@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Section } from "../ui/Section";
 import { Clock, Layers, Lock, Shield } from "../ui/icons";
 
 const CARDS: { icon: ReactNode; title: string; body: string }[] = [
@@ -25,7 +26,10 @@ const CARDS: { icon: ReactNode; title: string; body: string }[] = [
 ];
 
 export const Trust = () => (
-  <section className="gutter grid items-center gap-12 border-y border-rule bg-white py-[76px] lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+  <Section
+    tone="white"
+    inner="grid items-center gap-12 py-[76px] lg:grid-cols-[0.8fr_1.2fr] lg:gap-16"
+  >
     <div>
       <p className="eyebrow mb-4">WHO HOLDS WHAT</p>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
@@ -52,5 +56,5 @@ export const Trust = () => (
         </div>
       ))}
     </div>
-  </section>
+  </Section>
 );

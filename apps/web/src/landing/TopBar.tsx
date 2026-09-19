@@ -7,43 +7,45 @@ const LINKS = [
 ];
 
 export const TopBar = () => (
-  <header className="flex items-center justify-between gap-4 border-b border-rule px-5 py-5 sm:px-10">
-    <a href="#top" className="flex items-center gap-2.5">
-      <span className="grid size-7 place-items-center rounded-lg bg-brand text-shell">
-        <Anchor className="size-4" />
-      </span>
-      <span className="text-[17px] font-semibold tracking-[-0.01em]">Harbor</span>
-    </a>
+  <header className="sticky top-0 z-50 border-b border-rule bg-shell/85 backdrop-blur-md">
+    <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4 px-5 py-5 sm:px-10">
+      <a href="#top" className="flex items-center gap-2.5">
+        <span className="grid size-7 place-items-center rounded-lg bg-brand text-shell">
+          <Anchor className="size-4" />
+        </span>
+        <span className="text-[17px] font-semibold tracking-[-0.01em]">Harbor</span>
+      </a>
 
-    <div className="flex items-center">
-      <nav className="hidden items-center lg:flex">
-        {LINKS.map((link, i) => (
-          <a
-            key={link.label}
-            href={link.href}
-            className={`px-5 text-[14px] text-muted transition-colors hover:text-ink ${
-              i > 0 ? "border-l border-navline" : ""
-            }`}
+      <div className="flex items-center">
+        <nav className="hidden items-center lg:flex">
+          {LINKS.map((link, i) => (
+            <a
+              key={link.label}
+              href={link.href}
+              className={`px-5 text-[14px] text-muted transition-colors hover:text-ink ${
+                i > 0 ? "border-l border-navline" : ""
+              }`}
+            >
+              {link.label}
+            </a>
+          ))}
+          <button
+            type="button"
+            className="flex items-center gap-1.5 border-x border-navline px-5 text-[14px] text-muted transition-colors hover:text-ink"
           >
-            {link.label}
-          </a>
-        ))}
+            EN
+            <Globe className="size-[15px] text-faint" />
+          </button>
+        </nav>
+
         <button
           type="button"
-          className="flex items-center gap-1.5 border-x border-navline px-5 text-[14px] text-muted transition-colors hover:text-ink"
+          className="flex shrink-0 items-center gap-2 rounded-[9px] bg-brand px-4 py-2.5 text-[14px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-brand-deep sm:px-[18px] lg:ml-5"
         >
-          EN
-          <Globe className="size-[15px] text-faint" />
+          Connect wallet
+          <Wallet className="size-4" />
         </button>
-      </nav>
-
-      <button
-        type="button"
-        className="ml-0 flex shrink-0 items-center gap-2 rounded-[9px] bg-brand px-4 py-2.5 text-[14px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-brand-deep sm:px-[18px] lg:ml-5"
-      >
-        Connect wallet
-        <Wallet className="size-4" />
-      </button>
+      </div>
     </div>
   </header>
 );

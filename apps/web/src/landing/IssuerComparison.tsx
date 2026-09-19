@@ -1,3 +1,4 @@
+import { Section } from "../ui/Section";
 import { Search } from "../ui/icons";
 
 const ROWS = [
@@ -10,7 +11,10 @@ const ROWS = [
 const COLS = "grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-3";
 
 export const IssuerComparison = () => (
-  <section className="gutter grid items-center gap-12 border-y border-rule bg-white py-[76px] lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+  <Section
+    tone="white"
+    inner="grid items-center gap-12 py-[76px] lg:grid-cols-[0.9fr_1.1fr] lg:gap-16"
+  >
     <div>
       <p className="eyebrow mb-4">THE PART NOBODY ELSE DOES</p>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
@@ -55,9 +59,11 @@ export const IssuerComparison = () => (
       ))}
 
       <p className="border-t border-cardline bg-shell px-4 py-[13px] text-[12px] leading-[1.5] text-faint sm:px-[22px]">
+        <span className="block max-w-[74ch]">
         Price per share on a $1,000 order, including the cost of size. Where no route exists at
         your amount, Harbor refuses the order rather than filling it badly.
+        </span>
       </p>
     </div>
-  </section>
+  </Section>
 );

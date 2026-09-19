@@ -10,7 +10,7 @@ const CURVE =
   "M0,100 C26,92 44,108 70,88 C96,68 114,82 140,72 C166,62 184,78 210,58 C236,38 254,56 280,46 C306,36 324,48 350,28 C376,8 396,24 420,16 L460,10";
 
 export const PortfolioCard = () => (
-  <article className="rounded-[18px] border border-cardline bg-white px-[26px] py-6 shadow-[0_8px_28px_rgba(27,26,23,.08)]">
+  <article className="rise rounded-[18px] border border-cardline bg-white px-[26px] py-6 shadow-[0_8px_28px_rgba(27,26,23,.08)] [animation-delay:220ms]">
     <div className="flex items-center justify-between">
       <span className="text-[13px] font-medium text-muted">Portfolio value</span>
       <span className="flex items-center gap-[5px] font-mono text-[11px] text-faint">
@@ -66,7 +66,7 @@ export const PortfolioCard = () => (
 );
 
 export const IssuerCard = () => (
-  <article className="rounded-2xl border border-cardline bg-white px-[18px] py-4 shadow-[0_12px_32px_rgba(27,26,23,.12)] lg:absolute lg:bottom-0 lg:left-0 lg:w-[360px]">
+  <article className="rise rounded-2xl border border-cardline bg-white px-[18px] py-4 shadow-[0_12px_32px_rgba(27,26,23,.12)] [animation-delay:400ms] lg:relative lg:z-10 lg:-mt-2.5 lg:-ml-[34px] lg:w-[360px]">
     <div className="mb-3 flex items-center justify-between">
       <span className="font-mono text-[10px] tracking-[0.09em] text-faint">
         WE CHECKED BOTH ISSUERS
@@ -95,7 +95,7 @@ export const IssuerCard = () => (
 );
 
 export const DividendChip = () => (
-  <article className="flex items-center gap-2.5 rounded-xl border border-cardline bg-white px-3.5 py-2.5 shadow-[0_10px_26px_rgba(27,26,23,.10)] lg:absolute lg:top-0 lg:-right-3.5">
+  <article className="rise flex items-center gap-2.5 rounded-xl border border-cardline bg-white px-3.5 py-2.5 shadow-[0_10px_26px_rgba(27,26,23,.10)] [animation-delay:560ms] lg:absolute lg:-top-4 lg:-right-3.5">
     <span className="grid size-[26px] shrink-0 place-items-center rounded-lg bg-brand-tint text-brand">
       <Refresh className="size-3.5" />
     </span>

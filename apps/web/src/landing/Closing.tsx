@@ -1,3 +1,4 @@
+import { Section } from "../ui/Section";
 import { Anchor, ArrowRight } from "../ui/icons";
 
 const COLUMNS = [
@@ -7,7 +8,7 @@ const COLUMNS = [
 ];
 
 export const CallToAction = () => (
-  <section className="gutter pb-[76px]">
+  <Section inner="pb-[76px]">
     <div className="flex flex-col items-start justify-between gap-8 rounded-[20px] border border-cardline bg-white p-8 sm:p-[60px] lg:flex-row lg:items-center lg:gap-12">
       <div>
         <h2 className="text-[28px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[38px]">
@@ -25,12 +26,12 @@ export const CallToAction = () => (
         <ArrowRight className="size-[17px] transition-transform duration-300 ease-(--ease-out) group-hover:translate-x-0.5" />
       </button>
     </div>
-  </section>
+  </Section>
 );
 
 export const Footer = () => (
   <footer className="border-t border-rule">
-    <div className="gutter grid gap-10 pt-[52px] pb-10 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+    <div className="gutter mx-auto grid w-full max-w-[1440px] gap-10 pt-[52px] pb-10 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
       <div>
         <div className="flex items-center gap-2.5">
           <span className="grid size-[26px] place-items-center rounded-lg bg-brand text-shell">
@@ -45,13 +46,13 @@ export const Footer = () => (
       </div>
 
       {COLUMNS.map((col) => (
-        <div key={col.heading} className="grid content-start gap-[11px]">
+        <div key={col.heading} className="grid content-start gap-0 lg:gap-[11px]">
           <p className="mb-[3px] text-[13px] font-semibold">{col.heading}</p>
           {col.links.map((link) => (
             <a
               key={link}
               href="#top"
-              className="text-[13px] text-muted transition-colors hover:text-ink"
+              className="flex min-h-11 items-center text-[13px] text-muted transition-colors hover:text-ink lg:block lg:min-h-0"
             >
               {link}
             </a>
@@ -60,7 +61,7 @@ export const Footer = () => (
       ))}
     </div>
 
-    <div className="gutter flex items-center justify-between pt-[18px] pb-[34px]">
+    <div className="gutter mx-auto flex w-full max-w-[1440px] items-center justify-between pt-[18px] pb-[34px]">
       <span className="font-mono text-[11px] text-faint">© 2026 HARBOR</span>
       <span className="font-mono text-[11px] text-faint">BUILT ON SOLANA</span>
     </div>

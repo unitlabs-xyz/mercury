@@ -1,14 +1,15 @@
+import { Section } from "../ui/Section";
 import { ArrowRight, Lock } from "../ui/icons";
 import { DividendChip, IssuerCard, PortfolioCard } from "./HeroCards";
 
 export const Hero = () => (
-  <section
+  <Section
     id="top"
-    className="gutter grid items-center gap-14 py-16 lg:min-h-[880px] lg:grid-cols-2 lg:gap-14 lg:pt-20 lg:pb-[90px]"
+    inner="grid items-center gap-14 py-16 lg:min-h-[820px] lg:grid-cols-2 lg:pt-20 lg:pb-[90px]"
   >
     <div>
       <p className="rise mb-6 inline-flex items-center gap-[7px] rounded-full border border-navline bg-white px-[13px] py-1.5 text-[12px] font-medium text-muted">
-        <span className="size-1.5 rounded-full bg-up" />
+        <span className="size-1.5 shrink-0 rounded-full bg-up" />
         590 US stocks and funds · open every hour of the week
       </p>
 
@@ -43,10 +44,11 @@ export const Hero = () => (
       </p>
     </div>
 
-    <div className="rise relative flex flex-col gap-4 [animation-delay:220ms] lg:block lg:gap-0 lg:pt-[26px] lg:pr-0 lg:pb-10 lg:pl-[34px]">
+    {/* Layered cards. The issuer card is offset left and clears the figures above it. */}
+    <div className="relative flex flex-col gap-4 lg:block lg:gap-0 lg:pt-[26px] lg:pb-10 lg:pl-[34px]">
       <PortfolioCard />
       <IssuerCard />
       <DividendChip />
     </div>
-  </section>
+  </Section>
 );

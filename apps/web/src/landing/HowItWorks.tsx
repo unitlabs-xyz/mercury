@@ -1,3 +1,5 @@
+import { Section } from "../ui/Section";
+
 const STEPS = [
   {
     n: "01",
@@ -17,9 +19,9 @@ const STEPS = [
 ];
 
 export const HowItWorks = () => (
-  <section
+  <Section
     id="how-it-works"
-    className="gutter grid items-start gap-12 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16"
+    inner="grid items-start gap-12 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16"
   >
     <div>
       <p className="eyebrow mb-4">HOW IT WORKS</p>
@@ -55,5 +57,5 @@ export const HowItWorks = () => (
         </li>
       ))}
     </ol>
-  </section>
+  </Section>
 );

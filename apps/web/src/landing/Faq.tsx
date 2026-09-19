@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Section } from "../ui/Section";
 import { ChevronDown, Plus } from "../ui/icons";
 
 /**
@@ -33,9 +34,9 @@ export const Faq = () => {
   const [open, setOpen] = useState(0);
 
   return (
-    <section
+    <Section
       id="faqs"
-      className="gutter grid items-start gap-10 py-[76px] lg:grid-cols-[0.7fr_1.3fr] lg:gap-16"
+      inner="grid items-start gap-10 py-[76px] lg:grid-cols-[0.7fr_1.3fr] lg:gap-16"
     >
       <div>
         <p className="eyebrow mb-4">QUESTIONS</p>
@@ -68,7 +69,7 @@ export const Faq = () => {
                 )}
               </button>
               {isOpen && (
-                <p className="max-w-[640px] pb-6 text-[15px] leading-[1.6] text-muted text-pretty">
+                <p className="max-w-[34rem] pb-6 text-[15px] leading-[1.6] text-muted text-pretty">
                   {item.a}
                 </p>
               )}
@@ -76,6 +77,6 @@ export const Faq = () => {
           );
         })}
       </div>
-    </section>
+    </Section>
   );
 };

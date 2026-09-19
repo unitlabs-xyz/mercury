@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Section } from "../ui/Section";
 import { Clock, Grid, Repeat } from "../ui/icons";
 
 const WEIGHTS = [
@@ -38,7 +39,7 @@ const Panel = ({
 );
 
 export const Features = () => (
-  <section id="baskets" className="gutter grid gap-6 py-[76px] lg:grid-cols-2">
+  <Section id="baskets" inner="grid gap-6 py-[76px] lg:grid-cols-2">
     <Panel
       icon={<Grid className="size-[17px]" />}
       title="Baskets"
@@ -109,5 +110,5 @@ export const Features = () => (
         reopens.
       </p>
     </Panel>
-  </section>
+  </Section>
 );

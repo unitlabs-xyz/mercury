@@ -9,7 +9,7 @@
   --color-ink: #1b1a17;
   --color-ink-soft: #3a372f;
   --color-muted: #6b665c;
-  --color-faint: #7a746a;
+  --color-faint: #736d63;
 
   /* rules, in order of weight */
   --color-edge: #dbd7ce;
@@ -53,14 +53,43 @@
   }
   body {
     margin: 0;
-    background: var(--color-page);
+    background: var(--color-shell);
     color: var(--color-ink);
     font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
   }
+  /* One ring for every focusable thing, so keyboard users always see where they are. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  /* The bar is sticky, so anchored sections need to clear it. */
+  section[id] {
+    scroll-margin-top: 84px;
+  }
   ::selection {
     background: var(--color-brand);
     color: #fff;
+  }
+  html {
+    caret-color: var(--color-brand);
+    scrollbar-color: var(--color-dash) var(--color-shell);
+  }
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-shell);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-dash);
+    border: 3px solid var(--color-shell);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-faint);
   }
 }
 
@@ -87,6 +116,17 @@
   font-size: 11px;
   letter-spacing: 0.1em;
   color: var(--color-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @keyframes rise {
