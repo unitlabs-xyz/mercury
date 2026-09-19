@@ -14,7 +14,7 @@ export const PortfolioCard = () => (
     <div className="flex items-center justify-between">
       <span className="text-[13px] font-medium text-muted">Portfolio value</span>
       <span className="flex items-center gap-[5px] font-mono text-[11px] tracking-[0.06em] text-faint">
-        <span className="relative flex size-1.5"><span className="absolute inset-0 animate-ping rounded-full bg-up opacity-75" /><span className="relative size-1.5 rounded-full bg-up" /></span>
+        <span className="size-1.5 rounded-full bg-up" />
         LIVE
       </span>
     </div>
@@ -43,16 +43,14 @@ export const PortfolioCard = () => (
           <stop offset="100%" stopColor="#1A7F4B" stopOpacity="0.02" />
         </linearGradient>
       </defs>
-      <path d={`${CURVE} L460,120 L0,120 Z`} fill="url(#hbHeroArea)" className="wash" />
+      <path d={`${CURVE} L460,120 L0,120 Z`} fill="url(#hbHeroArea)" />
       <path
         d={CURVE}
-        pathLength={1}
         fill="none"
         stroke="#1A7F4B"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="draw"
       />
     </svg>
 

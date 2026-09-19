@@ -136,35 +136,7 @@
 }
 
 
-/* The focal moment: the performance line draws itself once, then its fill
-   arrives under it. pathLength=1 makes the dash maths resolution-independent. */
-@keyframes draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
 
-@utility draw {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw 1100ms var(--ease-out) 380ms forwards;
-}
-
-@keyframes wash {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@utility wash {
-  animation: wash 700ms ease-out 900ms both;
-}
 
 /* Nav underline that grows from the left on hover and focus. */
 @utility underlined {
