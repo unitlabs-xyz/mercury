@@ -46,8 +46,8 @@ Five things, none of which a traditional broker can copy. They are argued proper
    much sits with one issuer. No broker has this problem, so no broker has this screen.
 2. **Protection from the wrong wrapper.** Same stock, two issuers. On our own measurements one
    of them can cost eighty-five percent more for the identical share. We check every time.
-3. **A basket you can hold, send and pledge as one thing**, because it is a token and not a rule
-   in somebody's database.
+3. **A basket you can hold, send and pledge as one thing**, because it is a real token backed by
+   a vault and not a rule in somebody's database. See [10 Baskets](10-baskets.md).
 4. **A share count that grows by itself.** Dividends arrive as an increase in the token's
    multiplier, so the position quietly gets bigger. We show that as shares gained. Most
    integrations ignore the multiplier and their numbers slowly go wrong.

@@ -90,9 +90,9 @@ Version one ships three or four curated baskets. Investing a single amount buys 
 constituent in proportion, running the wrapper check on each leg. If any leg cannot be routed,
 the whole basket purchase is refused rather than silently rebalanced.
 
-The user's basket holding is displayed as one line. Whether it is genuinely a single token on
-chain or a tracked set of positions is an open decision; see
-[09 Open questions](09-open-questions.md).
+The user's basket holding is **one real token**, backed by the constituents held in a vault. It
+can be sent to somebody, and in version two pledged as a single collateral position. The design
+is in [10 Baskets](10-baskets.md) and the decision in [ADR 0005](adr/0005-basket-vaults.md).
 
 ### Recurring
 A fixed amount on a weekly or monthly cadence, split across stocks and baskets by percentage.

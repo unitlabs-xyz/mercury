@@ -1,26 +1,43 @@
-# ADR 0003 · The server never holds a key
+# ADR 0003 · Privy embedded wallets only
 
-**Status:** accepted · 19 September 2026 · one sub-decision open, see [09](../09-open-questions.md)
+**Status:** accepted · 19 September 2026 · supersedes the provisional version
 
 ## Context
-An investing app has to move money on a schedule. That is easiest if the server signs, and
-easiest is the wrong answer.
+The product has to move money on a schedule, and it has to onboard people who have never held a
+wallet. Two candidates: connect an existing wallet like Phantom, or create an embedded wallet.
 
 ## Decision
-The server never holds a private key and never signs a transaction. It builds unsigned
-transactions and returns them. The client signs, through Privy's embedded wallet or Phantom.
+**Privy embedded wallets, and nothing else, in version one.** No Phantom, no wallet-connect, no
+external wallet import. A user signs in with email or a social account and a Solana wallet is
+created for them.
 
-Recurring investing, which needs to act unattended, uses a **scoped session key** held by the
-user's wallet provider, limited by a token allowlist, a per-run cap and an expiry, and revocable
-by the user at any time.
+Recurring investing and basket rebalancing use **Privy delegated actions**. The user explicitly
+delegates their wallet for server-side signing, scoped by policy, revocable at any time.
+
+## How the keys actually work
+Privy splits the private key with Shamir's Secret Sharing across trusted parties and uses a
+Trusted Execution Environment to reconstitute it only for an authenticated request. Our server
+never possesses a key share that is useful on its own.
+
+## Precision about what the server can do
+The earlier draft of this record said "the server never signs". That is now too blunt to be
+useful. The accurate statement is:
+
+- The server **never holds a private key**.
+- For ordinary buys and sells, the **client** requests the signature. The server only builds the
+  unsigned transaction.
+- For delegated actions the user has explicitly granted, the server asks Privy to sign, within a
+  policy that names the programs and mints it may touch, a per-run value cap and an expiry.
+- Delegation is opt-in per feature, visible in settings, and revocable in one tap.
 
 ## Consequences
-**Good.** We are not a custodian. The worst failure mode is a bad recommendation, not a drained
-wallet. The claim that leaving is trivial is true rather than marketing.
+**Good.** A person with no crypto can be holding shares in two minutes. Recurring investing,
+basket rebalancing and in-kind vault flows all become possible unattended. One wallet path means
+one set of edge cases.
 
-**Bad.** Three round trips for a purchase instead of one. Recurring investing depends on the
-wallet provider supporting session keys, which constrains the choice in question 1 of
-[09 Open questions](../09-open-questions.md).
+**Bad.** Someone who already has Phantom cannot use their own wallet, which will annoy a share of
+crypto-native judges. Reversible later: Privy supports external wallets and adding them is
+additive.
 
-**Enforced by.** `services/api` has no signing dependency in its `package.json`, and a lint rule
-fails the build if one appears.
+**New problem this creates.** A fresh embedded wallet is empty, and we have no fiat on-ramp. See
+the funding question in [09 Open questions](../09-open-questions.md).

@@ -1,66 +1,99 @@
 # 08 · Roadmap
 
-## To 12 October
+Twenty-three days from 19 September to the deadline on 12 October. Four engineers. Web only;
+the iOS app follows the hackathon.
 
-Twenty-three days from 19 September. Scope is fixed; anything not listed waits.
+## Who does what
 
-### Week 1 · 19 to 25 September · the engine
-- [ ] Scaffold the workspaces, shared tsconfig, lint, CI on push
-- [ ] `packages/types`: Zod schemas for instruments, tokens, quotes, decisions
-- [ ] `packages/market`: reference price, session state, per-token multipliers, with a cache
-- [ ] `packages/chain`: token registry for both issuers, Jupiter quote and swap build
-- [ ] `packages/core`: `decide()` complete, with the fixture test table from [04](04-execution-engine.md)
-- [ ] `services/api`: instruments, quote, and the create/execute/confirm order path
-- [ ] **Gate: a real buy of NVDAx on mainnet, signed by a test wallet, recorded as a lot**
+| | Owns | First task |
+| --- | --- | --- |
+| **A · Programs** | The basket vault, or the Symmetry integration. Anchor, mainnet deploys | The Symmetry spike, day one |
+| **B · Chain and market** | Token registry, Jupiter quotes and triggers, Chainlink feeds, session state, the worker | A quote from both issuers for one ticker |
+| **C · Core and API** | The execution engine, orders, Postgres, lots, positions, exposure | `decide()` against the fixture table |
+| **D · Web** | The Vite app, Privy onboarding, every screen | Privy sign-in to a funded wallet |
 
-### Week 2 · 26 September to 2 October · the app
-- [ ] Postgres schema and migrations, positions maintained on write
-- [ ] Privy wallet connect, on web first
-- [ ] Web app: Home, Invest, stock page with the issuer comparison, buy sheet
-- [ ] All three buy outcomes rendered, including refuse and queue
-- [ ] Jupiter trigger orders for the queued path, worker polling their status
-- [ ] Market-closed banner and the stale-reference block
-- [ ] **Gate: a stranger can open the web app, connect, and buy a share end to end**
+B, C and D can start immediately. A's week is gated by a one-day spike.
 
-### Week 3 · 3 to 9 October · everything that makes it a product
-- [ ] Three curated baskets, preview with per-leg decisions, all-or-nothing invest
-- [ ] Recurring plans and the worker that runs them
-- [ ] Exposure sheet with the multiplier breakdown and concentration warnings
-- [ ] Money tab, idle balance earning, interest shown
-- [ ] Activity feed and CSV export
-- [ ] Dividend detection from multiplier changes, surfaced on Home
-- [ ] iOS app in Expo, sharing `sdk` and `types`, running on a device
-- [ ] **Gate: feature complete. No new features after this date.**
+## Week 1 · 19 to 25 September · prove the mechanism
 
-### Week 4 · 10 to 12 October · ship
-- [ ] Landing page
-- [ ] Demo video, four minutes, real money, real fills
-- [ ] README, architecture notes, open-source licence
-- [ ] Business plan section of the submission
-- [ ] Deploy web and API, confirm both stay up through judging on 23 October
-- [ ] **Submit by 11 October, a day early.** Do not use the last day.
+**A** Spike Symmetry against the xStocks mints and decide build or integrate by day two. Then
+either integrate the SDK or write `initialize_basket`, `deposit` and `redeem` and get them
+passing on devnet with mock tokens.
 
-## Cut list if we are behind
+**B** Token registry for both issuers with multipliers. Jupiter quotes at a given size. Chainlink
+reference prices and session state, with staleness detection.
 
-In this order. Cutting from the top costs the least.
+**C** `packages/core` complete: `decide()`, the policy defaults, and the full fixture table from
+[04](04-execution-engine.md). API skeleton with instruments, quote, and create/execute/confirm.
 
-1. The iOS app. Web carries the submission; the video can show the web build on a phone.
-2. Recurring plans.
-3. The Money tab's yield, leaving a plain balance.
-4. Two of the three baskets.
-5. CSV export.
+**D** Vite app scaffolded. Privy sign-in creating a Solana wallet. App shell with four tabs,
+design tokens, the Home and Invest skeletons.
 
-Never cut: the issuer comparison, the premium gate, the exposure sheet. Those are the submission.
+> **Gate, 25 September.** A real buy of NVDAx on mainnet, signed by a Privy embedded wallet,
+> recorded as a lot with correct cost basis. Nothing else counts as progress until this works.
+
+## Week 2 · 26 September to 2 October · make it a product
+
+**A** Vault on mainnet with a hard size cap. Deposit and redeem exercised with real tokens at
+small size. Fee accrual. Pause that never blocks redemption.
+
+**B** The worker: price cache, multiplier watch writing dividend events, Jupiter trigger order
+polling. Corporate-action state feeding the halt rule.
+
+**C** Postgres schema and migrations. Lots, positions, exposure queries. Basket preview running
+the decision on every leg. Order history.
+
+**D** Stock page with the issuer comparison. Buy sheet with all three outcomes rendered: filled,
+queued, refused. Market-closed banner. Portfolio and holdings.
+
+> **Gate, 2 October.** A stranger opens the web app, signs in with an email, funds the wallet,
+> and buys a share end to end without help.
+
+## Week 3 · 3 to 9 October · everything that makes it worth judging
+
+**A** Basket invest and redeem wired end to end. Program frozen by 7 October. Upgrade authority
+revoked.
+
+**B** Recurring runs through Privy delegated actions, with the policy scope and caps.
+
+**C** Recurring plans, activity feed, CSV export, dividend recognition from multiplier changes.
+
+**D** Baskets, exposure sheet with the multiplier breakdown and concentration warnings, Money
+tab, Activity.
+
+> **Gate, 9 October. Feature complete.** No new features after this date, by anyone, for any
+> reason.
+
+## Week 4 · 10 to 12 October · ship
+
+Landing page. Four-minute demo video with real money and real fills. README, architecture notes,
+open-source licence. The business plan section. Deploy web and API and confirm both stay up
+through judging on 23 October.
+
+> **Submit 11 October.** A full day early. Do not use the last day.
+
+## Cut list, in order
+
+1. Recurring investing.
+2. The Money tab's yield, leaving a plain balance.
+3. Two of the three baskets, shipping one.
+4. CSV export.
+5. Baskets as real tokens, falling back to a tracked set. **Only if the program is not safe by
+   7 October.** This is a product retreat, not a schedule adjustment, and it gets announced
+   rather than hidden.
+
+Never cut: the issuer comparison, the premium gate, the exposure sheet. Those three are the
+submission.
 
 ## After the hackathon
 
-**Version 1.1, October to December.** Fiat on-ramp research. More baskets. Gifting a holding by
-link. Round-ups. The auto-invest-from-gains feature, which is the acquisition engine described in
-the earlier work and which fits Solana better than the chain it was designed for.
+**1.1, October to December.** The iOS app in Expo, sharing `sdk` and `types`. Basket rebalancing,
+which needs its own decision record because it puts swaps back inside the vault. Gifting a
+holding by link. More baskets. The auto-invest-from-gains hook.
 
-**Version 2, Q1.** Borrowing against holdings through Kamino. A risk screen with both the
-present fall and the Monday gap. Then a card, which needs a partner who converts to real money
-and carries identity.
+**2.0, Q1.** Borrowing against holdings through Kamino, with a risk screen showing both the fall
+the portfolio can take today and the gap it could take on a Monday. Then a card, which needs a
+partner who converts to real money and carries identity.
 
-**Version 3.** Creator baskets with an automatic fee split and a track record that is a chain of
+**3.0.** Creator baskets with an automatic fee split and a track record that is a chain of
 timestamped transactions rather than a number you are asked to believe. That is the business.

@@ -11,6 +11,8 @@ harbor/
 ├── services/
 │   ├── api/             Hono on Node. The only thing the apps talk to.
 │   └── worker/          Scheduled work: recurring buys, order watching, price cache.
+├── programs/
+│   └── basket-vault/    Anchor. Holds constituents, mints the basket token. See docs/10-baskets.md.
 ├── packages/
 │   ├── core/            Domain logic, no I/O. Pricing, wrapper choice, cost basis, baskets.
 │   ├── chain/           Solana adapters. Jupiter, Kamino, RPC, token registry.
@@ -44,7 +46,9 @@ returns decisions. That is the whole reason the execution engine can be tested w
 | Chain access | `@solana/kit` | The current Solana client. Tree-shakeable, typed, no legacy `web3.js` baggage |
 | Routing | Jupiter Swap API and Trigger API | Best aggregate liquidity on Solana, and Trigger gives on-chain limit orders that keepers fill without our server |
 | Lending | Kamino SDK | Already accepts tokenized stocks with an off-hours price band |
-| Wallets | Privy embedded, plus Phantom | Privy gets a wallet made in seconds from an email. Phantom serves people who already have one |
+| Prices | Chainlink xStocks Data Streams | Official oracle for these assets. Pyth reads ~17bp low on them. [ADR 0006](adr/0006-pricing.md) |
+| Programs | Anchor | Only if the Symmetry spike says build. [ADR 0005](adr/0005-basket-vaults.md) |
+| Wallets | Privy embedded only | An email becomes a Solana wallet in seconds. Delegated actions let recurring plans run unattended. No external wallets in v1. [ADR 0003](adr/0003-custody.md) |
 | Web app | Vite + React + React Router | Fast, no server rendering needed. It is an app, not a document |
 | Mobile app | Expo + React Native, Expo Router | One codebase, over-the-air updates, and a build judges can install |
 | Landing | Next.js | Server rendering and metadata matter for exactly one surface, and this is it |
@@ -64,7 +68,8 @@ The only surface the apps talk to. Responsibilities:
 - Serve the portfolio, exposure and activity views
 - Own baskets and recurring plans
 
-It does **not** sign anything. See [ADR 0003](adr/0003-custody.md).
+It **never holds a private key**. For ordinary buys the client signs. For delegated actions the
+user has granted, it asks Privy to sign inside a policy. See [ADR 0003](adr/0003-custody.md).
 
 ### `services/worker`
 Everything on a clock:
@@ -119,6 +124,6 @@ amounts. Budget real money for testing and keep it small.
 
 - **No microservices.** One API, one worker. Split when there is a reason.
 - **No GraphQL.** The client surface is small and known.
-- **No server-side wallet.** See ADR 0003.
+- **No server-held keys.** Privy's TEE holds them. See ADR 0003.
 - **No shared React component library across web and mobile.** Primitives differ too much.
   Design tokens are shared; components are not.

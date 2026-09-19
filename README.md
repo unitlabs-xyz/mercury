@@ -21,7 +21,8 @@ Built on Solana for Colosseum's Crypto World's Fair. Submissions close **12 Octo
 | [06 API](docs/06-api.md) | Endpoint contract between apps and server |
 | [07 Design](docs/07-design.md) | Screens, states, and the apps we are copying |
 | [08 Roadmap](docs/08-roadmap.md) | What ships by 12 October, and what comes after |
-| [09 Open questions](docs/09-open-questions.md) | Decisions still needed, with recommendations |
+| [09 Open questions](docs/09-open-questions.md) | What is settled, and the five things still open |
+| [10 Baskets](docs/10-baskets.md) | The vault, and how a basket becomes one token |
 
 Architecture decision records live in [`docs/adr`](docs/adr).
 
@@ -32,6 +33,8 @@ apps/
   mobile/     Expo + React Native. iOS only for now.
   web/        Vite + React. The build judges will open.
   landing/    Next.js. Marketing site.
+programs/
+  basket-vault/  Anchor. Holds constituents, mints the basket token.
 services/
   api/        Hono on Node. The only thing the apps talk to.
   worker/     Scheduled work: recurring buys, order watching, price cache.
@@ -59,6 +62,6 @@ pnpm dev
 - **TypeScript everywhere, strict.** No `any` without a comment saying why.
 - **`packages/core` performs no I/O.** It takes data in and returns decisions. That is what makes
   the execution engine testable.
-- **The server never holds a private key.** See [ADR 0003](docs/adr/0003-custody.md).
+- **The server never holds a private key.** Privy does. See [ADR 0003](docs/adr/0003-custody.md).
 - **Money is never a float.** Integers in the smallest unit, or decimal strings. See
   [05 Data model](docs/05-data-model.md).
