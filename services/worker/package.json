@@ -1,7 +1,8 @@
 {
-  "name": "@harbor/worker",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": { "dev": "tsx watch src/index.ts", "build": "tsc", "typecheck": "tsc --noEmit" }
+  "name": "@harbor/worker", "version": "0.0.0", "private": true, "type": "module",
+  "scripts": { "dev": "tsx watch src/index.ts", "start": "tsx src/index.ts", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@harbor/core": "workspace:*", "@harbor/chain": "workspace:*", "@harbor/market": "workspace:*", "decimal.js": "^10.4.3"
+  },
+  "devDependencies": { "@harbor/tsconfig": "workspace:*", "@types/node": "^22.10.0", "tsx": "^4.19.0", "typescript": "^5.7.0" }
 }

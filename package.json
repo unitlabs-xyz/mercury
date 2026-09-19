@@ -2,13 +2,18 @@
   "name": "harbor",
   "private": true,
   "packageManager": "pnpm@10.33.2",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev",
-    "typecheck": "turbo typecheck",
-    "lint": "turbo lint",
-    "test": "turbo test"
+    "dev:api": "pnpm --filter @harbor/api dev",
+    "dev:web": "pnpm --filter @harbor/web dev",
+    "dev:landing": "pnpm --filter @harbor/landing dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "check": "pnpm -r typecheck && pnpm -r test"
   },
   "devDependencies": {
     "turbo": "^2.5.0",

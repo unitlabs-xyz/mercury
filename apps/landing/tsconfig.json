@@ -1,0 +1,6 @@
+{
+  "extends": "@harbor/tsconfig/react.json",
+  "compilerOptions": { "plugins": [{ "name": "next" }], "jsx": "preserve", "incremental": true, "allowJs": true },
+  "include": ["next-env.d.ts", "app", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

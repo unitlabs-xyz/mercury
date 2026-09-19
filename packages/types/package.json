@@ -1,9 +1,7 @@
 {
-  "name": "@harbor/types",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
-  "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run" }
+  "name": "@harbor/types", "version": "0.0.0", "private": true, "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": { "zod": "^3.24.0" },
+  "devDependencies": { "@harbor/tsconfig": "workspace:*", "typescript": "^5.7.0" }
 }

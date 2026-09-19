@@ -1,7 +1,9 @@
 {
-  "name": "@harbor/api",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": { "dev": "tsx watch src/index.ts", "build": "tsc", "typecheck": "tsc --noEmit" }
+  "name": "@harbor/api", "version": "0.0.0", "private": true, "type": "module",
+  "scripts": { "dev": "tsx watch src/index.ts", "start": "tsx src/index.ts", "typecheck": "tsc --noEmit", "test": "vitest run" },
+  "dependencies": {
+    "@harbor/core": "workspace:*", "@harbor/chain": "workspace:*", "@harbor/market": "workspace:*",
+    "@harbor/types": "workspace:*", "@hono/node-server": "^1.13.0", "hono": "^4.6.0", "decimal.js": "^10.4.3", "zod": "^3.24.0"
+  },
+  "devDependencies": { "@harbor/tsconfig": "workspace:*", "@types/node": "^22.10.0", "tsx": "^4.19.0", "typescript": "^5.7.0", "vitest": "^3.0.0" }
 }

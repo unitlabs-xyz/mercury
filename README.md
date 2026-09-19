@@ -48,13 +48,41 @@ tooling/      Shared eslint, prettier and tsconfig.
 
 ## Getting started
 
-Nothing is scaffolded yet. The layout above and the configs at the root encode the decisions
-in [03 Architecture](docs/03-architecture.md); the applications come next.
+Needs Node 24 and pnpm 10. No API keys, no database, no network.
 
 ```bash
 pnpm install
-pnpm dev
+pnpm check          # typecheck and test every package
+pnpm dev:api        # http://localhost:8787
+pnpm dev:web        # http://localhost:5173
 ```
+
+**The API runs in fixture mode by default**, serving the real measurements from
+19 September 2026 with no keys and no network. That is deliberate: the web app can be
+built before any integration lands, against a server that behaves correctly.
+
+```bash
+curl -s localhost:8787/v1/orders -H 'content-type: application/json' \
+  -d '{"ticker":"NVDA","side":"buy","amount":"1000"}' | jq .decision.best
+```
+
+returns `NVDAx` at $222.33 a share, with Ondo's wrapper refused at 85% price impact.
+`HARBOR_MODE=live` switches to Jupiter and the rest; see `services/api/.env.example`.
+
+## State of the build
+
+| Package | State |
+| --- | --- |
+| `packages/core` | **Done and tested.** 35 tests. The execution engine, cost basis, exposure, basket allocation |
+| `packages/types` | Done. Zod wire schemas |
+| `packages/chain` | Ports done, Jupiter Ultra written, fixtures done. Symmetry awaits the spike |
+| `packages/market` | Ports and fixtures done. Chainlink, Pyth and Token-2022 reads are week 1 |
+| `packages/sdk` | Done. Typed client, every response parsed |
+| `services/api` | Routes for market, instruments, orders and basket preview. Postgres is week 2 |
+| `services/worker` | Job plan and the multiplier watcher. Runner is week 2 |
+| `apps/web` | Scaffolded with the stock page, the screen the product is built around |
+| `apps/landing` | Scaffolded |
+| `apps/mobile` | Not started, on purpose. Week 2 |
 
 ## Ground rules
 
