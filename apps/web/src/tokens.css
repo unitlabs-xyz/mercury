@@ -1,82 +1,74 @@
 @import "tailwindcss";
 
-/* ── Harbor ──────────────────────────────────────────────────────────────────
-   Built on the visual language Phantom and Robinhood share: true black, white
-   type set heavy, rows as filled rounded cards rather than divider lists, and a
-   single market green doing double duty as the brand accent. -------------------- */
-
 @theme {
-  --color-bg:        #000000;
-  --color-surface:   #131315;
-  --color-surface-2: #1c1c1f;
-  --color-hairline:  #232327;
+  --color-page: #ffffff;
+  --color-canvas: #f5f4ef;
+  --color-bar: #fdfdfc;
+  --color-card: #ffffff;
 
-  --color-text:      #ffffff;
-  --color-muted:     #8e9196;
-  --color-faint:     #5c5f65;
+  --color-ink: #15171b;
+  --color-ink-soft: #3d4148;
+  --color-muted: #6d7178;
+  --color-faint: #9ca2a8;
 
-  --color-up:        #00d26b;
-  --color-up-wash:   #0a2318;
-  --color-down:      #ff5c5c;
-  --color-down-wash: #2a1414;
-  --color-warn:      #ffb020;
-  --color-warn-wash: #241a08;
+  --color-line: #e7e5de;
+  --color-line-soft: #eeece5;
 
-  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --color-brand: #2f5d5c;
+  --color-brand-hover: #26504f;
+  --color-up: #2f8f63;
+  --color-down: #c5493f;
 
-  --radius-card: 16px;
-  --radius-sheet: 24px;
-  --radius-pill: 999px;
+  --color-nvidia: #121316;
+  --color-spy: #2f3f6b;
+  --color-basket: #e6edf2;
+  --color-basket-ink: #5c7484;
+
+  --font-sans: "Switzer", ui-sans-serif, -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
-  html { -webkit-font-smoothing: antialiased; }
-  body {
-    margin: 0;
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-family: var(--font-sans);
-    font-size: 15px;
-    line-height: 1.45;
-    letter-spacing: -0.011em;
-    overscroll-behavior-y: none;
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
-  ::selection { background: var(--color-up); color: #000; }
-  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
-  input { font: inherit; color: inherit; }
-  a { color: inherit; text-decoration: none; }
-  ::-webkit-scrollbar { display: none; }
+  body {
+    background: var(--color-page);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  ::selection {
+    background: var(--color-brand);
+    color: #fff;
+  }
 }
 
-/* Numbers are set in the same sans, heavy and tabular. No serif anywhere. */
-@utility figure {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  letter-spacing: -0.035em;
-}
 @utility num {
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  letter-spacing: -0.015em;
+  font-feature-settings: "tnum" 1;
 }
-@utility eyebrow {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--color-text);
-}
-@utility micro {
+
+@utility stamp {
+  font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--color-faint);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-@keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
-@keyframes wash { from { opacity: 0; } to { opacity: 1; } }
-@keyframes draw { from { stroke-dashoffset: 400; } to { stroke-dashoffset: 0; } }
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 
-@utility enter { animation: rise-in 0.42s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+@utility rise {
+  animation: rise 800ms var(--ease-out) both;
+}
