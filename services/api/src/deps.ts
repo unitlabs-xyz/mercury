@@ -1,11 +1,5 @@
-import {
-  FixtureQuoteSource, FixtureRegistry, FixtureTriggerSource, JupiterUltra, SymmetryVenue,
-  type BasketVenue, type QuoteSource, type TokenRegistry, type TriggerSource,
-} from "@harbor/chain";
-import {
-  FixtureMultiplierSource, FixtureReferenceSource, FixtureSessionSource,
-  type MultiplierSource, type ReferenceSource, type SessionSource,
-} from "@harbor/market";
+import { JupiterUltra, SymmetryVenue, type BasketVenue, type QuoteSource, type TokenRegistry, type TriggerSource } from "@harbor/chain";
+import type { MultiplierSource, ReferenceSource, SessionSource } from "@harbor/market";
 
 export interface Deps {
   readonly registry: TokenRegistry;
@@ -14,43 +8,43 @@ export interface Deps {
   readonly sessions: SessionSource;
   readonly reference: ReferenceSource;
   readonly multipliers: MultiplierSource;
-  readonly baskets: BasketVenue | null;
-  readonly mode: "fixture" | "live";
+  readonly baskets: BasketVenue;
+}
+
+export interface Config {
+  readonly jupiterApiKey: string;
+  readonly solanaRpcUrl: string;
+  readonly chainlinkFeedUrl: string;
+  readonly pythApiKey: string;
+  readonly databaseUrl: string;
+}
+
+const required = (env: NodeJS.ProcessEnv, key: string): string => {
+  const value = env[key];
+  if (value === undefined || value.length === 0) throw new Error(`${key} is required`);
+  return value;
+};
+
+export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  return {
+    jupiterApiKey: required(env, "JUPITER_API_KEY"),
+    solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
+    chainlinkFeedUrl: required(env, "CHAINLINK_FEED_URL"),
+    pythApiKey: required(env, "PYTH_API_KEY"),
+    databaseUrl: required(env, "DATABASE_URL"),
+  };
 }
 
 /**
- * Fixture mode is the default and needs no keys and no network. That is deliberate:
- * the web app can be built on day one against a server that behaves correctly, using
- * the real measurements from 19 September. See docs/01.
+ * There is no fixture mode and no mock adapter. Every dependency is the real one or the
+ * server does not start. Dummy data belongs in the client while the interface is being
+ * built, never in the server.
  */
-export function buildDeps(env: NodeJS.ProcessEnv = process.env): Deps {
-  const live = env.HARBOR_MODE === "live";
-  if (!live) {
-    return {
-      registry: new FixtureRegistry(),
-      quotes: new FixtureQuoteSource(),
-      triggers: new FixtureTriggerSource(),
-      sessions: new FixtureSessionSource(),
-      reference: new FixtureReferenceSource(),
-      multipliers: new FixtureMultiplierSource(),
-      baskets: null,
-      mode: "fixture",
-    };
-  }
+export function buildDeps(config: Config): Deps {
+  const quotes = new JupiterUltra({ apiKey: config.jupiterApiKey });
+  const baskets = new SymmetryVenue({ rpcUrl: config.solanaRpcUrl });
 
-  const apiKey = env.JUPITER_API_KEY;
-  if (apiKey === undefined) throw new Error("JUPITER_API_KEY is required in live mode");
-  const rpcUrl = env.SOLANA_RPC_URL;
-  if (rpcUrl === undefined) throw new Error("SOLANA_RPC_URL is required in live mode");
-
-  return {
-    registry: new FixtureRegistry(), // TODO: on-chain registry, week 1
-    quotes: new JupiterUltra({ apiKey }),
-    triggers: new FixtureTriggerSource(), // TODO: Jupiter Trigger, week 2
-    sessions: new FixtureSessionSource(), // TODO: Pyth market_session_schedule, week 1
-    reference: new FixtureReferenceSource(), // TODO: Chainlink, week 1
-    multipliers: new FixtureMultiplierSource(), // TODO: Token-2022 ScaledUiAmount, week 1
-    baskets: new SymmetryVenue({ rpcUrl }),
-    mode: "live",
-  };
+  throw new Error(
+    "buildDeps: registry, triggers, sessions, reference and multipliers are not implemented yet. Week 1.",
+  );
 }

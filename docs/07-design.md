@@ -3,10 +3,26 @@
 ## Principle
 
 Built for investors, not traders. Every screen should make doing nothing feel fine and doing
-something feel considered. No red and green flashing, no streaks pushing trades, no leaderboard
-of who gambled hardest.
+something feel considered. No streaks pushing trades, no leaderboard of who gambled hardest.
 
-The bar is set by the apps in `docs/refs`, not by other crypto apps.
+## The visual language, and where it comes from
+
+We take it from **Phantom and Robinhood**, deliberately and closely. Both have spent years
+teaching millions of people what an on-chain money app looks like, and fighting that is a cost
+with no return.
+
+| | |
+| --- | --- |
+| **Ground** | True black. Not a tinted near-black, not a slate |
+| **Type** | One sans, Geist, at 400 to 700. Figures are the same face, set heavy and tabular. No serif anywhere |
+| **Rows** | Filled rounded cards with a gap between them and a circular tinted icon, the way Phantom lists tokens. Not a flat list on dividers |
+| **Headings** | Readable bold text at 17px, not micro uppercase |
+| **Colour** | One green carries both the brand and a gain, which is Robinhood's move and one colour fewer to manage. Red for a loss. Amber only for the market being shut |
+| **Charts** | A single line with a soft fill, drawn once on mount. No axes, grid or crosshair |
+
+The implementation lives in `apps/web/src/tokens.css` and `apps/web/src/ui/primitives.tsx`.
+
+Reference sheets are in `docs/refs` and `docs/refs/crypto`.
 
 | Reference | What we take |
 | --- | --- |

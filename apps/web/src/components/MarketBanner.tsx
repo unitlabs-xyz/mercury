@@ -1,27 +1,26 @@
-import { useQuery } from "@tanstack/react-query";
-import { client } from "../lib/client";
+import { MARKET } from "../mock/data";
+import { nyTime } from "../lib/format";
 
 /**
- * The market is shut for about two thirds of the week and our tokens trade through it.
- * Most apps hide that. We make it a designed state, in amber rather than red, because
- * it is a fact and not an error. See docs/07.
+ * These tokens trade while the US market is shut, which is most of the week. Every
+ * other app hides that. Ours says it, in amber rather than red, because it is a fact
+ * and not an error.
  */
 export function MarketBanner() {
-  const { data } = useQuery({ queryKey: ["market"], queryFn: () => client.marketStatus(), refetchInterval: 60_000 });
-  if (data === undefined || data.isOpen) return null;
-
-  const opens = data.nextOpenAt === null ? null : new Date(data.nextOpenAt);
+  if (MARKET.isOpen) return null;
   return (
-    <div className="mx-4 my-3 rounded-[var(--radius-card)] bg-[var(--color-warning-bg)] px-4 py-3">
-      <p className="m-0 font-semibold text-[var(--color-warning)]">
-        {data.isWeekend ? "US market is closed for the weekend" : "US market is closed"}
-      </p>
-      <p className="m-0 mt-1 text-sm text-[var(--color-warning)]">
-        {opens
-          ? `Reopens ${opens.toLocaleString("en-US", { weekday: "long", hour: "numeric", minute: "2-digit" })}. `
-          : ""}
-        Prices can drift from the real share price while it is shut.
-      </p>
+    <div className="px-4 pt-3">
+      <div className="flex items-start gap-3 rounded-[var(--radius-card)] bg-[var(--color-warn-wash)] px-4 py-3">
+        <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-[var(--color-warn)]" />
+        <div className="min-w-0">
+          <p className="m-0 text-[14px] font-semibold text-[var(--color-warn)]">
+            {MARKET.isWeekend ? "US market closed for the weekend" : "US market closed"}
+          </p>
+          <p className="m-0 mt-0.5 text-[13px] leading-snug text-[var(--color-warn)]/60">
+            Reopens {nyTime(MARKET.nextOpenAt)}. Prices can drift from the real share price while it is shut.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -45,6 +45,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@harbor/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@harbor/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk

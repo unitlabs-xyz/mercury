@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { allocate, D, toWire } from "@harbor/core";
-import { FIXTURE_SECTORS, FIXTURE_TOKENS } from "@harbor/chain";
 import { CreateOrderRequest, InvestBasketRequest } from "@harbor/types";
 import type { Deps } from "./deps.js";
 import { priceOrder } from "./pricing.js";
@@ -18,13 +17,15 @@ interface StoredOrder {
 /** In memory until the Postgres schema lands in week two. See docs/05. */
 const orders = new Map<string, StoredOrder>();
 
+// TODO week 2: Postgres, per docs/05. Instrument routes rebuild against deps.registry.
+
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
 export function createApp(deps: Deps) {
   const app = new Hono();
   app.use("*", cors());
 
-  app.get("/health", (c) => c.json({ ok: true, mode: deps.mode }));
+  app.get("/health", (c) => c.json({ ok: true }));
 
   app.get("/v1/market/status", async (c) => {
     const s = await deps.sessions.current();
@@ -34,40 +35,6 @@ export function createApp(deps: Deps) {
       nextOpenAt: s.nextOpenAt?.toISOString() ?? null,
       nextCloseAt: s.nextCloseAt?.toISOString() ?? null,
       isWeekend: s.isWeekend,
-    });
-  });
-
-  app.get("/v1/instruments", async (c) => {
-    const q = c.req.query("q")?.toUpperCase();
-    const tickers = [...new Set(FIXTURE_TOKENS.map((t) => t.ticker))]
-      .filter((t) => q === undefined || t.includes(q))
-      .map((ticker) => {
-        const first = FIXTURE_TOKENS.find((t) => t.ticker === ticker)!;
-        return {
-          ticker,
-          name: first.name,
-          sector: FIXTURE_SECTORS[ticker] ?? null,
-          pricePerShare: first.referencePricePerShare,
-          wrapperCount: FIXTURE_TOKENS.filter((t) => t.ticker === ticker).length,
-        };
-      });
-    return c.json({ instruments: tickers });
-  });
-
-  app.get("/v1/instruments/:ticker", async (c) => {
-    const ticker = c.req.param("ticker").toUpperCase();
-    const wrappers = FIXTURE_TOKENS.filter((t) => t.ticker === ticker);
-    if (wrappers.length === 0) return c.json(fail("not_found", `No instrument ${ticker}.`), 404);
-    const reference = await deps.reference.priceFor(ticker);
-    return c.json({
-      ticker,
-      name: wrappers[0]!.name,
-      sector: FIXTURE_SECTORS[ticker] ?? null,
-      pricePerShare: reference ? toWire(reference.pricePerShare) : null,
-      wrappers: wrappers.map((w) => ({
-        mint: w.mint, symbol: w.symbol, issuer: w.issuer,
-        multiplier: w.multiplier, decimals: w.decimals, isRoutable: true,
-      })),
     });
   });
 
