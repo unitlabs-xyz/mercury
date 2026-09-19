@@ -38,7 +38,6 @@ const COLUMNS = [
     heading: "Explore",
     links: [
       { label: "How it works", href: "#how-it-works" },
-      { label: "Both issuers", href: "#issuers" },
       { label: "Baskets", href: "#baskets" },
       { label: "Questions", href: "#faqs" },
     ],

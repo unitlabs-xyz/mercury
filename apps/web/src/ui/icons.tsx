@@ -82,13 +82,6 @@ export const Refresh = (p: Icon) => (
   </svg>
 );
 
-export const Search = (p: Icon) => (
-  <svg {...base} strokeWidth={1.8} {...p}>
-    <circle cx="11" cy="11" r="7" />
-    <path d="M16.5 16.5L21 21" />
-  </svg>
-);
-
 export const Shield = (p: Icon) => (
   <svg {...base} strokeWidth={1.8} {...p}>
     <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" />
