@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { VaultIllustration } from "../illustrations/Vault";
 import { Section } from "../ui/Section";
 import { Grid, Repeat, Trend, Wallet } from "../ui/icons";
 
@@ -29,7 +28,7 @@ const WAYS: { icon: ReactNode; title: string; body: string }[] = [
 export const Features = () => (
   <Section
     id="baskets"
-    inner="grid items-start gap-12 py-[76px] lg:grid-cols-[0.85fr_1.15fr] lg:gap-16"
+    inner="grid items-center gap-12 py-[76px] lg:grid-cols-[0.8fr_1.2fr] lg:gap-16"
   >
     <div>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
@@ -39,9 +38,6 @@ export const Features = () => (
         Buy a single company, buy a whole basket in one action, set an amount to go in every month,
         or leave it as cash and earn while you decide. Any combination, from the same balance.
       </p>
-      <div className="mt-9 hidden max-w-[360px] lg:block">
-        <VaultIllustration />
-      </div>
     </div>
 
     <div className="grid overflow-hidden rounded-2xl border border-cardline bg-white sm:grid-cols-2">
