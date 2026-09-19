@@ -1,9 +1,12 @@
 import { motion } from "motion/react";
+import { useAuthModal } from "../auth/AuthContext";
 import { Section } from "../ui/Section";
 import { PRESS } from "../motion/config";
 import { ArrowRight, Lock } from "../ui/icons";
 
-export const Hero = () => (
+export const Hero = () => {
+  const { open } = useAuthModal();
+  return (
   <Section
     id="top"
     className="flex flex-1 flex-col"
@@ -34,24 +37,25 @@ export const Hero = () => (
     <div className="mt-9 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
       <motion.button
         type="button"
+        onClick={open}
         whileHover="hover"
         whileTap={{ scale: 0.97 }}
         transition={PRESS}
         className="flex items-center justify-center gap-2 rounded-[10px] bg-brand px-6 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-brand-deep"
       >
-        Connect wallet
+        Get started
         <motion.span variants={{ hover: { x: 3 } }} transition={PRESS} className="inline-flex">
           <ArrowRight className="size-4" />
         </motion.span>
       </motion.button>
-      <motion.button
-        type="button"
+      <motion.a
+        href="#how-it-works"
         whileTap={{ scale: 0.97 }}
         transition={PRESS}
-        className="rounded-[10px] border border-btnline bg-white px-[22px] py-3.5 text-[15px] font-medium text-ink-soft transition-colors duration-200 hover:border-faint"
+        className="rounded-[10px] border border-btnline bg-white px-[22px] py-3.5 text-center text-[15px] font-medium text-ink-soft transition-colors duration-200 hover:border-faint"
       >
         See how it works
-      </motion.button>
+      </motion.a>
     </div>
 
     <p className="mt-7 flex items-center justify-center gap-[9px] text-[13px] text-muted">
@@ -60,3 +64,4 @@ export const Hero = () => (
     </p>
   </Section>
 );
+};

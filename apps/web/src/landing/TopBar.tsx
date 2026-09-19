@@ -1,5 +1,6 @@
+import { useAuthModal } from "../auth/AuthContext";
 import { Logo } from "../ui/Logo";
-import { Globe, Wallet } from "../ui/icons";
+import { Globe } from "../ui/icons";
 
 const LINKS = [
   { label: "How it works", href: "#how-it-works" },
@@ -7,7 +8,9 @@ const LINKS = [
   { label: "FAQs", href: "#faqs" },
 ];
 
-export const TopBar = () => (
+export const TopBar = () => {
+  const { open } = useAuthModal();
+  return (
   <header className="sticky top-0 z-50 border-b border-rule bg-shell/85 backdrop-blur-md">
     <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4 px-5 py-5 sm:px-10">
       <a href="#top" className="group flex items-center gap-2.5">
@@ -38,12 +41,13 @@ export const TopBar = () => (
 
         <button
           type="button"
-          className="flex shrink-0 items-center gap-2 rounded-[9px] bg-brand px-4 py-2.5 text-[14px] font-semibold whitespace-nowrap text-white transition-[background-color,transform] duration-200 hover:bg-brand-deep active:scale-[0.97] sm:px-[18px] lg:ml-5"
+          onClick={open}
+          className="shrink-0 rounded-[9px] bg-brand px-4 py-2.5 text-[14px] font-semibold whitespace-nowrap text-white transition-[background-color,transform] duration-200 hover:bg-brand-deep active:scale-[0.97] sm:px-[18px] lg:ml-5"
         >
-          Connect wallet
-          <Wallet className="size-4" />
+          Log In / Sign Up
         </button>
       </div>
     </div>
   </header>
 );
+};

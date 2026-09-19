@@ -1,3 +1,5 @@
+import { AuthProvider } from "../auth/AuthContext";
+import { AuthModal } from "../auth/AuthModal";
 import { CustodyStrip, StatsBand } from "./Bands";
 import { CallToAction, Footer } from "./Closing";
 import { Faq } from "./Faq";
@@ -9,7 +11,7 @@ import { TopBar } from "./TopBar";
 import { Trust } from "./Trust";
 
 export const Landing = () => (
-  <>
+  <AuthProvider>
     <TopBar />
     <main>
       {/* The first screen is exactly one viewport: hero, with the partner strip
@@ -27,5 +29,6 @@ export const Landing = () => (
       <CallToAction />
     </main>
     <Footer />
-  </>
+    <AuthModal />
+  </AuthProvider>
 );

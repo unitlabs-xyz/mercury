@@ -55,6 +55,40 @@ export const Trend = (p: Icon) => (
   </svg>
 );
 
+export const Mail = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <path d="M3.5 7l8.5 6 8.5-6" />
+  </svg>
+);
+
+export const Check = (p: Icon) => (
+  <svg {...base} strokeWidth={2.4} {...p}>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </svg>
+);
+
+export const Copy = (p: Icon) => (
+  <svg {...base} {...p}>
+    <rect x="9" y="9" width="11" height="11" rx="2" />
+    <path d="M5 15V6a2 2 0 0 1 2-2h8" />
+  </svg>
+);
+
+export const Alert = (p: Icon) => (
+  <svg {...base} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v5" />
+    <path d="M12 16h.01" />
+  </svg>
+);
+
+export const Close = (p: Icon) => (
+  <svg {...base} {...p}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
 export const Grid = (p: Icon) => (
   <svg {...base} {...p}>
     <rect x="3" y="3" width="7" height="7" rx="1.5" />

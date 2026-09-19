@@ -1,10 +1,13 @@
 import { motion } from "motion/react";
 import { PRESS } from "../motion/config";
+import { useAuthModal } from "../auth/AuthContext";
 import { Section } from "../ui/Section";
 import { Logo } from "../ui/Logo";
 import { ArrowRight } from "../ui/icons";
 
-export const CallToAction = () => (
+export const CallToAction = () => {
+  const { open } = useAuthModal();
+  return (
   <Section inner="pb-[76px]">
     <div className="flex flex-col items-start justify-between gap-8 rounded-[20px] border border-cardline bg-white p-8 sm:p-[60px] lg:flex-row lg:items-center lg:gap-12">
       <div>
@@ -17,19 +20,21 @@ export const CallToAction = () => (
       </div>
       <motion.button
         type="button"
+        onClick={open}
         whileHover="hover"
         whileTap={{ scale: 0.97 }}
         transition={PRESS}
         className="flex shrink-0 items-center gap-2.5 rounded-[11px] bg-brand px-7 py-4 text-[16px] font-semibold text-white transition-colors duration-200 hover:bg-brand-deep"
       >
-        Connect wallet
+        Get started
         <motion.span variants={{ hover: { x: 3 } }} transition={PRESS} className="inline-flex">
           <ArrowRight className="size-[17px]" />
         </motion.span>
       </motion.button>
-    </div>
-  </Section>
-);
+      </div>
+    </Section>
+  );
+};
 
 /* Every link here goes somewhere. The four under Explore are sections on this
    page; Company and Legal are routes still to be built. */
