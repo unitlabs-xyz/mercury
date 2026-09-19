@@ -12,6 +12,7 @@ const COLS = "grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-3";
 
 export const IssuerComparison = () => (
   <Section
+    id="issuers"
     tone="white"
     inner="grid items-center gap-12 py-[76px] lg:grid-cols-[0.9fr_1.1fr] lg:gap-16"
   >
