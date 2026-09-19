@@ -33,14 +33,12 @@ apps/
   mobile/     Expo + React Native. iOS only for now.
   web/        Vite + React. The build judges will open.
   landing/    Next.js. Marketing site.
-programs/
-  basket-vault/  Anchor. Holds constituents, mints the basket token.
 services/
   api/        Hono on Node. The only thing the apps talk to.
   worker/     Scheduled work: recurring buys, order watching, price cache.
 packages/
   core/       Domain logic with no I/O. Pricing, wrapper choice, cost basis, baskets.
-  chain/      Solana adapters. Jupiter, Kamino, RPC, token registry.
+  chain/      Solana adapters. Jupiter, Symmetry, Kamino, RPC, token registry.
   market/     Reference prices, market hours, multipliers.
   types/      Shared types and Zod schemas.
   sdk/        Typed API client used by web and mobile.

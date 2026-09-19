@@ -11,11 +11,9 @@ harbor/
 ├── services/
 │   ├── api/             Hono on Node. The only thing the apps talk to.
 │   └── worker/          Scheduled work: recurring buys, order watching, price cache.
-├── programs/
-│   └── basket-vault/    Anchor. Holds constituents, mints the basket token. See docs/10-baskets.md.
 ├── packages/
 │   ├── core/            Domain logic, no I/O. Pricing, wrapper choice, cost basis, baskets.
-│   ├── chain/           Solana adapters. Jupiter, Kamino, RPC, token registry.
+│   ├── chain/           Solana adapters. Jupiter, Symmetry, Kamino, RPC, token registry.
 │   ├── market/          Reference prices, market hours, multipliers.
 │   ├── types/           Shared types and Zod schemas.
 │   └── sdk/             Typed API client used by web and mobile.
@@ -47,7 +45,8 @@ returns decisions. That is the whole reason the execution engine can be tested w
 | Routing | Jupiter Swap API and Trigger API | Best aggregate liquidity on Solana, and Trigger gives on-chain limit orders that keepers fill without our server |
 | Lending | Kamino SDK | Already accepts tokenized stocks with an off-hours price band |
 | Prices | Chainlink xStocks Data Streams | Official oracle for these assets. Pyth reads ~17bp low on them. [ADR 0006](adr/0006-pricing.md) |
-| Programs | Anchor | Only if the Symmetry spike says build. [ADR 0005](adr/0005-basket-vaults.md) |
+| Baskets | Symmetry Protocol, `@symmetry-hq/baskets-sdk` | Permissionless vaults that already mint a token per basket. We integrate rather than write one. [ADR 0005](adr/0005-basket-vaults.md) |
+| Funding | Privy universal deposit addresses and card onramps | Fixes the empty-wallet cold start without us operating a ramp. [ADR 0007](adr/0007-wallet-funding.md) |
 | Wallets | Privy embedded only | An email becomes a Solana wallet in seconds. Delegated actions let recurring plans run unattended. No external wallets in v1. [ADR 0003](adr/0003-custody.md) |
 | Web app | Vite + React + React Router | Fast, no server rendering needed. It is an app, not a document |
 | Mobile app | Expo + React Native, Expo Router | One codebase, over-the-air updates, and a build judges can install |

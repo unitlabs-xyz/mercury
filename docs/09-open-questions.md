@@ -1,67 +1,61 @@
 # 09 · Open questions
 
-## Settled on 19 September
+## Settled
 
 | Question | Answer |
 | --- | --- |
-| Custody | **Privy embedded wallets only.** No Phantom, no wallet-connect. Recurring uses Privy delegated actions. [ADR 0003](adr/0003-custody.md) |
-| Baskets | **Real tokens, not a tracked set.** Build or integrate decided by a day-one spike. [ADR 0005](adr/0005-basket-vaults.md) |
-| Judged surface | **Web is the submission.** iOS follows the hackathon, as a product commitment rather than a hackathon deliverable |
+| Custody | **Privy embedded wallets only.** Recurring uses delegated actions. [ADR 0003](adr/0003-custody.md) |
+| Baskets | **Real tokens, on Symmetry Protocol.** Not our own vault. [ADR 0005](adr/0005-basket-vaults.md) |
+| Funding an empty wallet | **Every path Privy already offers**, built by us: none. [ADR 0007](adr/0007-wallet-funding.md) |
+| Judged surface | **Web is the submission.** iOS is back in scope and is the first cut |
 | Team | **Four engineers.** Allocation in [08 Roadmap](08-roadmap.md) |
 | Testing funds | **Funded wallets exist.** Mainnet from day one |
 | Reference price | **Chainlink**, not Pyth. [ADR 0006](adr/0006-pricing.md) |
-| Crypto-native, no fiat ramps | [ADR 0001](adr/0001-crypto-native.md) |
+| Crypto-native, no fiat ramps we operate | [ADR 0001](adr/0001-crypto-native.md) |
 | Solana, not Robinhood Chain | [ADR 0002](adr/0002-solana.md) |
 
 ---
 
-## Still open
+## Open, and how each gets closed
 
-### 1 · A new wallet is empty, and we have no on-ramp
+### 1 · The Symmetry spike · closes 20 September, by testing
 
-Choosing Privy-only created this. Someone signs in with an email, gets a Solana wallet, and it
-holds nothing. We have no fiat ramp by design. So the first-run experience currently ends at
-*"send USDC to this address"*, which means leaving for an exchange and coming back. That is the
-largest funnel drop in the product and it did not exist when an external wallet was an option.
+Three questions, answered by code rather than discussion, written into
+[ADR 0005](adr/0005-basket-vaults.md) the same day.
 
-Three ways out:
+1. **Are the xStocks mints in Symmetry's supported token list?** The only one that can stop us.
+   If no, we write the minimal vault and the schedule tightens sharply.
+2. **Do basket tokens route through Jupiter?** A `@jup-ag/symmetry-sdk` package exists, so
+   possibly. If yes, investing becomes one swap instead of six swaps and a deposit, which is a
+   large simplification and a better product.
+3. **Can Chainlink be configured as the oracle per constituent?**
 
-| Option | Cost | Problem |
-| --- | --- | --- |
-| Receive screen only | Nothing | Most people never come back |
-| **Privy's built-in funding**, which covers transfer from an existing wallet and card purchase through their partners | Configuration | A card purchase is a fiat ramp, operated by Privy's partner rather than by us |
-| Pre-fund demo accounts for judges | A day | Fine for judging, useless as a product |
+### 2 · Which three baskets ship · closes end of week 1
 
-**Recommendation: enable Privy's funding flow, and do all three.** The card path is consistent
-with [ADR 0001](adr/0001-crypto-native.md) on exactly the reasoning we already applied to the
-card in version two: the partner is the ramp and carries the identity burden, not us. For the
-hackathon we also pre-fund a demo account so a judge is never blocked.
+Candidates: Semiconductors, US Technology, S&P 500 exposure, AI, Dividend payers. Partly
+empirical, because a basket is only shippable if every constituent routes at size. Needs deciding
+early so copy and artwork can be made.
 
-**This needs your yes**, because it is a partial reversal of a decision you made deliberately.
+### 3 · Whether the iOS app actually ships · closes 2 October
 
-### 2 · Symmetry or our own vault
+It is in the plan because Symmetry returned a fortnight. It is also first on the cut list. The
+honest checkpoint is the week 2 gate: if the web app is not carrying itself by 2 October, mobile
+stops and that engineer moves to the web build.
 
-Resolved by a one-day spike on 20 September, not by discussion. The question the spike answers is
-whether Symmetry supports the specific xStocks mints. Integrating saves roughly a fortnight and
-scores on composability; building gives full control of a program that holds user funds.
-
-Whoever runs it writes the answer into [ADR 0005](adr/0005-basket-vaults.md) the same day.
-
-### 3 · Which three baskets ship
-
-Candidates: Semiconductors, US Technology, S&P 500 exposure, AI, Dividend payers. Constrained by
-what is actually routable at size on Jupiter, so the answer is partly empirical. Needs deciding
-in week one so the copy and the artwork can be made.
-
-### 4 · Do we publish the vault cap
-
-While the program is young there is a hard cap on vault size, a few thousand dollars. Showing it
-in the app is honest and slightly embarrassing. Hiding it is neither.
-
-**Recommendation: show it.** *"This basket is capped at $5,000 while the contract is new."* An
-audience that has watched a hundred protocols get drained reads that as competence.
-
-### 5 · The name
+### 4 · The name · closes whenever you like
 
 Still `harbor`. Nothing depends on it. A rename touches the README, the landing page and the app
 display name.
+
+---
+
+## Things I decided without asking
+
+Recorded here so they are easy to reverse.
+
+- **Card onramps are offered last in the funding screen**, after the universal deposit address
+  and the plain receive option. They are the slowest and most expensive path.
+- **The basket page names Symmetry.** We are not the custodian and should not imply we are.
+- **Redemption without us gets verified before launch**, and the result is stated in the product.
+- **`packages/core` never imports the Symmetry SDK.** It sits behind a four-method interface in
+  `packages/chain`, which keeps writing our own vault a week of work rather than a rewrite.
