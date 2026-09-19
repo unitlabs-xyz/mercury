@@ -1,0 +1,14 @@
+{
+  "name": "Harbor",
+  "short_name": "Harbor",
+  "description": "Buy real shares of Nvidia, Apple or the S&P 500 with stablecoins.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F6F2",
+  "theme_color": "#F7F6F2",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

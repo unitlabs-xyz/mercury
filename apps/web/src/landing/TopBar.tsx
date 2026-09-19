@@ -1,4 +1,5 @@
-import { Anchor, Globe, Wallet } from "../ui/icons";
+import { Logo } from "../ui/Logo";
+import { Globe, Wallet } from "../ui/icons";
 
 const LINKS = [
   { label: "How it works", href: "#how-it-works" },
@@ -9,11 +10,8 @@ const LINKS = [
 export const TopBar = () => (
   <header className="sticky top-0 z-50 border-b border-rule bg-shell/85 backdrop-blur-md">
     <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-4 px-5 py-5 sm:px-10">
-      <a href="#top" className="flex items-center gap-2.5">
-        <span className="grid size-7 place-items-center rounded-lg bg-brand text-shell">
-          <Anchor className="size-4" />
-        </span>
-        <span className="text-[17px] font-semibold tracking-[-0.01em]">Harbor</span>
+      <a href="#top" className="group flex items-center gap-2.5">
+        <Logo size="md" />
       </a>
 
       <div className="flex items-center">

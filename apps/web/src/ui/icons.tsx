@@ -12,14 +12,6 @@ const base = {
   strokeLinejoin: "round",
 } as const;
 
-export const Anchor = (p: Icon) => (
-  <svg {...base} {...p}>
-    <path d="M12 3v18" />
-    <path d="M5 10a7 7 0 0 0 14 0" />
-    <circle cx="12" cy="5" r="2" />
-  </svg>
-);
-
 export const Wallet = (p: Icon) => (
   <svg {...base} {...p}>
     <rect x="3" y="6" width="18" height="13" rx="2.5" />

@@ -1,7 +1,8 @@
 import { motion } from "motion/react";
 import { PRESS } from "../motion/config";
 import { Section } from "../ui/Section";
-import { Anchor, ArrowRight } from "../ui/icons";
+import { Logo } from "../ui/Logo";
+import { ArrowRight } from "../ui/icons";
 
 export const CallToAction = () => (
   <Section inner="pb-[76px]">
@@ -63,10 +64,7 @@ export const Footer = () => (
     <div className="gutter mx-auto grid w-full max-w-[1440px] gap-x-10 gap-y-12 pt-[52px] pb-12 lg:grid-cols-[2fr_1fr_1fr_1fr]">
       <div>
         <a href="#top" className="group inline-flex items-center gap-2.5">
-          <span className="grid size-[26px] place-items-center rounded-lg bg-brand text-shell transition-colors duration-200 group-hover:bg-brand-deep">
-            <Anchor className="size-[15px]" />
-          </span>
-          <span className="text-[16px] font-semibold tracking-[-0.01em]">Harbor</span>
+          <Logo />
         </a>
 
         <div className="mt-6 grid max-w-[46ch] gap-2.5 text-[13px] leading-[1.6] text-faint">
