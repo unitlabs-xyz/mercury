@@ -2,7 +2,8 @@ import { motion } from "motion/react";
 import { Section } from "../ui/Section";
 import { PRESS } from "../motion/config";
 import { ArrowRight, Lock } from "../ui/icons";
-import { DividendChip, IssuerCard, PortfolioCard } from "./HeroCards";
+import { VaultIllustration } from "../illustrations/Vault";
+import { IssuerCard } from "./HeroCards";
 
 export const Hero = () => (
   <Section
@@ -10,9 +11,18 @@ export const Hero = () => (
     inner="grid items-center gap-14 py-16 lg:min-h-[820px] lg:grid-cols-2 lg:pt-20 lg:pb-[90px]"
   >
     <div>
-      <p className="mb-6 inline-flex items-center gap-[7px] rounded-full border border-navline bg-white px-[13px] py-1.5 text-[12px] font-medium text-muted">
-        <span className="size-1.5 shrink-0 rounded-full bg-up" />
-        590 US stocks and funds · open every hour of the week
+      <p className="mb-7 inline-flex items-center gap-2.5 rounded-full border border-navline bg-white py-1.5 pr-4 pl-1.5 shadow-[0_1px_2px_rgba(27,26,23,0.05)]">
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-up-tint px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap text-up-deep">
+          <span className="size-1.5 shrink-0 rounded-full bg-up" />
+          Open now
+        </span>
+        {/* The full sentence needs more room than a phone gives it. */}
+        <span className="text-[13px] whitespace-nowrap text-ink-soft sm:hidden">
+          590 stocks, any hour
+        </span>
+        <span className="hidden text-[13px] whitespace-nowrap text-ink-soft sm:inline">
+          590 US stocks and funds, any hour of the week
+        </span>
       </p>
 
       <h1 className="text-[40px] leading-[1.06] font-semibold tracking-[-0.035em] text-balance sm:text-[50px] lg:text-[58px]">
@@ -53,13 +63,10 @@ export const Hero = () => (
       </p>
     </div>
 
-    <div className="relative flex flex-col gap-4 lg:block lg:gap-0 lg:pt-7 lg:pb-10">
-      <PortfolioCard />
-      <div className="lg:relative lg:z-10 lg:-mt-2.5 lg:w-[62%]">
+    <div className="relative mx-auto w-full max-w-[460px] lg:mr-0 lg:ml-auto">
+      <VaultIllustration />
+      <div className="mt-5 lg:absolute lg:-bottom-5 lg:-left-12 lg:mt-0 lg:w-[330px]">
         <IssuerCard />
-      </div>
-      <div className="lg:absolute lg:-top-5 lg:right-0">
-        <DividendChip />
       </div>
     </div>
   </Section>
