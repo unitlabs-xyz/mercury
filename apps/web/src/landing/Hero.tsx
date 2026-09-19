@@ -4,7 +4,11 @@ import { PRESS } from "../motion/config";
 import { ArrowRight, Lock } from "../ui/icons";
 
 export const Hero = () => (
-  <Section id="top" inner="flex flex-col items-center py-20 text-center lg:py-32">
+  <Section
+    id="top"
+    className="flex flex-1 flex-col"
+    inner="flex flex-1 flex-col items-center justify-center py-16 text-center lg:py-20"
+  >
     <p className="mb-7 inline-flex items-center gap-2.5 rounded-full border border-navline bg-white py-1.5 pr-4 pl-1.5 shadow-[0_1px_2px_rgba(27,26,23,0.05)]">
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-up-tint px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap text-up-deep">
         <span className="size-1.5 shrink-0 rounded-full bg-up" />

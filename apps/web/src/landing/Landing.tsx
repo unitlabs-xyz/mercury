@@ -12,8 +12,12 @@ export const Landing = () => (
   <>
     <TopBar />
     <main>
-      <Hero />
-      <CustodyStrip />
+      {/* The first screen is exactly one viewport: hero, with the partner strip
+          on its floor. Nothing below it peeks in. */}
+      <div className="flex min-h-[calc(100dvh-var(--bar-h))] flex-col">
+        <Hero />
+        <CustodyStrip />
+      </div>
       <StatsBand />
       <HowItWorks />
       <IssuerComparison />
