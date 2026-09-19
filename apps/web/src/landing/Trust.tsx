@@ -1,3 +1,4 @@
+import { CustodyIllustration } from "../illustrations/Illustrations";
 import type { ReactNode } from "react";
 import { Section } from "../ui/Section";
 import { Clock, Layers, Lock, Shield } from "../ui/icons";
@@ -34,10 +35,8 @@ export const Trust = () => (
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         Built so nobody has to trust us.
       </h2>
-      <div className="mt-[26px] grid h-50 place-items-center rounded-[14px] border border-dashed border-dash bg-[repeating-linear-gradient(135deg,var(--color-shell)_0_8px,#fff_8px_16px)]">
-        <span className="stamp px-4 text-center">
-          ISOMETRIC ILLUSTRATION — CUSTODY CHAIN
-        </span>
+      <div className="mt-[26px] h-50 rounded-[14px] border border-cardline bg-shell p-4">
+        <CustodyIllustration />
       </div>
     </div>
 

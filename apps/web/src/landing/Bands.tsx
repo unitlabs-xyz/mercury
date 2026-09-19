@@ -1,6 +1,13 @@
 import { Section } from "../ui/Section";
 
-const ISSUERS = ["Backed", "Ondo", "xStocks", "Solana", "Privy"];
+/** Official marks, painted through a mask so the strip takes one ink from the palette. */
+const ISSUERS = [
+  { name: "Backed", src: "/logos/backed.svg", w: 76, h: 17 },
+  { name: "Ondo", src: "/logos/ondo.svg", w: 65, h: 19 },
+  { name: "xStocks", src: "/logos/xstocks.svg", w: 94, h: 22 },
+  { name: "Solana", src: "/logos/solana.svg", w: 15, h: 15 },
+  { name: "Privy", src: "/logos/privy.svg", w: 76, h: 17 },
+];
 
 const STATS = [
   { value: "590", label: "US stocks and funds" },
@@ -16,10 +23,25 @@ export const CustodyStrip = () => (
   >
     <span className="stamp whitespace-nowrap">SHARES CUSTODIED AND TOKENISED BY</span>
     <div className="flex flex-1 flex-wrap items-center justify-between gap-x-10 gap-y-3">
-      {ISSUERS.map((name) => (
-        <span key={name} className="text-[17px] font-semibold tracking-[-0.01em] text-ink-soft">
-          {name}
-        </span>
+      {ISSUERS.map((issuer) => (
+        <span
+          key={issuer.name}
+          role="img"
+          aria-label={issuer.name}
+          className="block bg-ink-soft opacity-70 transition-opacity duration-200 hover:opacity-100"
+          style={{
+            width: issuer.w,
+            height: issuer.h,
+            maskImage: `url(${issuer.src})`,
+            WebkitMaskImage: `url(${issuer.src})`,
+            maskRepeat: "no-repeat",
+            WebkitMaskRepeat: "no-repeat",
+            maskSize: "contain",
+            WebkitMaskSize: "contain",
+            maskPosition: "center",
+            WebkitMaskPosition: "center",
+          }}
+        />
       ))}
     </div>
   </Section>

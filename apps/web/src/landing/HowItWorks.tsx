@@ -1,3 +1,4 @@
+import { FlowIllustration } from "../illustrations/Illustrations";
 import { Section } from "../ui/Section";
 
 const STEPS = [
@@ -31,10 +32,8 @@ export const HowItWorks = () => (
         No brokerage account, no identity check, no fiat rails. If you can hold a stablecoin, you
         can hold Nvidia.
       </p>
-      <div className="mt-7 grid h-60 place-items-center rounded-[14px] border border-dashed border-dash bg-[repeating-linear-gradient(135deg,var(--color-hatch)_0_8px,var(--color-shell)_8px_16px)]">
-        <span className="stamp px-4 text-center">
-          ISOMETRIC ILLUSTRATION — WALLET → SHARES
-        </span>
+      <div className="mt-7 h-60 rounded-[14px] border border-cardline bg-shell p-4">
+        <FlowIllustration />
       </div>
     </div>
 
