@@ -1,30 +1,45 @@
 @import "tailwindcss";
 
 @theme {
-  --color-page: #ffffff;
-  --color-canvas: #f5f4ef;
-  --color-bar: #fdfdfc;
-  --color-card: #ffffff;
+  /* ground */
+  --color-page: #efede8;
+  --color-shell: #f7f6f2;
 
-  --color-ink: #15171b;
-  --color-ink-soft: #3d4148;
-  --color-muted: #6d7178;
-  --color-faint: #9ca2a8;
+  /* ink */
+  --color-ink: #1b1a17;
+  --color-ink-soft: #3a372f;
+  --color-muted: #6b665c;
+  --color-faint: #7a746a;
 
-  --color-line: #e7e5de;
-  --color-line-soft: #eeece5;
+  /* rules, in order of weight */
+  --color-edge: #dbd7ce;
+  --color-rule: #e7e3da;
+  --color-cardline: #e4e0d7;
+  --color-navline: #dfdbd2;
+  --color-dash: #cfcbc2;
+  --color-btnline: #d5d0c6;
+  --color-hair: #f0ede6;
+  --color-hairline: #f3f0e9;
 
-  --color-brand: #2f5d5c;
-  --color-brand-hover: #26504f;
-  --color-up: #2f8f63;
-  --color-down: #c5493f;
+  /* fills */
+  --color-track: #f0ede5;
+  --color-chip: #f4f2ec;
+  --color-hatch: #f2f0ea;
+  --color-bar-neutral: #c6c0b4;
 
-  --color-nvidia: #121316;
-  --color-spy: #2f3f6b;
-  --color-basket: #e6edf2;
-  --color-basket-ink: #5c7484;
+  /* brand */
+  --color-brand: #0f7480;
+  --color-brand-deep: #0b5c66;
+  --color-brand-tint: #e8f4f5;
+  --color-brand-soft: #6ba8b0;
 
-  --font-sans: "Switzer", ui-sans-serif, -apple-system, system-ui, sans-serif;
+  /* performance */
+  --color-up: #1a7f4b;
+  --color-up-tint: #e7f3ec;
+  --color-down: #c0442f;
+  --color-down-line: #e8bdb4;
+
+  --font-sans: "Instrument Sans", ui-sans-serif, Helvetica, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -34,11 +49,14 @@
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
   }
   body {
+    margin: 0;
     background: var(--color-page);
     color: var(--color-ink);
     font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
   }
   ::selection {
     background: var(--color-brand);
@@ -46,16 +64,29 @@
   }
 }
 
-@utility num {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+/* 80px section gutter, collapsing on narrow screens */
+@utility gutter {
+  padding-inline: 20px;
+  @media (width >= 40rem) {
+    padding-inline: 40px;
+  }
+  @media (width >= 64rem) {
+    padding-inline: 80px;
+  }
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--color-brand);
 }
 
 @utility stamp {
   font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-faint);
 }
 
 @keyframes rise {

@@ -1,57 +1,125 @@
 import type { SVGProps } from "react";
 
+/** Icon geometry is copied verbatim from the design handoff. */
 type Icon = SVGProps<SVGSVGElement>;
 
-const stroke = {
+const base = {
+  viewBox: "0 0 24 24",
   fill: "none",
   stroke: "currentColor",
+  strokeWidth: 2,
   strokeLinecap: "round",
   strokeLinejoin: "round",
 } as const;
 
 export const Anchor = (p: Icon) => (
-  <svg viewBox="0 0 24 24" strokeWidth={1.9} {...stroke} {...p}>
-    <circle cx="12" cy="5.1" r="2.1" />
-    <path d="M12 7.2v13.3" />
-    <path d="M7.9 10.6h8.2" />
-    <path d="M4.2 14.9A8.2 8.2 0 0 0 12 20.6a8.2 8.2 0 0 0 7.8-5.7" />
+  <svg {...base} {...p}>
+    <path d="M12 3v18" />
+    <path d="M5 10a7 7 0 0 0 14 0" />
+    <circle cx="12" cy="5" r="2" />
   </svg>
 );
 
 export const Wallet = (p: Icon) => (
-  <svg viewBox="0 0 24 24" strokeWidth={1.7} {...stroke} {...p}>
-    <rect x="2.8" y="5.6" width="18.4" height="12.8" rx="3.2" />
-    <path d="M16.4 12h2.6" />
+  <svg {...base} {...p}>
+    <rect x="3" y="6" width="18" height="13" rx="2.5" />
+    <path d="M16 12.5h2" />
   </svg>
 );
 
 export const Globe = (p: Icon) => (
-  <svg viewBox="0 0 24 24" strokeWidth={1.5} {...stroke} {...p}>
-    <circle cx="12" cy="12" r="8.4" />
-    <path d="M3.6 12h16.8" />
-    <path d="M12 3.6c2.1 2.3 3.2 5.2 3.2 8.4s-1.1 6.1-3.2 8.4c-2.1-2.3-3.2-5.2-3.2-8.4S9.9 5.9 12 3.6Z" />
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18" />
+    <path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18" />
   </svg>
 );
 
 export const ArrowRight = (p: Icon) => (
-  <svg viewBox="0 0 24 24" strokeWidth={1.9} {...stroke} {...p}>
-    <path d="M4.8 12h14" />
-    <path d="m13 6.4 5.6 5.6-5.6 5.6" />
+  <svg {...base} {...p}>
+    <path d="M5 12h14" />
+    <path d="M13 6l6 6-6 6" />
+  </svg>
+);
+
+export const ArrowUp = (p: Icon) => (
+  <svg {...base} strokeWidth={2.6} {...p}>
+    <path d="M12 19V5" />
+    <path d="M6 11l6-6 6 6" />
   </svg>
 );
 
 export const Lock = (p: Icon) => (
-  <svg viewBox="0 0 24 24" strokeWidth={1.7} {...stroke} {...p}>
-    <rect x="4.6" y="10.4" width="14.8" height="9.8" rx="3" />
-    <path d="M8.4 10.4V7.8a3.6 3.6 0 0 1 7.2 0v2.6" />
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <rect x="4" y="10" width="16" height="10" rx="2.5" />
+    <path d="M8 10V7a4 4 0 0 1 8 0v3" />
   </svg>
 );
 
 export const Grid = (p: Icon) => (
-  <svg viewBox="0 0 24 24" strokeWidth={1.8} {...stroke} {...p}>
-    <rect x="3.6" y="3.6" width="7" height="7" rx="2.2" />
-    <rect x="13.4" y="3.6" width="7" height="7" rx="2.2" />
-    <rect x="3.6" y="13.4" width="7" height="7" rx="2.2" />
-    <rect x="13.4" y="13.4" width="7" height="7" rx="2.2" />
+  <svg {...base} {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </svg>
+);
+
+export const Repeat = (p: Icon) => (
+  <svg {...base} {...p}>
+    <path d="M17 2l4 4-4 4" />
+    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+    <path d="M7 22l-4-4 4-4" />
+    <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+  </svg>
+);
+
+export const Refresh = (p: Icon) => (
+  <svg {...base} {...p}>
+    <path d="M20 7v5a8 8 0 0 1-14.9 4" />
+    <path d="M4 17v-5a8 8 0 0 1 14.9-4" />
+    <path d="M20 3v4h-4" />
+    <path d="M4 21v-4h4" />
+  </svg>
+);
+
+export const Search = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M16.5 16.5L21 21" />
+  </svg>
+);
+
+export const Shield = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z" />
+  </svg>
+);
+
+export const Layers = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M12 3v18" />
+    <path d="M4 8h16" />
+    <path d="M4 16h16" />
+  </svg>
+);
+
+export const Clock = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+
+export const ChevronDown = (p: Icon) => (
+  <svg {...base} strokeLinejoin={undefined} {...p}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
+
+export const Plus = (p: Icon) => (
+  <svg {...base} strokeLinejoin={undefined} {...p}>
+    <path d="M12 6v12" />
+    <path d="M6 12h12" />
   </svg>
 );
