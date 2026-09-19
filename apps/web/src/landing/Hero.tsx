@@ -3,7 +3,6 @@ import { Section } from "../ui/Section";
 import { PRESS } from "../motion/config";
 import { ArrowRight, Lock } from "../ui/icons";
 import { VaultIllustration } from "../illustrations/Vault";
-import { IssuerCard } from "./HeroCards";
 
 export const Hero = () => (
   <Section
@@ -63,11 +62,8 @@ export const Hero = () => (
       </p>
     </div>
 
-    <div className="relative mx-auto w-full max-w-[460px] lg:mr-0 lg:ml-auto">
+    <div className="mx-auto w-full max-w-[460px] lg:mr-0 lg:ml-auto">
       <VaultIllustration />
-      <div className="mt-5 lg:absolute lg:-bottom-5 lg:-left-12 lg:mt-0 lg:w-[330px]">
-        <IssuerCard />
-      </div>
     </div>
   </Section>
 );
