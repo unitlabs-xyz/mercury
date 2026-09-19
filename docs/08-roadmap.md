@@ -20,18 +20,25 @@ are the xStocks mints in Symmetry's token list, do basket tokens route through J
 Chainlink be configured per constituent. Then create the three baskets on mainnet and get an
 invest and a redeem working at small size.
 
-**B** Token registry for both issuers with multipliers. Jupiter quotes at a given size. Chainlink
-reference prices and session state with staleness detection.
+**B** Token registry for both issuers with multipliers, read from the Token-2022
+`ScaledUiAmount` extension rather than an API. Jupiter Ultra quotes. Chainlink reference prices
+with the dividend-window correction, and sessions from Pyth's schedule.
+
+Also, days one and two: **the routing sweep**. Every candidate basket constituent quoted at
+$1,000 and $10,000, applying the rule in [09 Open questions](09-open-questions.md). This decides
+baskets two and three, so it blocks copy and artwork and cannot slip.
 
 **C** `packages/core` complete: `decide()`, policy defaults, the full fixture table from
 [04](04-execution-engine.md). API skeleton with instruments, quote, and create, execute, confirm.
 
-**D** Vite app scaffolded. Privy sign-in creating a Solana wallet. The funding screen with all
-three paths from [ADR 0007](adr/0007-wallet-funding.md). App shell, four tabs, design tokens.
+**D** Vite app scaffolded. Design tokens taking their real values from the brand work. Privy
+sign-in creating a Solana wallet. The funding screen with all three paths from
+[ADR 0007](adr/0007-wallet-funding.md). App shell, four tabs.
 
-> **Gate, 25 September.** A real buy of NVDAx on mainnet, signed by a Privy embedded wallet,
-> recorded as a lot with correct cost basis. And a real basket invest and redeem through
-> Symmetry. Nothing else counts as progress until both work.
+> **Gate, 25 September.** Three things. A real buy of NVDAx on mainnet, signed by a Privy
+> embedded wallet, recorded as a lot with correct cost basis. A real basket invest and redeem
+> through Symmetry. And the routing sweep complete, with baskets two and three named. Nothing
+> else counts as progress until all three are done.
 
 ## Week 2 · 26 September to 2 October · make it a product
 

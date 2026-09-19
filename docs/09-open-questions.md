@@ -5,106 +5,71 @@
 | Question | Answer |
 | --- | --- |
 | Custody | **Privy embedded wallets only.** Recurring uses delegated actions. [ADR 0003](adr/0003-custody.md) |
-| Baskets | **Real tokens, on Symmetry Protocol.** Not our own vault. [ADR 0005](adr/0005-basket-vaults.md) |
-| Funding an empty wallet | **Every path Privy already offers**, built by us: none. [ADR 0007](adr/0007-wallet-funding.md) |
-| Judged surface | **Web is the submission.** iOS is back in scope and is the first cut |
+| Baskets | **Real tokens, on Symmetry Protocol.** [ADR 0005](adr/0005-basket-vaults.md) |
+| Funding an empty wallet | **Every path Privy already offers.** We build none. [ADR 0007](adr/0007-wallet-funding.md) |
+| Positioning | **Investing, not trading.** No perps, no margin, no options, no order books. [ADR 0009](adr/0009-investing-not-trading.md) |
+| Jupiter integration | **Ultra everywhere.** No Router path. [ADR 0008](adr/0008-jupiter-ultra.md) |
+| Reference price | **Chainlink**, with the dividend-window correction. [ADR 0006](adr/0006-pricing.md) |
+| Judged surface | **Web is the submission.** iOS is in scope and is the first cut |
 | Team | **Four engineers.** Allocation in [08 Roadmap](08-roadmap.md) |
-| Testing funds | **Funded wallets exist.** Mainnet from day one |
-| Reference price | **Chainlink**, not Pyth. [ADR 0006](adr/0006-pricing.md) |
-| Crypto-native, no fiat ramps we operate | [ADR 0001](adr/0001-crypto-native.md) |
+| Infrastructure accounts | **Provided.** Jupiter key, RPC, Privy app, Pyth token, hosting |
+| Brand and design | **Designed before the screens are built.** Tokens in [07 Design](07-design.md) take the real values once they exist |
+| Crypto-native, no ramps we operate | [ADR 0001](adr/0001-crypto-native.md) |
 | Solana, not Robinhood Chain | [ADR 0002](adr/0002-solana.md) |
+| Monorepo and stack | [ADR 0004](adr/0004-stack.md) |
 
 ---
 
-## Open, and how each gets closed
+## Open · two, and both close by testing
 
-### 1 · The Symmetry spike · closes 20 September, by testing
+### 1 · The Symmetry spike · closes 20 September
 
-Three questions, answered by code rather than discussion, written into
-[ADR 0005](adr/0005-basket-vaults.md) the same day.
+Two questions now that [ADR 0008](adr/0008-jupiter-ultra.md) has removed the third.
 
-1. **Are the xStocks mints in Symmetry's supported token list?** The only one that can stop us.
-   If no, we write the minimal vault and the schedule tightens sharply.
-2. **Do basket tokens route through Jupiter?** A `@jup-ag/symmetry-sdk` package exists, so
-   possibly. If yes, investing becomes one swap instead of six swaps and a deposit, which is a
-   large simplification and a better product.
-3. **Can Chainlink be configured as the oracle per constituent?**
+1. **Are the xStocks mints in Symmetry's supported token list?** Call `getTokenListData()`. The
+   only question that can stop us. If no, we write the minimal vault and the schedule tightens.
+2. **Do basket tokens route through Jupiter?** If yes, investing in a basket is one swap rather
+   than six plus a deposit, which is a much better product.
 
-### 2 · Which three baskets ship · closes end of week 1
+Whoever runs it writes the answer into the ADR the same day.
 
-Candidates: Semiconductors, US Technology, S&P 500 exposure, AI, Dividend payers. Partly
-empirical, because a basket is only shippable if every constituent routes at size. Needs deciding
-early so copy and artwork can be made.
+### 2 · Which three baskets ship · one decided, two decided by a routing sweep
 
-### 3 · Whether the iOS app actually ships · closes 2 October
+**Basket one is locked: Core US, 70% SPYx and 30% QQQx.** Both measured at 0.00% and 0.11% price
+impact on 19 September, the two deepest tokenized equities on Solana. It is the basket most users
+should buy, it will never fail a leg, and it makes the mechanism reliable in the demo. Simple is
+the point.
 
-It is in the plan because Symmetry returned a fortnight. It is also first on the cut list. The
-honest checkpoint is the week 2 gate: if the web app is not carrying itself by 2 October, mobile
-stops and that engineer moves to the web build.
+**Baskets two and three are chosen by measurement, in week one.** Engineer B runs a routing sweep
+across every candidate constituent at $1,000 and $10,000 and applies one rule:
 
-### 4 · The name · closes whenever you like
+> A constituent ships only if price impact is under 1% at $1,000 and under 2% at $10,000.
 
-Still `harbor`. Nothing depends on it. A rename touches the README, the landing page and the app
-display name.
-
----
-
-## Things I decided without asking
-
-Recorded here so they are easy to reverse.
-
-- **Card onramps are offered last in the funding screen**, after the universal deposit address
-  and the plain receive option. They are the slowest and most expensive path.
-- **The basket page names Symmetry.** We are not the custodian and should not imply we are.
-- **Redemption without us gets verified before launch**, and the result is stated in the product.
-- **`packages/core` never imports the Symmetry SDK.** It sits behind a four-method interface in
-  `packages/chain`, which keeps writing our own vault a week of work rather than a rewrite.
-
----
-
-## Added 19 September, after the reference sweep
-
-### 5 · Positioning against Backpack · needs a decision, not a spike
-
-Backpack already ships a unified portfolio holding tokenized stocks beside crypto, cash earning
-3.35% that stays usable as collateral, and portfolio margin across assets. See
-[11 References](11-references.md).
-
-**So "stocks and crypto in one portfolio" is no longer an available claim.** What they do not
-have is baskets, recurring investing, any comparison between issuers of the same stock, exposure
-deduplication, or any awareness that the US market is shut. They are a trading product: perps,
-margin, order types, subaccounts.
-
-**Recommendation: lean harder into investing rather than trading.** No perps, no margin trading,
-no candlesticks, no order book. The positioning line becomes closer to M1's: built for investors,
-not traders. Everything in [00 Overview](00-overview.md) survives, but the emphasis moves from
-"one portfolio" toward "the account that buys you the right share at the right price and then
-leaves you alone".
-
-Worth your explicit agreement, because it rules out features people will ask for.
-
-### 6 · Infrastructure accounts, all needed in week 1
-
-| Thing | Why | Who owns it |
+| Candidate basket | Constituents to test | Verified so far |
 | --- | --- | --- |
-| Jupiter API key | Endpoints now require `x-api-key`. Not optional | ? |
-| RPC provider | Helius is a Colosseum sponsor and likely has credits for entrants | ? |
-| Privy app, with funding providers enabled | [ADR 0007](adr/0007-wallet-funding.md) is a dashboard setting | ? |
-| Pyth Pro token | Needed for equity feeds and the session schedule | ? |
-| Hosting | Vercel for web and landing. The API and worker need somewhere with a cron | ? |
+| Big Tech | AAPL, MSFT, GOOGL, AMZN, META, NVDA | AAPL 0.27%, NVDA 0.02% |
+| AI and Semiconductors | NVDA, AVGO, AMD, TSM, ASML, MU | NVDA 0.02% |
 
-These are half a day of admin that will otherwise block three engineers on day two.
+If a basket cannot assemble at least four qualifying constituents, it is dropped and we ship two
+baskets rather than three. Nobody should negotiate with the measurement.
 
-### 7 · Brand direction before D starts drawing
+---
 
-Engineer D builds screens from week one. A name, a palette and a typeface would prevent a rework
-in week three. Tokens are already specified in [07 Design](07-design.md) with placeholder values.
+## Decided without asking
 
-**Recommendation: pick a single accent colour and a typeface this week**, leave the name until
-later, and keep the palette neutral enough that a name and logo drop in without a redesign.
+Recorded so they are easy to reverse.
 
-### 8 · Which Jupiter path the basket deposit forces
-
-Jupiter's Ultra path delegates execution and is cleanest, but transactions it returns cannot be
-modified. Path B in [10 Baskets](10-baskets.md) composes a swap with a vault deposit, which may
-require the Router path instead. Answered by the same spike as question 1.
+- **Jupiter Ultra, not Router.** Reasoning in [ADR 0008](adr/0008-jupiter-ultra.md). The short
+  version: composition was never possible anyway, and Jupiter handling transaction landing is
+  worth more than composability we do not need.
+- **Basket investment is not atomic**, and the partial state is benign. If the swaps land and the
+  deposit does not, the user holds the constituents, which is what they paid for. The app offers
+  to finish the deposit.
+- **Borrowed funds cannot buy stocks inside the app**, enforced in code. That is the line between
+  a Lombard loan and margin, per [ADR 0009](adr/0009-investing-not-trading.md).
+- **Card onramps are offered last** in the funding screen, after the universal deposit address.
+- **The basket page names Symmetry.** We are not the custodian and will not imply we are.
+- **Redemption without us is verified before launch**, and stated in the product.
+- **`packages/core` never imports the Symmetry SDK**, keeping our own vault a week of work later
+  rather than a rewrite.
+- **The name stays `harbor`** until you want otherwise. Nothing depends on it.

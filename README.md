@@ -62,5 +62,7 @@ pnpm dev
 - **`packages/core` performs no I/O.** It takes data in and returns decisions. That is what makes
   the execution engine testable.
 - **The server never holds a private key.** Privy does. See [ADR 0003](docs/adr/0003-custody.md).
+- **Investing, not trading.** No perps, no margin, no options, no order books. See
+  [ADR 0009](docs/adr/0009-investing-not-trading.md).
 - **Money is never a float.** Integers in the smallest unit, or decimal strings. See
   [05 Data model](docs/05-data-model.md).

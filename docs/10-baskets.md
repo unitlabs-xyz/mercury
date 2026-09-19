@@ -52,8 +52,14 @@ Dramatically better, and it makes baskets feel like buying a stock rather than a
 5  Vault mints basket tokens pro-rata and sends them to the user.
 ```
 
-Steps 3 and 4 are signed together where transaction size allows. If step 4 never lands, the user
-simply holds six stock tokens, which is recoverable and not a loss.
+These are separate transactions, not one. Six Jupiter routes plus a deposit never fit in a single
+Solana transaction, so we stopped pretending they might. See
+[ADR 0008](adr/0008-jupiter-ultra.md).
+
+If the swaps land and the deposit does not, the user holds six stock tokens, which is what they
+paid for and is worth the same money. The app detects that state and offers *"finish your
+Semiconductors investment"*, resuming at the deposit. Recording the intent before the first swap
+is what makes the resume possible.
 
 ## Redeeming
 

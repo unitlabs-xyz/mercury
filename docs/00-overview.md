@@ -36,6 +36,12 @@ That is deliberately a later problem.
 
 > Your investment account, in your own wallet, open every hour of the week.
 
+**Built for investors, not traders.** No perpetuals, no margin, no options, no order books, no
+candlesticks. That is a decision rather than a gap, and it is recorded in
+[ADR 0009](adr/0009-investing-not-trading.md). Borrowing against holdings in version two is a
+Lombard loan, which produces cash without increasing exposure, and is a different thing from
+margin.
+
 ## What makes it different from a nice UI over a DEX
 
 Five things, none of which a traditional broker can copy. They are argued properly in
@@ -57,8 +63,9 @@ Five things, none of which a traditional broker can copy. They are argued proper
 
 Named here so nobody has to ask twice. Reasoning in [02 Product](02-product.md).
 
-Bank deposits and withdrawals. Identity checks. News, earnings, analyst data and a screener. A
-tax centre. Savings goals. A full web application. User-created baskets. An AI chat assistant.
+Perpetuals, margin trading, options, order books and candlestick charts. Bank deposits and
+withdrawals. Identity checks. News, earnings, analyst data and a screener. A tax centre. Savings
+goals. A full web application. User-created baskets. An AI chat assistant.
 
 ## The deadline
 

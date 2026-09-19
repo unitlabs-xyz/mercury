@@ -144,7 +144,9 @@ currency display, and a data export.
 | A full web application | Mobile is the product. Web is the demo build plus a shareable portfolio page |
 | User-created baskets | Curated first. Tools to build your own come once people use the ones we made |
 | An AI chat assistant | Everyone ships one. It adds nothing until there is a portfolio worth discussing |
-| Perpetuals, options, leverage | Not an investing product |
+| Perpetuals, margin trading, options | Not an investing product. Permanently out of scope, not merely later. [ADR 0009](adr/0009-investing-not-trading.md) |
+| Order books, depth charts, candlesticks | Same. The chart is a line, and it has five timeframes |
+| User-facing limit orders | The queued order underneath is a limit order. The user sees "wait for the real price" and never sets a trigger by hand |
 
 ## Version two
 
