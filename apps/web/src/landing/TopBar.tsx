@@ -22,7 +22,7 @@ export const TopBar = () => (
             <a
               key={link.label}
               href={link.href}
-              className={`px-5 text-[14px] text-muted transition-colors hover:text-ink ${
+              className={`underlined px-5 text-[14px] text-muted transition-colors hover:text-ink ${
                 i > 0 ? "border-l border-navline" : ""
               }`}
             >
@@ -40,7 +40,7 @@ export const TopBar = () => (
 
         <button
           type="button"
-          className="flex shrink-0 items-center gap-2 rounded-[9px] bg-brand px-4 py-2.5 text-[14px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-brand-deep sm:px-[18px] lg:ml-5"
+          className="flex shrink-0 items-center gap-2 rounded-[9px] bg-brand px-4 py-2.5 text-[14px] font-semibold whitespace-nowrap text-white transition-[background-color,transform] duration-200 hover:bg-brand-deep active:scale-[0.97] sm:px-[18px] lg:ml-5"
         >
           Connect wallet
           <Wallet className="size-4" />

@@ -10,11 +10,11 @@ const CURVE =
   "M0,100 C26,92 44,108 70,88 C96,68 114,82 140,72 C166,62 184,78 210,58 C236,38 254,56 280,46 C306,36 324,48 350,28 C376,8 396,24 420,16 L460,10";
 
 export const PortfolioCard = () => (
-  <article className="rise rounded-[18px] border border-cardline bg-white px-[26px] py-6 shadow-[0_8px_28px_rgba(27,26,23,.08)] [animation-delay:220ms]">
+  <article className="rounded-[18px] border border-cardline bg-white px-[26px] py-6 shadow-[0_8px_28px_rgba(27,26,23,.08)]">
     <div className="flex items-center justify-between">
       <span className="text-[13px] font-medium text-muted">Portfolio value</span>
       <span className="flex items-center gap-[5px] font-mono text-[11px] tracking-[0.06em] text-faint">
-        <span className="size-1.5 rounded-full bg-up" />
+        <span className="relative flex size-1.5"><span className="absolute inset-0 animate-ping rounded-full bg-up opacity-75" /><span className="relative size-1.5 rounded-full bg-up" /></span>
         LIVE
       </span>
     </div>
@@ -43,14 +43,16 @@ export const PortfolioCard = () => (
           <stop offset="100%" stopColor="#1A7F4B" stopOpacity="0.02" />
         </linearGradient>
       </defs>
-      <path d={`${CURVE} L460,120 L0,120 Z`} fill="url(#hbHeroArea)" />
+      <path d={`${CURVE} L460,120 L0,120 Z`} fill="url(#hbHeroArea)" className="wash" />
       <path
         d={CURVE}
+        pathLength={1}
         fill="none"
         stroke="#1A7F4B"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
+        className="draw"
       />
     </svg>
 
@@ -66,7 +68,7 @@ export const PortfolioCard = () => (
 );
 
 export const IssuerCard = () => (
-  <article className="rise rounded-2xl border border-cardline bg-white px-[18px] py-4 shadow-[0_12px_32px_rgba(27,26,23,.12)] [animation-delay:400ms] lg:relative lg:z-10 lg:-mt-2.5 lg:w-[62%]">
+  <article className="rounded-2xl border border-cardline bg-white px-[18px] py-4 shadow-[0_12px_32px_rgba(27,26,23,.12)]">
     <div className="mb-3 flex items-center justify-between">
       <span className="stamp text-[10px]">WE CHECKED BOTH ISSUERS</span>
       <span className="rounded-full bg-chip px-2 py-[3px] font-mono text-[10px] text-ink-soft">
@@ -93,7 +95,7 @@ export const IssuerCard = () => (
 );
 
 export const DividendChip = () => (
-  <article className="rise flex items-center gap-2.5 rounded-xl border border-cardline bg-white px-3.5 py-2.5 shadow-[0_10px_26px_rgba(27,26,23,.10)] [animation-delay:560ms] lg:absolute lg:-top-5 lg:right-0">
+  <article className="flex items-center gap-2.5 rounded-xl border border-cardline bg-white px-3.5 py-2.5 shadow-[0_10px_26px_rgba(27,26,23,.10)]">
     <span className="grid size-[26px] shrink-0 place-items-center rounded-lg bg-brand-tint text-brand">
       <Refresh className="size-3.5" />
     </span>

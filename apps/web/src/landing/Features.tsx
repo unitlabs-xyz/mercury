@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { motion } from "motion/react";
+import { useState, type ReactNode } from "react";
+import { MARK } from "../motion/config";
 import { Section } from "../ui/Section";
 import { Clock, Grid, Repeat } from "../ui/icons";
 
@@ -27,28 +29,78 @@ const PLAN = [
   { name: "S&P 500", pct: 40, usd: "$80", fill: "var(--color-ramp-5)" },
 ];
 
-/** Stacked composition bar: 2px surface gaps, rounded outer ends. */
-const StackedBar = ({
-  parts,
-}: {
-  parts: { name: string; pct: number; fill: string }[];
-}) => (
-  <div className="flex h-2.5 gap-[2px]" role="img" aria-label={parts.map((p) => `${p.name} ${p.pct}%`).join(", ")}>
-    {parts.map((p, i) => (
-      <div
-        key={p.name}
-        style={{ width: `${p.pct}%`, background: p.fill }}
-        className={`h-full ${i === 0 ? "rounded-l-[4px]" : ""} ${
-          i === parts.length - 1 ? "rounded-r-[4px]" : ""
-        }`}
-      />
-    ))}
-  </div>
-);
+type Part = { name: string; pct: number; fill: string };
 
-const Swatch = ({ fill }: { fill: string }) => (
-  <span className="size-2 shrink-0 rounded-[2px]" style={{ background: fill }} />
-);
+/**
+ * Stacked composition bar plus its legend, sharing one hover index so pointing
+ * at either half emphasises the same constituent. 2px surface gaps, rounded
+ * outer ends.
+ */
+const Composition = ({
+  parts,
+  columns = 1,
+  extra,
+}: {
+  parts: Part[];
+  columns?: 1 | 2;
+  extra?: (p: Part) => ReactNode;
+}) => {
+  const [hot, setHot] = useState<number | null>(null);
+
+  return (
+    <div onPointerLeave={() => setHot(null)}>
+      <div
+        className="flex h-2.5 gap-[2px]"
+        role="img"
+        aria-label={parts.map((p) => `${p.name} ${p.pct}%`).join(", ")}
+      >
+        {parts.map((p, i) => (
+          <motion.div
+            key={p.name}
+            onPointerEnter={() => setHot(i)}
+            style={{ width: `${p.pct}%`, background: p.fill }}
+            animate={{
+              scaleY: hot === i ? 1.6 : 1,
+              opacity: hot === null || hot === i ? 1 : 0.35,
+            }}
+            transition={MARK}
+            className={`h-full cursor-default ${i === 0 ? "rounded-l-[4px]" : ""} ${
+              i === parts.length - 1 ? "rounded-r-[4px]" : ""
+            }`}
+          />
+        ))}
+      </div>
+
+      <ul className={`mt-5 grid gap-x-8 gap-y-2.5 ${columns === 2 ? "grid-cols-2" : ""}`}>
+        {parts.map((p, i) => (
+          <motion.li
+            key={p.name}
+            onPointerEnter={() => setHot(i)}
+            animate={{ opacity: hot === null || hot === i ? 1 : 0.45 }}
+            transition={MARK}
+            className="flex items-center gap-2.5"
+          >
+            <motion.span
+              animate={{ scale: hot === i ? 1.45 : 1 }}
+              transition={MARK}
+              className="size-2 shrink-0 rounded-[2px]"
+              style={{ background: p.fill }}
+            />
+            <span className="flex-1 text-[14px] text-ink-soft">{p.name}</span>
+            {extra?.(p)}
+            <span
+              className={`font-mono text-[13px] transition-colors duration-200 ${
+                hot === i ? "text-ink" : "text-muted"
+              }`}
+            >
+              {p.pct}%
+            </span>
+          </motion.li>
+        ))}
+      </ul>
+    </div>
+  );
+};
 
 const Panel = ({
   icon,
@@ -86,17 +138,10 @@ export const Features = () => (
           <span className="text-[14px] font-semibold text-up">+18.4% past 12 months</span>
         </div>
 
-        <StackedBar parts={WEIGHTS.map((w, i) => ({ ...w, fill: RAMP[i] as string }))} />
-
-        <ul className="mt-5 grid grid-cols-2 gap-x-8 gap-y-2.5">
-          {WEIGHTS.map((w, i) => (
-            <li key={w.name} className="flex items-center gap-2.5">
-              <Swatch fill={RAMP[i] as string} />
-              <span className="flex-1 text-[14px] text-ink-soft">{w.name}</span>
-              <span className="font-mono text-[13px] text-muted">{w.pct}%</span>
-            </li>
-          ))}
-        </ul>
+        <Composition
+          parts={WEIGHTS.map((w, i) => ({ ...w, fill: RAMP[i] as string }))}
+          columns={2}
+        />
 
         <p className="mt-6 border-t border-hair pt-4 text-[13px] text-faint">
           Fee 0.5% a year · minimum $25
@@ -115,18 +160,14 @@ export const Features = () => (
           <span className="text-[13px] text-faint">next on 1 October</span>
         </div>
 
-        <StackedBar parts={PLAN} />
-
-        <ul className="mt-5 grid gap-2.5">
-          {PLAN.map((leg) => (
-            <li key={leg.name} className="flex items-center gap-2.5">
-              <Swatch fill={leg.fill} />
-              <span className="flex-1 text-[14px] text-ink-soft">{leg.name}</span>
-              <span className="font-mono text-[13px] text-muted">{leg.usd}</span>
-              <span className="w-9 text-right font-mono text-[13px] font-medium">{leg.pct}%</span>
-            </li>
-          ))}
-        </ul>
+        <Composition
+          parts={PLAN}
+          extra={(p) => (
+            <span className="font-mono text-[13px] text-muted">
+              {PLAN.find((l) => l.name === p.name)?.usd}
+            </span>
+          )}
+        />
 
         <dl className="mt-6 grid grid-cols-3 gap-x-4 border-t border-hair pt-4">
           {[

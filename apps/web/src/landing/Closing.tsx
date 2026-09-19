@@ -20,7 +20,7 @@ export const CallToAction = () => (
       </div>
       <button
         type="button"
-        className="group flex shrink-0 items-center gap-2.5 rounded-[11px] bg-brand px-7 py-4 text-[16px] font-semibold text-white transition-colors hover:bg-brand-deep"
+        className="group flex shrink-0 items-center gap-2.5 rounded-[11px] bg-brand px-7 py-4 text-[16px] font-semibold text-white transition-[background-color,transform] duration-200 hover:bg-brand-deep active:scale-[0.98]"
       >
         Connect wallet
         <ArrowRight className="size-[17px] transition-transform duration-300 ease-(--ease-out) group-hover:translate-x-0.5" />

@@ -1,3 +1,5 @@
+import { motion } from "motion/react";
+import { riseIn, sequence } from "../motion/config";
 import { Section } from "../ui/Section";
 
 /** Official marks, painted through a mask so the strip takes one ink from the palette. */
@@ -49,9 +51,16 @@ export const CustodyStrip = () => (
 
 export const StatsBand = () => (
   <div className="border-b border-rule">
-    <div className="mx-auto grid w-full max-w-[1440px] grid-cols-2 lg:grid-cols-4">
+    <motion.div
+      variants={sequence(0, 0.07)}
+      initial="hidden"
+      whileInView="shown"
+      viewport={{ once: true, amount: 0.5 }}
+      className="mx-auto grid w-full max-w-[1440px] grid-cols-2 lg:grid-cols-4"
+    >
       {STATS.map((stat, i) => (
-        <div
+        <motion.div
+          variants={riseIn}
           key={stat.label}
           className={[
             "px-5 py-[34px] sm:px-10",
@@ -66,8 +75,8 @@ export const StatsBand = () => (
             {stat.value}
           </p>
           <p className="mt-[5px] text-[13px] text-muted">{stat.label}</p>
-        </div>
+        </motion.div>
       ))}
-    </div>
+    </motion.div>
   </div>
 );

@@ -10,12 +10,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@harbor/core": "workspace:*",
     "@harbor/sdk": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
+    "motion": "^13.4.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.1.0",
-    "@harbor/core": "workspace:*"
+    "react-router-dom": "^7.1.0"
   },
   "devDependencies": {
     "@harbor/tsconfig": "workspace:*",

@@ -1,6 +1,8 @@
+import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
+import { EASE } from "../motion/config";
 import { Section } from "../ui/Section";
-import { ChevronDown, Plus } from "../ui/icons";
+import { ChevronDown } from "../ui/icons";
 
 /**
  * The handoff supplies the first answer only; the other four are collapsed in the
@@ -52,26 +54,51 @@ export const Faq = () => {
               key={item.q}
               className={i < ITEMS.length - 1 ? "border-b border-navline" : ""}
             >
-              <button
-                type="button"
-                aria-expanded={isOpen}
-                onClick={() => setOpen(isOpen ? -1 : i)}
-                className="flex w-full items-center justify-between gap-6 py-6 text-left"
-              >
-                <span className="text-[16px] font-semibold tracking-[-0.01em] sm:text-[18px]">
-                  {item.q}
-                </span>
-                {isOpen ? (
-                  <ChevronDown className="size-[18px] shrink-0 text-faint" />
-                ) : (
-                  <Plus className="size-[18px] shrink-0 text-faint" />
+              <h3>
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-${i}`}
+                  onClick={() => setOpen(isOpen ? -1 : i)}
+                  className="group flex w-full items-center justify-between gap-6 py-6 text-left"
+                >
+                  <span
+                    className={`text-[16px] font-semibold tracking-[-0.01em] transition-colors duration-200 group-hover:text-brand sm:text-[18px] ${
+                      isOpen ? "text-ink" : "text-ink-soft"
+                    }`}
+                  >
+                    {item.q}
+                  </span>
+                  <motion.span
+                    animate={{ rotate: isOpen ? 180 : 0 }}
+                    transition={{ duration: 0.32, ease: EASE }}
+                    className="inline-flex shrink-0 text-faint group-hover:text-brand"
+                  >
+                    <ChevronDown className="size-[18px]" />
+                  </motion.span>
+                </button>
+              </h3>
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    id={`faq-${i}`}
+                    role="region"
+                    key="answer"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{
+                      height: { duration: 0.34, ease: EASE },
+                      opacity: { duration: isOpen ? 0.28 : 0.14, delay: isOpen ? 0.08 : 0 },
+                    }}
+                    className="overflow-hidden"
+                  >
+                    <p className="max-w-[34rem] pb-6 text-[15px] leading-[1.6] text-muted text-pretty">
+                      {item.a}
+                    </p>
+                  </motion.div>
                 )}
-              </button>
-              {isOpen && (
-                <p className="max-w-[34rem] pb-6 text-[15px] leading-[1.6] text-muted text-pretty">
-                  {item.a}
-                </p>
-              )}
+              </AnimatePresence>
             </div>
           );
         })}

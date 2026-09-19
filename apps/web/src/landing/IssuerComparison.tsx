@@ -43,7 +43,7 @@ export const IssuerComparison = () => (
       {ROWS.map((row, i) => (
         <div
           key={row.ticker}
-          className={`${COLS} items-center px-4 py-[15px] sm:px-[22px] ${
+          className={`${COLS} items-center px-4 py-[15px] transition-colors duration-150 hover:bg-shell sm:px-[22px] ${
             i < ROWS.length - 1 ? "border-b border-hairline" : ""
           }`}
         >

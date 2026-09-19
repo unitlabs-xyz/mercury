@@ -44,11 +44,13 @@ export const Trust = () => (
       {CARDS.map((card, i) => (
         <div
           key={card.title}
-          className={`p-7 ${i % 2 === 0 ? "sm:border-r sm:border-hair" : ""} ${
+          className={`group p-7 transition-colors duration-200 hover:bg-shell ${i % 2 === 0 ? "sm:border-r sm:border-hair" : ""} ${
             i < 2 ? "border-b border-hair" : "max-sm:border-b max-sm:border-hair last:border-b-0"
           }`}
         >
-          <span className="block text-brand">{card.icon}</span>
+          <span className="block text-brand transition-transform duration-300 ease-(--ease-out) group-hover:-translate-y-0.5 group-hover:scale-110">
+            {card.icon}
+          </span>
           <h3 className="mt-3.5 text-[16px] font-semibold">{card.title}</h3>
           <p className="mt-[7px] text-[14px] leading-[1.55] text-muted text-pretty">{card.body}</p>
         </div>

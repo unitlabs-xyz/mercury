@@ -127,22 +127,62 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+    /* Movement goes; colour and opacity feedback stays, so an action still
+       acknowledges itself. */
+    transition-property: color, background-color, border-color, opacity, fill, stroke !important;
+    transition-duration: 120ms !important;
   }
 }
 
-@keyframes rise {
+
+/* The focal moment: the performance line draws itself once, then its fill
+   arrives under it. pathLength=1 makes the dash maths resolution-independent. */
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@utility draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 1100ms var(--ease-out) 380ms forwards;
+}
+
+@keyframes wash {
   from {
     opacity: 0;
-    transform: translateY(14px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 
-@utility rise {
-  animation: rise 800ms var(--ease-out) both;
+@utility wash {
+  animation: wash 700ms ease-out 900ms both;
+}
+
+/* Nav underline that grows from the left on hover and focus. */
+@utility underlined {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    bottom: -6px;
+    height: 1.5px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 220ms var(--ease-out);
+  }
+  &:hover::after,
+  &:focus-visible::after {
+    transform: scaleX(1);
+  }
 }
