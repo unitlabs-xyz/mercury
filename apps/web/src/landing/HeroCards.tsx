@@ -13,7 +13,7 @@ export const PortfolioCard = () => (
   <article className="rise rounded-[18px] border border-cardline bg-white px-[26px] py-6 shadow-[0_8px_28px_rgba(27,26,23,.08)] [animation-delay:220ms]">
     <div className="flex items-center justify-between">
       <span className="text-[13px] font-medium text-muted">Portfolio value</span>
-      <span className="flex items-center gap-[5px] font-mono text-[11px] text-faint">
+      <span className="flex items-center gap-[5px] font-mono text-[11px] tracking-[0.06em] text-faint">
         <span className="size-1.5 rounded-full bg-up" />
         LIVE
       </span>
@@ -68,9 +68,7 @@ export const PortfolioCard = () => (
 export const IssuerCard = () => (
   <article className="rise rounded-2xl border border-cardline bg-white px-[18px] py-4 shadow-[0_12px_32px_rgba(27,26,23,.12)] [animation-delay:400ms] lg:relative lg:z-10 lg:-mt-2.5 lg:-ml-[34px] lg:w-[360px]">
     <div className="mb-3 flex items-center justify-between">
-      <span className="font-mono text-[10px] tracking-[0.09em] text-faint">
-        WE CHECKED BOTH ISSUERS
-      </span>
+      <span className="stamp text-[10px]">WE CHECKED BOTH ISSUERS</span>
       <span className="rounded-full bg-chip px-2 py-[3px] font-mono text-[10px] text-ink-soft">
         $1,000
       </span>

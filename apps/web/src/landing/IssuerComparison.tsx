@@ -16,7 +16,6 @@ export const IssuerComparison = () => (
     inner="grid items-center gap-12 py-[76px] lg:grid-cols-[0.9fr_1.1fr] lg:gap-16"
   >
     <div>
-      <p className="eyebrow mb-4">THE PART NOBODY ELSE DOES</p>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         Same share. Two wrappers. Wildly different cost.
       </h2>

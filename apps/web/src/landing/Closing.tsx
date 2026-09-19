@@ -62,8 +62,8 @@ export const Footer = () => (
     </div>
 
     <div className="gutter mx-auto flex w-full max-w-[1440px] items-center justify-between pt-[18px] pb-[34px]">
-      <span className="font-mono text-[11px] text-faint">© 2026 HARBOR</span>
-      <span className="font-mono text-[11px] text-faint">BUILT ON SOLANA</span>
+      <span className="stamp">© 2026 HARBOR</span>
+      <span className="stamp">BUILT ON SOLANA</span>
     </div>
   </footer>
 );

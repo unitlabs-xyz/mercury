@@ -24,7 +24,6 @@ export const HowItWorks = () => (
     inner="grid items-start gap-12 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16"
   >
     <div>
-      <p className="eyebrow mb-4">HOW IT WORKS</p>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         Three steps, and none of them is a bank.
       </h2>
@@ -33,7 +32,7 @@ export const HowItWorks = () => (
         can hold Nvidia.
       </p>
       <div className="mt-7 grid h-60 place-items-center rounded-[14px] border border-dashed border-dash bg-[repeating-linear-gradient(135deg,var(--color-hatch)_0_8px,var(--color-shell)_8px_16px)]">
-        <span className="px-4 text-center font-mono text-[11px] tracking-[0.08em] text-faint">
+        <span className="stamp px-4 text-center">
           ISOMETRIC ILLUSTRATION — WALLET → SHARES
         </span>
       </div>
@@ -47,7 +46,7 @@ export const HowItWorks = () => (
             i < STEPS.length - 1 ? "border-b border-hair" : ""
           }`}
         >
-          <span className="pt-[3px] font-mono text-[13px] text-brand">{step.n}</span>
+          <span className="pt-[3px] text-[13px] font-semibold text-brand tabular-nums">{step.n}</span>
           <div>
             <h3 className="text-[18px] font-semibold tracking-[-0.01em]">{step.title}</h3>
             <p className="mt-[7px] text-[15px] leading-[1.55] text-muted text-pretty">

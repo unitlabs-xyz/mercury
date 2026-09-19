@@ -104,16 +104,9 @@
   }
 }
 
-@utility eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--color-brand);
-}
-
 @utility stamp {
-  font-family: var(--font-mono);
   font-size: 11px;
+  font-weight: 500;
   letter-spacing: 0.1em;
   color: var(--color-faint);
 }

@@ -31,12 +31,11 @@ export const Trust = () => (
     inner="grid items-center gap-12 py-[76px] lg:grid-cols-[0.8fr_1.2fr] lg:gap-16"
   >
     <div>
-      <p className="eyebrow mb-4">WHO HOLDS WHAT</p>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         Built so nobody has to trust us.
       </h2>
       <div className="mt-[26px] grid h-50 place-items-center rounded-[14px] border border-dashed border-dash bg-[repeating-linear-gradient(135deg,var(--color-shell)_0_8px,#fff_8px_16px)]">
-        <span className="px-4 text-center font-mono text-[11px] tracking-[0.08em] text-faint">
+        <span className="stamp px-4 text-center">
           ISOMETRIC ILLUSTRATION — CUSTODY CHAIN
         </span>
       </div>

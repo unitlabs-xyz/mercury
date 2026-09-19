@@ -45,7 +45,7 @@ export const Features = () => (
       title="Baskets"
       blurb="A named set of stocks at fixed weights, bought in one action and held afterwards as one position."
     >
-      <div className="rounded-[14px] border border-cardline p-5">
+      <div className="border-t border-cardline pt-5">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-[16px] font-semibold">Semiconductors</span>
           <span className="text-[14px] font-semibold text-up">+18.4% past 12 months</span>
@@ -79,7 +79,7 @@ export const Features = () => (
       title="Recurring"
       blurb="A fixed amount weekly or monthly, split by percentage across stocks and baskets. It runs on chain whether or not you open Harbor."
     >
-      <div className="rounded-[14px] border border-cardline p-5">
+      <div className="border-t border-cardline pt-5">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-[24px] font-semibold tracking-[-0.025em]">$200 monthly</span>
           <span className="text-[13px] text-faint">next on 1 October</span>
