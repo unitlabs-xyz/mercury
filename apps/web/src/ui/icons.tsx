@@ -48,6 +48,13 @@ export const Lock = (p: Icon) => (
   </svg>
 );
 
+export const Trend = (p: Icon) => (
+  <svg {...base} strokeWidth={1.9} {...p}>
+    <path d="M3 17l6-6 4 4 7-7" />
+    <path d="M14 8h6v6" />
+  </svg>
+);
+
 export const Grid = (p: Icon) => (
   <svg {...base} {...p}>
     <rect x="3" y="3" width="7" height="7" rx="1.5" />
