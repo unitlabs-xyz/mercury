@@ -28,8 +28,8 @@ export const Hero = () => (
     </h1>
 
     <p className="mt-6 max-w-[560px] text-[17px] leading-[1.55] text-muted text-balance">
-      Hold stablecoins, buy real shares of Nvidia, Apple or the S&P 500. No brokerage account, no
-      bank transfer, no minimum beyond a few dollars.
+      Buy real shares with stablecoins, put the same amount in every month, and hold your stocks
+      and your crypto as one portfolio. No brokerage account, no bank transfer.
     </p>
 
     <div className="mt-9 flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">

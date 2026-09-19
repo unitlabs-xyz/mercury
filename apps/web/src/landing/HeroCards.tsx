@@ -24,7 +24,7 @@ export const PortfolioCard = () => (
     </p>
 
     <div className="mt-2 flex items-center gap-2">
-      <span className="flex items-center gap-1 rounded-md bg-up-tint py-[3px] pr-2 pl-1.5 text-[13px] font-semibold text-up">
+      <span className="flex items-center gap-1 rounded-md bg-up-tint py-[3px] pr-2 pl-1.5 text-[13px] font-semibold text-up-deep">
         <ArrowUp className="size-3" />
         10.68%
       </span>

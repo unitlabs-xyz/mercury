@@ -125,8 +125,39 @@ const Panel = ({
   </article>
 );
 
+const PLAIN = [
+  {
+    title: "Stocks",
+    body: "590 US stocks and funds, from a few dollars. Every order is checked against both issuers first.",
+  },
+  {
+    title: "Cash",
+    body: "Stablecoins waiting to be invested earn 4.1% where they sit, including while a queued order waits for its price.",
+  },
+];
+
 export const Features = () => (
-  <Section id="baskets" inner="grid gap-6 py-[76px] lg:grid-cols-2">
+  <Section id="baskets" inner="py-[76px]">
+    <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
+      Four ways to put money in.
+    </h2>
+    <p className="mt-[18px] max-w-[52ch] text-[16px] leading-[1.6] text-muted text-pretty">
+      Buy a single company, buy a whole basket in one action, set an amount to go in every month,
+      or leave it as cash and earn while you decide. Any combination, from the same balance.
+    </p>
+
+    <dl className="mt-10 grid gap-x-10 gap-y-6 border-t border-cardline pt-8 sm:grid-cols-2">
+      {PLAIN.map((item) => (
+        <div key={item.title}>
+          <dt className="text-[18px] font-semibold tracking-[-0.01em]">{item.title}</dt>
+          <dd className="mt-2 max-w-[46ch] text-[15px] leading-[1.6] text-muted text-pretty">
+            {item.body}
+          </dd>
+        </div>
+      ))}
+    </dl>
+
+    <div className="mt-6 grid gap-6 lg:grid-cols-2">
     <Panel
       icon={<Grid className="size-[17px]" />}
       title="Baskets"
@@ -189,5 +220,6 @@ export const Features = () => (
         </p>
       </div>
     </Panel>
+    </div>
   </Section>
 );

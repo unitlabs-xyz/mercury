@@ -1,6 +1,8 @@
 import { CustodyStrip, StatsBand } from "./Bands";
 import { CallToAction, Footer } from "./Closing";
 import { Faq } from "./Faq";
+import { MarketHours } from "./MarketHours";
+import { Portfolio } from "./Portfolio";
 import { Features } from "./Features";
 import { Hero } from "./Hero";
 import { HowItWorks } from "./HowItWorks";
@@ -19,9 +21,11 @@ export const Landing = () => (
         <CustodyStrip />
       </div>
       <StatsBand />
+      <Portfolio />
       <HowItWorks />
       <IssuerComparison />
       <Features />
+      <MarketHours />
       <Trust />
       <Faq />
       <CallToAction />

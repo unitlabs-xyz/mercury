@@ -24,7 +24,7 @@ const ITEMS = [
   },
   {
     q: "What does Harbor charge?",
-    a: "Baskets carry 0.5% a year, charged on the position. Individual orders pay only the cost of the on-chain route, which is shown in full — price per share, premium and fee — before you confirm anything.",
+    a: "Baskets carry 0.5% a year, charged on the position. On an individual order Harbor takes a small spread, the way every retail broker does. Either way the whole cost is on the confirmation screen — price per share, the premium against the real share price, and the fee — before you commit to anything.",
   },
   {
     q: "Can I move my shares somewhere else?",

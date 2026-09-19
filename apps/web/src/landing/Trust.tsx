@@ -16,8 +16,8 @@ const CARDS: { icon: ReactNode; title: string; body: string }[] = [
   },
   {
     icon: <Layers className="size-5" />,
-    title: "Spread across issuers",
-    body: "Hold the same stock through both issuers. Harbor adds it up and warns when one holds too much.",
+    title: "A share count that grows",
+    body: "Dividends arrive as a rise in the token's multiplier, so the position quietly gets bigger. We show it as shares gained.",
   },
   {
     icon: <Clock className="size-5" />,
