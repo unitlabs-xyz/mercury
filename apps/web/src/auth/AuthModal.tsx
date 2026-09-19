@@ -7,12 +7,6 @@ import { CodeInput } from "./CodeInput";
 
 type Step = "email" | "code" | "fund";
 
-const WALLETS = [
-  { name: "Phantom", swatch: "bg-ink" },
-  { name: "Solflare", swatch: "bg-muted" },
-  { name: "Backpack", swatch: "bg-bar-soft" },
-];
-
 const ADDRESS = "7xQmF4d8Vn2pLs9jKcRb3TyWuAeH6gZxMq1NdP4Rk9";
 const RESEND_SECONDS = 30;
 
@@ -217,24 +211,6 @@ export const AuthModal = () => {
                     </motion.button>
                   </form>
 
-                  <div className="mt-6 flex items-center gap-3.5">
-                    <span className="h-px flex-1 bg-hair" />
-                    <span className="text-[12px] text-faint">or</span>
-                    <span className="h-px flex-1 bg-hair" />
-                  </div>
-
-                  <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
-                    {WALLETS.map((w) => (
-                      <button
-                        key={w.name}
-                        type="button"
-                        className="flex flex-1 items-center justify-center gap-[9px] rounded-[10px] border border-cardline py-3.5 text-[14px] font-medium text-ink-soft transition-colors hover:border-faint hover:bg-shell"
-                      >
-                        <span className={`size-4 rounded ${w.swatch}`} />
-                        {w.name}
-                      </button>
-                    ))}
-                  </div>
                 </>
               )}
 

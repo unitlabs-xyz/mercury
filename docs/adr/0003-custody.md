@@ -41,3 +41,31 @@ additive.
 
 **New problem this creates.** A fresh embedded wallet is empty, and we have no fiat on-ramp. See
 the funding question in [09 Open questions](../09-open-questions.md).
+
+## Confirmed against Privy's documentation, 20 September 2026
+The design bundle's connect screen offered Phantom, Solflare and Backpack beneath the email
+field, which contradicted this record. Before removing them we checked what Privy actually
+supports, because the answer changes the architecture rather than the markup.
+
+- **An external wallet can be the identity.** Privy supports Solana sign-in, so Phantom could log
+  someone in without an email.
+- **Both can coexist.** `createOnLogin: 'all-users'` creates an embedded wallet even for a user
+  who arrived with one of their own.
+- **But the embedded wallet is a separate address.** Privy never sees the external private key, so
+  nothing is derived from it. The result is one account with two wallets, not one wallet made
+  portable.
+- **Offline actions are an embedded-wallet capability.** Limit orders, subscriptions and recurring
+  transactions all sit under Privy's user-wallet signers. A connected Phantom cannot sign while
+  its owner is away.
+- **Two smaller traps.** Automatic wallet creation does not fire for whitelabel login interfaces,
+  which ours is, so wallets are created explicitly. And `connectOrCreateWallet` is EVM-only today,
+  so it is unavailable to us regardless.
+
+The deciding point is the third and fourth together. Supporting both would make recurring
+investing conditional on how somebody signed up, and split one portfolio across two addresses at
+exactly the moment we claim to add holdings up correctly. The buttons are gone from the modal.
+
+The friction this leaves — a Phantom owner funding a new address — is answered by **funding from
+a connected wallet**, not by wallet login: connect Phantom only to prefill a transfer, so nobody
+copies an address by hand. One signing path, one portfolio. That is additive and not scheduled
+for version one.
