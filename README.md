@@ -23,6 +23,7 @@ Built on Solana for Colosseum's Crypto World's Fair. Submissions close **12 Octo
 | [08 Roadmap](docs/08-roadmap.md) | What ships by 12 October, and what comes after |
 | [09 Open questions](docs/09-open-questions.md) | What is settled, and the five things still open |
 | [10 Baskets](docs/10-baskets.md) | The vault, and how a basket becomes one token |
+| [11 References](docs/11-references.md) | What to read before coding, and who already built near us |
 
 Architecture decision records live in [`docs/adr`](docs/adr).
 

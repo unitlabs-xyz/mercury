@@ -23,8 +23,8 @@ type DecisionInput = {
   side: "buy" | "sell";
   usdAmount: Decimal;
   candidates: Candidate[];      // one per wrapper, quoted at this size
-  reference: ReferencePrice;    // real share price and its freshness
-  session: MarketSession;       // open | premarket | postmarket | closed | halted
+  reference: ReferencePrice;    // real share price, its freshness, and any pending dividend
+  status: InstrumentStatus;     // see below
   policy: ExecutionPolicy;      // tolerances, defaults below
 };
 
@@ -33,6 +33,20 @@ type Candidate = {
   issuer: "backed" | "ondo";
   multiplier: Decimal;          // shares represented by one token
   quote: Quote | null;          // null when there is no route
+};
+
+type InstrumentStatus =
+  | "open"                // regular session
+  | "premarket" | "postmarket" | "overnight"
+  | "closed"              // weekend or holiday
+  | "halted"              // issuer paused the token, read from Token-2022 Pausable
+  | "stale"               // the reference price is too old to trust
+  | "corp_action_pending"; // ex-dividend has happened, the multiplier has not caught up
+
+type ReferencePrice = {
+  pricePerShare: Decimal;       // from Chainlink, per ADR 0006
+  observedAt: Date;
+  pendingDividendNet: Decimal;  // gross dividend less withholding, 0 most of the time
 };
 
 type Quote = {
@@ -53,6 +67,7 @@ type Quote = {
 | `maxReferenceAgeSec` | 120 while open, 900 while closed | A stale reference is worse than none |
 | `minOrderUsd` | 5 | Below this, fees dominate |
 | `issuerConcentrationWarnPct` | 80% | Position-level warning, does not block |
+| `blockOnCorpActionPending` | true | See the dividend window below |
 
 All overridable per user. None of them live in the UI in version one.
 
@@ -61,8 +76,9 @@ All overridable per user. None of them live in the UI in version one.
 ```
 1  Reject the order outright if:
      usdAmount < policy.minOrderUsd
-     session is halted for this instrument (corporate action)
-     reference price is older than policy.maxReferenceAgeSec
+     status is "halted"
+     status is "stale", or reference.observedAt is older than policy.maxReferenceAgeSec
+     status is "corp_action_pending" and policy.blockOnCorpActionPending
 
 2  For each candidate with a quote:
      pricePerToken = usdAmount / quote.tokensOut
@@ -74,12 +90,13 @@ All overridable per user. None of them live in the UI in version one.
 
 4  best = survivors sorted by pricePerShare ascending, first
 
-5  premium = (best.pricePerShare / reference.pricePerShare) - 1
+5  fairPricePerShare = reference.pricePerShare + reference.pendingDividendNet
+   premium           = (best.pricePerShare / fairPricePerShare) - 1
 
 6  Decide:
      premium <= policy.premiumTolerancePct           → EXECUTE
-     premium >  tolerance and session is open        → EXECUTE_WITH_WARNING
-     premium >  tolerance and session is not open    → OFFER_QUEUE
+     premium >  tolerance and status is "open"       → EXECUTE_WITH_WARNING
+     premium >  tolerance and status is not "open"   → OFFER_QUEUE
      premium <  -tolerance                           → EXECUTE, note the discount
 
 7  Return the decision with every candidate, its price per share, its impact and
@@ -88,6 +105,28 @@ All overridable per user. None of them live in the UI in version one.
 
 Step 2's division by the multiplier is the line that makes the comparison correct. Without it the
 answer is wrong, and on the S&P 500 it is wrong by more than three times the true gap.
+
+## The dividend window, and why step 5 has an extra term
+
+When a stock goes ex-dividend its share price drops by the dividend. The token holder is still
+entitled to that money, and the issuer will eventually fold it into the multiplier. Between those
+two moments, `underlying × multiplier` understates what the token is worth by the net dividend.
+
+This is not theoretical. On 18 September 2026 SPY went ex-dividend $1.889. On 19 September the
+SPYx mint still carried June's multiplier of 1.005714, and a naive oracle read 17.3 basis points
+low. That is a sixth of our entire premium tolerance, and it would have made the gate misfire on
+every S&P 500 order for as long as the window lasted.
+
+```
+netDividend = grossDividend × (1 − withholdingRate)     // 30% for non-US holders
+fairPrice   = underlying × multiplier + netDividend
+17.3bp      = 1.889 × 0.7 / 764
+```
+
+Using Chainlink protects us, because it was measured at 0.8 basis points from fair during exactly
+this window while the raw DEX price was 20 basis points off. The `corp_action_pending` status and
+the `pendingDividendNet` term exist anyway, because a fallback source must never quietly be
+wrong. Credit to the Rambu project for finding this; see [11 References](11-references.md).
 
 ## Outcomes
 
@@ -100,7 +139,7 @@ type Decision =
 
 type RefuseReason =
   | "below_minimum" | "no_route" | "impact_too_high"
-  | "reference_stale" | "instrument_halted" | "not_eligible";
+  | "reference_stale" | "instrument_halted" | "corp_action_pending" | "not_eligible";
 ```
 
 Every outcome carries the full candidate list. The user is always shown what was checked.
@@ -161,3 +200,8 @@ allocation.
 - Reference price 20 minutes stale while the market is open. Assert `refuse`.
 - A basket where one of six legs has no route. Assert the whole basket refuses.
 - Multiplier of exactly 1.0 and a multiplier of 10.0, the stock-split case, price the same.
+- **The SPY dividend window.** Reference $764.065, multiplier 1.005714, pending net dividend
+  $1.32. Assert the fair price includes the dividend, assert a quote that looks 0.9% rich against
+  the naive price is only 0.7% rich against fair, and assert the status blocks when
+  `blockOnCorpActionPending` is set.
+- Status `halted` with an otherwise perfect quote. Assert `refuse`.

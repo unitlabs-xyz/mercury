@@ -59,3 +59,52 @@ Recorded here so they are easy to reverse.
 - **Redemption without us gets verified before launch**, and the result is stated in the product.
 - **`packages/core` never imports the Symmetry SDK.** It sits behind a four-method interface in
   `packages/chain`, which keeps writing our own vault a week of work rather than a rewrite.
+
+---
+
+## Added 19 September, after the reference sweep
+
+### 5 · Positioning against Backpack · needs a decision, not a spike
+
+Backpack already ships a unified portfolio holding tokenized stocks beside crypto, cash earning
+3.35% that stays usable as collateral, and portfolio margin across assets. See
+[11 References](11-references.md).
+
+**So "stocks and crypto in one portfolio" is no longer an available claim.** What they do not
+have is baskets, recurring investing, any comparison between issuers of the same stock, exposure
+deduplication, or any awareness that the US market is shut. They are a trading product: perps,
+margin, order types, subaccounts.
+
+**Recommendation: lean harder into investing rather than trading.** No perps, no margin trading,
+no candlesticks, no order book. The positioning line becomes closer to M1's: built for investors,
+not traders. Everything in [00 Overview](00-overview.md) survives, but the emphasis moves from
+"one portfolio" toward "the account that buys you the right share at the right price and then
+leaves you alone".
+
+Worth your explicit agreement, because it rules out features people will ask for.
+
+### 6 · Infrastructure accounts, all needed in week 1
+
+| Thing | Why | Who owns it |
+| --- | --- | --- |
+| Jupiter API key | Endpoints now require `x-api-key`. Not optional | ? |
+| RPC provider | Helius is a Colosseum sponsor and likely has credits for entrants | ? |
+| Privy app, with funding providers enabled | [ADR 0007](adr/0007-wallet-funding.md) is a dashboard setting | ? |
+| Pyth Pro token | Needed for equity feeds and the session schedule | ? |
+| Hosting | Vercel for web and landing. The API and worker need somewhere with a cron | ? |
+
+These are half a day of admin that will otherwise block three engineers on day two.
+
+### 7 · Brand direction before D starts drawing
+
+Engineer D builds screens from week one. A name, a palette and a typeface would prevent a rework
+in week three. Tokens are already specified in [07 Design](07-design.md) with placeholder values.
+
+**Recommendation: pick a single accent colour and a typeface this week**, leave the name until
+later, and keep the palette neutral enough that a name and logo drop in without a redesign.
+
+### 8 · Which Jupiter path the basket deposit forces
+
+Jupiter's Ultra path delegates execution and is cleanest, but transactions it returns cannot be
+modified. Path B in [10 Baskets](10-baskets.md) composes a swap with a vault deposit, which may
+require the Router path instead. Answered by the same spike as question 1.
