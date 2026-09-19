@@ -34,13 +34,13 @@ export const PortfolioCard = () => (
     <svg
       viewBox="0 0 460 120"
       preserveAspectRatio="none"
-      className="mt-3.5 block h-28 w-full"
+      className="mt-3.5 block h-[96px] w-full"
       aria-hidden
     >
       <defs>
         <linearGradient id="hbHeroArea" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#1A7F4B" stopOpacity="0.15" />
-          <stop offset="100%" stopColor="#1A7F4B" stopOpacity="0" />
+          <stop offset="0%" stopColor="#1A7F4B" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="#1A7F4B" stopOpacity="0.02" />
         </linearGradient>
       </defs>
       <path d={`${CURVE} L460,120 L0,120 Z`} fill="url(#hbHeroArea)" />
@@ -66,7 +66,7 @@ export const PortfolioCard = () => (
 );
 
 export const IssuerCard = () => (
-  <article className="rise rounded-2xl border border-cardline bg-white px-[18px] py-4 shadow-[0_12px_32px_rgba(27,26,23,.12)] [animation-delay:400ms] lg:relative lg:z-10 lg:-mt-2.5 lg:-ml-[34px] lg:w-[360px]">
+  <article className="rise rounded-2xl border border-cardline bg-white px-[18px] py-4 shadow-[0_12px_32px_rgba(27,26,23,.12)] [animation-delay:400ms] lg:relative lg:z-10 lg:-mt-2.5 lg:w-[62%]">
     <div className="mb-3 flex items-center justify-between">
       <span className="stamp text-[10px]">WE CHECKED BOTH ISSUERS</span>
       <span className="rounded-full bg-chip px-2 py-[3px] font-mono text-[10px] text-ink-soft">
@@ -93,7 +93,7 @@ export const IssuerCard = () => (
 );
 
 export const DividendChip = () => (
-  <article className="rise flex items-center gap-2.5 rounded-xl border border-cardline bg-white px-3.5 py-2.5 shadow-[0_10px_26px_rgba(27,26,23,.10)] [animation-delay:560ms] lg:absolute lg:-top-4 lg:-right-3.5">
+  <article className="rise flex items-center gap-2.5 rounded-xl border border-cardline bg-white px-3.5 py-2.5 shadow-[0_10px_26px_rgba(27,26,23,.10)] [animation-delay:560ms] lg:absolute lg:-top-5 lg:right-0">
     <span className="grid size-[26px] shrink-0 place-items-center rounded-lg bg-brand-tint text-brand">
       <Refresh className="size-3.5" />
     </span>

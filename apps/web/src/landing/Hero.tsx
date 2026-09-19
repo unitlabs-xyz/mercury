@@ -44,8 +44,9 @@ export const Hero = () => (
       </p>
     </div>
 
-    {/* Layered cards. The issuer card is offset left and clears the figures above it. */}
-    <div className="relative flex flex-col gap-4 lg:block lg:gap-0 lg:pt-[26px] lg:pb-10 lg:pl-[34px]">
+    {/* Layered cards on two shared edges: the issuer card hangs off the base card's
+        left edge, the dividend chip off its right. No third offset. */}
+    <div className="relative flex flex-col gap-4 lg:block lg:gap-0 lg:pt-7 lg:pb-10">
       <PortfolioCard />
       <IssuerCard />
       <DividendChip />

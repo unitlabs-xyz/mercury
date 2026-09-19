@@ -33,6 +33,16 @@
   --color-brand-tint: #e8f4f5;
   --color-brand-soft: #6ba8b0;
 
+  /* Single-hue sequential ramp for part-to-whole marks, dark to light.
+     Validated: monotone lightness, adjacent dL >= 0.06, light end 2.18:1
+     against the card surface, hue spread 2 degrees. */
+  --color-ramp-1: #06434b;
+  --color-ramp-2: #0a5a63;
+  --color-ramp-3: #0f7480;
+  --color-ramp-4: #2e8f9b;
+  --color-ramp-5: #52a3ae;
+  --color-ramp-6: #76b8c1;
+
   /* performance */
   --color-up: #1a7f4b;
   --color-up-tint: #e7f3ec;
