@@ -443,7 +443,7 @@ export const AuthModal = () => {
           </div>
         </motion.div>
 
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-4 border-t border-hair pt-7">
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-4 pt-7">
           <PrivyMark />
           <span
             aria-hidden
