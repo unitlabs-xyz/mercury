@@ -29,72 +29,95 @@ const Move = ({ value, dir }: { value: string; dir: "up" | "down" | "queued" }) 
 };
 
 /**
- * The statement head: the one figure the page exists for, printed on the paper
- * rather than boxed, with its history beside it. A card here would make the
- * total a peer of everything under it.
+ * The statement head, on one sheet: the figure, what it is made of, its
+ * history, and the two things you can do about it. Keeping the actions here
+ * rather than in the page header puts them beside the balance they act on.
  */
 const Position = ({ range, setRange }: { range: Range; setRange: (r: Range) => void }) => (
-  <section aria-label="Total value" className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
-    <div>
-      <p className="text-[13px] font-medium text-muted">Total value</p>
-      <p className="mt-1.5 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">
-        {TOTAL.value}
-      </p>
-      <p className="mt-3 flex flex-wrap items-center gap-2.5">
-        <span className="flex items-center gap-1 rounded-md bg-up-tint py-[3px] pr-[9px] pl-[7px] text-[14px] font-semibold text-up-deep">
-          <ArrowUp className="size-3" />
-          {TOTAL.changePct}
-        </span>
-        <span className="text-[14px] font-medium text-up-deep">{TOTAL.changeUsd}</span>
-        <span className="text-[13px] text-faint">{TOTAL.since}</span>
-      </p>
+  <section
+    aria-label="Total value"
+    className="rounded-2xl border border-cardline bg-white px-6 py-[22px]"
+  >
+    <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
+      <div>
+        <p className="text-[13px] font-medium text-muted">Total value</p>
+        <p className="mt-1.5 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">
+          {TOTAL.value}
+        </p>
+        <p className="mt-3 flex flex-wrap items-center gap-2.5">
+          <span className="flex items-center gap-1 rounded-md bg-up-tint py-[3px] pr-[9px] pl-[7px] text-[14px] font-semibold text-up-deep">
+            <ArrowUp className="size-3" />
+            {TOTAL.changePct}
+          </span>
+          <span className="text-[14px] font-medium text-up-deep">{TOTAL.changeUsd}</span>
+          <span className="text-[13px] text-faint">{TOTAL.since}</span>
+        </p>
 
-      {/* Stated, not drawn. The share is the number, so it does not need a bar. */}
-      <dl className="mt-7 border-t border-rule">
-        {SPLIT.map((s) => {
-          const [name, note] = s.label.split(" · ");
-          return (
-            <div key={s.label} className="flex items-baseline gap-4 border-b border-hair py-2.5">
-              <dt className="flex-1 text-[14px] text-ink-soft">
-                {name}
-                {note && <span className="ml-1.5 text-[12px] text-faint">{note}</span>}
-              </dt>
-              <dd className="w-[44px] text-right text-[13px] tabular-nums text-faint">
-                {Math.round(s.share)}%
-              </dd>
-              <dd className="w-[92px] text-right text-[14px] font-semibold tabular-nums">
-                {s.value}
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
-    </div>
+        {/* Stated, not drawn. The share is the number, so it does not need a bar. */}
+        <dl className="mt-6 border-t border-hair">
+          {SPLIT.map((s) => {
+            const [name, note] = s.label.split(" \u00b7 ");
+            return (
+              <div key={s.label} className="flex items-baseline gap-4 border-b border-hair py-2.5">
+                <dt className="flex-1 text-[14px] text-ink-soft">
+                  {name}
+                  {note && <span className="ml-1.5 text-[12px] text-faint">{note}</span>}
+                </dt>
+                <dd className="w-[44px] text-right text-[13px] tabular-nums text-faint">
+                  {Math.round(s.share)}%
+                </dd>
+                <dd className="w-[92px] text-right text-[14px] font-semibold tabular-nums">
+                  {s.value}
+                </dd>
+              </div>
+            );
+          })}
+        </dl>
 
-    <div className="min-w-0">
-      {/* Stranded on the right when the chart is the whole column. */}
-      <div className="flex justify-start lg:justify-end">
-        <div className="flex gap-1 rounded-lg bg-chip p-1">
-          {RANGES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setRange(r)}
-              aria-pressed={range === r}
-              className={`min-h-11 rounded-md px-3.5 font-mono text-[12px] transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 ${
-                range === r
-                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(27,26,23,0.07)]"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              {r}
-            </button>
-          ))}
+      </div>
+
+      <div className="min-w-0">
+        {/* Stranded on the right when the chart is the whole column. */}
+        <div className="flex justify-start lg:justify-end">
+          <div className="flex gap-1 rounded-lg bg-shell p-1">
+            {RANGES.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRange(r)}
+                aria-pressed={range === r}
+                className={`min-h-11 rounded-md px-3.5 font-mono text-[12px] transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 ${
+                  range === r
+                    ? "bg-white text-ink shadow-[0_1px_2px_rgba(27,26,23,0.07)]"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-3">
+          <ValueChart range={range} />
         </div>
       </div>
-      <div className="mt-3">
-        <ValueChart range={range} />
-      </div>
+    </div>
+
+    <div className="mt-6 flex flex-wrap gap-2.5 border-t border-hair pt-6">
+      <Link
+        to="/money"
+        className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
+      >
+        <Plus className="size-[15px]" />
+        Add cash
+      </Link>
+      <Link
+        to="/invest"
+        className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 max-sm:min-h-11 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
+      >
+        <Trend className="size-[15px]" />
+        Invest
+      </Link>
     </div>
   </section>
 );
@@ -112,24 +135,6 @@ export const Portfolio = () => {
           <Clock className="size-[13px]" />
           {MARKET}
         </span>
-      }
-      actions={
-        <>
-          <Link
-            to="/money"
-            className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
-          >
-            <Plus className="size-[15px]" />
-            Add cash
-          </Link>
-          <Link
-            to="/invest"
-            className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 max-sm:min-h-11 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
-          >
-            <Trend className="size-[15px]" />
-            Invest
-          </Link>
-        </>
       }
     >
       <Welcome />
