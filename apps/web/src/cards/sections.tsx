@@ -3,7 +3,7 @@ import { useAuthModal } from "../auth/AuthContext";
 import { useCreditMarket } from "../market/hooks";
 import { Section } from "../ui/Section";
 import { ArrowRight, Check } from "../ui/icons";
-import { CollateralTable, RateCompare, RiskCards, RiskNote } from "../credit/parts";
+import { CollateralTable, RateCompare } from "../credit/parts";
 import { CardArt } from "./CardArt";
 import { CASH_MODE, CREDIT_MODE, PARTNERS, PLANS, PLAN_ROWS, PLAYBOOK, STEPS } from "./data";
 
@@ -359,24 +359,6 @@ export const Platinum = () => (
       <p className="mt-5 text-[15px] font-semibold text-muted">
         Platinum isn't a tier — it's access
       </p>
-    </div>
-  </Section>
-);
-
-export const WhatCanGoWrong = () => (
-  <Section inner="py-16 sm:py-20">
-    <div className="max-w-[640px]">
-      <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] sm:text-[40px]">
-        What can go wrong
-      </h2>
-      <p className="mt-4 text-[15px] leading-[1.6] text-muted text-pretty">
-        Spending a credit line secured on shares makes a good outcome better and a bad one worse.
-        Two things are worth understanding before you tap.
-      </p>
-    </div>
-    <div className="mt-8 space-y-5">
-      <RiskCards />
-      <RiskNote />
     </div>
   </Section>
 );

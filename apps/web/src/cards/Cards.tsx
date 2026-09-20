@@ -13,7 +13,6 @@ import {
   Playbook,
   Rates,
   TwoModes,
-  WhatCanGoWrong,
 } from "./sections";
 
 /**
@@ -33,7 +32,6 @@ export const Cards = () => (
       <EarnWhileYouSpend />
       <Plans />
       <Platinum />
-      <WhatCanGoWrong />
       <NonCustodial />
       <CardClosing />
     </main>
