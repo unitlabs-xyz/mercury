@@ -10,9 +10,10 @@ import {
   Trend,
 } from "../ui/icons";
 import { Sidebar } from "./Sidebar";
-import { AXIS, CURVE, EVENTS, HOLDINGS, MARKET, SPLIT, TOTAL, WATCHLIST } from "./data";
+import { EVENTS, HOLDINGS, MARKET, SPLIT, TOTAL, WATCHLIST, type Range } from "./data";
+import { ValueChart } from "./ValueChart";
 
-const RANGES = ["1W", "1M", "1Y", "All"] as const;
+const RANGES: Range[] = ["1W", "1M", "1Y", "All"];
 
 const Move = ({ value, dir }: { value: string; dir: "up" | "down" | "queued" }) => {
   if (dir === "queued")
@@ -35,7 +36,7 @@ const Move = ({ value, dir }: { value: string; dir: "up" | "down" | "queued" }) 
 };
 
 export const Portfolio = () => {
-  const [range, setRange] = useState<(typeof RANGES)[number]>("1Y");
+  const [range, setRange] = useState<Range>("1Y");
 
   return (
     <div className="flex min-h-dvh bg-page">
@@ -80,11 +81,14 @@ export const Portfolio = () => {
               key={w.ticker}
               className="flex items-center gap-3 rounded-[14px] border border-cardline bg-white px-4 py-3.5"
             >
-              <span
-                className={`grid size-[34px] shrink-0 place-items-center rounded-full text-[13px] font-bold text-white ${w.tone}`}
-              >
-                {w.mark}
-              </span>
+              <img
+                src={w.logo}
+                alt=""
+                width={34}
+                height={34}
+                loading="lazy"
+                className="size-[34px] shrink-0 rounded-full"
+              />
               <div className="min-w-0 flex-1">
                 <p className="font-mono text-[12px] text-faint">{w.ticker}</p>
                 <p className="mt-px text-[17px] font-semibold tracking-[-0.02em]">{w.price}</p>
@@ -155,35 +159,9 @@ export const Portfolio = () => {
               </div>
             </div>
 
-            <svg
-              viewBox="0 0 700 220"
-              preserveAspectRatio="none"
-              className="mt-4 block h-[196px] w-full"
-              role="img"
-              aria-label={`Portfolio value over ${range}, rising from September 2025 to September 2026`}
-            >
-              <defs>
-                <linearGradient id="hbArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#1A7F4B" stopOpacity="0.16" />
-                  <stop offset="100%" stopColor="#1A7F4B" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d={`${CURVE} L700,220 L0,220 Z`} fill="url(#hbArea)" />
-              <path
-                d={CURVE}
-                fill="none"
-                stroke="#1A7F4B"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-
-            <p className="mt-2 flex justify-between text-[12px] text-faint">
-              {AXIS.map((a) => (
-                <span key={a}>{a}</span>
-              ))}
-            </p>
+            <div className="mt-4">
+              <ValueChart range={range} />
+            </div>
           </article>
         </section>
 
@@ -248,11 +226,22 @@ export const Portfolio = () => {
               className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-hair px-6 py-4 transition-colors last:border-b-0 hover:bg-shell lg:grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))_110px_28px]"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className={`grid size-[34px] shrink-0 place-items-center rounded-full text-[13px] font-bold text-white ${h.tone}`}
-                >
-                  {h.mark}
-                </span>
+                {h.logo ? (
+                  <img
+                    src={h.logo}
+                    alt=""
+                    width={34}
+                    height={34}
+                    loading="lazy"
+                    className="size-[34px] shrink-0 rounded-full"
+                  />
+                ) : (
+                  <span
+                    className={`grid size-[34px] shrink-0 place-items-center rounded-full text-[13px] font-bold text-white ${h.tone}`}
+                  >
+                    {h.mark}
+                  </span>
+                )}
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2">
                     <span className="text-[15px] font-semibold">{h.name}</span>

@@ -17,10 +17,10 @@ export const SPLIT = [
 ];
 
 export const WATCHLIST = [
-  { mark: "N", tone: "bg-nvidia", ticker: "NVDA", price: "$222.29", move: "1.56%", dir: "up" },
-  { mark: "S&P", tone: "bg-spy", ticker: "SPY", price: "$664.21", move: "0.31%", dir: "up" },
-  { mark: "T", tone: "bg-ink-soft", ticker: "TSLA", price: "$426.07", move: "0.94%", dir: "down" },
-  { mark: "A", tone: "bg-ink-soft", ticker: "AAPL", price: "$245.50", move: "queued", dir: "queued" },
+  { logo: "/tokens/NVDAx.png", ticker: "NVDA", price: "$222.29", move: "1.56%", dir: "up" },
+  { logo: "/tokens/SPYx.png", ticker: "SPY", price: "$664.21", move: "0.31%", dir: "up" },
+  { logo: "/tokens/TSLAx.png", ticker: "TSLA", price: "$426.07", move: "0.94%", dir: "down" },
+  { logo: "/tokens/AAPLx.png", ticker: "AAPL", price: "$245.50", move: "queued", dir: "queued" },
 ] as const;
 
 export const EVENTS = [
@@ -37,8 +37,9 @@ export const EVENTS = [
 ] as const;
 
 export type Holding = {
-  mark: string;
-  tone: string;
+  logo?: string;
+  mark?: string;
+  tone?: string;
   name: string;
   sub: string;
   badge?: string;
@@ -51,8 +52,7 @@ export type Holding = {
 
 export const HOLDINGS: Holding[] = [
   {
-    mark: "N",
-    tone: "bg-nvidia",
+    logo: "/tokens/NVDAx.png",
     name: "Nvidia",
     sub: "NVDAx · NVDAon",
     badge: "2 issuers",
@@ -63,8 +63,7 @@ export const HOLDINGS: Holding[] = [
     dir: "up",
   },
   {
-    mark: "S&P",
-    tone: "bg-spy",
+    logo: "/tokens/SPYx.png",
     name: "S&P 500",
     sub: "SPYx · Backed",
     shares: "5.998",
@@ -85,8 +84,7 @@ export const HOLDINGS: Holding[] = [
     dir: "up",
   },
   {
-    mark: "T",
-    tone: "bg-ink-soft",
+    logo: "/tokens/TSLAx.png",
     name: "Tesla",
     sub: "TSLAx · TSLAon",
     badge: "est. basis",
@@ -116,8 +114,43 @@ export const ISSUER_MIX = [
 
 export const MARKET = "Market closed · reopens Mon 21 Sep, 9:30 AM NY";
 
-/** Value over time, as drawn in the design. */
-export const CURVE =
-  "M0,182 C40,168 68,196 108,160 C148,124 176,150 216,132 C256,114 284,140 324,104 C364,68 392,100 432,82 C472,64 500,84 540,52 C580,20 608,46 648,30 C672,20 686,26 700,18";
 
-export const AXIS = ["Sep 2025", "Jan 2026", "May 2026", "Sep 2026"];
+export type Point = { label: string; value: number };
+export type Range = "1W" | "1M" | "1Y" | "All";
+
+const END = 12480.62;
+const START_ALL = END - 1204.18; // the +$1,204.18 all-time gain
+
+/** Deterministic walk, so the series is stable across renders and reloads. */
+const walk = (n: number, from: number, to: number, jitter: number): number[] => {
+  let seed = 20260919;
+  const rand = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / (n - 1);
+    const drift = from + (to - from) * t;
+    const wobble = i === 0 || i === n - 1 ? 0 : (rand() - 0.5) * jitter;
+    return Math.round((drift + wobble) * 100) / 100;
+  });
+};
+
+const MONTHS = ["Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep"];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+export const SERIES: Record<Range, Point[]> = {
+  "1W": walk(7, 12388.4, END, 90).map((value, i) => ({ label: DAYS[i] as string, value })),
+  "1M": walk(30, 12102.7, END, 150).map((value, i) => ({
+    label: `${i + 1} Sep`,
+    value,
+  })),
+  "1Y": walk(13, START_ALL, END, 420).map((value, i) => ({
+    label: `${MONTHS[i]} ${i < 4 ? 2025 : 2026}`,
+    value,
+  })),
+  All: walk(13, START_ALL, END, 420).map((value, i) => ({
+    label: `${MONTHS[i]} ${i < 4 ? 2025 : 2026}`,
+    value,
+  })),
+};
