@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowUp, ChevronRight, Clock, Plus, Refresh, Trend } from "../ui/icons";
+import { ArrowDown, ArrowUp, ChevronRight, Clock, Plus, Trend } from "../ui/icons";
 import { AppShell } from "./AppShell";
-import { EVENTS, HOLDINGS, MARKET, SPLIT, TOTAL, type Range } from "./data";
+import { HOLDINGS, MARKET, SPLIT, TOTAL, type Range } from "./data";
 import { ValueChart } from "./ValueChart";
 import { Welcome } from "./Welcome";
 
@@ -215,32 +215,6 @@ export const Portfolio = () => {
         </div>
       </section>
 
-      {/* Notes at the foot of a statement, not cards in the middle of one. */}
-      <section aria-label="Recent" className="mt-14">
-        <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Recent</h2>
-        <ul className="mt-4 border-t border-rule">
-          {EVENTS.map((e) => (
-            <li key={e.title} className="flex items-start gap-3.5 border-b border-hair py-4">
-              <span
-                className={`mt-px grid size-7 shrink-0 place-items-center rounded-lg ${
-                  e.kind === "dividend" ? "bg-up-tint text-up-deep" : "bg-warn-tint text-warn"
-                }`}
-              >
-                {e.kind === "dividend" ? (
-                  <Refresh className="size-[15px]" />
-                ) : (
-                  <Clock className="size-[15px]" />
-                )}
-              </span>
-              <p className="min-w-0 flex-1 text-[14px] leading-[1.55] text-muted text-pretty">
-                <span className="font-semibold text-ink">{e.title}</span>
-                <span className="mx-1.5 text-faint">·</span>
-                {e.body}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </section>
     </AppShell>
   );
 };

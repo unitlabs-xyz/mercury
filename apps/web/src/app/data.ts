@@ -16,19 +16,6 @@ export const SPLIT = [
   { label: "Cash · earning 4.1%", value: "$4,534.73", share: 36.4, fill: "bg-ramp-c" },
 ];
 
-export const EVENTS = [
-  {
-    kind: "dividend",
-    title: "Dividend reinvested",
-    body: "You now own 2.401 shares of Nvidia, up from 2.398. No cash moved — the token's multiplier rose.",
-  },
-  {
-    kind: "queued",
-    title: "1 order queued",
-    body: "Apple · $100 · waits for $246.20 or better. Fills on chain without Harbor open.",
-  },
-] as const;
-
 export type Holding = {
   /** Underlying ticker, where one exists. Baskets and cash have none. */
   ticker?: string;
