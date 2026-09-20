@@ -89,6 +89,65 @@ export const Close = (p: Icon) => (
   </svg>
 );
 
+export const PieChart = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M21.2 15.9A10 10 0 1 1 8.1 2.8" />
+    <path d="M22 12A10 10 0 0 0 12 2v10z" />
+  </svg>
+);
+
+export const Card = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M3 7a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <path d="M16 12h3" />
+  </svg>
+);
+
+export const List = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M4 7h16" />
+    <path d="M4 12h16" />
+    <path d="M4 17h10" />
+  </svg>
+);
+
+export const Cog = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.8-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.5 15H3a2 2 0 1 1 0-4h.2A1.6 1.6 0 0 0 4.3 8.2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 9.9 4.3V4a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7h.3a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.2 1.2z" />
+  </svg>
+);
+
+export const Help = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 16v-4" />
+    <path d="M12 8h.01" />
+  </svg>
+);
+
+export const ArrowDown = (p: Icon) => (
+  <svg {...base} strokeWidth={2.6} {...p}>
+    <path d="M12 5v14" />
+    <path d="M6 13l6 6 6-6" />
+  </svg>
+);
+
+export const ChevronRight = (p: Icon) => (
+  <svg {...base} {...p}>
+    <path d="M9 6l6 6-6 6" />
+  </svg>
+);
+
+export const Sort = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M7 4v16" />
+    <path d="M4 17l3 3 3-3" />
+    <path d="M17 20V4" />
+    <path d="M14 7l3-3 3 3" />
+  </svg>
+);
+
 export const Grid = (p: Icon) => (
   <svg {...base} {...p}>
     <rect x="3" y="3" width="7" height="7" rx="1.5" />

@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
+import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { EASE, PRESS } from "../motion/config";
 import { Alert, Check, Clock, Close, Copy, Lock, Mail } from "../ui/icons";
@@ -45,6 +46,7 @@ const QrPlaceholder = () => (
 
 export const AuthModal = () => {
   const { isOpen, close } = useAuthModal();
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -327,7 +329,10 @@ export const AuthModal = () => {
                     </span>
                     <motion.button
                       type="button"
-                      onClick={close}
+                      onClick={() => {
+                        close();
+                        navigate("/portfolio");
+                      }}
                       whileTap={{ scale: 0.97 }}
                       transition={PRESS}
                       className="rounded-[9px] bg-ink px-6 py-3 text-[14px] font-semibold text-white transition-colors hover:bg-ink-soft"

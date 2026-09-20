@@ -24,6 +24,13 @@
   /* fills */
   --color-track: #f0ede5;
   --color-chip: #f4f2ec;
+
+  /* Three steps for the portfolio split bar. */
+  --color-ramp-a: #0f7480;
+  --color-ramp-b: #52a3ae;
+  --color-ramp-c: #c6c0b4;
+  --color-nvidia: #121316;
+  --color-spy: #2f3f6b;
   --color-hatch: #f2f0ea;
 
   /* brand */
@@ -37,6 +44,10 @@
   --color-up-deep: #177544;
   --color-up-tint: #e7f3ec;
   --color-down: #c0442f;
+  --color-down-deep: #b33d29;
+  --color-down-tint: #faebe8;
+  --color-warn: #8a5e10;
+  --color-warn-tint: #fbf3e0;
   --color-down-line: #e8bdb4;
 
   --font-sans: "Instrument Sans", ui-sans-serif, Helvetica, sans-serif;
