@@ -8,6 +8,7 @@ const LINKS = [
   { label: "How it works", href: "/#how-it-works" },
   { label: "Baskets", href: "/#baskets" },
   { label: "Credit", href: "/credit" },
+  { label: "Cards", href: "/cards" },
   { label: "FAQs", href: "/#faqs" },
 ];
 

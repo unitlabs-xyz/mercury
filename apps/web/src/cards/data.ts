@@ -1,0 +1,103 @@
+/** Card plans, exactly as specified for this page. */
+export type Plan = {
+  readonly name: string;
+  readonly finish: "basic" | "silver" | "gold" | "platinum";
+  readonly fee: string;
+  readonly monthlyLimit: string;
+  readonly cashback: string;
+  readonly concierge: string;
+  readonly lounges: string;
+  readonly fastTrack: string;
+};
+
+export const PLANS: Plan[] = [
+  {
+    name: "Basic",
+    finish: "basic",
+    fee: "Free",
+    monthlyLimit: "$2,000",
+    cashback: "0.5%",
+    concierge: "—",
+    lounges: "—",
+    fastTrack: "—",
+  },
+  {
+    name: "Silver",
+    finish: "silver",
+    fee: "$99/y",
+    monthlyLimit: "$20,000",
+    cashback: "1%",
+    concierge: "Standard",
+    lounges: "1 free visit/year",
+    fastTrack: "Standard",
+  },
+  {
+    name: "Gold",
+    finish: "gold",
+    fee: "$249/y",
+    monthlyLimit: "$200,000",
+    cashback: "1.5%",
+    concierge: "Personal",
+    lounges: "4 free visits/year",
+    fastTrack: "Priority",
+  },
+  {
+    name: "Platinum",
+    finish: "platinum",
+    fee: "$999/y",
+    monthlyLimit: "$750,000",
+    cashback: "2%",
+    concierge: "VIP Priority",
+    lounges: "Unlimited",
+    fastTrack: "VIP",
+  },
+];
+
+export const PLAN_ROWS = [
+  { label: "Annual fee", key: "fee" },
+  { label: "Monthly limit", key: "monthlyLimit" },
+  { label: "Credit mode cashback", key: "cashback" },
+  { label: "Concierge", key: "concierge" },
+  { label: "Airport lounges", key: "lounges" },
+  { label: "Fast track", key: "fastTrack" },
+] as const;
+
+/** What selling costs you, against what borrowing costs you. */
+export const PLAYBOOK = [
+  { label: "Tax", sell: "Capital gains event", borrow: "No disposal, no gain" },
+  { label: "Your asset", sell: "Gone", borrow: "Still yours" },
+  { label: "Future upside", sell: "Forfeited", borrow: "Still yours" },
+  { label: "Custody", sell: "Handed to an exchange", borrow: "Never leaves your wallet" },
+];
+
+export const STEPS = [
+  {
+    n: "01",
+    title: "Sign up in the app",
+    body: "Download, register, verify in minutes. Your virtual card activates instantly.",
+  },
+  {
+    n: "02",
+    title: "Deposit your crypto",
+    body: "Send from any wallet or exchange. It starts earning the moment it lands.",
+  },
+  {
+    n: "03",
+    title: "Tap on your terms",
+    body: "Choose cash or credit at the point of sale. Switch whenever you like.",
+  },
+];
+
+export const CASH_MODE = [
+  "Spend your stablecoin balance directly",
+  "No hidden spread, no FX games",
+  "Settles instantly from your balance",
+];
+
+export const CREDIT_MODE = [
+  "Borrow against your BTC, ETH or SOL at the moment you tap",
+  "Your assets stay invested",
+  "Your position stays whole",
+];
+
+export const PARTNERS = ["Solana", "Helius", "Kamino", "FYEO", "MoonPay", "Visa"];

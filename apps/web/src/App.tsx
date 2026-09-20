@@ -17,6 +17,7 @@ const Stock = lazy(() => import("./app/Stock").then((m) => ({ default: m.Stock }
 const Borrow = lazy(() => import("./app/Borrow").then((m) => ({ default: m.Borrow })));
 const Money = lazy(() => import("./app/Money").then((m) => ({ default: m.Money })));
 const Activity = lazy(() => import("./app/Activity").then((m) => ({ default: m.Activity })));
+const Cards = lazy(() => import("./cards/Cards").then((m) => ({ default: m.Cards })));
 const Credit = lazy(() => import("./credit/Credit").then((m) => ({ default: m.Credit })));
 
 /** Live market data is polled, so a refetch on every window focus would be noise. */
@@ -35,6 +36,7 @@ export const App = () => (
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Landing />} />
+            <Route path="/cards" element={<Cards />} />
             <Route path="/credit" element={<Credit />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/invest" element={<Invest />} />
