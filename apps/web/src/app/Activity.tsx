@@ -27,6 +27,7 @@ import {
   groupByDay,
 } from "./activity-filters";
 import { Select } from "../ui/Select";
+import { useActivityParams } from "./useActivityParams";
 import { AppShell } from "./AppShell";
 
 const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
@@ -199,11 +200,7 @@ const PER_PAGE = 10;
 const TOTAL = ACTIVITY.length;
 
 export const Activity = () => {
-  const [group, setGroup] = useState<Group>("all");
-  const [year, setYear] = useState("all");
-  const [month, setMonth] = useState("all");
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
+  const { group, year, month, query, page, write, reset } = useActivityParams();
 
   const filtered = useMemo(
     () => filterEvents(group, year, month, query),
@@ -216,20 +213,6 @@ export const Activity = () => {
   const days = useMemo(() => groupByDay(slice), [slice]);
 
   const narrowed = group !== "all" || year !== "all" || month !== "all" || query.trim() !== "";
-
-  /** Any filter change puts you back on the first page. */
-  const set = <T,>(setter: (v: T) => void) => (v: T) => {
-    setter(v);
-    setPage(1);
-  };
-
-  const clear = () => {
-    setGroup("all");
-    setYear("all");
-    setMonth("all");
-    setQuery("");
-    setPage(1);
-  };
 
   const from = filtered.length === 0 ? 0 : (current - 1) * PER_PAGE + 1;
   const to = Math.min(current * PER_PAGE, filtered.length);
@@ -257,19 +240,18 @@ export const Activity = () => {
     >
       <div className="mt-6 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap gap-2">
-          <Select label="Type" value={group} options={TYPE_OPTIONS} onChange={set<string>((v) => setGroup(v as Group))} widthClass="w-[178px]" />
-          <Select label="Year" value={year} options={YEAR_OPTIONS} onChange={set(setYear)} widthClass="w-[150px]" />
-          <Select label="Month" value={month} options={MONTH_OPTIONS} onChange={set(setMonth)} widthClass="w-[168px]" />
+          <Select label="Type" value={group} options={TYPE_OPTIONS} onChange={(v) => write({ group: v as Group })} widthClass="w-[178px]" />
+          <Select label="Year" value={year} options={YEAR_OPTIONS} onChange={(v) => write({ year: v })} widthClass="w-[150px]" />
+          <Select label="Month" value={month} options={MONTH_OPTIONS} onChange={(v) => write({ month: v })} widthClass="w-[168px]" />
         </div>
 
         <label className="flex items-center gap-2.5 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 focus-within:border-brand xl:w-[280px]">
           <Search className="size-4 shrink-0 text-faint" />
           <input
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
+            // Typing replaces rather than pushes, so Back does not walk
+            // through every keystroke.
+            onChange={(e) => write({ query: e.target.value }, { replace: true })}
             type="search"
             placeholder="Search events"
             aria-label="Search activity"
@@ -278,7 +260,7 @@ export const Activity = () => {
           {query && (
             <button
               type="button"
-              onClick={() => setQuery("")}
+              onClick={() => write({ query: "" }, { replace: true })}
               aria-label="Clear search"
               className="shrink-0 text-faint transition-colors hover:text-ink"
             >
@@ -292,7 +274,7 @@ export const Activity = () => {
         {TOTAL === 0 ? (
           <Empty />
         ) : filtered.length === 0 ? (
-          <NoMatch onClear={clear} />
+          <NoMatch onClear={reset} />
         ) : (
           days.map((day) => (
             <div key={day.date}>
@@ -319,7 +301,7 @@ export const Activity = () => {
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => setPage(current - 1)}
+              onClick={() => write({ page: current - 1 })}
               disabled={current === 1}
               aria-label="Previous page"
               className="grid size-9 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline"
@@ -331,7 +313,7 @@ export const Activity = () => {
               <button
                 key={n}
                 type="button"
-                onClick={() => setPage(n)}
+                onClick={() => write({ page: n })}
                 aria-current={n === current ? "page" : undefined}
                 className={`grid size-9 place-items-center rounded-[9px] text-[13px] font-medium tabular-nums transition-colors ${
                   n === current
@@ -345,7 +327,7 @@ export const Activity = () => {
 
             <button
               type="button"
-              onClick={() => setPage(current + 1)}
+              onClick={() => write({ page: current + 1 })}
               disabled={current === pages}
               aria-label="Next page"
               className="grid size-9 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline"
