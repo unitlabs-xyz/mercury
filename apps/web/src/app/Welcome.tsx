@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { PRESS } from "../motion/config";
 import { Dialog } from "../ui/Dialog";
 import { Plus } from "../ui/icons";
@@ -23,6 +24,7 @@ const STEPS = [
 
 export const Welcome = () => {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
 
   // First arrival only. Storage can throw in a private window, so never let it
   // decide whether the app renders.
@@ -80,7 +82,10 @@ export const Welcome = () => {
           </button>
           <motion.button
             type="button"
-            onClick={dismiss}
+            onClick={() => {
+              dismiss();
+              navigate("/money#receive");
+            }}
             whileTap={{ scale: 0.97 }}
             transition={PRESS}
             className="flex items-center justify-center gap-2 rounded-[9px] bg-brand px-5 py-3 text-[14px] font-semibold text-white transition-colors hover:bg-brand-deep"

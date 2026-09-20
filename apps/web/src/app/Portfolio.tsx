@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ArrowDown,
   ArrowUp,
@@ -9,7 +10,7 @@ import {
   Sort,
   Trend,
 } from "../ui/icons";
-import { Sidebar } from "./Sidebar";
+import { AppShell } from "./AppShell";
 import { EVENTS, HOLDINGS, MARKET, SPLIT, TOTAL, WATCHLIST, type Range } from "./data";
 import { ValueChart } from "./ValueChart";
 import { Welcome } from "./Welcome";
@@ -40,40 +41,35 @@ export const Portfolio = () => {
   const [range, setRange] = useState<Range>("1Y");
 
   return (
-    <div className="flex min-h-dvh bg-page">
+    <AppShell
+      current="portfolio"
+      title="Portfolio"
+      aside={
+        <span className="flex items-center gap-1.5 rounded-full bg-warn-tint px-2.5 py-1 text-[12px] font-medium text-warn">
+          <Clock className="size-[13px]" />
+          {MARKET}
+        </span>
+      }
+      actions={
+        <>
+          <Link
+            to="/money"
+            className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
+          >
+            <Plus className="size-[15px]" />
+            Add cash
+          </Link>
+          <button
+            type="button"
+            className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
+          >
+            <Trend className="size-[15px]" />
+            Invest
+          </button>
+        </>
+      }
+    >
       <Welcome />
-      <div className="hidden lg:flex">
-        <Sidebar />
-      </div>
-
-      <main className="min-w-0 flex-1 px-5 py-6 sm:px-8 sm:py-7">
-        <div className="mx-auto w-full max-w-[1280px]">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3.5">
-            <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Portfolio</h1>
-            <span className="flex items-center gap-1.5 rounded-full bg-warn-tint px-2.5 py-1 text-[12px] font-medium text-warn">
-              <Clock className="size-[13px]" />
-              {MARKET}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
-            >
-              <Plus className="size-[15px]" />
-              Add cash
-            </button>
-            <button
-              type="button"
-              className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
-            >
-              <Trend className="size-[15px]" />
-              Invest
-            </button>
-          </div>
-        </header>
 
         <section
           aria-label="Watchlist"
@@ -280,8 +276,6 @@ export const Portfolio = () => {
             </div>
           ))}
         </section>
-        </div>
-      </main>
-    </div>
+    </AppShell>
   );
 };
