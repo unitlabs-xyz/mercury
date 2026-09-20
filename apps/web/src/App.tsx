@@ -14,7 +14,6 @@ import { EASE } from "./motion/config";
 const Portfolio = lazy(() => import("./app/Portfolio").then((m) => ({ default: m.Portfolio })));
 const Invest = lazy(() => import("./app/Invest").then((m) => ({ default: m.Invest })));
 const Stock = lazy(() => import("./app/Stock").then((m) => ({ default: m.Stock })));
-const Borrow = lazy(() => import("./app/Borrow").then((m) => ({ default: m.Borrow })));
 const Money = lazy(() => import("./app/Money").then((m) => ({ default: m.Money })));
 const Activity = lazy(() => import("./app/Activity").then((m) => ({ default: m.Activity })));
 const Cards = lazy(() => import("./cards/Cards").then((m) => ({ default: m.Cards })));
@@ -41,7 +40,7 @@ export const App = () => (
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/invest" element={<Invest />} />
             <Route path="/invest/:ticker" element={<Stock />} />
-            <Route path="/borrow" element={<Borrow />} />
+            <Route path="/borrow" element={<Navigate to="/cards" replace />} />
             <Route path="/money" element={<Money />} />
             <Route path="/activity" element={<Activity />} />
           </Routes>
