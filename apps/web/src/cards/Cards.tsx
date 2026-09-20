@@ -23,8 +23,12 @@ export const Cards = () => (
   <AuthProvider>
     <TopBar />
     <main>
-      <CardHero />
-      <Rates />
+      {/* The first screen is exactly one viewport: the card, with the rate it
+          undercuts on its floor. Nothing below it peeks in. */}
+      <div className="flex min-h-[calc(100dvh-var(--bar-h))] flex-col">
+        <CardHero />
+        <Rates />
+      </div>
       <HowItWorks />
       <TwoModes />
       <EarnWhileYouSpend />

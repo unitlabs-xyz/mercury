@@ -42,7 +42,7 @@ const GetCard = ({ onClick }: { onClick: () => void }) => (
 export const CardHero = () => {
   const { open } = useAuthModal();
   return (
-    <Section inner="py-16 sm:py-20 lg:py-24">
+    <Section className="flex flex-1 flex-col justify-center" inner="py-12 lg:py-16">
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-center lg:gap-16">
         <div>
           <h1 className="max-w-[13ch] text-[40px] leading-[1.02] font-semibold tracking-[-0.035em] sm:text-[52px] lg:text-[62px]">
@@ -360,7 +360,7 @@ export const NonCustodial = () => (
 export const CardClosing = () => {
   const { open } = useAuthModal();
   return (
-    <Section inner="py-16 sm:py-20 lg:py-24">
+    <Section className="flex flex-1 flex-col justify-center" inner="py-12 lg:py-16">
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center lg:gap-16">
         <div>
           <h2 className="max-w-[14ch] text-[30px] leading-[1.06] font-semibold tracking-[-0.035em] sm:text-[40px]">

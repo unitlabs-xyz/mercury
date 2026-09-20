@@ -46,29 +46,27 @@ const ALTERNATIVES = [
 ];
 
 export const RateCompare = ({ apy }: { apy: number | null | undefined }) => (
-  <>
-    <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
-      <dl className="flex flex-wrap gap-x-10 gap-y-5">
-        {ALTERNATIVES.map((a) => (
-          <div key={a.label}>
-            <dt className="text-[13px] text-muted">{a.label}</dt>
-            <dd className="mt-1 text-[18px] font-semibold tabular-nums">{a.range}</dd>
-          </div>
-        ))}
-      </dl>
-      <div className="flex items-center gap-5 lg:shrink-0">
-        <div className="min-w-0">
-          <p className="text-[15px] font-semibold">Borrowing here</p>
-          <p className="mt-1 text-[13px] leading-[1.5] text-muted">
-            Because the collateral is already on chain and nobody underwrites you
-          </p>
+  <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
+    <dl className="flex flex-wrap gap-x-10 gap-y-5">
+      {ALTERNATIVES.map((a) => (
+        <div key={a.label}>
+          <dt className="text-[13px] text-muted">{a.label}</dt>
+          <dd className="mt-1 text-[18px] font-semibold tabular-nums">{a.range}</dd>
         </div>
-        <span className="shrink-0 border-b-2 border-up pb-1 text-[30px] font-semibold tracking-[-0.02em] text-up-deep tabular-nums">
-          {apy == null ? "—" : `${(apy * 100).toFixed(2)}%`}
-        </span>
+      ))}
+    </dl>
+    <div className="flex items-center gap-5 lg:shrink-0">
+      <div className="min-w-0">
+        <p className="text-[15px] font-semibold">Borrowing here</p>
+        <p className="mt-1 text-[13px] leading-[1.5] text-muted">
+          Because the collateral is already on chain and nobody underwrites you
+        </p>
       </div>
+      <span className="shrink-0 border-b-2 border-up pb-1 text-[30px] font-semibold tracking-[-0.02em] text-up-deep tabular-nums">
+        {apy == null ? "—" : `${(apy * 100).toFixed(2)}%`}
+      </span>
     </div>
-  </>
+  </div>
 );
 
 /* ── what it is, and why ────────────────────────────────────────────── */
