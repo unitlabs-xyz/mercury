@@ -163,10 +163,3 @@ export const CASH = {
   earnedThisYear: "$128.44",
   lastPaid: "1 September 2026",
 };
-
-/** Kamino accepts eight xStocks as collateral; this is stocks + baskets at 50%. */
-export const BORROWING = {
-  collateral: "$7,945.89",
-  power: "$3,972.94",
-  ltv: "50%",
-};
