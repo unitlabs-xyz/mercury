@@ -15,7 +15,7 @@ export const CallToAction = () => {
           Open an investment account in about a minute.
         </h2>
         <p className="mt-3.5 text-[16px] text-muted">
-          No paperwork, no waiting, no bank. Start with $3 if you want to.
+          No paperwork, no waiting, no bank. Start with $5 if you want to.
         </p>
       </div>
       <motion.button

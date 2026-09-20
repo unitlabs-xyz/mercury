@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { D, DEFAULT_POLICY, decide, type Candidate, type Decision } from "@harbor/core";
 import { USDC_DECIMALS, fetchPrices, fetchQuote, type JupPrice, type JupQuote } from "./jupiter";
+import { fetchCreditMarket } from "./kamino";
 import { fetchSession } from "./pyth";
 import { fetchUniverse, type Instrument, type Wrapper } from "./universe";
 
@@ -19,6 +20,15 @@ export const usePrices = (mints: readonly string[]) =>
     enabled: mints.length > 0,
     refetchInterval: 20_000,
     staleTime: 10_000,
+  });
+
+/** Collateral factors and the borrow rate. Both move, neither moves fast. */
+export const useCreditMarket = () =>
+  useQuery({
+    queryKey: ["credit-market"],
+    queryFn: ({ signal }) => fetchCreditMarket(signal),
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 
 export const useSession = () =>

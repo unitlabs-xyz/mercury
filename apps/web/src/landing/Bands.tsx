@@ -14,7 +14,7 @@ const ISSUERS = [
 const STATS = [
   { value: "590", label: "US stocks and funds" },
   { value: "24 / 7", label: "Buy any hour of the week" },
-  { value: "$3", label: "Minimum to start" },
+  { value: "$5", label: "Minimum to start" },
   { value: "4.1%", label: "Earned on idle cash" },
 ];
 

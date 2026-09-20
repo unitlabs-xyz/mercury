@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Activity } from "./app/Activity";
+import { Credit } from "./credit/Credit";
 import { Invest } from "./app/Invest";
 import { Money } from "./app/Money";
 import { Portfolio } from "./app/Portfolio";
@@ -21,6 +22,7 @@ export const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
+          <Route path="/credit" element={<Credit />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/invest" element={<Invest />} />
           <Route path="/invest/:ticker" element={<Stock />} />
