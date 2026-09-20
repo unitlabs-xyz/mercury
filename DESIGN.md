@@ -398,7 +398,20 @@ Form language is rectangular and calm — no clipped corners, no angled cuts, no
 geometry. Icons are drawn from one authored SVG set at a consistent 1.8–2px stroke on a 24px
 viewbox; token and company marks are the issuers' real logos, circular, never redrawn.
 
+### Card Finishes
+
+The one place the palette does not reach. A card is a physical object, and the four tiers are
+read as materials rather than as colours: **Basic** an anodised blue, **Silver**, **Gold**, and
+**Platinum**. Each is a multi-stop sweep at roughly 118°, not a flat fill, because what makes
+metal look like metal is a highlight travelling across a surface. Values live in
+`apps/web/src/cards/CardArt.tsx` and are deliberately outside the token set.
+
 ### Named Rules
+
+**The Material Exception Rule.** Rendered objects — a card, a coin, a device — may carry their own
+material colours, because no warm-neutral palette can make gold look like gold. Everything around
+the object stays in the system. This is the only sanctioned exception, and it applies to the
+object, never to its surroundings.
 
 **The Nested Radius Rule.** A container inside a card steps down one level (16px outer, 14px
 inner). Two identical radii nested inside each other read as a mistake.

@@ -299,7 +299,7 @@ export const EarnWhileYouSpend = () => {
                   className="flex items-center gap-4 border-b border-hair px-5 py-4 last:border-b-0 sm:px-6"
                 >
                   <span className="flex min-w-0 flex-1 items-center gap-3">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-chip font-mono text-[10px] font-semibold text-ink-soft">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-chip font-mono text-[11px] font-semibold text-ink-soft">
                       {v.symbol.slice(0, 2).toUpperCase()}
                     </span>
                     <span className="truncate text-[15px] font-medium">{v.name}</span>

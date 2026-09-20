@@ -482,6 +482,11 @@
         "name": "The One Step-Up Rule",
         "body": "A role that grows at a breakpoint grows to exactly one documented value. Section headings that step to 36 in one file, 38 in another and 40 in four more are not a scale, they are an accident. The same holds for dialog titles: one step-up value, not two.",
         "section": "typography"
+      },
+      {
+        "name": "The Material Exception Rule",
+        "body": "Rendered objects - a card, a coin, a device - may carry their own material colours, because no warm-neutral palette can make gold look like gold. Everything around the object stays in the system. This is the only sanctioned exception, and it applies to the object, never to its surroundings.",
+        "section": "shapes"
       }
     ],
     "dos": [
