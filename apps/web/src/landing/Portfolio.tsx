@@ -35,7 +35,7 @@ export const Portfolio = () => (
         </span>
       </div>
 
-      <p className="mt-1.5 text-[38px] leading-[1.1] font-semibold tracking-[-0.035em]">
+      <p className="mt-1.5 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">
         $12,480.62
       </p>
 

@@ -41,7 +41,7 @@ export const Faq = () => {
       inner="grid items-start gap-10 py-[76px] lg:grid-cols-[0.7fr_1.3fr] lg:gap-16"
     >
       <div>
-        <h2 className="text-[28px] leading-[1.12] font-semibold tracking-[-0.03em] text-balance sm:text-[36px]">
+        <h2 className="text-[30px] leading-[1.12] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
           The ones people actually ask.
         </h2>
       </div>

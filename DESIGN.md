@@ -33,16 +33,46 @@ colors:
 typography:
   display:
     fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
-    fontSize: "clamp(2.25rem, 5.2vw, 3.875rem)"
+    fontSize: "40px"
     fontWeight: 600
     lineHeight: 1.06
     letterSpacing: "-0.035em"
   headline:
     fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
-    fontSize: "clamp(1.5rem, 3vw, 2.5rem)"
+    fontSize: "30px"
     fontWeight: 600
     lineHeight: 1.1
     letterSpacing: "-0.03em"
+  figure-lg:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "42px"
+    fontWeight: 600
+    lineHeight: 1.1
+    letterSpacing: "-0.035em"
+  figure:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "32px"
+    fontWeight: 600
+    lineHeight: 1.15
+    letterSpacing: "-0.02em"
+  moment-title:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "26px"
+    fontWeight: 600
+    lineHeight: 1.15
+    letterSpacing: "-0.03em"
+  page-title:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "22px"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.02em"
+  lead:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "17px"
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: "normal"
   title:
     fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
     fontSize: "18px"
@@ -84,6 +114,12 @@ typography:
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.5
+    letterSpacing: "normal"
+  code:
+    fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace"
+    fontSize: "24px"
+    fontWeight: 500
+    lineHeight: 1
     letterSpacing: "normal"
   label:
     fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace"
@@ -254,11 +290,20 @@ slightly narrow sans and a mono used so sparingly it reads as a change of regist
 second font.
 
 ### Hierarchy
-- **Display** (600, `clamp(2.25rem, 5.2vw, 3.875rem)`, 1.06, `-0.035em`): Landing and page
-  openers. One per screen. Tracking tightens as size grows; it is never loose.
-- **Headline** (600, `clamp(1.5rem, 3vw, 2.5rem)`, 1.1, `-0.03em`): Section openers.
+- **Display** (600, 40px → 52px at `sm` → 62px at `lg`, 1.06, `-0.035em`): The landing hero and
+  the opener of a marketing page. One per screen.
+- **Headline** (600, 30px, 1.1, `-0.03em`): Section openers. It steps to 40px on the landing's
+  full-bleed bands, where the measure is wide enough to carry it, and stays at 30px inside the app
+  shell, where the column is narrower.
+- **Figure Large** (600, 42px, 1.1, `-0.035em`): The one number a screen exists to show — total
+  portfolio value, cash balance, borrowing power.
+- **Figure** (600, 32px, 1.15, `-0.02em`): A secondary headline number, such as a stock price.
+- **Moment Title** (600, 26px → 34px at `sm`, 1.15, `-0.03em`): The heading of a dialog that
+  marks an occasion — welcome, account ready.
+- **Page Title** (600, 22px, 1.2, `-0.02em`): The heading of an app screen or a task sheet.
 - **Title** (600, 18px, 1.25, `-0.015em`): Section headings inside a page.
 - **Subtitle** (600, 16px, 1.3, `-0.01em`): Card headings and row names.
+- **Lead** (400, 17px, 1.55): The paragraph directly under a display heading. One per surface.
 - **Amount** (600, 26px, `-0.02em`): The figure being entered or committed — a buy amount, a
   send amount. The subject of its screen, so it outranks the heading above it.
 - **Body** (400, 15px, 1.6): Prose, held to roughly 65–75 characters. Long-form measures are
@@ -267,16 +312,20 @@ second font.
 - **Body Small** (400, 13px, 1.55): The interface workhorse — row labels, secondary lines,
   explanatory sentences inside cards. The most used step in the system by a wide margin.
 - **Caption** (400, 12px, 1.5): Footnotes, provenance lines, column sub-labels.
+- **Code** (mono, 500, 24px): The one-time-code field's digits, sized so a six-character code
+  reads as six objects rather than a word.
 - **Label** (500, 11px, `0.1em`, uppercase): The `stamp` utility. Column headers and small
   capitalised markers.
 
-The full ladder is **11 · 12 · 13 · 14 · 15 · 16 · 18 · 26**, then display and headline clamp
-between 24px and 62px.
+The full ladder is **11 · 12 · 13 · 14 · 15 · 16 · 17 · 18 · 22 · 24 · 26 · 30 · 32 · 40 · 42**,
+with three roles stepping up at wider viewports: display to 52 then 62, headline to 40 on
+full-bleed bands, and moment title to 34. Anything off those values is drift.
 
-**Known drift, to be resolved rather than blessed.** A handful of literal sizes sit off this
-ladder — 17, 20, 22, 28, 30, 32, 34, 38, 42 and 52px — mostly large figures on the portfolio and
-stock screens that were set by eye. They are recorded here as debt, not as steps. New work uses
-the ladder; existing outliers get pulled onto it when their screen is next touched.
+### Named Rules (continued)
+
+**The One Step-Up Rule.** A role that grows at a breakpoint grows to exactly one documented value.
+Section headings that step to 36 in one file, 38 in another and 40 in four more are not a scale,
+they are an accident. The same holds for dialog titles: one step-up value, not two.
 
 ### Named Rules
 

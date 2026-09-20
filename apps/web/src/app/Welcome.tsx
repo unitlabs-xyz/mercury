@@ -50,7 +50,7 @@ export const Welcome = () => {
       <div className="p-7 sm:p-10">
         <h2
           id="welcome-heading"
-          className="text-[26px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance sm:text-[30px]"
+          className="text-[26px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance sm:text-[34px]"
         >
           Three steps and you own shares
         </h2>

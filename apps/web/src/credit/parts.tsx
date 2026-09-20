@@ -12,9 +12,25 @@ import { Alert, Clock, Layers, Lock, Refresh, Shield } from "../ui/icons";
 const pctOf = (n: number) => `${Math.round(n * 100)}%`;
 const EXAMPLE = 10_000;
 
-export const Heading = ({ title, body }: { title: string; body?: string }) => (
+/**
+ * `wide` is the full-bleed band treatment, where the headline steps to 40px.
+ * Inside the app shell the column is narrower and the headline stays at 30px.
+ */
+export const Heading = ({
+  title,
+  body,
+  wide = false,
+}: {
+  title: string;
+  body?: string;
+  wide?: boolean;
+}) => (
   <div className="max-w-[640px]">
-    <h2 className="text-[clamp(1.35rem,2.6vw,1.9rem)] leading-[1.18] font-semibold tracking-[-0.02em] text-balance">
+    <h2
+      className={`text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance ${
+        wide ? "sm:text-[40px]" : ""
+      }`}
+    >
       {title}
     </h2>
     {body && <p className="mt-3 text-[15px] leading-[1.6] text-muted text-pretty">{body}</p>}
@@ -36,7 +52,7 @@ export const RateCompare = ({ apy }: { apy: number | null | undefined }) => (
         {ALTERNATIVES.map((a) => (
           <div key={a.label}>
             <dt className="text-[13px] text-muted">{a.label}</dt>
-            <dd className="mt-1 text-[17px] font-semibold tabular-nums">{a.range}</dd>
+            <dd className="mt-1 text-[18px] font-semibold tabular-nums">{a.range}</dd>
           </div>
         ))}
       </dl>

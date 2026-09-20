@@ -84,7 +84,7 @@ export const Borrow = () => {
           <Block>
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start">
               <div className="rounded-2xl border border-cardline bg-white px-6 py-6">
-                <h2 className="text-[clamp(1.5rem,3vw,2.1rem)] leading-[1.12] font-semibold tracking-[-0.025em] text-balance">
+                <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance">
                   Cash without selling your stocks
                 </h2>
                 <p className="mt-3 max-w-[52ch] text-[15px] leading-[1.6] text-muted text-pretty">

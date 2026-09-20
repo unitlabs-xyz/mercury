@@ -77,7 +77,7 @@ const Row = ({ event }: { event: Event }) => {
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[15px] font-semibold">{event.title}</span>
             {event.pending && (
-              <span className="rounded bg-warn-tint px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.06em] text-warn uppercase">
+              <span className="rounded bg-warn-tint px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.06em] text-warn uppercase">
                 Pending
               </span>
             )}

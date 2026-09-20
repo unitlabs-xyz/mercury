@@ -71,7 +71,7 @@ export const StatsBand = () => (
             i === 1 ? "border-r-0 lg:border-r" : "",
           ].join(" ")}
         >
-          <p className="text-[28px] font-semibold tracking-[-0.03em] sm:text-[34px]">
+          <p className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[42px]">
             {stat.value}
           </p>
           <p className="mt-[5px] text-[13px] text-muted">{stat.label}</p>

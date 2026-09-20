@@ -112,11 +112,6 @@ export const HOLDINGS: Holding[] = [
   },
 ];
 
-export const ISSUER_MIX = [
-  { name: "Backed", share: 71 },
-  { name: "Ondo", share: 29 },
-];
-
 export const MARKET = "Market closed · reopens Mon 21 Sep, 9:30 AM NY";
 
 

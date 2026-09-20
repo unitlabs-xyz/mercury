@@ -54,6 +54,39 @@ export const CopyAddress = () => {
   );
 };
 
+/**
+ * Uses the platform share sheet where there is one, and falls back to copying.
+ * A button that looked like it shared and did nothing was worse than no button.
+ */
+const ShareAddress = () => {
+  const [done, setDone] = useState(false);
+  const share = async () => {
+    const text = `My Harbor address: ${ADDRESS}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Harbor address", text });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      setTimeout(() => setDone(false), 1600);
+    } catch {
+      /* dismissed, or no permission: nothing to report */
+    }
+  };
+  return (
+    <motion.button
+      type="button"
+      onClick={share}
+      whileTap={{ scale: 0.97 }}
+      transition={PRESS}
+      className="rounded-lg border border-btnline px-3.5 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint max-sm:min-h-11"
+    >
+      {done ? "Copied to share" : "Share"}
+    </motion.button>
+  );
+};
+
 export const Receive = () => (
   <section
     id="receive"
@@ -72,12 +105,7 @@ export const Receive = () => (
         <p className="font-mono text-[14px] leading-[1.6] break-all">{ADDRESS}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <CopyAddress />
-          <button
-            type="button"
-            className="rounded-lg border border-btnline px-3.5 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint max-sm:min-h-11"
-          >
-            Share
-          </button>
+          <ShareAddress />
         </div>
       </div>
     </div>

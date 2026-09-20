@@ -42,7 +42,7 @@ const MarketStamp = () => {
           className={`size-[7px] shrink-0 rounded-full ${open ? "bg-up" : "bg-faint"}`}
           aria-hidden
         />
-        <span className="stamp text-[10px]">{open ? "Market open" : "Market closed"}</span>
+        <span className="stamp">{open ? "Market open" : "Market closed"}</span>
       </p>
       <p className="mt-2 flex items-start gap-1.5 text-[12px] leading-[1.45] text-muted">
         <Clock className="mt-px size-3.5 shrink-0 text-faint" />

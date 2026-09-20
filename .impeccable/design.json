@@ -203,11 +203,11 @@
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "Page and landing openers. One per screen; tracking tightens as size grows."
+        "purpose": "The landing hero and marketing-page openers. One per screen."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Section openers inside a page."
+        "purpose": "Section openers on every long-form surface."
       },
       "title": {
         "displayName": "Title",
@@ -240,6 +240,30 @@
       "body-ui": {
         "displayName": "Body UI",
         "purpose": "Interface prose: button labels, list rows, sheet lines."
+      },
+      "figure-lg": {
+        "displayName": "Figure Large",
+        "purpose": "The one number a screen exists to show: portfolio value, cash, borrowing power."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "A secondary headline number, such as a stock price."
+      },
+      "moment-title": {
+        "displayName": "Moment Title",
+        "purpose": "The heading of a dialog marking an occasion: welcome, account ready."
+      },
+      "page-title": {
+        "displayName": "Page Title",
+        "purpose": "The heading of an app screen or a task sheet."
+      },
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "The paragraph directly under a display heading. One per surface."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "The one-time-code field's digits, sized so a six-character code reads as six objects rather than a word."
       }
     },
     "shadows": [
@@ -453,6 +477,11 @@
         "name": "The Nested Radius Rule",
         "body": "A container inside a card steps down one level (16px outer, 14px inner). Two identical radii nested inside each other read as a mistake.",
         "section": "shapes"
+      },
+      {
+        "name": "The One Step-Up Rule",
+        "body": "A role that grows at a breakpoint grows to exactly one documented value. Section headings that step to 36 in one file, 38 in another and 40 in four more are not a scale, they are an accident. The same holds for dialog titles: one step-up value, not two.",
+        "section": "typography"
       }
     ],
     "dos": [

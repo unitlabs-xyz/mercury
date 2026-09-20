@@ -11,8 +11,6 @@ import {
   ArrowUp,
   Bookmark,
   Card,
-  ChevronRight,
-  Droplet,
   Grid,
   List,
   Pulse,
@@ -251,7 +249,7 @@ const Tile = ({ t }: { t: (typeof TILES)[number] }) => {
       <span className="mt-3 flex items-center gap-1.5">
         <span className="text-[15px] font-semibold">{t.title}</span>
         {t.soon && (
-          <span className="rounded bg-chip px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.04em] text-faint uppercase">
+          <span className="rounded bg-chip px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.04em] text-faint uppercase">
             Soon
           </span>
         )}

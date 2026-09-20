@@ -7,7 +7,6 @@ import {
   Clock,
   Plus,
   Refresh,
-  Sort,
   Trend,
 } from "../ui/icons";
 import { AppShell } from "./AppShell";
@@ -90,7 +89,7 @@ export const Portfolio = () => {
               />
               <div className="min-w-0 flex-1">
                 <p className="font-mono text-[12px] text-faint">{w.ticker}</p>
-                <p className="mt-px text-[17px] font-semibold tracking-[-0.02em] tabular-nums">{w.price}</p>
+                <p className="mt-px text-[16px] font-semibold tracking-[-0.02em] tabular-nums">{w.price}</p>
               </div>
               <Move value={w.move} dir={w.dir} />
             </article>
@@ -198,16 +197,9 @@ export const Portfolio = () => {
         >
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-6 py-4">
             <h2 className="text-[15px] font-semibold">Holdings</h2>
-            <div className="flex items-center gap-3">
-              <span className="text-[13px] text-faint">{HOLDINGS.length} positions</span>
-              <button
-                type="button"
-                className="flex items-center gap-1.5 rounded-lg border border-cardline px-3 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-faint max-sm:min-h-11"
-              >
-                <Sort className="size-3.5" />
-                Sort
-              </button>
-            </div>
+            <span className="text-[13px] text-muted">
+              {HOLDINGS.length} positions, largest first
+            </span>
           </div>
 
           <div className="hidden grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))_110px_28px] gap-4 border-b border-hair px-6 py-2.5 text-[12px] font-medium text-faint lg:grid">
@@ -245,7 +237,7 @@ export const Portfolio = () => {
                   <p className="flex flex-wrap items-center gap-2">
                     <span className="text-[15px] font-semibold">{h.name}</span>
                     {h.badge && (
-                      <span className="rounded bg-chip px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.06em] text-faint uppercase">
+                      <span className="rounded bg-chip px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.06em] text-faint uppercase">
                         {h.badge}
                       </span>
                     )}

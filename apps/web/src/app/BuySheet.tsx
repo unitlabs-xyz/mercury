@@ -193,7 +193,7 @@ export const BuySheet = ({
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-up-tint text-up-deep">
               {placed.kind === "offer_queue" ? <Clock className="size-6" /> : <Check className="size-6" />}
             </span>
-            <h2 id="buy-title" className="mt-4 text-[20px] font-semibold tracking-[-0.01em]">
+            <h2 id="buy-title" className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">
               {placed.kind === "offer_queue" ? "Order queued" : "Bought"}
             </h2>
             <p className="mx-auto mt-2 max-w-[38ch] text-[14px] leading-[1.55] text-muted">
@@ -213,7 +213,7 @@ export const BuySheet = ({
       ) : (
         <>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-5 sm:px-7">
-            <h2 id="buy-title" className="text-[20px] font-semibold tracking-[-0.01em]">
+            <h2 id="buy-title" className="text-[22px] font-semibold tracking-[-0.02em]">
               Buy {instrument.name}
             </h2>
             <p className="mt-1 text-[14px] text-muted">

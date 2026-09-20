@@ -11,7 +11,7 @@ export const CallToAction = () => {
   <Section inner="pb-[76px]">
     <div className="flex flex-col items-start justify-between gap-8 rounded-[20px] border border-cardline bg-white p-8 sm:p-[60px] lg:flex-row lg:items-center lg:gap-12">
       <div>
-        <h2 className="text-[28px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[38px]">
+        <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
           Open an investment account in about a minute.
         </h2>
         <p className="mt-3.5 text-[16px] text-muted">

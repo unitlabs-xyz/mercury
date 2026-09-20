@@ -29,10 +29,10 @@ export const Credit = () => {
       <main>
         <Section inner="py-16 sm:py-20 lg:py-24">
           <div className="mx-auto max-w-[760px] text-center">
-            <h1 className="text-[clamp(2.1rem,5.2vw,3.4rem)] leading-[1.06] font-semibold tracking-[-0.03em] text-balance">
+            <h1 className="text-[40px] leading-[1.06] font-semibold tracking-[-0.035em] text-balance">
               Borrow against your stocks
             </h1>
-            <p className="mx-auto mt-5 max-w-[54ch] text-[clamp(1rem,1.5vw,1.125rem)] leading-[1.55] text-muted text-pretty">
+            <p className="mx-auto mt-5 max-w-[54ch] text-[17px] leading-[1.55] text-muted text-pretty">
               Cash without selling. Your shares stay yours, stay invested, and keep whatever they
               were going to do next. Arriving in version two.
             </p>
@@ -66,7 +66,7 @@ export const Credit = () => {
         <Section inner="py-16 sm:py-20">
           <div className="grid gap-12 lg:grid-cols-2 lg:gap-16">
             <div>
-              <Heading title="What borrowing against stocks actually is" />
+              <Heading wide title="What borrowing against stocks actually is" />
               <div className="mt-5">
                 <WhatItIs />
               </div>
@@ -77,6 +77,7 @@ export const Credit = () => {
 
         <Section tone="white" inner="py-16 sm:py-20">
           <Heading
+            wide
             title="What counts as collateral, and for how much"
             body="Not every holding is worth the same as security. A broad index is steadier than one company, so more of it can be borrowed against. These are the live limits — Kamino sets them and moves them when risk changes."
           />
@@ -88,6 +89,7 @@ export const Credit = () => {
         <Section inner="py-16 sm:py-20">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-16">
             <Heading
+              wide
               title="Cash against your stocks in four steps"
               body="No forms, because there is nothing to assess. The collateral is already on chain and so is the lending market."
             />
@@ -97,6 +99,7 @@ export const Credit = () => {
 
         <Section tone="white" inner="py-16 sm:py-20">
           <Heading
+            wide
             title="What can go wrong"
             body="Borrowing against an investment makes a good outcome better and a bad one worse. Two things are worth understanding before you use any of this."
           />
