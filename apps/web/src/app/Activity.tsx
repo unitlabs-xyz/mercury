@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { EASE } from "../motion/config";
 import {
@@ -7,14 +7,25 @@ import {
   ArrowUp,
   ChevronRight,
   Clock,
+  Close,
   Grid,
   List,
   Plus,
   Refresh,
   Repeat,
+  Search,
   Trend,
+  Download,
 } from "../ui/icons";
-import { ACTIVITY, type Event, type EventKind } from "./activity-data";
+import {
+  ACTIVITY,
+  GROUPS,
+  type Day,
+  type Event,
+  type EventKind,
+  type Group,
+} from "./activity-data";
+import { downloadCsv } from "./activity-export";
 import { AppShell } from "./AppShell";
 
 const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
@@ -142,6 +153,25 @@ const Row = ({ event }: { event: Event }) => {
   );
 };
 
+const NoMatch = ({ onClear }: { onClear: () => void }) => (
+  <div className="grid place-items-center px-6 py-16 text-center">
+    <span className="grid size-12 place-items-center rounded-full bg-shell text-faint">
+      <Search className="size-5" />
+    </span>
+    <p className="mt-4 text-[16px] font-semibold">Nothing matches that</p>
+    <p className="mt-1.5 max-w-[38ch] text-[14px] leading-[1.5] text-muted text-pretty">
+      Try a different word, or widen the filter.
+    </p>
+    <button
+      type="button"
+      onClick={onClear}
+      className="mt-5 rounded-[9px] border border-btnline bg-white px-4 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
+    >
+      Clear filters
+    </button>
+  </div>
+);
+
 const Empty = () => (
   <div className="grid place-items-center px-6 py-20 text-center">
     <span className="grid size-12 place-items-center rounded-full bg-shell text-faint">
@@ -161,20 +191,104 @@ const Empty = () => (
   </div>
 );
 
+const matches = (e: Event, q: string) => {
+  const hay = [e.title, e.sub, ...e.details.flatMap((d) => [d.label, d.value])]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(q);
+};
+
 export const Activity = () => {
-  const count = ACTIVITY.reduce((n, d) => n + d.events.length, 0);
+  const [group, setGroup] = useState<Group>("all");
+  const [query, setQuery] = useState("");
+
+  const total = ACTIVITY.reduce((n, d) => n + d.events.length, 0);
+
+  const days: Day[] = useMemo(() => {
+    const kinds = GROUPS.find((g) => g.key === group)?.kinds ?? [];
+    const q = query.trim().toLowerCase();
+    return ACTIVITY.map((day) => ({
+      ...day,
+      events: day.events.filter(
+        (e) =>
+          (kinds.length === 0 || kinds.includes(e.kind)) && (q === "" || matches(e, q)),
+      ),
+    })).filter((day) => day.events.length > 0);
+  }, [group, query]);
+
+  const shown = days.reduce((n, d) => n + d.events.length, 0);
+  const filtered = group !== "all" || query.trim() !== "";
 
   return (
     <AppShell
       current="activity"
       title="Activity"
-      aside={<span className="text-[13px] text-muted">{count} events</span>}
+      aside={
+        <span className="text-[13px] text-muted tabular-nums">
+          {filtered ? `${shown} of ${total} events` : `${total} events`}
+        </span>
+      }
+      actions={
+        <button
+          type="button"
+          onClick={() => downloadCsv(days)}
+          disabled={shown === 0}
+          className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint"
+        >
+          <Download className="size-[15px]" />
+          Export CSV
+        </button>
+      }
     >
-      <section className="mt-6 overflow-hidden rounded-2xl border border-cardline bg-white">
-        {count === 0 ? (
+      <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
+          {GROUPS.map((g) => (
+            <button
+              key={g.key}
+              type="button"
+              onClick={() => setGroup(g.key)}
+              aria-pressed={group === g.key}
+              className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors ${
+                group === g.key
+                  ? "bg-ink text-white"
+                  : "border border-cardline bg-white text-ink-soft hover:border-faint"
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        <label className="flex items-center gap-2.5 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 focus-within:border-brand lg:w-[300px]">
+          <Search className="size-4 shrink-0 text-faint" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            type="search"
+            placeholder="Search events"
+            aria-label="Search activity"
+            className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="shrink-0 text-faint transition-colors hover:text-ink"
+            >
+              <Close className="size-4" />
+            </button>
+          )}
+        </label>
+      </div>
+
+      <section className="mt-4 overflow-hidden rounded-2xl border border-cardline bg-white">
+        {total === 0 ? (
           <Empty />
+        ) : shown === 0 ? (
+          <NoMatch onClear={() => { setGroup("all"); setQuery(""); }} />
         ) : (
-          ACTIVITY.map((day) => (
+          days.map((day) => (
             <div key={day.date}>
               <h2 className="border-b border-hair bg-shell/60 px-5 py-2.5 text-[12px] font-semibold tracking-[0.04em] text-faint uppercase sm:px-6">
                 {day.date}

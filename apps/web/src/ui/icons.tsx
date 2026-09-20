@@ -173,6 +173,21 @@ export const Key = (p: Icon) => (
   </svg>
 );
 
+export const Search = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M16.5 16.5L21 21" />
+  </svg>
+);
+
+export const Download = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M12 4v11" />
+    <path d="M8 11l4 4 4-4" />
+    <path d="M5 19h14" />
+  </svg>
+);
+
 export const Grid = (p: Icon) => (
   <svg {...base} {...p}>
     <rect x="3" y="3" width="7" height="7" rx="1.5" />
