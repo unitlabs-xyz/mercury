@@ -51,7 +51,7 @@ export const Portfolio = () => (
         {SPLIT.map((item) => (
           <div key={item.label} className="flex items-baseline justify-between gap-4 py-[9px]">
             <span className="text-[14px] text-ink-soft">{item.label}</span>
-            <span className="font-mono text-[13px] font-semibold tabular-nums">{item.value}</span>
+            <span className="text-[13px] font-semibold tabular-nums">{item.value}</span>
           </div>
         ))}
       </div>

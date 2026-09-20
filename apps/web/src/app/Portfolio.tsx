@@ -45,6 +45,7 @@ export const Portfolio = () => {
       </div>
 
       <main className="min-w-0 flex-1 px-5 py-6 sm:px-8 sm:py-7">
+        <div className="mx-auto w-full max-w-[1280px]">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3.5">
             <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Portfolio</h1>
@@ -91,7 +92,7 @@ export const Portfolio = () => {
               />
               <div className="min-w-0 flex-1">
                 <p className="font-mono text-[12px] text-faint">{w.ticker}</p>
-                <p className="mt-px text-[17px] font-semibold tracking-[-0.02em]">{w.price}</p>
+                <p className="mt-px text-[17px] font-semibold tracking-[-0.02em] tabular-nums">{w.price}</p>
               </div>
               <Move value={w.move} dir={w.dir} />
             </article>
@@ -118,7 +119,7 @@ export const Portfolio = () => {
                 <div key={s.label} className="flex items-center gap-2.5">
                   <span className={`size-2 shrink-0 rounded-[2px] ${s.fill}`} />
                   <dt className="flex-1 text-[13px] text-ink-soft">{s.label}</dt>
-                  <dd className="font-mono text-[13px] font-semibold tabular-nums">{s.value}</dd>
+                  <dd className="text-[13px] font-semibold tabular-nums">{s.value}</dd>
                 </div>
               ))}
             </dl>
@@ -149,7 +150,7 @@ export const Portfolio = () => {
                     type="button"
                     onClick={() => setRange(r)}
                     aria-pressed={range === r}
-                    className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                    className={`rounded-md px-2.5 py-1 font-mono text-[12px] transition-colors ${
                       range === r ? "bg-white text-ink shadow-[0_1px_2px_rgba(27,26,23,0.07)]" : "text-muted hover:text-ink"
                     }`}
                   >
@@ -251,17 +252,17 @@ export const Portfolio = () => {
                       </span>
                     )}
                   </p>
-                  <p className="mt-0.5 truncate font-mono text-[12px] text-faint">{h.sub}</p>
+                  <p className="mt-0.5 truncate text-[12px] text-faint">{h.sub}</p>
                 </div>
               </div>
 
-              <span className="hidden text-right font-mono text-[14px] tabular-nums text-muted lg:block">
+              <span className="hidden text-right text-[14px] tabular-nums text-muted lg:block">
                 {h.shares}
               </span>
-              <span className="hidden text-right font-mono text-[14px] tabular-nums text-muted lg:block">
+              <span className="hidden text-right text-[14px] tabular-nums text-muted lg:block">
                 {h.price}
               </span>
-              <span className="text-right font-mono text-[15px] font-semibold tabular-nums lg:text-[14px]">
+              <span className="text-right text-[15px] font-semibold tabular-nums lg:text-[14px]">
                 {h.value}
               </span>
               <span className="hidden justify-end lg:flex">
@@ -277,6 +278,7 @@ export const Portfolio = () => {
             </div>
           ))}
         </section>
+        </div>
       </main>
     </div>
   );

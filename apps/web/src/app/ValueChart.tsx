@@ -119,7 +119,7 @@ export const ValueChart = ({ range }: { range: Range }) => {
             className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-lg border border-cardline bg-white px-3 py-2 shadow-[0_6px_20px_rgba(27,26,23,0.12)]"
             style={{ left: `${(hot.x / W) * 100}%` }}
           >
-            <p className="font-mono text-[13px] font-semibold tabular-nums whitespace-nowrap">
+            <p className="text-[13px] font-semibold tabular-nums whitespace-nowrap">
               {usd(hot.value)}
             </p>
             <p className="mt-0.5 flex items-center gap-2 text-[11px] whitespace-nowrap text-faint">
@@ -135,7 +135,7 @@ export const ValueChart = ({ range }: { range: Range }) => {
 
       <figcaption className="mt-2 flex justify-between text-[12px] text-faint">
         <span>{first?.label}</span>
-        <span className="font-mono tabular-nums">
+        <span className="tabular-nums">
           {usd(lo)} – {usd(hi)}
         </span>
         <span>{last?.label}</span>
