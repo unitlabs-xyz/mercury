@@ -20,6 +20,12 @@ export const cardIn: Variants = {
   shown: { opacity: 1, y: 0, transition: { duration: 0.75, ease: EASE } },
 };
 
+/** Inside a dialog the distance is short, so the travel is too. */
+export const noteIn: Variants = {
+  hidden: { opacity: 0, y: 8 },
+  shown: { opacity: 1, y: 0, transition: { duration: 0.34, ease: EASE } },
+};
+
 export const sequence = (delayChildren = 0, staggerChildren = 0.08): Variants => ({
   hidden: {},
   shown: { transition: { delayChildren, staggerChildren } },

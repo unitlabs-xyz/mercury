@@ -2,19 +2,26 @@ import { useEffect, useRef, type ClipboardEvent, type KeyboardEvent } from "reac
 
 const LENGTH = 6;
 
+/** Idle takes input; checking is sealed while the code is read; done accepted it. */
+export type CodeStatus = "idle" | "checking" | "done";
+
 /** Six boxes that behave like one field: type to advance, backspace to retreat, paste to fill. */
 export const CodeInput = ({
   value,
   onChange,
+  status = "idle",
 }: {
   value: string;
   onChange: (next: string) => void;
+  status?: CodeStatus;
 }) => {
   const boxes = useRef<(HTMLInputElement | null)[]>([]);
+  const locked = status !== "idle";
 
   useEffect(() => {
+    if (locked) return;
     boxes.current[Math.min(value.length, LENGTH - 1)]?.focus();
-  }, [value.length]);
+  }, [value.length, locked]);
 
   const setAt = (i: number, digit: string) => {
     const next = (value.slice(0, i) + digit + value.slice(i + 1)).slice(0, LENGTH);
@@ -36,7 +43,7 @@ export const CodeInput = ({
   };
 
   return (
-    <div className="flex gap-2 sm:gap-3">
+    <div className="grid grid-cols-6 gap-1.5 sm:gap-2.5">
       {Array.from({ length: LENGTH }, (_, i) => {
         const filled = Boolean(value[i]);
         const active = i === value.length;
@@ -50,14 +57,21 @@ export const CodeInput = ({
             onChange={(e) => setAt(i, e.target.value.slice(-1))}
             onKeyDown={onKeyDown(i)}
             onPaste={onPaste}
+            /* Read-only rather than disabled: the field seals without throwing
+               a keyboard user's focus back to the top of the page. */
+            readOnly={locked}
             inputMode="numeric"
             autoComplete={i === 0 ? "one-time-code" : "off"}
             maxLength={1}
             aria-label={`Digit ${i + 1} of ${LENGTH}`}
-            className={`h-[62px] w-[46px] rounded-xl border text-center font-mono text-[24px] font-medium caret-brand transition-colors duration-150 outline-none sm:h-[70px] sm:w-[54px] ${
-              filled || active
-                ? "border-[1.5px] border-brand bg-white"
-                : "border-cardline bg-shell"
+            className={`h-[54px] w-full min-w-0 rounded-xl border text-center font-mono text-[22px] font-medium caret-brand transition-colors duration-200 outline-none sm:h-[60px] sm:text-[24px] ${
+              status === "done"
+                ? "border-[1.5px] border-up bg-up-tint text-up-deep"
+                : status === "checking"
+                  ? "border-[1.5px] border-brand-soft bg-shell text-muted"
+                  : filled || active
+                    ? "border-[1.5px] border-brand bg-white"
+                    : "border-cardline bg-shell"
             }`}
           />
         );
