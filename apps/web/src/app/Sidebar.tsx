@@ -14,7 +14,7 @@ const NAV: Item[] = [
   { key: "baskets", icon: <Grid className="size-[17px]" />, label: "Baskets" },
   { key: "recurring", icon: <Repeat className="size-[17px]" />, label: "Recurring" },
   { key: "money", icon: <Card className="size-[17px]" />, label: "Money", to: "/money" },
-  { key: "activity", icon: <List className="size-[17px]" />, label: "Activity" },
+  { key: "activity", icon: <List className="size-[17px]" />, label: "Activity", to: "/activity" },
 ];
 
 const FOOT: Item[] = [
