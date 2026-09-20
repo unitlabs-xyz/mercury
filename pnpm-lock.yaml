@@ -45,7 +45,7 @@ importers:
 
   apps/mobile:
     dependencies:
-      '@expo-google-fonts/geist':
+      '@expo-google-fonts/instrument-sans':
         specifier: ^0.4.2
         version: 0.4.2
       '@harbor/core':
@@ -1377,8 +1377,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@expo-google-fonts/geist@0.4.2':
-    resolution: {integrity: sha512-cTsqJRQrvK5EniTVwH7UDK18RFf9Bc6yxciAuM936aViQ+eR6j3mLEI2rQkJXz5JP9kwtn8tHJviDyZ0ulH6oA==}
+  '@expo-google-fonts/instrument-sans@0.4.2':
+    resolution: {integrity: sha512-YR0jemCJ/eUlknOfxxxiLnJWpFDaT0KgLiB1q333jIDPlRAERfuMpOislkWA1A7HGX85N9LCsjWLlB3QOZo1wg==}
 
   '@expo/bunyan@4.0.1':
     resolution: {integrity: sha512-+Lla7nYSiHZirgK+U/uYzsLv/X+HaJienbD5AKX1UQZHYfWaP+9uuQluRB4GrEVWF0GZ7vEVp/jzaOT9k/SQlg==}
@@ -6302,7 +6302,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@expo-google-fonts/geist@0.4.2': {}
+  '@expo-google-fonts/instrument-sans@0.4.2': {}
 
   '@expo/bunyan@4.0.1':
     dependencies:
