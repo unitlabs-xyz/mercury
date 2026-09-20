@@ -62,15 +62,6 @@ export const PLAN_ROWS = [
   { label: "Fast track", key: "fastTrack" },
 ] as const;
 
-/** What selling costs you, against what borrowing costs you. */
-export const PLAYBOOK = [
-  { label: "Tax", sell: "Capital gains event", borrow: "No disposal, no gain" },
-  { label: "Your shares", sell: "Gone", borrow: "Still yours" },
-  { label: "Future upside", sell: "Forfeited", borrow: "Still yours" },
-  { label: "Dividends", sell: "Stop arriving", borrow: "Keep arriving" },
-  { label: "Custody", sell: "Handed to a broker", borrow: "Never leaves your wallet" },
-];
-
 export const STEPS = [
   {
     n: "01",

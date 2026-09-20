@@ -10,7 +10,6 @@ import {
   NonCustodial,
   Plans,
   Platinum,
-  Playbook,
   Rates,
   TwoModes,
 } from "./sections";
@@ -25,7 +24,6 @@ export const Cards = () => (
     <TopBar />
     <main>
       <CardHero />
-      <Playbook />
       <Rates />
       <HowItWorks />
       <TwoModes />

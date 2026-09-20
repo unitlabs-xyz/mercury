@@ -5,7 +5,7 @@ import { Section } from "../ui/Section";
 import { ArrowRight, Check } from "../ui/icons";
 import { CollateralTable, RateCompare } from "../credit/parts";
 import { CardArt } from "./CardArt";
-import { CASH_MODE, CREDIT_MODE, PARTNERS, PLANS, PLAN_ROWS, PLAYBOOK, STEPS } from "./data";
+import { CASH_MODE, CREDIT_MODE, PARTNERS, PLANS, PLAN_ROWS, STEPS } from "./data";
 
 /* ── hero ───────────────────────────────────────────────────────────── */
 
@@ -90,44 +90,6 @@ export const CardHero = () => {
     </Section>
   );
 };
-
-/* ── the playbook ───────────────────────────────────────────────────── */
-
-export const Playbook = () => (
-  <Section tone="white" inner="py-16 sm:py-20">
-    <p className="stamp">The playbook</p>
-    <h2 className="mt-5 max-w-[16ch] text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
-      Borrowing isn't selling. The tax code knows the difference
-    </h2>
-
-    <div className="mt-10 grid gap-10 lg:grid-cols-2 lg:gap-16">
-      <div className="space-y-4 text-[15px] leading-[1.65] text-ink-soft">
-        <p>
-          Sell shares to spend, and you trigger capital gains tax — UK, US, most of the EU. Borrow
-          against them, and you don't. The wealthiest operators have used this distinction for
-          decades.
-        </p>
-        <p>Harbor makes it work at your terminal, not just theirs.</p>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-cardline bg-shell">
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 border-b border-hair px-5 py-3.5 sm:px-6">
-          <span className="text-[13px] font-semibold text-muted">Sell to spend</span>
-          <span className="text-[13px] font-semibold text-brand-deep">Borrow with Harbor</span>
-        </div>
-        {PLAYBOOK.map((r) => (
-          <div key={r.label} className="border-b border-hair px-5 py-3.5 last:border-b-0 sm:px-6">
-            <p className="stamp">{r.label}</p>
-            <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4">
-              <span className="text-[15px] text-down-deep">{r.sell}</span>
-              <span className="text-[15px] font-medium text-up-deep">{r.borrow}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </Section>
-);
 
 /* ── how it works ───────────────────────────────────────────────────── */
 
