@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { Suspense, lazy } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Landing } from "./landing/Landing";
 import { EASE } from "./motion/config";
 
@@ -18,7 +18,6 @@ const Borrow = lazy(() => import("./app/Borrow").then((m) => ({ default: m.Borro
 const Money = lazy(() => import("./app/Money").then((m) => ({ default: m.Money })));
 const Activity = lazy(() => import("./app/Activity").then((m) => ({ default: m.Activity })));
 const Cards = lazy(() => import("./cards/Cards").then((m) => ({ default: m.Cards })));
-const Credit = lazy(() => import("./credit/Credit").then((m) => ({ default: m.Credit })));
 
 /** Live market data is polled, so a refetch on every window focus would be noise. */
 const queryClient = new QueryClient({
@@ -37,7 +36,8 @@ export const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/cards" element={<Cards />} />
-            <Route path="/credit" element={<Credit />} />
+            {/* Card and credit are one page now; the old link still resolves. */}
+            <Route path="/credit" element={<Navigate to="/cards" replace />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/invest" element={<Invest />} />
             <Route path="/invest/:ticker" element={<Stock />} />

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useAuthModal } from "../auth/AuthContext";
-import { useVaults } from "../market/hooks";
+import { useCreditMarket } from "../market/hooks";
 import { Section } from "../ui/Section";
 import { ArrowRight, Check } from "../ui/icons";
+import { CollateralTable, RateCompare, RiskCards, RiskNote } from "../credit/parts";
 import { CardArt } from "./CardArt";
 import { CASH_MODE, CREDIT_MODE, PARTNERS, PLANS, PLAN_ROWS, PLAYBOOK, STEPS } from "./data";
 
@@ -67,7 +68,7 @@ export const CardHero = () => {
           </h1>
           <p className="mt-4 text-[17px] font-semibold text-muted">Build wealth like the 1%</p>
           <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.6] text-ink-soft text-pretty">
-            Borrow against your crypto. Spend via Visa without triggering taxable events.
+            Borrow against the shares you already own. Spend via Visa without selling one.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <GetCard onClick={open} />
@@ -102,8 +103,8 @@ export const Playbook = () => (
     <div className="mt-10 grid gap-10 lg:grid-cols-2 lg:gap-16">
       <div className="space-y-4 text-[15px] leading-[1.65] text-ink-soft">
         <p>
-          Sell crypto to spend, and you trigger capital gains tax — UK, US, most of the EU. Borrow
-          against it, and you don't. The wealthiest operators have used this distinction for
+          Sell shares to spend, and you trigger capital gains tax — UK, US, most of the EU. Borrow
+          against them, and you don't. The wealthiest operators have used this distinction for
           decades.
         </p>
         <p>Harbor makes it work at your terminal, not just theirs.</p>
@@ -111,8 +112,8 @@ export const Playbook = () => (
 
       <div className="overflow-hidden rounded-2xl border border-cardline bg-shell">
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-4 border-b border-hair px-5 py-3.5 sm:px-6">
-          <span className="text-[13px] font-semibold text-muted">Spend with any crypto card</span>
-          <span className="text-[13px] font-semibold text-brand-deep">Spend with Harbor</span>
+          <span className="text-[13px] font-semibold text-muted">Sell to spend</span>
+          <span className="text-[13px] font-semibold text-brand-deep">Borrow with Harbor</span>
         </div>
         {PLAYBOOK.map((r) => (
           <div key={r.label} className="border-b border-hair px-5 py-3.5 last:border-b-0 sm:px-6">
@@ -129,6 +130,15 @@ export const Playbook = () => (
 );
 
 /* ── how it works ───────────────────────────────────────────────────── */
+
+export const Rates = () => {
+  const market = useCreditMarket();
+  return (
+    <Section tone="white" inner="py-8 sm:py-9">
+      <RateCompare apy={market.data?.borrowApy} />
+    </Section>
+  );
+};
 
 export const HowItWorks = () => (
   <Section inner="py-16 sm:py-20">
@@ -238,20 +248,27 @@ export const TwoModes = () => {
 /* ── earn while you spend ───────────────────────────────────────────── */
 
 export const EarnWhileYouSpend = () => {
-  const vaults = useVaults();
+  const market = useCreditMarket();
+  const supply = market.data?.supplyApy;
+  const borrow = market.data?.borrowApy;
   return (
     <Section inner="py-16 sm:py-20">
       <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
         <div>
-          <h2 className="max-w-[12ch] text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
+          <h2 className="max-w-[12ch] text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] sm:text-[40px]">
             Earn while you spend
           </h2>
-          <p className="mt-6 max-w-[46ch] text-[15px] leading-[1.6] font-medium text-ink-soft text-pretty">
-            Your main holdings deploy into Kamino Finance — $2.8B TVL, 18+ audits, zero bad debt
-            across its history.
+          <p className="mt-6 max-w-[48ch] text-[15px] leading-[1.6] font-medium text-ink-soft text-pretty">
+            Your shares sit as collateral in Kamino Finance and go on doing whatever they were
+            going to do. The cash beside them earns
+            {supply != null ? ` ${(supply * 100).toFixed(2)}%` : ""} while it waits to be spent.
           </p>
           <ul className="mt-7 space-y-3.5">
-            {["Yield compounds", "No lock-ups", "Withdraw the moment you decide"].map((t) => (
+            {[
+              "Dividends keep arriving as extra shares",
+              "Nothing is locked up",
+              "Repay whenever, or never, while the line holds",
+            ].map((t) => (
               <li key={t} className="flex items-center gap-3 text-[15px] font-medium">
                 <Check className="size-4 shrink-0 text-brand" />
                 {t}
@@ -259,10 +276,10 @@ export const EarnWhileYouSpend = () => {
             ))}
           </ul>
           <p className="mt-8 max-w-[62ch] text-[12px] leading-[1.6] text-muted">
-            Yield is variable and not guaranteed. Withdrawals depend on protocol liquidity and may
+            Rates are variable and not guaranteed. Withdrawals depend on protocol liquidity and may
             be temporarily limited during market stress. Past performance does not predict future
-            results. Using assets as collateral exposes you to liquidation risk. You may lose your
-            collateral if the market moves against your position.{" "}
+            results. Using shares as collateral exposes you to liquidation risk. You may lose them
+            if the market moves against your position.{" "}
             <a
               href="https://app.kamino.finance"
               target="_blank"
@@ -275,50 +292,17 @@ export const EarnWhileYouSpend = () => {
           </p>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-cardline bg-white">
-          <div className="flex items-center gap-4 border-b border-hair px-5 py-3.5 sm:px-6">
-            <span className="flex-1 text-[15px] font-semibold">Kamino</span>
-            <span className="w-[64px] text-right text-[11px] font-medium tracking-[0.1em] text-faint uppercase">
-              LTV
-            </span>
-            <span className="w-[76px] text-right text-[11px] font-medium tracking-[0.1em] text-faint uppercase">
-              APY
-            </span>
+        <div>
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-[16px] font-semibold">What backs the line, and for how much</h3>
+            {borrow != null && (
+              <span className="text-[13px] text-muted">
+                borrowing at{" "}
+                <strong className="font-semibold text-ink">{(borrow * 100).toFixed(2)}%</strong>
+              </span>
+            )}
           </div>
-          {vaults.isLoading
-            ? [0, 1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex items-center gap-4 border-b border-hair px-5 py-4 last:border-b-0 sm:px-6">
-                  <span className="h-4 w-28 rounded bg-chip" />
-                  <span className="ml-auto h-4 w-12 rounded bg-chip" />
-                </div>
-              ))
-            : (vaults.data ?? []).map((v) => (
-                <div
-                  key={v.symbol}
-                  className="flex items-center gap-4 border-b border-hair px-5 py-4 last:border-b-0 sm:px-6"
-                >
-                  <span className="flex min-w-0 flex-1 items-center gap-3">
-                    <img
-                      src={v.logo}
-                      alt=""
-                      width={28}
-                      height={28}
-                      loading="lazy"
-                      className="size-7 shrink-0 rounded-full"
-                    />
-                    <span className="truncate text-[15px] font-medium">{v.name}</span>
-                  </span>
-                  <span className="w-[64px] text-right text-[14px] tabular-nums text-muted">
-                    {Math.round(v.maxLtv * 100)}%
-                  </span>
-                  <span className="w-[76px] text-right text-[15px] font-semibold text-up-deep tabular-nums">
-                    {(v.supplyApy * 100).toFixed(2)}%
-                  </span>
-                </div>
-              ))}
-          <p className="border-t border-hair bg-shell px-5 py-3 text-[12px] text-muted sm:px-6">
-            Read live from Kamino's main pool.
-          </p>
+          <CollateralTable market={market.data} loading={market.isLoading} />
         </div>
       </div>
     </Section>
@@ -375,6 +359,24 @@ export const Platinum = () => (
       <p className="mt-5 text-[15px] font-semibold text-muted">
         Platinum isn't a tier — it's access
       </p>
+    </div>
+  </Section>
+);
+
+export const WhatCanGoWrong = () => (
+  <Section inner="py-16 sm:py-20">
+    <div className="max-w-[640px]">
+      <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] sm:text-[40px]">
+        What can go wrong
+      </h2>
+      <p className="mt-4 text-[15px] leading-[1.6] text-muted text-pretty">
+        Spending a credit line secured on shares makes a good outcome better and a bad one worse.
+        Two things are worth understanding before you tap.
+      </p>
+    </div>
+    <div className="mt-8 space-y-5">
+      <RiskCards />
+      <RiskNote />
     </div>
   </Section>
 );

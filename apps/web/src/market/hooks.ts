@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { D, DEFAULT_POLICY, decide, type Candidate, type Decision } from "@harbor/core";
 import { USDC_DECIMALS, fetchPrices, fetchQuote, type JupPrice, type JupQuote } from "./jupiter";
-import { fetchCreditMarket, fetchVaults } from "./kamino";
+import { fetchCreditMarket } from "./kamino";
 import { fetchSession } from "./pyth";
 import { fetchUniverse, type Instrument, type Wrapper } from "./universe";
 
@@ -27,15 +27,6 @@ export const useCreditMarket = () =>
   useQuery({
     queryKey: ["credit-market"],
     queryFn: ({ signal }) => fetchCreditMarket(signal),
-    staleTime: 5 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
-  });
-
-/** Supply rates for the deposits behind the card. */
-export const useVaults = () =>
-  useQuery({
-    queryKey: ["kamino-vaults"],
-    queryFn: ({ signal }) => fetchVaults(signal),
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
   });

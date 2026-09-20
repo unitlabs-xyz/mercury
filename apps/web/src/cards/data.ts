@@ -65,9 +65,10 @@ export const PLAN_ROWS = [
 /** What selling costs you, against what borrowing costs you. */
 export const PLAYBOOK = [
   { label: "Tax", sell: "Capital gains event", borrow: "No disposal, no gain" },
-  { label: "Your asset", sell: "Gone", borrow: "Still yours" },
+  { label: "Your shares", sell: "Gone", borrow: "Still yours" },
   { label: "Future upside", sell: "Forfeited", borrow: "Still yours" },
-  { label: "Custody", sell: "Handed to an exchange", borrow: "Never leaves your wallet" },
+  { label: "Dividends", sell: "Stop arriving", borrow: "Keep arriving" },
+  { label: "Custody", sell: "Handed to a broker", borrow: "Never leaves your wallet" },
 ];
 
 export const STEPS = [
@@ -78,8 +79,8 @@ export const STEPS = [
   },
   {
     n: "02",
-    title: "Deposit your crypto",
-    body: "Send from any wallet or exchange. It starts earning the moment it lands.",
+    title: "Build a portfolio",
+    body: "Buy shares of real companies and funds. They stay yours and stay invested.",
   },
   {
     n: "03",
@@ -89,14 +90,14 @@ export const STEPS = [
 ];
 
 export const CASH_MODE = [
-  "Spend your stablecoin balance directly",
+  "Spend the cash sitting in your account",
   "No hidden spread, no FX games",
   "Settles instantly from your balance",
 ];
 
 export const CREDIT_MODE = [
-  "Borrow against your BTC, ETH or SOL at the moment you tap",
-  "Your assets stay invested",
+  "Borrow against your Nvidia, Apple or S&P 500 at the moment you tap",
+  "Your shares stay invested",
   "Your position stays whole",
 ];
 

@@ -11,21 +11,29 @@ import {
   Plans,
   Platinum,
   Playbook,
+  Rates,
   TwoModes,
+  WhatCanGoWrong,
 } from "./sections";
 
-/** The card page for someone who does not have an account yet. */
+/**
+ * Card and credit are one product: the line is secured on the shares you hold,
+ * and the card is how you spend it. They were two pages telling half the story
+ * each.
+ */
 export const Cards = () => (
   <AuthProvider>
     <TopBar />
     <main>
       <CardHero />
       <Playbook />
+      <Rates />
       <HowItWorks />
       <TwoModes />
       <EarnWhileYouSpend />
       <Plans />
       <Platinum />
+      <WhatCanGoWrong />
       <NonCustodial />
       <CardClosing />
     </main>
