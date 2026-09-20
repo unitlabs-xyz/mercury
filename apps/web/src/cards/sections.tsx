@@ -26,24 +26,6 @@ const StoreMark = ({ kind }: { kind: "play" | "apple" }) => (
   </span>
 );
 
-/** A quiet-zone QR block. Decorative: the download link is the button beside it. */
-const QrBlock = () => {
-  const cells = Array.from({ length: 169 }, (_, i) => {
-    const x = i % 13;
-    const y = Math.floor(i / 13);
-    const finder = (cx: number, cy: number) => x >= cx && x < cx + 3 && y >= cy && y < cy + 3;
-    if (finder(0, 0) || finder(10, 0) || finder(0, 10)) return true;
-    return (x * 7 + y * 11 + ((x * y) % 5)) % 3 === 0;
-  });
-  return (
-    <div aria-hidden className="grid grid-cols-13 gap-[2px]" style={{ gridTemplateColumns: "repeat(13,1fr)" }}>
-      {cells.map((on, i) => (
-        <span key={i} className={`aspect-square rounded-[1px] ${on ? "bg-ink" : "bg-transparent"}`} />
-      ))}
-    </div>
-  );
-};
-
 const GetCard = ({ onClick }: { onClick: () => void }) => (
   <button
     type="button"
@@ -77,14 +59,8 @@ export const CardHero = () => {
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-8">
-          <div className="w-full max-w-[420px] [container-type:inline-size]">
-            <CardArt tilt tier="Platinum" />
-          </div>
-          <div className="w-[164px] rounded-[16px] border border-cardline bg-white p-4">
-            <p className="mb-3 text-center text-[13px] font-semibold">Download app</p>
-            <QrBlock />
-          </div>
+        <div className="mx-auto w-full max-w-[440px] [container-type:inline-size]">
+          <CardArt tier="Platinum" />
         </div>
       </div>
     </Section>

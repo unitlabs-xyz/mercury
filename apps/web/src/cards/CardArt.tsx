@@ -28,19 +28,16 @@ export const CardArt = ({
   finish = "platinum",
   tier,
   className = "",
-  tilt = false,
 }: {
   finish?: Finish;
   tier?: string;
   className?: string;
-  tilt?: boolean;
 }) => (
   <div
     className={`relative aspect-[1.586/1] w-full overflow-hidden rounded-[18px] ${className}`}
     style={{
       background: FINISHES[finish],
       boxShadow: "0 24px 60px rgba(27,26,23,0.28), inset 0 1px 0 rgba(255,255,255,0.65)",
-      transform: tilt ? "rotate(-7deg)" : undefined,
     }}
   >
     <span
