@@ -399,12 +399,34 @@ export const NonCustodial = () => (
     </div>
 
     <ul className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {PARTNERS.map((name) => (
+      {PARTNERS.map((p) => (
         <li
-          key={name}
-          className="flex h-[72px] items-center justify-center rounded-2xl border border-cardline bg-shell px-3 text-[15px] font-semibold tracking-[-0.01em] text-ink-soft"
+          key={p.name}
+          className="flex h-[72px] items-center justify-center rounded-2xl border border-cardline bg-shell px-3"
         >
-          {name}
+          {p.src ? (
+            <span
+              role="img"
+              aria-label={p.name}
+              className="block bg-ink-soft opacity-75 transition-opacity duration-200 hover:opacity-100"
+              style={{
+                width: p.w,
+                height: p.h,
+                maskImage: `url(${p.src})`,
+                WebkitMaskImage: `url(${p.src})`,
+                maskRepeat: "no-repeat",
+                WebkitMaskRepeat: "no-repeat",
+                maskSize: "contain",
+                WebkitMaskSize: "contain",
+                maskPosition: "center",
+                WebkitMaskPosition: "center",
+              }}
+            />
+          ) : (
+            <span className="text-[15px] font-semibold tracking-[0.22em] text-ink-soft opacity-75 transition-opacity duration-200 hover:opacity-100">
+              {p.name}
+            </span>
+          )}
         </li>
       ))}
     </ul>

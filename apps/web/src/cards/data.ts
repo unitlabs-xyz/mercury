@@ -100,4 +100,23 @@ export const CREDIT_MODE = [
   "Your position stays whole",
 ];
 
-export const PARTNERS = ["Solana", "Helius", "Kamino", "FYEO", "MoonPay", "Visa"];
+/**
+ * Third-party marks, painted from the palette with a CSS mask so the row reads
+ * as one family. FYEO sets its name as spaced capitals rather than a drawn
+ * mark, so it is typeset rather than masked.
+ */
+export type Partner = {
+  readonly name: string;
+  readonly src?: string;
+  readonly w: number;
+  readonly h: number;
+};
+
+export const PARTNERS: Partner[] = [
+  { name: "Solana", src: "/logos/solana-wordmark.svg", w: 108, h: 16 },
+  { name: "Helius", src: "/logos/helius.svg", w: 90, h: 19 },
+  { name: "Kamino", src: "/logos/kamino.svg", w: 85, h: 20 },
+  { name: "FYEO", w: 62, h: 20 },
+  { name: "MoonPay", src: "/logos/moonpay.svg", w: 93, h: 19 },
+  { name: "Visa", src: "/logos/visa.svg", w: 59, h: 19 },
+];
