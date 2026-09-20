@@ -15,6 +15,15 @@ const get = async <T>(path: string, signal?: AbortSignal): Promise<T> => {
   return (await res.json()) as T;
 };
 
+export type JupStats = {
+  priceChange?: number;
+  buyVolume?: number;
+  sellVolume?: number;
+  numTraders?: number;
+  /** Buyers minus sellers. Real on-chain activity, not a marketing number. */
+  numNetBuyers?: number;
+};
+
 export type JupToken = {
   id: string;
   name: string;
@@ -25,6 +34,8 @@ export type JupToken = {
   tags?: string[];
   liquidity?: number;
   holderCount?: number;
+  stats24h?: JupStats;
+  organicScoreLabel?: string;
 };
 
 /**

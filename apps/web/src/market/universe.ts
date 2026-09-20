@@ -9,6 +9,12 @@ export type Wrapper = {
   readonly decimals: number;
   readonly icon?: string;
   readonly liquidity: number;
+  /** On-chain holders of this wrapper. */
+  readonly holders: number;
+  /** Net buyers over 24h — buyers minus sellers, from Jupiter's own stats. */
+  readonly netBuyers24h: number;
+  readonly volume24h: number;
+  readonly traders24h: number;
 };
 
 export type Instrument = {
@@ -54,6 +60,10 @@ const toWrapper = (t: JupToken, issuer: Issuer): Wrapper => ({
   decimals: t.decimals,
   ...(t.icon ? { icon: t.icon } : {}),
   liquidity: t.liquidity ?? 0,
+  holders: t.holderCount ?? 0,
+  netBuyers24h: Math.max(0, Math.round(t.stats24h?.numNetBuyers ?? 0)),
+  volume24h: (t.stats24h?.buyVolume ?? 0) + (t.stats24h?.sellVolume ?? 0),
+  traders24h: Math.round(t.stats24h?.numTraders ?? 0),
 });
 
 export const fetchUniverse = async (signal?: AbortSignal): Promise<Instrument[]> => {

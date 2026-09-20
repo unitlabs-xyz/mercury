@@ -38,6 +38,9 @@ export type Priced = {
   readonly todayPct: number | null;
   readonly liquidity: number;
   readonly observedAt: Date | null;
+  readonly holders: number;
+  readonly netBuyers24h: number;
+  readonly volume24h: number;
 };
 
 export const priceInstrument = (
@@ -47,12 +50,17 @@ export const priceInstrument = (
   const backed = instrument.wrappers.find((w) => w.issuer === "backed");
   const primary = backed ?? instrument.wrappers[0];
   const p = primary ? prices?.[primary.mint] : null;
+  const sum = (pick: (w: (typeof instrument.wrappers)[number]) => number) =>
+    instrument.wrappers.reduce((n, w) => n + pick(w), 0);
   return {
     instrument,
     fair: p?.stockData?.price ?? null,
     todayPct: p?.priceChange24h ?? null,
-    liquidity: instrument.wrappers.reduce((n, w) => n + (prices?.[w.mint]?.liquidity ?? 0), 0),
+    liquidity: instrument.wrappers.reduce((n, w) => n + (prices?.[w.mint]?.liquidity ?? w.liquidity), 0),
     observedAt: p?.stockData?.updatedAt ? new Date(p.stockData.updatedAt) : null,
+    holders: sum((w) => w.holders),
+    netBuyers24h: sum((w) => w.netBuyers24h),
+    volume24h: sum((w) => w.volume24h),
   };
 };
 

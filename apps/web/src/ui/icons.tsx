@@ -248,3 +248,30 @@ export const Plus = (p: Icon) => (
     <path d="M6 12h12" />
   </svg>
 );
+
+export const Bookmark = ({ filled = false, ...p }: Icon & { filled?: boolean }) => (
+  <svg {...base} fill={filled ? "currentColor" : "none"} {...p}>
+    <path d="M6 4.5h12a1 1 0 0 1 1 1v14l-7-4-7 4v-14a1 1 0 0 1 1-1Z" />
+  </svg>
+);
+
+export const Users = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3.5 19.5a5.5 5.5 0 0 1 11 0" />
+    <path d="M16 5.2a3.2 3.2 0 0 1 0 5.6" />
+    <path d="M17.5 14.4a5.5 5.5 0 0 1 3 5.1" />
+  </svg>
+);
+
+export const Pulse = (p: Icon) => (
+  <svg {...base} strokeWidth={1.9} {...p}>
+    <path d="M3 12h3.5L9 5.5 13 18l2.5-6H21" />
+  </svg>
+);
+
+export const Droplet = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M12 3.5c3.2 3.4 5.5 6.2 5.5 9a5.5 5.5 0 0 1-11 0c0-2.8 2.3-5.6 5.5-9Z" />
+  </svg>
+);
