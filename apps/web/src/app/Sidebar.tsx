@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnchorMark } from "../ui/Logo";
-import { Card, Clock, Cog, Grid, Help, List, PieChart, Repeat, Trend } from "../ui/icons";
+import { Card, Clock, Grid, Help, List, PieChart, Repeat, Trend } from "../ui/icons";
 import { useSession } from "../market/hooks";
 
 
@@ -13,7 +13,7 @@ export type NavKey =
   | "money"
   | "activity";
 
-type Item = { key: NavKey | "settings" | "help"; icon: ReactNode; label: string; to?: string };
+type Item = { key: NavKey | "help"; icon: ReactNode; label: string; to?: string };
 
 const NAV: Item[] = [
   { key: "portfolio", icon: <PieChart className="size-[17px]" />, label: "Portfolio", to: "/portfolio" },
@@ -24,10 +24,7 @@ const NAV: Item[] = [
   { key: "activity", icon: <List className="size-[17px]" />, label: "Activity", to: "/activity" },
 ];
 
-const FOOT: Item[] = [
-  { key: "settings", icon: <Cog className="size-[17px]" />, label: "Settings" },
-  { key: "help", icon: <Help className="size-[17px]" />, label: "Help" },
-];
+const FOOT: Item[] = [{ key: "help", icon: <Help className="size-[17px]" />, label: "Help" }];
 
 const MarketStamp = () => {
   const session = useSession();
@@ -85,7 +82,7 @@ const NavItem = ({ item, current }: { item: Item; current: boolean }) => {
 };
 
 export const Sidebar = ({ current }: { current: NavKey }) => (
-  <aside className="flex w-[236px] shrink-0 flex-col border-r border-navline px-4 pt-[26px] pb-5">
+  <aside className="sticky top-0 hidden h-dvh w-[236px] shrink-0 flex-col overflow-y-auto border-r border-navline px-4 pt-[26px] pb-5 lg:flex">
     <Link to="/" className="mb-[26px] flex items-center gap-2.5 px-2.5">
       <span className="grid size-7 place-items-center rounded-lg bg-brand text-white">
         <AnchorMark className="size-4" />

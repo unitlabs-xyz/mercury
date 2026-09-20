@@ -16,9 +16,7 @@ export const AppShell = ({
   children: ReactNode;
 }) => (
   <div className="flex min-h-dvh bg-page">
-    <div className="hidden lg:flex">
-      <Sidebar current={current} />
-    </div>
+    <Sidebar current={current} />
 
     <main className="min-w-0 flex-1 px-5 py-6 sm:px-8 sm:py-7">
       <div className="mx-auto w-full max-w-[1280px]">
