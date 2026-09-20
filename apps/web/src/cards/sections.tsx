@@ -264,7 +264,7 @@ export const EarnWhileYouSpend = () => {
               </span>
             )}
           </div>
-          <CollateralTable market={market.data} loading={market.isLoading} />
+          <CollateralTable market={market.data} loading={market.isLoading} limit={6} />
         </div>
       </div>
     </Section>

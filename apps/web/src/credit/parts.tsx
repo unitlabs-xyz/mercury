@@ -154,10 +154,17 @@ export const Benefits = () => (
 export const CollateralTable = ({
   market,
   loading,
+  limit,
 }: {
   market: CreditMarket | undefined;
   loading: boolean;
-}) => (
+  /** Show only the top few, for a surface where the full list would overrun. */
+  limit?: number;
+}) => {
+  const all = market?.collateral ?? [];
+  const rows = limit ? all.slice(0, limit) : all;
+  const hidden = all.length - rows.length;
+  return (
   <>
     <div className="overflow-hidden rounded-2xl border border-cardline bg-white">
       <div className="hidden items-center gap-4 border-b border-hair bg-shell px-5 py-3 text-[12px] tracking-[0.04em] text-faint uppercase sm:flex sm:px-6">
@@ -166,7 +173,7 @@ export const CollateralTable = ({
         <span className="w-[150px] text-right">On $10,000 held</span>
       </div>
       {loading
-        ? [0, 1, 2, 3, 4].map((i) => (
+        ? Array.from({ length: limit ?? 5 }, (_, i) => i).map((i) => (
             <div
               key={i}
               className="flex items-center gap-3 border-b border-hair px-5 py-3.5 last:border-b-0 sm:px-6"
@@ -176,7 +183,7 @@ export const CollateralTable = ({
               <span className="ml-auto h-4 w-16 rounded bg-chip" />
             </div>
           ))
-        : (market?.collateral ?? []).map((c) => (
+        : rows.map((c) => (
             <div
               key={c.symbol}
               className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-hair px-5 py-3.5 last:border-b-0 sm:px-6"
@@ -216,10 +223,14 @@ export const CollateralTable = ({
       <span className="font-mono">
         {XSTOCKS_MARKET.slice(0, 4)}…{XSTOCKS_MARKET.slice(-4)}
       </span>
-      . A holding that is not listed here cannot be borrowed against at all.
+      .{" "}
+      {hidden > 0
+        ? `The ${rows.length} that lend the most, of ${all.length} accepted.`
+        : "A holding that is not listed here cannot be borrowed against at all."}
     </p>
   </>
-);
+  );
+};
 
 /* ── steps ──────────────────────────────────────────────────────────── */
 
