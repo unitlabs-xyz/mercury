@@ -111,6 +111,13 @@ export const List = (p: Icon) => (
   </svg>
 );
 
+export const Bell = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M18 8.6a6 6 0 1 0-12 0c0 5.4-2 6.9-2 6.9h16s-2-1.5-2-6.9Z" />
+    <path d="M13.7 19.4a2 2 0 0 1-3.4 0" />
+  </svg>
+);
+
 export const Cog = (p: Icon) => (
   <svg {...base} strokeWidth={1.8} {...p}>
     <circle cx="12" cy="12" r="3" />

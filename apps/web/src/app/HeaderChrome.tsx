@@ -1,0 +1,80 @@
+import { useEffect, useRef, useState } from "react";
+import { Bell, Cog } from "../ui/icons";
+
+/**
+ * Global chrome, the same on every app screen. Nothing sits behind either
+ * panel yet and both say so: a control that does nothing at all when pressed
+ * reads as broken rather than as unfinished.
+ */
+type Panel = "alerts" | "settings";
+
+const PANELS: Record<Panel, { label: string; title: string; body: string }> = {
+  alerts: {
+    label: "Notifications",
+    title: "Nothing yet",
+    body: "Filled orders, orders still queued for the open, and dividends will arrive here.",
+  },
+  settings: {
+    label: "Settings",
+    title: "Not built yet",
+    body: "Your profile, security, and exporting the wallet to somewhere else will live here.",
+  },
+};
+
+export const HeaderChrome = () => {
+  const [open, setOpen] = useState<Panel | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(null);
+    };
+    const onDown = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(null);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [open]);
+
+  const panel = open ? PANELS[open] : null;
+
+  return (
+    <div ref={box} className="relative flex items-center gap-0.5">
+      {(Object.keys(PANELS) as Panel[]).map((key) => {
+        const Icon = key === "alerts" ? Bell : Cog;
+        const active = open === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            aria-label={PANELS[key].label}
+            aria-haspopup="dialog"
+            aria-expanded={active}
+            onClick={() => setOpen(active ? null : key)}
+            className={`grid size-9 max-sm:size-11 place-items-center rounded-[9px] transition-colors ${
+              active ? "bg-white text-ink" : "text-muted hover:bg-white hover:text-ink"
+            }`}
+          >
+            <Icon className="size-[18px]" />
+          </button>
+        );
+      })}
+
+      {panel && (
+        <div
+          role="dialog"
+          aria-label={panel.label}
+          className="absolute top-[calc(100%+10px)] right-0 z-40 w-[272px] rounded-[14px] border border-cardline bg-white p-4 shadow-[0_6px_20px_rgba(27,26,23,0.12)]"
+        >
+          <p className="text-[14px] font-semibold">{panel.title}</p>
+          <p className="mt-1.5 text-[13px] leading-[1.55] text-muted text-pretty">{panel.body}</p>
+        </div>
+      )}
+    </div>
+  );
+};
