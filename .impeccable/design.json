@@ -1,0 +1,444 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-20T09:54:09.675934Z",
+  "title": "Design System: Harbor",
+  "extensions": {
+    "colorMeta": {
+      "harbour-teal": {
+        "role": "primary",
+        "displayName": "Harbour Teal",
+        "canonical": "#0f7480",
+        "tonalRamp": [
+          "#083e44",
+          "#0e6d79",
+          "#149dad",
+          "#1acce1",
+          "#4cd9ea",
+          "#80e4f0",
+          "#b4eff6",
+          "#e8fafc"
+        ]
+      },
+      "harbour-teal-deep": {
+        "role": "primary",
+        "displayName": "Harbour Teal Deep",
+        "canonical": "#0b5c66",
+        "tonalRamp": [
+          "#073e45",
+          "#0d6e7a",
+          "#139dae",
+          "#18cde3",
+          "#4adaeb",
+          "#7fe5f1",
+          "#b3eff7",
+          "#e8fafd"
+        ]
+      },
+      "harbour-teal-tint": {
+        "role": "primary",
+        "displayName": "Harbour Teal Tint",
+        "canonical": "#e8f4f5",
+        "tonalRamp": [
+          "#173335",
+          "#295a5e",
+          "#3b8187",
+          "#4ca8af",
+          "#73bcc2",
+          "#9cd0d4",
+          "#c5e3e6",
+          "#edf6f7"
+        ]
+      },
+      "statement-paper": {
+        "role": "neutral",
+        "displayName": "Statement Paper",
+        "canonical": "#efede8",
+        "tonalRamp": [
+          "#2d291f",
+          "#4f4937",
+          "#72684f",
+          "#948767",
+          "#ada389",
+          "#c5bdab",
+          "#ddd8ce",
+          "#f5f3f0"
+        ]
+      },
+      "fresh-sheet": {
+        "role": "neutral",
+        "displayName": "Fresh Sheet",
+        "canonical": "#f7f6f2",
+        "tonalRamp": [
+          "#2f2c1d",
+          "#534d33",
+          "#786e4a",
+          "#9c9060",
+          "#b3a983",
+          "#c9c2a7",
+          "#dfdbcb",
+          "#f5f4ef"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#1b1a17",
+        "tonalRamp": [
+          "#292823",
+          "#49463e",
+          "#686459",
+          "#888374",
+          "#a39f93",
+          "#bebbb2",
+          "#d8d7d2",
+          "#f3f3f1"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#6b665c",
+        "tonalRamp": [
+          "#292723",
+          "#48453e",
+          "#686359",
+          "#878174",
+          "#a29d93",
+          "#bdbab3",
+          "#d8d6d2",
+          "#f3f3f1"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint",
+        "canonical": "#6f6a60",
+        "tonalRamp": [
+          "#292723",
+          "#48453f",
+          "#68635a",
+          "#878175",
+          "#a29d94",
+          "#bdbab3",
+          "#d8d6d2",
+          "#f3f3f1"
+        ]
+      },
+      "cardline": {
+        "role": "neutral",
+        "displayName": "Cardline",
+        "canonical": "#e4e0d7",
+        "tonalRamp": [
+          "#2e291f",
+          "#504836",
+          "#73684e",
+          "#968765",
+          "#aea287",
+          "#c6bdaa",
+          "#ddd8cd",
+          "#f5f3f0"
+        ]
+      },
+      "gain": {
+        "role": "secondary",
+        "displayName": "Gain",
+        "canonical": "#1a7f4b",
+        "tonalRamp": [
+          "#0d4026",
+          "#177042",
+          "#21a05f",
+          "#2bd17b",
+          "#59dd99",
+          "#89e7b7",
+          "#b9f1d4",
+          "#eafbf2"
+        ]
+      },
+      "loss": {
+        "role": "secondary",
+        "displayName": "Loss",
+        "canonical": "#c0442f",
+        "tonalRamp": [
+          "#3d160f",
+          "#6c261b",
+          "#9b3726",
+          "#ca4831",
+          "#d8705e",
+          "#e3998d",
+          "#efc3bc",
+          "#faedeb"
+        ]
+      },
+      "caution": {
+        "role": "tertiary",
+        "displayName": "Caution",
+        "canonical": "#8a5e10",
+        "tonalRamp": [
+          "#452f08",
+          "#79520e",
+          "#ad7614",
+          "#e1991a",
+          "#eab14b",
+          "#f0c880",
+          "#f6deb4",
+          "#fcf5e8"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page and landing openers. One per screen; tracking tightens as size grows."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section openers inside a page."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card headings and row names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose, held to roughly 65-75 characters."
+      },
+      "label": {
+        "displayName": "Label (mono)",
+        "purpose": "The stamp utility: column headers and small uppercase markers. Identifiers only, never money."
+      }
+    },
+    "shadows": [
+      {
+        "name": "seated",
+        "value": "0 1px 2px rgba(27,26,23,0.06)",
+        "purpose": "The sheet rests on the one below it. Active sidebar item, small pills."
+      },
+      {
+        "name": "lifted",
+        "value": "0 2px 14px rgba(27,26,23,0.07)",
+        "purpose": "Hover on a card that can be picked up."
+      },
+      {
+        "name": "raised",
+        "value": "0 6px 20px rgba(27,26,23,0.12)",
+        "purpose": "Dropdown or popover held above the page."
+      },
+      {
+        "name": "floating",
+        "value": "0 24px 60px rgba(27,26,23,0.28)",
+        "purpose": "Modals and sheets only, where the sheet genuinely is off the desk."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Confident deceleration. Default easing for every transition and entrance."
+      },
+      {
+        "name": "press",
+        "value": "spring(stiffness 480, damping 34, mass 0.6)",
+        "purpose": "Press and hover feedback, fast enough to read as cause and effect."
+      },
+      {
+        "name": "mark",
+        "value": "spring(stiffness 380, damping 28, mass 0.5)",
+        "purpose": "A logo or mark reacting to the pointer."
+      },
+      {
+        "name": "rise-in",
+        "value": "opacity 0->1, y 14px->0 over 650ms",
+        "purpose": "Section entrance."
+      },
+      {
+        "name": "card-in",
+        "value": "opacity 0->1, y 22px->0 over 750ms",
+        "purpose": "Cards arrive with more travel because they carry more weight."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "movement removed; colour and opacity transitions kept at 120ms",
+        "purpose": "Under prefers-reduced-motion an action still acknowledges itself."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "content-max",
+        "value": "1280px (app) / 1440px (landing)"
+      },
+      {
+        "name": "sidebar",
+        "value": "236px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single committing action on a screen. Harbour Teal, white label, press springs to 0.97.",
+      "html": "<button class=\"ds-btn-primary\">Buy now</button>",
+      "css": ".ds-btn-primary{background:var(--color-brand);color:#fff;font:600 14px/1.3 'Instrument Sans',ui-sans-serif,sans-serif;padding:10px 18px;border:none;border-radius:9px;cursor:pointer;transition:background-color .2s cubic-bezier(.16,1,.3,1),transform .2s cubic-bezier(.16,1,.3,1)}.ds-btn-primary:hover{background:var(--color-brand-deep)}.ds-btn-primary:active{transform:scale(.97)}.ds-btn-primary:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The way out of a decision. White sheet with a warm border that darkens on hover.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary{background:#fff;color:var(--color-ink-soft);font:500 14px/1.3 'Instrument Sans',ui-sans-serif,sans-serif;padding:10px 14px;border:1px solid var(--color-btnline);border-radius:9px;cursor:pointer;transition:border-color .2s,background-color .2s}.ds-btn-secondary:hover{border-color:var(--color-faint);background:var(--color-shell)}.ds-btn-secondary:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}"
+    },
+    {
+      "name": "Disabled Button",
+      "kind": "button",
+      "refersTo": "button-disabled",
+      "description": "A refused or unavailable action. Chip ground and Faint label, never a faded primary.",
+      "html": "<button class=\"ds-btn-disabled\" disabled>Unavailable</button>",
+      "css": ".ds-btn-disabled{background:var(--color-chip);color:var(--color-faint);font:600 15px/1.3 'Instrument Sans',ui-sans-serif,sans-serif;padding:12px 18px;border:none;border-radius:10px;cursor:not-allowed}"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Sector and range filters. Fully rounded, selected takes the teal tint rather than a fill.",
+      "html": "<div class=\"ds-chip-row\"><button class=\"ds-chip ds-chip-on\">All</button><button class=\"ds-chip\">Index funds</button><button class=\"ds-chip\">Semiconductors</button></div>",
+      "css": ".ds-chip-row{display:flex;gap:8px}.ds-chip{height:36px;padding:0 14px;border-radius:9999px;background:#fff;color:var(--color-ink-soft);border:1px solid var(--color-cardline);font:500 13px/1 'Instrument Sans',ui-sans-serif,sans-serif;cursor:pointer;transition:border-color .2s,background-color .2s}.ds-chip:hover{border-color:var(--color-brand-soft)}.ds-chip-on{background:var(--color-brand-tint);border-color:var(--color-brand);color:var(--color-brand-deep)}.ds-chip:focus-visible{outline:2px solid var(--color-brand);outline-offset:2px}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The default container. Flat at rest; the Cardline border does the separating, not a shadow.",
+      "html": "<section class=\"ds-card\"><h3 class=\"ds-card-title\">We checked both issuers</h3><div class=\"ds-card-row\"><span>NVDAx</span><strong>$220.60</strong></div><div class=\"ds-card-row\"><span>NVDAon</span><strong>$675.63</strong></div></section>",
+      "css": ".ds-card{background:#fff;border:1px solid var(--color-cardline);border-radius:16px;overflow:hidden;font-family:'Instrument Sans',ui-sans-serif,sans-serif;color:var(--color-ink);max-width:380px}.ds-card-title{margin:0;padding:16px 20px;font:600 15px/1.3 'Instrument Sans',sans-serif;border-bottom:1px solid var(--color-hair)}.ds-card-row{display:flex;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--color-hair);font-size:14px;font-variant-numeric:tabular-nums}.ds-card-row:last-child{border-bottom:none}.ds-card-row span{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:13px;color:var(--color-muted)}"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "The label wraps the field so the whole box is the target. Border shifts to teal on focus-within.",
+      "html": "<label class=\"ds-input\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m20 20-3.5-3.5\"/></svg><input placeholder=\"Search by company or ticker\" /></label>",
+      "css": ".ds-input{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--color-cardline);border-radius:14px;padding:12px 16px;max-width:380px;color:var(--color-faint);transition:border-color .2s}.ds-input:focus-within{border-color:var(--color-brand)}.ds-input input{border:none;outline:none;width:100%;font:400 15px/1.4 'Instrument Sans',ui-sans-serif,sans-serif;color:var(--color-ink);background:transparent;caret-color:var(--color-brand)}.ds-input input::placeholder{color:var(--color-faint)}"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Active takes a white sheet with the seated shadow and 600 weight; inactive warms on hover.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-on\" href=\"#\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12h3.5L9 5.5 13 18l2.5-6H21\"/></svg>Invest</a><a class=\"ds-nav-item\" href=\"#\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.9\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"6\" width=\"18\" height=\"13\" rx=\"2.5\"/><path d=\"M16 12.5h2\"/></svg>Money</a></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:2px;width:236px;background:var(--color-page);padding:10px;border-radius:12px}.ds-nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;font:500 14px/1.2 'Instrument Sans',ui-sans-serif,sans-serif;color:var(--color-muted);text-decoration:none;transition:background-color .2s,color .2s}.ds-nav-item:hover{background:rgba(255,255,255,.6);color:var(--color-ink)}.ds-nav-on{background:#fff;color:var(--color-ink);font-weight:600;box-shadow:0 1px 2px rgba(27,26,23,.06)}"
+    },
+    {
+      "name": "Verdict Panel",
+      "kind": "custom",
+      "refersTo": "verdict-panel",
+      "description": "Signature component. The engine's three outcomes share a shape and never a colour: fill, queue, refuse.",
+      "html": "<div class=\"ds-verdicts\"><div class=\"ds-verdict ds-v-gain\"><p class=\"ds-v-head\">Ready to buy</p><p class=\"ds-v-body\">Backed is the cheaper route at this size \u2014 $220.60 per share, in line with the reference price.</p></div><div class=\"ds-verdict ds-v-caution\"><p class=\"ds-v-head\">Worth waiting</p><p class=\"ds-v-body\">The token is 1.62% above the reference price. We can hold the order and fill it when the price comes back.</p></div><div class=\"ds-verdict ds-v-loss\"><p class=\"ds-v-head\">Too small to trade</p><p class=\"ds-v-body\">The smallest order we can route is $5.</p></div></div>",
+      "css": ".ds-verdicts{display:flex;flex-direction:column;gap:10px;max-width:420px;font-family:'Instrument Sans',ui-sans-serif,sans-serif}.ds-verdict{border-radius:14px;padding:14px 16px;border:1px solid}.ds-v-head{margin:0;font-size:14px;font-weight:600}.ds-v-body{margin:4px 0 0;font-size:13px;line-height:1.5}.ds-v-gain{background:var(--color-up-tint);border-color:var(--color-up-line)}.ds-v-gain .ds-v-head{color:var(--color-up-deep)}.ds-v-gain .ds-v-body{color:var(--color-up-deep);opacity:.85}.ds-v-caution{background:var(--color-warn-tint);border-color:var(--color-warn-line)}.ds-v-caution .ds-v-head,.ds-v-caution .ds-v-body{color:var(--color-warn)}.ds-v-loss{background:var(--color-down-tint);border-color:var(--color-down-line)}.ds-v-loss .ds-v-head,.ds-v-loss .ds-v-body{color:var(--color-down-deep)}"
+    },
+    {
+      "name": "Performance Badge",
+      "kind": "chip",
+      "refersTo": "badge-gain",
+      "description": "Applied only to a figure that actually moved. Gain and loss are the only two states.",
+      "html": "<div class=\"ds-badges\"><span class=\"ds-badge ds-badge-up\">\u2191 1.56%</span><span class=\"ds-badge ds-badge-down\">\u2193 0.94%</span></div>",
+      "css": ".ds-badges{display:flex;gap:8px;font-family:'Instrument Sans',ui-sans-serif,sans-serif}.ds-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:6px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}.ds-badge-up{background:var(--color-up-tint);color:var(--color-up-deep)}.ds-badge-down{background:var(--color-down-tint);color:var(--color-down-deep)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Printed Statement",
+    "overview": "Harbor is set, not styled. The ground is warm off-white paper rather than white or dark; structure comes from hairline rules and the edges of sheets, not from boxes with shadows; and every figure sits in a tabular column so that columns of money actually line up. Authority is meant to come from typesetting the way it does on a bank statement or a prospectus, where nothing is decorated and nothing needs to be.\n\nThe density is deliberately unhurried. A screen carries one idea, states it in a heading, supports it with one paragraph at reading measure, and then shows the numbers. Colour is scarce: a single teal appears only where something is actionable or live, and the gain/loss pair appears only on figures that actually moved. Most of any screen is paper, ink and rules.\n\nRestraint here is a trust argument, not a taste preference. This is a product that refuses orders, queues them, and tells people they can be sold out of a position while they sleep \u2014 the interface has to feel like it is reading from a record rather than selling something.",
+    "keyCharacteristics": [
+      "Warm paper ground (Statement Paper #efede8), never white and never dark",
+      "Hairline rules carry structure; borders replace shadows",
+      "Harbour Teal on under a tenth of any screen, only where something is actionable or live",
+      "Tabular numerals globally, so figures align down a column",
+      "Monospace reserved for identifiers, never for prose or money",
+      "Every number says where it came from"
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "Harbour Teal appears on at most a tenth of any screen. If a second thing wants to be teal, one of them is not actually actionable.",
+        "section": "colors"
+      },
+      {
+        "name": "The Earned Colour Rule",
+        "body": "Gain, Loss and Caution are applied to figures and verdicts that genuinely moved or genuinely changed state. A number that is merely important stays Ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The Contrast Floor",
+        "body": "Every text colour clears 4.5:1 on every ground it is permitted to sit on. Faint is #6f6a60 rather than something lighter for exactly this reason. Sustained prose on Statement Paper uses Muted, not Faint.",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono Is For Identifiers Rule",
+        "body": "JetBrains Mono is for tickers, token symbols, wallet addresses, mint addresses, multipliers, route labels and stamp labels. It is never used for dollar figures, share counts, percentages, or prose.",
+        "section": "typography"
+      },
+      {
+        "name": "The Aligned Figures Rule",
+        "body": "font-variant-numeric: tabular-nums is set globally on body. Every column of money lines up by default, and nothing should opt out.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tightening Rule",
+        "body": "Letter-spacing tightens as type grows (-0.01em at title, -0.035em at display) and never goes positive except on the 11px uppercase stamp, where it opens to 0.1em.",
+        "section": "typography"
+      },
+      {
+        "name": "The Restructure Don't Shrink Rule",
+        "body": "When a horizontal row cannot hold its columns, it becomes stacked lines with the same information. Nothing is truncated to fit and no font size drops below its step to buy width.",
+        "section": "layout"
+      },
+      {
+        "name": "The Hairline Before Shadow Rule",
+        "body": "If a surface needs separating, give it a border. Reach for a shadow only when the surface is genuinely above the page \u2014 hovered, dragged, or modal.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Nested Radius Rule",
+        "body": "A container inside a card steps down one level (16px outer, 14px inner). Two identical radii nested inside each other read as a mistake.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do put every app screen on Statement Paper (#efede8) and reserve white for cards.",
+      "Do separate surfaces with a hairline before reaching for a shadow.",
+      "Do keep Harbour Teal under a tenth of the screen, on things that are actionable or live.",
+      "Do use JetBrains Mono for tickers, addresses, multipliers and route labels only.",
+      "Do state a figure's source next to it, because provenance is part of this product's visual language.",
+      "Do restructure rows into stacked lines on narrow screens rather than shrinking type.",
+      "Do step a nested container's radius down one level from its parent.",
+      "Do hold every screen to WCAG 2.1 AA, including 44px targets under coarse pointers."
+    ],
+    "donts": [
+      "Don't reach for the fintech startup template: purple-to-blue gradients on white, oversized rounded cards, 3D illustrated mascots, or a hero with a floating phone mock. This is the one named anti-reference.",
+      "Don't set a kicker or eyebrow above a heading. The heading carries its own weight.",
+      "Don't put a monospace face on a dollar figure, a share count or a percentage.",
+      "Don't give a component a shadow at rest.",
+      "Don't use Faint for sustained prose on Statement Paper; that is Muted's job.",
+      "Don't colour a figure green or red unless it actually moved, or amber unless it is genuinely in a third state.",
+      "Don't draw a bar, ring or sparkline to stand in for content that could be stated as aligned text and read exactly.",
+      "Don't nest a card inside a card."
+    ]
+  }
+}
