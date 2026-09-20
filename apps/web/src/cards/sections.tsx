@@ -60,16 +60,16 @@ export const CardHero = () => {
   const { open } = useAuthModal();
   return (
     <Section inner="py-16 sm:py-20 lg:py-24">
-      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)] lg:items-center lg:gap-16">
+      <div className="grid gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-center lg:gap-16">
         <div>
-          <h1 className="text-[40px] leading-[1.02] font-semibold tracking-[-0.035em] text-balance sm:text-[52px] lg:text-[62px]">
+          <h1 className="max-w-[13ch] text-[40px] leading-[1.02] font-semibold tracking-[-0.035em] sm:text-[52px] lg:text-[62px]">
             Spend without selling
           </h1>
           <p className="mt-4 text-[17px] font-semibold text-muted">Build wealth like the 1%</p>
-          <p className="mt-8 max-w-[44ch] text-[17px] leading-[1.55] text-ink-soft text-pretty">
+          <p className="mt-5 max-w-[40ch] text-[15px] leading-[1.6] text-ink-soft text-pretty">
             Borrow against your crypto. Spend via Visa without triggering taxable events.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-9 flex flex-wrap items-center gap-3">
             <GetCard onClick={open} />
             <StoreMark kind="play" />
             <StoreMark kind="apple" />
@@ -419,13 +419,13 @@ export const CardClosing = () => {
     <Section inner="py-16 sm:py-20 lg:py-24">
       <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center lg:gap-16">
         <div>
-          <h2 className="max-w-[14ch] text-[30px] leading-[1.06] font-semibold tracking-[-0.035em] text-balance sm:text-[40px]">
+          <h2 className="max-w-[14ch] text-[30px] leading-[1.06] font-semibold tracking-[-0.035em] sm:text-[40px]">
             Build wealth. Not taxable events
           </h2>
           <p className="mt-5 text-[15px] font-medium text-muted">
             Join the members who figured it out.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-9 flex flex-wrap items-center gap-3">
             <GetCard onClick={open} />
             <StoreMark kind="play" />
             <StoreMark kind="apple" />
