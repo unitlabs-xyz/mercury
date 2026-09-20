@@ -12,6 +12,7 @@ import {
 import { Sidebar } from "./Sidebar";
 import { EVENTS, HOLDINGS, MARKET, SPLIT, TOTAL, WATCHLIST, type Range } from "./data";
 import { ValueChart } from "./ValueChart";
+import { Welcome } from "./Welcome";
 
 const RANGES: Range[] = ["1W", "1M", "1Y", "All"];
 
@@ -40,6 +41,7 @@ export const Portfolio = () => {
 
   return (
     <div className="flex min-h-dvh bg-page">
+      <Welcome />
       <div className="hidden lg:flex">
         <Sidebar />
       </div>

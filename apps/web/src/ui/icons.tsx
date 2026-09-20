@@ -148,6 +148,31 @@ export const Sort = (p: Icon) => (
   </svg>
 );
 
+export const Blocks = (p: Icon) => (
+  <svg {...base} strokeWidth={1.9} {...p}>
+    <rect x="3" y="3" width="8" height="8" rx="2" />
+    <path d="M11 7h4a2 2 0 0 1 2 2v4" />
+    <rect x="13" y="13" width="8" height="8" rx="2" />
+  </svg>
+);
+
+export const Sliders = (p: Icon) => (
+  <svg {...base} strokeWidth={1.9} {...p}>
+    <path d="M4 7h4M14 7h6" />
+    <circle cx="11" cy="7" r="2.6" />
+    <path d="M4 17h6M16 17h4" />
+    <circle cx="13" cy="17" r="2.6" />
+  </svg>
+);
+
+export const Key = (p: Icon) => (
+  <svg {...base} strokeWidth={1.9} {...p}>
+    <circle cx="7.5" cy="14.5" r="3.5" />
+    <path d="M10 12L20 4" />
+    <path d="M17.5 6.5l2 2" />
+  </svg>
+);
+
 export const Grid = (p: Icon) => (
   <svg {...base} {...p}>
     <rect x="3" y="3" width="7" height="7" rx="1.5" />
