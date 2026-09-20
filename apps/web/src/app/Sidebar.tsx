@@ -10,7 +10,7 @@ type Item = { key: NavKey | "settings" | "help"; icon: ReactNode; label: string;
 
 const NAV: Item[] = [
   { key: "portfolio", icon: <PieChart className="size-[17px]" />, label: "Portfolio", to: "/portfolio" },
-  { key: "invest", icon: <Trend className="size-[17px]" />, label: "Invest" },
+  { key: "invest", icon: <Trend className="size-[17px]" />, label: "Invest", to: "/invest" },
   { key: "baskets", icon: <Grid className="size-[17px]" />, label: "Baskets" },
   { key: "recurring", icon: <Repeat className="size-[17px]" />, label: "Recurring" },
   { key: "money", icon: <Card className="size-[17px]" />, label: "Money", to: "/money" },
