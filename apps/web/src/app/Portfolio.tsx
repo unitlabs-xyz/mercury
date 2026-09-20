@@ -54,14 +54,14 @@ export const Portfolio = () => {
         <>
           <Link
             to="/money"
-            className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
+            className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
           >
             <Plus className="size-[15px]" />
             Add cash
           </Link>
           <button
             type="button"
-            className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
+            className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 max-sm:min-h-11 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
           >
             <Trend className="size-[15px]" />
             Invest
@@ -148,7 +148,7 @@ export const Portfolio = () => {
                     type="button"
                     onClick={() => setRange(r)}
                     aria-pressed={range === r}
-                    className={`rounded-md px-2.5 py-1 font-mono text-[12px] transition-colors ${
+                    className={`min-h-11 rounded-md px-3.5 font-mono text-[12px] transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 ${
                       range === r ? "bg-white text-ink shadow-[0_1px_2px_rgba(27,26,23,0.07)]" : "text-muted hover:text-ink"
                     }`}
                   >
@@ -202,7 +202,7 @@ export const Portfolio = () => {
               <span className="text-[13px] text-faint">{HOLDINGS.length} positions</span>
               <button
                 type="button"
-                className="flex items-center gap-1.5 rounded-lg border border-cardline px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-faint"
+                className="flex items-center gap-1.5 rounded-lg border border-cardline px-3 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-faint max-sm:min-h-11"
               >
                 <Sort className="size-3.5" />
                 Sort

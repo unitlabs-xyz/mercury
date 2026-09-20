@@ -112,7 +112,7 @@ const StarterCard = ({
             onClick={onToggle}
             aria-pressed={saved}
             aria-label={saved ? `Remove ${p.instrument.name} from watchlist` : `Save ${p.instrument.name}`}
-            className={`-mt-1 -mr-1 grid size-9 place-items-center rounded-lg transition-colors ${
+            className={`-mt-1 -mr-1 grid size-11 place-items-center rounded-lg transition-colors sm:size-9 ${
               saved ? "text-brand" : "text-faint hover:text-ink-soft"
             }`}
           >
@@ -415,7 +415,7 @@ export const Invest = () => {
                       type="button"
                       onClick={() => watchlist.toggle(p.instrument.ticker)}
                       aria-label={`Remove ${p.instrument.name} from saved`}
-                      className="grid size-8 shrink-0 place-items-center rounded-lg text-brand transition-colors hover:bg-shell"
+                      className="grid size-11 shrink-0 place-items-center rounded-lg text-brand transition-colors hover:bg-shell sm:size-9"
                     >
                       <Bookmark filled className="size-[17px]" />
                     </button>
@@ -462,7 +462,7 @@ export const Invest = () => {
                     type="button"
                     onClick={() => setFilter(s)}
                     aria-pressed={filter === s}
-                    className={`h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-medium transition-colors ${
+                    className={`h-11 shrink-0 rounded-full border px-4 text-[13px] font-medium transition-colors sm:h-9 sm:px-3.5 ${
                       filter === s
                         ? "border-brand bg-brand-tint text-brand-deep"
                         : "border-cardline bg-white text-ink-soft hover:border-brand-soft"
@@ -484,7 +484,7 @@ export const Invest = () => {
                     />
                   ))}
             </div>
-            <p className="mt-4 text-[12px] leading-[1.5] text-faint">
+            <p className="mt-4 text-[12px] leading-[1.55] text-muted">
               Holders, volume and 24h moves are read live from chain. Return figures and 30-day buyer
               counts are sample data until the returns service ships.
             </p>

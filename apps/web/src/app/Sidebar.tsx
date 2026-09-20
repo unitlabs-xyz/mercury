@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnchorMark } from "../ui/Logo";
-import { Card, Cog, Grid, Help, Layers, List, PieChart, Repeat, Shield, Trend } from "../ui/icons";
-import { ISSUER_MIX } from "./data";
+import { Card, Clock, Cog, Grid, Help, Layers, List, PieChart, Repeat, Trend } from "../ui/icons";
+import { useSession } from "../market/hooks";
+
 
 export type NavKey =
   | "portfolio"
@@ -29,6 +30,35 @@ const FOOT: Item[] = [
   { key: "settings", icon: <Cog className="size-[17px]" />, label: "Settings" },
   { key: "help", icon: <Help className="size-[17px]" />, label: "Help" },
 ];
+
+const MarketStamp = () => {
+  const session = useSession();
+  const open = session.data?.isOpen === true;
+  const when = open ? session.data?.nextClose : session.data?.nextOpen;
+  return (
+    <section className="mt-7 rounded-xl border border-cardline bg-white/70 p-3.5">
+      <p className="flex items-center gap-1.5">
+        <span
+          className={`size-[7px] shrink-0 rounded-full ${open ? "bg-up" : "bg-faint"}`}
+          aria-hidden
+        />
+        <span className="stamp text-[10px]">{open ? "Market open" : "Market closed"}</span>
+      </p>
+      <p className="mt-2 flex items-start gap-1.5 text-[12px] leading-[1.45] text-muted">
+        <Clock className="mt-px size-3.5 shrink-0 text-faint" />
+        {when
+          ? `${open ? "Closes" : "Opens"} ${when.toLocaleString("en-US", {
+              weekday: "short",
+              hour: "numeric",
+              minute: "2-digit",
+              timeZone: "America/New_York",
+              timeZoneName: "short",
+            })}`
+          : "Checking the exchange calendar"}
+      </p>
+    </section>
+  );
+};
 
 const style = (current: boolean) =>
   `flex w-full items-center gap-[11px] rounded-[9px] px-3 py-2.5 text-left text-[14px] transition-colors ${
@@ -71,28 +101,7 @@ export const Sidebar = ({ current }: { current: NavKey }) => (
       ))}
     </nav>
 
-    <section className="mt-7 rounded-xl border border-cardline bg-white/70 p-3.5">
-      <p className="mb-2.5 flex items-center gap-1.5">
-        <Shield className="size-[13px] text-faint" />
-        <span className="stamp text-[10px]">ISSUER MIX</span>
-      </p>
-      <div className="flex h-1.5 gap-[2px] overflow-hidden rounded-full">
-        {ISSUER_MIX.map((m, i) => (
-          <span
-            key={m.name}
-            style={{ width: `${m.share}%` }}
-            className={i === 0 ? "rounded-l-full bg-brand" : "rounded-r-full bg-brand-soft"}
-          />
-        ))}
-      </div>
-      <p className="mt-2.5 flex justify-between text-[12px] text-muted">
-        {ISSUER_MIX.map((m) => (
-          <span key={m.name}>
-            {m.name} {m.share}%
-          </span>
-        ))}
-      </p>
-    </section>
+    <MarketStamp />
 
     <div className="mt-auto flex flex-col gap-0.5 pt-6">
       {FOOT.map((item) => (

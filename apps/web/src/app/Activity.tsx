@@ -168,7 +168,7 @@ const NoMatch = ({ onClear }: { onClear: () => void }) => (
     <button
       type="button"
       onClick={onClear}
-      className="mt-5 rounded-[9px] border border-btnline bg-white px-4 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
+      className="mt-5 rounded-[9px] border border-btnline bg-white px-4 py-2 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
     >
       Clear filters
     </button>
@@ -187,7 +187,7 @@ const Empty = () => (
     </p>
     <Link
       to="/money"
-      className="mt-6 rounded-[9px] bg-brand px-5 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
+      className="mt-6 rounded-[9px] bg-brand px-5 py-2.5 max-sm:min-h-11 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
     >
       Add cash to start
     </Link>
@@ -231,7 +231,7 @@ export const Activity = () => {
           type="button"
           onClick={() => downloadCsv(filtered)}
           disabled={filtered.length === 0}
-          className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint"
+          className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint"
         >
           <Download className="size-[15px]" />
           Export CSV
@@ -304,7 +304,7 @@ export const Activity = () => {
               onClick={() => write({ page: current - 1 })}
               disabled={current === 1}
               aria-label="Previous page"
-              className="grid size-9 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline"
+              className="grid size-11 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline sm:size-9"
             >
               <ChevronRight className="size-4 rotate-180" />
             </button>
@@ -315,7 +315,7 @@ export const Activity = () => {
                 type="button"
                 onClick={() => write({ page: n })}
                 aria-current={n === current ? "page" : undefined}
-                className={`grid size-9 place-items-center rounded-[9px] text-[13px] font-medium tabular-nums transition-colors ${
+                className={`grid size-11 place-items-center rounded-[9px] text-[13px] font-medium tabular-nums transition-colors sm:size-9 ${
                   n === current
                     ? "bg-ink text-white"
                     : "border border-cardline bg-white text-ink-soft hover:border-faint"
@@ -330,7 +330,7 @@ export const Activity = () => {
               onClick={() => write({ page: current + 1 })}
               disabled={current === pages}
               aria-label="Next page"
-              className="grid size-9 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline"
+              className="grid size-11 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline sm:size-9"
             >
               <ChevronRight className="size-4" />
             </button>

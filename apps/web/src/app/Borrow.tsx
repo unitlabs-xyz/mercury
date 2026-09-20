@@ -131,7 +131,7 @@ export const Borrow = () => {
                     value={share}
                     onChange={(e) => setShare(Number(e.target.value))}
                     aria-label="Share of the limit drawn"
-                    className="mt-3 w-full accent-[var(--color-brand)]"
+                    className="mt-3 h-11 w-full cursor-pointer touch-pan-y accent-[var(--color-brand)]"
                   />
                   <p className="mt-3 flex items-start gap-2 text-[13px] leading-[1.55] text-muted">
                     <Alert className="mt-px size-4 shrink-0 text-warn" />

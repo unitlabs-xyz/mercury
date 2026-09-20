@@ -91,7 +91,7 @@ export const Select = ({
         aria-expanded={open}
         aria-labelledby={`${id}-label`}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 text-left text-[13px] transition-colors hover:border-faint"
+        className="flex w-full items-center justify-between gap-2 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 text-left max-sm:min-h-11 text-[13px] transition-colors hover:border-faint"
       >
         <span className="min-w-0 truncate">
           <span id={`${id}-label`} className="text-faint">

@@ -55,7 +55,7 @@ export const TopBar = () => {
         <button
           type="button"
           onClick={open}
-          className="shrink-0 rounded-[9px] bg-brand px-4 py-2.5 text-[14px] font-semibold whitespace-nowrap text-white transition-[background-color,transform] duration-200 hover:bg-brand-deep active:scale-[0.97] sm:px-[18px] lg:ml-5"
+          className="shrink-0 rounded-[9px] bg-brand px-4 py-2.5 max-sm:min-h-11 text-[14px] font-semibold whitespace-nowrap text-white transition-[background-color,transform] duration-200 hover:bg-brand-deep active:scale-[0.97] sm:px-[18px] lg:ml-5"
         >
           Log In / Sign Up
         </button>

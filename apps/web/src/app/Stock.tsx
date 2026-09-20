@@ -107,7 +107,7 @@ export const Stock = () => {
           <LiveDot fetching={prices.isFetching} at={prices.dataUpdatedAt} />
           <Link
             to="/invest"
-            className="flex h-9 items-center rounded-[9px] border border-cardline px-3.5 text-[14px] font-medium transition-colors hover:bg-white"
+            className="flex h-11 items-center rounded-[9px] border border-cardline px-4 text-[14px] font-medium transition-colors hover:bg-white sm:h-9 sm:px-3.5"
           >
             All stocks
           </Link>

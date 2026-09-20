@@ -46,7 +46,7 @@ export const CopyAddress = () => {
       onClick={copy}
       whileTap={{ scale: 0.97 }}
       transition={PRESS}
-      className="flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
+      className="flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep max-sm:min-h-11"
     >
       {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
       {copied ? "Copied" : "Copy address"}
@@ -74,7 +74,7 @@ export const Receive = () => (
           <CopyAddress />
           <button
             type="button"
-            className="rounded-lg border border-btnline px-3.5 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
+            className="rounded-lg border border-btnline px-3.5 py-2 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint max-sm:min-h-11"
           >
             Share
           </button>

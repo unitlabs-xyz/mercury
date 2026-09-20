@@ -76,7 +76,7 @@ export const Welcome = () => {
           <button
             type="button"
             onClick={dismiss}
-            className="text-[14px] font-medium text-muted transition-colors hover:text-ink"
+            className="flex min-h-11 items-center justify-center rounded-[10px] px-3 text-[14px] font-medium text-muted transition-colors hover:bg-shell hover:text-ink"
           >
             Look around first
           </button>

@@ -18,14 +18,14 @@ export const Money = () => {
           <button
             type="button"
             onClick={() => setSending(true)}
-            className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
+            className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
           >
             <ArrowUp className="size-[15px] rotate-45" />
             Send
           </button>
           <a
             href="#receive"
-            className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
+            className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 max-sm:min-h-11 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
           >
             <Plus className="size-[15px]" />
             Add cash

@@ -52,7 +52,7 @@ export const RateCompare = ({ apy }: { apy: number | null | undefined }) => (
         </span>
       </div>
     </div>
-    <p className="mt-6 text-[12px] leading-[1.5] text-faint">
+    <p className="mt-6 text-[12px] leading-[1.55] text-muted">
       Alternatives are typical published ranges for context, not offers. Ours is the live USDC
       borrow rate in Kamino's xStocks market and changes with utilisation.
     </p>
@@ -179,7 +179,7 @@ export const CollateralTable = ({
             </div>
           ))}
     </div>
-    <p className="mt-4 text-[12px] leading-[1.5] text-faint">
+    <p className="mt-4 text-[12px] leading-[1.55] text-muted">
       Read live from Kamino's xStocks market{" "}
       <span className="font-mono">
         {XSTOCKS_MARKET.slice(0, 4)}…{XSTOCKS_MARKET.slice(-4)}

@@ -29,15 +29,12 @@ export const Credit = () => {
       <main>
         <Section inner="py-16 sm:py-20 lg:py-24">
           <div className="mx-auto max-w-[760px] text-center">
-            <p className="text-[13px] font-semibold tracking-[0.08em] text-brand uppercase">
-              Coming in version two
-            </p>
-            <h1 className="mt-4 text-[clamp(2.1rem,5.2vw,3.4rem)] leading-[1.06] font-semibold tracking-[-0.03em] text-balance">
+            <h1 className="text-[clamp(2.1rem,5.2vw,3.4rem)] leading-[1.06] font-semibold tracking-[-0.03em] text-balance">
               Borrow against your stocks
             </h1>
             <p className="mx-auto mt-5 max-w-[54ch] text-[clamp(1rem,1.5vw,1.125rem)] leading-[1.55] text-muted text-pretty">
               Cash without selling. Your shares stay yours, stay invested, and keep whatever they
-              were going to do next.
+              were going to do next. Arriving in version two.
             </p>
             <div className="mt-8 flex flex-col items-center gap-4">
               <span className="inline-flex flex-wrap items-baseline justify-center gap-2.5 rounded-2xl border border-cardline bg-white px-5 py-3.5">
