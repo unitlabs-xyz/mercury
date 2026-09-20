@@ -27,14 +27,20 @@ const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 
 const compact = (v: number) =>
-  v >= 1_000_000
-    ? `$${(v / 1_000_000).toFixed(1)}m`
-    : v >= 1_000
-      ? `$${Math.round(v / 1_000)}k`
-      : `$${Math.round(v)}`;
+  !Number.isFinite(v) || v <= 0
+    ? "—"
+    : v >= 1_000_000
+      ? `$${(v / 1_000_000).toFixed(1)}m`
+      : v >= 1_000
+        ? `$${Math.round(v / 1_000)}k`
+        : `$${Math.round(v)}`;
 
 const count = (v: number) =>
-  v >= 1000 ? `${(v / 1000).toFixed(v >= 10_000 ? 0 : 1)}k` : String(v);
+  !Number.isFinite(v) || v <= 0
+    ? "—"
+    : v >= 1000
+      ? `${(v / 1000).toFixed(v >= 10_000 ? 0 : 1)}k`
+      : String(Math.round(v));
 
 /**
  * Broad means the instrument holds many companies; single stock means one. This
@@ -150,7 +156,6 @@ type Board = {
   title: string;
   sub: string;
   icon: ReactNode;
-  metric: string;
   rank: (a: Priced, b: Priced) => number;
   value: (p: Priced) => ReactNode;
 };
@@ -161,7 +166,6 @@ const BOARDS: Board[] = [
     title: "Most held",
     sub: "Wallets holding the token",
     icon: <Users className="size-4" />,
-    metric: "Holders",
     rank: (a, b) => b.holders - a.holders,
     value: (p) => <span className="tabular-nums">{count(p.holders)}</span>,
   },
@@ -170,25 +174,14 @@ const BOARDS: Board[] = [
     title: "Biggest movers",
     sub: "Last 24 hours",
     icon: <Pulse className="size-4" />,
-    metric: "24h",
     rank: (a, b) => Math.abs(b.todayPct ?? 0) - Math.abs(a.todayPct ?? 0),
     value: (p) => <Move pct={p.todayPct} />,
-  },
-  {
-    key: "traded",
-    title: "Most traded",
-    sub: "Volume across both issuers",
-    icon: <Droplet className="size-4" />,
-    metric: "24h volume",
-    rank: (a, b) => b.volume24h - a.volume24h,
-    value: (p) => <span className="tabular-nums">{compact(p.volume24h)}</span>,
   },
   {
     key: "returns",
     title: "Best 1 year",
     sub: "Total return over twelve months",
     icon: <Trend className="size-4" />,
-    metric: "1Y return",
     rank: (a, b) => performanceFor(b.instrument.ticker).y1 - performanceFor(a.instrument.ticker).y1,
     value: (p) => <Move pct={performanceFor(p.instrument.ticker).y1} />,
   },
@@ -196,44 +189,44 @@ const BOARDS: Board[] = [
 
 const BoardCard = ({ board, items }: { board: Board; items: Priced[] }) => (
   <section className="overflow-hidden rounded-2xl border border-cardline bg-white">
-    <div className="flex items-start justify-between gap-3 px-5 py-4">
+    <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4">
       <span>
         <h3 className="text-[15px] font-semibold">{board.title}</h3>
-        <p className="mt-0.5 text-[13px] text-muted">{board.sub}</p>
+        <p className="mt-1 text-[13px] text-muted">{board.sub}</p>
       </span>
       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-tint text-brand-deep">
         {board.icon}
       </span>
     </div>
     {items.length === 0 ? (
-      <p className="border-t border-hair px-5 py-6 text-[13px] text-faint">
+      <p className="border-t border-hair px-5 py-7 text-[13px] text-faint">
         Nothing in this filter.
       </p>
     ) : (
-      items.map((p, n) => (
-        <Link
-          key={p.instrument.ticker}
-          to={`/invest/${p.instrument.ticker}`}
-          className="flex items-center gap-3 border-t border-hair px-5 py-3 transition-colors hover:bg-shell"
-        >
-          <span className="w-3 shrink-0 text-[13px] font-semibold text-faint tabular-nums">
-            {n + 1}
-          </span>
-          <Mark i={p.instrument} size={28} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] font-medium">{p.instrument.name}</span>
-            <span className="mt-0.5 block font-mono text-[11px] text-faint">
-              {p.instrument.ticker}
-            </span>
-          </span>
-          <span className="shrink-0 text-right">
-            <span className="block text-[11px] text-faint">{board.metric}</span>
-            <span className="mt-0.5 flex justify-end text-[13px] font-semibold">
-              {board.value(p)}
-            </span>
-          </span>
-        </Link>
-      ))
+      <ol className="border-t border-hair">
+        {items.map((p, n) => (
+          <li key={p.instrument.ticker}>
+            <Link
+              to={`/invest/${p.instrument.ticker}`}
+              className="flex items-center gap-3.5 px-5 py-3.5 transition-colors hover:bg-shell"
+            >
+              <span className="w-3.5 shrink-0 text-[13px] text-faint tabular-nums">{n + 1}</span>
+              <Mark i={p.instrument} size={30} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14.5px] font-medium">
+                  {p.instrument.name}
+                </span>
+                <span className="mt-0.5 block font-mono text-[11px] text-faint">
+                  {p.instrument.ticker}
+                </span>
+              </span>
+              <span className="flex shrink-0 justify-end text-[15px] font-semibold">
+                {board.value(p)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ol>
     )}
   </section>
 );
@@ -432,7 +425,7 @@ export const Invest = () => {
             </section>
           )}
 
-          <section className="mt-8">
+          <section className="mt-12">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
@@ -443,7 +436,7 @@ export const Invest = () => {
                 </p>
               </div>
             </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {universe.isLoading
                 ? [0, 1, 2].map((i) => <SkeletonCard key={i} />)
                 : starters.map((p) => (
@@ -457,22 +450,19 @@ export const Invest = () => {
             </div>
           </section>
 
-          <section className="mt-10">
-            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-              <div>
-                <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Trending</h2>
-                <p className="mt-1 text-[14px] text-muted">
-                  Ranked on what is actually happening on chain, not on what we promote
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
+          <section className="mt-14">
+            <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Trending</h2>
+            <p className="mt-1 text-[14px] text-muted">
+              Ranked on what is actually happening on chain, not on what we promote
+            </p>
+            <div className="mt-4 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {sectors.map((s) => (
                   <button
                     key={s}
                     type="button"
                     onClick={() => setFilter(s)}
                     aria-pressed={filter === s}
-                    className={`h-8 rounded-full border px-3 text-[13px] font-medium transition-colors ${
+                    className={`h-9 shrink-0 rounded-full border px-3.5 text-[13px] font-medium transition-colors ${
                       filter === s
                         ? "border-brand bg-brand-tint text-brand-deep"
                         : "border-cardline bg-white text-ink-soft hover:border-brand-soft"
@@ -481,12 +471,11 @@ export const Invest = () => {
                     {s}
                   </button>
                 ))}
-              </div>
             </div>
 
-            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {universe.isLoading
-                ? [0, 1, 2, 3].map((i) => <SkeletonCard key={i} />)
+                ? [0, 1, 2].map((i) => <SkeletonCard key={i} />)
                 : BOARDS.map((b) => (
                     <BoardCard
                       key={b.key}
@@ -495,15 +484,15 @@ export const Invest = () => {
                     />
                   ))}
             </div>
-            <p className="mt-3 text-[12px] leading-[1.5] text-faint">
+            <p className="mt-4 text-[12px] leading-[1.5] text-faint">
               Holders, volume and 24h moves are read live from chain. Return figures and 30-day buyer
               counts are sample data until the returns service ships.
             </p>
           </section>
 
-          <section className="mt-10 mb-2">
+          <section className="mt-14 mb-2">
             <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Everything else</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {TILES.map((t) => (
                 <Tile key={t.title} t={t} />
               ))}

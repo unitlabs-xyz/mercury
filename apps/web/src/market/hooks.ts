@@ -50,13 +50,14 @@ export const priceInstrument = (
   const backed = instrument.wrappers.find((w) => w.issuer === "backed");
   const primary = backed ?? instrument.wrappers[0];
   const p = primary ? prices?.[primary.mint] : null;
-  const sum = (pick: (w: (typeof instrument.wrappers)[number]) => number) =>
-    instrument.wrappers.reduce((n, w) => n + pick(w), 0);
+  // Coerced, because a field Jupiter stops sending would otherwise surface as NaN.
+  const sum = (pick: (w: (typeof instrument.wrappers)[number]) => number | undefined) =>
+    instrument.wrappers.reduce((n, w) => n + (Number(pick(w)) || 0), 0);
   return {
     instrument,
     fair: p?.stockData?.price ?? null,
     todayPct: p?.priceChange24h ?? null,
-    liquidity: instrument.wrappers.reduce((n, w) => n + (prices?.[w.mint]?.liquidity ?? w.liquidity), 0),
+    liquidity: sum((w) => prices?.[w.mint]?.liquidity ?? w.liquidity),
     observedAt: p?.stockData?.updatedAt ? new Date(p.stockData.updatedAt) : null,
     holders: sum((w) => w.holders),
     netBuyers24h: sum((w) => w.netBuyers24h),
