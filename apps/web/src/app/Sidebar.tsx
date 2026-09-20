@@ -1,10 +1,17 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AnchorMark } from "../ui/Logo";
-import { Card, Cog, Grid, Help, List, PieChart, Repeat, Shield, Trend } from "../ui/icons";
+import { Card, Cog, Grid, Help, Layers, List, PieChart, Repeat, Shield, Trend } from "../ui/icons";
 import { ISSUER_MIX } from "./data";
 
-export type NavKey = "portfolio" | "invest" | "baskets" | "recurring" | "money" | "activity";
+export type NavKey =
+  | "portfolio"
+  | "invest"
+  | "baskets"
+  | "recurring"
+  | "borrow"
+  | "money"
+  | "activity";
 
 type Item = { key: NavKey | "settings" | "help"; icon: ReactNode; label: string; to?: string };
 
@@ -13,6 +20,7 @@ const NAV: Item[] = [
   { key: "invest", icon: <Trend className="size-[17px]" />, label: "Invest", to: "/invest" },
   { key: "baskets", icon: <Grid className="size-[17px]" />, label: "Baskets" },
   { key: "recurring", icon: <Repeat className="size-[17px]" />, label: "Recurring" },
+  { key: "borrow", icon: <Layers className="size-[17px]" />, label: "Borrow", to: "/borrow" },
   { key: "money", icon: <Card className="size-[17px]" />, label: "Money", to: "/money" },
   { key: "activity", icon: <List className="size-[17px]" />, label: "Activity", to: "/activity" },
 ];

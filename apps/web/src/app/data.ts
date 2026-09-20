@@ -37,6 +37,8 @@ export const EVENTS = [
 ] as const;
 
 export type Holding = {
+  /** Underlying ticker, where one exists. Baskets and cash have none. */
+  ticker?: string;
   logo?: string;
   mark?: string;
   tone?: string;
@@ -53,6 +55,7 @@ export type Holding = {
 export const HOLDINGS: Holding[] = [
   {
     logo: "/tokens/NVDAx.png",
+    ticker: "NVDA",
     name: "Nvidia",
     sub: "NVDAx · NVDAon",
     badge: "2 issuers",
@@ -64,6 +67,7 @@ export const HOLDINGS: Holding[] = [
   },
   {
     logo: "/tokens/SPYx.png",
+    ticker: "SPY",
     name: "S&P 500",
     sub: "SPYx · Backed",
     shares: "5.998",
@@ -85,6 +89,7 @@ export const HOLDINGS: Holding[] = [
   },
   {
     logo: "/tokens/TSLAx.png",
+    ticker: "TSLA",
     name: "Tesla",
     sub: "TSLAx · TSLAon",
     badge: "est. basis",
