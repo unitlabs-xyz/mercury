@@ -1,20 +1,19 @@
 import { useMemo, useState } from "react";
-import type { Decision } from "@harbor/core";
 import { Link, useParams } from "react-router-dom";
+import type { Decision } from "@harbor/core";
 import { AppShell } from "./AppShell";
 import { BuySheet, REFUSE_COPY } from "./BuySheet";
 import { IssuerCompare } from "./IssuerCompare";
-import { findInstrument, MARKET_OPENS_ET, priceFor } from "./market";
+import { LiveDot, PriceError } from "./LiveStatus";
+import { priceInstrument, useDecision, usePrices, useUniverse } from "../market/hooks";
 import { Alert, ArrowDown, ArrowUp, Clock } from "../ui/icons";
 
 const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 
-/**
- * "Which issuer is cheaper" and "should you buy at all" are different questions.
- * The comparison answers the first; without this, the second stays hidden until
- * the sheet opens, which makes a green BEST chip look like a recommendation.
- */
+/** The size the page compares at before the user names one of their own. */
+const SAMPLE = 1000;
+
 const Verdict = ({ decision }: { decision: Decision }) => {
   if (decision.kind === "execute") return null;
 
@@ -25,8 +24,8 @@ const Verdict = ({ decision }: { decision: Decision }) => {
         <Clock className="mt-px size-4 shrink-0 text-warn" />
         <p className="text-[13px] leading-[1.55] text-warn">
           <span className="font-semibold">Trading {premium.toFixed(2)}% above the reference.</span>{" "}
-          More than we think you should pay while the exchange is shut. You can still buy, or let us
-          hold the order and fill it when the price comes back.
+          More than we think you should pay. You can still buy, or let us hold the order and fill it
+          when the price comes back.
         </p>
       </div>
     );
@@ -43,33 +42,56 @@ const Verdict = ({ decision }: { decision: Decision }) => {
   );
 };
 
-const Missing = () => (
+const Missing = ({ loading }: { loading: boolean }) => (
   <AppShell current="invest" title="Invest">
-    <div className="rounded-2xl border border-cardline bg-white px-6 py-12 text-center">
-      <p className="text-[15px] font-semibold">We don't have that one</p>
-      <p className="mt-1.5 text-[14px] text-muted">No tokenised version of that ticker exists yet.</p>
-      <Link
-        to="/invest"
-        className="mt-5 inline-flex h-10 items-center rounded-[10px] bg-ink px-4 text-[14px] font-semibold text-white transition-colors hover:bg-ink-soft"
-      >
-        Back to Invest
-      </Link>
+    <div className="mt-6 rounded-2xl border border-cardline bg-white px-6 py-12 text-center">
+      {loading ? (
+        <p className="text-[15px] text-muted">Loading…</p>
+      ) : (
+        <>
+          <p className="text-[15px] font-semibold">We don't have that one</p>
+          <p className="mt-1.5 text-[14px] text-muted">
+            No verified tokenised version of that ticker exists yet.
+          </p>
+          <Link
+            to="/invest"
+            className="mt-5 inline-flex h-10 items-center rounded-[10px] bg-ink px-4 text-[14px] font-semibold text-white transition-colors hover:bg-ink-soft"
+          >
+            Back to Invest
+          </Link>
+        </>
+      )}
     </div>
   </AppShell>
 );
 
 export const Stock = () => {
   const { ticker = "" } = useParams();
-  const instrument = findInstrument(ticker);
   const [buying, setBuying] = useState(false);
 
-  // The comparison on this page is for a representative $1,000 order — the size
-  // the measurement was taken at. The sheet re-prices for the real amount.
-  const decision = useMemo(() => (instrument ? priceFor(instrument, 1000) : null), [instrument]);
+  const universe = useUniverse();
+  const instrument = useMemo(
+    () => (universe.data ?? []).find((i) => i.ticker.toLowerCase() === ticker.toLowerCase()),
+    [universe.data, ticker],
+  );
 
-  if (!instrument || !decision) return <Missing />;
+  const mints = useMemo(() => instrument?.wrappers.map((w) => w.mint) ?? [], [instrument]);
+  const prices = usePrices(mints);
+  const priced = instrument ? priceInstrument(instrument, prices.data) : null;
+  const { decision, isLoading, session } = useDecision(instrument, SAMPLE, prices.data);
 
-  const up = instrument.todayPct >= 0;
+  if (!instrument) return <Missing loading={universe.isLoading} />;
+
+  const up = (priced?.todayPct ?? 0) >= 0;
+  const opensAt = session?.nextOpen
+    ? session.nextOpen.toLocaleString("en-US", {
+        weekday: "long",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "America/New_York",
+        timeZoneName: "short",
+      })
+    : null;
 
   return (
     <AppShell
@@ -81,12 +103,15 @@ export const Stock = () => {
         </span>
       }
       actions={
-        <Link
-          to="/invest"
-          className="flex h-9 items-center rounded-[9px] border border-cardline px-3.5 text-[14px] font-medium transition-colors hover:bg-white"
-        >
-          All stocks
-        </Link>
+        <>
+          <LiveDot fetching={prices.isFetching} at={prices.dataUpdatedAt} />
+          <Link
+            to="/invest"
+            className="flex h-9 items-center rounded-[9px] border border-cardline px-3.5 text-[14px] font-medium transition-colors hover:bg-white"
+          >
+            All stocks
+          </Link>
+        </>
       }
     >
       <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
@@ -105,55 +130,72 @@ export const Stock = () => {
 
             <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="text-[32px] font-semibold tracking-[-0.02em] tabular-nums">
-                {usd(instrument.fair)}
+                {priced?.fair === null || priced?.fair === undefined ? (
+                  <span className="inline-block h-8 w-36 animate-pulse rounded bg-chip align-middle" />
+                ) : (
+                  usd(priced.fair)
+                )}
               </span>
-              <span
-                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[13px] font-semibold tabular-nums ${
-                  up ? "bg-up-tint text-up-deep" : "bg-down-tint text-down-deep"
-                }`}
-              >
-                {up ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />}
-                {Math.abs(instrument.todayPct).toFixed(2)}% today
-              </span>
+              {priced?.todayPct !== null && priced?.todayPct !== undefined && (
+                <span
+                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-[13px] font-semibold tabular-nums ${
+                    up ? "bg-up-tint text-up-deep" : "bg-down-tint text-down-deep"
+                  }`}
+                >
+                  {up ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />}
+                  {Math.abs(priced.todayPct).toFixed(2)}% today
+                </span>
+              )}
             </div>
-            <p className="mt-2 text-[13px] text-muted">
-              Reference price of one real share, from Chainlink.
-            </p>
+            <p className="mt-2 text-[13px] text-muted">Price of one real share.</p>
 
-            <p className="mt-4 flex items-start gap-2 rounded-xl border border-hair bg-shell px-3.5 py-3 text-[13px] leading-[1.5] text-muted">
-              <Clock className="mt-px size-4 shrink-0 text-faint" />
-              The exchange is shut. You can still buy — the token trades all week — but we check the
-              price against the reference before we do. Opens {MARKET_OPENS_ET}.
-            </p>
-          </section>
-
-          <Verdict decision={decision} />
-
-          <IssuerCompare decision={decision} amount={1000} />
-
-          <section className="rounded-2xl border border-cardline bg-white px-5 py-5 sm:px-6">
-            <h2 className="text-[15px] font-semibold">About</h2>
-            <p className="mt-2 text-[14px] leading-[1.6] text-ink-soft">{instrument.about}</p>
-            {!instrument.measured && (
-              <p className="mt-3 text-[13px] leading-[1.5] text-faint">
-                Quotes for this stock are illustrative. The six on the Popular shelf carry routes
-                measured on Jupiter.
+            {session && !session.isOpen && (
+              <p className="mt-4 flex items-start gap-2 rounded-xl border border-hair bg-shell px-3.5 py-3 text-[13px] leading-[1.5] text-muted">
+                <Clock className="mt-px size-4 shrink-0 text-faint" />
+                The exchange is shut. You can still buy — the token trades all week — but we check
+                the price against the reference before we do.
+                {opensAt && ` Opens ${opensAt}.`}
               </p>
             )}
           </section>
+
+          {prices.isError ? (
+            <PriceError
+              message="Could not reach Jupiter for live prices."
+              onRetry={() => void prices.refetch()}
+            />
+          ) : (
+            <>
+              {decision && <Verdict decision={decision} />}
+              <IssuerCompare
+                decision={decision}
+                amount={SAMPLE}
+                loading={isLoading}
+                wrappers={instrument.wrappers}
+              />
+            </>
+          )}
+
+          {instrument.about && (
+            <section className="rounded-2xl border border-cardline bg-white px-5 py-5 sm:px-6">
+              <h2 className="text-[15px] font-semibold">About</h2>
+              <p className="mt-2 text-[14px] leading-[1.6] text-ink-soft">{instrument.about}</p>
+            </section>
+          )}
         </div>
 
         <aside className="lg:sticky lg:top-6">
           <div className="rounded-2xl border border-cardline bg-white px-5 py-5">
             <p className="text-[13px] text-muted">Buy {instrument.name}</p>
             <p className="mt-1 text-[14px] leading-[1.5] text-ink-soft">
-              We check both issuers for the amount you enter and take the cheaper one per real
+              We quote every issuer for the amount you enter and take the cheaper one per real
               share.
             </p>
             <button
               type="button"
               onClick={() => setBuying(true)}
-              className="mt-4 h-11 w-full rounded-[10px] bg-brand text-[15px] font-semibold text-white transition-colors hover:bg-brand-deep"
+              disabled={priced?.fair == null}
+              className="mt-4 h-11 w-full rounded-[10px] bg-brand text-[15px] font-semibold text-white transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-chip disabled:text-faint"
             >
               Buy
             </button>
@@ -168,7 +210,12 @@ export const Stock = () => {
         </aside>
       </div>
 
-      <BuySheet instrument={instrument} open={buying} onClose={() => setBuying(false)} />
+      <BuySheet
+        instrument={instrument}
+        prices={prices.data}
+        open={buying}
+        onClose={() => setBuying(false)}
+      />
     </AppShell>
   );
 };

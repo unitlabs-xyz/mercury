@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Activity } from "./app/Activity";
@@ -8,18 +9,25 @@ import { Stock } from "./app/Stock";
 import { Landing } from "./landing/Landing";
 import { EASE } from "./motion/config";
 
+/** Live market data is polled, so a refetch on every window focus would be noise. */
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
+});
+
 export const App = () => (
   // reducedMotion="user" makes every Motion animation honour the OS setting.
   <MotionConfig reducedMotion="user" transition={{ duration: 0.4, ease: EASE }}>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/portfolio" element={<Portfolio />} />
-        <Route path="/invest" element={<Invest />} />
-        <Route path="/invest/:ticker" element={<Stock />} />
-        <Route path="/money" element={<Money />} />
-        <Route path="/activity" element={<Activity />} />
-      </Routes>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/invest" element={<Invest />} />
+          <Route path="/invest/:ticker" element={<Stock />} />
+          <Route path="/money" element={<Money />} />
+          <Route path="/activity" element={<Activity />} />
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
   </MotionConfig>
 );

@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Decision, OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@harbor/core";
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
 import { CASH } from "./data";
-import { IssuerCompare } from "./IssuerCompare";
-import { ISSUER_NAME, MARKET_OPENS_ET, priceFor, type Instrument } from "./market";
+import { IssuerCompare, ISSUER_NAME } from "./IssuerCompare";
+import { useDecision } from "../market/hooks";
+import type { JupPrice } from "../market/jupiter";
+import type { Instrument } from "../market/universe";
 
 const AVAILABLE = Number(CASH.available.replace(/[^0-9.]/g, ""));
 
@@ -74,7 +76,17 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
         <Line k="Amount held" v={usd(amount)} />
         <Line
           k="Latest"
-          v={d.marketOpensAt ? `${MARKET_OPENS_ET}, when the exchange opens` : "When the price returns"}
+          v={
+            d.marketOpensAt
+              ? `${d.marketOpensAt.toLocaleString("en-US", {
+                  weekday: "long",
+                  hour: "numeric",
+                  minute: "2-digit",
+                  timeZone: "America/New_York",
+                  timeZoneName: "short",
+                })}, when the exchange opens`
+              : "When the price returns"
+          }
         />
       </dl>
       <p className="mt-4 text-[13px] leading-[1.5] text-muted">
@@ -127,10 +139,12 @@ const Line = ({ k, v, mono = false }: { k: string; v: string; mono?: boolean }) 
 
 export const BuySheet = ({
   instrument,
+  prices,
   open,
   onClose,
 }: {
   instrument: Instrument;
+  prices: Record<string, JupPrice | null> | undefined;
   open: boolean;
   onClose: () => void;
 }) => {
@@ -138,16 +152,33 @@ export const BuySheet = ({
   const [placed, setPlaced] = useState<Decision | null>(null);
 
   const amount = Number(raw) || 0;
-  const decision: Decision = useMemo(
-    () => priceFor(instrument, Math.max(amount, 0.01)),
-    [instrument, amount],
+
+  // Quoting on every keystroke would hammer a free endpoint and flicker the
+  // numbers while someone is still typing. Settle first, then quote.
+  const [settled, setSettled] = useState(amount);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(amount), 350);
+    return () => clearTimeout(t);
+  }, [amount]);
+
+  const { decision, isLoading, isFetching } = useDecision(
+    open ? instrument : undefined,
+    settled,
+    prices,
   );
 
+  const typing = settled !== amount;
   const overBalance = amount > AVAILABLE;
-  const blocked = amount <= 0 || overBalance || decision.kind === "refuse";
+  const blocked =
+    amount <= 0 || overBalance || !decision || decision.kind === "refuse" || typing || isLoading;
 
-  const cta =
-    decision.kind === "offer_queue" ? "Queue this order" : decision.kind === "refuse" ? "Unavailable" : "Buy now";
+  const cta = !decision
+    ? "Getting a quote\u2026"
+    : decision.kind === "offer_queue"
+      ? "Queue this order"
+      : decision.kind === "refuse"
+        ? "Unavailable"
+        : "Buy now";
 
   const close = () => {
     setPlaced(null);
@@ -167,8 +198,8 @@ export const BuySheet = ({
             </h2>
             <p className="mx-auto mt-2 max-w-[38ch] text-[14px] leading-[1.55] text-muted">
               {placed.kind === "offer_queue"
-                ? `${usd(amount)} of ${instrument.name} is waiting on your price. You'll see it in Activity.`
-                : `${usd(amount)} of ${instrument.name} is in your portfolio.`}
+                ? `${usd(settled)} of ${instrument.name} is waiting on your price. You'll see it in Activity.`
+                : `${usd(settled)} of ${instrument.name} is in your portfolio.`}
             </p>
             <button
               type="button"
@@ -186,7 +217,7 @@ export const BuySheet = ({
               Buy {instrument.name}
             </h2>
             <p className="mt-1 text-[14px] text-muted">
-              {usd(AVAILABLE)} available · reference {usd(instrument.fair)} a share
+              {usd(AVAILABLE)} available
             </p>
 
             <label className="mt-5 flex items-center gap-1 rounded-xl border border-cardline bg-shell px-4 py-3.5 focus-within:border-brand">
@@ -220,13 +251,31 @@ export const BuySheet = ({
             )}
 
             <div className="mt-5">
-              {decision.kind === "execute" && <Execute d={decision} amount={amount} />}
-              {decision.kind === "offer_queue" && <Queue d={decision} amount={amount} />}
-              {decision.kind === "refuse" && <Refuse d={decision} />}
+              {!decision ? (
+                <div className="rounded-xl border border-cardline bg-shell px-4 py-3.5">
+                  <p className="text-[14px] font-semibold text-muted">
+                    {typing ? "Pricing\u2026" : "Quoting every issuer\u2026"}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-[1.5] text-faint">
+                    Routes are quoted for this exact amount, so the answer changes with the number.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {decision.kind === "execute" && <Execute d={decision} amount={settled} />}
+                  {decision.kind === "offer_queue" && <Queue d={decision} amount={settled} />}
+                  {decision.kind === "refuse" && <Refuse d={decision} />}
+                </>
+              )}
             </div>
 
             <div className="mt-5">
-              <IssuerCompare decision={decision} amount={Math.max(amount, 0.01)} />
+              <IssuerCompare
+                decision={decision}
+                amount={Math.max(settled, 0.01)}
+                loading={isLoading || isFetching}
+                wrappers={instrument.wrappers}
+              />
             </div>
 
           </div>
@@ -242,7 +291,7 @@ export const BuySheet = ({
             <button
               type="button"
               disabled={blocked}
-              onClick={() => setPlaced(decision)}
+              onClick={() => decision && setPlaced(decision)}
               className="h-11 flex-[1.6] rounded-[10px] bg-brand text-[15px] font-semibold text-white transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-chip disabled:text-faint"
             >
               {cta}

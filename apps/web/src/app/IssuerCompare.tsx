@@ -1,5 +1,7 @@
 import type { Decision, PricedCandidate } from "@harbor/core";
-import { ISSUER_NAME } from "./market";
+import type { Wrapper } from "../market/universe";
+
+export const ISSUER_NAME = { backed: "Backed", ondo: "Ondo" } as const;
 
 const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -33,7 +35,42 @@ const CHIP: Record<Verdict, string> = {
  * user is actually about to spend. Three states, because "tradable but dearer"
  * is a real outcome and not a failure.
  */
-export const IssuerCompare = ({ decision, amount }: { decision: Decision; amount: number }) => {
+export const IssuerCompare = ({
+  decision,
+  amount,
+  loading = false,
+  wrappers = [],
+}: {
+  decision: Decision | null;
+  amount: number;
+  loading?: boolean;
+  wrappers?: readonly Wrapper[];
+}) => {
+  if (!decision)
+    return (
+      <section className="overflow-hidden rounded-2xl border border-cardline bg-white">
+        <div className="border-b border-hair px-5 py-4 sm:px-6">
+          <h2 className="text-[15px] font-semibold">
+            {loading ? "Quoting every issuer…" : "No quote yet"}
+          </h2>
+        </div>
+        {(wrappers.length > 0 ? wrappers : [null, null]).map((w, i) => (
+          <div key={w?.mint ?? i} className="border-b border-hair px-5 py-4 last:border-b-0 sm:px-6">
+            <span className="flex items-center gap-2">
+              <span className="font-mono text-[14px] font-medium">
+                {w?.symbol ?? <span className="inline-block h-4 w-16 rounded bg-chip align-middle" />}
+              </span>
+              <span className="ml-auto inline-block h-6 w-16 rounded-md bg-chip" />
+            </span>
+            <span className="mt-2 flex items-end justify-between">
+              <span className="inline-block h-3.5 w-24 rounded bg-shell" />
+              <span className="inline-block h-4 w-28 rounded bg-chip" />
+            </span>
+          </div>
+        ))}
+      </section>
+    );
+
   const best = decision.kind === "refuse" ? null : decision.best;
   const bestPrice = best?.pricePerShare ? Number(best.pricePerShare.toString()) : null;
 
