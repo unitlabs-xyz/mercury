@@ -1,16 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronRight,
-  Clock,
-  Plus,
-  Refresh,
-  Trend,
-} from "../ui/icons";
+import { ArrowDown, ArrowUp, ChevronRight, Clock, Plus, Refresh, Trend } from "../ui/icons";
 import { AppShell } from "./AppShell";
-import { EVENTS, HOLDINGS, MARKET, SPLIT, TOTAL, WATCHLIST, type Range } from "./data";
+import { EVENTS, HOLDINGS, MARKET, SPLIT, TOTAL, type Range } from "./data";
 import { ValueChart } from "./ValueChart";
 import { Welcome } from "./Welcome";
 
@@ -36,6 +28,77 @@ const Move = ({ value, dir }: { value: string; dir: "up" | "down" | "queued" }) 
   );
 };
 
+/**
+ * The statement head: the one figure the page exists for, printed on the paper
+ * rather than boxed, with its history beside it. A card here would make the
+ * total a peer of everything under it.
+ */
+const Position = ({ range, setRange }: { range: Range; setRange: (r: Range) => void }) => (
+  <section aria-label="Total value" className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
+    <div>
+      <p className="text-[13px] font-medium text-muted">Total value</p>
+      <p className="mt-1.5 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">
+        {TOTAL.value}
+      </p>
+      <p className="mt-3 flex flex-wrap items-center gap-2.5">
+        <span className="flex items-center gap-1 rounded-md bg-up-tint py-[3px] pr-[9px] pl-[7px] text-[14px] font-semibold text-up-deep">
+          <ArrowUp className="size-3" />
+          {TOTAL.changePct}
+        </span>
+        <span className="text-[14px] font-medium text-up-deep">{TOTAL.changeUsd}</span>
+        <span className="text-[13px] text-faint">{TOTAL.since}</span>
+      </p>
+
+      {/* Stated, not drawn. The share is the number, so it does not need a bar. */}
+      <dl className="mt-7 border-t border-rule">
+        {SPLIT.map((s) => {
+          const [name, note] = s.label.split(" · ");
+          return (
+            <div key={s.label} className="flex items-baseline gap-4 border-b border-hair py-2.5">
+              <dt className="flex-1 text-[14px] text-ink-soft">
+                {name}
+                {note && <span className="ml-1.5 text-[12px] text-faint">{note}</span>}
+              </dt>
+              <dd className="w-[44px] text-right text-[13px] tabular-nums text-faint">
+                {Math.round(s.share)}%
+              </dd>
+              <dd className="w-[92px] text-right text-[14px] font-semibold tabular-nums">
+                {s.value}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+    </div>
+
+    <div className="min-w-0">
+      {/* Stranded on the right when the chart is the whole column. */}
+      <div className="flex justify-start lg:justify-end">
+        <div className="flex gap-1 rounded-lg bg-chip p-1">
+          {RANGES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setRange(r)}
+              aria-pressed={range === r}
+              className={`min-h-11 rounded-md px-3.5 font-mono text-[12px] transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 ${
+                range === r
+                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(27,26,23,0.07)]"
+                  : "text-muted hover:text-ink"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3">
+        <ValueChart range={range} />
+      </div>
+    </div>
+  </section>
+);
+
 export const Portfolio = () => {
   const [range, setRange] = useState<Range>("1Y");
 
@@ -44,7 +107,8 @@ export const Portfolio = () => {
       current="portfolio"
       title="Portfolio"
       aside={
-        <span className="flex items-center gap-1.5 rounded-full bg-warn-tint px-2.5 py-1 text-[12px] font-medium text-warn">
+        /* The sidebar stamps this already; it is only needed where that is hidden. */
+        <span className="flex items-center gap-1.5 rounded-full bg-warn-tint px-2.5 py-1 text-[12px] font-medium text-warn lg:hidden">
           <Clock className="size-[13px]" />
           {MARKET}
         </span>
@@ -58,150 +122,31 @@ export const Portfolio = () => {
             <Plus className="size-[15px]" />
             Add cash
           </Link>
-          <button
-            type="button"
+          <Link
+            to="/invest"
             className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 max-sm:min-h-11 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
           >
             <Trend className="size-[15px]" />
             Invest
-          </button>
+          </Link>
         </>
       }
     >
       <Welcome />
 
-        <section
-          aria-label="Watchlist"
-          className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
-        >
-          {WATCHLIST.map((w) => (
-            <article
-              key={w.ticker}
-              className="flex items-center gap-3 rounded-[14px] border border-cardline bg-white px-4 py-3.5"
-            >
-              <img
-                src={w.logo}
-                alt=""
-                width={34}
-                height={34}
-                loading="lazy"
-                className="size-[34px] shrink-0 rounded-full"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="font-mono text-[12px] text-faint">{w.ticker}</p>
-                <p className="mt-px text-[16px] font-semibold tracking-[-0.02em] tabular-nums">{w.price}</p>
-              </div>
-              <Move value={w.move} dir={w.dir} />
-            </article>
-          ))}
-        </section>
+      <div className="mt-8">
+        <Position range={range} setRange={setRange} />
+      </div>
 
-        <section className="mt-[18px] grid gap-[18px] xl:grid-cols-[392px_minmax(0,1fr)]">
-          <article className="flex flex-col rounded-2xl border border-cardline bg-white px-6 py-[22px]">
-            <p className="text-[13px] font-medium text-muted">Total value</p>
-            <p className="mt-2 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">
-              {TOTAL.value}
-            </p>
-            <p className="mt-2.5 flex flex-wrap items-center gap-2.5">
-              <span className="flex items-center gap-1 rounded-md bg-up-tint py-[3px] pr-[9px] pl-[7px] text-[14px] font-semibold text-up-deep">
-                <ArrowUp className="size-3" />
-                {TOTAL.changePct}
-              </span>
-              <span className="text-[14px] font-medium text-up-deep">{TOTAL.changeUsd}</span>
-              <span className="text-[13px] text-faint">{TOTAL.since}</span>
-            </p>
+      <section aria-label="Holdings" className="mt-14">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Holdings</h2>
+          <span className="text-[13px] text-muted">
+            {HOLDINGS.length} positions, largest first
+          </span>
+        </div>
 
-            <dl className="mt-7 grid gap-3">
-              {SPLIT.map((s) => (
-                <div key={s.label} className="flex items-center gap-2.5">
-                  <span className={`size-2 shrink-0 rounded-[2px] ${s.fill}`} />
-                  <dt className="flex-1 text-[13px] text-ink-soft">{s.label}</dt>
-                  <dd className="text-[13px] font-semibold tabular-nums">{s.value}</dd>
-                </div>
-              ))}
-            </dl>
-
-            <div
-              aria-hidden
-              className="mt-5 flex h-1.5 gap-[2px] overflow-hidden rounded-full"
-            >
-              {SPLIT.map((s, i) => (
-                <span
-                  key={s.label}
-                  style={{ width: `${s.share}%` }}
-                  className={`${s.fill} ${i === 0 ? "rounded-l-full" : ""} ${
-                    i === SPLIT.length - 1 ? "rounded-r-full" : ""
-                  }`}
-                />
-              ))}
-            </div>
-          </article>
-
-          <article className="rounded-2xl border border-cardline bg-white px-6 py-[22px]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-[13px] font-medium text-muted">Value over time</h2>
-              <div className="flex gap-1 rounded-lg bg-shell p-1">
-                {RANGES.map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRange(r)}
-                    aria-pressed={range === r}
-                    className={`min-h-11 rounded-md px-3.5 font-mono text-[12px] transition-colors sm:min-h-0 sm:px-2.5 sm:py-1 ${
-                      range === r ? "bg-white text-ink shadow-[0_1px_2px_rgba(27,26,23,0.07)]" : "text-muted hover:text-ink"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <ValueChart range={range} />
-            </div>
-          </article>
-        </section>
-
-        <section aria-label="Recent events" className="mt-[18px] grid gap-3 lg:grid-cols-2">
-          {EVENTS.map((e) => (
-            <article
-              key={e.title}
-              className="flex items-start gap-3 rounded-[14px] border border-cardline bg-white px-4 py-3.5"
-            >
-              <span
-                className={`grid size-8 shrink-0 place-items-center rounded-lg ${
-                  e.kind === "dividend" ? "bg-up-tint text-up-deep" : "bg-warn-tint text-warn"
-                }`}
-              >
-                {e.kind === "dividend" ? (
-                  <Refresh className="size-4" />
-                ) : (
-                  <Clock className="size-4" />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-semibold">{e.title}</p>
-                <p className="mt-1 text-[13px] leading-[1.5] text-muted text-pretty">{e.body}</p>
-              </div>
-              {e.kind === "queued" && (
-                <ChevronRight className="mt-1 size-4 shrink-0 text-faint" />
-              )}
-            </article>
-          ))}
-        </section>
-
-        <section
-          aria-label="Holdings"
-          className="mt-[18px] overflow-hidden rounded-2xl border border-cardline bg-white"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-6 py-4">
-            <h2 className="text-[15px] font-semibold">Holdings</h2>
-            <span className="text-[13px] text-muted">
-              {HOLDINGS.length} positions, largest first
-            </span>
-          </div>
-
+        <div className="mt-4 overflow-hidden rounded-2xl border border-cardline bg-white">
           <div className="hidden grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))_110px_28px] gap-4 border-b border-hair px-6 py-2.5 text-[12px] font-medium text-faint lg:grid">
             <span>Name</span>
             <span className="text-right">Shares</span>
@@ -267,7 +212,35 @@ export const Portfolio = () => {
               </span>
             </div>
           ))}
-        </section>
+        </div>
+      </section>
+
+      {/* Notes at the foot of a statement, not cards in the middle of one. */}
+      <section aria-label="Recent" className="mt-14">
+        <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Recent</h2>
+        <ul className="mt-4 border-t border-rule">
+          {EVENTS.map((e) => (
+            <li key={e.title} className="flex items-start gap-3.5 border-b border-hair py-4">
+              <span
+                className={`mt-px grid size-7 shrink-0 place-items-center rounded-lg ${
+                  e.kind === "dividend" ? "bg-up-tint text-up-deep" : "bg-warn-tint text-warn"
+                }`}
+              >
+                {e.kind === "dividend" ? (
+                  <Refresh className="size-[15px]" />
+                ) : (
+                  <Clock className="size-[15px]" />
+                )}
+              </span>
+              <p className="min-w-0 flex-1 text-[14px] leading-[1.55] text-muted text-pretty">
+                <span className="font-semibold text-ink">{e.title}</span>
+                <span className="mx-1.5 text-faint">·</span>
+                {e.body}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </section>
     </AppShell>
   );
 };

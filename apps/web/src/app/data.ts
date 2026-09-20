@@ -16,13 +16,6 @@ export const SPLIT = [
   { label: "Cash · earning 4.1%", value: "$4,534.73", share: 36.4, fill: "bg-ramp-c" },
 ];
 
-export const WATCHLIST = [
-  { logo: "/tokens/NVDAx.png", ticker: "NVDA", price: "$222.29", move: "1.56%", dir: "up" },
-  { logo: "/tokens/SPYx.png", ticker: "SPY", price: "$664.21", move: "0.31%", dir: "up" },
-  { logo: "/tokens/TSLAx.png", ticker: "TSLA", price: "$426.07", move: "0.94%", dir: "down" },
-  { logo: "/tokens/AAPLx.png", ticker: "AAPL", price: "$245.50", move: "queued", dir: "queued" },
-] as const;
-
 export const EVENTS = [
   {
     kind: "dividend",
