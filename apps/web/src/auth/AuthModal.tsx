@@ -2,7 +2,7 @@ import { motion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { PRESS } from "../motion/config";
-import { Dialog, DottedPanel } from "../ui/Dialog";
+import { Dialog, RuledSheet } from "../ui/Dialog";
 import { Blocks, Clock, Close, Key, Lock, Mail, Sliders } from "../ui/icons";
 import { useAuthModal } from "./AuthContext";
 import { CodeInput } from "./CodeInput";
@@ -235,7 +235,7 @@ export const AuthModal = () => {
         </div>
       </div>
 
-      <DottedPanel />
+      <RuledSheet />
     </Dialog>
   );
 };
