@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { EASE } from "../motion/config";
 import {
@@ -17,15 +17,16 @@ import {
   Trend,
   Download,
 } from "../ui/icons";
-import {
-  ACTIVITY,
-  GROUPS,
-  type Day,
-  type Event,
-  type EventKind,
-  type Group,
-} from "./activity-data";
+import { type Event, type EventKind, type Group } from "./activity-data";
 import { downloadCsv } from "./activity-export";
+import {
+  MONTH_OPTIONS,
+  TYPE_OPTIONS,
+  YEAR_OPTIONS,
+  filterEvents,
+  groupByDay,
+} from "./activity-filters";
+import { Select } from "../ui/Select";
 import { AppShell } from "./AppShell";
 
 const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
@@ -55,6 +56,7 @@ const Amount = ({ event }: { event: Event }) => {
 
 const Row = ({ event }: { event: Event }) => {
   const [open, setOpen] = useState(false);
+  const id = useId();
   const look = LOOK[event.kind];
 
   return (
@@ -62,7 +64,7 @@ const Row = ({ event }: { event: Event }) => {
       <button
         type="button"
         aria-expanded={open}
-        aria-controls={`event-${event.id}`}
+        aria-controls={`event-${id}`}
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-3.5 px-5 py-4 text-left transition-colors hover:bg-shell sm:px-6"
       >
@@ -97,7 +99,7 @@ const Row = ({ event }: { event: Event }) => {
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            id={`event-${event.id}`}
+            id={`event-${id}`}
             role="region"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -191,33 +193,46 @@ const Empty = () => (
   </div>
 );
 
-const matches = (e: Event, q: string) => {
-  const hay = [e.title, e.sub, ...e.details.flatMap((d) => [d.label, d.value])]
-    .join(" ")
-    .toLowerCase();
-  return hay.includes(q);
-};
+import { ACTIVITY } from "./activity-data";
+
+const PER_PAGE = 10;
+const TOTAL = ACTIVITY.length;
 
 export const Activity = () => {
   const [group, setGroup] = useState<Group>("all");
+  const [year, setYear] = useState("all");
+  const [month, setMonth] = useState("all");
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
 
-  const total = ACTIVITY.reduce((n, d) => n + d.events.length, 0);
+  const filtered = useMemo(
+    () => filterEvents(group, year, month, query),
+    [group, year, month, query],
+  );
 
-  const days: Day[] = useMemo(() => {
-    const kinds = GROUPS.find((g) => g.key === group)?.kinds ?? [];
-    const q = query.trim().toLowerCase();
-    return ACTIVITY.map((day) => ({
-      ...day,
-      events: day.events.filter(
-        (e) =>
-          (kinds.length === 0 || kinds.includes(e.kind)) && (q === "" || matches(e, q)),
-      ),
-    })).filter((day) => day.events.length > 0);
-  }, [group, query]);
+  const pages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const current = Math.min(page, pages);
+  const slice = filtered.slice((current - 1) * PER_PAGE, current * PER_PAGE);
+  const days = useMemo(() => groupByDay(slice), [slice]);
 
-  const shown = days.reduce((n, d) => n + d.events.length, 0);
-  const filtered = group !== "all" || query.trim() !== "";
+  const narrowed = group !== "all" || year !== "all" || month !== "all" || query.trim() !== "";
+
+  /** Any filter change puts you back on the first page. */
+  const set = <T,>(setter: (v: T) => void) => (v: T) => {
+    setter(v);
+    setPage(1);
+  };
+
+  const clear = () => {
+    setGroup("all");
+    setYear("all");
+    setMonth("all");
+    setQuery("");
+    setPage(1);
+  };
+
+  const from = filtered.length === 0 ? 0 : (current - 1) * PER_PAGE + 1;
+  const to = Math.min(current * PER_PAGE, filtered.length);
 
   return (
     <AppShell
@@ -225,14 +240,14 @@ export const Activity = () => {
       title="Activity"
       aside={
         <span className="text-[13px] text-muted tabular-nums">
-          {filtered ? `${shown} of ${total} events` : `${total} events`}
+          {narrowed ? `${filtered.length} of ${TOTAL} events` : `${TOTAL} events`}
         </span>
       }
       actions={
         <button
           type="button"
-          onClick={() => downloadCsv(days)}
-          disabled={shown === 0}
+          onClick={() => downloadCsv(filtered)}
+          disabled={filtered.length === 0}
           className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint"
         >
           <Download className="size-[15px]" />
@@ -240,30 +255,21 @@ export const Activity = () => {
         </button>
       }
     >
-      <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
-          {GROUPS.map((g) => (
-            <button
-              key={g.key}
-              type="button"
-              onClick={() => setGroup(g.key)}
-              aria-pressed={group === g.key}
-              className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors ${
-                group === g.key
-                  ? "bg-ink text-white"
-                  : "border border-cardline bg-white text-ink-soft hover:border-faint"
-              }`}
-            >
-              {g.label}
-            </button>
-          ))}
+      <div className="mt-6 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <Select label="Type" value={group} options={TYPE_OPTIONS} onChange={set<string>((v) => setGroup(v as Group))} widthClass="w-[178px]" />
+          <Select label="Year" value={year} options={YEAR_OPTIONS} onChange={set(setYear)} widthClass="w-[150px]" />
+          <Select label="Month" value={month} options={MONTH_OPTIONS} onChange={set(setMonth)} widthClass="w-[168px]" />
         </div>
 
-        <label className="flex items-center gap-2.5 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 focus-within:border-brand lg:w-[300px]">
+        <label className="flex items-center gap-2.5 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 focus-within:border-brand xl:w-[280px]">
           <Search className="size-4 shrink-0 text-faint" />
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
             type="search"
             placeholder="Search events"
             aria-label="Search activity"
@@ -283,23 +289,72 @@ export const Activity = () => {
       </div>
 
       <section className="mt-4 overflow-hidden rounded-2xl border border-cardline bg-white">
-        {total === 0 ? (
+        {TOTAL === 0 ? (
           <Empty />
-        ) : shown === 0 ? (
-          <NoMatch onClear={() => { setGroup("all"); setQuery(""); }} />
+        ) : filtered.length === 0 ? (
+          <NoMatch onClear={clear} />
         ) : (
           days.map((day) => (
             <div key={day.date}>
               <h2 className="border-b border-hair bg-shell/60 px-5 py-2.5 text-[12px] font-semibold tracking-[0.04em] text-faint uppercase sm:px-6">
-                {day.date}
+                {day.label}
               </h2>
               {day.events.map((event) => (
-                <Row key={event.id} event={event} />
+                <Row key={event.date + event.title} event={event} />
               ))}
             </div>
           ))
         )}
       </section>
+
+      {filtered.length > 0 && (
+        <nav
+          aria-label="Pagination"
+          className="mt-4 flex flex-wrap items-center justify-between gap-3"
+        >
+          <p className="text-[13px] text-muted tabular-nums">
+            Showing {from}–{to} of {filtered.length}
+          </p>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPage(current - 1)}
+              disabled={current === 1}
+              aria-label="Previous page"
+              className="grid size-9 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline"
+            >
+              <ChevronRight className="size-4 rotate-180" />
+            </button>
+
+            {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setPage(n)}
+                aria-current={n === current ? "page" : undefined}
+                className={`grid size-9 place-items-center rounded-[9px] text-[13px] font-medium tabular-nums transition-colors ${
+                  n === current
+                    ? "bg-ink text-white"
+                    : "border border-cardline bg-white text-ink-soft hover:border-faint"
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => setPage(current + 1)}
+              disabled={current === pages}
+              aria-label="Next page"
+              className="grid size-9 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+        </nav>
+      )}
 
       <p className="mt-4 text-[13px] text-muted">
         Every row links to the transaction on Solana. Nothing here is a number you have to take on
