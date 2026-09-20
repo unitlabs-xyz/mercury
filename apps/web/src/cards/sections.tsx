@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useAuthModal } from "../auth/AuthContext";
 import { useVaults } from "../market/hooks";
 import { Section } from "../ui/Section";
-import { AnchorMark } from "../ui/Logo";
-import { ArrowRight, Check, Shield } from "../ui/icons";
+import { ArrowRight, Check } from "../ui/icons";
 import { CardArt } from "./CardArt";
 import { CASH_MODE, CREDIT_MODE, PARTNERS, PLANS, PLAN_ROWS, PLAYBOOK, STEPS } from "./data";
 
@@ -299,9 +298,14 @@ export const EarnWhileYouSpend = () => {
                   className="flex items-center gap-4 border-b border-hair px-5 py-4 last:border-b-0 sm:px-6"
                 >
                   <span className="flex min-w-0 flex-1 items-center gap-3">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-chip font-mono text-[11px] font-semibold text-ink-soft">
-                      {v.symbol.slice(0, 2).toUpperCase()}
-                    </span>
+                    <img
+                      src={v.logo}
+                      alt=""
+                      width={28}
+                      height={28}
+                      loading="lazy"
+                      className="size-7 shrink-0 rounded-full"
+                    />
                     <span className="truncate text-[15px] font-medium">{v.name}</span>
                   </span>
                   <span className="w-[64px] text-right text-[14px] tabular-nums text-muted">
@@ -431,14 +435,6 @@ export const CardClosing = () => {
           <CardArt tier="Platinum" />
         </div>
       </div>
-
-      <p className="mt-16 flex items-center gap-2.5 border-t border-rule pt-8 text-[15px] font-semibold">
-        <span className="grid size-7 place-items-center rounded-lg bg-brand text-white">
-          <AnchorMark className="size-4" />
-        </span>
-        Harbor
-        <Shield className="ml-auto size-4 text-faint" />
-      </p>
     </Section>
   );
 };

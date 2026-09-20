@@ -38,17 +38,18 @@ export type CreditMarket = {
 export type Vault = {
   readonly symbol: string;
   readonly name: string;
+  readonly logo: string;
   readonly maxLtv: number;
   readonly supplyApy: number;
 };
 
 /** The deposits shown on the card page, in the order the page lists them. */
-const VAULTS: { symbol: string; name: string }[] = [
-  { symbol: "SOL", name: "Solana" },
-  { symbol: "USDT", name: "Tether" },
-  { symbol: "ETH", name: "Ethereum" },
-  { symbol: "cbBTC", name: "Bitcoin" },
-  { symbol: "USDC", name: "USD Coin" },
+const VAULTS: { symbol: string; name: string; logo: string }[] = [
+  { symbol: "SOL", name: "Solana", logo: "/crypto/SOL.png" },
+  { symbol: "USDT", name: "Tether", logo: "/crypto/USDT.svg" },
+  { symbol: "ETH", name: "Ethereum", logo: "/crypto/ETH.png" },
+  { symbol: "cbBTC", name: "Bitcoin", logo: "/crypto/cbBTC.png" },
+  { symbol: "USDC", name: "USD Coin", logo: "/crypto/USDC.png" },
 ];
 
 /**
@@ -68,9 +69,9 @@ export const fetchVaults = async (signal?: AbortSignal): Promise<Vault[]> => {
     if (!cur || Number(r.totalSupplyUsd ?? 0) > Number(cur.totalSupplyUsd ?? 0)) deepest.set(r.liquidityToken, r);
   }
 
-  return VAULTS.flatMap(({ symbol, name }) => {
+  return VAULTS.flatMap(({ symbol, name, logo }) => {
     const r = deepest.get(symbol);
-    return r ? [{ symbol, name, maxLtv: Number(r.maxLtv), supplyApy: Number(r.supplyApy ?? 0) }] : [];
+    return r ? [{ symbol, name, logo, maxLtv: Number(r.maxLtv), supplyApy: Number(r.supplyApy ?? 0) }] : [];
   });
 };
 
