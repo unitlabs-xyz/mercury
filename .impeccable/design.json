@@ -183,6 +183,21 @@
           "#f6deb4",
           "#fcf5e8"
         ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#262626",
+          "#404040",
+          "#595959",
+          "#737373",
+          "#8c8c8c",
+          "#a6a6a6",
+          "#d9d9d9",
+          "#ffffff"
+        ]
       }
     },
     "typographyMeta": {
@@ -196,7 +211,7 @@
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Card headings and row names."
+        "purpose": "Section headings inside a page."
       },
       "body": {
         "displayName": "Body",
@@ -205,6 +220,26 @@
       "label": {
         "displayName": "Label (mono)",
         "purpose": "The stamp utility: column headers and small uppercase markers. Identifiers only, never money."
+      },
+      "amount": {
+        "displayName": "Amount",
+        "purpose": "The figure being entered or committed. Outranks the heading above it."
+      },
+      "body-sm": {
+        "displayName": "Body Small",
+        "purpose": "The interface workhorse: row labels, secondary lines, sentences inside cards."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Footnotes, provenance lines, column sub-labels."
+      },
+      "subtitle": {
+        "displayName": "Subtitle",
+        "purpose": "Card headings and row names."
+      },
+      "body-ui": {
+        "displayName": "Body UI",
+        "purpose": "Interface prose: button labels, list rows, sheet lines."
       }
     },
     "shadows": [

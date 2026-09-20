@@ -7,6 +7,7 @@ colors:
   harbour-teal-soft: "#6ba8b0"
   harbour-teal-tint: "#e8f4f5"
   harbour-teal-line: "#cbe4e7"
+  white: "#ffffff"
   statement-paper: "#efede8"
   fresh-sheet: "#f7f6f2"
   ink: "#1b1a17"
@@ -44,15 +45,45 @@ typography:
     letterSpacing: "-0.03em"
   title:
     fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
-    fontSize: "15px"
+    fontSize: "18px"
+    fontWeight: 600
+    lineHeight: 1.25
+    letterSpacing: "-0.015em"
+  subtitle:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "16px"
     fontWeight: 600
     lineHeight: 1.3
     letterSpacing: "-0.01em"
+  amount:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "26px"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.02em"
   body:
     fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
     fontSize: "15px"
     fontWeight: 400
     lineHeight: 1.6
+    letterSpacing: "normal"
+  body-ui:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: "normal"
+  body-sm:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.55
+    letterSpacing: "normal"
+  caption:
+    fontFamily: "Instrument Sans, ui-sans-serif, Helvetica, sans-serif"
+    fontSize: "12px"
+    fontWeight: 400
+    lineHeight: 1.5
     letterSpacing: "normal"
   label:
     fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace"
@@ -226,11 +257,26 @@ second font.
 - **Display** (600, `clamp(2.25rem, 5.2vw, 3.875rem)`, 1.06, `-0.035em`): Landing and page
   openers. One per screen. Tracking tightens as size grows; it is never loose.
 - **Headline** (600, `clamp(1.5rem, 3vw, 2.5rem)`, 1.1, `-0.03em`): Section openers.
-- **Title** (600, 15–16px, 1.3, `-0.01em`): Card headings and row names.
-- **Body** (400, 14–15px, 1.55–1.6): Prose, held to roughly 65–75 characters. Long-form measures
-  are capped explicitly rather than left to the container.
+- **Title** (600, 18px, 1.25, `-0.015em`): Section headings inside a page.
+- **Subtitle** (600, 16px, 1.3, `-0.01em`): Card headings and row names.
+- **Amount** (600, 26px, `-0.02em`): The figure being entered or committed — a buy amount, a
+  send amount. The subject of its screen, so it outranks the heading above it.
+- **Body** (400, 15px, 1.6): Prose, held to roughly 65–75 characters. Long-form measures are
+  capped explicitly rather than left to the container.
+- **Body UI** (400, 14px, 1.55): Interface prose — button labels, list rows, sheet lines.
+- **Body Small** (400, 13px, 1.55): The interface workhorse — row labels, secondary lines,
+  explanatory sentences inside cards. The most used step in the system by a wide margin.
+- **Caption** (400, 12px, 1.5): Footnotes, provenance lines, column sub-labels.
 - **Label** (500, 11px, `0.1em`, uppercase): The `stamp` utility. Column headers and small
   capitalised markers.
+
+The full ladder is **11 · 12 · 13 · 14 · 15 · 16 · 18 · 26**, then display and headline clamp
+between 24px and 62px.
+
+**Known drift, to be resolved rather than blessed.** A handful of literal sizes sit off this
+ladder — 17, 20, 22, 28, 30, 32, 34, 38, 42 and 52px — mostly large figures on the portfolio and
+stock screens that were set by eye. They are recorded here as debt, not as steps. New work uses
+the ladder; existing outliers get pulled onto it when their screen is next touched.
 
 ### Named Rules
 
