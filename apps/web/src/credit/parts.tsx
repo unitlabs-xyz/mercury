@@ -169,9 +169,10 @@ export const CollateralTable = ({
         ? [0, 1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="flex items-center gap-4 border-b border-hair px-5 py-3.5 last:border-b-0 sm:px-6"
+              className="flex items-center gap-3 border-b border-hair px-5 py-3.5 last:border-b-0 sm:px-6"
             >
-              <span className="h-4 w-40 rounded bg-chip" />
+              <span className="size-7 shrink-0 rounded-full bg-chip" />
+              <span className="h-4 w-36 rounded bg-chip" />
               <span className="ml-auto h-4 w-16 rounded bg-chip" />
             </div>
           ))
@@ -180,11 +181,26 @@ export const CollateralTable = ({
               key={c.symbol}
               className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-hair px-5 py-3.5 last:border-b-0 sm:px-6"
             >
-              <span className="flex min-w-0 flex-1 items-baseline gap-2.5">
-                <span className="truncate text-[15px] font-medium">
-                  {DISPLAY_NAME[c.ticker] ?? c.ticker}
+              <span className="flex min-w-0 flex-1 items-center gap-3">
+                {/* Backed publishes a mark per wrapper; a row carrying one reads
+                    as a holding rather than a line in a rate sheet. */}
+                <img
+                  src={`/tokens/${c.symbol}.png`}
+                  alt=""
+                  width={28}
+                  height={28}
+                  loading="lazy"
+                  className="size-7 shrink-0 rounded-full"
+                  onError={(e) => {
+                    e.currentTarget.style.visibility = "hidden";
+                  }}
+                />
+                <span className="flex min-w-0 items-baseline gap-2.5">
+                  <span className="truncate text-[15px] font-medium">
+                    {DISPLAY_NAME[c.ticker] ?? c.ticker}
+                  </span>
+                  <span className="font-mono text-[12px] text-faint">{c.symbol}</span>
                 </span>
-                <span className="font-mono text-[12px] text-faint">{c.symbol}</span>
               </span>
               <span className="w-[120px] text-right text-[15px] font-semibold tabular-nums">
                 {pctOf(c.maxLtv)}
