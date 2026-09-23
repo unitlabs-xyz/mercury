@@ -1,4 +1,5 @@
 import { verifyIdentityToken } from "@privy-io/node";
+import { privyJwks } from "./verifier.js";
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { users, wallets } from "../db/schema.js";
@@ -31,13 +32,14 @@ export interface UserDirectory {
 
 export const createPrivyDirectory = (opts: {
   appId: string;
-  verificationKey: string;
+  /** A pasted PEM. Omit it and the app's published JWKS is used instead. */
+  verificationKey?: string | undefined;
 }): UserDirectory => ({
   async read(identityToken) {
     const user = await verifyIdentityToken({
       identity_token: identityToken,
       app_id: opts.appId,
-      verification_key: opts.verificationKey,
+      verification_key: opts.verificationKey ?? privyJwks(opts.appId),
     });
     const wallet = user.linked_accounts.find(
       (a) =>

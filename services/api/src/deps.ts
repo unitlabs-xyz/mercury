@@ -19,8 +19,11 @@ export interface Config {
   /** Required. Nothing works without these. */
   readonly databaseUrl: string;
   readonly privyAppId: string;
-  /** The PEM public key from the Privy dashboard. Public, so not a secret. */
-  readonly privyVerificationKey: string;
+  /**
+   * Optional. Privy publishes the public key as a JWKS derived from the app id,
+   * so this is only needed to pin a specific key instead of fetching it.
+   */
+  readonly privyVerificationKey?: string;
   readonly solanaRpcUrl: string;
   /** Execution only — subsystem 3. Absent until then. */
   readonly jupiterApiKey?: string;
@@ -34,12 +37,13 @@ const required = (env: NodeJS.ProcessEnv, key: string): string => {
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const jupiterApiKey = env["JUPITER_API_KEY"];
+  const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
   return {
     databaseUrl: required(env, "DATABASE_URL"),
     privyAppId: required(env, "PRIVY_APP_ID"),
-    privyVerificationKey: required(env, "PRIVY_VERIFICATION_KEY"),
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
+    ...(privyVerificationKey ? { privyVerificationKey } : {}),
     ...(jupiterApiKey ? { jupiterApiKey } : {}),
   };
 }
