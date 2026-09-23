@@ -115,14 +115,42 @@ corner subsystem 4 cannot escape, but five subsystems is too much for one plan t
 
 ### 1 · Identity
 
-`@privy-io/react-auth` in web, `@privy-io/server-auth` in the API. Privy embedded wallets only,
-per [ADR 0003](../../adr/0003-custody.md); no external wallets in v1.
+`@privy-io/react-auth` (3.45.0) in web, **`@privy-io/node`** (0.35.0) in the API. Privy embedded
+wallets only, per [ADR 0003](../../adr/0003-custody.md); no external wallets in v1.
 
-The auth modal's step machine is kept as designed — only the staged `setTimeout` calls are
-replaced by real Privy calls. The loading states, the staged waits and the sealed code field were
-built against realistic latency; this is the payoff, not a rewrite.
+Not `@privy-io/server-auth`. Privy's own docs name `@privy-io/node`, and the release history
+agrees: `node` and `react-auth` both shipped 21 September 2026, `server-auth` last moved in
+April. `server-auth` also hard-depends on `@solana/web3.js@1`, the legacy client
+[03 Architecture](../../03-architecture.md) explicitly chose `@solana/kit` to avoid;
+`@privy-io/node` depends on `jose` v6 and nothing chain-specific.
 
-Server verifies the Privy JWT per request and creates `user` + `wallet` rows on first sight. The
+Every chain-specific peer of both packages is optional, so nothing EVM is pulled in.
+**`@solana/kit` is deliberately not installed until subsystem 3**, where signing needs it. That
+also sidesteps a live conflict: kit is at 8.3.0, `react-auth` accepts `>=3.0.3` but
+`@privy-io/node` asks for `^5.1.0`. Optional peers, so it warns rather than fails — but there is
+no reason to take the warning before we need the package.
+
+**Email is Privy's, not ours.** Privy sends the OTP; there is no hook to substitute a provider,
+and customising the sender or branding is enterprise-gated. No transactional email dependency in
+v1. When the worker starts sending fill and dividend notices in subsystem 4, the question to
+answer first is not which email service but whether Harbor stores addresses at all — docs/05
+currently says it does not.
+
+The auth modal's step machine is kept as designed. `useLoginWithEmail` returns
+`sendCode({email})`, `loginWithCode({code})` and a `state` of
+`initial | sending-code | awaiting-code-input | submitting-code | done | error`, which maps
+almost directly onto the modal's existing `Pending` union.
+
+**`SEND_MS`, `CHECK_MS` and `CREATE_MS` stop being simulated latency and become a minimum
+display duration.** This is deliberate and must not be read later as a bug. A response that
+arrives before the progress hairline finishes is held until it does, because the alternative is a
+sub-100ms flicker through three designed states. A response that arrives *after* it finishes
+hands the same 2px rule over to an indeterminate sweep, because a full bar that has not advanced
+reads as broken within about a second. Both cases are required; the first alone leaves the slow
+path looking hung.
+
+Server verifies the Privy access token per request — a standard ES256 JWT, so verifiable with
+`@privy-io/node` or any JWT library — and creates `user` + `wallet` rows on first sight. The
 server never holds a key.
 
 **Done when:** a real email produces a real Solana wallet, and `GET /v1/portfolio` returns 401
