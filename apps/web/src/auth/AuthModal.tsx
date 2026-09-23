@@ -5,23 +5,13 @@ import { EASE, PRESS, noteIn, sequence } from "../motion/config";
 import { Dialog, RuledSheet } from "../ui/Dialog";
 import { Alert, Blocks, Check, Clock, Close, Key, Lock, Mail, Sliders } from "../ui/icons";
 import { useAuthModal } from "./AuthContext";
+import { CHECK_MS, CREATE_MS, RESEND_MS, SEND_MS, useEmailLogin } from "./useEmailLogin";
 import { CodeInput } from "./CodeInput";
 
 type Step = "email" | "code" | "ready";
 
-/**
- * Nothing here reaches a server yet, so every wait is staged. They are staged
- * at roughly the length the real ones will be, because a screen designed
- * against instant responses is a screen that has never been designed for the
- * only state it will actually spend time in.
- */
-type Pending = "sending" | "resending" | "checking" | "creating" | null;
 
 const RESEND_SECONDS = 30;
-const SEND_MS = 800;
-const RESEND_MS = 650;
-const CHECK_MS = 700;
-const CREATE_MS = 800;
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -55,18 +45,27 @@ const PrivyMark = () => (
 );
 
 /**
- * The one loading material in this dialog: a hairline filling over exactly as
- * long as the wait lasts, so a wait always shows its own end. It is the same
- * material the rest of the system builds structure from, which is why there is
- * no spinner anywhere in here.
+ * The one loading material in this dialog, and the same material the rest of
+ * the system builds structure from — which is why there is no spinner in here.
+ *
+ * The first segment is the honest fill, over exactly the minimum display
+ * duration. Everything after it only ever plays when the response has
+ * outlived that floor, because the element unmounts the moment the wait ends.
+ * A full bar that has stopped moving reads as broken within about a second.
  */
 const Fill = ({ ms, className }: { ms: number; className: string }) => (
   <motion.span
     aria-hidden
     className={`origin-left ${className}`}
     initial={{ scaleX: 0 }}
-    animate={{ scaleX: 1 }}
-    transition={{ duration: ms / 1000, ease: "linear" }}
+    animate={{ scaleX: [0, 1, 0.12, 1] }}
+    transition={{
+      duration: (ms / 1000) * 2.6,
+      times: [0, 1 / 2.6, 1.35 / 2.6, 1],
+      ease: "linear",
+      repeat: Infinity,
+      repeatDelay: 0,
+    }}
   />
 );
 
@@ -75,7 +74,7 @@ export const AuthModal = () => {
   const navigate = useNavigate();
   const reduce = useReducedMotion();
   const [step, setStep] = useState<Step>("email");
-  const [pending, setPending] = useState<Pending>(null);
+  const { pending, rejected, send, submit, reset } = useEmailLogin();
   const [email, setEmail] = useState("");
   const [invalid, setInvalid] = useState(false);
   const [code, setCode] = useState("");
@@ -90,7 +89,7 @@ export const AuthModal = () => {
     if (isOpen) return undefined;
     const t = setTimeout(() => {
       setStep("email");
-      setPending(null);
+      reset();
       setCode("");
       setInvalid(false);
       setResent(false);
@@ -114,32 +113,6 @@ export const AuthModal = () => {
     return () => ro.disconnect();
   }, [isOpen]);
 
-  /* Every staged wait lives here, so one place decides what follows what. */
-  useEffect(() => {
-    if (!pending) return undefined;
-    const after = (ms: number, then: () => void) => {
-      const t = setTimeout(then, ms);
-      return () => clearTimeout(t);
-    };
-    if (pending === "sending")
-      return after(SEND_MS, () => {
-        setPending(null);
-        setSeconds(RESEND_SECONDS);
-        setStep("code");
-      });
-    if (pending === "resending")
-      return after(RESEND_MS, () => {
-        setPending(null);
-        setSeconds(RESEND_SECONDS);
-        setResent(true);
-      });
-    if (pending === "checking") return after(CHECK_MS, () => setPending("creating"));
-    return after(CREATE_MS, () => {
-      setPending(null);
-      setStep("ready");
-    });
-  }, [pending]);
-
   /* Clip for the length of the resize and no longer. Tying this to the
      animation's own completion callback means a frame loop that stops — a
      backgrounded tab — leaves the sheet clipped shut. */
@@ -162,9 +135,14 @@ export const AuthModal = () => {
     return () => clearTimeout(t);
   }, [isOpen, step, pending, seconds]);
 
+  /* Six digits is the submit. Privy decides what happens next, not a timer. */
   useEffect(() => {
-    if (step === "code" && !pending && code.length === 6) setPending("checking");
-  }, [code, step, pending]);
+    if (step !== "code" || pending || code.length !== 6) return;
+    void submit(code).then((ok) => {
+      if (ok) setStep("ready");
+      else setCode("");
+    });
+  }, [code, step, pending, submit]);
 
   const submitEmail = (e: FormEvent) => {
     e.preventDefault();
@@ -175,7 +153,11 @@ export const AuthModal = () => {
       return;
     }
     setInvalid(false);
-    setPending("sending");
+    void send(email).then((ok) => {
+      if (!ok) return;
+      setSeconds(RESEND_SECONDS);
+      setStep("code");
+    });
   };
 
   const sending = pending === "sending";
@@ -322,9 +304,11 @@ export const AuthModal = () => {
                           ? "Checking your code"
                           : pending === "creating"
                             ? "Creating your wallet"
-                            : resent
-                              ? "A new code is on its way"
-                              : ""}
+                            : rejected
+                              ? "That code didn't work"
+                              : resent
+                                ? "A new code is on its way"
+                                : ""}
                       </span>
 
                       <div className="mt-5">
@@ -346,6 +330,11 @@ export const AuthModal = () => {
                                 : "Creating your wallet"}
                             </p>
                           </motion.div>
+                        ) : rejected ? (
+                          <p role="alert" className="flex items-start gap-2 text-[14px] text-down-deep">
+                            <Alert className="mt-0.5 size-[15px] shrink-0" />
+                            That code didn't work. Check it and enter it again.
+                          </p>
                         ) : resent ? (
                           <p className="flex items-center gap-2 text-[14px] text-up-deep">
                             <Check className="size-[15px] shrink-0" />
@@ -366,7 +355,13 @@ export const AuthModal = () => {
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => setPending("resending")}
+                                onClick={() => {
+                                  void send(email, true).then((ok) => {
+                                    if (!ok) return;
+                                    setSeconds(RESEND_SECONDS);
+                                    setResent(true);
+                                  });
+                                }}
                                 className="text-[14px] font-semibold text-brand underline-offset-4 hover:underline"
                               >
                                 Resend the code
