@@ -6,6 +6,7 @@ import type { Deps } from "./deps.js";
 import { priceOrder } from "./pricing.js";
 import { decisionToWire } from "./serialize.js";
 import { BASKETS } from "./baskets.js";
+import { requireAuth, type AuthDeps } from "./auth/middleware.js";
 
 interface StoredOrder {
   id: string;
@@ -21,11 +22,16 @@ const orders = new Map<string, StoredOrder>();
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
-export function createApp(deps: Deps) {
+export function createApp(deps: Deps, auth: AuthDeps) {
   const app = new Hono();
   app.use("*", cors());
 
   app.get("/health", (c) => c.json({ ok: true }));
+
+  app.use("/v1/*", requireAuth(auth));
+
+  /** Who is calling, and which wallet is theirs. The first authenticated route. */
+  app.get("/v1/me", (c) => c.json(c.get("identity")));
 
   app.get("/v1/market/status", async (c) => {
     const s = await deps.sessions.current();
