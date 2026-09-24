@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/brand/mercury-wordmark.svg" alt="Mercury" width="200">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/mercury-wordmark-dark.svg">
+    <img src="docs/brand/mercury-wordmark.svg" alt="Mercury" width="200">
+  </picture>
 </p>
 
 <h3 align="center">Your wealth. Onchain.</h3>
