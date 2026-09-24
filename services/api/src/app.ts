@@ -36,6 +36,7 @@ export function createApp(market: () => Deps, auth: AuthDeps) {
   const app = new Hono();
   app.use("*", cors());
 
+
   app.get("/health", (c) => c.json({ ok: true }));
 
   app.use("/v1/*", requireAuth(auth));
