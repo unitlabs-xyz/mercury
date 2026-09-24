@@ -7,18 +7,11 @@ import { priceOrder } from "./pricing.js";
 import { decisionToWire } from "./serialize.js";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
-
-interface StoredOrder {
-  id: string;
-  decision: ReturnType<typeof decisionToWire>;
-  status: "pending" | "executing" | "filled" | "queued" | "refused";
-  createdAt: string;
-}
-
-/** In memory until the Postgres schema lands in week two. See docs/05. */
-const orders = new Map<string, StoredOrder>();
-
-// TODO week 2: Postgres, per docs/05. Instrument routes rebuild against deps.registry.
+import type { ReadDeps } from "./deps.js";
+import { activityRoutes } from "./routes/activity.js";
+import { instrumentRoutes } from "./routes/instruments.js";
+import { moneyRoutes } from "./routes/money.js";
+import { portfolioRoutes } from "./routes/portfolio.js";
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
@@ -32,7 +25,7 @@ const NOT_READY = fail(
  * lifts them out of the browser, and evaluating it at boot would stop the auth
  * path from running at all. The routes that need it answer 503 instead.
  */
-export function createApp(market: () => Deps, auth: AuthDeps) {
+export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
   app.use("*", cors());
 
@@ -49,6 +42,11 @@ export function createApp(market: () => Deps, auth: AuthDeps) {
 
   /** Who is calling, and which wallet is theirs. The first authenticated route. */
   app.get("/v1/me", (c) => c.json(c.get("identity")));
+
+  app.route("/", instrumentRoutes(read.instruments));
+  app.route("/", portfolioRoutes(read.portfolio));
+  app.route("/", moneyRoutes(read.money));
+  app.route("/", activityRoutes(read.activity));
 
   app.get("/v1/market/status", async (c) => {
     const s = await market().sessions.current();
@@ -70,35 +68,45 @@ export function createApp(market: () => Deps, auth: AuthDeps) {
     if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
     const wire = decisionToWire(decision);
-    const id = crypto.randomUUID();
-    orders.set(id, {
-      id,
+    const saved = await read.orders.create({
+      userId: c.get("identity").userId,
+      ticker: parsed.data.ticker,
+      side: parsed.data.side,
+      usdAmount: parsed.data.amount,
       decision: wire,
+      chosenMint: wire.kind === "refuse" ? null : wire.best.mint,
+      referencePrice: wire.fairPricePerShare,
+      premiumPct: wire.kind === "refuse" ? null : wire.premium,
       status: wire.kind === "refuse" ? "refused" : "pending",
-      createdAt: new Date().toISOString(),
     });
-    return c.json({ orderId: id, decision: wire });
+    return c.json({ orderId: saved.id, decision: wire });
   });
 
-  app.get("/v1/orders/:id", (c) => {
-    const o = orders.get(c.req.param("id"));
-    return o ? c.json(o) : c.json(fail("not_found", "Unknown order."), 404);
+  app.get("/v1/orders/:id", async (c) => {
+    const order = await read.orders.byId(c.get("identity").userId, c.req.param("id"));
+    return order === null ? c.json(fail("not_found", "Unknown order."), 404) : c.json(order);
   });
 
   /** Build the unsigned transaction. The client signs it; we never hold a key. ADR 0003. */
   app.post("/v1/orders/:id/execute", async (c) => {
-    const o = orders.get(c.req.param("id"));
-    if (o === undefined) return c.json(fail("not_found", "Unknown order."), 404);
-    if (o.decision.kind === "refuse") return c.json(fail("instrument_not_tradable", o.decision.detail), 409);
+    const identity = c.get("identity");
+    const order = await read.orders.byId(identity.userId, c.req.param("id"));
+    if (order === null) return c.json(fail("not_found", "Unknown order."), 404);
 
-    const owner = c.req.header("x-wallet-address");
-    if (owner === undefined) return c.json(fail("unauthorized", "No wallet on the request."), 401);
+    const decision = order.decision as ReturnType<typeof decisionToWire>;
+    if (decision.kind === "refuse") return c.json(fail("instrument_not_tradable", decision.detail), 409);
 
-    const quoteId = o.decision.best.rejection === null ? o.decision.best.mint : null;
-    if (quoteId === null) return c.json(fail("quote_expired", "The chosen quote is gone. Ask again."), 409);
+    // The wallet comes from the identity token Privy signed, never from a
+    // header the caller controls. See services/api/src/auth/identity.ts.
+    const owner = identity.walletAddress;
+    if (owner === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
 
-    const transactions = await market().quotes.buildSwap(`${o.id}`, owner);
-    o.status = "executing";
+    if (decision.best.rejection !== null) {
+      return c.json(fail("quote_expired", "The chosen quote is gone. Ask again."), 409);
+    }
+
+    const transactions = await market().quotes.buildSwap(order.id, owner);
+    await read.orders.setStatus(identity.userId, order.id, "executing");
     return c.json({ transactions, expiresAt: new Date(Date.now() + 30_000).toISOString() });
   });
 

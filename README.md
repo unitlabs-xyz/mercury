@@ -94,10 +94,10 @@ pnpm --filter @mercury/web dev                   # http://localhost:5173
 | --- | --- |
 | `packages/core` | **Done and tested.** 35 tests. Execution engine, cost basis, exposure, basket allocation |
 | `packages/types` | Done. Zod wire schemas |
-| `packages/chain` | Ports done, Jupiter Ultra written. Symmetry awaits the spike |
-| `packages/market` | Ports only. The browser holds working implementations that move here next |
+| `packages/chain` | Registry, keyless quotes and Solana reads done and tested. Jupiter Ultra written, unused until execution. Symmetry awaits the spike |
+| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic |
 | `packages/sdk` | Done. Typed client, every response parsed |
-| `services/api` | **Identity done**: Privy tokens verified against the app's JWKS, users and wallets in Postgres. Market routes answer 503 until the ports land |
+| `services/api` | **Identity and read models done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity all answer from Postgres and chain. Execution is subsystem 3 |
 | `services/worker` | Job plan only. Runner is still to come |
 | `apps/web` | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet |
 | `apps/landing` | Scaffolded |

@@ -25,9 +25,15 @@ Dependency direction is one way and enforced by lint rules:
 
 ```
 apps ──► sdk ──► types
+apps ──► market, chain ──► types
 services ──► core ──► types
 services ──► chain, market ──► types
 ```
+
+`apps ──► market, chain` is the fallback edge, added in
+[ADR 0011](adr/0011-server-preferred-prices.md): the web app reads Jupiter, Pyth and Kamino
+directly when the API is unreachable, through the same adapters the server uses rather than a
+second copy of them.
 
 `core` never imports `chain` or `market`. It receives quotes and prices as plain data and
 returns decisions. That is the whole reason the execution engine can be tested without a network.
@@ -58,7 +64,11 @@ returns decisions. That is the whole reason the execution engine can be tested w
 ## Services
 
 ### `services/api`
-The only surface the apps talk to. Responsibilities:
+The preferred surface the apps talk to — not the only one. The web app also reads Jupiter, Pyth
+and Kamino directly as a fallback when the API is unreachable, on a transport failure only and
+never on a 4xx. The fallback covers market data; positions, orders and activity have no keyless
+equivalent, so the degraded state is *live prices, no portfolio*. See
+[ADR 0011](adr/0011-server-preferred-prices.md). Responsibilities:
 
 - Resolve instruments and wrappers, and serve discovery shelves
 - Produce an execution decision for a proposed order and return it with its reasoning
