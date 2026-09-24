@@ -11,9 +11,11 @@ const Visa = ({ className = "" }: { className?: string }) => (
 );
 
 const FINISHES = {
-  platinum: "linear-gradient(118deg,#f4f3f0 0%,#d8d5cd 18%,#fbfaf8 34%,#c9c5bb 52%,#eeece7 68%,#d2cec4 84%,#f6f5f2 100%)",
+  platinum:
+    "linear-gradient(118deg,#f4f3f0 0%,#d8d5cd 18%,#fbfaf8 34%,#c9c5bb 52%,#eeece7 68%,#d2cec4 84%,#f6f5f2 100%)",
   gold: "linear-gradient(118deg,#f3e6c4 0%,#d9bd77 20%,#fbf4dd 36%,#c9a84f 54%,#eeddb0 70%,#cfae58 86%,#f7efd8 100%)",
-  silver: "linear-gradient(118deg,#eeedea 0%,#cfccc4 20%,#f8f7f4 36%,#bfbbb2 54%,#e7e5e0 70%,#c8c4ba 86%,#f2f1ee 100%)",
+  silver:
+    "linear-gradient(118deg,#eeedea 0%,#cfccc4 20%,#f8f7f4 36%,#bfbbb2 54%,#e7e5e0 70%,#c8c4ba 86%,#f2f1ee 100%)",
   basic: "linear-gradient(118deg,#1b5f86 0%,#2f8fc0 22%,#7fc6e8 40%,#2a7ba8 58%,#5aa9d4 74%,#1f6b93 100%)",
 } as const;
 
@@ -43,7 +45,10 @@ export const CardArt = ({
     <span
       aria-hidden
       className="pointer-events-none absolute inset-0"
-      style={{ background: "linear-gradient(196deg,rgba(255,255,255,0.5) 0%,transparent 42%,rgba(27,26,23,0.12) 100%)" }}
+      style={{
+        background:
+          "linear-gradient(196deg,rgba(255,255,255,0.5) 0%,transparent 42%,rgba(27,26,23,0.12) 100%)",
+      }}
     />
     <div className="absolute inset-0 flex flex-col justify-between p-[7%]">
       {/* Sized in em against the wordmark, so the mark scales with the card

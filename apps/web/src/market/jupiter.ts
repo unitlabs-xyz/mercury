@@ -73,12 +73,7 @@ export type JupQuote = {
 };
 
 /** A real routed quote for a real amount: what this order would actually fill at. */
-export const fetchQuote = (
-  outputMint: string,
-  usd: number,
-  signal?: AbortSignal,
-  slippageBps = 50,
-) => {
+export const fetchQuote = (outputMint: string, usd: number, signal?: AbortSignal, slippageBps = 50) => {
   const amount = Math.round(usd * 10 ** USDC_DECIMALS);
   return get<JupQuote>(
     `/swap/v1/quote?inputMint=${USDC_MINT}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}`,

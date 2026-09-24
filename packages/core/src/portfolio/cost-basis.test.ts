@@ -38,7 +38,7 @@ describe("cost basis", () => {
 
   describe("a dividend arriving through the multiplier", () => {
     it("adds shares for free, so the average cost per share falls", () => {
-      const before = applyBuy(EMPTY_POSITION, D(100), D(22_236.50));
+      const before = applyBuy(EMPTY_POSITION, D(100), D(22_236.5));
       expect(avgUnitCost(before).toFixed(4)).toBe("222.3650");
 
       // The multiplier moves 1.001701 -> 1.005701 on 99.83 tokens.
@@ -52,10 +52,13 @@ describe("cost basis", () => {
 
     it("shows a gain rather than a phantom loss at an unchanged price", () => {
       const price = D(222.365);
-      const before = applyBuy(EMPTY_POSITION, D(100), D(22_236.50));
+      const before = applyBuy(EMPTY_POSITION, D(100), D(22_236.5));
       expect(unrealisedPnl(before, price).toFixed(2)).toBe("0.00");
 
-      const after = applyDividend(before, sharesGainedFromMultiplier(D("99.83"), D("1.001701"), D("1.005701")));
+      const after = applyDividend(
+        before,
+        sharesGainedFromMultiplier(D("99.83"), D("1.001701"), D("1.005701")),
+      );
       expect(unrealisedPnl(after, price).gt(0)).toBe(true);
     });
 

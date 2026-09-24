@@ -1,2 +1,5 @@
-{ "extends": "@mercury/tsconfig/react.json", "include": ["src", "vite.config.ts"],
-  "compilerOptions": { "types": ["vite/client"] } }
+{
+  "extends": "@mercury/tsconfig/react.json",
+  "include": ["src", "vite.config.ts"],
+  "compilerOptions": { "types": ["vite/client"] }
+}

@@ -70,7 +70,70 @@ export interface BasketWeight {
  */
 export interface BasketVenue {
   quote(basketId: string, usdAmount: Decimal): Promise<BasketQuote>;
-  invest(basketId: string, deposits: readonly { mint: string; amount: Decimal }[], owner: string): Promise<readonly string[]>;
+  invest(
+    basketId: string,
+    deposits: readonly { mint: string; amount: Decimal }[],
+    owner: string,
+  ): Promise<readonly string[]>;
   redeem(basketId: string, tokens: Decimal, owner: string): Promise<readonly string[]>;
   value(basketId: string): Promise<{ nav: Decimal; navPerToken: Decimal; weights: readonly BasketWeight[] }>;
+}
+
+/** What the catalogue sync needs and `TokenRegistry` deliberately does not carry. */
+export interface CatalogueWrapper {
+  readonly mint: string;
+  readonly symbol: string;
+  readonly issuer: Issuer;
+  readonly decimals: number;
+  /** The issuer's own name, e.g. "NVIDIA xStock". Our display name is editorial. */
+  readonly name: string;
+  readonly icon: string | null;
+  readonly liquidityUsd: Decimal;
+  readonly holders: number;
+  /** Buyers minus sellers over 24h, from Jupiter's own stats. Never negative here. */
+  readonly netBuyers24h: number;
+  readonly volume24hUsd: Decimal;
+  readonly traders24h: number;
+}
+
+export interface CatalogueInstrument {
+  readonly ticker: string;
+  readonly wrappers: readonly CatalogueWrapper[];
+}
+
+/**
+ * The live token universe, richer than `TokenRegistry` and used only to fill the
+ * `instrument` and `token` tables. Kept separate so the decision path keeps
+ * depending on the four fields it actually needs.
+ */
+export interface CatalogueSource {
+  instruments(): Promise<readonly CatalogueInstrument[]>;
+}
+
+/** One token account's worth, in the mint's smallest unit. Never a float. */
+export interface TokenBalance {
+  readonly mint: string;
+  readonly rawAmount: bigint;
+  readonly decimals: number;
+}
+
+export interface MintConfig {
+  readonly decimals: number;
+  /**
+   * The multiplier in force right now, which is `newMultiplier` once its
+   * effective timestamp has passed. One token is this many shares.
+   */
+  readonly multiplier: Decimal;
+  /** Token-2022 Pausable. True when the issuer has halted the token. */
+  readonly isPaused: boolean;
+}
+
+/**
+ * What we read from Solana without ever holding a key. Two calls, both public:
+ * a wallet's token accounts, and a mint's Token-2022 extensions.
+ */
+export interface ChainReader {
+  tokenBalances(owner: string): Promise<readonly TokenBalance[]>;
+  /** Null when the account does not exist or is not a Token-2022 mint. */
+  mintConfig(mint: string): Promise<MintConfig | null>;
 }

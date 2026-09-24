@@ -8,29 +8,29 @@ import { ArrowRight } from "../ui/icons";
 export const CallToAction = () => {
   const { open } = useAuthModal();
   return (
-  <Section inner="pb-[76px]">
-    <div className="flex flex-col items-start justify-between gap-8 rounded-[20px] border border-cardline bg-white p-8 sm:p-[60px] lg:flex-row lg:items-center lg:gap-12">
-      <div>
-        <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
-          Open an investment account in about a minute.
-        </h2>
-        <p className="mt-3.5 text-[16px] text-muted">
-          No paperwork, no waiting, no bank. Start with $5 if you want to.
-        </p>
-      </div>
-      <motion.button
-        type="button"
-        onClick={open}
-        whileHover="hover"
-        whileTap={{ scale: 0.97 }}
-        transition={PRESS}
-        className="flex shrink-0 items-center gap-2.5 rounded-[11px] bg-brand px-7 py-4 text-[16px] font-semibold text-white transition-colors duration-200 hover:bg-brand-deep"
-      >
-        Get started
-        <motion.span variants={{ hover: { x: 3 } }} transition={PRESS} className="inline-flex">
-          <ArrowRight className="size-[17px]" />
-        </motion.span>
-      </motion.button>
+    <Section inner="pb-[76px]">
+      <div className="flex flex-col items-start justify-between gap-8 rounded-[20px] border border-cardline bg-white p-8 sm:p-[60px] lg:flex-row lg:items-center lg:gap-12">
+        <div>
+          <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
+            Open an investment account in about a minute.
+          </h2>
+          <p className="mt-3.5 text-[16px] text-muted">
+            No paperwork, no waiting, no bank. Start with $5 if you want to.
+          </p>
+        </div>
+        <motion.button
+          type="button"
+          onClick={open}
+          whileHover="hover"
+          whileTap={{ scale: 0.97 }}
+          transition={PRESS}
+          className="flex shrink-0 items-center gap-2.5 rounded-[11px] bg-brand px-7 py-4 text-[16px] font-semibold text-white transition-colors duration-200 hover:bg-brand-deep"
+        >
+          Get started
+          <motion.span variants={{ hover: { x: 3 } }} transition={PRESS} className="inline-flex">
+            <ArrowRight className="size-[17px]" />
+          </motion.span>
+        </motion.button>
       </div>
     </Section>
   );
@@ -73,14 +73,12 @@ export const Footer = () => (
 
         <div className="mt-6 grid max-w-[46ch] gap-2.5 text-[13px] leading-[1.6] text-faint">
           <p>
-            Harbor is an interface to tokenised securities issued by Backed and Ondo Global
-            Markets. It is not a broker and not a custodian: it cannot move, freeze or borrow
-            against anything you hold.
+            Harbor is an interface to tokenised securities issued by Backed and Ondo Global Markets. It is not
+            a broker and not a custodian: it cannot move, freeze or borrow against anything you hold.
           </p>
           <p>
-            Investing carries risk. The value of your holdings can fall as well as rise, and past
-            performance does not guarantee future results. Nothing on this page is investment
-            advice.
+            Investing carries risk. The value of your holdings can fall as well as rise, and past performance
+            does not guarantee future results. Nothing on this page is investment advice.
           </p>
           <p>Harbor is not affiliated with Backed, Ondo, Solana or Privy.</p>
         </div>

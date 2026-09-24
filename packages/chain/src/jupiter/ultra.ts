@@ -29,7 +29,9 @@ export class JupiterUltra implements QuoteSource {
     this.doFetch = config.fetch ?? fetch;
   }
 
-  async quote(req: QuoteRequest): Promise<ReturnType<QuoteSource["quote"]> extends Promise<infer T> ? T : never> {
+  async quote(
+    req: QuoteRequest,
+  ): Promise<ReturnType<QuoteSource["quote"]> extends Promise<infer T> ? T : never> {
     const buying = req.side === "buy";
     const inputMint = buying ? USDC_MINT : req.mint;
     const outputMint = buying ? req.mint : USDC_MINT;

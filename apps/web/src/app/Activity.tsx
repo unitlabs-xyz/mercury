@@ -19,13 +19,7 @@ import {
 } from "../ui/icons";
 import { type Event, type EventKind, type Group } from "./activity-data";
 import { downloadCsv } from "./activity-export";
-import {
-  MONTH_OPTIONS,
-  TYPE_OPTIONS,
-  YEAR_OPTIONS,
-  filterEvents,
-  groupByDay,
-} from "./activity-filters";
+import { MONTH_OPTIONS, TYPE_OPTIONS, YEAR_OPTIONS, filterEvents, groupByDay } from "./activity-filters";
 import { Select } from "../ui/Select";
 import { useActivityParams } from "./useActivityParams";
 import { AppShell } from "./AppShell";
@@ -44,8 +38,7 @@ const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
 
 const Amount = ({ event }: { event: Event }) => {
   if (!event.amount) return null;
-  const tone =
-    event.flow === "in" ? "text-up-deep" : event.flow === "out" ? "text-ink" : "text-up-deep";
+  const tone = event.flow === "in" ? "text-up-deep" : event.flow === "out" ? "text-ink" : "text-up-deep";
   const sign = event.flow === "in" ? "+" : event.flow === "out" ? "−" : "";
   return (
     <span className={`text-[14px] font-semibold tabular-nums ${tone}`}>
@@ -182,8 +175,7 @@ const Empty = () => (
     </span>
     <p className="mt-4 text-[16px] font-semibold">Nothing has happened yet</p>
     <p className="mt-1.5 max-w-[42ch] text-[14px] leading-[1.5] text-muted text-pretty">
-      Every buy, sell, dividend and transfer will show here, each with the transaction behind it
-      one tap away.
+      Every buy, sell, dividend and transfer will show here, each with the transaction behind it one tap away.
     </p>
     <Link
       to="/money"
@@ -202,10 +194,7 @@ const TOTAL = ACTIVITY.length;
 export const Activity = () => {
   const { group, year, month, query, page, write, reset } = useActivityParams();
 
-  const filtered = useMemo(
-    () => filterEvents(group, year, month, query),
-    [group, year, month, query],
-  );
+  const filtered = useMemo(() => filterEvents(group, year, month, query), [group, year, month, query]);
 
   const pages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const current = Math.min(page, pages);
@@ -240,9 +229,27 @@ export const Activity = () => {
     >
       <div className="mt-6 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap gap-2">
-          <Select label="Type" value={group} options={TYPE_OPTIONS} onChange={(v) => write({ group: v as Group })} widthClass="w-[178px]" />
-          <Select label="Year" value={year} options={YEAR_OPTIONS} onChange={(v) => write({ year: v })} widthClass="w-[150px]" />
-          <Select label="Month" value={month} options={MONTH_OPTIONS} onChange={(v) => write({ month: v })} widthClass="w-[168px]" />
+          <Select
+            label="Type"
+            value={group}
+            options={TYPE_OPTIONS}
+            onChange={(v) => write({ group: v as Group })}
+            widthClass="w-[178px]"
+          />
+          <Select
+            label="Year"
+            value={year}
+            options={YEAR_OPTIONS}
+            onChange={(v) => write({ year: v })}
+            widthClass="w-[150px]"
+          />
+          <Select
+            label="Month"
+            value={month}
+            options={MONTH_OPTIONS}
+            onChange={(v) => write({ month: v })}
+            widthClass="w-[168px]"
+          />
         </div>
 
         <label className="flex items-center gap-2.5 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 focus-within:border-brand xl:w-[280px]">
@@ -290,10 +297,7 @@ export const Activity = () => {
       </section>
 
       {filtered.length > 0 && (
-        <nav
-          aria-label="Pagination"
-          className="mt-4 flex flex-wrap items-center justify-between gap-3"
-        >
+        <nav aria-label="Pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[13px] text-muted tabular-nums">
             Showing {from}–{to} of {filtered.length}
           </p>
@@ -339,8 +343,7 @@ export const Activity = () => {
       )}
 
       <p className="mt-4 text-[13px] text-muted">
-        Every row links to the transaction on Solana. Nothing here is a number you have to take on
-        trust.
+        Every row links to the transaction on Solana. Nothing here is a number you have to take on trust.
       </p>
     </AppShell>
   );

@@ -14,7 +14,14 @@ const SEMIS = [
 describe("allocate", () => {
   it("splits by weight", () => {
     const legs = allocate(D(500), SEMIS);
-    expect(legs.map((l) => l.usdAmount.toFixed(2))).toEqual(["150.00", "110.00", "90.00", "70.00", "50.00", "30.00"]);
+    expect(legs.map((l) => l.usdAmount.toFixed(2))).toEqual([
+      "150.00",
+      "110.00",
+      "90.00",
+      "70.00",
+      "50.00",
+      "30.00",
+    ]);
   });
 
   it("always sums to exactly the input, even when it does not divide", () => {

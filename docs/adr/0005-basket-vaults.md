@@ -3,11 +3,13 @@
 **Status:** accepted · 19 September 2026 · supersedes the build-or-integrate version
 
 ## Context
+
 A basket can be an allocation rule the app remembers, or an actual token backed by the
 constituents. The second is the thing no off-chain broker can copy, and writing a vault program
 that holds user funds in three weeks is the riskiest thing we could do.
 
 ## Decision
+
 **Baskets are real tokens, and we use Symmetry Protocol rather than writing our own vault.**
 
 Symmetry is permissionless asset-management infrastructure on Solana. Anyone can create a vault,
@@ -21,6 +23,7 @@ The SDK is `@symmetry-hq/baskets-sdk`, the docs are at `docs.symmetry.fi`, and t
 interface at `app.symmetry.fi` is open source.
 
 ## Why this is the right call, not just the fast one
+
 1. **The dangerous code disappears.** A three-week-old program holding user funds was the single
    largest risk in the plan. It no longer exists.
 2. **Composability is a judging criterion.** Building on a live protocol scores where a bespoke
@@ -31,6 +34,7 @@ interface at `app.symmetry.fi` is open source.
    basket becomes a single swap rather than six swaps and a deposit. See the spike below.
 
 ## The day-one spike, 20 September
+
 Three questions, one day, written into this record the same day.
 
 1. **Does Symmetry's supported token list include the xStocks mints we need?** Call
@@ -41,6 +45,7 @@ Three questions, one day, written into this record the same day.
 3. **Can we configure Chainlink as the oracle per constituent**, per [ADR 0006](0006-pricing.md)?
 
 ## Exit path
+
 "At least for now" is load-bearing. Symmetry is a dependency that holds user assets, so:
 
 - Redemption must work without our app. Verify a user can withdraw directly through
@@ -54,6 +59,7 @@ Writing our own vault stays available as a later decision, and that interface is
 week of work rather than a rewrite.
 
 ## Consequences
+
 **Good.** Baskets are genuinely sendable and genuinely one position. No program audit burden. No
 upgrade authority to revoke. The product claim in [00 Overview](../00-overview.md) is true in the
 present tense.

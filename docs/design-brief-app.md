@@ -23,11 +23,11 @@ are tabular so columns line up.
 **Colour.** One brand teal `#0F7480` (deep `#0B5C66`, tint `#E8F4F5`). Green and red are reserved
 strictly for performance, amber strictly for facts like a shut market.
 
-| Role | Mark | Text on its own tint | Tint |
-| --- | --- | --- | --- |
-| Up | `#1A7F4B` | `#177544` | `#E7F3EC` |
-| Down | `#C0442F` | `#B33D29` | `#FAEBE8` |
-| Market closed | — | `#8A5E10` | `#FBF3E0` |
+| Role          | Mark      | Text on its own tint | Tint      |
+| ------------- | --------- | -------------------- | --------- |
+| Up            | `#1A7F4B` | `#177544`            | `#E7F3EC` |
+| Down          | `#C0442F` | `#B33D29`            | `#FAEBE8` |
+| Market closed | —         | `#8A5E10`            | `#FBF3E0` |
 
 Every tinted badge needs the deeper text value to clear 4.5:1. This caught us three times.
 
@@ -47,6 +47,7 @@ Charts are a single line with a soft fill. Every list needs empty, loading and e
 ## 2. Screens to design
 
 ### 2.1 Invest — browse and search
+
 **Purpose:** find something to buy. **Priority: highest.** This is where the product's argument
 lives.
 
@@ -64,6 +65,7 @@ carries the lettered mark, company name, ticker, price and today's move.
 ---
 
 ### 2.2 Stock detail
+
 **Purpose:** decide. The signature screen.
 
 Top to bottom: **price → today's change → line chart → timeframe pills (1D / 1W / 1M / 1Y / All)
@@ -79,11 +81,11 @@ WE CHECKED BOTH ISSUERS                         for $1,000
   Ondo   · NVDAon     $1,523.66 per share     85.27% impact      AVOIDED
 ```
 
-| State | When | Treatment |
-| --- | --- | --- |
-| **Best** | cheapest per share, deep enough at this size | green, chosen |
-| **Tradable but dearer** | a real option, just worse | neutral, with how much dearer per share |
-| **Refused** | no usable route at this size | red, with the reason |
+| State                   | When                                         | Treatment                               |
+| ----------------------- | -------------------------------------------- | --------------------------------------- |
+| **Best**                | cheapest per share, deep enough at this size | green, chosen                           |
+| **Tradable but dearer** | a real option, just worse                    | neutral, with how much dearer per share |
+| **Refused**             | no usable route at this size                 | red, with the reason                    |
 
 It regenerates whenever the amount changes, because the answer depends on size. Show that it is
 live.
@@ -98,6 +100,7 @@ both issuers are fine).
 ---
 
 ### 2.3 Buy sheet
+
 **Purpose:** commit. One input, three possible endings.
 
 Amount field with quick chips at **$25 / $100 / $500**. Then: estimated shares, price per share,
@@ -106,17 +109,18 @@ button.
 
 **All three endings must be designed. The happy one is the least interesting.**
 
-| Ending | When | Content |
-| --- | --- | --- |
-| **Filled** | best wrapper within tolerance | share count, issuer used, link to the transaction |
-| **Queued** | premium above tolerance, usually while the market is shut | why we waited, the trigger price, when the market reopens, and that it fills on chain without the app open. Offers "buy anyway" |
-| **Refused** | no wrapper has a usable route at this size | which issuers were tried, what was wrong with each, suggestion to try a smaller amount |
+| Ending      | When                                                      | Content                                                                                                                         |
+| ----------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Filled**  | best wrapper within tolerance                             | share count, issuer used, link to the transaction                                                                               |
+| **Queued**  | premium above tolerance, usually while the market is shut | why we waited, the trigger price, when the market reopens, and that it fills on chain without the app open. Offers "buy anyway" |
+| **Refused** | no wrapper has a usable route at this size                | which issuers were tried, what was wrong with each, suggestion to try a smaller amount                                          |
 
 Sell is the same shape in reverse.
 
 ---
 
 ### 2.4 Exposure sheet
+
 **Purpose:** the screen no traditional broker can build. Opens from a holding that spans issuers.
 
 ```
@@ -134,10 +138,11 @@ are different things.
 ---
 
 ### 2.5 Baskets — list and detail
+
 **List:** each basket shows name, what is in it, past twelve months, fee and minimum.
 
 **Detail:** name, performance, fee, minimum, then constituents with their weights, then one
-amount input. Under the button: *"Buys all six. Held afterwards as one position."*
+amount input. Under the button: _"Buys all six. Held afterwards as one position."_
 
 The thing to make visible: a basket here is **one real token**, not a rule in a database. It can
 be sent to somebody and later pledged as a single piece of collateral. Say so.
@@ -151,6 +156,7 @@ AMD 18, TSMC 14, ASML 10, Micron 6.
 ---
 
 ### 2.6 Recurring — list and create
+
 **List:** each plan shows the amount, the cadence, the next date, and the split.
 
 ```
@@ -169,6 +175,7 @@ enough cash for the next run; paused.
 ---
 
 ### 2.7 Money
+
 Four things:
 
 - **Balance** — stablecoins available to invest, the rate they are earning, interest earned this
@@ -183,6 +190,7 @@ No bank transfers, no card top-ups, no cash withdrawals. That is a decision, not
 ---
 
 ### 2.8 Activity
+
 One reverse-chronological list grouped by day: buys, sells, basket investments, recurring runs,
 dividends recognised, sends, receives. Each row has an icon, a title, a subtitle and an amount.
 
@@ -194,6 +202,7 @@ to the explorer.
 ---
 
 ### 2.9 Settings
+
 Wallet — including **export your wallet**, which matters because leaving is trivial and we say
 so. Notifications. Currency display. Data export as a spreadsheet. Delegation controls:
 recurring investing asks the user to delegate, scoped and revocable in one tap, and this is where
@@ -205,16 +214,16 @@ they revoke it.
 
 Empty, loading, error and offline for every list. Plus these, specific to this product:
 
-| State | Where |
-| --- | --- |
-| Market closed | Invest, stock detail, buy sheet |
-| Instrument halted for a corporate action | Stock detail, buy sheet |
-| Only one issuer routable | Stock detail comparison |
-| No issuer routable at this size | Buy sheet |
-| Reference price stale | Buy sheet — blocks the order |
-| Queued order waiting | Portfolio, Activity, stock detail |
-| Dividend recognised as shares gained | Portfolio, Activity |
-| Estimated cost basis on a transferred-in lot | Holding row, exposure sheet |
+| State                                        | Where                             |
+| -------------------------------------------- | --------------------------------- |
+| Market closed                                | Invest, stock detail, buy sheet   |
+| Instrument halted for a corporate action     | Stock detail, buy sheet           |
+| Only one issuer routable                     | Stock detail comparison           |
+| No issuer routable at this size              | Buy sheet                         |
+| Reference price stale                        | Buy sheet — blocks the order      |
+| Queued order waiting                         | Portfolio, Activity, stock detail |
+| Dividend recognised as shares gained         | Portfolio, Activity               |
+| Estimated cost basis on a transferred-in lot | Holding row, exposure sheet       |
 
 ---
 
@@ -242,14 +251,14 @@ If only some get designed, this order:
 
 Real measured numbers, Jupiter quotes at $1,000 on 19 September 2026, for filling mockups:
 
-| Stock | Backed | impact | Ondo | impact |
-| --- | --- | --- | --- | --- |
-| Nvidia | NVDAx $222.33 | 0.02% | NVDAon $1,523.66 | 85.27% |
-| S&P 500 | SPYx $664.21 | 0.00% | SPYon $664.88 | 0.10% |
-| Nasdaq 100 | QQQx $598.42 | 0.11% | QQQon $1,050.12 | 75.64% |
-| Tesla | TSLAx $426.07 | 0.02% | TSLAon $2,178.43 | 97.41% |
-| Apple | AAPLx $245.50 | 0.27% | AAPLon $281.14 | 13.18% |
-| MicroStrategy | MSTRx $162.47 | 0.19% | MSTRon — | no route |
+| Stock         | Backed        | impact | Ondo             | impact   |
+| ------------- | ------------- | ------ | ---------------- | -------- |
+| Nvidia        | NVDAx $222.33 | 0.02%  | NVDAon $1,523.66 | 85.27%   |
+| S&P 500       | SPYx $664.21  | 0.00%  | SPYon $664.88    | 0.10%    |
+| Nasdaq 100    | QQQx $598.42  | 0.11%  | QQQon $1,050.12  | 75.64%   |
+| Tesla         | TSLAx $426.07 | 0.02%  | TSLAon $2,178.43 | 97.41%   |
+| Apple         | AAPLx $245.50 | 0.27%  | AAPLon $281.14   | 13.18%   |
+| MicroStrategy | MSTRx $162.47 | 0.19%  | MSTRon —         | no route |
 
 Portfolio: **$12,480.62**, up **$1,204.18 (+10.68%)**. Stocks $5,795.49 · Baskets $2,150.40 ·
 Cash $4,534.73 earning 4.1%. Market status: **closed, weekend**, reopens **Monday 21 September,

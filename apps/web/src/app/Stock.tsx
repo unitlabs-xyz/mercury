@@ -23,9 +23,9 @@ const Verdict = ({ decision }: { decision: Decision }) => {
       <div className="flex gap-2.5 rounded-2xl border border-warn-line bg-warn-tint px-4 py-3.5">
         <Clock className="mt-px size-4 shrink-0 text-warn" />
         <p className="text-[13px] leading-[1.55] text-warn">
-          <span className="font-semibold">Trading {premium.toFixed(2)}% above the reference.</span>{" "}
-          More than we think you should pay. You can still buy, or let us hold the order and fill it
-          when the price comes back.
+          <span className="font-semibold">Trading {premium.toFixed(2)}% above the reference.</span> More than
+          we think you should pay. You can still buy, or let us hold the order and fill it when the price
+          comes back.
         </p>
       </div>
     );
@@ -152,8 +152,8 @@ export const Stock = () => {
             {session && !session.isOpen && (
               <p className="mt-4 flex items-start gap-2 rounded-xl border border-hair bg-shell px-3.5 py-3 text-[13px] leading-[1.5] text-muted">
                 <Clock className="mt-px size-4 shrink-0 text-faint" />
-                The exchange is shut. You can still buy — the token trades all week — but we check
-                the price against the reference before we do.
+                The exchange is shut. You can still buy — the token trades all week — but we check the price
+                against the reference before we do.
                 {opensAt && ` Opens ${opensAt}.`}
               </p>
             )}
@@ -188,8 +188,7 @@ export const Stock = () => {
           <div className="rounded-2xl border border-cardline bg-white px-5 py-5">
             <p className="text-[13px] text-muted">Buy {instrument.name}</p>
             <p className="mt-1 text-[14px] leading-[1.5] text-ink-soft">
-              We quote every issuer for the amount you enter and take the cheaper one per real
-              share.
+              We quote every issuer for the amount you enter and take the cheaper one per real share.
             </p>
             <button
               type="button"
@@ -210,12 +209,7 @@ export const Stock = () => {
         </aside>
       </div>
 
-      <BuySheet
-        instrument={instrument}
-        prices={prices.data}
-        open={buying}
-        onClose={() => setBuying(false)}
-      />
+      <BuySheet instrument={instrument} prices={prices.data} open={buying} onClose={() => setBuying(false)} />
     </AppShell>
   );
 };

@@ -2,21 +2,21 @@
 
 ## Settled
 
-| Question | Answer |
-| --- | --- |
-| Custody | **Privy embedded wallets only.** Recurring uses delegated actions. [ADR 0003](adr/0003-custody.md) |
-| Baskets | **Real tokens, on Symmetry Protocol.** [ADR 0005](adr/0005-basket-vaults.md) |
-| Funding an empty wallet | **Every path Privy already offers.** We build none. [ADR 0007](adr/0007-wallet-funding.md) |
-| Positioning | **Investing, not trading.** No perps, no margin, no options, no order books. [ADR 0009](adr/0009-investing-not-trading.md) |
-| Jupiter integration | **Ultra everywhere.** No Router path. [ADR 0008](adr/0008-jupiter-ultra.md) |
-| Reference price | **Chainlink**, with the dividend-window correction. [ADR 0006](adr/0006-pricing.md) |
-| Judged surface | **Web is the submission.** iOS is in scope and is the first cut |
-| Team | **Four engineers.** Allocation in [08 Roadmap](08-roadmap.md) |
-| Infrastructure accounts | **Provided.** Jupiter key, RPC, Privy app, Pyth token, hosting |
-| Brand and design | **Designed before the screens are built.** Tokens in [07 Design](07-design.md) take the real values once they exist |
-| Crypto-native, no ramps we operate | [ADR 0001](adr/0001-crypto-native.md) |
-| Solana, not Robinhood Chain | [ADR 0002](adr/0002-solana.md) |
-| Monorepo and stack | [ADR 0004](adr/0004-stack.md) |
+| Question                           | Answer                                                                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Custody                            | **Privy embedded wallets only.** Recurring uses delegated actions. [ADR 0003](adr/0003-custody.md)                         |
+| Baskets                            | **Real tokens, on Symmetry Protocol.** [ADR 0005](adr/0005-basket-vaults.md)                                               |
+| Funding an empty wallet            | **Every path Privy already offers.** We build none. [ADR 0007](adr/0007-wallet-funding.md)                                 |
+| Positioning                        | **Investing, not trading.** No perps, no margin, no options, no order books. [ADR 0009](adr/0009-investing-not-trading.md) |
+| Jupiter integration                | **Ultra everywhere.** No Router path. [ADR 0008](adr/0008-jupiter-ultra.md)                                                |
+| Reference price                    | **Chainlink**, with the dividend-window correction. [ADR 0006](adr/0006-pricing.md)                                        |
+| Judged surface                     | **Web is the submission.** iOS is in scope and is the first cut                                                            |
+| Team                               | **Four engineers.** Allocation in [08 Roadmap](08-roadmap.md)                                                              |
+| Infrastructure accounts            | **Provided.** Jupiter key, RPC, Privy app, Pyth token, hosting                                                             |
+| Brand and design                   | **Designed before the screens are built.** Tokens in [07 Design](07-design.md) take the real values once they exist        |
+| Crypto-native, no ramps we operate | [ADR 0001](adr/0001-crypto-native.md)                                                                                      |
+| Solana, not Robinhood Chain        | [ADR 0002](adr/0002-solana.md)                                                                                             |
+| Monorepo and stack                 | [ADR 0004](adr/0004-stack.md)                                                                                              |
 
 ---
 
@@ -45,10 +45,10 @@ across every candidate constituent at $1,000 and $10,000 and applies one rule:
 
 > A constituent ships only if price impact is under 1% at $1,000 and under 2% at $10,000.
 
-| Candidate basket | Constituents to test | Verified so far |
-| --- | --- | --- |
-| Big Tech | AAPL, MSFT, GOOGL, AMZN, META, NVDA | AAPL 0.27%, NVDA 0.02% |
-| AI and Semiconductors | NVDA, AVGO, AMD, TSM, ASML, MU | NVDA 0.02% |
+| Candidate basket      | Constituents to test                | Verified so far        |
+| --------------------- | ----------------------------------- | ---------------------- |
+| Big Tech              | AAPL, MSFT, GOOGL, AMZN, META, NVDA | AAPL 0.27%, NVDA 0.02% |
+| AI and Semiconductors | NVDA, AVGO, AMD, TSM, ASML, MU      | NVDA 0.02%             |
 
 If a basket cannot assemble at least four qualifying constituents, it is dropped and we ship two
 baskets rather than three. Nobody should negotiate with the measurement.

@@ -26,17 +26,14 @@ const WAYS: { icon: ReactNode; title: string; body: string }[] = [
 ];
 
 export const Features = () => (
-  <Section
-    id="baskets"
-    inner="grid items-center gap-12 py-[76px] lg:grid-cols-[0.8fr_1.2fr] lg:gap-16"
-  >
+  <Section id="baskets" inner="grid items-center gap-12 py-[76px] lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
     <div>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         Four ways to put money in.
       </h2>
       <p className="mt-[18px] max-w-[42ch] text-[16px] leading-[1.6] text-muted text-pretty">
-        Buy a single company, buy a whole basket in one action, set an amount to go in every month,
-        or leave it as cash and earn while you decide. Any combination, from the same balance.
+        Buy a single company, buy a whole basket in one action, set an amount to go in every month, or leave
+        it as cash and earn while you decide. Any combination, from the same balance.
       </p>
     </div>
 

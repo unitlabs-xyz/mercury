@@ -219,6 +219,7 @@ queues them, and tells people they can be sold out of a position while they slee
 has to feel like it is reading from a record rather than selling something.
 
 **Key Characteristics:**
+
 - Warm paper ground (Statement Paper `#efede8`), never white and never dark
 - Hairline rules carry structure; borders replace shadows
 - Harbour Teal on under a tenth of any screen, only where something is actionable or live
@@ -231,6 +232,7 @@ has to feel like it is reading from a record rather than selling something.
 A warm, low-chroma paper palette with exactly one accent and a strictly rationed performance pair.
 
 ### Primary
+
 - **Harbour Teal** (`#0f7480`): The only accent. Primary buttons, live indicators, focus rings,
   the selected state of a filter, and links inside prose. Its scarcity is what makes it readable
   as "this does something".
@@ -241,18 +243,22 @@ A warm, low-chroma paper palette with exactly one accent and a strictly rationed
 - **Harbour Teal Soft** (`#6ba8b0`): Second step in the portfolio split bar, and hover borders.
 
 ### Secondary
+
 The performance pair. These are never decorative and never appear on anything that did not move.
+
 - **Gain** (`#1a7f4b`), **Gain Deep** (`#177544`) on **Gain Tint** (`#e7f3ec`) with **Gain Line**
   (`#bcdcc9`): A rise, a filled order, a ready-to-buy verdict. Deep is the on-tint variant.
 - **Loss** (`#c0442f`), **Loss Deep** (`#b33d29`) on **Loss Tint** (`#faebe8`) with **Loss Line**
   (`#e8bdb4`): A fall, a refusal, a price we will not pay.
 
 ### Tertiary
+
 - **Caution** (`#8a5e10`) on **Caution Tint** (`#fbf3e0`) with **Caution Line** (`#e6d2a4`): The
   third verdict — queued, waiting, switched off, liquidation risk. It exists because a queued
   order is neither a success nor a failure, and colouring it green or red would lie about which.
 
 ### Neutral
+
 - **Statement Paper** (`#efede8`): The application ground. Every app screen sits on this.
 - **Fresh Sheet** (`#f7f6f2`): The landing ground and the recessed fill inside app cards, half a
   step lighter than the page.
@@ -290,6 +296,7 @@ slightly narrow sans and a mono used so sparingly it reads as a change of regist
 second font.
 
 ### Hierarchy
+
 - **Display** (600, 40px → 52px at `sm` → 62px at `lg`, 1.06, `-0.035em`): The landing hero and
   the opener of a marketing page. One per screen.
 - **Headline** (600, 30px, 1.1, `-0.03em`): Section openers. It steps to 40px on the landing's
@@ -376,6 +383,7 @@ seam. A card is legible as a card because of its `#e4e0d7` edge, not because of 
 Shadows are therefore a response to state, not a property of a component at rest.
 
 ### Shadow Vocabulary
+
 - **Seated** (`0 1px 2px rgba(27,26,23,0.05–0.07)`): The sheet is resting on the one below it.
   Sidebar's active item, small pills.
 - **Lifted** (`0 2px 14px rgba(27,26,23,0.07)`): Hover on a card that can be picked up.
@@ -422,6 +430,7 @@ The feel to aim for is **tactile and confident**: presses respond physically, sp
 weight, and every state acknowledges itself.
 
 ### Buttons
+
 - **Shape:** Softly squared (9px for bar and inline actions, 10px for full-width sheet actions).
 - **Primary:** Harbour Teal ground, white label, 600 weight, 10px/18px padding.
 - **Hover / Focus:** Ground shifts to Harbour Teal Deep over 200ms; press scales to 0.97 on a
@@ -430,12 +439,14 @@ weight, and every state acknowledges itself.
 - **Disabled:** Chip ground, Faint label, `cursor-not-allowed`. Never a faded primary.
 
 ### Chips
+
 - **Style:** Fully rounded, 36px tall (44px under coarse pointers), white ground with a Cardline
   border.
 - **State:** Selected takes Harbour Teal Tint with a Harbour Teal border and Teal Deep label.
   Unselected borders warm toward Teal Soft on hover.
 
 ### Cards / Containers
+
 - **Corner Style:** 16px.
 - **Background:** White on Statement Paper; Fresh Sheet for recessed panels inside a card.
 - **Shadow Strategy:** None at rest. See Elevation — the Cardline border does the work.
@@ -443,6 +454,7 @@ weight, and every state acknowledges itself.
 - **Internal Padding:** 20px vertical, 20–24px horizontal; internal rows divided by Hair.
 
 ### Inputs / Fields
+
 - **Style:** White ground, Cardline border, 14px radius, generous padding. The label wraps the
   input so the whole field is the target, not just the text box.
 - **Focus:** Border shifts to Harbour Teal via `focus-within`. The caret is Harbour Teal globally.
@@ -450,6 +462,7 @@ weight, and every state acknowledges itself.
   subject of the screen.
 
 ### Navigation
+
 - **Sidebar:** 236px, items 41px tall with an icon and label. Active takes a white ground with the
   Seated shadow and 600 weight; inactive is Muted and warms to a translucent white on hover.
 - **Top bar:** Sticky, `rgba` Fresh Sheet at 85% with a 12px backdrop blur, items divided by
@@ -457,6 +470,7 @@ weight, and every state acknowledges itself.
 - **Mobile:** The sidebar is hidden below 1024px; the page header carries the context instead.
 
 ### Verdict Panels (signature)
+
 The component the product is really about. A decision from the execution engine renders as one of
 three panels sharing a shape but never a colour: **Gain Tint** for a fill, **Caution Tint** for a
 queue, **Loss Tint** for a refusal. Each opens with an icon and a short verdict in 600 weight,
@@ -464,6 +478,7 @@ then one sentence of plain explanation, then a definition list of the figures be
 are visually siblings so the product never looks like it is hiding one of them.
 
 ### Issuer Comparison Row (signature)
+
 Two lines rather than a wide row. Line one carries the token symbol in mono, the issuer name, and
 a verdict badge pushed right. Line two carries the multiplier in mono on the left and the price
 per real share on the right, with impact and how much dearer it is underneath. It holds its shape
@@ -472,6 +487,7 @@ from 320px to 1440px without truncating.
 ## Do's and Don'ts
 
 ### Do:
+
 - **Do** put every app screen on Statement Paper (`#efede8`) and reserve white for cards.
 - **Do** separate surfaces with a hairline before reaching for a shadow.
 - **Do** keep Harbour Teal under a tenth of the screen, on things that are actionable or live.
@@ -483,6 +499,7 @@ from 320px to 1440px without truncating.
 - **Do** hold every screen to WCAG 2.1 AA, including 44px targets under coarse pointers.
 
 ### Don't:
+
 - **Don't** reach for the fintech startup template: purple-to-blue gradients on white, oversized
   rounded cards, 3D illustrated mascots, or a hero with a floating phone mock. This is the one
   named anti-reference.

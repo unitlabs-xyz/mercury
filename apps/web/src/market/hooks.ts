@@ -132,13 +132,15 @@ export const useDecision = (
   let decision: Decision | null = null;
   if (instrument && quotes.data && fair !== null && amount > 0) {
     const candidates: Candidate[] = quotes.data.map(({ w, q }) =>
-      q ? candidateFrom(w, q, prices?.[w.mint]) : {
-        mint: w.mint,
-        symbol: w.symbol,
-        issuer: w.issuer,
-        multiplier: D(multiplierOf(prices?.[w.mint])),
-        quote: null,
-      },
+      q
+        ? candidateFrom(w, q, prices?.[w.mint])
+        : {
+            mint: w.mint,
+            symbol: w.symbol,
+            issuer: w.issuer,
+            multiplier: D(multiplierOf(prices?.[w.mint])),
+            quote: null,
+          },
     );
     decision = decide({
       ticker: instrument.ticker,

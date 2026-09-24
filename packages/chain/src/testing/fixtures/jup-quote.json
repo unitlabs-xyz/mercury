@@ -1,0 +1,45 @@
+{
+  "inputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "inAmount": "100000000",
+  "outputMint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+  "outAmount": "44488653",
+  "otherAmountThreshold": "44266210",
+  "swapMode": "ExactIn",
+  "slippageBps": 50,
+  "platformFee": null,
+  "priceImpactPct": "0.0004502316249174667933562843",
+  "routePlan": [
+    {
+      "swapInfo": {
+        "ammKey": "6R4r93V5fcMzc13CL2enEepDSYcr4Qx3ptZBDwudTXCo",
+        "label": "Whirlpool",
+        "inputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "outputMint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+        "inAmount": "100000000",
+        "outAmount": "44488653",
+        "updateContextSlot": "449951671"
+      },
+      "percent": 100,
+      "bps": null
+    }
+  ],
+  "contextSlot": 449951693,
+  "timeTaken": 0.009026676,
+  "swapUsdValue": "99.987243162911200",
+  "mostReliableAmmsQuoteReport": {
+    "info": {
+      "BZtgQEyS6eXUXicYPHecYQ7PybqodXQMvkjUbP4R8mUU": "99994428",
+      "49iMatQtoyabsYAQc8GafVq6aeBFVDxSRH44oiatyyw6": "44419680"
+    }
+  },
+  "longtailMarketQuoteReport": null,
+  "useIncurredSlippageForQuoting": null,
+  "useRewards": null,
+  "otherRoutePlans": null,
+  "loadedLongtailToken": false,
+  "instructionVersion": null,
+  "transactionVersion": 0,
+  "additionalIntermediateTokens": [
+    "Ab3Jtnw4xC2ZfCh3Fwo85zFScyRtVpqC9soTKRaWHkLX"
+  ]
+}

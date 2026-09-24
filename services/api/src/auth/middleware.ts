@@ -32,18 +32,12 @@ type Resolve = (
  *
  * `resolve` is injected so the middleware can be tested without a database.
  */
-export const requireAuth = (
-  deps: AuthDeps,
-  resolve: Resolve = resolveIdentity,
-): MiddlewareHandler => {
+export const requireAuth = (deps: AuthDeps, resolve: Resolve = resolveIdentity): MiddlewareHandler => {
   return async (c, next) => {
     const header = c.req.header("Authorization");
     const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
     if (!token) {
-      return c.json(
-        { error: { code: "unauthenticated", message: "Expected a Bearer access token." } },
-        401,
-      );
+      return c.json({ error: { code: "unauthenticated", message: "Expected a Bearer access token." } }, 401);
     }
 
     try {
@@ -52,10 +46,7 @@ export const requireAuth = (
       c.set("identity", await resolve(deps.db, deps.directory, verified, identityToken));
     } catch (cause) {
       if (cause instanceof InvalidToken) {
-        return c.json(
-          { error: { code: "unauthenticated", message: "That session is not valid." } },
-          401,
-        );
+        return c.json({ error: { code: "unauthenticated", message: "That session is not valid." } }, 401);
       }
       throw cause;
     }

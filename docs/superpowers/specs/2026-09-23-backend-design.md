@@ -2,7 +2,7 @@
 
 **Status:** accepted · 23 September 2026 · 19 days to the 12 October deadline
 
-The server side the web app currently does without. This spec is the *build* design. It does not
+The server side the web app currently does without. This spec is the _build_ design. It does not
 restate the schema or the route surface — [05 Data model](../../05-data-model.md) and
 [06 API](../../06-api.md) already specify those and remain the contract. What follows is what to
 construct, in what order, and the decisions those two documents leave open.
@@ -35,8 +35,8 @@ Verified by reading the repo on 23 September 2026, not from the docs.
 
 **Absent**
 
-- `services/api/src/deps.ts` — `buildDeps()` throws outright: *"registry, triggers, sessions,
-  reference and multipliers are not implemented yet."* **The API cannot start today.**
+- `services/api/src/deps.ts` — `buildDeps()` throws outright: _"registry, triggers, sessions,
+  reference and multipliers are not implemented yet."_ **The API cannot start today.**
 - No Postgres, no Drizzle, no migrations.
 - No Privy anywhere. The auth modal is a staged mock with `setTimeout` waits.
 - `services/worker` prints its job plan and exits.
@@ -48,13 +48,13 @@ server is missing. This is not a rewrite; it is a lift.
 
 ## 2 · Decisions taken
 
-| # | Decision | Consequence |
-|---|---|---|
-| 1 | Design all five subsystems in one spec, build strictly in dependency order, stop wherever 12 October finds us | This document covers work that will not ship. That is intentional — it stops subsystem 2 being designed into a corner that subsystem 4 cannot get out of. |
-| 2 | Market data: **server preferred, browser falls back** | The most resilient and the most code. Made affordable by §3: both paths run the *same* implementation. |
-| 3 | **Deployed.** Judges visit a URL | Hosting, secrets and uptime are in scope. |
-| 4 | **No dummy data.** Real providers end to end | `apps/web/src/app/data.ts` and `apps/web/src/market/placeholder.ts` are both deleted by the end of subsystem 2. |
-| 5 | Price history is **recorded by us**, not bought | See §6. Costs a new table and a job; buys honesty. |
+| #   | Decision                                                                                                      | Consequence                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Design all five subsystems in one spec, build strictly in dependency order, stop wherever 12 October finds us | This document covers work that will not ship. That is intentional — it stops subsystem 2 being designed into a corner that subsystem 4 cannot get out of. |
+| 2   | Market data: **server preferred, browser falls back**                                                         | The most resilient and the most code. Made affordable by §3: both paths run the _same_ implementation.                                                    |
+| 3   | **Deployed.** Judges visit a URL                                                                              | Hosting, secrets and uptime are in scope.                                                                                                                 |
+| 4   | **No dummy data.** Real providers end to end                                                                  | `apps/web/src/app/data.ts` and `apps/web/src/market/placeholder.ts` are both deleted by the end of subsystem 2.                                           |
+| 5   | Price history is **recorded by us**, not bought                                                               | See §6. Costs a new table and a job; buys honesty.                                                                                                        |
 
 Approach chosen: **lift and adapt, read upstream per request.**
 
@@ -77,19 +77,19 @@ upgrade path in ADR 0010.
 `packages/market` stops being ports with no implementations. Each lifted module is made
 runtime-agnostic: `fetch` is injected, no Node built-ins, no `window`.
 
-| Browser file today | Becomes | Implements |
-|---|---|---|
-| `market/pyth.ts` | `@mercury/market/pyth` | `SessionSource` |
-| `market/jupiter.ts` → `stockData.price` | `@mercury/market/jupiter` | `ReferenceSource` |
-| `market/jupiter.ts` → `scaledUiConfig` | same module | `MultiplierSource` |
-| `market/universe.ts` + `searchTokens` | `@mercury/chain/jupiter/registry` | `TokenRegistry` |
-| `market/jupiter.ts` → `/swap/v1/quote` | `@mercury/chain/jupiter/lite` | `QuoteSource` (keyless) |
-| `market/kamino.ts` | `@mercury/market/kamino` | new `CreditSource` port |
+| Browser file today                      | Becomes                           | Implements              |
+| --------------------------------------- | --------------------------------- | ----------------------- |
+| `market/pyth.ts`                        | `@mercury/market/pyth`            | `SessionSource`         |
+| `market/jupiter.ts` → `stockData.price` | `@mercury/market/jupiter`         | `ReferenceSource`       |
+| `market/jupiter.ts` → `scaledUiConfig`  | same module                       | `MultiplierSource`      |
+| `market/universe.ts` + `searchTokens`   | `@mercury/chain/jupiter/registry` | `TokenRegistry`         |
+| `market/jupiter.ts` → `/swap/v1/quote`  | `@mercury/chain/jupiter/lite`     | `QuoteSource` (keyless) |
+| `market/kamino.ts`                      | `@mercury/market/kamino`          | new `CreditSource` port |
 
 Stays in the web app: `hooks.ts` (React Query is app-level), `meta.ts` display names.
 
 **Two adapters, one port.** `QuoteSource` gets two implementations — the keyless
-`/swap/v1/quote` for *pricing* a decision, and the existing `JupiterUltra` for *executing* one.
+`/swap/v1/quote` for _pricing_ a decision, and the existing `JupiterUltra` for _executing_ one.
 `priceOrder` is unchanged; it uses whichever it is given.
 
 **The dependency rule changes.** [03 Architecture](../../03-architecture.md) enforces
@@ -144,7 +144,7 @@ almost directly onto the modal's existing `Pending` union.
 **`SEND_MS`, `CHECK_MS` and `CREATE_MS` stop being simulated latency and become a minimum
 display duration.** This is deliberate and must not be read later as a bug. A response that
 arrives before the progress hairline finishes is held until it does, because the alternative is a
-sub-100ms flicker through three designed states. A response that arrives *after* it finishes
+sub-100ms flicker through three designed states. A response that arrives _after_ it finishes
 hands the same 2px rule over to an indeterminate sweep, because a full bar that has not advanced
 reads as broken within about a second. Both cases are required; the first alone leaves the slow
 path looking hung.
@@ -213,7 +213,7 @@ doing, because question 2 decides whether the implementation is one code path or
 
 ## 5 · Cross-cutting
 
-**Fallback trigger.** The browser reads upstream directly only on *transport* failure — a 2s
+**Fallback trigger.** The browser reads upstream directly only on _transport_ failure — a 2s
 timeout or a 5xx. Never on a 4xx. A 401 or 422 is the API answering correctly and must surface as
 an error; rerouting it would hide the bug behind a path that cannot authenticate anyway.
 
@@ -229,7 +229,7 @@ rather than a pixel.
 
 - `core` — 35 tests, untouched.
 - **Parity test, the important one.** The risk of decision 2 is the two paths disagreeing. Both
-  adapters run the *same* implementation, so a test that runs each against the same recorded
+  adapters run the _same_ implementation, so a test that runs each against the same recorded
   fixtures and asserts identical output makes drift structurally impossible rather than merely
   unlikely.
 - Cost basis, the dividend case: multiplier rises → zero-cost lot written → average cost per
@@ -246,8 +246,7 @@ Neon. Secrets in the platform, never in the repo; `.env.example` stays value-fre
 ## 6 · Price history
 
 `placeholder.ts` states its own problem: period returns and 5Y CAGR need a historical price
-series, and 30-day buyer counts need our own order table. The buyer count is solved by subsystem
-2. The series is not, because no provider we use serves one — Jupiter gives spot, Pyth gives spot
+series, and 30-day buyer counts need our own order table. The buyer count is solved by subsystem 2. The series is not, because no provider we use serves one — Jupiter gives spot, Pyth gives spot
 and a calendar, Kamino gives rates.
 
 **Decision: record it ourselves.** A `portfolio_snapshot` table, written hourly per user by the
@@ -263,7 +262,7 @@ portfolio_snapshot: id, user_id, captured_at, total_usd numeric(38,18),
 
 - By 12 October there are at most 19 days of history, and a brand-new account has none.
 - `1W` and `1M` ship. Longer ranges stay hidden until there is data behind them.
-- A new account needs a real empty state. *"Not enough history yet"* is a truthful thing for a
+- A new account needs a real empty state. _"Not enough history yet"_ is a truthful thing for a
   new account to say, and more credible than a chart with no source.
 - Period returns and 5Y CAGR stay unavailable in v1. They are removed from the UI rather than
   estimated.
@@ -284,8 +283,8 @@ Written down as cut, so nobody rediscovers them as gaps:
 
 ## 8 · Document amendments this requires
 
-1. **[03 Architecture](../../03-architecture.md)** — the API is no longer *"the only surface the
-   apps talk to"*, and `apps ──► market, chain` becomes a legal dependency edge. The lint rule
+1. **[03 Architecture](../../03-architecture.md)** — the API is no longer _"the only surface the
+   apps talk to"_, and `apps ──► market, chain` becomes a legal dependency edge. The lint rule
    changes with it.
 2. **New ADR 0011** — records that the keyless browser path became the fallback rather than the
    only path, superseding the part of ADR 0010 that implied it was the whole answer.
@@ -296,8 +295,8 @@ Written down as cut, so nobody rediscovers them as gaps:
 
 Each names how it closes. None blocks starting.
 
-| Question | Closes by |
-|---|---|
-| Are the xStocks mints in Symmetry's token list, and do basket tokens route through Jupiter? | Running the spike in `SPIKE_QUESTIONS`. Half a day. Decides whether baskets are one swap or seven. |
-| Does a Privy embedded wallet expose a signer usable with Jupiter Ultra's unsigned-transaction flow? | Reading Privy's Solana docs and signing one devnet transaction. Blocks subsystem 3, not 1 or 2. |
-| What hourly snapshot cadence costs on Neon's free tier at demo user counts | Measuring after subsystem 4 lands. Cadence is a constant, trivially lowered. |
+| Question                                                                                            | Closes by                                                                                          |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Are the xStocks mints in Symmetry's token list, and do basket tokens route through Jupiter?         | Running the spike in `SPIKE_QUESTIONS`. Half a day. Decides whether baskets are one swap or seven. |
+| Does a Privy embedded wallet expose a signer usable with Jupiter Ultra's unsigned-transaction flow? | Reading Privy's Solana docs and signing one devnet transaction. Blocks subsystem 3, not 1 or 2.    |
+| What hourly snapshot cadence costs on Neon's free tier at demo user counts                          | Measuring after subsystem 4 lands. Cadence is a constant, trivially lowered.                       |

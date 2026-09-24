@@ -1,0 +1,94 @@
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "context": {
+      "apiVersion": "4.3.0",
+      "slot": 449951669
+    },
+    "value": {
+      "data": {
+        "parsed": {
+          "info": {
+            "decimals": 8,
+            "extensions": [
+              {
+                "extension": "metadataPointer",
+                "state": {
+                  "authority": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+                  "metadataAddress": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh"
+                }
+              },
+              {
+                "extension": "permanentDelegate",
+                "state": {
+                  "delegate": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq"
+                }
+              },
+              {
+                "extension": "defaultAccountState",
+                "state": {
+                  "accountState": "initialized"
+                }
+              },
+              {
+                "extension": "scaledUiAmountConfig",
+                "state": {
+                  "authority": "S7vYFFWH6BjJyEsdrPQpqpYTqLTrPRK6KW3VwsJuRaS",
+                  "multiplier": "1.0009180758490996",
+                  "newMultiplier": "1.001701196801074",
+                  "newMultiplierEffectiveTimestamp": 1789000200
+                }
+              },
+              {
+                "extension": "pausableConfig",
+                "state": {
+                  "authority": "JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs",
+                  "paused": false
+                }
+              },
+              {
+                "extension": "confidentialTransferMint",
+                "state": {
+                  "auditorElgamalPubkey": null,
+                  "authority": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+                  "autoApproveNewAccounts": false
+                }
+              },
+              {
+                "extension": "transferHook",
+                "state": {
+                  "authority": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+                  "programId": null
+                }
+              },
+              {
+                "extension": "tokenMetadata",
+                "state": {
+                  "additionalMetadata": [],
+                  "mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+                  "name": "NVIDIA xStock",
+                  "symbol": "NVDAx",
+                  "updateAuthority": "5aMNNLQJwAEeoemTEMkv5NVjqKwvvefRYCQ5Z67HFvEq",
+                  "uri": "https://xstocks-metadata.backed.fi/tokens/Solana/NVDAx/metadata.json"
+                }
+              }
+            ],
+            "freezeAuthority": "JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs",
+            "isInitialized": true,
+            "mintAuthority": "7pt9tkctJPK7PPNQJ77GKg8ZffSF6QxoMiCFYHxrtaCj",
+            "supply": "32127413608947"
+          },
+          "type": "mint"
+        },
+        "program": "spl-token-2022",
+        "space": 679
+      },
+      "executable": false,
+      "lamports": 617943468,
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "rentEpoch": 18446744073709552000,
+      "space": 679
+    }
+  },
+  "id": 1
+}

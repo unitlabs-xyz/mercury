@@ -17,7 +17,7 @@ export const CREATE_MS = 800;
  *
  * A rejection is never held: making a typo wait feels like a network fault.
  */
-export const atLeast = async <T,>(ms: number, work: Promise<T>): Promise<T> => {
+export const atLeast = async <T>(ms: number, work: Promise<T>): Promise<T> => {
   const floor = new Promise<void>((resolve) => setTimeout(resolve, ms));
   const result = await work;
   await floor;
@@ -64,10 +64,7 @@ export const useEmailLogin = () => {
       setRejected(null);
       try {
         const call = sendCode({ email }).catch(() => undefined);
-        await atLeast(
-          resend ? RESEND_MS : SEND_MS,
-          Promise.race([call, reaches("awaiting-code-input")]),
-        );
+        await atLeast(resend ? RESEND_MS : SEND_MS, Promise.race([call, reaches("awaiting-code-input")]));
         return true;
       } catch (cause) {
         setRejected(cause instanceof Error ? cause.message : "That did not work.");

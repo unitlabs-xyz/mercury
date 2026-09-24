@@ -37,9 +37,7 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
         <h2 id="send-heading" className="text-[22px] font-semibold tracking-[-0.02em]">
           Send USDC
         </h2>
-        <p className="mt-1.5 text-[14px] text-muted">
-          {CASH.available} available. Solana network only.
-        </p>
+        <p className="mt-1.5 text-[14px] text-muted">{CASH.available} available. Solana network only.</p>
 
         <label className="mt-7 block">
           <span className="text-[13px] font-medium text-muted">Amount</span>

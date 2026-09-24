@@ -16,7 +16,7 @@ portfolio that holds your stocks and your crypto together.
 It is not a trading terminal. It is closer to a brokerage account, and the person using it
 should never need to know which blockchain it runs on.
 
-**Positioning line:** *Your investment account, in your own wallet, open every hour of the week.*
+**Positioning line:** _Your investment account, in your own wallet, open every hour of the week._
 
 ### Why it can exist
 
@@ -67,9 +67,9 @@ Each holding row: ticker, company name, share count, value, day change. A basket
 basket name and how many stocks are inside. A small badge appears on a row when that position is
 spread across more than one issuer.
 
-**The one unusual thing on Home:** a dividend appears as *shares gained*, not cash. When a
+**The one unusual thing on Home:** a dividend appears as _shares gained_, not cash. When a
 token's multiplier rises the user owns more shares without spending money. Home surfaces it as
-an event: *"Dividend reinvested. You now own 2.401 shares of Nvidia, up from 2.398."*
+an event: _"Dividend reinvested. You now own 2.401 shares of Nvidia, up from 2.398."_
 
 ### 3.2 Exposure sheet — the screen no broker has
 
@@ -119,11 +119,11 @@ primary button.
 
 **Three terminal states, all of which must be designed:**
 
-| Outcome | When | What it says |
-| --- | --- | --- |
-| **Filled** | Best wrapper is within tolerance | Share count, issuer used, link to the transaction |
-| **Queued** | Price is above tolerance, usually because the market is shut | Why we waited, the trigger price, when the market reopens, and a note that it fills on chain without the app open. Offers "buy anyway" |
-| **Refused** | No wrapper has a usable route at this size | Which issuers were tried, what was wrong with each, suggestion to try a smaller amount |
+| Outcome     | When                                                         | What it says                                                                                                                           |
+| ----------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Filled**  | Best wrapper is within tolerance                             | Share count, issuer used, link to the transaction                                                                                      |
+| **Queued**  | Price is above tolerance, usually because the market is shut | Why we waited, the trigger price, when the market reopens, and a note that it fills on chain without the app open. Offers "buy anyway" |
+| **Refused** | No wrapper has a usable route at this size                   | Which issuers were tried, what was wrong with each, suggestion to try a smaller amount                                                 |
 
 ### 3.6 Baskets
 
@@ -136,7 +136,7 @@ Semiconductors                         +18.4% past 12 months
 ```
 
 Basket page: name, performance, fee, minimum, constituents with weight bars, one amount input.
-A line under the button reading *"Buys all six. Held afterwards as one position."*
+A line under the button reading _"Buys all six. Held afterwards as one position."_
 
 ### 3.7 Recurring
 
@@ -174,16 +174,16 @@ line saying prices can drift while it is closed. **Amber, not red — it is a fa
 
 Empty, loading, error and offline for every list. Plus these, which are specific to this app:
 
-| State | Where |
-| --- | --- |
-| Market closed | Invest, stock page, buy sheet |
-| Instrument halted for a corporate action | Stock page, buy sheet |
-| Only one issuer routable | Stock page comparison |
-| No issuer routable at this size | Buy sheet |
-| Reference price stale | Buy sheet — blocks the order |
-| Queued order waiting | Home, Activity, stock page |
-| Dividend recognised | Home, Activity |
-| Estimated cost basis on a transferred-in position | Holding row, exposure sheet |
+| State                                             | Where                         |
+| ------------------------------------------------- | ----------------------------- |
+| Market closed                                     | Invest, stock page, buy sheet |
+| Instrument halted for a corporate action          | Stock page, buy sheet         |
+| Only one issuer routable                          | Stock page comparison         |
+| No issuer routable at this size                   | Buy sheet                     |
+| Reference price stale                             | Buy sheet — blocks the order  |
+| Queued order waiting                              | Home, Activity, stock page    |
+| Dividend recognised                               | Home, Activity                |
+| Estimated cost basis on a transferred-in position | Holding row, exposure sheet   |
 
 ---
 
@@ -192,14 +192,14 @@ Empty, loading, error and offline for every list. Plus these, which are specific
 These are measured, not invented — Jupiter quotes on Solana, $1,000 buy, 19 September 2026.
 Use them so the screens read as real.
 
-| Stock | Backed token | price/share | impact | Ondo token | price/share | impact |
-| --- | --- | --- | --- | --- | --- | --- |
-| Nvidia | NVDAx | $222.33 | 0.02% | NVDAon | $1,523.66 | 85.27% |
-| S&P 500 | SPYx | $664.21 | 0.00% | SPYon | $664.88 | 0.10% |
-| Nasdaq 100 | QQQx | $598.42 | 0.11% | QQQon | $1,050.12 | 75.64% |
-| Tesla | TSLAx | $426.07 | 0.02% | TSLAon | $2,178.43 | 97.41% |
-| Apple | AAPLx | $245.50 | 0.27% | AAPLon | $281.14 | 13.18% |
-| MicroStrategy | MSTRx | $162.47 | 0.19% | MSTRon | — | no route |
+| Stock         | Backed token | price/share | impact | Ondo token | price/share | impact   |
+| ------------- | ------------ | ----------- | ------ | ---------- | ----------- | -------- |
+| Nvidia        | NVDAx        | $222.33     | 0.02%  | NVDAon     | $1,523.66   | 85.27%   |
+| S&P 500       | SPYx         | $664.21     | 0.00%  | SPYon      | $664.88     | 0.10%    |
+| Nasdaq 100    | QQQx         | $598.42     | 0.11%  | QQQon      | $1,050.12   | 75.64%   |
+| Tesla         | TSLAx        | $426.07     | 0.02%  | TSLAon     | $2,178.43   | 97.41%   |
+| Apple         | AAPLx        | $245.50     | 0.27%  | AAPLon     | $281.14     | 13.18%   |
+| MicroStrategy | MSTRx        | $162.47     | 0.19%  | MSTRon     | —           | no route |
 
 Sample portfolio: total **$12,480.62**, up **$1,204.18 (+10.68%)**. Holdings — Nvidia $533.28
 (2.398 shares, two issuers), S&P 500 $3,984.00, Semiconductors basket $2,150.40, Tesla $1,278.21,
@@ -226,21 +226,21 @@ All links verified working.
 
 **The two that matter most**
 
-| App | Why | Link |
-| --- | --- | --- |
-| **Phantom** | The reference for what an on-chain money app looks like. Token rows as filled cards with circular icons, true-black ground | https://phantom.com · https://apps.apple.com/us/app/phantom-trading-wallet/id1598432977 |
-| **Robinhood** | The reference for the stock page and discovery. Price, change, line chart, timeframe pills, nothing above the fold | https://robinhood.com · https://apps.apple.com/us/app/robinhood-trading-investing/id938003185 |
+| App           | Why                                                                                                                        | Link                                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Phantom**   | The reference for what an on-chain money app looks like. Token rows as filled cards with circular icons, true-black ground | https://phantom.com · https://apps.apple.com/us/app/phantom-trading-wallet/id1598432977       |
+| **Robinhood** | The reference for the stock page and discovery. Price, change, line chart, timeframe pills, nothing above the fold         | https://robinhood.com · https://apps.apple.com/us/app/robinhood-trading-investing/id938003185 |
 
 **Also worth taking from**
 
-| App | What to take | Link |
-| --- | --- | --- |
-| **M1** | Portfolio home — one value, then holdings. Also the cash screen and the borrowing screen | https://m1.com · https://apps.apple.com/us/app/m1-invest-bank-smarter/id1071915644 |
-| **smallcase** | Baskets: publisher, past return, minimum, risk badge. And the recurring-plan screen | https://www.smallcase.com · https://apps.apple.com/us/app/smallcase-save-invest/id1345309437 |
-| **Backpack** | The closest live competitor — stocks and crypto in one portfolio on Solana | https://backpack.exchange · https://apps.apple.com/us/app/backpack-trade-invest-earn/id6445964121 |
-| **Public** | Clean investing UI, good empty and education states | https://public.com · https://apps.apple.com/us/app/public-invest-trade/id1204112719 |
-| **Jupiter** | Swap/quote UI on Solana — what a route and a price impact look like | https://jup.ag |
-| **Kamino** | Borrowing against holdings — version two | https://app.kamino.finance |
+| App           | What to take                                                                             | Link                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **M1**        | Portfolio home — one value, then holdings. Also the cash screen and the borrowing screen | https://m1.com · https://apps.apple.com/us/app/m1-invest-bank-smarter/id1071915644                |
+| **smallcase** | Baskets: publisher, past return, minimum, risk badge. And the recurring-plan screen      | https://www.smallcase.com · https://apps.apple.com/us/app/smallcase-save-invest/id1345309437      |
+| **Backpack**  | The closest live competitor — stocks and crypto in one portfolio on Solana               | https://backpack.exchange · https://apps.apple.com/us/app/backpack-trade-invest-earn/id6445964121 |
+| **Public**    | Clean investing UI, good empty and education states                                      | https://public.com · https://apps.apple.com/us/app/public-invest-trade/id1204112719               |
+| **Jupiter**   | Swap/quote UI on Solana — what a route and a price impact look like                      | https://jup.ag                                                                                    |
+| **Kamino**    | Borrowing against holdings — version two                                                 | https://app.kamino.finance                                                                        |
 
 **Where the tokens come from** (useful for issuer branding and how they describe themselves)
 
@@ -249,14 +249,14 @@ All links verified working.
 
 **Design reference libraries**
 
-| Site | What it is | Link |
-| --- | --- | --- |
-| **Mobbin** | Real screenshots of real apps, flow by flow. Has Robinhood, Phantom, Public. The single most useful one here | https://mobbin.com |
-| **Page Flows** | Recorded user flows — good for onboarding and the buy flow | https://pageflows.com |
-| **Refero** | UI reference library, searchable by screen type | https://refero.design |
-| **Dribbble** | Concepts — treat as inspiration, not as a target | https://dribbble.com |
-| **Godly** | Web design gallery, useful for the landing page | https://godly.website |
-| **Land-book** | Landing page gallery | https://land-book.com |
+| Site           | What it is                                                                                                   | Link                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------ | --------------------- |
+| **Mobbin**     | Real screenshots of real apps, flow by flow. Has Robinhood, Phantom, Public. The single most useful one here | https://mobbin.com    |
+| **Page Flows** | Recorded user flows — good for onboarding and the buy flow                                                   | https://pageflows.com |
+| **Refero**     | UI reference library, searchable by screen type                                                              | https://refero.design |
+| **Dribbble**   | Concepts — treat as inspiration, not as a target                                                             | https://dribbble.com  |
+| **Godly**      | Web design gallery, useful for the landing page                                                              | https://godly.website |
+| **Land-book**  | Landing page gallery                                                                                         | https://land-book.com |
 
 **Screenshots already collected**, cropped and ready, in this repo:
 

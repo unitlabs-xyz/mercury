@@ -17,7 +17,8 @@ export interface Position {
 
 export const EMPTY_POSITION: Position = { shares: ZERO, costBasisUsd: ZERO };
 
-export const avgUnitCost = (p: Position): Decimal => (p.shares.isZero() ? ZERO : p.costBasisUsd.div(p.shares));
+export const avgUnitCost = (p: Position): Decimal =>
+  p.shares.isZero() ? ZERO : p.costBasisUsd.div(p.shares);
 
 /** Tokens are not shares. One token is `multiplier` shares. */
 export const tokensToShares = (tokens: Decimal, multiplier: Decimal): Decimal => tokens.mul(multiplier);
@@ -58,7 +59,11 @@ export const applyDividend = (p: Position, sharesGained: Decimal): Position => (
   costBasisUsd: p.costBasisUsd,
 });
 
-export const sharesGainedFromMultiplier = (tokenQty: Decimal, oldMultiplier: Decimal, newMultiplier: Decimal): Decimal => {
+export const sharesGainedFromMultiplier = (
+  tokenQty: Decimal,
+  oldMultiplier: Decimal,
+  newMultiplier: Decimal,
+): Decimal => {
   if (newMultiplier.lte(oldMultiplier)) return ZERO;
   return tokenQty.mul(newMultiplier.sub(oldMultiplier));
 };

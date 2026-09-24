@@ -29,7 +29,7 @@ export const NVDA_CANDIDATES: Candidate[] = [
     symbol: "NVDAx",
     issuer: "backed",
     multiplier: D("1.001701196801074"),
-    quote: quote(1000, 4.490180, 0.02),
+    quote: quote(1000, 4.49018, 0.02),
   },
   {
     mint: "NVDAonMintAddress11111111111111111111111111",

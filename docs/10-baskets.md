@@ -29,6 +29,7 @@ tokens; they burn vault tokens and receive the underlying assets.
 Which one we ship is decided by the day-one spike in [ADR 0005](adr/0005-basket-vaults.md).
 
 ### Path A · one swap, if basket tokens route through Jupiter
+
 A `@jup-ag/symmetry-sdk` package exists, so this may simply work.
 
 ```
@@ -42,6 +43,7 @@ A `@jup-ag/symmetry-sdk` package exists, so this may simply work.
 Dramatically better, and it makes baskets feel like buying a stock rather than assembling one.
 
 ### Path B · six swaps and a deposit, if not
+
 ```
 1  User enters $500.
 2  API runs the full execution decision on every constituent at its weight.
@@ -57,8 +59,8 @@ Solana transaction, so we stopped pretending they might. See
 [ADR 0008](adr/0008-jupiter-ultra.md).
 
 If the swaps land and the deposit does not, the user holds six stock tokens, which is what they
-paid for and is worth the same money. The app detects that state and offers *"finish your
-Semiconductors investment"*, resuming at the deposit. Recording the intent before the first swap
+paid for and is worth the same money. The app detects that state and offers _"finish your
+Semiconductors investment"_, resuming at the deposit. Recording the intent before the first swap
 is what makes the resume possible.
 
 ## Redeeming

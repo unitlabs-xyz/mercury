@@ -36,10 +36,7 @@ export const Faq = () => {
   const [open, setOpen] = useState(0);
 
   return (
-    <Section
-      id="faqs"
-      inner="grid items-start gap-10 py-[76px] lg:grid-cols-[0.7fr_1.3fr] lg:gap-16"
-    >
+    <Section id="faqs" inner="grid items-start gap-10 py-[76px] lg:grid-cols-[0.7fr_1.3fr] lg:gap-16">
       <div>
         <h2 className="text-[30px] leading-[1.12] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
           The ones people actually ask.
@@ -50,10 +47,7 @@ export const Faq = () => {
         {ITEMS.map((item, i) => {
           const isOpen = open === i;
           return (
-            <div
-              key={item.q}
-              className={i < ITEMS.length - 1 ? "border-b border-navline" : ""}
-            >
+            <div key={item.q} className={i < ITEMS.length - 1 ? "border-b border-navline" : ""}>
               <h3>
                 <button
                   type="button"

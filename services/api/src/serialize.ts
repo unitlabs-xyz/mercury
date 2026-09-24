@@ -32,7 +32,13 @@ export const decisionToWire = (d: Decision): WireDecision => {
 
   switch (d.kind) {
     case "execute":
-      return { ...base, kind: "execute", best: candidate(d.best), premium: toWire(d.premium), warning: d.warning };
+      return {
+        ...base,
+        kind: "execute",
+        best: candidate(d.best),
+        premium: toWire(d.premium),
+        warning: d.warning,
+      };
     case "offer_queue":
       return {
         ...base,

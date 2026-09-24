@@ -1,4 +1,4 @@
-import { D, Decimal, ZERO } from "../money.js";
+import { Decimal, ZERO } from "../money.js";
 
 export interface Constituent {
   readonly ticker: string;
@@ -59,10 +59,13 @@ export function allocate(usdAmount: Decimal, constituents: readonly Constituent[
 }
 
 /** Current weights of a basket, for showing drift against target. Version one does not rebalance. */
-export function currentWeights(values: readonly { ticker: string; valueUsd: Decimal }[]): Map<string, number> {
+export function currentWeights(
+  values: readonly { ticker: string; valueUsd: Decimal }[],
+): Map<string, number> {
   const total = values.reduce((a, v) => a.add(v.valueUsd), ZERO);
   const out = new Map<string, number>();
   if (total.isZero()) return out;
-  for (const v of values) out.set(v.ticker, v.valueUsd.div(total).mul(TOTAL_BPS).toDecimalPlaces(0).toNumber());
+  for (const v of values)
+    out.set(v.ticker, v.valueUsd.div(total).mul(TOTAL_BPS).toDecimalPlaces(0).toNumber());
   return out;
 }

@@ -33,12 +33,26 @@ const priceCandidate = (candidate: Candidate, side: Side, maxPriceImpact: Decima
   };
 
   if (candidate.quote === null) {
-    return { ...base, pricePerToken: null, pricePerShare: null, priceImpact: null, viable: false, rejection: "no_route" };
+    return {
+      ...base,
+      pricePerToken: null,
+      pricePerShare: null,
+      priceImpact: null,
+      viable: false,
+      rejection: "no_route",
+    };
   }
 
   const { inAmount, outAmount, priceImpact } = candidate.quote;
   if (outAmount.lte(ZERO) || inAmount.lte(ZERO)) {
-    return { ...base, pricePerToken: null, pricePerShare: null, priceImpact, viable: false, rejection: "zero_output" };
+    return {
+      ...base,
+      pricePerToken: null,
+      pricePerShare: null,
+      priceImpact,
+      viable: false,
+      rejection: "zero_output",
+    };
   }
 
   // Buy: USD in, tokens out. Sell: tokens in, USD out.
@@ -49,7 +63,14 @@ const priceCandidate = (candidate: Candidate, side: Side, maxPriceImpact: Decima
   const pricePerShare = pricePerToken.div(candidate.multiplier);
 
   if (priceImpact.gt(maxPriceImpact)) {
-    return { ...base, pricePerToken, pricePerShare, priceImpact, viable: false, rejection: "impact_too_high" };
+    return {
+      ...base,
+      pricePerToken,
+      pricePerShare,
+      priceImpact,
+      viable: false,
+      rejection: "impact_too_high",
+    };
   }
 
   return { ...base, pricePerToken, pricePerShare, priceImpact, viable: true, rejection: null };
@@ -102,7 +123,10 @@ export function decide(input: DecisionInput): Decision {
 
   const ageSec = (now.getTime() - reference.observedAt.getTime()) / 1000;
   if (status === "stale" || ageSec > maxAgeSec(status, policy)) {
-    return refuse("reference_stale", `The reference price is ${Math.round(ageSec)}s old and cannot be trusted.`);
+    return refuse(
+      "reference_stale",
+      `The reference price is ${Math.round(ageSec)}s old and cannot be trusted.`,
+    );
   }
   if (priced.length === 0) {
     return refuse("no_candidates", "No wrapper is registered for this instrument.");

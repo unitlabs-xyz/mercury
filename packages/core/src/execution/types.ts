@@ -10,14 +10,7 @@ export type Issuer = "backed" | "ondo";
  * issuer folding that dividend into the token's multiplier. See docs/04.
  */
 export type InstrumentStatus =
-  | "open"
-  | "premarket"
-  | "postmarket"
-  | "overnight"
-  | "closed"
-  | "halted"
-  | "stale"
-  | "corp_action_pending";
+  "open" | "premarket" | "postmarket" | "overnight" | "closed" | "halted" | "stale" | "corp_action_pending";
 
 export const TRADING_SESSIONS: readonly InstrumentStatus[] = ["open", "premarket", "postmarket", "overnight"];
 

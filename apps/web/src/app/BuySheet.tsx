@@ -65,9 +65,8 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
           Worth waiting
         </p>
         <p className="mt-1 text-[13px] leading-[1.5] text-warn/90">
-          The market is shut, and the token is {premium.toFixed(2)}% above the reference price —
-          more than we think you should pay. We can hold the order and fill it when the price comes
-          back.
+          The market is shut, and the token is {premium.toFixed(2)}% above the reference price — more than we
+          think you should pay. We can hold the order and fill it when the price comes back.
         </p>
       </div>
       <dl className="mt-4 space-y-2.5 text-[14px]">
@@ -161,11 +160,7 @@ export const BuySheet = ({
     return () => clearTimeout(t);
   }, [amount]);
 
-  const { decision, isLoading, isFetching } = useDecision(
-    open ? instrument : undefined,
-    settled,
-    prices,
-  );
+  const { decision, isLoading, isFetching } = useDecision(open ? instrument : undefined, settled, prices);
 
   const typing = settled !== amount;
   const overBalance = amount > AVAILABLE;
@@ -186,7 +181,12 @@ export const BuySheet = ({
   };
 
   return (
-    <Dialog open={open} onClose={close} labelledBy="buy-title" className="flex max-h-[min(86vh,780px)] max-w-[520px] flex-col">
+    <Dialog
+      open={open}
+      onClose={close}
+      labelledBy="buy-title"
+      className="flex max-h-[min(86vh,780px)] max-w-[520px] flex-col"
+    >
       {placed ? (
         <div className="px-6 py-6 sm:px-7">
           <div className="py-4 text-center">
@@ -216,9 +216,7 @@ export const BuySheet = ({
             <h2 id="buy-title" className="text-[22px] font-semibold tracking-[-0.02em]">
               Buy {instrument.name}
             </h2>
-            <p className="mt-1 text-[14px] text-muted">
-              {usd(AVAILABLE)} available
-            </p>
+            <p className="mt-1 text-[14px] text-muted">{usd(AVAILABLE)} available</p>
 
             <label className="mt-5 flex items-center gap-1 rounded-xl border border-cardline bg-shell px-4 py-3.5 focus-within:border-brand">
               <span className="text-[26px] font-semibold text-faint">$</span>
@@ -277,7 +275,6 @@ export const BuySheet = ({
                 wrappers={instrument.wrappers}
               />
             </div>
-
           </div>
 
           <div className="flex shrink-0 gap-2.5 border-t border-hair bg-white px-6 py-4 sm:px-7">

@@ -3,13 +3,16 @@
 **Status:** accepted · 19 September 2026
 
 ## Context
+
 Tokenized equities live on several chains. Robinhood Chain has the tightest narrative, being the
 chain built for them. Colosseum's Crypto World's Fair has tracks for both.
 
 ## Decision
+
 Build on Solana.
 
 ## Reasons
+
 1. **Exposure deduplication needs two issuers.** Solana has Backed and Ondo side by side.
    Robinhood Chain has Robinhood. Our headline feature cannot exist there.
 2. **Borrowing is an integration on Solana.** Kamino already lends against eight tokenized stocks
@@ -22,5 +25,6 @@ Build on Solana.
 5. **Consumer surface.** Phantom and Jupiter, against a chain two and a half months old.
 
 ## Consequences
+
 We give up a tighter story and a lighter field. Robinhood Chain has deeper single-chain equity
 liquidity, and we lose that. Acceptable.

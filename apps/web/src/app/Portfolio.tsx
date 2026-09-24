@@ -34,16 +34,11 @@ const Move = ({ value, dir }: { value: string; dir: "up" | "down" | "queued" }) 
  * rather than in the page header puts them beside the balance they act on.
  */
 const Position = ({ range, setRange }: { range: Range; setRange: (r: Range) => void }) => (
-  <section
-    aria-label="Total value"
-    className="rounded-2xl border border-cardline bg-white px-6 py-[22px]"
-  >
+  <section aria-label="Total value" className="rounded-2xl border border-cardline bg-white px-6 py-[22px]">
     <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
       <div>
         <p className="text-[13px] font-medium text-muted">Total value</p>
-        <p className="mt-1.5 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">
-          {TOTAL.value}
-        </p>
+        <p className="mt-1.5 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">{TOTAL.value}</p>
         <p className="mt-3 flex flex-wrap items-center gap-2.5">
           <span className="flex items-center gap-1 rounded-md bg-up-tint py-[3px] pr-[9px] pl-[7px] text-[14px] font-semibold text-up-deep">
             <ArrowUp className="size-3" />
@@ -66,14 +61,11 @@ const Position = ({ range, setRange }: { range: Range; setRange: (r: Range) => v
                 <dd className="w-[44px] text-right text-[13px] tabular-nums text-faint">
                   {Math.round(s.share)}%
                 </dd>
-                <dd className="w-[92px] text-right text-[14px] font-semibold tabular-nums">
-                  {s.value}
-                </dd>
+                <dd className="w-[92px] text-right text-[14px] font-semibold tabular-nums">{s.value}</dd>
               </div>
             );
           })}
         </dl>
-
       </div>
 
       <div className="min-w-0">
@@ -146,9 +138,7 @@ export const Portfolio = () => {
       <section aria-label="Holdings" className="mt-14">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Holdings</h2>
-          <span className="text-[13px] text-muted">
-            {HOLDINGS.length} positions, largest first
-          </span>
+          <span className="text-[13px] text-muted">{HOLDINGS.length} positions, largest first</span>
         </div>
 
         <div className="mt-4 overflow-hidden rounded-2xl border border-cardline bg-white">
@@ -219,7 +209,6 @@ export const Portfolio = () => {
           ))}
         </div>
       </section>
-
     </AppShell>
   );
 };

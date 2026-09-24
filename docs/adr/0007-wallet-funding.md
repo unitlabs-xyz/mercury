@@ -3,6 +3,7 @@
 **Status:** accepted · 19 September 2026
 
 ## Context
+
 [ADR 0003](0003-custody.md) chose Privy embedded wallets only, which removed the external wallet.
 The external wallet was how a user arrived holding money. A person now signs in with an email,
 receives a Solana wallet, and it holds nothing. [ADR 0001](0001-crypto-native.md) ruled out
@@ -12,6 +13,7 @@ Left alone, the first run ends at "send USDC to this address", which means leavi
 exchange and probably not returning.
 
 ## Decision
+
 **Turn on every funding path Privy already offers, and build none of them.**
 
 1. **Universal deposit address.** The user sends any supported asset from any supported chain to
@@ -25,6 +27,7 @@ exchange and probably not returning.
 4. **A pre-funded demo account** for the hackathon, so a judge is never blocked at step one.
 
 ## Does this contradict ADR 0001?
+
 No, and the distinction matters. ADR 0001 says we do not build or operate payment rails, hold
 fiat, or take on money licensing. A card purchase through Privy's provider is operated by that
 provider, who carries the identity checks and the regulatory burden. We never touch the money.
@@ -34,6 +37,7 @@ What ADR 0001 rules out remains ruled out: no bank account of ours, no fiat bala
 withdrawal, no identity documents in our database.
 
 ## Consequences
+
 **Good.** The cold-start problem largely disappears. A user with money on Binance or Coinbase can
 fund in one transfer without caring about chains. A user with only a card can start in a minute.
 

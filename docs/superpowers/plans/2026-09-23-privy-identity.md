@@ -28,41 +28,43 @@
 
 **Created**
 
-| File | Responsibility |
-| --- | --- |
-| `services/api/src/db/schema.ts` | Drizzle table definitions for `user` and `wallet` only. Other tables arrive with their subsystems. |
-| `services/api/src/db/client.ts` | One pooled Drizzle client built from `DATABASE_URL`. |
-| `services/api/drizzle.config.ts` | Drizzle Kit config so migrations can be generated. |
-| `services/api/src/auth/verifier.ts` | The `TokenVerifier` port and its real Privy implementation. This is the seam that makes the rest testable. |
-| `services/api/src/auth/identity.ts` | Turns a verified `user_id` into `user` + `wallet` rows. Talks to Privy's user API and to Postgres. |
-| `services/api/src/auth/middleware.ts` | Hono middleware. Reads the bearer header, verifies, loads identity, sets context. |
-| `services/api/src/auth/verifier.test.ts` | Tests for the middleware and identity upsert using a fake verifier. |
-| `apps/web/src/auth/PrivyBoundary.tsx` | Wraps the app in `PrivyProvider` with Solana-only config. |
-| `apps/web/src/auth/useEmailLogin.ts` | Adapts Privy's `OtpFlowState` to the modal's existing `Pending` union, and owns the minimum-display-duration rule. |
-| `apps/web/src/auth/useEmailLogin.test.ts` | Tests the state mapping and the duration floor with fake timers. |
-| `apps/web/src/api/client.ts` | `fetch` wrapper that attaches the Privy access token. |
+| File                                      | Responsibility                                                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `services/api/src/db/schema.ts`           | Drizzle table definitions for `user` and `wallet` only. Other tables arrive with their subsystems.                 |
+| `services/api/src/db/client.ts`           | One pooled Drizzle client built from `DATABASE_URL`.                                                               |
+| `services/api/drizzle.config.ts`          | Drizzle Kit config so migrations can be generated.                                                                 |
+| `services/api/src/auth/verifier.ts`       | The `TokenVerifier` port and its real Privy implementation. This is the seam that makes the rest testable.         |
+| `services/api/src/auth/identity.ts`       | Turns a verified `user_id` into `user` + `wallet` rows. Talks to Privy's user API and to Postgres.                 |
+| `services/api/src/auth/middleware.ts`     | Hono middleware. Reads the bearer header, verifies, loads identity, sets context.                                  |
+| `services/api/src/auth/verifier.test.ts`  | Tests for the middleware and identity upsert using a fake verifier.                                                |
+| `apps/web/src/auth/PrivyBoundary.tsx`     | Wraps the app in `PrivyProvider` with Solana-only config.                                                          |
+| `apps/web/src/auth/useEmailLogin.ts`      | Adapts Privy's `OtpFlowState` to the modal's existing `Pending` union, and owns the minimum-display-duration rule. |
+| `apps/web/src/auth/useEmailLogin.test.ts` | Tests the state mapping and the duration floor with fake timers.                                                   |
+| `apps/web/src/api/client.ts`              | `fetch` wrapper that attaches the Privy access token.                                                              |
 
 **Modified**
 
-| File | Change |
-| --- | --- |
-| `services/api/src/deps.ts` | `Config` gains Privy and loses Chainlink/Pyth. `Deps` gains `db` and `verifier`. `buildDeps` stops throwing for the auth path. |
-| `services/api/src/app.ts` | Mount the middleware; add `GET /v1/me`. |
-| `apps/web/src/auth/AuthContext.tsx` | Unchanged API, but reads real auth state. |
-| `apps/web/src/auth/AuthModal.tsx` | Staged `setTimeout` machine replaced by `useEmailLogin`. |
-| `apps/web/src/main.tsx` | Render inside `PrivyBoundary`. |
+| File                                | Change                                                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `services/api/src/deps.ts`          | `Config` gains Privy and loses Chainlink/Pyth. `Deps` gains `db` and `verifier`. `buildDeps` stops throwing for the auth path. |
+| `services/api/src/app.ts`           | Mount the middleware; add `GET /v1/me`.                                                                                        |
+| `apps/web/src/auth/AuthContext.tsx` | Unchanged API, but reads real auth state.                                                                                      |
+| `apps/web/src/auth/AuthModal.tsx`   | Staged `setTimeout` machine replaced by `useEmailLogin`.                                                                       |
+| `apps/web/src/main.tsx`             | Render inside `PrivyBoundary`.                                                                                                 |
 
 ---
 
 ## Task 1: Database client and the two tables
 
 **Files:**
+
 - Create: `services/api/src/db/schema.ts`
 - Create: `services/api/src/db/client.ts`
 - Create: `services/api/drizzle.config.ts`
 - Test: `services/api/src/db/schema.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `users` and `wallets` Drizzle tables; `type User = typeof users.$inferSelect`; `type Wallet = typeof wallets.$inferSelect`; `createDb(url: string): Db`; `type Db`.
 
@@ -75,7 +77,7 @@ pnpm --filter @mercury/api add -D drizzle-kit
 
 - [ ] **Step 2: Write the failing test**
 
-This test asserts the schema's *shape*, which is what later tasks depend on. It needs no database.
+This test asserts the schema's _shape_, which is what later tasks depend on. It needs no database.
 
 Create `services/api/src/db/schema.test.ts`:
 
@@ -87,16 +89,12 @@ import { users, wallets } from "./schema.js";
 describe("schema", () => {
   it("gives a user an id, a creation time and a display currency", () => {
     const cols = Object.keys(getTableColumns(users));
-    expect(cols).toEqual(
-      expect.arrayContaining(["id", "privyUserId", "createdAt", "displayCurrency"]),
-    );
+    expect(cols).toEqual(expect.arrayContaining(["id", "privyUserId", "createdAt", "displayCurrency"]));
   });
 
   it("gives a wallet an address, a kind and an owner", () => {
     const cols = Object.keys(getTableColumns(wallets));
-    expect(cols).toEqual(
-      expect.arrayContaining(["id", "userId", "address", "kind", "isPrimary"]),
-    );
+    expect(cols).toEqual(expect.arrayContaining(["id", "userId", "address", "kind", "isPrimary"]));
   });
 });
 ```
@@ -205,10 +203,12 @@ git commit -m "feat: add user and wallet tables"
 ## Task 2: The token verifier port and its Privy implementation
 
 **Files:**
+
 - Create: `services/api/src/auth/verifier.ts`
 - Test: `services/api/src/auth/verifier.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `interface TokenVerifier { verify(token: string): Promise<VerifiedToken> }`; `type VerifiedToken = { privyUserId: string; sessionId: string; expiresAt: Date }`; `class InvalidToken extends Error`; `createPrivyVerifier(opts: { appId: string; verificationKey: string }): TokenVerifier`.
 
@@ -291,10 +291,7 @@ export class InvalidToken extends Error {
  * public key from the Privy dashboard; it is public, so it is configuration
  * rather than a secret. Verification needs no app secret at all.
  */
-export const createPrivyVerifier = (opts: {
-  appId: string;
-  verificationKey: string;
-}): TokenVerifier => ({
+export const createPrivyVerifier = (opts: { appId: string; verificationKey: string }): TokenVerifier => ({
   async verify(token) {
     try {
       const claims = await verifyAccessToken({
@@ -337,10 +334,12 @@ git commit -m "feat: add the privy token verifier behind a port"
 ## Task 3: Identity upsert
 
 **Files:**
+
 - Create: `services/api/src/auth/identity.ts`
 - Test: `services/api/src/auth/identity.test.ts`
 
 **Interfaces:**
+
 - Consumes: `users`, `wallets`, `Db` from Task 1. `VerifiedToken` from Task 2.
 - Produces: `interface WalletDirectory { solanaWalletFor(privyUserId: string): Promise<string | null> }`; `createPrivyDirectory(opts: { appId: string; appSecret: string }): WalletDirectory`; `resolveIdentity(db: Db, dir: WalletDirectory, token: VerifiedToken): Promise<Identity>`; `type Identity = { userId: string; privyUserId: string; walletAddress: string | null }`.
 
@@ -455,10 +454,7 @@ export interface WalletDirectory {
   solanaWalletFor(privyUserId: string): Promise<string | null>;
 }
 
-export const createPrivyDirectory = (opts: {
-  appId: string;
-  appSecret: string;
-}): WalletDirectory => {
+export const createPrivyDirectory = (opts: { appId: string; appSecret: string }): WalletDirectory => {
   const client = new PrivyClient({ appID: opts.appId, appSecret: opts.appSecret });
   return {
     async solanaWalletFor(privyUserId) {
@@ -488,13 +484,7 @@ export const resolveIdentity = async (
 
   const user =
     existing ??
-    (
-      await db
-        .insert(users)
-        .values({ privyUserId: token.privyUserId })
-        .onConflictDoNothing()
-        .returning()
-    )[0];
+    (await db.insert(users).values({ privyUserId: token.privyUserId }).onConflictDoNothing().returning())[0];
 
   if (!user) throw new Error(`could not create or find user for ${token.privyUserId}`);
 
@@ -537,12 +527,14 @@ git commit -m "feat: resolve a verified token into user and wallet rows"
 ## Task 4: Auth middleware and `GET /v1/me`
 
 **Files:**
+
 - Create: `services/api/src/auth/middleware.ts`
 - Modify: `services/api/src/deps.ts`
 - Modify: `services/api/src/app.ts:28` — add the route after `/health`
 - Test: `services/api/src/auth/middleware.test.ts`
 
 **Interfaces:**
+
 - Consumes: `TokenVerifier`, `InvalidToken` (Task 2); `resolveIdentity`, `WalletDirectory`, `Identity` (Task 3); `Db` (Task 1).
 - Produces: `requireAuth(deps: AuthDeps): MiddlewareHandler`; `type AuthDeps = { db: Db; verifier: TokenVerifier; directory: WalletDirectory }`; Hono context variable `identity: Identity`.
 
@@ -579,11 +571,14 @@ const deps = {
 const appWith = (d: AuthDeps) => {
   const app = new Hono();
   app.get("/health", (c) => c.json({ ok: true }));
-  app.use("/v1/*", requireAuth(d, async (_db, dir, token) => ({
-    userId: "user-1",
-    privyUserId: token.privyUserId,
-    walletAddress: await dir.solanaWalletFor(token.privyUserId),
-  })));
+  app.use(
+    "/v1/*",
+    requireAuth(d, async (_db, dir, token) => ({
+      userId: "user-1",
+      privyUserId: token.privyUserId,
+      walletAddress: await dir.solanaWalletFor(token.privyUserId),
+    })),
+  );
   app.get("/v1/me", (c) => c.json(c.get("identity")));
   return app;
 };
@@ -661,18 +656,12 @@ type Resolve = (db: Db, dir: WalletDirectory, token: VerifiedToken) => Promise<I
  *
  * `resolve` is injected so the middleware can be tested without a database.
  */
-export const requireAuth = (
-  deps: AuthDeps,
-  resolve: Resolve = resolveIdentity,
-): MiddlewareHandler => {
+export const requireAuth = (deps: AuthDeps, resolve: Resolve = resolveIdentity): MiddlewareHandler => {
   return async (c, next) => {
     const header = c.req.header("Authorization");
     const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
     if (!token) {
-      return c.json(
-        { error: { code: "unauthenticated", message: "Expected a Bearer access token." } },
-        401,
-      );
+      return c.json({ error: { code: "unauthenticated", message: "Expected a Bearer access token." } }, 401);
     }
 
     try {
@@ -680,10 +669,7 @@ export const requireAuth = (
       c.set("identity", await resolve(deps.db, deps.directory, verified));
     } catch (cause) {
       if (cause instanceof InvalidToken) {
-        return c.json(
-          { error: { code: "unauthenticated", message: "That session is not valid." } },
-          401,
-        );
+        return c.json({ error: { code: "unauthenticated", message: "That session is not valid." } }, 401);
       }
       throw cause;
     }
@@ -787,10 +773,10 @@ import { requireAuth, type AuthDeps } from "./auth/middleware.js";
 Then immediately after the existing `/health` route (line 28), add:
 
 ```ts
-  app.use("/v1/*", requireAuth(auth));
+app.use("/v1/*", requireAuth(auth));
 
-  /** Who is calling, and which wallet is theirs. The first authenticated route. */
-  app.get("/v1/me", (c) => c.json(c.get("identity")));
+/** Who is calling, and which wallet is theirs. The first authenticated route. */
+app.get("/v1/me", (c) => c.json(c.get("identity")));
 ```
 
 - [ ] **Step 8: Update the entrypoint**
@@ -832,6 +818,7 @@ git commit -m "feat: require a verified privy token on /v1 routes"
 This is the one task that cannot be unit tested, and it is where the real problems appear. Do it before writing any frontend code — discovering a dashboard misconfiguration after building three components wastes the components.
 
 **Files:**
+
 - Modify: `services/api/.env.example`
 
 - [ ] **Step 1: Configure the Privy dashboard**
@@ -839,7 +826,7 @@ This is the one task that cannot be unit tested, and it is where the real proble
 At [dashboard.privy.io](https://dashboard.privy.io), in a new app:
 
 1. **Login methods** — enable Email. Disable everything else.
-2. **Embedded wallets** — enable Solana. Set "create on login" to *users without wallets*. Turn Ethereum embedded wallets **off**; we have no use for them and they double the provisioning time.
+2. **Embedded wallets** — enable Solana. Set "create on login" to _users without wallets_. Turn Ethereum embedded wallets **off**; we have no use for them and they double the provisioning time.
 3. **App settings** — copy the App ID, the App Secret, and the **verification key** (a PEM block beginning `-----BEGIN PUBLIC KEY-----`).
 
 - [ ] **Step 2: Record the variables**
@@ -910,10 +897,12 @@ git commit -m "chore: record the privy environment variables"
 ## Task 6: The Privy boundary in the web app
 
 **Files:**
+
 - Create: `apps/web/src/auth/PrivyBoundary.tsx`
 - Modify: `apps/web/src/main.tsx`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
 - Produces: `PrivyBoundary` — a component wrapping `children`.
 
@@ -996,10 +985,12 @@ git commit -m "feat: wrap the web app in a solana-only privy provider"
 ## Task 7: The email login hook, with the minimum display duration
 
 **Files:**
+
 - Create: `apps/web/src/auth/useEmailLogin.ts`
 - Test: `apps/web/src/auth/useEmailLogin.test.ts`
 
 **Interfaces:**
+
 - Consumes: `@privy-io/react-auth`'s `useLoginWithEmail`.
 - Produces: `useEmailLogin(): { pending: Pending; invalid: boolean; send(email: string): Promise<void>; submit(code: string): Promise<void>; reset(): void }`; `type Pending = "sending" | "resending" | "checking" | "creating" | null`; and the exported pure helper `atLeast<T>(ms: number, work: Promise<T>): Promise<T>`.
 
@@ -1048,7 +1039,7 @@ describe("atLeast", () => {
 });
 ```
 
-The third case matters: holding an *error* for 800ms makes a typo feel like a network problem.
+The third case matters: holding an _error_ for 800ms makes a typo feel like a network problem.
 
 - [ ] **Step 2: Run it to make sure it fails**
 
@@ -1077,7 +1068,7 @@ export const CREATE_MS = 800;
  * through three designed states in under 100ms, so we hold. A rejection is
  * never held: making a typo wait feels like a network fault.
  */
-export const atLeast = async <T,>(ms: number, work: Promise<T>): Promise<T> => {
+export const atLeast = async <T>(ms: number, work: Promise<T>): Promise<T> => {
   const floor = new Promise<void>((resolve) => setTimeout(resolve, ms));
   const result = await work;
   await floor;
@@ -1161,14 +1152,16 @@ git commit -m "feat: adapt privy's otp flow to the modal's pending states"
 ## Task 8: Wire the modal to the hook
 
 **Files:**
+
 - Modify: `apps/web/src/auth/AuthModal.tsx`
 - Modify: `apps/web/src/auth/AuthContext.tsx`
 
 **Interfaces:**
+
 - Consumes: `useEmailLogin`, `Pending` (Task 7).
 - Produces: no new exports. `AuthModal`'s props and `useAuthModal`'s shape are unchanged.
 
-**Preserve the design.** The step machine, the sealed code field, the hairline progress and the three-step choreography all stay. This task deletes the timers that *drove* them and connects real calls in their place. If the modal looks different afterwards, something has gone wrong.
+**Preserve the design.** The step machine, the sealed code field, the hairline progress and the three-step choreography all stay. This task deletes the timers that _drove_ them and connects real calls in their place. If the modal looks different afterwards, something has gone wrong.
 
 - [ ] **Step 1: Remove the staged machine**
 
@@ -1290,10 +1283,12 @@ git commit -m "feat: drive the auth modal from privy instead of timers"
 ## Task 9: The authenticated API client, end to end
 
 **Files:**
+
 - Create: `apps/web/src/api/client.ts`
 - Test: `apps/web/src/api/client.test.ts`
 
 **Interfaces:**
+
 - Consumes: `getAccessToken` from `@privy-io/react-auth`.
 - Produces: `apiFetch<T>(path: string, init?: RequestInit): Promise<T>`; `class ApiError extends Error { status: number; code: string }`.
 
@@ -1313,9 +1308,9 @@ describe("apiFetch", () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it("attaches the access token as a bearer header", async () => {
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    );
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     await apiFetch("/v1/me");
     const init = spy.mock.calls[0]?.[1];
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer tok_123");
@@ -1335,9 +1330,7 @@ describe("apiFetch", () => {
 
   it("sends no Authorization header when there is no session", async () => {
     vi.mocked(getAccessToken).mockResolvedValueOnce(null);
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response("{}", { status: 200 }),
-    );
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
     await apiFetch("/v1/me");
     expect(new Headers(spy.mock.calls[0]?.[1]?.headers).has("Authorization")).toBe(false);
   });

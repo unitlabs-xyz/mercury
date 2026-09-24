@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 import { EASE } from "../motion/config";
 import { AnchorMark } from "./Logo";
 
@@ -67,7 +67,9 @@ export const Dialog = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          onMouseDown={(e) => {
+          // Typed explicitly: motion's props cannot infer it now that React
+          // types are no longer hoisted. See .npmrc.
+          onMouseDown={(e: MouseEvent<HTMLDivElement>) => {
             if (e.target === e.currentTarget) onClose();
           }}
         >
@@ -96,10 +98,7 @@ export const Dialog = ({
  * that the rules print straight over. Decorative, desktop only.
  */
 export const RuledSheet = () => (
-  <div
-    aria-hidden
-    className="relative hidden overflow-hidden border-l border-hair bg-shell lg:block"
-  >
+  <div aria-hidden className="relative hidden overflow-hidden border-l border-hair bg-shell lg:block">
     {/* Centred in the ruled field rather than the panel, so the margin does not push it off. */}
     <AnchorMark className="absolute top-1/2 left-[calc(50%+18px)] size-[148px] -translate-x-1/2 -translate-y-1/2 text-ink/[0.05]" />
     <div className="absolute inset-0 bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_27px,var(--color-rule)_27px,var(--color-rule)_28px)]" />

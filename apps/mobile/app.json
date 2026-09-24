@@ -12,9 +12,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "works.hashira.mercury"
     },
-    "plugins": [
-      "expo-router"
-    ],
+    "plugins": ["expo-router"],
     "experiments": {
       "typedRoutes": true
     }

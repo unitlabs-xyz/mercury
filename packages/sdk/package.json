@@ -1,7 +1,20 @@
 {
-  "name": "@mercury/sdk", "version": "0.0.0", "private": true, "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc --noEmit" },
-  "dependencies": { "@mercury/types": "workspace:*", "zod": "^3.24.0" },
-  "devDependencies": { "@mercury/tsconfig": "workspace:*", "typescript": "^5.7.0" }
+  "name": "@mercury/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mercury/types": "workspace:*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@mercury/tsconfig": "workspace:*",
+    "typescript": "^5.7.0"
+  }
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { D, asBps, fromPct } from "../money.js";
 import { decide, fairPricePerShare, multiplierChangesTheAnswer } from "./decide.js";
 import { DEFAULT_POLICY, withPolicy } from "./policy.js";
-import { NOW, NVDA_CANDIDATES, SPY_CANDIDATES, buyInput, quote, reference } from "./fixtures.js";
+import { NVDA_CANDIDATES, SPY_CANDIDATES, buyInput, quote, reference } from "./fixtures.js";
 
 describe("wrapper selection", () => {
   it("picks Backed over Ondo for Nvidia and says why the other was refused", () => {
@@ -79,14 +79,18 @@ describe("the premium gate", () => {
   });
 
   it("warns but proceeds at the same premium while the market is open", () => {
-    const d = decide(buyInput({ ticker: "SPY", candidates: richQuote(1.09, 764.065), reference: reference(764.065) }));
+    const d = decide(
+      buyInput({ ticker: "SPY", candidates: richQuote(1.09, 764.065), reference: reference(764.065) }),
+    );
     expect(d.kind).toBe("execute");
     if (d.kind !== "execute") return;
     expect(d.warning).toContain("above the real share price");
   });
 
   it("executes silently inside tolerance", () => {
-    const d = decide(buyInput({ ticker: "SPY", candidates: richQuote(0.14, 764.065), reference: reference(764.065) }));
+    const d = decide(
+      buyInput({ ticker: "SPY", candidates: richQuote(0.14, 764.065), reference: reference(764.065) }),
+    );
     expect(d.kind === "execute" && d.warning).toBeNull();
   });
 });
@@ -158,7 +162,9 @@ describe("selling", () => {
       { ...SPY_CANDIDATES[0]!, quote: quote(1, 768.5, 0.02) },
       { ...SPY_CANDIDATES[1]!, quote: quote(1, 772.6, 0.05) },
     ];
-    const d = decide(buyInput({ ticker: "SPY", side: "sell", amount: D(1), candidates, reference: reference(764.065) }));
+    const d = decide(
+      buyInput({ ticker: "SPY", side: "sell", amount: D(1), candidates, reference: reference(764.065) }),
+    );
     expect(d.kind).toBe("execute");
     // 772.6 / 1.009473 = 765.3 a share, against 768.5 / 1.005715 = 764.1
     if (d.kind === "execute") expect(d.best.symbol).toBe("SPYon");
@@ -167,7 +173,14 @@ describe("selling", () => {
   it("treats a low price as adverse when selling", () => {
     const candidates = [{ ...SPY_CANDIDATES[0]!, quote: quote(1, 760.0, 0.02) }];
     const d = decide(
-      buyInput({ ticker: "SPY", side: "sell", amount: D(1), candidates, reference: reference(764.065), status: "closed" }),
+      buyInput({
+        ticker: "SPY",
+        side: "sell",
+        amount: D(1),
+        candidates,
+        reference: reference(764.065),
+        status: "closed",
+      }),
     );
     expect(d.kind).toBe("offer_queue");
   });
@@ -176,8 +189,14 @@ describe("selling", () => {
 describe("splits", () => {
   it("prices a 10x multiplier the same per share", () => {
     const split = [
-      { ...NVDA_CANDIDATES[0]!, multiplier: D(10), quote: quote(1000, 0.4490180, 0.02) },
-      { ...NVDA_CANDIDATES[0]!, mint: "other", symbol: "NVDAy", multiplier: D(1), quote: quote(1000, 4.490180, 0.02) },
+      { ...NVDA_CANDIDATES[0]!, multiplier: D(10), quote: quote(1000, 0.449018, 0.02) },
+      {
+        ...NVDA_CANDIDATES[0]!,
+        mint: "other",
+        symbol: "NVDAy",
+        multiplier: D(1),
+        quote: quote(1000, 4.49018, 0.02),
+      },
     ];
     const d = decide(buyInput({ candidates: split }));
     if (d.kind !== "execute") throw new Error("expected execute");

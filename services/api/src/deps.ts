@@ -1,17 +1,52 @@
-import { JupiterUltra, SymmetryVenue, type BasketVenue, type QuoteSource, type TokenRegistry, type TriggerSource } from "@mercury/chain";
-import type { MultiplierSource, ReferenceSource, SessionSource } from "@mercury/market";
+import {
+  JupiterLite,
+  JupiterRegistry,
+  SolanaRpc,
+  SymmetryVenue,
+  USDC_MINT,
+  type BasketVenue,
+  type CatalogueSource,
+  type ChainReader,
+  type QuoteSource,
+  type TokenRegistry,
+  type TriggerSource,
+} from "@mercury/chain";
+import {
+  JupiterMarket,
+  KaminoCredit,
+  MintMultipliers,
+  PythSessions,
+  type CreditSource,
+  type MultiplierSource,
+  type PriceBoard,
+  type ReferenceSource,
+  type SessionSource,
+} from "@mercury/market";
 import type { AuthDeps } from "./auth/middleware.js";
 import { createPrivyDirectory } from "./auth/identity.js";
 import { createPrivyVerifier } from "./auth/verifier.js";
-import { createDb } from "./db/client.js";
+import { createDb, type Db } from "./db/client.js";
+import type { ActivityDeps } from "./routes/activity.js";
+import type { InstrumentDeps } from "./routes/instruments.js";
+import type { MoneyDeps } from "./routes/money.js";
+import type { PortfolioDeps } from "./routes/portfolio.js";
+import { pgOrderStore, type OrderStore } from "./orders/store.js";
+import { countBuyers30d, readCatalogue } from "./instruments/queries.js";
+import { readHoldings } from "./portfolio/queries.js";
+import { readActivity } from "./portfolio/activity-queries.js";
+import { reconcile } from "./portfolio/apply.js";
 
 export interface Deps {
   readonly registry: TokenRegistry;
+  readonly catalogue: CatalogueSource;
   readonly quotes: QuoteSource;
   readonly triggers: TriggerSource;
   readonly sessions: SessionSource;
   readonly reference: ReferenceSource;
   readonly multipliers: MultiplierSource;
+  readonly prices: PriceBoard;
+  readonly credit: CreditSource;
+  readonly chain: ChainReader;
   readonly baskets: BasketVenue;
 }
 
@@ -71,15 +106,79 @@ export function buildAuthDeps(config: Config): AuthDeps {
  * There is no fixture mode and no mock adapter. Every dependency is the real one or the
  * server does not start. Dummy data belongs in the client while the interface is being
  * built, never in the server.
+ *
+ * Nothing here takes a key. Quotes come from Jupiter's keyless endpoint, which is
+ * what prices a decision; `JUPITER_API_KEY` buys Ultra, which *executes* one, and
+ * arrives with subsystem 3. Triggers are subsystem 3 as well, and baskets are
+ * blocked on the Symmetry spike — both are present so the object is whole, and
+ * both throw if called.
  */
 export function buildDeps(config: Config): Deps {
-  if (!config.jupiterApiKey) {
-    throw new Error("buildDeps: JUPITER_API_KEY is required once execution lands. Subsystem 3.");
-  }
-  const quotes = new JupiterUltra({ apiKey: config.jupiterApiKey });
-  const baskets = new SymmetryVenue({ rpcUrl: config.solanaRpcUrl });
+  const registry = new JupiterRegistry();
+  const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl });
+  const market = new JupiterMarket({ registry });
 
-  throw new Error(
-    "buildDeps: registry, triggers, sessions, reference and multipliers are not implemented yet. Week 1.",
-  );
+  return {
+    registry,
+    catalogue: registry,
+    quotes: new JupiterLite(),
+    triggers: new JupiterTriggersNotYet(),
+    sessions: new PythSessions(),
+    reference: market,
+    // The mint is the authority. `market` implements the same port from
+    // Jupiter's copy of the same numbers, and is what the browser falls back to.
+    multipliers: new MintMultipliers({ chain }),
+    prices: market,
+    credit: new KaminoCredit(),
+    chain,
+    baskets: new SymmetryVenue({ rpcUrl: config.solanaRpcUrl }),
+  };
+}
+
+/** Trigger orders are subsystem 3. Present so `Deps` is whole; loud if called. */
+class JupiterTriggersNotYet implements TriggerSource {
+  create(): never {
+    throw new Error("buildDeps: trigger orders arrive with execution, subsystem 3");
+  }
+  status(): never {
+    throw new Error("buildDeps: trigger orders arrive with execution, subsystem 3");
+  }
+  cancel(): never {
+    throw new Error("buildDeps: trigger orders arrive with execution, subsystem 3");
+  }
+}
+
+export interface ReadDeps {
+  readonly instruments: InstrumentDeps;
+  readonly portfolio: PortfolioDeps;
+  readonly money: MoneyDeps;
+  readonly activity: ActivityDeps;
+  readonly orders: OrderStore;
+}
+
+/**
+ * The read side. Each route module takes its queries as functions rather than a
+ * database handle, which is what lets every route be tested with a plain object.
+ */
+export function buildReadDeps(db: Db, deps: Deps): ReadDeps {
+  const reconcileDeps = { chain: deps.chain, prices: deps.prices, multipliers: deps.multipliers };
+  return {
+    instruments: {
+      catalogue: () => readCatalogue(db, deps.catalogue),
+      buyers30d: (ticker) => countBuyers30d(db, ticker),
+      prices: deps.prices,
+      sessions: deps.sessions,
+    },
+    portfolio: {
+      reconcile: (userId, wallet) => reconcile(db, reconcileDeps, userId, wallet),
+      holdings: (userId) => readHoldings(db, userId),
+      prices: deps.prices,
+      chain: deps.chain,
+      multipliers: deps.multipliers,
+      usdcMint: USDC_MINT,
+    },
+    money: { chain: deps.chain, credit: deps.credit, usdcMint: USDC_MINT },
+    activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
+    orders: pgOrderStore(db),
+  };
 }
