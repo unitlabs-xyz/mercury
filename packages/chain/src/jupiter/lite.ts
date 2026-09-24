@@ -2,6 +2,7 @@ import { D, type Decimal } from "@mercury/core";
 import type { Candidate } from "@mercury/core";
 import type { QuoteRequest, QuoteSource } from "../ports.js";
 import { USDC_DECIMALS, USDC_MINT } from "./ultra.js";
+import { defaultFetch } from "../fetch.js";
 
 const LITE = "https://lite-api.jup.ag";
 
@@ -44,7 +45,7 @@ export class JupiterLite implements QuoteSource {
 
   constructor(config: JupiterLiteConfig = {}) {
     this.base = config.baseUrl ?? LITE;
-    this.doFetch = config.fetch ?? fetch;
+    this.doFetch = config.fetch ?? defaultFetch();
     this.slippageBps = config.slippageBps ?? 50;
   }
 

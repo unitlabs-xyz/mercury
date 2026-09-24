@@ -1,5 +1,5 @@
-import type { CreditMarket } from "../market/kamino";
-import { XSTOCKS_MARKET } from "../market/kamino";
+import type { CreditMarket } from "../market/hooks";
+import { XSTOCKS_MARKET } from "../market/hooks";
 import { DISPLAY_NAME } from "../market/meta";
 
 /**

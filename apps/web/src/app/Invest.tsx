@@ -5,7 +5,7 @@ import { LiveDot, PriceError } from "./LiveStatus";
 import { useWatchlist } from "./watchlist";
 import { priceInstrument, usePrices, useUniverse, type Priced } from "../market/hooks";
 import { performanceFor } from "../market/placeholder";
-import type { Instrument } from "../market/universe";
+import type { Instrument } from "../market/hooks";
 import {
   ArrowDown,
   ArrowUp,

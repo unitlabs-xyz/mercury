@@ -4,3 +4,4 @@ export * from "./symmetry/venue.js";
 export * from "./jupiter/registry.js";
 export * from "./jupiter/lite.js";
 export * from "./solana/rpc.js";
+export * from "./fetch.js";

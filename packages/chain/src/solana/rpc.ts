@@ -1,5 +1,6 @@
 import { D, ONE, type Decimal } from "@mercury/core";
 import type { ChainReader, MintConfig, TokenBalance } from "../ports.js";
+import { defaultFetch } from "../fetch.js";
 
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 export const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
@@ -52,7 +53,7 @@ export class SolanaRpc implements ChainReader {
   private readonly now: () => number;
 
   constructor(private readonly config: SolanaRpcConfig) {
-    this.doFetch = config.fetch ?? fetch;
+    this.doFetch = config.fetch ?? defaultFetch();
     this.now = config.now ?? Date.now;
   }
 

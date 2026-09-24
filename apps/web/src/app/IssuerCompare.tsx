@@ -1,5 +1,5 @@
 import type { Decision, PricedCandidate } from "@mercury/core";
-import type { Wrapper } from "../market/universe";
+import type { Wrapper } from "../market/hooks";
 
 export const ISSUER_NAME = { backed: "Backed", ondo: "Ondo" } as const;
 

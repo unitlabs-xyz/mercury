@@ -5,8 +5,7 @@ import { Alert, Check, Clock } from "../ui/icons";
 import { CASH } from "./data";
 import { IssuerCompare, ISSUER_NAME } from "./IssuerCompare";
 import { useDecision } from "../market/hooks";
-import type { JupPrice } from "../market/jupiter";
-import type { Instrument } from "../market/universe";
+import type { Instrument, PriceMap } from "../market/hooks";
 
 const AVAILABLE = Number(CASH.available.replace(/[^0-9.]/g, ""));
 
@@ -143,7 +142,7 @@ export const BuySheet = ({
   onClose,
 }: {
   instrument: Instrument;
-  prices: Record<string, JupPrice | null> | undefined;
+  prices: PriceMap | undefined;
   open: boolean;
   onClose: () => void;
 }) => {

@@ -1,5 +1,6 @@
 import { D, type Decimal } from "@mercury/core";
 import type { Collateral, CreditMarket, CreditSource } from "./ports.js";
+import { defaultFetch } from "@mercury/chain";
 
 /** Kamino's public API. No key, CORS-open — verified from the browser on 20 September 2026. */
 const BASE = "https://api.kamino.finance";
@@ -31,7 +32,7 @@ export class KaminoCredit implements CreditSource {
   constructor(config: KaminoCreditConfig = {}) {
     this.base = config.baseUrl ?? BASE;
     this.market = config.marketAddress ?? XSTOCKS_MARKET;
-    this.doFetch = config.fetch ?? fetch;
+    this.doFetch = config.fetch ?? defaultFetch();
   }
 
   async current(): Promise<CreditMarket> {

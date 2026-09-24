@@ -1,5 +1,6 @@
 import { D, type Decimal } from "@mercury/core";
 import type { QuoteRequest, QuoteSource } from "../ports.js";
+import { defaultFetch } from "../fetch.js";
 
 const ULTRA = "https://lite-api.jup.ag/ultra/v1";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -26,7 +27,7 @@ export class JupiterUltra implements QuoteSource {
 
   constructor(private readonly config: JupiterConfig) {
     this.base = config.baseUrl ?? ULTRA;
-    this.doFetch = config.fetch ?? fetch;
+    this.doFetch = config.fetch ?? defaultFetch();
   }
 
   async quote(
