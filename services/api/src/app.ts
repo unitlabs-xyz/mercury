@@ -6,6 +6,7 @@ import type { Deps } from "./deps.js";
 import { priceOrder } from "./pricing.js";
 import { decisionToWire } from "./serialize.js";
 import { BASKETS } from "./baskets.js";
+import { requireAuth, type AuthDeps } from "./auth/middleware.js";
 
 interface StoredOrder {
   id: string;
@@ -21,14 +22,36 @@ const orders = new Map<string, StoredOrder>();
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
-export function createApp(deps: Deps) {
+const NOT_READY = fail(
+  "not_implemented",
+  "Market data is not wired up yet. See subsystem 2 of the backend spec.",
+);
+
+/**
+ * `market` is a thunk, not a value. Its adapters do not exist until subsystem 2
+ * lifts them out of the browser, and evaluating it at boot would stop the auth
+ * path from running at all. The routes that need it answer 503 instead.
+ */
+export function createApp(market: () => Deps, auth: AuthDeps) {
   const app = new Hono();
   app.use("*", cors());
 
+
   app.get("/health", (c) => c.json({ ok: true }));
 
+  app.use("/v1/*", requireAuth(auth));
+
+  app.onError((err, c) => {
+    if (err.message.startsWith("buildDeps:")) return c.json(NOT_READY, 503);
+    console.error(err);
+    return c.json(fail("internal", "Something went wrong."), 500);
+  });
+
+  /** Who is calling, and which wallet is theirs. The first authenticated route. */
+  app.get("/v1/me", (c) => c.json(c.get("identity")));
+
   app.get("/v1/market/status", async (c) => {
-    const s = await deps.sessions.current();
+    const s = await market().sessions.current();
     return c.json({
       status: s.status,
       isOpen: s.isOpen,
@@ -43,7 +66,7 @@ export function createApp(deps: Deps) {
     const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
-    const decision = await priceOrder(deps, parsed.data);
+    const decision = await priceOrder(market(), parsed.data);
     if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
     const wire = decisionToWire(decision);
@@ -74,7 +97,7 @@ export function createApp(deps: Deps) {
     const quoteId = o.decision.best.rejection === null ? o.decision.best.mint : null;
     if (quoteId === null) return c.json(fail("quote_expired", "The chosen quote is gone. Ask again."), 409);
 
-    const transactions = await deps.quotes.buildSwap(`${o.id}`, owner);
+    const transactions = await market().quotes.buildSwap(`${o.id}`, owner);
     o.status = "executing";
     return c.json({ transactions, expiresAt: new Date(Date.now() + 30_000).toISOString() });
   });
@@ -103,7 +126,7 @@ export function createApp(deps: Deps) {
     const legs = allocate(D(parsed.data.usdAmount), basket.constituents);
     const priced = await Promise.all(
       legs.map(async (leg) => {
-        const decision = await priceOrder(deps, { ticker: leg.ticker, side: "buy", amount: toWire(leg.usdAmount) });
+        const decision = await priceOrder(market(), { ticker: leg.ticker, side: "buy", amount: toWire(leg.usdAmount) });
         return { ticker: leg.ticker, usdAmount: toWire(leg.usdAmount), decision: decision ? decisionToWire(decision) : null };
       }),
     );
