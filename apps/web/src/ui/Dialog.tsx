@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 import { EASE } from "../motion/config";
 import { AnchorMark } from "./Logo";
 
@@ -67,7 +67,9 @@ export const Dialog = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          onMouseDown={(e) => {
+          // Typed explicitly: motion's props cannot infer it now that React
+          // types are no longer hoisted. See .npmrc.
+          onMouseDown={(e: MouseEvent<HTMLDivElement>) => {
             if (e.target === e.currentTarget) onClose();
           }}
         >
