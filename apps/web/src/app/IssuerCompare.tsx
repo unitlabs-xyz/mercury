@@ -1,4 +1,4 @@
-import type { Decision, PricedCandidate } from "@harbor/core";
+import type { Decision, PricedCandidate } from "@mercury/core";
 import type { Wrapper } from "../market/universe";
 
 export const ISSUER_NAME = { backed: "Backed", ondo: "Ondo" } as const;

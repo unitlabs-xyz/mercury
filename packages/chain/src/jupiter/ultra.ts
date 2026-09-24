@@ -1,4 +1,4 @@
-import { D, type Decimal } from "@harbor/core";
+import { D, type Decimal } from "@mercury/core";
 import type { QuoteRequest, QuoteSource } from "../ports.js";
 
 const ULTRA = "https://lite-api.jup.ag/ultra/v1";

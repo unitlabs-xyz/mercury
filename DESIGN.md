@@ -1,5 +1,5 @@
 ---
-name: Harbor
+name: Mercury
 description: An investment account that lives in a crypto wallet, set like a printed statement.
 colors:
   harbour-teal: "#0f7480"
@@ -197,13 +197,13 @@ components:
     padding: "3px 7px"
 ---
 
-# Design System: Harbor
+# Design System: Mercury
 
 ## Overview
 
 **Creative North Star: "The Printed Statement"**
 
-Harbor is set, not styled. The ground is warm off-white paper rather than white or dark; structure
+Mercury is set, not styled. The ground is warm off-white paper rather than white or dark; structure
 comes from hairline rules and the edges of sheets, not from boxes with shadows; and every figure
 sits in a tabular column so that columns of money actually line up. Authority is meant to come
 from typesetting the way it does on a bank statement or a prospectus, where nothing is decorated

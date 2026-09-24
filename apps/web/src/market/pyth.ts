@@ -1,4 +1,4 @@
-import type { InstrumentStatus } from "@harbor/core";
+import type { InstrumentStatus } from "@mercury/core";
 
 /**
  * Pyth Hermes, no key. Only the metadata endpoint is reachable from a browser:

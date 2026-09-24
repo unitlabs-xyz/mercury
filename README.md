@@ -1,10 +1,23 @@
-# Harbor
+<p align="center">
+  <img src="docs/brand/mercury-wordmark.svg" alt="Mercury" width="200">
+</p>
 
-> Working name. See `docs/09-open-questions.md`.
+<h3 align="center">Your wealth. Onchain.</h3>
 
-An investment account that lives in a crypto wallet. You arrive holding stablecoins, buy
-tokenized US equities, invest in baskets, set a recurring plan, and watch one portfolio.
-Later you borrow against those holdings instead of selling them.
+<p align="center">The financial account built for the onchain world.</p>
+
+<p align="center">
+  Hold your money, invest in stocks and ETFs, build diversified portfolios,<br>
+  spend with your card, and access your wealth — all from a single wallet.
+</p>
+
+<p align="center"><strong>Hold. Invest. Grow. Spend.</strong></p>
+
+---
+
+Mercury brings the simplicity of a modern financial account to the onchain world. Hold
+stablecoins, invest in stocks, ETFs, and curated portfolios, automate your investments, and spend
+everyday with the Mercury Card — while keeping your wealth in one place.
 
 Built on Solana for Colosseum's Crypto World's Fair. Submissions close **12 October 2026**.
 
@@ -21,11 +34,12 @@ Built on Solana for Colosseum's Crypto World's Fair. Submissions close **12 Octo
 | [06 API](docs/06-api.md) | Endpoint contract between apps and server |
 | [07 Design](docs/07-design.md) | Screens, states, and the apps we are copying |
 | [08 Roadmap](docs/08-roadmap.md) | What ships by 12 October, and what comes after |
-| [09 Open questions](docs/09-open-questions.md) | What is settled, and the five things still open |
+| [09 Open questions](docs/09-open-questions.md) | What is settled, and what is still open |
 | [10 Baskets](docs/10-baskets.md) | The vault, and how a basket becomes one token |
-| [11 References](docs/11-references.md) | What to read before coding, and who already built near us |
+| [11 References](docs/11-references.md) | What to read and look at before writing code |
 
-Architecture decision records live in [`docs/adr`](docs/adr).
+Decisions live in [`docs/adr`](docs/adr). The backend design and its implementation plans are in
+[`docs/superpowers`](docs/superpowers).
 
 ## Layout
 
@@ -44,45 +58,50 @@ packages/
   types/      Shared types and Zod schemas.
   sdk/        Typed API client used by web and mobile.
 tooling/      Shared eslint, prettier and tsconfig.
+docs/brand/   The wordmark and the mark.
 ```
 
 ## Getting started
 
-Needs Node 24 and pnpm 10. No API keys, no database, no network.
+Needs Node 24 and pnpm 10.
 
 ```bash
 pnpm install
 pnpm check          # typecheck and test every package
-pnpm dev:api        # http://localhost:8787
-pnpm dev:web        # http://localhost:5173
 ```
 
-**The API runs in fixture mode by default**, serving the real measurements from
-19 September 2026 with no keys and no network. That is deliberate: the web app can be
-built before any integration lands, against a server that behaves correctly.
+`packages/core` runs with no keys, no database and no network — it performs no I/O at all, which
+is the point of it. `pnpm --filter @mercury/core exec vitest run` is the fastest way to see the
+execution engine work.
+
+The API needs Postgres and a Privy app. There is **no fixture mode**: every dependency is the
+real one or the server does not start.
 
 ```bash
-curl -s localhost:8787/v1/orders -H 'content-type: application/json' \
-  -d '{"ticker":"NVDA","side":"buy","amount":"1000"}' | jq .decision.best
-```
+docker run -d --name mercury-pg \
+  -e POSTGRES_USER=mercury -e POSTGRES_PASSWORD=mercury -e POSTGRES_DB=mercury \
+  -p 5432:5432 -v mercury-pg-data:/var/lib/postgresql/data postgres:16-alpine
 
-returns `NVDAx` at $222.33 a share, with Ondo's wrapper refused at 85% price impact.
-`HARBOR_MODE=live` switches to Jupiter and the rest; see `services/api/.env.example`.
+cp services/api/.env.example services/api/.env   # then fill PRIVY_APP_ID
+pnpm --filter @mercury/api exec drizzle-kit migrate
+pnpm --filter @mercury/api dev                   # http://localhost:8787
+pnpm --filter @mercury/web dev                   # http://localhost:5173
+```
 
 ## State of the build
 
 | Package | State |
 | --- | --- |
-| `packages/core` | **Done and tested.** 35 tests. The execution engine, cost basis, exposure, basket allocation |
+| `packages/core` | **Done and tested.** 35 tests. Execution engine, cost basis, exposure, basket allocation |
 | `packages/types` | Done. Zod wire schemas |
-| `packages/chain` | Ports done, Jupiter Ultra written, fixtures done. Symmetry awaits the spike |
-| `packages/market` | Ports and fixtures done. Chainlink, Pyth and Token-2022 reads are week 1 |
+| `packages/chain` | Ports done, Jupiter Ultra written. Symmetry awaits the spike |
+| `packages/market` | Ports only. The browser holds working implementations that move here next |
 | `packages/sdk` | Done. Typed client, every response parsed |
-| `services/api` | Routes for market, instruments, orders and basket preview. Postgres is week 2 |
-| `services/worker` | Job plan and the multiplier watcher. Runner is week 2 |
-| `apps/web` | Scaffolded with the stock page, the screen the product is built around |
+| `services/api` | **Identity done**: Privy tokens verified against the app's JWKS, users and wallets in Postgres. Market routes answer 503 until the ports land |
+| `services/worker` | Job plan only. Runner is still to come |
+| `apps/web` | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet |
 | `apps/landing` | Scaffolded |
-| `apps/mobile` | Not started, on purpose. Week 2 |
+| `apps/mobile` | Not started, on purpose |
 
 ## Ground rules
 
@@ -94,3 +113,5 @@ returns `NVDAx` at $222.33 a share, with Ondo's wrapper refused at 85% price imp
   [ADR 0009](docs/adr/0009-investing-not-trading.md).
 - **Money is never a float.** Integers in the smallest unit, or decimal strings. See
   [05 Data model](docs/05-data-model.md).
+- **Read it, do not type it.** Any number that exists on chain or behind a public API is read
+  live and attributed. A figure written into source is a figure that goes quietly wrong.

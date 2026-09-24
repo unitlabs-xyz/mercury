@@ -1,9 +1,9 @@
-# Harbor — app screens design brief
+# Mercury — app screens design brief
 
 The landing page and the signed-in **Portfolio** screen are built. This covers everything still
 to be designed. Hand the whole file over; it is self-contained.
 
-Existing work to match: `docs/design/Harbor.dc.html` holds the approved Portfolio screen and the
+Existing work to match: `docs/design/Mercury.dc.html` holds the approved Portfolio screen and the
 connect flow. Build on that language rather than starting fresh.
 
 ---

@@ -1,4 +1,4 @@
-import type { Decimal, InstrumentStatus, ReferencePrice } from "@harbor/core";
+import type { Decimal, InstrumentStatus, ReferencePrice } from "@mercury/core";
 
 export interface SessionState {
   readonly status: InstrumentStatus;

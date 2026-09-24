@@ -1,5 +1,5 @@
 {
-  "name": "@harbor/api",
+  "name": "@mercury/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@harbor/chain": "workspace:*",
-    "@harbor/core": "workspace:*",
-    "@harbor/market": "workspace:*",
-    "@harbor/types": "workspace:*",
+    "@mercury/chain": "workspace:*",
+    "@mercury/core": "workspace:*",
+    "@mercury/market": "workspace:*",
+    "@mercury/types": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@privy-io/node": "^0.35.0",
     "decimal.js": "^10.4.3",
@@ -24,7 +24,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@harbor/tsconfig": "workspace:*",
+    "@mercury/tsconfig": "workspace:*",
     "@types/node": "^22.10.0",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.19.0",

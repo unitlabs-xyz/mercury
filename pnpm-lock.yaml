@@ -27,7 +27,7 @@ importers:
         specifier: ^19.0.0
         version: 19.3.0(react@19.3.0)
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@types/node':
@@ -48,7 +48,7 @@ importers:
       '@expo-google-fonts/instrument-sans':
         specifier: ^0.4.2
         version: 0.4.2
-      '@harbor/core':
+      '@mercury/core':
         specifier: workspace:*
         version: link:../../packages/core
       expo:
@@ -109,10 +109,10 @@ importers:
 
   apps/web:
     dependencies:
-      '@harbor/core':
+      '@mercury/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@harbor/sdk':
+      '@mercury/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       '@privy-io/react-auth':
@@ -146,7 +146,7 @@ importers:
         specifier: ^7.1.0
         version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@tailwindcss/vite':
@@ -176,14 +176,14 @@ importers:
 
   packages/chain:
     dependencies:
-      '@harbor/core':
+      '@mercury/core':
         specifier: workspace:*
         version: link:../core
       decimal.js:
         specifier: ^10.4.3
         version: 10.6.0
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@types/node':
@@ -202,7 +202,7 @@ importers:
         specifier: ^10.4.3
         version: 10.6.0
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       typescript:
@@ -214,17 +214,17 @@ importers:
 
   packages/market:
     dependencies:
-      '@harbor/chain':
+      '@mercury/chain':
         specifier: workspace:*
         version: link:../chain
-      '@harbor/core':
+      '@mercury/core':
         specifier: workspace:*
         version: link:../core
       decimal.js:
         specifier: ^10.4.3
         version: 10.6.0
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@types/node':
@@ -239,14 +239,14 @@ importers:
 
   packages/sdk:
     dependencies:
-      '@harbor/types':
+      '@mercury/types':
         specifier: workspace:*
         version: link:../types
       zod:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       typescript:
@@ -259,7 +259,7 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       typescript:
@@ -268,16 +268,16 @@ importers:
 
   services/api:
     dependencies:
-      '@harbor/chain':
+      '@mercury/chain':
         specifier: workspace:*
         version: link:../../packages/chain
-      '@harbor/core':
+      '@mercury/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@harbor/market':
+      '@mercury/market':
         specifier: workspace:*
         version: link:../../packages/market
-      '@harbor/types':
+      '@mercury/types':
         specifier: workspace:*
         version: link:../../packages/types
       '@hono/node-server':
@@ -305,7 +305,7 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@types/node':
@@ -326,20 +326,20 @@ importers:
 
   services/worker:
     dependencies:
-      '@harbor/chain':
+      '@mercury/chain':
         specifier: workspace:*
         version: link:../../packages/chain
-      '@harbor/core':
+      '@mercury/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@harbor/market':
+      '@mercury/market':
         specifier: workspace:*
         version: link:../../packages/market
       decimal.js:
         specifier: ^10.4.3
         version: 10.6.0
     devDependencies:
-      '@harbor/tsconfig':
+      '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@types/node':

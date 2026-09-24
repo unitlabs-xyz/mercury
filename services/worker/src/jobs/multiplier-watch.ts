@@ -1,6 +1,6 @@
-import { D, sharesGainedFromMultiplier, type Decimal } from "@harbor/core";
-import type { MultiplierSource } from "@harbor/market";
-import type { TokenRegistry } from "@harbor/chain";
+import { D, sharesGainedFromMultiplier, type Decimal } from "@mercury/core";
+import type { MultiplierSource } from "@mercury/market";
+import type { TokenRegistry } from "@mercury/chain";
 import type { Job } from "./index.js";
 
 export interface MultiplierStore {

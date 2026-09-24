@@ -1,6 +1,6 @@
-# @harbor/mobile
+# @mercury/mobile
 
-Expo + React Native, iOS only. Shares `@harbor/core`, `@harbor/sdk` and `@harbor/types` with the
+Expo + React Native, iOS only. Shares `@mercury/core`, `@mercury/sdk` and `@mercury/types` with the
 web app.
 
 **Scaffolded, not implemented.** `app/` holds a placeholder screen so the project is valid and

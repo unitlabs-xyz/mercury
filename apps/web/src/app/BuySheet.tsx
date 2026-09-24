@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Decision, OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@harbor/core";
+import type { Decision, OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@mercury/core";
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
 import { CASH } from "./data";
