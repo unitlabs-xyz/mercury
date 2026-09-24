@@ -68,13 +68,7 @@ export const resolveIdentity = async (
 
   const user =
     existing ??
-    (
-      await db
-        .insert(users)
-        .values({ privyUserId: token.privyUserId })
-        .onConflictDoNothing()
-        .returning()
-    )[0];
+    (await db.insert(users).values({ privyUserId: token.privyUserId }).onConflictDoNothing().returning())[0];
 
   if (!user) throw new Error(`could not create or find user for ${token.privyUserId}`);
 

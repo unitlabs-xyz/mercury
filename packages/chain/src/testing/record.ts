@@ -41,12 +41,23 @@ const save = async (name: string, body: unknown) => {
 await mkdir(OUT, { recursive: true });
 
 await save("jup-search-xstock", await get(`${JUP}/tokens/v2/search?query=xStock`));
-await save("jup-search-ondo", await get(`${JUP}/tokens/v2/search?query=${encodeURIComponent("Ondo Tokenized")}`));
+await save(
+  "jup-search-ondo",
+  await get(`${JUP}/tokens/v2/search?query=${encodeURIComponent("Ondo Tokenized")}`),
+);
 // Deliberately an ambiguous query: it returns the real NVDAx next to several
 // "Nvidia Stonk" impersonators with one holder each. That is the filter's test.
 await save("jup-search-impostors", await get(`${JUP}/tokens/v2/search?query=NVDAx`));
 await save("jup-price", await get(`${JUP}/price/v3?ids=${NVDAX},${SPYX},${USDC}`));
-await save("jup-quote", await get(`${JUP}/swap/v1/quote?inputMint=${USDC}&outputMint=${NVDAX}&amount=100000000&slippageBps=50`));
+await save(
+  "jup-quote",
+  await get(`${JUP}/swap/v1/quote?inputMint=${USDC}&outputMint=${NVDAX}&amount=100000000&slippageBps=50`),
+);
 await save("pyth-spy", await get("https://hermes.pyth.network/v2/price_feeds?query=SPY&asset_type=equity"));
-await save("kamino-reserves", await get("https://api.kamino.finance/kamino-market/5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua/reserves/metrics"));
+await save(
+  "kamino-reserves",
+  await get(
+    "https://api.kamino.finance/kamino-market/5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua/reserves/metrics",
+  ),
+);
 await save("rpc-mint-nvda", await rpc("getAccountInfo", [NVDAX, { encoding: "jsonParsed" }]));

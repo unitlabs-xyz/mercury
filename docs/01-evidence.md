@@ -6,11 +6,11 @@ folder of the previous repository. Re-run it before quoting any number in public
 
 ## The market
 
-| Measure | Value |
-| --- | --- |
-| Tokenized US stocks and funds on Solana | 590 |
-| Issued by Backed (`x` suffix) | 139 |
-| Issued by Ondo Global Markets (`on` suffix) | 451 |
+| Measure                                                                | Value    |
+| ---------------------------------------------------------------------- | -------- |
+| Tokenized US stocks and funds on Solana                                | 590      |
+| Issued by Backed (`x` suffix)                                          | 139      |
+| Issued by Ondo Global Markets (`on` suffix)                            | 451      |
 | Of the fifteen largest tickers we checked, available from both issuers | 15 of 15 |
 
 Every major name has at least two wrappers. That is the condition the whole product depends on.
@@ -21,19 +21,19 @@ Each token carries a **multiplier**, the number of real shares one token represe
 1.0 and rises as dividends are reinvested. The two issuers reinvest on their own schedules, so
 the same stock has a different multiplier from each.
 
-| Ticker | Backed | Ondo | Gap |
-| --- | --- | --- | --- |
-| SPY | 1.005715 | 1.009473 | 0.37% |
-| QQQ | 1.002725 | 1.003353 | 0.06% |
-| AAPL | 1.003269 | 1.003376 | 0.01% |
-| NVDA | 1.001701 | 1.001715 | 0.00% |
-| JPM | 1.013917 | 1.013353 | 0.06% |
+| Ticker | Backed   | Ondo     | Gap   |
+| ------ | -------- | -------- | ----- |
+| SPY    | 1.005715 | 1.009473 | 0.37% |
+| QQQ    | 1.002725 | 1.003353 | 0.06% |
+| AAPL   | 1.003269 | 1.003376 | 0.01% |
+| NVDA   | 1.001701 | 1.001715 | 0.00% |
+| JPM    | 1.013917 | 1.013353 | 0.06% |
 
 Comparing raw token prices without dividing by the multiplier gets the answer wrong. On the S&P
 500 a naive comparison says Backed is 0.48% cheaper; corrected, it is 0.11% cheaper. The naive
 answer overstates the gap by more than three times.
 
-**Consequence.** Every price the user sees must be a price *per share*, computed as the token
+**Consequence.** Every price the user sees must be a price _per share_, computed as the token
 price divided by that token's multiplier. This rule appears again in
 [04 Execution engine](04-execution-engine.md) and [05 Data model](05-data-model.md).
 
@@ -42,13 +42,13 @@ price divided by that token's multiplier. This rule appears again in
 Quotes taken through Jupiter for a $1,000 buy, converted to price per share.
 
 | Ticker | Backed, price impact | Ondo, price impact | Backed $/share | Ondo $/share |
-| --- | --- | --- | --- | --- |
-| NVDA | 0.02% | 85.27% | 222.33 | 1,523.66 |
-| TSLA | 0.02% | 97.41% | 364.86 | 14,054.51 |
-| QQQ | 0.11% | 75.64% | 721.07 | 2,884.48 |
-| AAPL | 0.27% | 13.18% | 335.97 | 395.28 |
-| SPY | 0.00% | 0.10% | 764.21 | 765.03 |
-| MSTR | 0.19% | no route | 159.52 | — |
+| ------ | -------------------- | ------------------ | -------------- | ------------ |
+| NVDA   | 0.02%                | 85.27%             | 222.33         | 1,523.66     |
+| TSLA   | 0.02%                | 97.41%             | 364.86         | 14,054.51    |
+| QQQ    | 0.11%                | 75.64%             | 721.07         | 2,884.48     |
+| AAPL   | 0.27%                | 13.18%             | 335.97         | 395.28       |
+| SPY    | 0.00%                | 0.10%              | 764.21         | 765.03       |
+| MSTR   | 0.19%                | no route           | 159.52         | —            |
 
 At $10,000 the picture is worse: Ondo's Apple wrapper has no route at all, and Nvidia's impact
 rises to 97%.
@@ -74,13 +74,13 @@ not exist.
 Best available on-chain price against the real share price, same Saturday.
 
 | Token | Premium |
-| --- | --- |
-| NVDAx | −0.02% |
-| SPYx | +0.02% |
-| QQQx | −0.06% |
-| TSLAx | −0.09% |
-| AAPLx | +0.14% |
-| SPYon | +0.13% |
+| ----- | ------- |
+| NVDAx | −0.02%  |
+| SPYx  | +0.02%  |
+| QQQx  | −0.06%  |
+| TSLAx | −0.09%  |
+| AAPLx | +0.14%  |
+| SPYon | +0.13%  |
 
 **Consequence, and be honest about it.** The gate rarely fires. It is insurance against the rare
 weekend, not a constant tax. Do not oversell it in the pitch. The known catastrophic case is from

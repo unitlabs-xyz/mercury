@@ -94,7 +94,6 @@ export const HOLDINGS: Holding[] = [
 
 export const MARKET = "Market closed · reopens Mon 21 Sep, 9:30 AM NY";
 
-
 export type Point = { label: string; value: number };
 export type Range = "1W" | "1M" | "1Y" | "All";
 

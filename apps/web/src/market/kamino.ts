@@ -33,7 +33,10 @@ export type CreditMarket = {
 };
 
 export const fetchCreditMarket = async (signal?: AbortSignal): Promise<CreditMarket> => {
-  const res = await fetch(`${BASE}/kamino-market/${XSTOCKS_MARKET}/reserves/metrics`, signal ? { signal } : {});
+  const res = await fetch(
+    `${BASE}/kamino-market/${XSTOCKS_MARKET}/reserves/metrics`,
+    signal ? { signal } : {},
+  );
   if (!res.ok) throw new Error(`Kamino reserves returned ${res.status}`);
   const reserves = (await res.json()) as Reserve[];
 

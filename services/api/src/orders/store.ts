@@ -3,8 +3,7 @@ import type { Db } from "../db/client.js";
 import { instruments, orders, tokens } from "../db/schema.js";
 
 export type OrderStatus =
-  | "pending" | "executing" | "filled" | "queued"
-  | "partially_filled" | "expired" | "cancelled" | "refused";
+  "pending" | "executing" | "filled" | "queued" | "partially_filled" | "expired" | "cancelled" | "refused";
 
 export interface NewOrder {
   readonly userId: string;
@@ -51,8 +50,9 @@ export const pgOrderStore = (db: Db): OrderStore => ({
     const chosenTokenId =
       order.chosenMint === null
         ? null
-        : ((await db.select({ id: tokens.id }).from(tokens).where(eq(tokens.mint, order.chosenMint)).limit(1))[0]
-            ?.id ?? null);
+        : ((
+            await db.select({ id: tokens.id }).from(tokens).where(eq(tokens.mint, order.chosenMint)).limit(1)
+          )[0]?.id ?? null);
 
     const [saved] = await db
       .insert(orders)
@@ -67,7 +67,12 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         premiumPct: order.premiumPct,
         status: order.status,
       })
-      .returning({ id: orders.id, decision: orders.decision, status: orders.status, createdAt: orders.createdAt });
+      .returning({
+        id: orders.id,
+        decision: orders.decision,
+        status: orders.status,
+        createdAt: orders.createdAt,
+      });
     if (saved === undefined) throw new Error("order insert returned nothing");
 
     return {
@@ -80,7 +85,12 @@ export const pgOrderStore = (db: Db): OrderStore => ({
 
   async byId(userId, id) {
     const [row] = await db
-      .select({ id: orders.id, decision: orders.decision, status: orders.status, createdAt: orders.createdAt })
+      .select({
+        id: orders.id,
+        decision: orders.decision,
+        status: orders.status,
+        createdAt: orders.createdAt,
+      })
       .from(orders)
       // Scoped to the caller. An order id is a uuid, but a route that trusts one
       // without an owner check is a route that will one day be handed someone
@@ -93,6 +103,9 @@ export const pgOrderStore = (db: Db): OrderStore => ({
   },
 
   async setStatus(userId, id, status) {
-    await db.update(orders).set({ status }).where(and(eq(orders.id, id), eq(orders.userId, userId)));
+    await db
+      .update(orders)
+      .set({ status })
+      .where(and(eq(orders.id, id), eq(orders.userId, userId)));
   },
 });

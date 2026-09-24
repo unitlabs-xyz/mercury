@@ -21,8 +21,7 @@ export interface KaminoCreditConfig {
 }
 
 /** Rates arrive as decimal strings. They go straight into Decimal, never through a float. */
-const rate = (v: string | undefined): Decimal | null =>
-  v === undefined || v.length === 0 ? null : D(v);
+const rate = (v: string | undefined): Decimal | null => (v === undefined || v.length === 0 ? null : D(v));
 
 export class KaminoCredit implements CreditSource {
   private readonly base: string;

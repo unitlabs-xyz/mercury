@@ -5,11 +5,10 @@ import { EASE, PRESS, noteIn, sequence } from "../motion/config";
 import { Dialog, RuledSheet } from "../ui/Dialog";
 import { Alert, Blocks, Check, Clock, Close, Key, Lock, Mail, Sliders } from "../ui/icons";
 import { useAuthModal } from "./AuthContext";
-import { CHECK_MS, CREATE_MS, RESEND_MS, SEND_MS, useEmailLogin } from "./useEmailLogin";
+import { CHECK_MS, CREATE_MS, SEND_MS, useEmailLogin } from "./useEmailLogin";
 import { CodeInput } from "./CodeInput";
 
 type Step = "email" | "code" | "ready";
-
 
 const RESEND_SECONDS = 30;
 
@@ -210,8 +209,8 @@ export const AuthModal = () => {
                       Enter your email to connect or create a wallet
                     </h2>
                     <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.6] text-muted text-pretty">
-                      We'll email you a one-time code. No seed phrase to write down, and you can
-                      export the wallet whenever you like.
+                      We'll email you a one-time code. No seed phrase to write down, and you can export the
+                      wallet whenever you like.
                     </p>
 
                     <form
@@ -221,9 +220,7 @@ export const AuthModal = () => {
                         invalid ? "border-down" : "border-cardline focus-within:border-brand"
                       }`}
                     >
-                      <Mail
-                        className={`size-[18px] shrink-0 ${invalid ? "text-down" : "text-faint"}`}
-                      />
+                      <Mail className={`size-[18px] shrink-0 ${invalid ? "text-down" : "text-faint"}`} />
                       <input
                         ref={emailField}
                         type="email"
@@ -248,10 +245,7 @@ export const AuthModal = () => {
                       >
                         {sending ? "Sending" : "Get code"}
                         {sending && (
-                          <Fill
-                            ms={SEND_MS}
-                            className="absolute inset-x-0 bottom-0 h-[2px] bg-white/55"
-                          />
+                          <Fill ms={SEND_MS} className="absolute inset-x-0 bottom-0 h-[2px] bg-white/55" />
                         )}
                       </motion.button>
                     </form>
@@ -285,8 +279,8 @@ export const AuthModal = () => {
                       Check your email for the 6-digit code
                     </h2>
                     <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.6] text-muted text-pretty">
-                      Sent to <span className="font-semibold text-ink">{email}</span>. This creates
-                      your new wallet, or connects the one you already have.
+                      Sent to <span className="font-semibold text-ink">{email}</span>. This creates your new
+                      wallet, or connects the one you already have.
                     </p>
 
                     {/* Width comes from the boxes, so the progress rule measures the code. */}
@@ -325,9 +319,7 @@ export const AuthModal = () => {
                               />
                             </span>
                             <p className="mt-3.5 text-[14px] text-muted">
-                              {pending === "checking"
-                                ? "Checking your code"
-                                : "Creating your wallet"}
+                              {pending === "checking" ? "Checking your code" : "Creating your wallet"}
                             </p>
                           </motion.div>
                         ) : rejected ? (
@@ -337,8 +329,7 @@ export const AuthModal = () => {
                           </p>
                         ) : resent ? (
                           <p className="flex items-center gap-2 text-[14px] text-up-deep">
-                            <Check className="size-[15px] shrink-0" />
-                            A new code is on its way
+                            <Check className="size-[15px] shrink-0" />A new code is on its way
                           </p>
                         ) : pending === "resending" ? (
                           <p className="flex items-center gap-2 text-[14px] text-muted">
@@ -374,8 +365,7 @@ export const AuthModal = () => {
 
                     <p className="mt-8 flex items-center gap-[11px] rounded-xl border border-[#CBE4E7] bg-[#F1F7F8] px-4 py-3.5 text-[14px] leading-[1.45] text-brand-deep">
                       <Lock className="size-[17px] shrink-0" />
-                      Only you can approve transactions. Neither Harbor nor Privy can move your
-                      funds.
+                      Only you can approve transactions. Neither Harbor nor Privy can move your funds.
                     </p>
                   </>
                 )}
@@ -402,9 +392,7 @@ export const AuthModal = () => {
                         <motion.li key={a.title} className="flex gap-3.5" variants={noteIn}>
                           <span className="mt-0.5 shrink-0 text-brand">{a.icon}</span>
                           <div>
-                            <p className="text-[16px] font-semibold tracking-[-0.01em]">
-                              {a.title}
-                            </p>
+                            <p className="text-[16px] font-semibold tracking-[-0.01em]">{a.title}</p>
                             <p className="mt-1 max-w-[46ch] text-[14px] leading-[1.5] text-muted text-pretty">
                               {a.body}
                             </p>

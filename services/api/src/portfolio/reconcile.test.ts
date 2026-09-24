@@ -162,10 +162,7 @@ describe("planReconciliation: a dividend", () => {
   it("does not bill a new arrival for a dividend it was never owed", () => {
     // The transfer_in lot is already recorded at the current multiplier, so the
     // shortfall it would otherwise leave behind is zero.
-    const plan = planReconciliation(
-      [held({ multiplier: D("1.5"), chainRawAmount: ONE_TOKEN })],
-      NOW,
-    );
+    const plan = planReconciliation([held({ multiplier: D("1.5"), chainRawAmount: ONE_TOKEN })], NOW);
     expect(plan.lots.length).toBe(1);
     expect(plan.lots[0]!.source).toBe("transfer_in");
     expect(plan.lots[0]!.shares).toEqual(D("1.5"));
@@ -198,7 +195,14 @@ describe("planReconciliation: tokens that left", () => {
 
   it("writes no activity for it, because we do not know what happened", () => {
     const plan = planReconciliation(
-      [held({ chainRawAmount: 0n, recordedRawAmount: ONE_TOKEN, recordedShares: D(1), recordedCostUsd: D(200) })],
+      [
+        held({
+          chainRawAmount: 0n,
+          recordedRawAmount: ONE_TOKEN,
+          recordedShares: D(1),
+          recordedCostUsd: D(200),
+        }),
+      ],
       NOW,
     );
     expect(plan.activity).toEqual([]);
@@ -213,19 +217,13 @@ describe("planReconciliation: tokens that left", () => {
 
 describe("planReconciliation: what it refuses to do", () => {
   it("will not write a lot it cannot price", () => {
-    const plan = planReconciliation(
-      [held({ chainRawAmount: ONE_TOKEN, referencePricePerShare: null })],
-      NOW,
-    );
+    const plan = planReconciliation([held({ chainRawAmount: ONE_TOKEN, referencePricePerShare: null })], NOW);
     expect(plan.lots).toEqual([]);
     expect(plan.activity).toEqual([]);
   });
 
   it("will not claim shares it has no cost for", () => {
-    const plan = planReconciliation(
-      [held({ chainRawAmount: ONE_TOKEN, referencePricePerShare: null })],
-      NOW,
-    );
+    const plan = planReconciliation([held({ chainRawAmount: ONE_TOKEN, referencePricePerShare: null })], NOW);
     expect(plan.positions[0]!.shares).toEqual(ZERO);
   });
 });

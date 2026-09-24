@@ -5,8 +5,18 @@ import type { Option } from "../ui/Select";
 const TODAY = "2026-09-19";
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 export const dayLabel = (iso: string) => {
@@ -34,10 +44,7 @@ export const MONTH_OPTIONS: Option[] = [
 ];
 
 const matches = (e: Event, q: string) =>
-  [e.title, e.sub, ...e.details.flatMap((d) => [d.label, d.value])]
-    .join(" ")
-    .toLowerCase()
-    .includes(q);
+  [e.title, e.sub, ...e.details.flatMap((d) => [d.label, d.value])].join(" ").toLowerCase().includes(q);
 
 export const filterEvents = (group: Group, year: string, month: string, query: string) => {
   const kinds = GROUPS.find((g) => g.key === group)?.kinds ?? [];

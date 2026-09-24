@@ -4,14 +4,7 @@ import { AnchorMark } from "../ui/Logo";
 import { Card, Clock, Grid, Help, List, PieChart, Repeat, Trend } from "../ui/icons";
 import { useSession } from "../market/hooks";
 
-
-export type NavKey =
-  | "portfolio"
-  | "invest"
-  | "baskets"
-  | "recurring"
-  | "money"
-  | "activity";
+export type NavKey = "portfolio" | "invest" | "baskets" | "recurring" | "money" | "activity";
 
 type Item = { key: NavKey | "help"; icon: ReactNode; label: string; to?: string };
 
@@ -33,10 +26,7 @@ const MarketStamp = () => {
   return (
     <section className="mt-7 rounded-xl border border-cardline bg-white/70 p-3.5">
       <p className="flex items-center gap-1.5">
-        <span
-          className={`size-[7px] shrink-0 rounded-full ${open ? "bg-up" : "bg-faint"}`}
-          aria-hidden
-        />
+        <span className={`size-[7px] shrink-0 rounded-full ${open ? "bg-up" : "bg-faint"}`} aria-hidden />
         <span className="stamp">{open ? "Market open" : "Market closed"}</span>
       </p>
       <p className="mt-2 flex items-start gap-1.5 text-[12px] leading-[1.45] text-muted">

@@ -17,8 +17,13 @@ export const PricedCandidate = z.object({
 });
 
 export const RefuseReason = z.enum([
-  "below_minimum", "no_route", "impact_too_high",
-  "reference_stale", "instrument_halted", "corp_action_pending", "no_candidates",
+  "below_minimum",
+  "no_route",
+  "impact_too_high",
+  "reference_stale",
+  "instrument_halted",
+  "corp_action_pending",
+  "no_candidates",
 ]);
 
 const decisionBase = {
@@ -32,16 +37,33 @@ const decisionBase = {
 };
 
 export const Decision = z.discriminatedUnion("kind", [
-  z.object({ ...decisionBase, kind: z.literal("execute"), best: PricedCandidate, premium: Ratio, warning: z.string().nullable() }),
   z.object({
-    ...decisionBase, kind: z.literal("offer_queue"), best: PricedCandidate, premium: Ratio,
-    suggestedTriggerPricePerShare: Usd, marketOpensAt: Iso.nullable(),
+    ...decisionBase,
+    kind: z.literal("execute"),
+    best: PricedCandidate,
+    premium: Ratio,
+    warning: z.string().nullable(),
+  }),
+  z.object({
+    ...decisionBase,
+    kind: z.literal("offer_queue"),
+    best: PricedCandidate,
+    premium: Ratio,
+    suggestedTriggerPricePerShare: Usd,
+    marketOpensAt: Iso.nullable(),
   }),
   z.object({ ...decisionBase, kind: z.literal("refuse"), reason: RefuseReason, detail: z.string() }),
 ]);
 
 export const OrderStatus = z.enum([
-  "pending", "executing", "filled", "queued", "partially_filled", "expired", "cancelled", "refused",
+  "pending",
+  "executing",
+  "filled",
+  "queued",
+  "partially_filled",
+  "expired",
+  "cancelled",
+  "refused",
 ]);
 
 export const Order = z.object({

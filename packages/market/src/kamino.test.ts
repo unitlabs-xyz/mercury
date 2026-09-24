@@ -60,7 +60,9 @@ describe("KaminoCredit", () => {
   });
 
   it("says null for a rate USDC is missing, rather than zero", async () => {
-    const k = new KaminoCredit({ fetch: fakeFetch({ "/kamino-market/": [{ liquidityToken: "SPYx", maxLtv: "0.73" }] }) });
+    const k = new KaminoCredit({
+      fetch: fakeFetch({ "/kamino-market/": [{ liquidityToken: "SPYx", maxLtv: "0.73" }] }),
+    });
     const market = await k.current();
     expect(market.borrowApy).toBeNull();
     expect(market.supplyApy).toBeNull();

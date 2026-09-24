@@ -70,7 +70,11 @@ export interface BasketWeight {
  */
 export interface BasketVenue {
   quote(basketId: string, usdAmount: Decimal): Promise<BasketQuote>;
-  invest(basketId: string, deposits: readonly { mint: string; amount: Decimal }[], owner: string): Promise<readonly string[]>;
+  invest(
+    basketId: string,
+    deposits: readonly { mint: string; amount: Decimal }[],
+    owner: string,
+  ): Promise<readonly string[]>;
   redeem(basketId: string, tokens: Decimal, owner: string): Promise<readonly string[]>;
   value(basketId: string): Promise<{ nav: Decimal; navPerToken: Decimal; weights: readonly BasketWeight[] }>;
 }

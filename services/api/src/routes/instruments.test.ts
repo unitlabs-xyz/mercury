@@ -17,7 +17,15 @@ const catalogue: readonly CatalogueRow[] = [
     logoUrl: "https://example.test/nvdax.png",
     isTradable: true,
     wrappers: [
-      { mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8, multiplier: "1.5", isRoutable: true, holders: 108_418 },
+      {
+        mint: NVDAX,
+        symbol: "NVDAx",
+        issuer: "backed",
+        decimals: 8,
+        multiplier: "1.5",
+        isRoutable: true,
+        holders: 108_418,
+      },
     ],
   },
   {
@@ -28,7 +36,15 @@ const catalogue: readonly CatalogueRow[] = [
     logoUrl: null,
     isTradable: true,
     wrappers: [
-      { mint: SPYX, symbol: "SPYx", issuer: "backed", decimals: 8, multiplier: "1", isRoutable: true, holders: 250_000 },
+      {
+        mint: SPYX,
+        symbol: "SPYx",
+        issuer: "backed",
+        decimals: 8,
+        multiplier: "1",
+        isRoutable: true,
+        holders: 250_000,
+      },
     ],
   },
 ];
@@ -49,7 +65,13 @@ const deps = (over: Partial<InstrumentDeps> = {}): InstrumentDeps => ({
   buyers30d: async () => 0,
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) },
   sessions: {
-    current: async () => ({ status: "open", isOpen: true, nextOpenAt: null, nextCloseAt: null, isWeekend: false }),
+    current: async () => ({
+      status: "open",
+      isOpen: true,
+      nextOpenAt: null,
+      nextCloseAt: null,
+      isWeekend: false,
+    }),
   },
   ...over,
 });
@@ -86,7 +108,13 @@ describe("GET /v1/instruments", () => {
   it("carries the live session, so a closed market is visible before an order is tried", async () => {
     const d = deps({
       sessions: {
-        current: async () => ({ status: "closed", isOpen: false, nextOpenAt: null, nextCloseAt: null, isWeekend: true }),
+        current: async () => ({
+          status: "closed",
+          isOpen: false,
+          nextOpenAt: null,
+          nextCloseAt: null,
+          isWeekend: true,
+        }),
       },
     });
     const shelf = await shelfOf(await app(d).request("/v1/instruments"));
@@ -122,7 +150,9 @@ describe("GET /v1/instruments", () => {
   });
 
   it("leaves out an instrument nothing can fill", async () => {
-    const d = deps({ catalogue: async () => catalogue.map((c) => ({ ...c, isTradable: c.ticker !== "SPY" })) });
+    const d = deps({
+      catalogue: async () => catalogue.map((c) => ({ ...c, isTradable: c.ticker !== "SPY" })),
+    });
     const shelf = await shelfOf(await app(d).request("/v1/instruments"));
     expect(shelf.map((i) => i.ticker)).toEqual(["NVDA"]);
   });

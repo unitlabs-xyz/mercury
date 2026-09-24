@@ -11,12 +11,22 @@
     "dev:api": "pnpm --filter @mercury/api dev",
     "dev:web": "pnpm --filter @mercury/web dev",
     "dev:landing": "pnpm --filter @mercury/landing dev",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "check": "pnpm -r typecheck && pnpm -r test"
+    "check": "pnpm lint && pnpm format:check && pnpm -r typecheck && pnpm -r test"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.9",
     "turbo": "^2.5.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.70.1"
   }
 }

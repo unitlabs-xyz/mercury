@@ -5,7 +5,13 @@ import { fails, fakeFetch, jupPrice, NVDAX_MINT, SPYX_MINT } from "@mercury/chai
 import { JupiterMarket } from "./jupiter.js";
 
 const NVDAX: TokenRef = { mint: NVDAX_MINT, symbol: "NVDAx", ticker: "NVDA", issuer: "backed", decimals: 8 };
-const NVDAON: TokenRef = { mint: "OnDoNvDaMiNtAdDrEsSfOrTeStSoNlY1111111111", symbol: "NVDAon", ticker: "NVDA", issuer: "ondo", decimals: 6 };
+const NVDAON: TokenRef = {
+  mint: "OnDoNvDaMiNtAdDrEsSfOrTeStSoNlY1111111111",
+  symbol: "NVDAon",
+  ticker: "NVDA",
+  issuer: "ondo",
+  decimals: 6,
+};
 
 const registry = (refs: readonly TokenRef[]): TokenRegistry => ({
   wrappersFor: async (ticker) => refs.filter((r) => r.ticker === ticker),
@@ -83,7 +89,9 @@ describe("JupiterMarket.pricesFor", () => {
       fetch: fakeFetch({ "/price/v3": body }),
       now: () => Date.parse("2026-09-01T00:00:00Z"),
     });
-    expect((await m.pricesFor([NVDAX_MINT])).get(NVDAX_MINT)!.multiplier.toFixed()).toBe("1.0009180758490996");
+    expect((await m.pricesFor([NVDAX_MINT])).get(NVDAX_MINT)!.multiplier.toFixed()).toBe(
+      "1.0009180758490996",
+    );
   });
 
   it("says one for a token that has never paid a dividend", async () => {
@@ -105,7 +113,10 @@ describe("JupiterMarket.pricesFor", () => {
 
 describe("JupiterMarket.priceFor", () => {
   it("prices a ticker from its Backed wrapper", async () => {
-    const m = new JupiterMarket({ registry: registry([NVDAON, NVDAX]), fetch: fakeFetch({ "/price/v3": jupPrice }) });
+    const m = new JupiterMarket({
+      registry: registry([NVDAON, NVDAX]),
+      fetch: fakeFetch({ "/price/v3": jupPrice }),
+    });
     const reference = await m.priceFor("NVDA");
     const nvda = recorded[NVDAX_MINT]!;
     expect(reference!.pricePerShare.toFixed()).toBe(String(nvda.stockData!.price));
@@ -129,7 +140,10 @@ describe("JupiterMarket.priceFor", () => {
   });
 
   it("throws when Jupiter is down, so the caller can fall back rather than price on nothing", async () => {
-    const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: fakeFetch({ "/price/v3": fails(502) }) });
+    const m = new JupiterMarket({
+      registry: registry([NVDAX]),
+      fetch: fakeFetch({ "/price/v3": fails(502) }),
+    });
     await expect(m.priceFor("NVDA")).rejects.toThrow("502");
   });
 });

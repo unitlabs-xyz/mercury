@@ -133,8 +133,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       const balance = balances.find((b) => b.mint === wrapper.mint);
       if (balance === undefined || balance.rawAmount === 0n) continue;
       const price = board.get(wrapper.mint);
-      const multiplier =
-        (await deps.multipliers.multiplierFor(wrapper.mint)) ?? price?.multiplier ?? D(1);
+      const multiplier = (await deps.multipliers.multiplierFor(wrapper.mint)) ?? price?.multiplier ?? D(1);
       held.push({
         mint: wrapper.mint,
         symbol: wrapper.symbol,

@@ -30,9 +30,7 @@ export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise
     catalogue.instruments().catch(() => []),
   ]);
 
-  const holdersByMint = new Map(
-    live.flatMap((i) => i.wrappers.map((w) => [w.mint, w.holders] as const)),
-  );
+  const holdersByMint = new Map(live.flatMap((i) => i.wrappers.map((w) => [w.mint, w.holders] as const)));
 
   const wrappers = await db
     .select({

@@ -13,8 +13,7 @@ import { portfolioRoutes, type HoldingRow, type PortfolioDeps } from "./portfoli
  */
 const portfolioOf = async (res: Response) => Portfolio.parse(await res.json());
 const exposureOf = async (res: Response) => Exposure.parse(await res.json());
-const errorOf = async (res: Response) =>
-  (await res.json()) as { error: { code: string; message: string } };
+const errorOf = async (res: Response) => (await res.json()) as { error: { code: string; message: string } };
 
 // Real mints, because the wire schema validates them — a four-character
 // stand-in is not a mint and `packages/types` is right to refuse it.
@@ -112,7 +111,9 @@ describe("GET /v1/portfolio", () => {
   it("derives today's change from each holding's own move", async () => {
     // 2 shares now worth $400 after a 25% rise: $80 of that is today's.
     const d = deps({
-      prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m, { changePct24h: D(25) })])) },
+      prices: {
+        pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m, { changePct24h: D(25) })])),
+      },
     });
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.changeUsd).toBe("80");
@@ -199,14 +200,19 @@ describe("GET /v1/portfolio/exposure/:ticker", () => {
             mints.map((m) => [
               m,
               // Two tokens, two different multipliers. One token is not one share.
-              m === NVDAX ? price(m, { multiplier: D(2), usdPricePerToken: D(400) }) : price(m, { multiplier: D(1) }),
+              m === NVDAX
+                ? price(m, { multiplier: D(2), usdPricePerToken: D(400) })
+                : price(m, { multiplier: D(1) }),
             ]),
           ),
       },
       // The mint is the authority on the multiplier, and the route asks it
       // first. A fake that answered 1 for everything would be testing the
       // fallback while pretending to test the preferred path.
-      multipliers: { multiplierFor: async (mint) => (mint === NVDAX ? D(2) : D(1)), isPaused: async () => false },
+      multipliers: {
+        multiplierFor: async (mint) => (mint === NVDAX ? D(2) : D(1)),
+        isPaused: async () => false,
+      },
     });
     const body = await exposureOf(await appWith(d).request("/v1/portfolio/exposure/NVDA"));
     expect(body.shares).toBe("3");

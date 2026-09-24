@@ -10,12 +10,23 @@ export const Qty = Usd;
 export const Ratio = z.string().regex(/^-?\d+(\.\d+)?$/);
 
 export const Mint = z.string().min(32).max(44);
-export const Ticker = z.string().min(1).max(12).regex(/^[A-Z.]+$/);
+export const Ticker = z
+  .string()
+  .min(1)
+  .max(12)
+  .regex(/^[A-Z.]+$/);
 export const Issuer = z.enum(["backed", "ondo"]);
 export const Side = z.enum(["buy", "sell"]);
 
 export const InstrumentStatus = z.enum([
-  "open", "premarket", "postmarket", "overnight", "closed", "halted", "stale", "corp_action_pending",
+  "open",
+  "premarket",
+  "postmarket",
+  "overnight",
+  "closed",
+  "halted",
+  "stale",
+  "corp_action_pending",
 ]);
 
 export const Iso = z.string().datetime();

@@ -1,4 +1,4 @@
-import { D, type Decimal } from "@mercury/core";
+import type { Decimal } from "@mercury/core";
 import type { BasketQuote, BasketVenue, BasketWeight } from "../ports.js";
 
 /**
@@ -17,7 +17,11 @@ export class SymmetryVenue implements BasketVenue {
     throw new Error("SymmetryVenue.quote: awaiting the spike, see docs/adr/0005-basket-vaults.md");
   }
 
-  invest(_basketId: string, _deposits: readonly { mint: string; amount: Decimal }[], _owner: string): Promise<readonly string[]> {
+  invest(
+    _basketId: string,
+    _deposits: readonly { mint: string; amount: Decimal }[],
+    _owner: string,
+  ): Promise<readonly string[]> {
     throw new Error("SymmetryVenue.invest: awaiting the spike");
   }
 
@@ -25,7 +29,9 @@ export class SymmetryVenue implements BasketVenue {
     throw new Error("SymmetryVenue.redeem: awaiting the spike");
   }
 
-  value(_basketId: string): Promise<{ nav: Decimal; navPerToken: Decimal; weights: readonly BasketWeight[] }> {
+  value(
+    _basketId: string,
+  ): Promise<{ nav: Decimal; navPerToken: Decimal; weights: readonly BasketWeight[] }> {
     throw new Error("SymmetryVenue.value: awaiting the spike");
   }
 }

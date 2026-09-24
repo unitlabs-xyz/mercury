@@ -52,7 +52,8 @@ export function activityRoutes(deps: ActivityDeps): Hono {
     const identity = c.get("identity");
 
     const asked = Number(c.req.query("limit"));
-    const limit = Number.isFinite(asked) && asked > 0 ? Math.min(Math.floor(asked), MAX_LIMIT) : DEFAULT_LIMIT;
+    const limit =
+      Number.isFinite(asked) && asked > 0 ? Math.min(Math.floor(asked), MAX_LIMIT) : DEFAULT_LIMIT;
 
     const raw = c.req.query("cursor");
     const cursor = raw === undefined ? null : decodeCursor(raw);

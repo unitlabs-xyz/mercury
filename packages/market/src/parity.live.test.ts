@@ -35,7 +35,10 @@ describe.skipIf(RPC === undefined)("multiplier parity, live", () => {
       // so exact equality is the wrong assertion. A basis point is not: the gap
       // this catches is a stale multiplier, which is hundreds of times larger.
       const gap = mint!.sub(jupiter!).abs().div(mint!);
-      expect(gap.lte("0.0001"), `${token.symbol}: chain ${mint!.toFixed()} vs jupiter ${jupiter!.toFixed()}`).toBe(true);
+      expect(
+        gap.lte("0.0001"),
+        `${token.symbol}: chain ${mint!.toFixed()} vs jupiter ${jupiter!.toFixed()}`,
+      ).toBe(true);
     }
   }, 60_000);
 });

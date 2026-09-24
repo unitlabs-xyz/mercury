@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import { fails, fakeFetch, FIXTURE_OWNER, NVDAX_MINT, rpcMintNvda, rpcTokenAccounts, SPYX_MINT, USDC_MINT } from "../testing/index.js";
+import {
+  fails,
+  fakeFetch,
+  FIXTURE_OWNER,
+  NVDAX_MINT,
+  rpcMintNvda,
+  rpcTokenAccounts,
+  SPYX_MINT,
+  USDC_MINT,
+} from "../testing/index.js";
 import { SolanaRpc } from "./rpc.js";
 
 const RPC = "https://rpc.example/v1";
@@ -128,7 +137,11 @@ describe("SolanaRpc.tokenBalances", () => {
 describe("SolanaRpc.mintConfig", () => {
   it("uses newMultiplier once its effective timestamp has passed", async () => {
     const body = mintWith(
-      { multiplier: "1.0009180758490996", newMultiplier: "1.001701196801074", newMultiplierEffectiveTimestamp: 1_789_000_200 },
+      {
+        multiplier: "1.0009180758490996",
+        newMultiplier: "1.001701196801074",
+        newMultiplierEffectiveTimestamp: 1_789_000_200,
+      },
       false,
     );
     const rpc = new SolanaRpc({
@@ -142,7 +155,11 @@ describe("SolanaRpc.mintConfig", () => {
 
   it("uses the current multiplier until then", async () => {
     const body = mintWith(
-      { multiplier: "1.0009180758490996", newMultiplier: "1.001701196801074", newMultiplierEffectiveTimestamp: 1_789_000_200 },
+      {
+        multiplier: "1.0009180758490996",
+        newMultiplier: "1.001701196801074",
+        newMultiplierEffectiveTimestamp: 1_789_000_200,
+      },
       false,
     );
     const rpc = new SolanaRpc({
@@ -164,7 +181,10 @@ describe("SolanaRpc.mintConfig", () => {
   });
 
   it("reports a halted token", async () => {
-    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: mintWith({ multiplier: "1" }, true) }) });
+    const rpc = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: mintWith({ multiplier: "1" }, true) }),
+    });
     expect((await rpc.mintConfig(NVDAX_MINT))!.isPaused).toBe(true);
   });
 
@@ -185,7 +205,10 @@ describe("SolanaRpc.mintConfig", () => {
   });
 
   it("says null for an account that does not exist", async () => {
-    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: { jsonrpc: "2.0", id: 1, result: { value: null } } }) });
+    const rpc = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: { jsonrpc: "2.0", id: 1, result: { value: null } } }),
+    });
     expect(await rpc.mintConfig("NotAMint")).toBeNull();
   });
 });

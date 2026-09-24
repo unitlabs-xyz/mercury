@@ -29,7 +29,6 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
   app.use("*", cors());
 
-
   app.get("/health", (c) => c.json({ ok: true }));
 
   app.use("/v1/*", requireAuth(auth));
@@ -113,8 +112,13 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.get("/v1/baskets", (c) =>
     c.json({
       baskets: BASKETS.map((b) => ({
-        slug: b.slug, name: b.name, description: b.description,
-        feeBps: b.feeBps, minimumUsd: b.minimumUsd, capUsd: b.capUsd, venue: "symmetry",
+        slug: b.slug,
+        name: b.name,
+        description: b.description,
+        feeBps: b.feeBps,
+        minimumUsd: b.minimumUsd,
+        capUsd: b.capUsd,
+        venue: "symmetry",
         constituents: b.constituents,
       })),
     }),
@@ -134,12 +138,22 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const legs = allocate(D(parsed.data.usdAmount), basket.constituents);
     const priced = await Promise.all(
       legs.map(async (leg) => {
-        const decision = await priceOrder(market(), { ticker: leg.ticker, side: "buy", amount: toWire(leg.usdAmount) });
-        return { ticker: leg.ticker, usdAmount: toWire(leg.usdAmount), decision: decision ? decisionToWire(decision) : null };
+        const decision = await priceOrder(market(), {
+          ticker: leg.ticker,
+          side: "buy",
+          amount: toWire(leg.usdAmount),
+        });
+        return {
+          ticker: leg.ticker,
+          usdAmount: toWire(leg.usdAmount),
+          decision: decision ? decisionToWire(decision) : null,
+        };
       }),
     );
 
-    const refusedLegs = priced.filter((l) => l.decision === null || l.decision.kind === "refuse").map((l) => l.ticker);
+    const refusedLegs = priced
+      .filter((l) => l.decision === null || l.decision.kind === "refuse")
+      .map((l) => l.ticker);
     const queued = priced.filter((l) => l.decision?.kind === "offer_queue").length;
 
     return c.json({

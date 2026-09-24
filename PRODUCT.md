@@ -77,6 +77,7 @@ candlestick charts, bank deposits and withdrawals, identity checks, news and ana
 screener, a tax centre, savings goals, user-created baskets, an AI assistant.
 
 **Confirmed rules:**
+
 - Minimum order **$5**; orders under it are refused, not rounded.
 - Price impact above **1.5%** refuses; a premium above **1%** while the exchange is shut offers
   to queue rather than fill.
@@ -88,11 +89,12 @@ screener, a tax centre, savings goals, user-created baskets, an AI assistant.
 - An instrument is listed only where some wrapper has the depth to fill a normal order. Listing
   what cannot be filled is an offer the product cannot honour.
 
-**Terminology:** *wrapper* (a token representing a share), *multiplier* (shares per token),
-*issuer* (Backed, whose symbols end `x`; Ondo, whose end `on`), *basket*, *queue*, *reference
-price* (one real share), *collateral factor*.
+**Terminology:** _wrapper_ (a token representing a share), _multiplier_ (shares per token),
+_issuer_ (Backed, whose symbols end `x`; Ondo, whose end `on`), _basket_, _queue_, _reference
+price_ (one real share), _collateral factor_.
 
 **Open, and recorded rather than assumed:**
+
 - Whether basket tokens route as a single swap, and whether the xStocks mints are in Symmetry's
   supported list. Both close by testing, not by discussion.
 - **Every screen must run on real data by 12 October.** Portfolio, Money and Activity still use

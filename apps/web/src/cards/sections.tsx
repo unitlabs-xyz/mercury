@@ -13,7 +13,10 @@ const StoreMark = ({ kind }: { kind: "play" | "apple" }) => (
   <span className="grid size-11 shrink-0 place-items-center rounded-[10px] border border-cardline bg-white text-ink transition-colors hover:border-brand">
     {kind === "play" ? (
       <svg viewBox="0 0 24 24" className="size-[17px]" fill="currentColor">
-        <path d="M4.2 2.6c-.3.3-.5.7-.5 1.3v16.2c0 .6.2 1 .5 1.3l.1.1 9.1-9.1v-.2L4.3 2.5l-.1.1Z" opacity=".75" />
+        <path
+          d="M4.2 2.6c-.3.3-.5.7-.5 1.3v16.2c0 .6.2 1 .5 1.3l.1.1 9.1-9.1v-.2L4.3 2.5l-.1.1Z"
+          opacity=".75"
+        />
         <path d="m16.5 15.5-3.1-3.1v-.2l3.1-3.1.1.1 3.7 2.1c1 .6 1 1.6 0 2.2l-3.7 2.1-.1-.1Z" />
         <path d="m16.6 15.4-3.2-3.2-9.2 9.2c.4.4.9.4 1.6 0l10.8-6Z" opacity=".9" />
         <path d="M16.6 8.6 5.8 2.6c-.7-.4-1.2-.4-1.6 0l9.2 9.2 3.2-3.2Z" opacity=".6" />
@@ -87,8 +90,7 @@ export const HowItWorks = () => (
           Three steps. No paperwork
         </h2>
         <p className="mt-5 max-w-[44ch] text-[15px] leading-[1.6] text-muted text-pretty">
-          No applications. No manual borrowing. No origination fee. Physical metal card available
-          on request.
+          No applications. No manual borrowing. No origination fee. Physical metal card available on request.
         </p>
       </div>
 
@@ -98,9 +100,7 @@ export const HowItWorks = () => (
             <span className="mt-1 font-mono text-[12px] text-faint tabular-nums">{s.n}</span>
             <span className="min-w-0 flex-1 rounded-2xl border border-cardline bg-white px-5 py-4">
               <span className="block text-[16px] font-semibold">{s.title}</span>
-              <span className="mt-1.5 block text-[14px] leading-[1.6] text-muted text-pretty">
-                {s.body}
-              </span>
+              <span className="mt-1.5 block text-[14px] leading-[1.6] text-muted text-pretty">{s.body}</span>
             </span>
           </li>
         ))}
@@ -176,8 +176,8 @@ export const TwoModes = () => {
       </div>
 
       <p className="mt-12 text-center text-[13px] leading-[1.6] text-muted text-pretty">
-        Visa cards are accepted in 160+ countries · Up to $750K/month · 0% FX on Platinum · Up to 4%
-        cashback in USDC
+        Visa cards are accepted in 160+ countries · Up to $750K/month · 0% FX on Platinum · Up to 4% cashback
+        in USDC
       </p>
     </Section>
   );
@@ -197,8 +197,8 @@ export const EarnWhileYouSpend = () => {
             Earn while you spend
           </h2>
           <p className="mt-6 max-w-[48ch] text-[15px] leading-[1.6] font-medium text-ink-soft text-pretty">
-            Your shares sit as collateral in Kamino Finance and go on doing whatever they were
-            going to do. The cash beside them earns
+            Your shares sit as collateral in Kamino Finance and go on doing whatever they were going to do.
+            The cash beside them earns
             {supply != null ? ` ${(supply * 100).toFixed(2)}%` : ""} while it waits to be spent.
           </p>
           <ul className="mt-7 space-y-3.5">
@@ -214,10 +214,10 @@ export const EarnWhileYouSpend = () => {
             ))}
           </ul>
           <p className="mt-8 max-w-[62ch] text-[12px] leading-[1.6] text-muted">
-            Rates are variable and not guaranteed. Withdrawals depend on protocol liquidity and may
-            be temporarily limited during market stress. Past performance does not predict future
-            results. Using shares as collateral exposes you to liquidation risk. You may lose them
-            if the market moves against your position.{" "}
+            Rates are variable and not guaranteed. Withdrawals depend on protocol liquidity and may be
+            temporarily limited during market stress. Past performance does not predict future results. Using
+            shares as collateral exposes you to liquidation risk. You may lose them if the market moves
+            against your position.{" "}
             <a
               href="https://app.kamino.finance"
               target="_blank"
@@ -235,8 +235,7 @@ export const EarnWhileYouSpend = () => {
             <h3 className="text-[16px] font-semibold">What backs the line, and for how much</h3>
             {borrow != null && (
               <span className="text-[13px] text-muted">
-                borrowing at{" "}
-                <strong className="font-semibold text-ink">{(borrow * 100).toFixed(2)}%</strong>
+                borrowing at <strong className="font-semibold text-ink">{(borrow * 100).toFixed(2)}%</strong>
               </span>
             )}
           </div>
@@ -265,7 +264,10 @@ export const Plans = () => (
           <div className="flex items-start justify-between gap-3 px-5 pt-5">
             <h3 className="text-[16px] font-semibold">{p.name}</h3>
             <span className="w-[42%] shrink-0 [container-type:inline-size]">
-              <CardArt finish={p.finish} className="!rounded-[8px] !shadow-[0_4px_14px_rgba(27,26,23,0.18)]" />
+              <CardArt
+                finish={p.finish}
+                className="!rounded-[8px] !shadow-[0_4px_14px_rgba(27,26,23,0.18)]"
+              />
             </span>
           </div>
           <dl className="mt-4">
@@ -294,9 +296,7 @@ export const Platinum = () => (
       <h2 className="mt-5 text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         Bespoke services for people who already know what they want
       </h2>
-      <p className="mt-5 text-[15px] font-semibold text-muted">
-        Platinum isn't a tier — it's access
-      </p>
+      <p className="mt-5 text-[15px] font-semibold text-muted">Platinum isn't a tier — it's access</p>
     </div>
   </Section>
 );
@@ -312,9 +312,9 @@ export const NonCustodial = () => (
       </h2>
       <div className="space-y-4 text-[15px] leading-[1.65] text-ink-soft">
         <p>
-          Harbor never holds your funds. Your main assets earn yield through Kamino Finance — a
-          non-custodial DeFi protocol with $2.8B TVL, 18+ audits, and zero bad debt across its
-          history. Card transactions settle through Visa. Smart contracts are audited by FYEO.
+          Harbor never holds your funds. Your main assets earn yield through Kamino Finance — a non-custodial
+          DeFi protocol with $2.8B TVL, 18+ audits, and zero bad debt across its history. Card transactions
+          settle through Visa. Smart contracts are audited by FYEO.
         </p>
         <p>Every link in the chain is either verifiable on-chain or named publicly.</p>
       </div>
@@ -366,9 +366,7 @@ export const CardClosing = () => {
           <h2 className="max-w-[14ch] text-[30px] leading-[1.06] font-semibold tracking-[-0.035em] sm:text-[40px]">
             Build wealth. Not taxable events
           </h2>
-          <p className="mt-5 text-[15px] font-medium text-muted">
-            Join the members who figured it out.
-          </p>
+          <p className="mt-5 text-[15px] font-medium text-muted">Join the members who figured it out.</p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <GetCard onClick={open} />
             <StoreMark kind="play" />

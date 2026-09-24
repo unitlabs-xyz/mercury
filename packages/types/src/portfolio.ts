@@ -21,8 +21,14 @@ export const Portfolio = z.object({
 });
 
 export const WrapperExposure = z.object({
-  mint: Mint, symbol: z.string(), issuer: Issuer,
-  tokenQty: Usd, multiplier: Usd, shares: Usd, valueUsd: Usd, sharePct: Usd,
+  mint: Mint,
+  symbol: z.string(),
+  issuer: Issuer,
+  tokenQty: Usd,
+  multiplier: Usd,
+  shares: Usd,
+  valueUsd: Usd,
+  sharePct: Usd,
 });
 
 export const Exposure = z.object({
@@ -30,7 +36,9 @@ export const Exposure = z.object({
   shares: Usd,
   valueUsd: Usd,
   wrappers: z.array(WrapperExposure),
-  warnings: z.array(z.object({ code: z.literal("issuer_concentration"), issuer: Issuer, sharePct: Usd, message: z.string() })),
+  warnings: z.array(
+    z.object({ code: z.literal("issuer_concentration"), issuer: Issuer, sharePct: Usd, message: z.string() }),
+  ),
 });
 
 export const Money = z.object({

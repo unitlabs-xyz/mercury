@@ -5,16 +5,12 @@ import { users, wallets } from "./schema.js";
 describe("schema", () => {
   it("gives a user an id, a creation time and a display currency", () => {
     const cols = Object.keys(getTableColumns(users));
-    expect(cols).toEqual(
-      expect.arrayContaining(["id", "privyUserId", "createdAt", "displayCurrency"]),
-    );
+    expect(cols).toEqual(expect.arrayContaining(["id", "privyUserId", "createdAt", "displayCurrency"]));
   });
 
   it("gives a wallet an address, a kind and an owner", () => {
     const cols = Object.keys(getTableColumns(wallets));
-    expect(cols).toEqual(
-      expect.arrayContaining(["id", "userId", "address", "kind", "isPrimary"]),
-    );
+    expect(cols).toEqual(expect.arrayContaining(["id", "userId", "address", "kind", "isPrimary"]));
   });
 });
 
@@ -32,8 +28,16 @@ describe("read model schema", () => {
     const cols = Object.keys(getTableColumns(tokens));
     expect(cols).toEqual(
       expect.arrayContaining([
-        "id", "instrumentId", "mint", "issuer", "symbol", "decimals",
-        "multiplier", "multiplierUpdatedAt", "isRoutable", "firstSeenAt",
+        "id",
+        "instrumentId",
+        "mint",
+        "issuer",
+        "symbol",
+        "decimals",
+        "multiplier",
+        "multiplierUpdatedAt",
+        "isRoutable",
+        "firstSeenAt",
       ]),
     );
   });
@@ -51,8 +55,17 @@ describe("read model schema", () => {
     const cols = Object.keys(getTableColumns(lots));
     expect(cols).toEqual(
       expect.arrayContaining([
-        "id", "userId", "tokenId", "instrumentId", "tokenQty", "shares",
-        "unitCostUsd", "acquiredAt", "source", "isEstimated", "orderId",
+        "id",
+        "userId",
+        "tokenId",
+        "instrumentId",
+        "tokenQty",
+        "shares",
+        "unitCostUsd",
+        "acquiredAt",
+        "source",
+        "isEstimated",
+        "orderId",
       ]),
     );
   });
@@ -60,7 +73,14 @@ describe("read model schema", () => {
   it("rolls a position up per instrument, not per token", () => {
     const cols = Object.keys(getTableColumns(positions));
     expect(cols).toEqual(
-      expect.arrayContaining(["userId", "instrumentId", "shares", "costBasisUsd", "avgUnitCostUsd", "updatedAt"]),
+      expect.arrayContaining([
+        "userId",
+        "instrumentId",
+        "shares",
+        "costBasisUsd",
+        "avgUnitCostUsd",
+        "updatedAt",
+      ]),
     );
     expect(cols).not.toContain("tokenId");
   });
@@ -69,9 +89,20 @@ describe("read model schema", () => {
     const cols = Object.keys(getTableColumns(orders));
     expect(cols).toEqual(
       expect.arrayContaining([
-        "id", "userId", "instrumentId", "side", "usdAmount", "decision",
-        "chosenTokenId", "referencePrice", "premiumPct", "status",
-        "txSignature", "triggerOrderAccount", "filledAt", "createdAt",
+        "id",
+        "userId",
+        "instrumentId",
+        "side",
+        "usdAmount",
+        "decision",
+        "chosenTokenId",
+        "referencePrice",
+        "premiumPct",
+        "status",
+        "txSignature",
+        "triggerOrderAccount",
+        "filledAt",
+        "createdAt",
       ]),
     );
   });
@@ -80,8 +111,16 @@ describe("read model schema", () => {
     const cols = Object.keys(getTableColumns(activities));
     expect(cols).toEqual(
       expect.arrayContaining([
-        "id", "userId", "kind", "occurredAt", "title", "subtitle",
-        "amountUsd", "refTable", "refId", "txSignature",
+        "id",
+        "userId",
+        "kind",
+        "occurredAt",
+        "title",
+        "subtitle",
+        "amountUsd",
+        "refTable",
+        "refId",
+        "txSignature",
       ]),
     );
   });

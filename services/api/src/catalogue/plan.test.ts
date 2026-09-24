@@ -153,8 +153,19 @@ describe("planCatalogue", () => {
   });
 
   it("keeps both wrappers of an instrument, in one instrument row", () => {
-    const ondo = wrapper({ mint: "OnDoMiNt", symbol: "NVDAon", issuer: "ondo", decimals: 6, liquidityUsd: D(40_000) });
-    const plan = planCatalogue({ live: [live({ wrappers: [wrapper(), ondo] })], prices: priced(), stored: [], now: NOW });
+    const ondo = wrapper({
+      mint: "OnDoMiNt",
+      symbol: "NVDAon",
+      issuer: "ondo",
+      decimals: 6,
+      liquidityUsd: D(40_000),
+    });
+    const plan = planCatalogue({
+      live: [live({ wrappers: [wrapper(), ondo] })],
+      prices: priced(),
+      stored: [],
+      now: NOW,
+    });
     expect(plan.instruments.length).toBe(1);
     expect(plan.tokens.map((t) => t.symbol).sort()).toEqual(["NVDAon", "NVDAx"]);
   });

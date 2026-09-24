@@ -26,20 +26,20 @@ Built on Solana for Colosseum's Crypto World's Fair. Submissions close **12 Octo
 
 ## Read the docs in this order
 
-| Doc | What it covers |
-| --- | --- |
-| [00 Overview](docs/00-overview.md) | What we are building and for whom, in one page |
-| [01 Evidence](docs/01-evidence.md) | What we measured on-chain, and why it justifies the product |
-| [02 Product](docs/02-product.md) | Every feature, in scope and out |
-| [03 Architecture](docs/03-architecture.md) | Monorepo layout, stack, and why each choice |
-| [04 Execution engine](docs/04-execution-engine.md) | The core algorithm. Read this one properly |
-| [05 Data model](docs/05-data-model.md) | Entities, and the cost-basis rules that are easy to get wrong |
-| [06 API](docs/06-api.md) | Endpoint contract between apps and server |
-| [07 Design](docs/07-design.md) | Screens, states, and the apps we are copying |
-| [08 Roadmap](docs/08-roadmap.md) | What ships by 12 October, and what comes after |
-| [09 Open questions](docs/09-open-questions.md) | What is settled, and what is still open |
-| [10 Baskets](docs/10-baskets.md) | The vault, and how a basket becomes one token |
-| [11 References](docs/11-references.md) | What to read and look at before writing code |
+| Doc                                                | What it covers                                                |
+| -------------------------------------------------- | ------------------------------------------------------------- |
+| [00 Overview](docs/00-overview.md)                 | What we are building and for whom, in one page                |
+| [01 Evidence](docs/01-evidence.md)                 | What we measured on-chain, and why it justifies the product   |
+| [02 Product](docs/02-product.md)                   | Every feature, in scope and out                               |
+| [03 Architecture](docs/03-architecture.md)         | Monorepo layout, stack, and why each choice                   |
+| [04 Execution engine](docs/04-execution-engine.md) | The core algorithm. Read this one properly                    |
+| [05 Data model](docs/05-data-model.md)             | Entities, and the cost-basis rules that are easy to get wrong |
+| [06 API](docs/06-api.md)                           | Endpoint contract between apps and server                     |
+| [07 Design](docs/07-design.md)                     | Screens, states, and the apps we are copying                  |
+| [08 Roadmap](docs/08-roadmap.md)                   | What ships by 12 October, and what comes after                |
+| [09 Open questions](docs/09-open-questions.md)     | What is settled, and what is still open                       |
+| [10 Baskets](docs/10-baskets.md)                   | The vault, and how a basket becomes one token                 |
+| [11 References](docs/11-references.md)             | What to read and look at before writing code                  |
 
 Decisions live in [`docs/adr`](docs/adr). The backend design and its implementation plans are in
 [`docs/superpowers`](docs/superpowers).
@@ -60,7 +60,7 @@ packages/
   market/     Reference prices, market hours, multipliers.
   types/      Shared types and Zod schemas.
   sdk/        Typed API client used by web and mobile.
-tooling/      Shared eslint, prettier and tsconfig.
+tooling/      Shared tsconfig. Eslint and prettier are configured at the root.
 docs/brand/   The wordmark and the mark.
 ```
 
@@ -70,8 +70,12 @@ Needs Node 24 and pnpm 10.
 
 ```bash
 pnpm install
-pnpm check          # typecheck and test every package
+pnpm check          # lint, format, typecheck and test every package
 ```
+
+Each of those four runs as its own GitHub Actions workflow on every pull request, so
+none of them needs running by hand to find out. `pnpm format` fixes formatting;
+`pnpm lint:fix` fixes what lint can fix on its own.
 
 `packages/core` runs with no keys, no database and no network — it performs no I/O at all, which
 is the point of it. `pnpm --filter @mercury/core exec vitest run` is the fastest way to see the
@@ -93,18 +97,18 @@ pnpm --filter @mercury/web dev                   # http://localhost:5173
 
 ## State of the build
 
-| Package | State |
-| --- | --- |
-| `packages/core` | **Done and tested.** 35 tests. Execution engine, cost basis, exposure, basket allocation |
-| `packages/types` | Done. Zod wire schemas |
-| `packages/chain` | Registry, keyless quotes and Solana reads done and tested. Jupiter Ultra written, unused until execution. Symmetry awaits the spike |
-| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic |
-| `packages/sdk` | Done. Typed client, every response parsed |
-| `services/api` | **Identity and read models done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity all answer from Postgres and chain. Execution is subsystem 3 |
-| `services/worker` | Job plan only. Runner is still to come |
-| `apps/web` | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet |
-| `apps/landing` | Scaffolded |
-| `apps/mobile` | Not started, on purpose |
+| Package           | State                                                                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core`   | **Done and tested.** 35 tests. Execution engine, cost basis, exposure, basket allocation                                                                                                           |
+| `packages/types`  | Done. Zod wire schemas                                                                                                                                                                             |
+| `packages/chain`  | Registry, keyless quotes and Solana reads done and tested. Jupiter Ultra written, unused until execution. Symmetry awaits the spike                                                                |
+| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic                                                                   |
+| `packages/sdk`    | Done. Typed client, every response parsed                                                                                                                                                          |
+| `services/api`    | **Identity and read models done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity all answer from Postgres and chain. Execution is subsystem 3 |
+| `services/worker` | Job plan only. Runner is still to come                                                                                                                                                             |
+| `apps/web`        | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet                                                                                                      |
+| `apps/landing`    | Scaffolded                                                                                                                                                                                         |
+| `apps/mobile`     | Not started, on purpose                                                                                                                                                                            |
 
 ## Ground rules
 
@@ -116,5 +120,7 @@ pnpm --filter @mercury/web dev                   # http://localhost:5173
   [ADR 0009](docs/adr/0009-investing-not-trading.md).
 - **Money is never a float.** Integers in the smallest unit, or decimal strings. See
   [05 Data model](docs/05-data-model.md).
+- **Formatting is not a matter of opinion.** Prettier owns it, and CI checks it. Prose is
+  exempt: `*.md` is formatted but never rewrapped.
 - **Read it, do not type it.** Any number that exists on chain or behind a public API is read
   live and attributed. A figure written into source is a figure that goes quietly wrong.

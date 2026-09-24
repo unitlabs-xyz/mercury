@@ -22,35 +22,37 @@ type DecisionInput = {
   ticker: string;
   side: "buy" | "sell";
   usdAmount: Decimal;
-  candidates: Candidate[];      // one per wrapper, quoted at this size
-  reference: ReferencePrice;    // real share price, its freshness, and any pending dividend
-  status: InstrumentStatus;     // see below
-  policy: ExecutionPolicy;      // tolerances, defaults below
+  candidates: Candidate[]; // one per wrapper, quoted at this size
+  reference: ReferencePrice; // real share price, its freshness, and any pending dividend
+  status: InstrumentStatus; // see below
+  policy: ExecutionPolicy; // tolerances, defaults below
 };
 
 type Candidate = {
   mint: string;
   issuer: "backed" | "ondo";
-  multiplier: Decimal;          // shares represented by one token
-  quote: Quote | null;          // null when there is no route
+  multiplier: Decimal; // shares represented by one token
+  quote: Quote | null; // null when there is no route
 };
 
 type InstrumentStatus =
-  | "open"                // regular session
-  | "premarket" | "postmarket" | "overnight"
-  | "closed"              // weekend or holiday
-  | "halted"              // issuer paused the token, read from Token-2022 Pausable
-  | "stale"               // the reference price is too old to trust
+  | "open" // regular session
+  | "premarket"
+  | "postmarket"
+  | "overnight"
+  | "closed" // weekend or holiday
+  | "halted" // issuer paused the token, read from Token-2022 Pausable
+  | "stale" // the reference price is too old to trust
   | "corp_action_pending"; // ex-dividend has happened, the multiplier has not caught up
 
 type ReferencePrice = {
-  pricePerShare: Decimal;       // from Chainlink, per ADR 0006
+  pricePerShare: Decimal; // from Chainlink, per ADR 0006
   observedAt: Date;
-  pendingDividendNet: Decimal;  // gross dividend less withholding, 0 most of the time
+  pendingDividendNet: Decimal; // gross dividend less withholding, 0 most of the time
 };
 
 type Quote = {
-  tokensOut: Decimal;           // for a buy
+  tokensOut: Decimal; // for a buy
   priceImpactPct: Decimal;
   routeLabels: string[];
   quoteId: string;
@@ -60,14 +62,14 @@ type Quote = {
 
 ## Policy defaults
 
-| Setting | Default | Why |
-| --- | --- | --- |
-| `maxPriceImpactPct` | 1.5% | Above this the book is too thin to be a fair price |
-| `premiumTolerancePct` | 1.0% | Measured weekend drift is under 0.15%, so 1% is generous and only fires on real dislocation |
-| `maxReferenceAgeSec` | 120 while open, 900 while closed | A stale reference is worse than none |
-| `minOrderUsd` | 5 | Below this, fees dominate |
-| `issuerConcentrationWarnPct` | 80% | Position-level warning, does not block |
-| `blockOnCorpActionPending` | true | See the dividend window below |
+| Setting                      | Default                          | Why                                                                                         |
+| ---------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `maxPriceImpactPct`          | 1.5%                             | Above this the book is too thin to be a fair price                                          |
+| `premiumTolerancePct`        | 1.0%                             | Measured weekend drift is under 0.15%, so 1% is generous and only fires on real dislocation |
+| `maxReferenceAgeSec`         | 120 while open, 900 while closed | A stale reference is worse than none                                                        |
+| `minOrderUsd`                | 5                                | Below this, fees dominate                                                                   |
+| `issuerConcentrationWarnPct` | 80%                              | Position-level warning, does not block                                                      |
+| `blockOnCorpActionPending`   | true                             | See the dividend window below                                                               |
 
 All overridable per user. None of them live in the UI in version one.
 
@@ -133,13 +135,23 @@ wrong. Credit to the Rambu project for finding this; see [11 References](11-refe
 ```ts
 type Decision =
   | { kind: "execute"; best: PricedCandidate; premiumPct: Decimal; warning?: string }
-  | { kind: "offer_queue"; best: PricedCandidate; premiumPct: Decimal;
-      suggestedTriggerPrice: Decimal; marketOpensAt: Date }
+  | {
+      kind: "offer_queue";
+      best: PricedCandidate;
+      premiumPct: Decimal;
+      suggestedTriggerPrice: Decimal;
+      marketOpensAt: Date;
+    }
   | { kind: "refuse"; reason: RefuseReason; candidates: PricedCandidate[] };
 
 type RefuseReason =
-  | "below_minimum" | "no_route" | "impact_too_high"
-  | "reference_stale" | "instrument_halted" | "corp_action_pending" | "not_eligible";
+  | "below_minimum"
+  | "no_route"
+  | "impact_too_high"
+  | "reference_stale"
+  | "instrument_halted"
+  | "corp_action_pending"
+  | "not_eligible";
 ```
 
 Every outcome carries the full candidate list. The user is always shown what was checked.

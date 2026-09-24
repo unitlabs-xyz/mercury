@@ -1,6 +1,16 @@
 import {
-  bigint, boolean, index, integer, jsonb, numeric, pgTable, primaryKey,
-  text, timestamp, uniqueIndex, uuid,
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -170,7 +180,16 @@ export const orders = pgTable(
     referencePrice: usd("reference_price"),
     premiumPct: usd("premium_pct"),
     status: text("status", {
-      enum: ["pending", "executing", "filled", "queued", "partially_filled", "expired", "cancelled", "refused"],
+      enum: [
+        "pending",
+        "executing",
+        "filled",
+        "queued",
+        "partially_filled",
+        "expired",
+        "cancelled",
+        "refused",
+      ],
     }).notNull(),
     txSignature: text("tx_signature"),
     triggerOrderAccount: text("trigger_order_account"),

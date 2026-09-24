@@ -50,9 +50,7 @@ export const IssuerCompare = ({
     return (
       <section className="overflow-hidden rounded-2xl border border-cardline bg-white">
         <div className="border-b border-hair px-5 py-4 sm:px-6">
-          <h2 className="text-[15px] font-semibold">
-            {loading ? "Quoting every issuer…" : "No quote yet"}
-          </h2>
+          <h2 className="text-[15px] font-semibold">{loading ? "Quoting every issuer…" : "No quote yet"}</h2>
         </div>
         {(wrappers.length > 0 ? wrappers : [null, null]).map((w, i) => (
           <div key={w?.mint ?? i} className="border-b border-hair px-5 py-4 last:border-b-0 sm:px-6">
@@ -90,15 +88,10 @@ export const IssuerCompare = ({
         const price = c.pricePerShare ? Number(c.pricePerShare.toString()) : null;
         const impact = c.priceImpact ? Number(c.priceImpact.toString()) : null;
         const dearer =
-          verdict === "dearer" && price !== null && bestPrice !== null
-            ? (price / bestPrice - 1) * 100
-            : null;
+          verdict === "dearer" && price !== null && bestPrice !== null ? (price / bestPrice - 1) * 100 : null;
 
         return (
-          <div
-            key={c.mint}
-            className="border-b border-hair px-5 py-4 last:border-b-0 sm:px-6"
-          >
+          <div key={c.mint} className="border-b border-hair px-5 py-4 last:border-b-0 sm:px-6">
             <div className="flex items-center gap-2">
               <span className="font-mono text-[14px] font-medium">{c.symbol}</span>
               <span className="truncate text-[13px] text-muted">{ISSUER_NAME[c.issuer]}</span>
@@ -141,13 +134,13 @@ export const IssuerCompare = ({
               .filter((c) => !c.viable)
               .map((c) => `${c.symbol}: ${REJECTION[c.rejection ?? ""] ?? "unusable"}`)
               .join(" · ")}
-            . Prices are per real share, corrected by each token's multiplier — comparing raw
-            token prices gets the answer wrong.
+            . Prices are per real share, corrected by each token's multiplier — comparing raw token prices
+            gets the answer wrong.
           </>
         ) : (
           <>
-            Prices are per real share, corrected by each token's multiplier — comparing raw token
-            prices gets the answer wrong. It is worked out again whenever you change the amount.
+            Prices are per real share, corrected by each token's multiplier — comparing raw token prices gets
+            the answer wrong. It is worked out again whenever you change the amount.
           </>
         )}
       </p>

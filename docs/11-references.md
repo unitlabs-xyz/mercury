@@ -7,6 +7,7 @@ Two kinds. What to read before writing code, and what to look at before drawing 
 ## Part 1 · Architecture references
 
 ### Rambu / Stocklana · read this one first
+
 `github.com/PugarHuda/rambu` · live at `rambu-kappa.vercel.app` · TypeScript and Rust · pushed
 19 September 2026
 
@@ -38,6 +39,7 @@ the ex-date and the issuer folding the dividend into the multiplier.
    measured to be right during a dividend window.
 
 **Other things worth stealing.**
+
 - Their status enum is better than ours was: `Open`, `Closed`, `Halted`, `Stale`,
   `CorpActionPending`.
 - Pyth publishes a `market_session_schedule` covering regular, pre-market, post-market and
@@ -53,6 +55,7 @@ and pre-market hours and earned overnight and at the weekend. If we ever provide
 their method before assuming an advertised APR is real.
 
 ### Symmetry baskets-ui
+
 `github.com/symmetry-protocol/baskets-ui` · Next.js, Tailwind, Redux · MIT
 
 The reference implementation of the SDK we are integrating, and it is **forkable**. Use it as a
@@ -63,6 +66,7 @@ map of which calls exist and in what order.
 call sequence, not for the code.
 
 ### Jupiter
+
 `github.com/Jupiter-DevRel/typescript-examples` · `@jup-ag/api` on npm
 
 **Endpoints now require an API key** in an `x-api-key` header, which is a task for week one and
@@ -73,6 +77,7 @@ path B of [10 Baskets](10-baskets.md) modifies transactions, so check which path
 before committing.
 
 ### Privy fiat onramp demo
+
 `github.com/privy-io/fiat-onramp-demo` · Next.js · pushed January 2026
 
 The working reference for [ADR 0007](adr/0007-wallet-funding.md). Copy the flow, not the styling.
@@ -82,9 +87,10 @@ The working reference for [ADR 0007](adr/0007-wallet-funding.md). Copy the flow,
 ## Part 2 · Competitive reading
 
 ### Backpack · the closest thing to us that already exists
+
 Sheets in [`refs/crypto/backpack.jpg`](refs/crypto).
 
-Their own words: *"One portfolio. Unified capital."* Their marketing lists trade, invest, earn,
+Their own words: _"One portfolio. Unified capital."_ Their marketing lists trade, invest, earn,
 hedge, crypto, margin, perps, yield, wallet, DeFi, stablecoins and fiat. Their portfolio
 screenshot holds USDC and Solana alongside **MU** and **SPCX**, which are tokenized Micron and
 SpaceX. Cash earns 3.35% with auto-lend on and stays usable as collateral. Portfolio margin lets
@@ -104,6 +110,7 @@ investors, not traders. Our differentiators survive intact because none of them 
 stocks and crypto in one list.
 
 ### The rest
+
 `refs/crypto/` also holds Phantom, Jupiter Mobile, Kraken, Bitget Wallet, eToro and Trading 212.
 `refs/` holds the traditional side: M1, Robinhood, smallcase, and the rest from
 [07 Design](07-design.md).

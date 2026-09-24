@@ -38,7 +38,9 @@ describe("JupiterRegistry", () => {
 
   it("drops an instrument no wrapper can fill at a normal size", async () => {
     const thin = jupSearchXStock.map((t) => ({ ...t, liquidity: 1_000 }));
-    const r = new JupiterRegistry({ fetch: fakeFetch({ "query=xStock": thin, "query=Ondo%20Tokenized": [] }) });
+    const r = new JupiterRegistry({
+      fetch: fakeFetch({ "query=xStock": thin, "query=Ondo%20Tokenized": [] }),
+    });
     expect(await r.instruments()).toEqual([]);
   });
 
@@ -101,7 +103,9 @@ describe("JupiterRegistry", () => {
   });
 
   it("fails loudly when the xStocks search fails, because there is nothing left", async () => {
-    const r = new JupiterRegistry({ fetch: fakeFetch({ "query=xStock": fails(500), "query=Ondo%20Tokenized": [] }) });
+    const r = new JupiterRegistry({
+      fetch: fakeFetch({ "query=xStock": fails(500), "query=Ondo%20Tokenized": [] }),
+    });
     await expect(r.instruments()).rejects.toThrow("500");
   });
 });

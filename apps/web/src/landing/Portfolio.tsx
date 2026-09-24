@@ -8,21 +8,18 @@ const SPLIT = [
 ];
 
 export const Portfolio = () => (
-  <Section
-    tone="white"
-    inner="grid items-center gap-12 py-[76px] lg:grid-cols-[1fr_0.85fr] lg:gap-20"
-  >
+  <Section tone="white" inner="grid items-center gap-12 py-[76px] lg:grid-cols-[1fr_0.85fr] lg:gap-20">
     <div>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         One account. Your stocks and your crypto in the same number.
       </h2>
       <p className="mt-[18px] max-w-[46ch] text-[16px] leading-[1.6] text-muted text-pretty">
-        Not a stocks app beside a wallet. One portfolio value, what it cost you, and what it has
-        done — with everything you hold counted together.
+        Not a stocks app beside a wallet. One portfolio value, what it cost you, and what it has done — with
+        everything you hold counted together.
       </p>
       <p className="mt-4 max-w-[46ch] text-[16px] leading-[1.6] text-muted text-pretty">
-        And because the same company can be held through either issuer, Harbor adds your positions
-        up by each token's own multiplier rather than by counting tokens.
+        And because the same company can be held through either issuer, Harbor adds your positions up by each
+        token's own multiplier rather than by counting tokens.
       </p>
     </div>
 
@@ -35,9 +32,7 @@ export const Portfolio = () => (
         </span>
       </div>
 
-      <p className="mt-1.5 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">
-        $12,480.62
-      </p>
+      <p className="mt-1.5 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em]">$12,480.62</p>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <span className="flex items-center gap-1 rounded-md bg-up-tint py-[3px] pr-2 pl-1.5 text-[13px] font-semibold text-up-deep">

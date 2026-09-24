@@ -41,9 +41,7 @@ describe("JupiterLite", () => {
     const quote = await lite.quote(buy);
     expect(quote).not.toBeNull();
     expect(quote!.inAmount.toFixed()).toBe("100");
-    expect(quote!.outAmount.toFixed()).toBe(
-      D(jupQuote.outAmount).div(D(10).pow(8)).toFixed(),
-    );
+    expect(quote!.outAmount.toFixed()).toBe(D(jupQuote.outAmount).div(D(10).pow(8)).toFixed());
   });
 
   it("carries the impact through as a Decimal, never a float", async () => {

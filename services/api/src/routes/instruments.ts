@@ -98,7 +98,9 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
 
     let rows = priced;
     if (q !== undefined && q.length > 0) {
-      rows = rows.filter((p) => p.row.ticker.toLowerCase().includes(q) || p.row.name.toLowerCase().includes(q));
+      rows = rows.filter(
+        (p) => p.row.ticker.toLowerCase().includes(q) || p.row.name.toLowerCase().includes(q),
+      );
     }
     if (sector !== undefined) rows = rows.filter((p) => p.row.sector === sector);
 

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { activityRoutes, decodeCursor, encodeCursor, type ActivityDeps, type ActivityRow } from "./activity.js";
+import {
+  activityRoutes,
+  decodeCursor,
+  encodeCursor,
+  type ActivityDeps,
+  type ActivityRow,
+} from "./activity.js";
 
 const at = (iso: string): Date => new Date(iso);
 
@@ -43,7 +49,8 @@ describe("GET /v1/activity", () => {
 
   it("hands back a cursor only when there is another page", async () => {
     const full: ActivityDeps = {
-      read: async (_u, limit) => Array.from({ length: limit }, (_, i) => row(String(i), "2026-09-24T12:00:00Z")),
+      read: async (_u, limit) =>
+        Array.from({ length: limit }, (_, i) => row(String(i), "2026-09-24T12:00:00Z")),
     };
     const short: ActivityDeps = { read: async () => [row("a", "2026-09-24T12:00:00Z")] };
     expect((await feedOf(await appWith(full).request("/v1/activity?limit=2"))).nextCursor).not.toBeNull();

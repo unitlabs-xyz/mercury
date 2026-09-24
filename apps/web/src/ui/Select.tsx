@@ -32,7 +32,12 @@ export const Select = ({
 
   useEffect(() => {
     if (!open) return undefined;
-    setCursor(Math.max(0, options.findIndex((o) => o.value === value)));
+    setCursor(
+      Math.max(
+        0,
+        options.findIndex((o) => o.value === value),
+      ),
+    );
     const onDown = (e: MouseEvent) => {
       if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
     };

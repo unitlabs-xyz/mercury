@@ -112,13 +112,12 @@ export const Receive = () => (
 
     <p className="mt-6 flex items-start gap-2.5 rounded-xl bg-warn-tint px-4 py-3 text-[13px] leading-[1.5] text-warn">
       <Alert className="mt-px size-4 shrink-0" />
-      Solana network only, and USDC only. Anything sent on another network, or in another token,
-      is lost.
+      Solana network only, and USDC only. Anything sent on another network, or in another token, is lost.
     </p>
 
     <p className="mt-4 text-[13px] leading-[1.5] text-faint text-pretty">
-      There is no bank transfer and no card top-up, by choice. Harbor never touches fiat, which is
-      why there is nothing to verify and no country to be approved in.
+      There is no bank transfer and no card top-up, by choice. Harbor never touches fiat, which is why there
+      is nothing to verify and no country to be approved in.
     </p>
   </section>
 );

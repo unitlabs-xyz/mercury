@@ -11,9 +11,7 @@ describe("fakeFetch", () => {
 
   it("names the url it could not answer, so a wrong request is obvious", async () => {
     const f = fakeFetch({ "/price/v3": {} });
-    await expect(f("https://lite-api.jup.ag/tokens/v2/search?query=x")).rejects.toThrow(
-      "/tokens/v2/search",
-    );
+    await expect(f("https://lite-api.jup.ag/tokens/v2/search?query=x")).rejects.toThrow("/tokens/v2/search");
   });
 
   it("serves a failure when one is registered", async () => {

@@ -44,8 +44,14 @@ describe("PythSessions", () => {
 
   it("knows a weekend from a weekday, in New York rather than in UTC", async () => {
     const closed = feedsWith({ is_open: false, next_open: 1_790_256_600 });
-    const weekday = new PythSessions({ fetch: fakeFetch({ "/v2/price_feeds": closed }), now: () => WEDNESDAY });
-    const weekend = new PythSessions({ fetch: fakeFetch({ "/v2/price_feeds": closed }), now: () => SATURDAY });
+    const weekday = new PythSessions({
+      fetch: fakeFetch({ "/v2/price_feeds": closed }),
+      now: () => WEDNESDAY,
+    });
+    const weekend = new PythSessions({
+      fetch: fakeFetch({ "/v2/price_feeds": closed }),
+      now: () => SATURDAY,
+    });
     expect((await weekday.current()).isWeekend).toBe(false);
     expect((await weekend.current()).isWeekend).toBe(true);
   });

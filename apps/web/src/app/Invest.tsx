@@ -24,15 +24,6 @@ import {
 const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 
-const compact = (v: number) =>
-  !Number.isFinite(v) || v <= 0
-    ? "—"
-    : v >= 1_000_000
-      ? `$${(v / 1_000_000).toFixed(1)}m`
-      : v >= 1_000
-        ? `$${Math.round(v / 1_000)}k`
-        : `$${Math.round(v)}`;
-
 const count = (v: number) =>
   !Number.isFinite(v) || v <= 0
     ? "—"
@@ -84,15 +75,7 @@ const Mark = ({ i, size = 34 }: { i: Instrument; size?: number }) =>
 
 /* ── ideal for getting started ──────────────────────────────────────── */
 
-const StarterCard = ({
-  p,
-  saved,
-  onToggle,
-}: {
-  p: Priced;
-  saved: boolean;
-  onToggle: () => void;
-}) => {
+const StarterCard = ({ p, saved, onToggle }: { p: Priced; saved: boolean; onToggle: () => void }) => {
   const perf = performanceFor(p.instrument.ticker);
   return (
     <article className="overflow-hidden rounded-2xl border border-cardline bg-white transition-shadow hover:shadow-[0_2px_14px_rgba(27,26,23,0.07)]">
@@ -120,16 +103,12 @@ const StarterCard = ({
 
         <Link to={`/invest/${p.instrument.ticker}`} className="mt-3 block">
           <h3 className="text-[16px] font-semibold tracking-[-0.01em]">{p.instrument.name}</h3>
-          <p className="mt-1 line-clamp-2 text-[13px] leading-[1.5] text-muted">
-            {p.instrument.about}
-          </p>
+          <p className="mt-1 line-clamp-2 text-[13px] leading-[1.5] text-muted">{p.instrument.about}</p>
         </Link>
 
         <div className="mt-4 flex items-end justify-between gap-3 border-t border-hair pt-3.5">
           <span>
-            <span className="block text-[11px] tracking-[0.04em] text-faint uppercase">
-              Min. amount
-            </span>
+            <span className="block text-[11px] tracking-[0.04em] text-faint uppercase">Min. amount</span>
             <span className="mt-0.5 block text-[15px] font-semibold tabular-nums">$5</span>
           </span>
           <span>
@@ -197,9 +176,7 @@ const BoardCard = ({ board, items }: { board: Board; items: Priced[] }) => (
       </span>
     </div>
     {items.length === 0 ? (
-      <p className="border-t border-hair px-5 py-7 text-[13px] text-faint">
-        Nothing in this filter.
-      </p>
+      <p className="border-t border-hair px-5 py-7 text-[13px] text-faint">Nothing in this filter.</p>
     ) : (
       <ol className="border-t border-hair">
         {items.map((p, n) => (
@@ -211,16 +188,10 @@ const BoardCard = ({ board, items }: { board: Board; items: Priced[] }) => (
               <span className="w-3.5 shrink-0 text-[13px] text-faint tabular-nums">{n + 1}</span>
               <Mark i={p.instrument} size={30} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14.5px] font-medium">
-                  {p.instrument.name}
-                </span>
-                <span className="mt-0.5 block font-mono text-[11px] text-faint">
-                  {p.instrument.ticker}
-                </span>
+                <span className="block truncate text-[14.5px] font-medium">{p.instrument.name}</span>
+                <span className="mt-0.5 block font-mono text-[11px] text-faint">{p.instrument.ticker}</span>
               </span>
-              <span className="flex shrink-0 justify-end text-[15px] font-semibold">
-                {board.value(p)}
-              </span>
+              <span className="flex shrink-0 justify-end text-[15px] font-semibold">{board.value(p)}</span>
             </Link>
           </li>
         ))}
@@ -306,16 +277,12 @@ export const Invest = () => {
         ? []
         : priced.filter(
             (p) =>
-              p.instrument.name.toLowerCase().includes(q) ||
-              p.instrument.ticker.toLowerCase().includes(q),
+              p.instrument.name.toLowerCase().includes(q) || p.instrument.ticker.toLowerCase().includes(q),
           ),
     [priced, q],
   );
 
-  const sectors = useMemo(
-    () => ["All", ...new Set(priced.map((p) => p.instrument.sector))].sort(),
-    [priced],
-  );
+  const sectors = useMemo(() => ["All", ...new Set(priced.map((p) => p.instrument.sector))].sort(), [priced]);
   const inFilter = filter === "All" ? priced : priced.filter((p) => p.instrument.sector === filter);
 
   const starters = STARTERS.map((t) => priced.find((p) => p.instrument.ticker === t)).filter(
@@ -357,8 +324,8 @@ export const Invest = () => {
             <div className="px-6 py-10 text-center">
               <p className="text-[16px] font-semibold">Nothing called “{query}”</p>
               <p className="mx-auto mt-1.5 max-w-[46ch] text-[14px] leading-[1.55] text-muted">
-                Only instruments Harbor can actually route are listed. If a stock is tokenised but
-                has no usable route, it will not appear here.
+                Only instruments Harbor can actually route are listed. If a stock is tokenised but has no
+                usable route, it will not appear here.
               </p>
             </div>
           ) : (
@@ -370,12 +337,8 @@ export const Invest = () => {
               >
                 <Mark i={p.instrument} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold">
-                    {p.instrument.name}
-                  </span>
-                  <span className="mt-0.5 block font-mono text-[12px] text-faint">
-                    {p.instrument.ticker}
-                  </span>
+                  <span className="block truncate text-[15px] font-semibold">{p.instrument.name}</span>
+                  <span className="mt-0.5 block font-mono text-[12px] text-faint">{p.instrument.ticker}</span>
                 </span>
                 <span className="text-[15px] font-semibold tabular-nums">
                   {p.fair === null ? "—" : usd(p.fair)}
@@ -390,9 +353,7 @@ export const Invest = () => {
           {saved.length > 0 && (
             <section className="mt-8">
               <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Saved</h2>
-              <p className="mt-1 text-[14px] text-muted">
-                Kept on this device, not in your account
-              </p>
+              <p className="mt-1 text-[14px] text-muted">Kept on this device, not in your account</p>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {saved.map((p) => (
                   <div
@@ -401,9 +362,7 @@ export const Invest = () => {
                   >
                     <Mark i={p.instrument} size={30} />
                     <Link to={`/invest/${p.instrument.ticker}`} className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-semibold">
-                        {p.instrument.name}
-                      </span>
+                      <span className="block truncate text-[14px] font-semibold">{p.instrument.name}</span>
                       <span className="mt-0.5 block text-[13px] tabular-nums text-muted">
                         {p.fair === null ? "—" : usd(p.fair)}
                       </span>
@@ -426,9 +385,7 @@ export const Invest = () => {
           <section className="mt-12">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
-                  Ideal for getting started
-                </h2>
+                <h2 className="text-[18px] font-semibold tracking-[-0.015em]">Ideal for getting started</h2>
                 <p className="mt-1 text-[14px] text-muted">
                   Hundreds of companies in one holding, and the deepest liquidity we can route
                 </p>
@@ -454,37 +411,33 @@ export const Invest = () => {
               Ranked on what is actually happening on chain, not on what we promote
             </p>
             <div className="mt-4 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {sectors.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setFilter(s)}
-                    aria-pressed={filter === s}
-                    className={`h-11 shrink-0 rounded-full border px-4 text-[13px] font-medium transition-colors sm:h-9 sm:px-3.5 ${
-                      filter === s
-                        ? "border-brand bg-brand-tint text-brand-deep"
-                        : "border-cardline bg-white text-ink-soft hover:border-brand-soft"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
+              {sectors.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setFilter(s)}
+                  aria-pressed={filter === s}
+                  className={`h-11 shrink-0 rounded-full border px-4 text-[13px] font-medium transition-colors sm:h-9 sm:px-3.5 ${
+                    filter === s
+                      ? "border-brand bg-brand-tint text-brand-deep"
+                      : "border-cardline bg-white text-ink-soft hover:border-brand-soft"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {universe.isLoading
                 ? [0, 1, 2].map((i) => <SkeletonCard key={i} />)
                 : BOARDS.map((b) => (
-                    <BoardCard
-                      key={b.key}
-                      board={b}
-                      items={[...inFilter].sort(b.rank).slice(0, 5)}
-                    />
+                    <BoardCard key={b.key} board={b} items={[...inFilter].sort(b.rank).slice(0, 5)} />
                   ))}
             </div>
             <p className="mt-4 text-[12px] leading-[1.55] text-muted">
-              Holders, volume and 24h moves are read live from chain. Return figures and 30-day buyer
-              counts are sample data until the returns service ships.
+              Holders, volume and 24h moves are read live from chain. Return figures and 30-day buyer counts
+              are sample data until the returns service ships.
             </p>
           </section>
 

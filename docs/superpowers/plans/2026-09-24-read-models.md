@@ -77,7 +77,7 @@ docs/05 says to mark the lot "at the reference price on the block it arrived". F
 
 **4. Tokens that leave the wallet cap the position; no lot is reduced and no activity row is written.**
 
-Selling does not exist until subsystem 3, so the only way tokens leave in this subsystem is a transfer the user made themselves. When the chain holds less than our lots record, the *position* follows the chain — shares from chain, cost basis scaled by the same ratio, which leaves average cost untouched because average cost is what we keep. Lots are left as written history. No activity row is emitted, because we do not know what happened and inventing an event is worse than silence. Writing one would also break reconciliation idempotency, since lots are never reduced and the same deficit would be re-detected on every read.
+Selling does not exist until subsystem 3, so the only way tokens leave in this subsystem is a transfer the user made themselves. When the chain holds less than our lots record, the _position_ follows the chain — shares from chain, cost basis scaled by the same ratio, which leaves average cost untouched because average cost is what we keep. Lots are left as written history. No activity row is emitted, because we do not know what happened and inventing an event is worse than silence. Writing one would also break reconciliation idempotency, since lots are never reduced and the same deficit would be re-detected on every read.
 
 **And one duplication that is not a deviation but is worth naming:** ticker display names, sectors and descriptions exist in `apps/web/src/market/meta.ts` and, after Task 10, in `services/api/src/db/seed/instruments.ts`. The spec explicitly leaves `meta.ts` in the web app. The server's copy is the one that reaches the `instrument` table, and after the web half lands the web app should read `name` and `sector` from `GET /v1/instruments` and delete its copy. Until then, two copies.
 
@@ -87,57 +87,57 @@ Selling does not exist until subsystem 3, so the only way tokens leave in this s
 
 **Created — `packages/chain`**
 
-| File | Responsibility |
-| --- | --- |
-| `src/testing/fake-fetch.ts` | A `fetch` stand-in that answers from a URL-substring map and throws on anything unmatched. Every adapter test's only network. |
-| `src/testing/fixtures.ts` | Re-exports the recorded JSON fixtures under stable names. |
-| `src/testing/fixtures/*.json` | Recorded upstream responses. Committed. |
-| `src/testing/record.ts` | The recorder that produced them. Run by hand, never in CI. Self-contained: no relative imports. |
-| `src/jupiter/registry.ts` | `JupiterRegistry` — `TokenRegistry` and `CatalogueSource`. The lift of `universe.ts` plus `searchTokens`. |
-| `src/jupiter/lite.ts` | `JupiterLite` — keyless `QuoteSource` on `/swap/v1/quote`, for pricing a decision. |
-| `src/solana/rpc.ts` | `SolanaRpc` — `ChainReader`. Token balances and mint config over plain JSON-RPC. |
+| File                          | Responsibility                                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `src/testing/fake-fetch.ts`   | A `fetch` stand-in that answers from a URL-substring map and throws on anything unmatched. Every adapter test's only network. |
+| `src/testing/fixtures.ts`     | Re-exports the recorded JSON fixtures under stable names.                                                                     |
+| `src/testing/fixtures/*.json` | Recorded upstream responses. Committed.                                                                                       |
+| `src/testing/record.ts`       | The recorder that produced them. Run by hand, never in CI. Self-contained: no relative imports.                               |
+| `src/jupiter/registry.ts`     | `JupiterRegistry` — `TokenRegistry` and `CatalogueSource`. The lift of `universe.ts` plus `searchTokens`.                     |
+| `src/jupiter/lite.ts`         | `JupiterLite` — keyless `QuoteSource` on `/swap/v1/quote`, for pricing a decision.                                            |
+| `src/solana/rpc.ts`           | `SolanaRpc` — `ChainReader`. Token balances and mint config over plain JSON-RPC.                                              |
 
 **Created — `packages/market`**
 
-| File | Responsibility |
-| --- | --- |
-| `src/pyth.ts` | `PythSessions` — `SessionSource`. The lift of `pyth.ts`, plus the `isWeekend` the port asks for. |
+| File             | Responsibility                                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `src/pyth.ts`    | `PythSessions` — `SessionSource`. The lift of `pyth.ts`, plus the `isWeekend` the port asks for.                             |
 | `src/jupiter.ts` | `JupiterMarket` — `ReferenceSource`, `PriceBoard`, and the fallback `MultiplierSource`. One upstream call answers all three. |
-| `src/mint.ts` | `MintMultipliers` — the preferred `MultiplierSource`, read from the Token-2022 extensions on the mint. |
-| `src/kamino.ts` | `KaminoCredit` — `CreditSource`. The lift of `kamino.ts`. |
+| `src/mint.ts`    | `MintMultipliers` — the preferred `MultiplierSource`, read from the Token-2022 extensions on the mint.                       |
+| `src/kamino.ts`  | `KaminoCredit` — `CreditSource`. The lift of `kamino.ts`.                                                                    |
 
 **Created — `services/api`**
 
-| File | Responsibility |
-| --- | --- |
-| `src/db/seed/instruments.ts` | Ticker → display name, sector, description. The server's editorial layer over what Jupiter knows. |
-| `src/catalogue/plan.ts` | Pure. Live catalogue + stored rows → inserts, updates and multiplier events. |
-| `src/catalogue/sync.ts` | The thin shell that reads the tables, calls `planCatalogue`, writes the result. |
+| File                         | Responsibility                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `src/db/seed/instruments.ts` | Ticker → display name, sector, description. The server's editorial layer over what Jupiter knows.     |
+| `src/catalogue/plan.ts`      | Pure. Live catalogue + stored rows → inserts, updates and multiplier events.                          |
+| `src/catalogue/sync.ts`      | The thin shell that reads the tables, calls `planCatalogue`, writes the result.                       |
 | `src/portfolio/reconcile.ts` | Pure. Chain balances + recorded lots → new lots, activity and positions. The heart of this subsystem. |
-| `src/portfolio/apply.ts` | The thin shell: load what `planReconciliation` needs, write what it returns. |
-| `src/routes/portfolio.ts` | `GET /v1/portfolio`, `GET /v1/portfolio/exposure/:ticker`. |
-| `src/routes/money.ts` | `GET /v1/money`. |
-| `src/routes/activity.ts` | `GET /v1/activity`. |
-| `src/routes/instruments.ts` | `GET /v1/instruments`, `GET /v1/instruments/:ticker`. |
-| `src/orders/store.ts` | The `order` table behind the interface the in-memory Map had. |
+| `src/portfolio/apply.ts`     | The thin shell: load what `planReconciliation` needs, write what it returns.                          |
+| `src/routes/portfolio.ts`    | `GET /v1/portfolio`, `GET /v1/portfolio/exposure/:ticker`.                                            |
+| `src/routes/money.ts`        | `GET /v1/money`.                                                                                      |
+| `src/routes/activity.ts`     | `GET /v1/activity`.                                                                                   |
+| `src/routes/instruments.ts`  | `GET /v1/instruments`, `GET /v1/instruments/:ticker`.                                                 |
+| `src/orders/store.ts`        | The `order` table behind the interface the in-memory Map had.                                         |
 
 **Modified**
 
-| File | Change |
-| --- | --- |
-| `packages/chain/src/ports.ts` | Add `CatalogueSource`, `ChainReader`, and their types. `TokenRegistry` is unchanged. |
-| `packages/chain/src/index.ts` | Export the new modules. |
-| `packages/chain/package.json` | Subpath exports so `@mercury/chain/jupiter/registry` and friends resolve, plus `@mercury/chain/testing`. |
-| `packages/market/src/ports.ts` | Add `PriceBoard`, `TokenPrice`, `CreditSource`, `CreditMarket`. Correct the `ReferenceSource` and `MultiplierSource` comments. |
-| `packages/market/src/index.ts` | Export the new modules. |
-| `packages/market/package.json` | Subpath exports. |
-| `services/api/src/db/schema.ts` | Seven new tables. `user` and `wallet` are untouched. |
-| `services/api/src/deps.ts` | `Deps` gains `catalogue`, `chain`, `prices`, `credit`. `buildDeps` stops throwing. |
-| `services/api/src/app.ts` | Mount the four route modules; the in-memory `orders` Map is deleted. |
-| `services/api/.env.example` | `JUPITER_API_KEY` moves from "subsystem 3 onward" to a note that nothing in the server needs it yet. |
-| `README.md` | Build-state table. |
-| `docs/03-architecture.md` | The dependency-rule amendment the spec's §8 requires. |
-| `docs/adr/0011-server-preferred-prices.md` | New. The ADR the spec's §8 requires. |
+| File                                       | Change                                                                                                                         |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `packages/chain/src/ports.ts`              | Add `CatalogueSource`, `ChainReader`, and their types. `TokenRegistry` is unchanged.                                           |
+| `packages/chain/src/index.ts`              | Export the new modules.                                                                                                        |
+| `packages/chain/package.json`              | Subpath exports so `@mercury/chain/jupiter/registry` and friends resolve, plus `@mercury/chain/testing`.                       |
+| `packages/market/src/ports.ts`             | Add `PriceBoard`, `TokenPrice`, `CreditSource`, `CreditMarket`. Correct the `ReferenceSource` and `MultiplierSource` comments. |
+| `packages/market/src/index.ts`             | Export the new modules.                                                                                                        |
+| `packages/market/package.json`             | Subpath exports.                                                                                                               |
+| `services/api/src/db/schema.ts`            | Seven new tables. `user` and `wallet` are untouched.                                                                           |
+| `services/api/src/deps.ts`                 | `Deps` gains `catalogue`, `chain`, `prices`, `credit`. `buildDeps` stops throwing.                                             |
+| `services/api/src/app.ts`                  | Mount the four route modules; the in-memory `orders` Map is deleted.                                                           |
+| `services/api/.env.example`                | `JUPITER_API_KEY` moves from "subsystem 3 onward" to a note that nothing in the server needs it yet.                           |
+| `README.md`                                | Build-state table.                                                                                                             |
+| `docs/03-architecture.md`                  | The dependency-rule amendment the spec's §8 requires.                                                                          |
+| `docs/adr/0011-server-preferred-prices.md` | New. The ADR the spec's §8 requires.                                                                                           |
 
 ---
 
@@ -146,6 +146,7 @@ Selling does not exist until subsystem 3, so the only way tokens leave in this s
 Every adapter in Tasks 2–8 is a parser wrapped around `fetch`. They need one shared way to answer a request without a network, and one set of recorded responses that are actually what the upstreams send. Both live in `packages/chain` rather than a new package, because `packages/market` already depends on `@mercury/chain` and a twelfth workspace package earns nothing.
 
 **Files:**
+
 - Create: `packages/chain/src/testing/fake-fetch.ts`
 - Create: `packages/chain/src/testing/fake-fetch.test.ts`
 - Create: `packages/chain/src/testing/record.ts`
@@ -154,6 +155,7 @@ Every adapter in Tasks 2–8 is a parser wrapped around `fetch`. They need one s
 - Modify: `packages/chain/package.json`
 
 **Interfaces:**
+
 - Produces: `fakeFetch(routes: Record<string, unknown>): typeof fetch`, `fails(status: number): HttpFailure`, and the fixture re-exports `jupSearchXStock`, `jupSearchOndo`, `jupSearchImpostors`, `jupPrice`, `jupQuote`, `pythSpy`, `kaminoReserves`, `rpcMintNvda`, `rpcTokenAccounts`.
 
 - [ ] **Step 1: Write the failing test**
@@ -174,9 +176,7 @@ describe("fakeFetch", () => {
 
   it("names the url it could not answer, so a wrong request is obvious", async () => {
     const f = fakeFetch({ "/price/v3": {} });
-    await expect(f("https://lite-api.jup.ag/tokens/v2/search?query=x")).rejects.toThrow(
-      "/tokens/v2/search",
-    );
+    await expect(f("https://lite-api.jup.ag/tokens/v2/search?query=x")).rejects.toThrow("/tokens/v2/search");
   });
 
   it("serves a failure when one is registered", async () => {
@@ -291,14 +291,25 @@ const save = async (name: string, body: unknown) => {
 await mkdir(OUT, { recursive: true });
 
 await save("jup-search-xstock", await get(`${JUP}/tokens/v2/search?query=xStock`));
-await save("jup-search-ondo", await get(`${JUP}/tokens/v2/search?query=${encodeURIComponent("Ondo Tokenized")}`));
+await save(
+  "jup-search-ondo",
+  await get(`${JUP}/tokens/v2/search?query=${encodeURIComponent("Ondo Tokenized")}`),
+);
 // Deliberately an ambiguous query: it returns the real NVDAx next to several
 // "Nvidia Stonk" impersonators with one holder each. That is the filter's test.
 await save("jup-search-impostors", await get(`${JUP}/tokens/v2/search?query=NVDAx`));
 await save("jup-price", await get(`${JUP}/price/v3?ids=${NVDAX},${SPYX},${USDC}`));
-await save("jup-quote", await get(`${JUP}/swap/v1/quote?inputMint=${USDC}&outputMint=${NVDAX}&amount=100000000&slippageBps=50`));
+await save(
+  "jup-quote",
+  await get(`${JUP}/swap/v1/quote?inputMint=${USDC}&outputMint=${NVDAX}&amount=100000000&slippageBps=50`),
+);
 await save("pyth-spy", await get("https://hermes.pyth.network/v2/price_feeds?query=SPY&asset_type=equity"));
-await save("kamino-reserves", await get("https://api.kamino.finance/kamino-market/5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua/reserves/metrics"));
+await save(
+  "kamino-reserves",
+  await get(
+    "https://api.kamino.finance/kamino-market/5wJeMrUYECGq41fxRESKALVcHnNX26TAWy4W98yULsua/reserves/metrics",
+  ),
+);
 await save("rpc-mint-nvda", await rpc("getAccountInfo", [NVDAX, { encoding: "jsonParsed" }]));
 ```
 
@@ -545,12 +556,14 @@ git commit -m "test: recorded upstream fixtures and a fake fetch for adapter tes
 The lift of `apps/web/src/market/universe.ts` and the `searchTokens` half of `jupiter.ts`. It implements two ports: `TokenRegistry`, which `pricing.ts` already consumes, and a new `CatalogueSource`, which Task 10 uses to fill the `instrument` and `token` tables. One class, because it is one pair of upstream calls.
 
 **Files:**
+
 - Modify: `packages/chain/src/ports.ts`
 - Create: `packages/chain/src/jupiter/registry.ts`
 - Create: `packages/chain/src/jupiter/registry.test.ts`
 - Modify: `packages/chain/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `fakeFetch`, `jupSearchXStock`, `jupSearchOndo`, `jupSearchImpostors` from Task 1.
 - Produces: `class JupiterRegistry implements TokenRegistry, CatalogueSource` with `constructor(config?: JupiterRegistryConfig)`; the types `CatalogueWrapper`, `CatalogueInstrument`, `CatalogueSource`; the constant `MIN_LIQUIDITY_USD`.
 
@@ -636,7 +649,9 @@ describe("JupiterRegistry", () => {
 
   it("drops an instrument no wrapper can fill at a normal size", async () => {
     const thin = jupSearchXStock.map((t) => ({ ...t, liquidity: 1_000 }));
-    const r = new JupiterRegistry({ fetch: fakeFetch({ "query=xStock": thin, "query=Ondo%20Tokenized": [] }) });
+    const r = new JupiterRegistry({
+      fetch: fakeFetch({ "query=xStock": thin, "query=Ondo%20Tokenized": [] }),
+    });
     expect(await r.instruments()).toEqual([]);
   });
 
@@ -699,7 +714,9 @@ describe("JupiterRegistry", () => {
   });
 
   it("fails loudly when the xStocks search fails, because there is nothing left", async () => {
-    const r = new JupiterRegistry({ fetch: fakeFetch({ "query=xStock": fails(500), "query=Ondo%20Tokenized": [] }) });
+    const r = new JupiterRegistry({
+      fetch: fakeFetch({ "query=xStock": fails(500), "query=Ondo%20Tokenized": [] }),
+    });
     await expect(r.instruments()).rejects.toThrow("500");
   });
 });
@@ -716,7 +733,13 @@ Create `packages/chain/src/jupiter/registry.ts`:
 
 ```ts
 import { D, ZERO, type Decimal, type Issuer } from "@mercury/core";
-import type { CatalogueInstrument, CatalogueSource, CatalogueWrapper, TokenRef, TokenRegistry } from "../ports.js";
+import type {
+  CatalogueInstrument,
+  CatalogueSource,
+  CatalogueWrapper,
+  TokenRef,
+  TokenRegistry,
+} from "../ports.js";
 
 /**
  * Jupiter's free tier. No key, no account, CORS-open. The paid host (api.jup.ag)
@@ -911,11 +934,13 @@ git commit -m "feat: lift the Jupiter token registry out of the browser"
 The lift of `fetchQuote`. This is one of the two implementations of `QuoteSource` the spec's §3 calls for: the keyless one that **prices** a decision. `JupiterUltra`, already written, **executes** one and arrives in subsystem 3. `priceOrder` is unchanged and uses whichever it is given.
 
 **Files:**
+
 - Create: `packages/chain/src/jupiter/lite.ts`
 - Create: `packages/chain/src/jupiter/lite.test.ts`
 - Modify: `packages/chain/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `fakeFetch`, `jupQuote`, `NVDAX_MINT`, `USDC_MINT` from Task 1.
 - Produces: `class JupiterLite implements QuoteSource`, `constructor(config?: { baseUrl?: string; fetch?: typeof fetch })`.
 
@@ -969,9 +994,7 @@ describe("JupiterLite", () => {
     expect(quote!.inAmount.toFixed()).toBe("100");
     // Derived from the fixture, not pasted: the recorder re-runs and the market
     // moves, so a literal here would rot on the next recording.
-    expect(quote!.outAmount.toFixed()).toBe(
-      D(jupQuote.outAmount).div(D(10).pow(8)).toFixed(),
-    );
+    expect(quote!.outAmount.toFixed()).toBe(D(jupQuote.outAmount).div(D(10).pow(8)).toFixed());
   });
 
   it("carries the impact through as a Decimal, never a float", async () => {
@@ -1141,7 +1164,7 @@ git commit -m "feat: keyless Jupiter quote source for pricing decisions"
 
 Two reads, one adapter, no `@solana/kit`: plain JSON-RPC over `fetch`. Balances answer "what does this wallet hold", and the mint config answers "how many shares is one of these, and has the issuer halted it".
 
-**The multiplier rule, and why it is not the obvious field.** A Token-2022 `scaledUiAmountConfig` carries *two* multipliers and a switchover time. The effective one is `newMultiplier` once `newMultiplierEffectiveTimestamp` has passed, and `multiplier` before that. Reading `multiplier` unconditionally is wrong for every token that has ever scheduled a dividend. Measured on NVDAx, 24 September 2026:
+**The multiplier rule, and why it is not the obvious field.** A Token-2022 `scaledUiAmountConfig` carries _two_ multipliers and a switchover time. The effective one is `newMultiplier` once `newMultiplierEffectiveTimestamp` has passed, and `multiplier` before that. Reading `multiplier` unconditionally is wrong for every token that has ever scheduled a dividend. Measured on NVDAx, 24 September 2026:
 
 ```
 multiplier                      1.0009180758490996
@@ -1152,12 +1175,14 @@ newMultiplierEffectiveTimestamp 1789000200  = 2026-09-10T00:30:00Z, a fortnight 
 Jupiter's own arithmetic confirms which one is live: `usdPricePrescaled / newMultiplier` = `224.82082989684469 / 1.001701196801074` = `224.43901496255418`, which is exactly the `usdPrice` it reports. Using the stale field understates shares by 0.0782% on this token today, and the gap grows with every dividend. `apps/web/src/market/hooks.ts` has this bug (`multiplierOf` reads `scaledUiConfig.multiplier`); the lift fixes it, and the web half inherits the fix when it switches to the package.
 
 **Files:**
+
 - Modify: `packages/chain/src/ports.ts`
 - Create: `packages/chain/src/solana/rpc.ts`
 - Create: `packages/chain/src/solana/rpc.test.ts`
 - Modify: `packages/chain/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `fakeFetch`, `rpcTokenAccounts`, `rpcMintNvda`, `NVDAX_MINT`, `USDC_MINT`, `FIXTURE_OWNER` from Task 1.
 - Produces: `class SolanaRpc implements ChainReader`, `constructor(config: { rpcUrl: string; fetch?: typeof fetch; now?: () => number })`; the types `TokenBalance`, `MintConfig`, `ChainReader`; the constants `TOKEN_PROGRAM`, `TOKEN_2022_PROGRAM`.
 
@@ -1202,7 +1227,16 @@ Create `packages/chain/src/solana/rpc.test.ts`:
 ```ts
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import { fails, fakeFetch, FIXTURE_OWNER, NVDAX_MINT, rpcMintNvda, rpcTokenAccounts, SPYX_MINT, USDC_MINT } from "../testing/index.js";
+import {
+  fails,
+  fakeFetch,
+  FIXTURE_OWNER,
+  NVDAX_MINT,
+  rpcMintNvda,
+  rpcTokenAccounts,
+  SPYX_MINT,
+  USDC_MINT,
+} from "../testing/index.js";
 import { SolanaRpc } from "./rpc.js";
 
 const RPC = "https://rpc.example/v1";
@@ -1330,7 +1364,11 @@ describe("SolanaRpc.tokenBalances", () => {
 describe("SolanaRpc.mintConfig", () => {
   it("uses newMultiplier once its effective timestamp has passed", async () => {
     const body = mintWith(
-      { multiplier: "1.0009180758490996", newMultiplier: "1.001701196801074", newMultiplierEffectiveTimestamp: 1_789_000_200 },
+      {
+        multiplier: "1.0009180758490996",
+        newMultiplier: "1.001701196801074",
+        newMultiplierEffectiveTimestamp: 1_789_000_200,
+      },
       false,
     );
     const rpc = new SolanaRpc({
@@ -1344,7 +1382,11 @@ describe("SolanaRpc.mintConfig", () => {
 
   it("uses the current multiplier until then", async () => {
     const body = mintWith(
-      { multiplier: "1.0009180758490996", newMultiplier: "1.001701196801074", newMultiplierEffectiveTimestamp: 1_789_000_200 },
+      {
+        multiplier: "1.0009180758490996",
+        newMultiplier: "1.001701196801074",
+        newMultiplierEffectiveTimestamp: 1_789_000_200,
+      },
       false,
     );
     const rpc = new SolanaRpc({
@@ -1366,7 +1408,10 @@ describe("SolanaRpc.mintConfig", () => {
   });
 
   it("reports a halted token", async () => {
-    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: mintWith({ multiplier: "1" }, true) }) });
+    const rpc = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: mintWith({ multiplier: "1" }, true) }),
+    });
     expect((await rpc.mintConfig(NVDAX_MINT))!.isPaused).toBe(true);
   });
 
@@ -1387,7 +1432,10 @@ describe("SolanaRpc.mintConfig", () => {
   });
 
   it("says null for an account that does not exist", async () => {
-    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: { jsonrpc: "2.0", id: 1, result: { value: null } } }) });
+    const rpc = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: { jsonrpc: "2.0", id: 1, result: { value: null } } }),
+    });
     expect(await rpc.mintConfig("NotAMint")).toBeNull();
   });
 });
@@ -1577,12 +1625,14 @@ git commit -m "feat: read token balances and Token-2022 mint config over plain J
 The lift of `apps/web/src/market/pyth.ts`, plus the `isWeekend` the port asks for and the browser never computed.
 
 **Files:**
+
 - Create: `packages/market/src/pyth.ts`
 - Create: `packages/market/src/pyth.test.ts`
 - Modify: `packages/market/src/index.ts`
 - Modify: `packages/market/package.json`
 
 **Interfaces:**
+
 - Consumes: `fakeFetch`, `pythSpy` from `@mercury/chain/testing`.
 - Produces: `class PythSessions implements SessionSource`, `constructor(config?: { baseUrl?: string; fetch?: typeof fetch; now?: () => Date })`.
 
@@ -1651,8 +1701,14 @@ describe("PythSessions", () => {
 
   it("knows a weekend from a weekday, in New York rather than in UTC", async () => {
     const closed = feedsWith({ is_open: false, next_open: 1_790_256_600 });
-    const weekday = new PythSessions({ fetch: fakeFetch({ "/v2/price_feeds": closed }), now: () => WEDNESDAY });
-    const weekend = new PythSessions({ fetch: fakeFetch({ "/v2/price_feeds": closed }), now: () => SATURDAY });
+    const weekday = new PythSessions({
+      fetch: fakeFetch({ "/v2/price_feeds": closed }),
+      now: () => WEDNESDAY,
+    });
+    const weekend = new PythSessions({
+      fetch: fakeFetch({ "/v2/price_feeds": closed }),
+      now: () => SATURDAY,
+    });
     expect((await weekday.current()).isWeekend).toBe(false);
     expect((await weekend.current()).isWeekend).toBe(true);
   });
@@ -1793,12 +1849,14 @@ git commit -m "feat: lift the Pyth session source out of the browser"
 One Jupiter call answers three questions, so one module implements three ports: what a token costs (`PriceBoard`, for valuing a portfolio), what one real share costs (`ReferenceSource`, for `decide()`), and what the multiplier is (`MultiplierSource`, the browser's fallback path — the server prefers Task 7's).
 
 **Files:**
+
 - Modify: `packages/market/src/ports.ts`
 - Create: `packages/market/src/jupiter.ts`
 - Create: `packages/market/src/jupiter.test.ts`
 - Modify: `packages/market/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `TokenRegistry` from `@mercury/chain`; `fakeFetch`, `jupPrice`, `NVDAX_MINT`, `SPYX_MINT` from `@mercury/chain/testing`.
 - Produces: `class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSource`, `constructor(config: { registry: TokenRegistry; baseUrl?: string; fetch?: typeof fetch; now?: () => number })`; the types `TokenPrice`, `PriceBoard`.
 
@@ -1873,7 +1931,13 @@ import { fails, fakeFetch, jupPrice, NVDAX_MINT, SPYX_MINT } from "@mercury/chai
 import { JupiterMarket } from "./jupiter.js";
 
 const NVDAX: TokenRef = { mint: NVDAX_MINT, symbol: "NVDAx", ticker: "NVDA", issuer: "backed", decimals: 8 };
-const NVDAON: TokenRef = { mint: "OnDoNvDaMiNtAdDrEsSfOrTeStSoNlY1111111111", symbol: "NVDAon", ticker: "NVDA", issuer: "ondo", decimals: 6 };
+const NVDAON: TokenRef = {
+  mint: "OnDoNvDaMiNtAdDrEsSfOrTeStSoNlY1111111111",
+  symbol: "NVDAon",
+  ticker: "NVDA",
+  issuer: "ondo",
+  decimals: 6,
+};
 
 const registry = (refs: readonly TokenRef[]): TokenRegistry => ({
   wrappersFor: async (ticker) => refs.filter((r) => r.ticker === ticker),
@@ -1888,7 +1952,9 @@ describe("JupiterMarket.pricesFor", () => {
   it("maps the recorded response onto the board", async () => {
     const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: fakeFetch({ "/price/v3": jupPrice }) });
     const board = await m.pricesFor([NVDAX_MINT]);
-    const recorded = (jupPrice as Record<string, { usdPrice: number; stockData?: { price: number } }>)[NVDAX_MINT]!;
+    const recorded = (jupPrice as Record<string, { usdPrice: number; stockData?: { price: number } }>)[
+      NVDAX_MINT
+    ]!;
     const price = board.get(NVDAX_MINT);
     expect(price!.usdPricePerToken.toFixed()).toBe(String(recorded.usdPrice));
     expect(price!.pricePerShare!.toFixed()).toBe(String(recorded.stockData!.price));
@@ -1946,7 +2012,9 @@ describe("JupiterMarket.pricesFor", () => {
       fetch: fakeFetch({ "/price/v3": body }),
       now: () => Date.parse("2026-09-01T00:00:00Z"),
     });
-    expect((await m.pricesFor([NVDAX_MINT])).get(NVDAX_MINT)!.multiplier.toFixed()).toBe("1.0009180758490996");
+    expect((await m.pricesFor([NVDAX_MINT])).get(NVDAX_MINT)!.multiplier.toFixed()).toBe(
+      "1.0009180758490996",
+    );
   });
 
   it("says one for a token that has never paid a dividend", async () => {
@@ -1968,9 +2036,14 @@ describe("JupiterMarket.pricesFor", () => {
 
 describe("JupiterMarket.priceFor", () => {
   it("prices a ticker from its Backed wrapper", async () => {
-    const m = new JupiterMarket({ registry: registry([NVDAON, NVDAX]), fetch: fakeFetch({ "/price/v3": jupPrice }) });
+    const m = new JupiterMarket({
+      registry: registry([NVDAON, NVDAX]),
+      fetch: fakeFetch({ "/price/v3": jupPrice }),
+    });
     const reference = await m.priceFor("NVDA");
-    const recorded = (jupPrice as Record<string, { stockData?: { price: number; updatedAt: string } }>)[NVDAX_MINT]!;
+    const recorded = (jupPrice as Record<string, { stockData?: { price: number; updatedAt: string } }>)[
+      NVDAX_MINT
+    ]!;
     expect(reference!.pricePerShare.toFixed()).toBe(String(recorded.stockData!.price));
     expect(reference!.observedAt).toEqual(new Date(recorded.stockData!.updatedAt));
     // Zero almost always: a dividend that has gone ex but is not yet in the
@@ -1992,7 +2065,10 @@ describe("JupiterMarket.priceFor", () => {
   });
 
   it("throws when Jupiter is down, so the caller can fall back rather than price on nothing", async () => {
-    const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: fakeFetch({ "/price/v3": fails(502) }) });
+    const m = new JupiterMarket({
+      registry: registry([NVDAX]),
+      fetch: fakeFetch({ "/price/v3": fails(502) }),
+    });
     await expect(m.priceFor("NVDA")).rejects.toThrow("502");
   });
 });
@@ -2182,6 +2258,7 @@ git commit -m "feat: lift Jupiter prices, reference price and multipliers out of
 `MintMultipliers` reads the ScaledUiAmount extension from the mint itself: an exact decimal string rather than a JSON float, and `isPaused` from the same account rather than a shrug. This is what `buildDeps` wires in. `JupiterMarket`'s implementation stays as the fallback, and the parity test is what keeps them honest about each other.
 
 **Files:**
+
 - Create: `packages/market/src/mint.ts`
 - Create: `packages/market/src/mint.test.ts`
 - Create: `packages/market/src/parity.live.test.ts`
@@ -2189,6 +2266,7 @@ git commit -m "feat: lift Jupiter prices, reference price and multipliers out of
 - Modify: `packages/market/package.json`
 
 **Interfaces:**
+
 - Consumes: `ChainReader`, `MintConfig` from `@mercury/chain` (Task 4).
 - Produces: `class MintMultipliers implements MultiplierSource`, `constructor(config: { chain: ChainReader })`.
 
@@ -2362,7 +2440,10 @@ describe.skipIf(RPC === undefined)("multiplier parity, live", () => {
       // so exact equality is the wrong assertion. A basis point is not: the gap
       // this catches is a stale multiplier, which is hundreds of times larger.
       const gap = mint!.sub(jupiter!).abs().div(mint!);
-      expect(gap.lte("0.0001"), `${token.symbol}: chain ${mint!.toFixed()} vs jupiter ${jupiter!.toFixed()}`).toBe(true);
+      expect(
+        gap.lte("0.0001"),
+        `${token.symbol}: chain ${mint!.toFixed()} vs jupiter ${jupiter!.toFixed()}`,
+      ).toBe(true);
     }
   }, 60_000);
 });
@@ -2405,12 +2486,14 @@ git commit -m "feat: read multipliers from the mint, and test them against Jupit
 The lift of `apps/web/src/market/kamino.ts` behind a new `CreditSource` port. One endpoint, one parse. `GET /v1/money` consumes the USDC supply rate; the collateral factors come back in the same response and are kept, because splitting one parse in two to drop a field we might show later is work that buys nothing.
 
 **Files:**
+
 - Modify: `packages/market/src/ports.ts`
 - Create: `packages/market/src/kamino.ts`
 - Create: `packages/market/src/kamino.test.ts`
 - Modify: `packages/market/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `fakeFetch`, `kaminoReserves` from `@mercury/chain/testing`.
 - Produces: `class KaminoCredit implements CreditSource`, `constructor(config?: { baseUrl?: string; marketAddress?: string; fetch?: typeof fetch })`; the types `Collateral`, `CreditMarket`, `CreditSource`; the constant `XSTOCKS_MARKET`.
 
@@ -2511,7 +2594,9 @@ describe("KaminoCredit", () => {
   });
 
   it("says null for a rate USDC is missing, rather than zero", async () => {
-    const k = new KaminoCredit({ fetch: fakeFetch({ "/kamino-market/": [{ liquidityToken: "SPYx", maxLtv: "0.73" }] }) });
+    const k = new KaminoCredit({
+      fetch: fakeFetch({ "/kamino-market/": [{ liquidityToken: "SPYx", maxLtv: "0.73" }] }),
+    });
     const market = await k.current();
     expect(market.borrowApy).toBeNull();
     expect(market.supplyApy).toBeNull();
@@ -2557,8 +2642,7 @@ export interface KaminoCreditConfig {
 }
 
 /** Rates arrive as decimal strings. They go straight into Decimal, never through a float. */
-const rate = (v: string | undefined): Decimal | null =>
-  v === undefined || v.length === 0 ? null : D(v);
+const rate = (v: string | undefined): Decimal | null => (v === undefined || v.length === 0 ? null : D(v));
 
 export class KaminoCredit implements CreditSource {
   private readonly base: string;
@@ -2621,11 +2705,13 @@ git commit -m "feat: lift the Kamino credit market out of the browser"
 Seven tables from [docs/05](../../05-data-model.md), exactly as it specifies them. `user` and `wallet` already exist from subsystem 1 and are not touched. `basket*` and `plan*` land with their own subsystems.
 
 **Files:**
+
 - Modify: `services/api/src/db/schema.ts`
 - Modify: `services/api/src/db/schema.test.ts`
 - Create: `services/api/drizzle/0001_*.sql` (generated)
 
 **Interfaces:**
+
 - Produces: the tables `instruments`, `tokens`, `multiplierEvents`, `lots`, `positions`, `orders`, `activities`, and the row types `Instrument`, `Token`, `Lot`, `Position`, `Order`, `Activity`.
 
 - [ ] **Step 1: Write the failing test**
@@ -2647,8 +2733,16 @@ describe("read model schema", () => {
     const cols = Object.keys(getTableColumns(tokens));
     expect(cols).toEqual(
       expect.arrayContaining([
-        "id", "instrumentId", "mint", "issuer", "symbol", "decimals",
-        "multiplier", "multiplierUpdatedAt", "isRoutable", "firstSeenAt",
+        "id",
+        "instrumentId",
+        "mint",
+        "issuer",
+        "symbol",
+        "decimals",
+        "multiplier",
+        "multiplierUpdatedAt",
+        "isRoutable",
+        "firstSeenAt",
       ]),
     );
   });
@@ -2666,8 +2760,17 @@ describe("read model schema", () => {
     const cols = Object.keys(getTableColumns(lots));
     expect(cols).toEqual(
       expect.arrayContaining([
-        "id", "userId", "tokenId", "instrumentId", "tokenQty", "shares",
-        "unitCostUsd", "acquiredAt", "source", "isEstimated", "orderId",
+        "id",
+        "userId",
+        "tokenId",
+        "instrumentId",
+        "tokenQty",
+        "shares",
+        "unitCostUsd",
+        "acquiredAt",
+        "source",
+        "isEstimated",
+        "orderId",
       ]),
     );
   });
@@ -2675,7 +2778,14 @@ describe("read model schema", () => {
   it("rolls a position up per instrument, not per token", () => {
     const cols = Object.keys(getTableColumns(positions));
     expect(cols).toEqual(
-      expect.arrayContaining(["userId", "instrumentId", "shares", "costBasisUsd", "avgUnitCostUsd", "updatedAt"]),
+      expect.arrayContaining([
+        "userId",
+        "instrumentId",
+        "shares",
+        "costBasisUsd",
+        "avgUnitCostUsd",
+        "updatedAt",
+      ]),
     );
     expect(cols).not.toContain("tokenId");
   });
@@ -2684,9 +2794,20 @@ describe("read model schema", () => {
     const cols = Object.keys(getTableColumns(orders));
     expect(cols).toEqual(
       expect.arrayContaining([
-        "id", "userId", "instrumentId", "side", "usdAmount", "decision",
-        "chosenTokenId", "referencePrice", "premiumPct", "status",
-        "txSignature", "triggerOrderAccount", "filledAt", "createdAt",
+        "id",
+        "userId",
+        "instrumentId",
+        "side",
+        "usdAmount",
+        "decision",
+        "chosenTokenId",
+        "referencePrice",
+        "premiumPct",
+        "status",
+        "txSignature",
+        "triggerOrderAccount",
+        "filledAt",
+        "createdAt",
       ]),
     );
   });
@@ -2695,8 +2816,16 @@ describe("read model schema", () => {
     const cols = Object.keys(getTableColumns(activities));
     expect(cols).toEqual(
       expect.arrayContaining([
-        "id", "userId", "kind", "occurredAt", "title", "subtitle",
-        "amountUsd", "refTable", "refId", "txSignature",
+        "id",
+        "userId",
+        "kind",
+        "occurredAt",
+        "title",
+        "subtitle",
+        "amountUsd",
+        "refTable",
+        "refId",
+        "txSignature",
       ]),
     );
   });
@@ -2728,8 +2857,18 @@ In `services/api/src/db/schema.ts`, replace the import line with:
 
 ```ts
 import {
-  bigint, boolean, index, integer, jsonb, numeric, pgTable, primaryKey,
-  text, timestamp, uniqueIndex, uuid,
+  bigint,
+  boolean,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 ```
 
@@ -2881,7 +3020,16 @@ export const orders = pgTable(
     referencePrice: usd("reference_price"),
     premiumPct: usd("premium_pct"),
     status: text("status", {
-      enum: ["pending", "executing", "filled", "queued", "partially_filled", "expired", "cancelled", "refused"],
+      enum: [
+        "pending",
+        "executing",
+        "filled",
+        "queued",
+        "partially_filled",
+        "expired",
+        "cancelled",
+        "refused",
+      ],
     }).notNull(),
     txSignature: text("tx_signature"),
     triggerOrderAccount: text("trigger_order_account"),
@@ -2969,12 +3117,14 @@ git commit -m "feat: the read-model tables from docs/05"
 The live token universe becomes `instrument` and `token` rows. The decision of what to store is a pure function so it can be tested without a database; the shell around it does nothing but read, call and write.
 
 **Files:**
+
 - Create: `services/api/src/db/seed/instruments.ts`
 - Create: `services/api/src/catalogue/plan.ts`
 - Create: `services/api/src/catalogue/plan.test.ts`
 - Create: `services/api/src/catalogue/sync.ts`
 
 **Interfaces:**
+
 - Consumes: `CatalogueSource`, `CatalogueInstrument` from `@mercury/chain`; `PriceBoard`, `TokenPrice` from `@mercury/market`.
 - Produces: `planCatalogue(input: CatalogueInput): CataloguePlan`; `syncCatalogue(db: Db, deps: { catalogue: CatalogueSource; prices: PriceBoard }): Promise<CatalogueSummary>`; `INSTRUMENT_META`.
 
@@ -3005,27 +3155,111 @@ export interface InstrumentMetaEntry {
 }
 
 export const INSTRUMENT_META: Readonly<Record<string, InstrumentMetaEntry>> = {
-  NVDA: { name: "Nvidia", sector: "Semiconductors", about: "Designs the graphics and AI accelerators most large models are trained on." },
-  AAPL: { name: "Apple", sector: "Technology", about: "iPhone, Mac and a services business that now earns more than most companies do in total." },
-  MSFT: { name: "Microsoft", sector: "Technology", about: "Windows, Office and Azure — the second largest cloud business in the world." },
-  GOOGL: { name: "Alphabet", sector: "Technology", about: "Search, YouTube, Android and a cloud business growing into third place." },
-  META: { name: "Meta", sector: "Technology", about: "Facebook, Instagram and WhatsApp, funded almost entirely by advertising." },
-  AMZN: { name: "Amazon", sector: "Technology", about: "The largest online retailer in the world, and the cloud business that pays for it." },
-  INTC: { name: "Intel", sector: "Semiconductors", about: "The company that made the x86 processor, now spending heavily to make chips for others." },
-  PLTR: { name: "Palantir", sector: "Technology", about: "Data analysis software, sold mostly to governments and large enterprises." },
-  TSLA: { name: "Tesla", sector: "Consumer", about: "Electric vehicles, energy storage and an autonomy programme the share price has long been valued on more than the cars." },
-  MCD: { name: "McDonald's", sector: "Consumer", about: "The largest restaurant chain in the world, and mostly a property business." },
-  GME: { name: "GameStop", sector: "Consumer", about: "A video game retailer, and the stock that made retail coordination a market force." },
-  COIN: { name: "Coinbase", sector: "Financials", about: "The largest listed crypto exchange in the United States." },
-  HOOD: { name: "Robinhood", sector: "Financials", about: "Commission-free brokerage, and the app that made retail trading mainstream." },
-  CRCL: { name: "Circle", sector: "Financials", about: "Issuer of USDC, the stablecoin this account holds your cash in." },
-  MSTR: { name: "Strategy", sector: "Financials", about: "A software company that holds bitcoin on its balance sheet, and trades more on that holding than on the software." },
-  STRC: { name: "Strategy Preferred", sector: "Financials", about: "Strategy's preferred stock, which pays a monthly dividend." },
-  "BRK.B": { name: "Berkshire Hathaway", sector: "Financials", about: "Insurance, railroads, energy and a famous equity portfolio." },
-  SPY: { name: "S&P 500", sector: "Index funds", about: "The five hundred largest listed companies in the United States, weighted by market value. The default answer for someone who does not want to pick." },
-  QQQ: { name: "Nasdaq 100", sector: "Index funds", about: "The hundred largest non-financial companies on the Nasdaq. Heavier in technology than the S&P 500, and more volatile for it." },
+  NVDA: {
+    name: "Nvidia",
+    sector: "Semiconductors",
+    about: "Designs the graphics and AI accelerators most large models are trained on.",
+  },
+  AAPL: {
+    name: "Apple",
+    sector: "Technology",
+    about: "iPhone, Mac and a services business that now earns more than most companies do in total.",
+  },
+  MSFT: {
+    name: "Microsoft",
+    sector: "Technology",
+    about: "Windows, Office and Azure — the second largest cloud business in the world.",
+  },
+  GOOGL: {
+    name: "Alphabet",
+    sector: "Technology",
+    about: "Search, YouTube, Android and a cloud business growing into third place.",
+  },
+  META: {
+    name: "Meta",
+    sector: "Technology",
+    about: "Facebook, Instagram and WhatsApp, funded almost entirely by advertising.",
+  },
+  AMZN: {
+    name: "Amazon",
+    sector: "Technology",
+    about: "The largest online retailer in the world, and the cloud business that pays for it.",
+  },
+  INTC: {
+    name: "Intel",
+    sector: "Semiconductors",
+    about: "The company that made the x86 processor, now spending heavily to make chips for others.",
+  },
+  PLTR: {
+    name: "Palantir",
+    sector: "Technology",
+    about: "Data analysis software, sold mostly to governments and large enterprises.",
+  },
+  TSLA: {
+    name: "Tesla",
+    sector: "Consumer",
+    about:
+      "Electric vehicles, energy storage and an autonomy programme the share price has long been valued on more than the cars.",
+  },
+  MCD: {
+    name: "McDonald's",
+    sector: "Consumer",
+    about: "The largest restaurant chain in the world, and mostly a property business.",
+  },
+  GME: {
+    name: "GameStop",
+    sector: "Consumer",
+    about: "A video game retailer, and the stock that made retail coordination a market force.",
+  },
+  COIN: {
+    name: "Coinbase",
+    sector: "Financials",
+    about: "The largest listed crypto exchange in the United States.",
+  },
+  HOOD: {
+    name: "Robinhood",
+    sector: "Financials",
+    about: "Commission-free brokerage, and the app that made retail trading mainstream.",
+  },
+  CRCL: {
+    name: "Circle",
+    sector: "Financials",
+    about: "Issuer of USDC, the stablecoin this account holds your cash in.",
+  },
+  MSTR: {
+    name: "Strategy",
+    sector: "Financials",
+    about:
+      "A software company that holds bitcoin on its balance sheet, and trades more on that holding than on the software.",
+  },
+  STRC: {
+    name: "Strategy Preferred",
+    sector: "Financials",
+    about: "Strategy's preferred stock, which pays a monthly dividend.",
+  },
+  "BRK.B": {
+    name: "Berkshire Hathaway",
+    sector: "Financials",
+    about: "Insurance, railroads, energy and a famous equity portfolio.",
+  },
+  SPY: {
+    name: "S&P 500",
+    sector: "Index funds",
+    about:
+      "The five hundred largest listed companies in the United States, weighted by market value. The default answer for someone who does not want to pick.",
+  },
+  QQQ: {
+    name: "Nasdaq 100",
+    sector: "Index funds",
+    about:
+      "The hundred largest non-financial companies on the Nasdaq. Heavier in technology than the S&P 500, and more volatile for it.",
+  },
   GLD: { name: "Gold", sector: "Commodities", about: "Physical gold, held in a vault, divided into shares." },
-  SPCX: { name: "SpaceX", sector: "Private markets", about: "Pre-IPO exposure to SpaceX, which is not listed on any exchange." },
+  SPCX: {
+    name: "SpaceX",
+    sector: "Private markets",
+    about: "Pre-IPO exposure to SpaceX, which is not listed on any exchange.",
+  },
   VIDA: { name: "Vida", sector: "Healthcare", about: "A healthcare company focused on respiratory imaging." },
 };
 ```
@@ -3190,8 +3424,19 @@ describe("planCatalogue", () => {
   });
 
   it("keeps both wrappers of an instrument, in one instrument row", () => {
-    const ondo = wrapper({ mint: "OnDoMiNt", symbol: "NVDAon", issuer: "ondo", decimals: 6, liquidityUsd: D(40_000) });
-    const plan = planCatalogue({ live: [live({ wrappers: [wrapper(), ondo] })], prices: priced(), stored: [], now: NOW });
+    const ondo = wrapper({
+      mint: "OnDoMiNt",
+      symbol: "NVDAon",
+      issuer: "ondo",
+      decimals: 6,
+      liquidityUsd: D(40_000),
+    });
+    const plan = planCatalogue({
+      live: [live({ wrappers: [wrapper(), ondo] })],
+      prices: priced(),
+      stored: [],
+      now: NOW,
+    });
     expect(plan.instruments.length).toBe(1);
     expect(plan.tokens.map((t) => t.symbol).sort()).toEqual(["NVDAon", "NVDAx"]);
   });
@@ -3516,16 +3761,18 @@ Pure, for the same reason `packages/core` is pure: every rule below is testable 
 **The four rules, and why:**
 
 1. **More tokens than we recorded** → a `transfer_in` lot, priced at the reference we can see now, `is_estimated = true`. We do not know what it cost, and the flag is how the UI says so.
-2. **More shares than our lots account for, after that** → a `dividend` lot with a unit cost of zero. The multiplier rose; the holder gained shares without spending anything. The average cost per share therefore *falls*, which is correct: the same money now buys more shares. docs/05 predicts this is the mistake other integrations make.
+2. **More shares than our lots account for, after that** → a `dividend` lot with a unit cost of zero. The multiplier rose; the holder gained shares without spending anything. The average cost per share therefore _falls_, which is correct: the same money now buys more shares. docs/05 predicts this is the mistake other integrations make.
 3. **Fewer tokens than we recorded** → the position follows the chain, scaled pro rata, and the lots are left alone. Average cost is unchanged by construction. No activity row: selling does not exist until subsystem 3, so we do not know what happened, and inventing an event would also break idempotency.
 4. **No reference price** → write nothing, and do not claim shares we cannot cost. The next read tries again.
 
 **Files:**
+
 - Create: `services/api/src/portfolio/reconcile.ts`
 - Create: `services/api/src/portfolio/reconcile.test.ts`
 - Create: `services/api/src/portfolio/apply.ts`
 
 **Interfaces:**
+
 - Consumes: `Decimal`, `D`, `ZERO` from `@mercury/core`.
 - Produces: `planReconciliation(held: readonly HeldToken[], now: Date): Reconciliation`; the types `HeldToken`, `LotWrite`, `ActivityWrite`, `PositionWrite`, `Reconciliation`; `applyReconciliation(db: Db, userId: string, plan: Reconciliation): Promise<void>`; `loadHeldTokens(db, deps, identity): Promise<readonly HeldToken[]>`.
 
@@ -3698,10 +3945,7 @@ describe("planReconciliation: a dividend", () => {
   it("does not bill a new arrival for a dividend it was never owed", () => {
     // The transfer_in lot is already recorded at the current multiplier, so the
     // shortfall it would otherwise leave behind is zero.
-    const plan = planReconciliation(
-      [held({ multiplier: D("1.5"), chainRawAmount: ONE_TOKEN })],
-      NOW,
-    );
+    const plan = planReconciliation([held({ multiplier: D("1.5"), chainRawAmount: ONE_TOKEN })], NOW);
     expect(plan.lots.length).toBe(1);
     expect(plan.lots[0]!.source).toBe("transfer_in");
     expect(plan.lots[0]!.shares).toEqual(D("1.5"));
@@ -3734,7 +3978,14 @@ describe("planReconciliation: tokens that left", () => {
 
   it("writes no activity for it, because we do not know what happened", () => {
     const plan = planReconciliation(
-      [held({ chainRawAmount: 0n, recordedRawAmount: ONE_TOKEN, recordedShares: D(1), recordedCostUsd: D(200) })],
+      [
+        held({
+          chainRawAmount: 0n,
+          recordedRawAmount: ONE_TOKEN,
+          recordedShares: D(1),
+          recordedCostUsd: D(200),
+        }),
+      ],
       NOW,
     );
     expect(plan.activity).toEqual([]);
@@ -3749,19 +4000,13 @@ describe("planReconciliation: tokens that left", () => {
 
 describe("planReconciliation: what it refuses to do", () => {
   it("will not write a lot it cannot price", () => {
-    const plan = planReconciliation(
-      [held({ chainRawAmount: ONE_TOKEN, referencePricePerShare: null })],
-      NOW,
-    );
+    const plan = planReconciliation([held({ chainRawAmount: ONE_TOKEN, referencePricePerShare: null })], NOW);
     expect(plan.lots).toEqual([]);
     expect(plan.activity).toEqual([]);
   });
 
   it("will not claim shares it has no cost for", () => {
-    const plan = planReconciliation(
-      [held({ chainRawAmount: ONE_TOKEN, referencePricePerShare: null })],
-      NOW,
-    );
+    const plan = planReconciliation([held({ chainRawAmount: ONE_TOKEN, referencePricePerShare: null })], NOW);
     expect(plan.positions[0]!.shares).toEqual(ZERO);
   });
 });
@@ -3882,7 +4127,10 @@ const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div
 
 /** Trims trailing zeros so "1 share" does not read as "1.000000000000000000 shares". */
 const plural = (shares: Decimal): string => {
-  const n = shares.toDecimalPlaces(6).toFixed().replace(/\.?0+$/, "");
+  const n = shares
+    .toDecimalPlaces(6)
+    .toFixed()
+    .replace(/\.?0+$/, "");
   return `${n} ${shares.eq(1) ? "share" : "shares"}`;
 };
 
@@ -4191,11 +4439,13 @@ The first two routes that answer from Postgres and chain together. Each route mo
 **A naming inconsistency to be aware of, not to fix here.** `packages/types` declares `Holding.changePct24h` with the `Ratio` schema, whose comment says a ratio ("0.0085 is 85 basis points"). The field name says percent, and the browser has always passed Jupiter's `priceChange24h` through as a percent (`-1.92` for -1.92%). This plan follows the **name** and serves a percentage. `Ratio` is a permissive regex so nothing breaks either way. Renaming the schema is a `packages/types` change that would ripple into the web app, so it is left for whoever owns that change.
 
 **Files:**
+
 - Create: `services/api/src/portfolio/queries.ts`
 - Create: `services/api/src/routes/portfolio.ts`
 - Create: `services/api/src/routes/portfolio.test.ts`
 
 **Interfaces:**
+
 - Consumes: `reconcile`, `ReconcileDeps` from Task 11; `PriceBoard`, `ChainReader`, `MultiplierSource`.
 - Produces: `portfolioRoutes(deps: PortfolioDeps): Hono`; the types `HoldingRow`, `PortfolioDeps`; `readHoldings(db: Db, userId: string): Promise<readonly HoldingRow[]>`.
 
@@ -4303,7 +4553,9 @@ describe("GET /v1/portfolio", () => {
   it("derives today's change from each holding's own move", async () => {
     // 2 shares now worth $400 after a 25% rise: $80 of that is today's.
     const d = deps({
-      prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m, { changePct24h: D(25) })])) },
+      prices: {
+        pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m, { changePct24h: D(25) })])),
+      },
     });
     const body = await (await appWith(d).request("/v1/portfolio")).json();
     expect(body.changeUsd).toBe("80");
@@ -4389,14 +4641,19 @@ describe("GET /v1/portfolio/exposure/:ticker", () => {
             mints.map((m) => [
               m,
               // Two tokens, two different multipliers. One token is not one share.
-              m === NVDAX ? price(m, { multiplier: D(2), usdPricePerToken: D(400) }) : price(m, { multiplier: D(1) }),
+              m === NVDAX
+                ? price(m, { multiplier: D(2), usdPricePerToken: D(400) })
+                : price(m, { multiplier: D(1) }),
             ]),
           ),
       },
       // The mint is the authority on the multiplier, and the route asks it
       // first. A fake that answered 1 for everything would be testing the
       // fallback while pretending to test the preferred path.
-      multipliers: { multiplierFor: async (mint) => (mint === NVDAX ? D(2) : D(1)), isPaused: async () => false },
+      multipliers: {
+        multiplierFor: async (mint) => (mint === NVDAX ? D(2) : D(1)),
+        isPaused: async () => false,
+      },
     });
     const body = await (await appWith(d).request("/v1/portfolio/exposure/NVDA")).json();
     expect(body.shares).toBe("3");
@@ -4566,8 +4823,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       const balance = balances.find((b) => b.mint === wrapper.mint);
       if (balance === undefined || balance.rawAmount === 0n) continue;
       const price = board.get(wrapper.mint);
-      const multiplier =
-        (await deps.multipliers.multiplierFor(wrapper.mint)) ?? price?.multiplier ?? D(1);
+      const multiplier = (await deps.multipliers.multiplierFor(wrapper.mint)) ?? price?.multiplier ?? D(1);
       held.push({
         mint: wrapper.mint,
         symbol: wrapper.symbol,
@@ -4688,6 +4944,7 @@ Cash is a chain balance. The rate is Kamino's. Activity is the table, paginated 
 **What these routes do not pretend to know.** `interestEarnedYtdUsd` is zero because Mercury does not supply cash anywhere in v1 — nothing has earned anything, and zero is the true figure rather than a placeholder. `yieldApr` is the rate Kamino's xStocks market pays a supplier right now: a real, attributed number describing what is available, not what the user is being paid. `borrowingPower.enabled` is false because borrowing was cut from v1's interface.
 
 **Files:**
+
 - Create: `services/api/src/routes/money.ts`
 - Create: `services/api/src/routes/activity.ts`
 - Create: `services/api/src/routes/money.test.ts`
@@ -4695,6 +4952,7 @@ Cash is a chain balance. The rate is Kamino's. Activity is the table, paginated 
 - Create: `services/api/src/portfolio/activity-queries.ts`
 
 **Interfaces:**
+
 - Produces: `moneyRoutes(deps: MoneyDeps): Hono`; `activityRoutes(deps: ActivityDeps): Hono`; `readActivity(db, userId, limit, cursor)`; `encodeCursor`/`decodeCursor`.
 
 - [ ] **Step 1: Write the failing money test**
@@ -4855,7 +5113,13 @@ Create `services/api/src/routes/activity.test.ts`:
 ```ts
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { activityRoutes, decodeCursor, encodeCursor, type ActivityDeps, type ActivityRow } from "./activity.js";
+import {
+  activityRoutes,
+  decodeCursor,
+  encodeCursor,
+  type ActivityDeps,
+  type ActivityRow,
+} from "./activity.js";
 
 const at = (iso: string): Date => new Date(iso);
 
@@ -4890,7 +5154,10 @@ describe("GET /v1/activity", () => {
   });
 
   it("hands back a cursor only when there is another page", async () => {
-    const full: ActivityDeps = { read: async (_u, limit) => Array.from({ length: limit }, (_, i) => row(String(i), "2026-09-24T12:00:00Z")) };
+    const full: ActivityDeps = {
+      read: async (_u, limit) =>
+        Array.from({ length: limit }, (_, i) => row(String(i), "2026-09-24T12:00:00Z")),
+    };
     const short: ActivityDeps = { read: async () => [row("a", "2026-09-24T12:00:00Z")] };
     expect((await (await appWith(full).request("/v1/activity?limit=2")).json()).nextCursor).not.toBeNull();
     expect((await (await appWith(short).request("/v1/activity?limit=2")).json()).nextCursor).toBeNull();
@@ -5019,7 +5286,8 @@ export function activityRoutes(deps: ActivityDeps): Hono {
     const identity = c.get("identity");
 
     const asked = Number(c.req.query("limit"));
-    const limit = Number.isFinite(asked) && asked > 0 ? Math.min(Math.floor(asked), MAX_LIMIT) : DEFAULT_LIMIT;
+    const limit =
+      Number.isFinite(asked) && asked > 0 ? Math.min(Math.floor(asked), MAX_LIMIT) : DEFAULT_LIMIT;
 
     const raw = c.req.query("cursor");
     const cursor = raw === undefined ? null : decodeCursor(raw);
@@ -5117,6 +5385,7 @@ git commit -m "feat: money and activity routes"
 The shelf the web app browses, and the end of the in-memory `orders` Map the spec's §3 names. The Map is replaced by a store interface with a Postgres implementation, which is what lets subsystem 3 add execute and confirm without touching the routes again.
 
 **Files:**
+
 - Create: `services/api/src/routes/instruments.ts`
 - Create: `services/api/src/routes/instruments.test.ts`
 - Create: `services/api/src/instruments/queries.ts`
@@ -5126,6 +5395,7 @@ The shelf the web app browses, and the end of the in-memory `orders` Map the spe
 - Modify: `services/api/src/app.ts`
 
 **Interfaces:**
+
 - Produces: `instrumentRoutes(deps: InstrumentDeps): Hono`; `readCatalogue(db: Db, catalogue: CatalogueSource): Promise<readonly CatalogueRow[]>`; `countBuyers30d(db: Db, ticker: string): Promise<number>`; `OrderStore`, `pgOrderStore(db: Db): OrderStore`, `memoryOrderStore(): OrderStore`.
 
 - [ ] **Step 1: Write the failing instruments test**
@@ -5151,7 +5421,15 @@ const catalogue: readonly CatalogueRow[] = [
     logoUrl: "https://example.test/nvdax.png",
     isTradable: true,
     wrappers: [
-      { mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8, multiplier: "1.5", isRoutable: true, holders: 108_418 },
+      {
+        mint: NVDAX,
+        symbol: "NVDAx",
+        issuer: "backed",
+        decimals: 8,
+        multiplier: "1.5",
+        isRoutable: true,
+        holders: 108_418,
+      },
     ],
   },
   {
@@ -5162,7 +5440,15 @@ const catalogue: readonly CatalogueRow[] = [
     logoUrl: null,
     isTradable: true,
     wrappers: [
-      { mint: SPYX, symbol: "SPYx", issuer: "backed", decimals: 8, multiplier: "1", isRoutable: true, holders: 250_000 },
+      {
+        mint: SPYX,
+        symbol: "SPYx",
+        issuer: "backed",
+        decimals: 8,
+        multiplier: "1",
+        isRoutable: true,
+        holders: 250_000,
+      },
     ],
   },
 ];
@@ -5183,7 +5469,13 @@ const deps = (over: Partial<InstrumentDeps> = {}): InstrumentDeps => ({
   buyers30d: async () => 0,
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) },
   sessions: {
-    current: async () => ({ status: "open", isOpen: true, nextOpenAt: null, nextCloseAt: null, isWeekend: false }),
+    current: async () => ({
+      status: "open",
+      isOpen: true,
+      nextOpenAt: null,
+      nextCloseAt: null,
+      isWeekend: false,
+    }),
   },
   ...over,
 });
@@ -5209,7 +5501,13 @@ describe("GET /v1/instruments", () => {
   it("carries the live session, so a closed market is visible before an order is tried", async () => {
     const d = deps({
       sessions: {
-        current: async () => ({ status: "closed", isOpen: false, nextOpenAt: null, nextCloseAt: null, isWeekend: true }),
+        current: async () => ({
+          status: "closed",
+          isOpen: false,
+          nextOpenAt: null,
+          nextCloseAt: null,
+          isWeekend: true,
+        }),
       },
     });
     const body = await (await app(d).request("/v1/instruments")).json();
@@ -5245,7 +5543,9 @@ describe("GET /v1/instruments", () => {
   });
 
   it("leaves out an instrument nothing can fill", async () => {
-    const d = deps({ catalogue: async () => catalogue.map((c) => ({ ...c, isTradable: c.ticker !== "SPY" })) });
+    const d = deps({
+      catalogue: async () => catalogue.map((c) => ({ ...c, isTradable: c.ticker !== "SPY" })),
+    });
     const body = await (await app(d).request("/v1/instruments")).json();
     expect(body.instruments.map((i: { ticker: string }) => i.ticker)).toEqual(["NVDA"]);
   });
@@ -5261,7 +5561,11 @@ describe("GET /v1/instruments/:ticker", () => {
   it("returns the instrument with every wrapper and its multiplier", async () => {
     const body = await (await app(deps()).request("/v1/instruments/nvda")).json();
     expect(body.instrument).toMatchObject({ ticker: "NVDA", name: "Nvidia", sector: "Semiconductors" });
-    expect(body.instrument.wrappers[0]).toMatchObject({ symbol: "NVDAx", issuer: "backed", isRoutable: true });
+    expect(body.instrument.wrappers[0]).toMatchObject({
+      symbol: "NVDAx",
+      issuer: "backed",
+      isRoutable: true,
+    });
     expect(body.instrument.wrappers[0].multiplier).toBe("1.5");
   });
 
@@ -5396,7 +5700,9 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
 
     let rows = priced;
     if (q !== undefined && q.length > 0) {
-      rows = rows.filter((p) => p.row.ticker.toLowerCase().includes(q) || p.row.name.toLowerCase().includes(q));
+      rows = rows.filter(
+        (p) => p.row.ticker.toLowerCase().includes(q) || p.row.name.toLowerCase().includes(q),
+      );
     }
     if (sector !== undefined) rows = rows.filter((p) => p.row.sector === sector);
 
@@ -5467,9 +5773,7 @@ export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise
     catalogue.instruments().catch(() => []),
   ]);
 
-  const holdersByMint = new Map(
-    live.flatMap((i) => i.wrappers.map((w) => [w.mint, w.holders] as const)),
-  );
+  const holdersByMint = new Map(live.flatMap((i) => i.wrappers.map((w) => [w.mint, w.holders] as const)));
 
   const wrappers = await db
     .select({
@@ -5540,8 +5844,7 @@ import type { Db } from "../db/client.js";
 import { instruments, orders, tokens } from "../db/schema.js";
 
 export type OrderStatus =
-  | "pending" | "executing" | "filled" | "queued"
-  | "partially_filled" | "expired" | "cancelled" | "refused";
+  "pending" | "executing" | "filled" | "queued" | "partially_filled" | "expired" | "cancelled" | "refused";
 
 export interface NewOrder {
   readonly userId: string;
@@ -5588,8 +5891,9 @@ export const pgOrderStore = (db: Db): OrderStore => ({
     const chosenTokenId =
       order.chosenMint === null
         ? null
-        : ((await db.select({ id: tokens.id }).from(tokens).where(eq(tokens.mint, order.chosenMint)).limit(1))[0]
-            ?.id ?? null);
+        : ((
+            await db.select({ id: tokens.id }).from(tokens).where(eq(tokens.mint, order.chosenMint)).limit(1)
+          )[0]?.id ?? null);
 
     const [saved] = await db
       .insert(orders)
@@ -5604,7 +5908,12 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         premiumPct: order.premiumPct,
         status: order.status,
       })
-      .returning({ id: orders.id, decision: orders.decision, status: orders.status, createdAt: orders.createdAt });
+      .returning({
+        id: orders.id,
+        decision: orders.decision,
+        status: orders.status,
+        createdAt: orders.createdAt,
+      });
     if (saved === undefined) throw new Error("order insert returned nothing");
 
     return {
@@ -5617,7 +5926,12 @@ export const pgOrderStore = (db: Db): OrderStore => ({
 
   async byId(userId, id) {
     const [row] = await db
-      .select({ id: orders.id, decision: orders.decision, status: orders.status, createdAt: orders.createdAt })
+      .select({
+        id: orders.id,
+        decision: orders.decision,
+        status: orders.status,
+        createdAt: orders.createdAt,
+      })
       .from(orders)
       // Scoped to the caller. An order id is a uuid, but a route that trusts one
       // without an owner check is a route that will one day be handed someone
@@ -5630,7 +5944,10 @@ export const pgOrderStore = (db: Db): OrderStore => ({
   },
 
   async setStatus(userId, id, status) {
-    await db.update(orders).set({ status }).where(and(eq(orders.id, id), eq(orders.userId, userId)));
+    await db
+      .update(orders)
+      .set({ status })
+      .where(and(eq(orders.id, id), eq(orders.userId, userId)));
   },
 });
 ```
@@ -5737,41 +6054,41 @@ In `services/api/src/app.ts`:
 3. Mount the route modules after the auth middleware:
 
 ```ts
-  app.route("/", instrumentRoutes(read.instruments));
-  app.route("/", portfolioRoutes(read.portfolio));
-  app.route("/", moneyRoutes(read.money));
-  app.route("/", activityRoutes(read.activity));
+app.route("/", instrumentRoutes(read.instruments));
+app.route("/", portfolioRoutes(read.portfolio));
+app.route("/", moneyRoutes(read.money));
+app.route("/", activityRoutes(read.activity));
 ```
 
 4. Replace the three order handlers' Map access with `read.orders`:
 
 ```ts
-  app.post("/v1/orders", async (c) => {
-    const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+app.post("/v1/orders", async (c) => {
+  const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
-    const decision = await priceOrder(market(), parsed.data);
-    if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
+  const decision = await priceOrder(market(), parsed.data);
+  if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
-    const wire = decisionToWire(decision);
-    const saved = await read.orders.create({
-      userId: c.get("identity").userId,
-      ticker: parsed.data.ticker,
-      side: parsed.data.side,
-      usdAmount: parsed.data.amount,
-      decision: wire,
-      chosenMint: wire.kind === "refuse" ? null : wire.best.mint,
-      referencePrice: wire.fairPricePerShare,
-      premiumPct: wire.kind === "refuse" ? null : wire.premium,
-      status: wire.kind === "refuse" ? "refused" : "pending",
-    });
-    return c.json({ orderId: saved.id, decision: wire });
+  const wire = decisionToWire(decision);
+  const saved = await read.orders.create({
+    userId: c.get("identity").userId,
+    ticker: parsed.data.ticker,
+    side: parsed.data.side,
+    usdAmount: parsed.data.amount,
+    decision: wire,
+    chosenMint: wire.kind === "refuse" ? null : wire.best.mint,
+    referencePrice: wire.fairPricePerShare,
+    premiumPct: wire.kind === "refuse" ? null : wire.premium,
+    status: wire.kind === "refuse" ? "refused" : "pending",
   });
+  return c.json({ orderId: saved.id, decision: wire });
+});
 
-  app.get("/v1/orders/:id", async (c) => {
-    const order = await read.orders.byId(c.get("identity").userId, c.req.param("id"));
-    return order === null ? c.json(fail("not_found", "Unknown order."), 404) : c.json(order);
-  });
+app.get("/v1/orders/:id", async (c) => {
+  const order = await read.orders.byId(c.get("identity").userId, c.req.param("id"));
+  return order === null ? c.json(fail("not_found", "Unknown order."), 404) : c.json(order);
+});
 ```
 
 5. In `POST /v1/orders/:id/execute`, replace `orders.get(...)` with `await read.orders.byId(c.get("identity").userId, c.req.param("id"))`, and `o.status = "executing"` with `await read.orders.setStatus(c.get("identity").userId, o.id, "executing")`. The handler's own body still throws `buildDeps:` until subsystem 3 provides a keyed Ultra client, and the 503 mapping already covers that.
@@ -5791,6 +6108,7 @@ git commit -m "feat: instrument routes, and orders in Postgres instead of a Map"
 `buildDeps()` stops throwing. Everything lifted in Tasks 2–8 is constructed once, the routes get their queries, and the two documents the spec's §8 asks for are written.
 
 **Files:**
+
 - Modify: `services/api/src/deps.ts`
 - Modify: `services/api/src/index.ts`
 - Modify: `services/api/.env.example`
@@ -5804,14 +6122,27 @@ In `services/api/src/deps.ts`, replace the imports and the `Deps` interface:
 
 ```ts
 import {
-  JupiterLite, JupiterRegistry, SolanaRpc, SymmetryVenue,
-  type BasketVenue, type CatalogueSource, type ChainReader,
-  type QuoteSource, type TokenRegistry, type TriggerSource,
+  JupiterLite,
+  JupiterRegistry,
+  SolanaRpc,
+  SymmetryVenue,
+  type BasketVenue,
+  type CatalogueSource,
+  type ChainReader,
+  type QuoteSource,
+  type TokenRegistry,
+  type TriggerSource,
 } from "@mercury/chain";
 import {
-  JupiterMarket, KaminoCredit, MintMultipliers, PythSessions,
-  type CreditSource, type MultiplierSource, type PriceBoard,
-  type ReferenceSource, type SessionSource,
+  JupiterMarket,
+  KaminoCredit,
+  MintMultipliers,
+  PythSessions,
+  type CreditSource,
+  type MultiplierSource,
+  type PriceBoard,
+  type ReferenceSource,
+  type SessionSource,
 } from "@mercury/market";
 ```
 
@@ -6162,7 +6493,7 @@ import { KaminoCredit } from "@mercury/market/kamino";
 
 `hooks.ts` and `meta.ts` stay in the app — React Query is app-level, and `meta.ts` becomes unnecessary once the app reads `name`, `sector` and `description` from `GET /v1/instruments`. `apps/web` will need `@mercury/market` and `@mercury/chain` added to its `package.json`; that edge is now legal, and [ADR 0011](../../adr/0011-server-preferred-prices.md) records why.
 
-**2. There is a live bug in the browser's multiplier.** `multiplierOf` in `apps/web/src/market/hooks.ts` reads `scaledUiConfig.multiplier`, which is the *scheduled-from* value. The one in force is `newMultiplier` once `newMultiplierEffectiveAt` has passed. On NVDAx in September 2026 the gap was 0.078% of every share count. `JupiterMarket` in the package gets this right; switching to it fixes it.
+**2. There is a live bug in the browser's multiplier.** `multiplierOf` in `apps/web/src/market/hooks.ts` reads `scaledUiConfig.multiplier`, which is the _scheduled-from_ value. The one in force is `newMultiplier` once `newMultiplierEffectiveAt` has passed. On NVDAx in September 2026 the gap was 0.078% of every share count. `JupiterMarket` in the package gets this right; switching to it fixes it.
 
 **3. The routes the app can now call.** All under `/v1`, all needing the bearer token the app already sends:
 
@@ -6182,7 +6513,7 @@ GET  /v1/orders/:id
 
 **5. `changePct24h` is a percentage**, despite `packages/types` typing it with the `Ratio` schema whose comment says otherwise. The server follows the field name. If anyone fixes the schema, both sides change together.
 
-**6. The fallback rule.** Read the API first. Fall back to the direct upstream reads only on a timeout or a 5xx — never on a 4xx, which is the API answering correctly. The fallback covers prices, sessions and the credit market; there is no keyless equivalent for a portfolio, so the degraded state is *live prices, no portfolio*, and the screens should say so rather than looking broken.
+**6. The fallback rule.** Read the API first. Fall back to the direct upstream reads only on a timeout or a 5xx — never on a 4xx, which is the API answering correctly. The fallback covers prices, sessions and the credit market; there is no keyless equivalent for a portfolio, so the degraded state is _live prices, no portfolio_, and the screens should say so rather than looking broken.
 
 ---
 

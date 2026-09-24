@@ -20,17 +20,14 @@ const STEPS = [
 ];
 
 export const HowItWorks = () => (
-  <Section
-    id="how-it-works"
-    inner="grid items-start gap-12 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16"
-  >
+  <Section id="how-it-works" inner="grid items-start gap-12 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
     <div>
       <h2 className="text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         Three steps, and none of them is a bank.
       </h2>
       <p className="mt-[18px] text-[16px] leading-[1.6] text-muted text-pretty">
-        No brokerage account, no identity check, no fiat rails. If you can hold a stablecoin, you
-        can hold Nvidia.
+        No brokerage account, no identity check, no fiat rails. If you can hold a stablecoin, you can hold
+        Nvidia.
       </p>
       <div className="mt-7 h-60 rounded-[14px] border border-cardline bg-shell p-4">
         <FlowIllustration />
@@ -48,9 +45,7 @@ export const HowItWorks = () => (
           <span className="pt-[3px] text-[13px] font-semibold text-brand tabular-nums">{step.n}</span>
           <div>
             <h3 className="text-[18px] font-semibold tracking-[-0.01em]">{step.title}</h3>
-            <p className="mt-[7px] text-[15px] leading-[1.55] text-muted text-pretty">
-              {step.body}
-            </p>
+            <p className="mt-[7px] text-[15px] leading-[1.55] text-muted text-pretty">{step.body}</p>
           </div>
         </li>
       ))}

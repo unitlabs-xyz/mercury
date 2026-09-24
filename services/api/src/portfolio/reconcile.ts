@@ -61,7 +61,10 @@ const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div
 
 /** Trims trailing zeros so "1 share" does not read as "1.000000000000000000 shares". */
 const plural = (shares: Decimal): string => {
-  const n = shares.toDecimalPlaces(6).toFixed().replace(/\.?0+$/, "");
+  const n = shares
+    .toDecimalPlaces(6)
+    .toFixed()
+    .replace(/\.?0+$/, "");
   return `${n} ${shares.eq(1) ? "share" : "shares"}`;
 };
 

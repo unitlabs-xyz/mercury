@@ -19,10 +19,7 @@ const STATS = [
 ];
 
 export const CustodyStrip = () => (
-  <Section
-    tone="white"
-    inner="flex flex-col gap-4 py-[22px] lg:flex-row lg:items-center lg:gap-[34px]"
-  >
+  <Section tone="white" inner="flex flex-col gap-4 py-[22px] lg:flex-row lg:items-center lg:gap-[34px]">
     <span className="stamp whitespace-nowrap">SHARES CUSTODIED AND TOKENISED BY</span>
     <div className="flex flex-1 flex-wrap items-center justify-between gap-x-10 gap-y-3">
       {ISSUERS.map((issuer) => (
@@ -71,9 +68,7 @@ export const StatsBand = () => (
             i === 1 ? "border-r-0 lg:border-r" : "",
           ].join(" ")}
         >
-          <p className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[42px]">
-            {stat.value}
-          </p>
+          <p className="text-[32px] font-semibold tracking-[-0.03em] sm:text-[42px]">{stat.value}</p>
           <p className="mt-[5px] text-[13px] text-muted">{stat.label}</p>
         </motion.div>
       ))}

@@ -6,12 +6,12 @@ engineer, which buys back the iOS app.
 
 ## Who does what
 
-| | Weeks 1 | Weeks 2 to 3 | Owns |
-| --- | --- | --- | --- |
-| **A** | Symmetry spike, then the basket integration | **iOS app in Expo** | Baskets, then mobile |
-| **B** | Token registry, Jupiter, Chainlink, session state | The worker, recurring, triggers | Chain and market data |
-| **C** | `decide()`, orders, the API | Postgres, lots, positions, exposure | The engine and the server |
-| **D** | Privy onboarding, app shell, funding screen | Every screen | The web app |
+|       | Weeks 1                                           | Weeks 2 to 3                        | Owns                      |
+| ----- | ------------------------------------------------- | ----------------------------------- | ------------------------- |
+| **A** | Symmetry spike, then the basket integration       | **iOS app in Expo**                 | Baskets, then mobile      |
+| **B** | Token registry, Jupiter, Chainlink, session state | The worker, recurring, triggers     | Chain and market data     |
+| **C** | `decide()`, orders, the API                       | Postgres, lots, positions, exposure | The engine and the server |
+| **D** | Privy onboarding, app shell, funding screen       | Every screen                        | The web app               |
 
 ## Week 1 · 19 to 25 September · prove the mechanism
 

@@ -5,8 +5,7 @@ const W = 700;
 const H = 200;
 const PAD = 6;
 
-const usd = (v: number) =>
-  v.toLocaleString("en-US", { style: "currency", currency: "USD" });
+const usd = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
 /**
  * A single line with a soft fill, and a crosshair that reports the value under
@@ -108,7 +107,15 @@ export const ValueChart = ({ range }: { range: Range }) => {
                 vectorEffect="non-scaling-stroke"
               />
               <circle cx={hot.x} cy={hot.y} r="5" fill="#fff" />
-              <circle cx={hot.x} cy={hot.y} r="5" fill="none" stroke="#1A7F4B" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+              <circle
+                cx={hot.x}
+                cy={hot.y}
+                r="5"
+                fill="none"
+                stroke="#1A7F4B"
+                strokeWidth="2.5"
+                vectorEffect="non-scaling-stroke"
+              />
             </g>
           )}
         </svg>
@@ -119,9 +126,7 @@ export const ValueChart = ({ range }: { range: Range }) => {
             className="pointer-events-none absolute top-0 z-10 -translate-x-1/2 rounded-lg border border-cardline bg-white px-3 py-2 shadow-[0_6px_20px_rgba(27,26,23,0.12)]"
             style={{ left: `${(hot.x / W) * 100}%` }}
           >
-            <p className="text-[13px] font-semibold tabular-nums whitespace-nowrap">
-              {usd(hot.value)}
-            </p>
+            <p className="text-[13px] font-semibold tabular-nums whitespace-nowrap">{usd(hot.value)}</p>
             <p className="mt-0.5 flex items-center gap-2 text-[11px] whitespace-nowrap text-faint">
               {hot.label}
               <span className={delta >= 0 ? "text-up-deep" : "text-down-deep"}>

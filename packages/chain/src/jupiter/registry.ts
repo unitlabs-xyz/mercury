@@ -1,5 +1,11 @@
 import { D, ZERO, type Decimal, type Issuer } from "@mercury/core";
-import type { CatalogueInstrument, CatalogueSource, CatalogueWrapper, TokenRef, TokenRegistry } from "../ports.js";
+import type {
+  CatalogueInstrument,
+  CatalogueSource,
+  CatalogueWrapper,
+  TokenRef,
+  TokenRegistry,
+} from "../ports.js";
 
 /**
  * Jupiter's free tier. No key, no account, CORS-open. The paid host (api.jup.ag)
