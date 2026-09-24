@@ -1,0 +1,177 @@
+import { Hono } from "hono";
+import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHolding } from "@mercury/core";
+import type { ChainReader } from "@mercury/chain";
+import type { MultiplierSource, PriceBoard } from "@mercury/market";
+// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+import type {} from "../auth/middleware.js";
+
+export interface HoldingWrapper {
+  readonly mint: string;
+  readonly symbol: string;
+  readonly issuer: Issuer;
+  readonly decimals: number;
+}
+
+export interface HoldingRow {
+  readonly instrumentId: string;
+  readonly ticker: string;
+  readonly name: string;
+  readonly shares: Decimal;
+  readonly costBasisUsd: Decimal;
+  readonly avgUnitCostUsd: Decimal;
+  readonly wrappers: readonly HoldingWrapper[];
+}
+
+export interface PortfolioDeps {
+  /** Brings the lots in line with the chain before anything is read. */
+  readonly reconcile: (userId: string, walletAddress: string) => Promise<void>;
+  readonly holdings: (userId: string) => Promise<readonly HoldingRow[]>;
+  readonly prices: PriceBoard;
+  readonly chain: ChainReader;
+  readonly multipliers: MultiplierSource;
+  readonly usdcMint: string;
+}
+
+const fail = (code: string, message: string) => ({ error: { code, message } });
+
+const EMPTY = {
+  totalValueUsd: "0",
+  cashUsd: "0",
+  changeUsd: "0",
+  changePct: "0",
+  holdings: [] as const,
+};
+
+export function portfolioRoutes(deps: PortfolioDeps): Hono {
+  const app = new Hono();
+
+  app.get("/v1/portfolio", async (c) => {
+    const identity = c.get("identity");
+    // A session can be valid before Privy finishes provisioning the wallet.
+    // Nothing is owned yet, which is an empty portfolio and not an error.
+    if (identity.walletAddress === null) return c.json(EMPTY);
+
+    await deps.reconcile(identity.userId, identity.walletAddress);
+
+    const [rows, balances] = await Promise.all([
+      deps.holdings(identity.userId),
+      deps.chain.tokenBalances(identity.walletAddress),
+    ]);
+
+    const mints = rows.flatMap((r) => r.wrappers.map((w) => w.mint));
+    const board = await deps.prices.pricesFor(mints);
+
+    let total = ZERO;
+    let change = ZERO;
+    const holdings = [];
+
+    for (const row of rows) {
+      if (row.shares.lte(ZERO)) continue; // a closed holding is not a row
+
+      // Every wrapper of this company prices one share the same way, so the
+      // first that answers is enough. The share count already spans all of them.
+      const priced = row.wrappers.map((w) => board.get(w.mint)).find((p) => p !== undefined);
+      const perShare = priced?.pricePerShare ?? ZERO;
+      const valueUsd = row.shares.mul(perShare);
+      const changePct24h = priced?.changePct24h ?? ZERO;
+
+      // value_now = value_yesterday x (1 + pct/100), so today's move is
+      // value_now x pct / (100 + pct). No price history needed for one day.
+      const denominator = D(100).add(changePct24h);
+      const movedUsd = denominator.isZero() ? ZERO : valueUsd.mul(changePct24h).div(denominator);
+
+      total = total.add(valueUsd);
+      change = change.add(movedUsd);
+
+      holdings.push({
+        ticker: row.ticker,
+        name: row.name,
+        shares: toWire(row.shares),
+        valueUsd: toWire(valueUsd),
+        costBasisUsd: toWire(row.costBasisUsd),
+        unrealisedPnlUsd: toWire(valueUsd.sub(row.costBasisUsd)),
+        changePct24h: toWire(changePct24h),
+        wrapperCount: row.wrappers.length,
+      });
+    }
+
+    const usdc = balances.find((b) => b.mint === deps.usdcMint);
+    const cashUsd = usdc === undefined ? ZERO : D(usdc.rawAmount.toString()).div(D(10).pow(usdc.decimals));
+    const totalWithCash = total.add(cashUsd);
+
+    // Cash does not move, so the percentage is of what actually could.
+    const yesterday = total.sub(change);
+    const changePct = yesterday.isZero() ? ZERO : change.div(yesterday).mul(100);
+
+    return c.json({
+      totalValueUsd: toWire(totalWithCash),
+      cashUsd: toWire(cashUsd),
+      changeUsd: toWire(change),
+      changePct: toWire(changePct),
+      holdings,
+    });
+  });
+
+  app.get("/v1/portfolio/exposure/:ticker", async (c) => {
+    const identity = c.get("identity");
+    const ticker = c.req.param("ticker").toUpperCase();
+    if (identity.walletAddress === null) return c.json(fail("not_found", "Nothing held."), 404);
+
+    const rows = await deps.holdings(identity.userId);
+    const row = rows.find((r) => r.ticker === ticker);
+    if (row === undefined || row.shares.lte(ZERO)) {
+      return c.json(fail("not_found", `No position in ${ticker}.`), 404);
+    }
+
+    const [balances, board] = await Promise.all([
+      deps.chain.tokenBalances(identity.walletAddress),
+      deps.prices.pricesFor(row.wrappers.map((w) => w.mint)),
+    ]);
+
+    const held: WrapperHolding[] = [];
+    for (const wrapper of row.wrappers) {
+      const balance = balances.find((b) => b.mint === wrapper.mint);
+      if (balance === undefined || balance.rawAmount === 0n) continue;
+      const price = board.get(wrapper.mint);
+      const multiplier =
+        (await deps.multipliers.multiplierFor(wrapper.mint)) ?? price?.multiplier ?? D(1);
+      held.push({
+        mint: wrapper.mint,
+        symbol: wrapper.symbol,
+        issuer: wrapper.issuer,
+        tokenQty: D(balance.rawAmount.toString()).div(D(10).pow(balance.decimals)),
+        multiplier,
+        pricePerToken: price?.usdPricePerToken ?? ZERO,
+      });
+    }
+
+    // The arithmetic is `@mercury/core`'s. Shares are summed as tokenQty x
+    // multiplier, never by adding token counts: two wrappers of one company are
+    // different numbers of shares. See docs/02.
+    const result = exposure(ticker, held);
+
+    return c.json({
+      ticker: result.ticker,
+      shares: toWire(result.shares),
+      valueUsd: toWire(result.valueUsd),
+      wrappers: result.wrappers.map((w) => ({
+        mint: w.mint,
+        symbol: w.symbol,
+        issuer: w.issuer,
+        tokenQty: toWire(w.tokenQty),
+        multiplier: toWire(w.multiplier),
+        shares: toWire(w.shares),
+        valueUsd: toWire(w.valueUsd),
+        sharePct: toWire(w.sharePct),
+      })),
+      warnings: result.warnings.map((w) => ({
+        code: w.code,
+        issuer: w.issuer,
+        sharePct: toWire(w.sharePct),
+        message: w.message,
+      })),
+    });
+  });
+
+  return app;
+}
