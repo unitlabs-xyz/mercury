@@ -2137,7 +2137,7 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
    * fallback path satisfies the port, and it never claims a token is halted on
    * evidence it does not have.
    */
-  isPaused(): Promise<boolean> {
+  isPaused(_mint: string): Promise<boolean> {
     return Promise.resolve(false);
   }
 
