@@ -218,11 +218,14 @@ export class HttpFailure {
 
 export const fails = (status: number): HttpFailure => new HttpFailure(status);
 
-const urlOf = (input: RequestInfo | URL): string =>
+type FetchInput = Parameters<typeof fetch>[0];
+
+/** `RequestInfo` is not a global under lib ES2023, so take fetch's own first parameter. */
+const urlOf = (input: FetchInput): string =>
   typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 
 export const fakeFetch = (routes: Record<string, unknown>): typeof fetch =>
-  (async (input: RequestInfo | URL) => {
+  (async (input: FetchInput) => {
     const url = urlOf(input);
     const hit = Object.entries(routes).find(([pattern]) => url.includes(pattern));
     if (hit === undefined) throw new Error(`fakeFetch: nothing registered for ${url}`);

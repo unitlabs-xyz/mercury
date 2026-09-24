@@ -1,0 +1,802 @@
+[
+  {
+    "id": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+    "name": "NVIDIA xStock",
+    "symbol": "NVDAx",
+    "icon": "https://xstocks-metadata.backed.fi/logos/tokens/NVDAx.png",
+    "decimals": 8,
+    "dev": "S7vYFFWH6BjJyEsdrPQpqpYTqLTrPRK6KW3VwsJuRaS",
+    "circSupply": 321820.68662205327,
+    "totalSupply": 321820.68662205327,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "mintAuthority": "7pt9tkctJPK7PPNQJ77GKg8ZffSF6QxoMiCFYHxrtaCj",
+    "freezeAuthority": "JDq14BWvqCRFNu1krb12bcRpbGtJZ1FLEakMw6FdxJNs",
+    "holderCount": 108513,
+    "fdv": 72173170.88890707,
+    "mcap": 72173170.88890707,
+    "usdPrice": 224.265169670921,
+    "priceBlockId": 449951686,
+    "liquidity": 2869811.090596414,
+    "stats5m": {
+      "priceChange": 0.0007861854329526114,
+      "holderChange": -0.01474260335947074,
+      "liquidityChange": 0.008486763026745977,
+      "volumeChange": -65.79941968206985,
+      "buyVolume": 6914.335970652451,
+      "sellVolume": 7383.441131509419,
+      "buyOrganicVolume": 1254.0453346422908,
+      "sellOrganicVolume": 1253.930219120412,
+      "numBuys": 113,
+      "numSells": 130,
+      "numTraders": 80,
+      "numOrganicBuyers": 1,
+      "numNetBuyers": 5
+    },
+    "stats1h": {
+      "priceChange": -0.4398983774354343,
+      "holderChange": 0.09223986053333087,
+      "liquidityChange": -0.445578057819011,
+      "volumeChange": 87.77034862216172,
+      "buyVolume": 328191.67599895416,
+      "sellVolume": 398457.58956775686,
+      "buyOrganicVolume": 9079.032493000681,
+      "sellOrganicVolume": 9320.357187298845,
+      "numBuys": 3871,
+      "numSells": 4323,
+      "numTraders": 1261,
+      "numOrganicBuyers": 16,
+      "numNetBuyers": 142
+    },
+    "stats6h": {
+      "priceChange": -0.3376372024000725,
+      "holderChange": -0.15733686651209008,
+      "liquidityChange": -2.5441789684261917,
+      "volumeChange": -59.883648723614805,
+      "buyVolume": 1586137.9701425505,
+      "sellVolume": 1686769.0034678765,
+      "buyOrganicVolume": 47403.07733700871,
+      "sellOrganicVolume": 48936.54252344638,
+      "numBuys": 13910,
+      "numSells": 15172,
+      "numTraders": 3990,
+      "numOrganicBuyers": 33,
+      "numNetBuyers": 522
+    },
+    "stats24h": {
+      "priceChange": -2.005416941155702,
+      "holderChange": 1.5696956082219475,
+      "liquidityChange": -5.019010440533929,
+      "volumeChange": -42.17141345845519,
+      "buyVolume": 11425391.146382682,
+      "sellVolume": 12023261.127776587,
+      "buyOrganicVolume": 518298.02158865397,
+      "sellOrganicVolume": 578914.7772247606,
+      "numBuys": 135667,
+      "numSells": 141834,
+      "numTraders": 18597,
+      "numOrganicBuyers": 168,
+      "numNetBuyers": 2690
+    },
+    "firstPool": {
+      "id": "GH5Jo3dRwkg6bYZcC7oPPrVRFu7KexBL7ncdgqVqGtnz",
+      "createdAt": "2025-06-27T10:14:51Z"
+    },
+    "audit": {
+      "topHoldersPercentage": 74.13829573090766,
+      "devBalancePercentage": 2.5696091572061595,
+      "devMints": 1479
+    },
+    "organicScore": 91.10246956621914,
+    "organicScoreLabel": "high",
+    "isVerified": true,
+    "tags": [
+      "rwa",
+      "equities",
+      "moonshot-verified",
+      "token-2022",
+      "verified",
+      "xstocks",
+      "stocks"
+    ],
+    "createdAt": "2025-06-11T09:39:59Z",
+    "updatedAt": "2026-09-24T06:47:36.162675277Z"
+  },
+  {
+    "id": "EXoXNpJzrRm1HhKGfqVG1ftPCBciiNBjDQLTfjbYpump",
+    "name": "$NVDAx",
+    "symbol": "NVDA",
+    "icon": "https://ipfs.io/ipfs/bafybeidx7qam4t6fj6zfnl5fnjtu5pzhi4ox6gm3l4rnqch6adpiwoog4u",
+    "decimals": 6,
+    "dev": "79DYh57V2HY215Sb5GrBRnHHhUGA4YbusQ2FeLFgwXbA",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3983.200988592294,
+    "mcap": 3983.200988592294,
+    "usdPrice": 0.000003983200988592294,
+    "priceBlockId": 445704949,
+    "liquidity": 6718.877295270963,
+    "firstPool": {
+      "id": "EXoXNpJzrRm1HhKGfqVG1ftPCBciiNBjDQLTfjbYpump",
+      "createdAt": "2026-09-09T20:44:21Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.4892024160938,
+      "devMints": 6
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-09T20:44:21Z",
+    "updatedAt": "2026-09-13T18:16:40Z"
+  },
+  {
+    "id": "BJU68seCmQm6s6heFcDZh9dLfjuUbKuhtjQ2MkKepump",
+    "name": "Nvidia Stonk",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreie5jurr2gnmx4dqa2dru2j73lnb2zcrnztlg4l2zy7w44ekbin3tm",
+    "decimals": 6,
+    "dev": "8HMg8oPLrgLfT4qvnEgZbsiMBQzcHHbsd8yD3gHK1Txy",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3768.6583973057423,
+    "mcap": 3768.6583973057423,
+    "usdPrice": 0.0000037686583973057422,
+    "priceBlockId": 447281852,
+    "liquidity": 6377.63489756806,
+    "stats24h": {
+      "volumeChange": -100
+    },
+    "firstPool": {
+      "id": "BJU68seCmQm6s6heFcDZh9dLfjuUbKuhtjQ2MkKepump",
+      "createdAt": "2026-09-15T15:08:59Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.1422762305841,
+      "devMigrations": 3,
+      "devMints": 23
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-15T15:08:59Z",
+    "updatedAt": "2026-09-16T15:27:55Z"
+  },
+  {
+    "id": "9J4tfEFR31QW8JHHGnPb8yrsew5MpwkSFtQz1nyapump",
+    "name": "Nvidia Stonk",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreie5jurr2gnmx4dqa2dru2j73lnb2zcrnztlg4l2zy7w44ekbin3tm",
+    "decimals": 6,
+    "dev": "GUGnRC4GnG82iRQu6T7UF37wboiC643ozeYf86ju5Ge7",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3769.0609585601055,
+    "mcap": 3769.0609585601055,
+    "usdPrice": 0.0000037690609585601057,
+    "priceBlockId": 447281857,
+    "liquidity": 6377.634889064548,
+    "firstPool": {
+      "id": "9J4tfEFR31QW8JHHGnPb8yrsew5MpwkSFtQz1nyapump",
+      "createdAt": "2026-09-15T15:04:54Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.15373201831720001,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-15T15:04:54Z",
+    "updatedAt": "2026-09-21T08:42:55.864786399Z"
+  },
+  {
+    "id": "BZtxsxP6epYcSDWS629wPxeXLF4chjD8TGuZSfHNpump",
+    "name": "Nvidia Stonk",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreie5jurr2gnmx4dqa2dru2j73lnb2zcrnztlg4l2zy7w44ekbin3tm",
+    "decimals": 6,
+    "twitter": "https://x.com/Mick_NLN/status/2099831574997139965",
+    "website": "https://nvdax.fun",
+    "dev": "373qQq4De1ZMBWVeeaBcSQZryGkQYHx5ZS9QftNxXKhy",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3765.642789455599,
+    "mcap": 3765.642789455599,
+    "usdPrice": 0.0000037656427894555992,
+    "priceBlockId": 447280905,
+    "liquidity": 6374.451171538986,
+    "firstPool": {
+      "id": "BZtxsxP6epYcSDWS629wPxeXLF4chjD8TGuZSfHNpump",
+      "createdAt": "2026-09-15T14:59:02Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.1099938073893,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-15T14:59:02Z",
+    "updatedAt": "2026-09-21T08:49:16.044617178Z"
+  },
+  {
+    "id": "7nYrvAX2xaPdys4WTVjSmw6Y6vnwejJkwsURcFpHpump",
+    "name": "Nvidia Stonk",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreie5jurr2gnmx4dqa2dru2j73lnb2zcrnztlg4l2zy7w44ekbin3tm",
+    "decimals": 6,
+    "twitter": "https://x.com/Mick_NLN/status/2099831574997139965",
+    "website": "https://nvdax.fun",
+    "dev": "8UjxZHzPeDSntGqG4wiuWMtp4935ZLWaDHBkJrNtJ5nC",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3764.642529808411,
+    "mcap": 3764.642529808411,
+    "usdPrice": 0.0000037646425298084107,
+    "priceBlockId": 447280908,
+    "liquidity": 6370.18981573545,
+    "firstPool": {
+      "id": "7nYrvAX2xaPdys4WTVjSmw6Y6vnwejJkwsURcFpHpump",
+      "createdAt": "2026-09-15T14:56:34Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.15318419287409998,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-15T14:56:34Z",
+    "updatedAt": "2026-09-21T08:49:19.139811205Z"
+  },
+  {
+    "id": "9esRxCAc1LMAEPUPhY6ftiXWS5G8cMbLo2wXRLqZpump",
+    "name": "Nvidia Stonk",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreie5jurr2gnmx4dqa2dru2j73lnb2zcrnztlg4l2zy7w44ekbin3tm",
+    "decimals": 6,
+    "dev": "9oDLqXkNYsMg9hde5BrnqxBWkgdDWZskUTcf5STymb1a",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3842.870983499954,
+    "mcap": 3842.870983499954,
+    "usdPrice": 0.000003842870983499954,
+    "priceBlockId": 447281608,
+    "liquidity": 6369.412991772728,
+    "stats24h": {
+      "volumeChange": -100
+    },
+    "firstPool": {
+      "id": "9esRxCAc1LMAEPUPhY6ftiXWS5G8cMbLo2wXRLqZpump",
+      "createdAt": "2026-09-15T15:09:47Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 2.3471368756957998,
+      "devMigrations": 1,
+      "devMints": 19
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-15T15:09:47Z",
+    "updatedAt": "2026-09-16T15:27:36Z"
+  },
+  {
+    "id": "2tQqQGWPhfZbzUEu3eXGdAkJFqCAvEMtUhAJ4PjDpump",
+    "name": "Nvidia Stonk",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreie5jurr2gnmx4dqa2dru2j73lnb2zcrnztlg4l2zy7w44ekbin3tm",
+    "decimals": 6,
+    "dev": "8UjxZHzPeDSntGqG4wiuWMtp4935ZLWaDHBkJrNtJ5nC",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3789.4936363577485,
+    "mcap": 3789.4936363577485,
+    "usdPrice": 0.0000037894936363577487,
+    "priceBlockId": 447284007,
+    "liquidity": 6366.776665598653,
+    "firstPool": {
+      "id": "2tQqQGWPhfZbzUEu3eXGdAkJFqCAvEMtUhAJ4PjDpump",
+      "createdAt": "2026-09-15T15:10:17Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.9128694973205,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-15T15:10:17Z",
+    "updatedAt": "2026-09-21T08:49:16.044532475Z"
+  },
+  {
+    "id": "7XFjWDpQZWtPuYWBTeWDTpmPsXThwxEYEe3e2UJGgoTb",
+    "name": "NVDAX Greenbot",
+    "symbol": "NVDAX",
+    "icon": "https://ipfs.io/ipfs/bafybeifv4vx6x32626sbca4i2xj44fpkpjyerpnh5bzpki22grcfkppbgy",
+    "decimals": 6,
+    "dev": "5d9L9fcEfJQsUkGZubGvVfVUBDGkRuPbFtK96UXZ9nvf",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 2744.7148267230887,
+    "mcap": 2744.7148267230887,
+    "usdPrice": 0.0000027447148267230887,
+    "priceBlockId": 447646264,
+    "liquidity": 2944.2240667740884,
+    "stats6h": {
+      "volumeChange": -100
+    },
+    "stats24h": {
+      "priceChange": 0.5017141012110421,
+      "holderChange": -50,
+      "liquidityChange": 0.4682361773438612,
+      "buyVolume": 0.9764668093853507,
+      "sellVolume": 0.9813658810616827,
+      "numBuys": 1,
+      "numSells": 1,
+      "numTraders": 1
+    },
+    "firstPool": {
+      "id": "7XFjWDpQZWtPuYWBTeWDTpmPsXThwxEYEe3e2UJGgoTb",
+      "createdAt": "2026-09-16T23:11:45Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.0357547484171,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-16T23:11:45Z",
+    "updatedAt": "2026-09-17T05:27:14Z"
+  },
+  {
+    "id": "45dgpR3taAV5Li7PX5zWBjqvHrN1KnWh5NpLDSGcvdKK",
+    "name": "NVIDIA",
+    "symbol": "NVDAX",
+    "icon": "https://usepaygram.com/api/uploads/f4988e4f-7b01-4b89-ab94-60b5381b0fba.png",
+    "decimals": 6,
+    "telegram": "https://t.me/fwpgd16",
+    "website": "https://usepaygram.com/profile/fwpgd16",
+    "dev": "EaDHLNyJXukNVBvbPEKjoe7uvGVgfrNVcbztwopSquY8",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3311.7566069596573,
+    "mcap": 3311.7566069596573,
+    "usdPrice": 0.000003311756606959657,
+    "priceBlockId": 449458193,
+    "liquidity": 3549.0372060614973,
+    "stats24h": {
+      "volumeChange": -100
+    },
+    "firstPool": {
+      "id": "45dgpR3taAV5Li7PX5zWBjqvHrN1KnWh5NpLDSGcvdKK",
+      "createdAt": "2026-09-22T16:01:23Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.13979736700439999,
+      "devMigrations": 1,
+      "devMints": 291
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-22T16:01:23Z",
+    "updatedAt": "2026-09-23T18:32:32.673824757Z"
+  },
+  {
+    "id": "FyeSxEUkXBTrwRuRaDNCandrvyKtV3uaHSiLJWBBbeKA",
+    "name": "NVIDIA xStock",
+    "symbol": "NVDAx",
+    "icon": "https://axiomtrading-v2.axiom-cdn.io/Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh.webp",
+    "decimals": 6,
+    "twitter": "https://x.com/WatcherGuru/status/2101084429267669220",
+    "dev": "8QL7hpnU2z1dnRMHJm8EFiW1hsq1gFMMB7C6G1VEQypR",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 3183.761112163293,
+    "mcap": 3183.761112163293,
+    "usdPrice": 0.000003183761112163293,
+    "priceBlockId": 448227523,
+    "liquidity": 3397.8401398631113,
+    "firstPool": {
+      "id": "FyeSxEUkXBTrwRuRaDNCandrvyKtV3uaHSiLJWBBbeKA",
+      "createdAt": "2026-09-18T23:02:25Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-18T23:02:25Z",
+    "updatedAt": "2026-09-21T08:49:19.139860558Z"
+  },
+  {
+    "id": "6g95Bc68Wn5VazCvazzuHiC3waABJfu9srpjSaMZpump",
+    "name": "NVDAx",
+    "symbol": "NVDAx",
+    "decimals": 6,
+    "dev": "3iGsZtmsU521rJpZL1dGDTYK6gfxP1MzGmyTQdS4gcZ5",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "fdv": 2969.4577519717695,
+    "mcap": 2969.4577519717695,
+    "usdPrice": 0.0000029694577519717694,
+    "priceBlockId": 446718648,
+    "liquidity": 3000.2141168420435,
+    "firstPool": {
+      "id": "6g95Bc68Wn5VazCvazzuHiC3waABJfu9srpjSaMZpump",
+      "createdAt": "2026-09-13T13:03:57Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 6.2685714223522995,
+      "devMints": 8
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-09-13T13:03:57Z",
+    "updatedAt": "2026-09-18T07:38:24.958991568Z"
+  },
+  {
+    "id": "2kwvU12Zy5YGWnN9hrdnzfokehMyCefwU9XWXHkRpump",
+    "name": "NVIDIA xStock",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreibcdg2dxgoeiwx7aip6s2mqlljgzuj7lpocksyebllof4j46zfsju",
+    "decimals": 6,
+    "twitter": "https://x.com/elonmusk/status/2091996623492817403",
+    "dev": "FFnKxd5WMLUiRT3paYYuXB5HJ82ozThxm62b2iWKYDt6",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 10,
+    "fdv": 2706.9038618995646,
+    "mcap": 2706.9038618995646,
+    "usdPrice": 0.0000027069038618995645,
+    "priceBlockId": 441753913,
+    "liquidity": 2902.1253526111036,
+    "firstPool": {
+      "id": "2kwvU12Zy5YGWnN9hrdnzfokehMyCefwU9XWXHkRpump",
+      "createdAt": "2026-08-24T21:11:13Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.030774357046599997,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-08-24T21:11:13Z",
+    "updatedAt": "2026-09-21T08:49:38.770886551Z"
+  },
+  {
+    "id": "x9ZwuBraPzfAvGsDpKZ83a3x7fXEKHm3Q5DMYZypump",
+    "name": "Nvidia Token",
+    "symbol": "NVDAX",
+    "icon": "https://desperate-moccasin-minnow.myfilebase.com/ipfs/QmeSbysgH856bRckiENWCpTxmwWF2iWpqw6yiH2Xu5uvgn",
+    "decimals": 6,
+    "twitter": "https://x.com/USD1vsPUMP/status/2044058919698399467",
+    "website": "https://clicklinkin.bio/nvidia?utm_source=ig&utm_medium=social&utm_content=link_in_bio&fbclid=PAZXh0bgNhZW0CMTEAc3J0YwZhcHBfaWQMMjU2MjgxMDQwNTU4AAGnHv_OT7owpswjYBvUTETheNHUVh9zZjMXJxH1uqVX4xH26FzqmiwR1fcu6So_aem_52uoelAOPbjTs2mCyug_dg",
+    "dev": "CiXhnMkWGQLjJLQLw7NMD27QYUAXvaAnYFsvGt4UgpJi",
+    "circSupply": 997642215.500244,
+    "totalSupply": 997642215.500244,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 8,
+    "liquidity": 2822.7331941016937,
+    "firstPool": {
+      "id": "x9ZwuBraPzfAvGsDpKZ83a3x7fXEKHm3Q5DMYZypump",
+      "createdAt": "2026-04-14T14:23:36Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 8.181532506984016,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-04-14T14:23:36Z",
+    "updatedAt": "2026-09-21T08:49:17.674208803Z"
+  },
+  {
+    "id": "TpPUxNqk1EdHMptm9rioex39j4dAoEPwvezqh8Cpump",
+    "name": "NVIDIA xStock",
+    "symbol": "NVDAX",
+    "icon": "https://ipfs.io/ipfs/bafkreifhgqp6vekw7roxiktwwbuuo7sosu6e7n3lliv62hhtctjxvioyva",
+    "decimals": 6,
+    "twitter": "https://x.com/Polymarket/status/2034008972038967731",
+    "website": "https://x.com/asdfghdevpf/status/2033730395489923319",
+    "dev": "DXvvP8ChaTnSDTXdUYZmBAMt2wN8BaX9Fiko9eg5co6v",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 2,
+    "liquidity": 2657.159287747466,
+    "firstPool": {
+      "id": "TpPUxNqk1EdHMptm9rioex39j4dAoEPwvezqh8Cpump",
+      "createdAt": "2026-03-17T20:48:58Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 1.5008320174468,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-03-17T20:48:58Z",
+    "updatedAt": "2026-09-21T08:49:13.472617432Z"
+  },
+  {
+    "id": "H7uxdVaHBmrP9g8HFuaLZLKrSsfb3CbYWPNtyN6Qpump",
+    "name": "Nvidia Token",
+    "symbol": "NVDAX",
+    "icon": "https://desperate-moccasin-minnow.myfilebase.com/ipfs/QmeSbysgH856bRckiENWCpTxmwWF2iWpqw6yiH2Xu5uvgn",
+    "decimals": 6,
+    "twitter": "https://x.com/USD1vsPUMP/status/2044071119234146777",
+    "website": "https://clicklinkin.bio/nvidia?utm_source=ig&utm_medium=social&utm_content=link_in_bio&fbclid=PAZXh0bgNhZW0CMTEAc3J0YwZhcHBfaWQMMjU2MjgxMDQwNTU4AAGnHv_OT7owpswjYBvUTETheNHUVh9zZjMXJxH1uqVX4xH26FzqmiwR1fcu6So_aem_52uoelAOPbjTs2mCyug_dg",
+    "dev": "CiXhnMkWGQLjJLQLw7NMD27QYUAXvaAnYFsvGt4UgpJi",
+    "circSupply": 999999996.423333,
+    "totalSupply": 999999996.423333,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "liquidity": 2571.22195175709,
+    "firstPool": {
+      "id": "H7uxdVaHBmrP9g8HFuaLZLKrSsfb3CbYWPNtyN6Qpump",
+      "createdAt": "2026-04-14T15:12:24Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.3551633885682012,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "token-2022",
+      "unknown"
+    ],
+    "createdAt": "2026-04-14T15:12:24Z",
+    "updatedAt": "2026-09-21T08:49:15.789080398Z"
+  },
+  {
+    "id": "GAs45EcCDSPA8pEqmyRZJq6eqWxcrmkUZUoJMdhMpump",
+    "name": "NVDAx",
+    "symbol": "NVDAX",
+    "icon": "https://pbs.twimg.com/card_img/2045208823691173888/OrpTwwPK?format=png&name=orig",
+    "decimals": 6,
+    "twitter": "https://twitter.com/krakenfx/status/2049482853021261900",
+    "dev": "whamNNP9tHoxLg92yHvJPdYhghEoCg1qYTsh5a2oLbx",
+    "circSupply": 999999998.927,
+    "totalSupply": 999999998.927,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 1,
+    "liquidity": 2518.8881601989287,
+    "firstPool": {
+      "id": "GAs45EcCDSPA8pEqmyRZJq6eqWxcrmkUZUoJMdhMpump",
+      "createdAt": "2026-04-29T13:36:11Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 32.61322509299849,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-04-29T13:36:11Z",
+    "updatedAt": "2026-09-21T08:49:16.044665674Z"
+  },
+  {
+    "id": "6dXdHYvzx3Zrg2jr7Cj5oCotTPwY4wGQThTWKDJepump",
+    "name": "NVDAx",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/QmdnmeWRpAzSRdvi6NxGjTpRm7bdmD1kPiVLSYnqbe3pNK",
+    "decimals": 6,
+    "dev": "8cScfgZFpwJQZVJq9AzbFCVQ2VcQPN8sksTUvfjjPNhQ",
+    "circSupply": 1000000000,
+    "totalSupply": 1000000000,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 4,
+    "liquidity": 2460.563446200911,
+    "firstPool": {
+      "id": "6dXdHYvzx3Zrg2jr7Cj5oCotTPwY4wGQThTWKDJepump",
+      "createdAt": "2026-04-03T02:01:13Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 3.0691170078122,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "token-2022",
+      "unknown"
+    ],
+    "createdAt": "2026-04-03T02:01:13Z",
+    "updatedAt": "2026-09-21T08:49:19.139790684Z"
+  },
+  {
+    "id": "5qApz79WPjrmDcNWd952KPhXC2YzZp6uhPHSbnLBpump",
+    "name": "NVDAx",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreid4nwshvhv6izi55gxincjlsxvcbodboarivyi7awp32nukpcukry",
+    "decimals": 6,
+    "twitter": "https://x.com/gamecoinlaunch?s=11",
+    "telegram": "https://t.me/xStocksLive",
+    "website": "https://xstocksfi.io/",
+    "dev": "8qEmPTreUa7Xi41mu2HwB3CACPmaSgdn8FGy34iBujNz",
+    "circSupply": 999628823.945518,
+    "totalSupply": 999628823.945518,
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "launchpad": "pump.fun",
+    "holderCount": 19,
+    "liquidity": 2275.2306199739537,
+    "firstPool": {
+      "id": "5qApz79WPjrmDcNWd952KPhXC2YzZp6uhPHSbnLBpump",
+      "createdAt": "2025-06-06T18:37:48Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 4.232028972913819,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "launchpad",
+      "unknown"
+    ],
+    "createdAt": "2025-06-06T18:37:48Z",
+    "updatedAt": "2026-09-11T21:06:04Z"
+  },
+  {
+    "id": "FECdWq59NtgXbVAVWz7Wcdpu3pUwNxXMBQXrWDvopump",
+    "name": "NVIDIA xStock",
+    "symbol": "NVDAx",
+    "icon": "https://ipfs.io/ipfs/bafkreihhmk24xtzjusnepw25wj5spnx6fbqgztlmqtlur5aysh2tjono4y",
+    "decimals": 6,
+    "website": "https://xstockscoins.xyz/",
+    "dev": "HvsaoHJiadS1rEHkMRqdV3NMus55z4xqNs33ZCHVBoTS",
+    "circSupply": 999886226.227263,
+    "totalSupply": 999886226.227263,
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "launchpad": "pump.fun",
+    "holderCount": 7,
+    "liquidity": 2229.4739395014117,
+    "firstPool": {
+      "id": "FECdWq59NtgXbVAVWz7Wcdpu3pUwNxXMBQXrWDvopump",
+      "createdAt": "2026-05-20T17:40:46Z"
+    },
+    "audit": {
+      "mintAuthorityDisabled": true,
+      "freezeAuthorityDisabled": true,
+      "topHoldersPercentage": 0.5554142436607333,
+      "devMints": 1
+    },
+    "organicScore": 0,
+    "organicScoreLabel": "low",
+    "tags": [
+      "unknown",
+      "token-2022"
+    ],
+    "createdAt": "2026-05-20T17:40:46Z",
+    "updatedAt": "2026-09-23T16:31:35.759462983Z"
+  }
+]

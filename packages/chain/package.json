@@ -1,7 +1,28 @@
 {
-  "name": "@mercury/chain", "version": "0.0.0", "private": true, "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run" },
-  "dependencies": { "@mercury/core": "workspace:*", "decimal.js": "^10.4.3" },
-  "devDependencies": { "@mercury/tsconfig": "workspace:*", "@types/node": "^22.10.0", "typescript": "^5.7.0", "vitest": "^3.0.0" }
+  "name": "@mercury/chain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts",
+    "./jupiter/registry": "./src/jupiter/registry.ts",
+    "./jupiter/lite": "./src/jupiter/lite.ts",
+    "./jupiter/ultra": "./src/jupiter/ultra.ts",
+    "./solana/rpc": "./src/solana/rpc.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mercury/core": "workspace:*",
+    "decimal.js": "^10.4.3"
+  },
+  "devDependencies": {
+    "@mercury/tsconfig": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
 }

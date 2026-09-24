@@ -1,0 +1,54 @@
+{
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+    "createdAt": "2024-06-05T08:55:25.527Z",
+    "liquidity": 454114065.95911574,
+    "usdPrice": 0.999872431629112,
+    "blockId": 449951687,
+    "decimals": 6,
+    "priceChange24h": 0.0024009382120759428
+  },
+  "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh": {
+    "createdAt": "2025-06-11T09:39:59Z",
+    "liquidity": 2869474.7976898625,
+    "usdPrice": 224.265169670921,
+    "blockId": 449951686,
+    "decimals": 8,
+    "priceChange24h": -2.005416941155702,
+    "stockData": {
+      "id": "xstocks",
+      "price": 225.07,
+      "mcap": 5526523890000,
+      "updatedAt": "2026-09-24T06:43:43.609Z"
+    },
+    "scaledUiConfig": {
+      "multiplier": 1.0009180758490996,
+      "newMultiplier": 1.001701196801074,
+      "newMultiplierEffectiveAt": "2026-09-10T00:30:00Z",
+      "circSupplyPrescaled": 321274.13608947,
+      "totalSupplyPrescaled": 321274.13608947,
+      "usdPricePrescaled": 224.64668886015752
+    }
+  },
+  "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W": {
+    "createdAt": "2025-06-11T09:41:51Z",
+    "liquidity": 6526471.131185961,
+    "usdPrice": 765.6162215980468,
+    "blockId": 449951649,
+    "decimals": 8,
+    "priceChange24h": -1.1635145087737198,
+    "stockData": {
+      "id": "xstocks",
+      "price": 767.81,
+      "mcap": 693025994825,
+      "updatedAt": "2026-09-24T06:44:26.57Z"
+    },
+    "scaledUiConfig": {
+      "multiplier": 1.003909240011759,
+      "newMultiplier": 1.005714560286254,
+      "newMultiplierEffectiveAt": "2026-06-18T04:00:00Z",
+      "circSupplyPrescaled": 95231.29371378,
+      "totalSupplyPrescaled": 95231.29371378,
+      "usdPricePrescaled": 769.9913816525028
+    }
+  }
+}
