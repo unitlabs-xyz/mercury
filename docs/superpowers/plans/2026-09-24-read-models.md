@@ -967,8 +967,11 @@ describe("JupiterLite", () => {
     const quote = await lite.quote(buy);
     expect(quote).not.toBeNull();
     expect(quote!.inAmount.toFixed()).toBe("100");
-    // 44483201 base units at eight decimals.
-    expect(quote!.outAmount.toFixed()).toBe("0.44483201");
+    // Derived from the fixture, not pasted: the recorder re-runs and the market
+    // moves, so a literal here would rot on the next recording.
+    expect(quote!.outAmount.toFixed()).toBe(
+      D(jupQuote.outAmount).div(D(10).pow(8)).toFixed(),
+    );
   });
 
   it("carries the impact through as a Decimal, never a float", async () => {
@@ -1101,7 +1104,7 @@ export class JupiterLite implements QuoteSource {
     };
   }
 
-  buildSwap(): Promise<readonly string[]> {
+  buildSwap(_quoteId: string, _owner: string): Promise<readonly string[]> {
     return Promise.reject(
       new Error(
         "JupiterLite.buildSwap: the keyless endpoint prices orders, it does not build them. Execution uses JupiterUltra — subsystem 3.",
