@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./pyth": "./src/pyth.ts",
+    "./jupiter": "./src/jupiter.ts",
+    "./mint": "./src/mint.ts",
+    "./kamino": "./src/kamino.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
