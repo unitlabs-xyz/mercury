@@ -2,7 +2,7 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { PRESS } from "../motion/config";
 import { Alert, Check, Copy } from "../ui/icons";
-import { ADDRESS } from "./data";
+import { useMoney } from "../api/hooks";
 
 /** Stands in until a real address encoder is wired up. */
 export const QrBlock = ({ size = 128 }: { size?: number }) => (
@@ -28,11 +28,12 @@ export const QrBlock = ({ size = 128 }: { size?: number }) => (
 );
 
 export const CopyAddress = () => {
+  const address = useMoney().data?.depositAddress ?? "";
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(ADDRESS);
+      await navigator.clipboard.writeText(address);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch {
@@ -59,12 +60,13 @@ export const CopyAddress = () => {
  * A button that looked like it shared and did nothing was worse than no button.
  */
 const ShareAddress = () => {
+  const address = useMoney().data?.depositAddress ?? "";
   const [done, setDone] = useState(false);
   const share = async () => {
-    const text = `My Harbor address: ${ADDRESS}`;
+    const text = `My Mercury address: ${address}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: "Harbor address", text });
+        await navigator.share({ title: "Mercury address", text });
         return;
       }
       await navigator.clipboard.writeText(text);
@@ -87,37 +89,42 @@ const ShareAddress = () => {
   );
 };
 
-export const Receive = () => (
-  <section
-    id="receive"
-    aria-label="Receive"
-    className="rounded-2xl border border-cardline bg-white p-6 sm:p-7"
-  >
-    <h2 className="text-[15px] font-semibold">Add cash</h2>
-    <p className="mt-1.5 text-[14px] leading-[1.5] text-muted text-pretty">
-      Send USDC to this address. It starts earning the moment it arrives.
-    </p>
+export const Receive = () => {
+  const address = useMoney().data?.depositAddress;
+  return (
+    <section
+      id="receive"
+      aria-label="Receive"
+      className="rounded-2xl border border-cardline bg-white p-6 sm:p-7"
+    >
+      <h2 className="text-[15px] font-semibold">Add cash</h2>
+      <p className="mt-1.5 text-[14px] leading-[1.5] text-muted text-pretty">
+        Send USDC to this address. It starts earning the moment it arrives.
+      </p>
 
-    <div className="mt-6 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-      <QrBlock />
-      <div className="min-w-0 flex-1">
-        <p className="mb-2 text-[12px] font-medium text-faint">Your Solana address</p>
-        <p className="font-mono text-[14px] leading-[1.6] break-all">{ADDRESS}</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <CopyAddress />
-          <ShareAddress />
+      <div className="mt-6 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+        <QrBlock />
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 text-[12px] font-medium text-faint">Your Solana address</p>
+          <p className="font-mono text-[14px] leading-[1.6] break-all">
+            {address ?? "Sign in to see your address"}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <CopyAddress />
+            <ShareAddress />
+          </div>
         </div>
       </div>
-    </div>
 
-    <p className="mt-6 flex items-start gap-2.5 rounded-xl bg-warn-tint px-4 py-3 text-[13px] leading-[1.5] text-warn">
-      <Alert className="mt-px size-4 shrink-0" />
-      Solana network only, and USDC only. Anything sent on another network, or in another token, is lost.
-    </p>
+      <p className="mt-6 flex items-start gap-2.5 rounded-xl bg-warn-tint px-4 py-3 text-[13px] leading-[1.5] text-warn">
+        <Alert className="mt-px size-4 shrink-0" />
+        Solana network only, and USDC only. Anything sent on another network, or in another token, is lost.
+      </p>
 
-    <p className="mt-4 text-[13px] leading-[1.5] text-faint text-pretty">
-      There is no bank transfer and no card top-up, by choice. Harbor never touches fiat, which is why there
-      is nothing to verify and no country to be approved in.
-    </p>
-  </section>
-);
+      <p className="mt-4 text-[13px] leading-[1.5] text-faint text-pretty">
+        There is no bank transfer and no card top-up, by choice. Harbor never touches fiat, which is why there
+        is nothing to verify and no country to be approved in.
+      </p>
+    </section>
+  );
+};

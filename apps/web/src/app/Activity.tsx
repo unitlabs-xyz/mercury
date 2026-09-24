@@ -19,7 +19,9 @@ import {
 } from "../ui/icons";
 import { type Event, type EventKind, type Group } from "./activity-data";
 import { downloadCsv } from "./activity-export";
-import { MONTH_OPTIONS, TYPE_OPTIONS, YEAR_OPTIONS, filterEvents, groupByDay } from "./activity-filters";
+import { MONTH_OPTIONS, TYPE_OPTIONS, filterEvents, groupByDay, yearOptions } from "./activity-filters";
+import { useActivityFeed } from "../api/hooks";
+import { toEvent } from "./activity-map";
 import { Select } from "../ui/Select";
 import { useActivityParams } from "./useActivityParams";
 import { AppShell } from "./AppShell";
@@ -186,15 +188,19 @@ const Empty = () => (
   </div>
 );
 
-import { ACTIVITY } from "./activity-data";
-
 const PER_PAGE = 10;
-const TOTAL = ACTIVITY.length;
 
 export const Activity = () => {
   const { group, year, month, query, page, write, reset } = useActivityParams();
+  const feed = useActivityFeed();
 
-  const filtered = useMemo(() => filterEvents(group, year, month, query), [group, year, month, query]);
+  const events = useMemo(() => (feed.data?.items ?? []).map(toEvent), [feed.data]);
+  const total = events.length;
+
+  const filtered = useMemo(
+    () => filterEvents(events, group, year, month, query),
+    [events, group, year, month, query],
+  );
 
   const pages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
   const current = Math.min(page, pages);
@@ -212,7 +218,7 @@ export const Activity = () => {
       title="Activity"
       aside={
         <span className="text-[13px] text-muted tabular-nums">
-          {narrowed ? `${filtered.length} of ${TOTAL} events` : `${TOTAL} events`}
+          {narrowed ? `${filtered.length} of ${total} events` : `${total} events`}
         </span>
       }
       actions={
@@ -239,7 +245,7 @@ export const Activity = () => {
           <Select
             label="Year"
             value={year}
-            options={YEAR_OPTIONS}
+            options={yearOptions(events)}
             onChange={(v) => write({ year: v })}
             widthClass="w-[150px]"
           />
@@ -278,7 +284,7 @@ export const Activity = () => {
       </div>
 
       <section className="mt-4 overflow-hidden rounded-2xl border border-cardline bg-white">
-        {TOTAL === 0 ? (
+        {total === 0 ? (
           <Empty />
         ) : filtered.length === 0 ? (
           <NoMatch onClear={reset} />

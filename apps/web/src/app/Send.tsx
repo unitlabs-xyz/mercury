@@ -3,16 +3,17 @@ import { useState, type FormEvent } from "react";
 import { PRESS } from "../motion/config";
 import { Dialog } from "../ui/Dialog";
 import { Alert, Close } from "../ui/icons";
-import { CASH } from "./data";
-
-const AVAILABLE = 4534.73;
+import { useMoney } from "../api/hooks";
+import { usd } from "./format";
 
 export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+  const money = useMoney();
+  const available = Number(money.data?.balanceUsd ?? 0);
   const [amount, setAmount] = useState("");
   const [to, setTo] = useState("");
 
   const value = Number(amount.replace(/[^0-9.]/g, ""));
-  const overdrawn = value > AVAILABLE;
+  const overdrawn = value > available;
   const addressLooksWrong = to.length > 0 && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim());
   const ready = value > 0 && !overdrawn && to.trim().length > 0 && !addressLooksWrong;
 
@@ -37,7 +38,9 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
         <h2 id="send-heading" className="text-[22px] font-semibold tracking-[-0.02em]">
           Send USDC
         </h2>
-        <p className="mt-1.5 text-[14px] text-muted">{CASH.available} available. Solana network only.</p>
+        <p className="mt-1.5 text-[14px] text-muted">
+          {usd(money.data?.balanceUsd)} available. Solana network only.
+        </p>
 
         <label className="mt-7 block">
           <span className="text-[13px] font-medium text-muted">Amount</span>
@@ -58,7 +61,7 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
             />
             <button
               type="button"
-              onClick={() => setAmount(String(AVAILABLE))}
+              onClick={() => setAmount(String(available))}
               className="shrink-0 rounded-md bg-white px-2.5 py-1 text-[12px] font-semibold text-brand transition-colors hover:bg-brand-tint"
             >
               Max
@@ -67,7 +70,7 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
           {overdrawn && (
             <span className="mt-2 flex items-center gap-1.5 text-[13px] text-down-deep">
               <Alert className="size-3.5" />
-              More than you have. {CASH.available} available.
+              More than you have. {usd(money.data?.balanceUsd)} available.
             </span>
           )}
         </label>
