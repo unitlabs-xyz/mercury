@@ -12,7 +12,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --exclude '**/*.live.test.ts'"
   },
   "dependencies": {
     "@mercury/core": "workspace:*",
