@@ -74,3 +74,34 @@ export interface BasketVenue {
   redeem(basketId: string, tokens: Decimal, owner: string): Promise<readonly string[]>;
   value(basketId: string): Promise<{ nav: Decimal; navPerToken: Decimal; weights: readonly BasketWeight[] }>;
 }
+
+/** What the catalogue sync needs and `TokenRegistry` deliberately does not carry. */
+export interface CatalogueWrapper {
+  readonly mint: string;
+  readonly symbol: string;
+  readonly issuer: Issuer;
+  readonly decimals: number;
+  /** The issuer's own name, e.g. "NVIDIA xStock". Our display name is editorial. */
+  readonly name: string;
+  readonly icon: string | null;
+  readonly liquidityUsd: Decimal;
+  readonly holders: number;
+  /** Buyers minus sellers over 24h, from Jupiter's own stats. Never negative here. */
+  readonly netBuyers24h: number;
+  readonly volume24hUsd: Decimal;
+  readonly traders24h: number;
+}
+
+export interface CatalogueInstrument {
+  readonly ticker: string;
+  readonly wrappers: readonly CatalogueWrapper[];
+}
+
+/**
+ * The live token universe, richer than `TokenRegistry` and used only to fill the
+ * `instrument` and `token` tables. Kept separate so the decision path keeps
+ * depending on the four fields it actually needs.
+ */
+export interface CatalogueSource {
+  instruments(): Promise<readonly CatalogueInstrument[]>;
+}

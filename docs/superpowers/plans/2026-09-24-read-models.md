@@ -700,7 +700,7 @@ describe("JupiterRegistry", () => {
 
   it("fails loudly when the xStocks search fails, because there is nothing left", async () => {
     const r = new JupiterRegistry({ fetch: fakeFetch({ "query=xStock": fails(500), "query=Ondo%20Tokenized": [] }) });
-    await expect(r.instruments()).rejects.toThrow("503");
+    await expect(r.instruments()).rejects.toThrow("500");
   });
 });
 ```
