@@ -2,12 +2,10 @@ import { useEffect, useState } from "react";
 import type { Decision, OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@mercury/core";
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
-import { CASH } from "./data";
+import { useMoney } from "../api/hooks";
 import { IssuerCompare, ISSUER_NAME } from "./IssuerCompare";
 import { useDecision } from "../market/hooks";
 import type { Instrument, PriceMap } from "../market/hooks";
-
-const AVAILABLE = Number(CASH.available.replace(/[^0-9.]/g, ""));
 
 const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
@@ -146,6 +144,7 @@ export const BuySheet = ({
   open: boolean;
   onClose: () => void;
 }) => {
+  const available = Number(useMoney().data?.balanceUsd ?? 0);
   const [raw, setRaw] = useState("100");
   const [placed, setPlaced] = useState<Decision | null>(null);
 
@@ -162,7 +161,7 @@ export const BuySheet = ({
   const { decision, isLoading, isFetching } = useDecision(open ? instrument : undefined, settled, prices);
 
   const typing = settled !== amount;
-  const overBalance = amount > AVAILABLE;
+  const overBalance = amount > available;
   const blocked =
     amount <= 0 || overBalance || !decision || decision.kind === "refuse" || typing || isLoading;
 
@@ -215,7 +214,7 @@ export const BuySheet = ({
             <h2 id="buy-title" className="text-[22px] font-semibold tracking-[-0.02em]">
               Buy {instrument.name}
             </h2>
-            <p className="mt-1 text-[14px] text-muted">{usd(AVAILABLE)} available</p>
+            <p className="mt-1 text-[14px] text-muted">{usd(available)} available</p>
 
             <label className="mt-5 flex items-center gap-1 rounded-xl border border-cardline bg-shell px-4 py-3.5 focus-within:border-brand">
               <span className="text-[26px] font-semibold text-faint">$</span>
@@ -243,7 +242,7 @@ export const BuySheet = ({
 
             {overBalance && (
               <p className="mt-3 text-[13px] text-down-deep">
-                That is more than your {usd(AVAILABLE)} cash. Add money first.
+                That is more than your {usd(available)} cash. Add money first.
               </p>
             )}
 

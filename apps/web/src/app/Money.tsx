@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowUp, Plus, Trend } from "../ui/icons";
 import { AppShell } from "./AppShell";
-import { CASH } from "./data";
+import { useMoney } from "../api/hooks";
+import { pct, usd } from "./format";
 import { Receive } from "./Receive";
 import { Send } from "./Send";
 
 export const Money = () => {
   const [sending, setSending] = useState(false);
+  const money = useMoney();
 
   return (
     <AppShell
@@ -37,11 +39,11 @@ export const Money = () => {
         <article className="flex flex-col rounded-2xl border border-cardline bg-white px-6 py-[22px]">
           <p className="text-[13px] font-medium text-muted">Available to invest</p>
           <p className="mt-2 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em] tabular-nums">
-            {CASH.available}
+            {usd(money.data?.balanceUsd)}
           </p>
           <p className="mt-2.5 flex flex-wrap items-center gap-2.5">
             <span className="rounded-md bg-up-tint px-2 py-[3px] text-[14px] font-semibold text-up-deep">
-              Earning {CASH.rate}
+              Earning {pct(Number(money.data?.yieldApr ?? 0) * 100)}
             </span>
             <span className="text-[13px] text-faint">paid into this balance</span>
           </p>
@@ -49,11 +51,9 @@ export const Money = () => {
           <dl className="mt-7 grid gap-3 border-t border-hair pt-5">
             <div className="flex items-baseline justify-between gap-4">
               <dt className="text-[13px] text-ink-soft">Interest earned this year</dt>
-              <dd className="text-[13px] font-semibold tabular-nums">{CASH.earnedThisYear}</dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-[13px] text-ink-soft">Last paid</dt>
-              <dd className="text-[13px] tabular-nums text-muted">{CASH.lastPaid}</dd>
+              <dd className="text-[13px] font-semibold tabular-nums">
+                {usd(money.data?.interestEarnedYtdUsd)}
+              </dd>
             </div>
           </dl>
 

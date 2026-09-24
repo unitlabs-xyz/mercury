@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { GROUPS, type Group } from "./activity-data";
-import { MONTH_OPTIONS, YEAR_OPTIONS } from "./activity-filters";
+import { MONTH_OPTIONS } from "./activity-filters";
 
 export type ActivityState = {
   group: Group;
@@ -17,8 +17,9 @@ const DEFAULTS: ActivityState = { group: "all", year: "all", month: "all", query
 const readGroup = (v: string | null): Group =>
   GROUPS.some((g) => g.key === v) ? (v as Group) : DEFAULTS.group;
 
-const readYear = (v: string | null): string =>
-  YEAR_OPTIONS.some((o) => o.value === v) ? (v as string) : DEFAULTS.year;
+// Shape, not membership. Which years the feed covers is not known until it
+// loads, and a URL should not decode differently depending on that.
+const readYear = (v: string | null): string => (v !== null && /^\d{4}$/.test(v) ? v : DEFAULTS.year);
 
 const readMonth = (v: string | null): string =>
   MONTH_OPTIONS.some((o) => o.value === v) ? (v as string) : DEFAULTS.month;
