@@ -105,3 +105,31 @@ export interface CatalogueInstrument {
 export interface CatalogueSource {
   instruments(): Promise<readonly CatalogueInstrument[]>;
 }
+
+/** One token account's worth, in the mint's smallest unit. Never a float. */
+export interface TokenBalance {
+  readonly mint: string;
+  readonly rawAmount: bigint;
+  readonly decimals: number;
+}
+
+export interface MintConfig {
+  readonly decimals: number;
+  /**
+   * The multiplier in force right now, which is `newMultiplier` once its
+   * effective timestamp has passed. One token is this many shares.
+   */
+  readonly multiplier: Decimal;
+  /** Token-2022 Pausable. True when the issuer has halted the token. */
+  readonly isPaused: boolean;
+}
+
+/**
+ * What we read from Solana without ever holding a key. Two calls, both public:
+ * a wallet's token accounts, and a mint's Token-2022 extensions.
+ */
+export interface ChainReader {
+  tokenBalances(owner: string): Promise<readonly TokenBalance[]>;
+  /** Null when the account does not exist or is not a Token-2022 mint. */
+  mintConfig(mint: string): Promise<MintConfig | null>;
+}

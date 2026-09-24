@@ -1202,10 +1202,11 @@ Create `packages/chain/src/solana/rpc.test.ts`:
 ```ts
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import { fails, fakeFetch, FIXTURE_OWNER, NVDAX_MINT, rpcMintNvda, rpcTokenAccounts, USDC_MINT } from "../testing/index.js";
+import { fails, fakeFetch, FIXTURE_OWNER, NVDAX_MINT, rpcMintNvda, rpcTokenAccounts, SPYX_MINT, USDC_MINT } from "../testing/index.js";
 import { SolanaRpc } from "./rpc.js";
 
 const RPC = "https://rpc.example/v1";
+const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
 /** The parsed mint account, rebuilt with whichever extension state a test needs. */
 const mintWith = (scaled: Record<string, unknown>, paused: boolean) => ({
@@ -1231,50 +1232,85 @@ const mintWith = (scaled: Record<string, unknown>, paused: boolean) => ({
   },
 });
 
+/**
+ * A node answers each program separately, and a mint belongs to exactly one of
+ * them. The fixture holds all three accounts, so the fake splits it the way a
+ * real node would rather than serving the whole list to both calls.
+ */
+const byProgram = (accounts = rpcTokenAccounts.result.value) => {
+  const of = (program: string) => ({
+    jsonrpc: "2.0",
+    id: 1,
+    result: { context: { slot: 1 }, value: accounts.filter((a) => a.account.owner === program) },
+  });
+  return (body: string) =>
+    body.includes(TOKEN_2022) ? of(TOKEN_2022) : of("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+};
+
+const nodeServing = (accounts?: typeof rpcTokenAccounts.result.value) => {
+  const pick = byProgram(accounts);
+  const calls: string[] = [];
+  const doFetch = ((_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const body = String(init?.body);
+    calls.push(body);
+    return Promise.resolve(
+      new Response(JSON.stringify(pick(body)), { headers: { "content-type": "application/json" } }),
+    );
+  }) as typeof fetch;
+  return { doFetch, calls };
+};
+
 describe("SolanaRpc.tokenBalances", () => {
   it("asks both token programs, because xStocks are Token-2022 and USDC is not", async () => {
-    const seen: string[] = [];
-    const f = fakeFetch({ [RPC]: rpcTokenAccounts });
-    const rpc = new SolanaRpc({
-      rpcUrl: RPC,
-      fetch: ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-        seen.push(String(init?.body));
-        return f(input);
-      }) as typeof fetch,
-    });
+    const node = nodeServing();
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
     await rpc.tokenBalances(FIXTURE_OWNER);
-    expect(seen.length).toBe(2);
-    expect(seen.join()).toContain("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-    expect(seen.join()).toContain("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-    expect(seen.join()).toContain(FIXTURE_OWNER);
+    expect(node.calls.length).toBe(2);
+    expect(node.calls.join()).toContain("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    expect(node.calls.join()).toContain(TOKEN_2022);
+    expect(node.calls.join()).toContain(FIXTURE_OWNER);
   });
 
   it("returns raw amounts as bigint, and never touches uiAmount", async () => {
-    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: rpcTokenAccounts }) });
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: nodeServing().doFetch });
     const balances = await rpc.tokenBalances(FIXTURE_OWNER);
-    const nvda = balances.find((b) => b.mint === NVDAX_MINT);
-    expect(nvda).toEqual({ mint: NVDAX_MINT, rawAmount: 44_483_201n, decimals: 8 });
-    const usdc = balances.find((b) => b.mint === USDC_MINT);
-    expect(usdc).toEqual({ mint: USDC_MINT, rawAmount: 250_000_000n, decimals: 6 });
+    expect(balances.find((b) => b.mint === NVDAX_MINT)).toEqual({
+      mint: NVDAX_MINT,
+      rawAmount: 44_483_201n,
+      decimals: 8,
+    });
+    expect(balances.find((b) => b.mint === USDC_MINT)).toEqual({
+      mint: USDC_MINT,
+      rawAmount: 250_000_000n,
+      decimals: 6,
+    });
+  });
+
+  it("merges the two programs into one list", async () => {
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: nodeServing().doFetch });
+    const balances = await rpc.tokenBalances(FIXTURE_OWNER);
+    expect(balances.map((b) => b.mint).sort()).toEqual([USDC_MINT, NVDAX_MINT].sort());
   });
 
   it("drops emptied accounts, so a closed position is not a zero row", async () => {
-    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: rpcTokenAccounts }) });
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: nodeServing().doFetch });
     const balances = await rpc.tokenBalances(FIXTURE_OWNER);
     expect(balances.every((b) => b.rawAmount > 0n)).toBe(true);
+    // The zero-balance SPYx account is in the fixture and must not appear.
+    expect(balances.map((b) => b.mint)).not.toContain(SPYX_MINT);
   });
 
   it("sums two accounts for the same mint, which a wallet is allowed to have", async () => {
-    const doubled = structuredClone(rpcTokenAccounts) as typeof rpcTokenAccounts;
-    const first = doubled.result.value[0]!;
-    doubled.result.value.push(structuredClone(first));
-    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: doubled }) });
+    const accounts = rpcTokenAccounts.result.value;
+    const nvdax = accounts.find((a) => a.account.data.parsed.info.mint === NVDAX_MINT)!;
+    const rpc = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: nodeServing([...accounts, structuredClone(nvdax)]).doFetch,
+    });
     const balances = await rpc.tokenBalances(FIXTURE_OWNER);
     const nvda = balances.filter((b) => b.mint === NVDAX_MINT);
     expect(nvda.length).toBe(1);
-    // Both programs are queried and this fixture answers both, so the row is
-    // counted from every account that carries the mint.
-    expect(nvda[0]!.rawAmount % 44_483_201n).toBe(0n);
+    expect(nvda[0]!.rawAmount).toBe(44_483_201n * 2n);
   });
 
   it("throws when the node answers an error, rather than reporting an empty wallet", async () => {
@@ -1518,7 +1554,7 @@ export class SolanaRpc implements ChainReader {
 - [ ] **Step 5: Run it and watch it pass**
 
 Run: `pnpm --filter @mercury/chain exec vitest run src/solana`
-Expected: PASS, 12 tests.
+Expected: PASS, 13 tests.
 
 - [ ] **Step 6: Export and commit**
 
