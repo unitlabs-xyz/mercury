@@ -1,6 +1,7 @@
 import { D, ZERO, ONE, type Decimal, type ReferencePrice } from "@mercury/core";
 import type { TokenRegistry } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard, ReferenceSource, TokenPrice } from "./ports.js";
+import { defaultFetch } from "@mercury/chain";
 
 /** Jupiter's free tier. Keyless and CORS-open, which is what makes it the fallback path. */
 const BASE = "https://lite-api.jup.ag";
@@ -43,7 +44,7 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
 
   constructor(private readonly config: JupiterMarketConfig) {
     this.base = config.baseUrl ?? BASE;
-    this.doFetch = config.fetch ?? fetch;
+    this.doFetch = config.fetch ?? defaultFetch();
     this.now = config.now ?? Date.now;
   }
 

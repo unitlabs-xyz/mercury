@@ -1,22 +1,129 @@
 import { useQuery } from "@tanstack/react-query";
-import { D, DEFAULT_POLICY, decide, type Candidate, type Decision } from "@mercury/core";
-import { USDC_DECIMALS, fetchPrices, fetchQuote, type JupPrice, type JupQuote } from "./jupiter";
-import { fetchCreditMarket } from "./kamino";
-import { fetchSession } from "./pyth";
-import { fetchUniverse, type Instrument, type Wrapper } from "./universe";
+import {
+  D,
+  DEFAULT_POLICY,
+  ONE,
+  decide,
+  type Candidate,
+  type Decimal,
+  type Decision,
+  type Issuer,
+} from "@mercury/core";
+import {
+  JupiterLite,
+  JupiterRegistry,
+  type CatalogueInstrument,
+  type CatalogueWrapper,
+} from "@mercury/chain";
+import {
+  JupiterMarket,
+  KaminoCredit,
+  PythSessions,
+  type CreditMarket as ChainCreditMarket,
+  type TokenPrice,
+} from "@mercury/market";
+import { ABOUT, DISPLAY_NAME, SECTOR } from "./meta";
+
+/**
+ * The app's view of the market.
+ *
+ * Every read below happens in `@mercury/market` and `@mercury/chain`, which the
+ * API uses too — one implementation, so the two paths cannot disagree. What
+ * stays here is what belongs to the app: React Query's caching, and the view
+ * models the screens are written against. Those use plain numbers, because they
+ * are display figures; anything that reaches `decide()` stays a Decimal.
+ *
+ * This is the fallback path of ADR 0011: keyless, CORS-open, no server.
+ */
+const registry = new JupiterRegistry();
+const market = new JupiterMarket({ registry });
+const quotes = new JupiterLite();
+const sessions = new PythSessions();
+const credit = new KaminoCredit();
+
+export type PriceMap = ReadonlyMap<string, TokenPrice>;
+export type { TokenPrice };
+
+export type Wrapper = {
+  readonly mint: string;
+  readonly symbol: string;
+  readonly issuer: Issuer;
+  readonly decimals: number;
+  readonly icon?: string;
+  readonly liquidity: number;
+  /** On-chain holders of this wrapper. */
+  readonly holders: number;
+  /** Net buyers over 24h — buyers minus sellers, from Jupiter's own stats. */
+  readonly netBuyers24h: number;
+  readonly volume24h: number;
+  readonly traders24h: number;
+};
+
+export type Instrument = {
+  readonly ticker: string;
+  readonly name: string;
+  readonly sector: string;
+  readonly about: string;
+  readonly logo?: string;
+  readonly wrappers: readonly Wrapper[];
+};
+
+export type Session = {
+  readonly status: Awaited<ReturnType<PythSessions["current"]>>["status"];
+  readonly isOpen: boolean;
+  readonly nextOpen: Date | null;
+  readonly nextClose: Date | null;
+};
+
+export type Collateral = { readonly symbol: string; readonly ticker: string; readonly maxLtv: number };
+export type CreditMarket = {
+  readonly collateral: readonly Collateral[];
+  readonly borrowApy: number | null;
+  readonly supplyApy: number | null;
+};
+
+export { XSTOCKS_MARKET } from "@mercury/market";
+
+const toWrapper = (w: CatalogueWrapper): Wrapper => ({
+  mint: w.mint,
+  symbol: w.symbol,
+  issuer: w.issuer,
+  decimals: w.decimals,
+  ...(w.icon ? { icon: w.icon } : {}),
+  liquidity: w.liquidityUsd.toNumber(),
+  holders: w.holders,
+  netBuyers24h: w.netBuyers24h,
+  volume24h: w.volume24hUsd.toNumber(),
+  traders24h: w.traders24h,
+});
+
+/** Jupiter names the token ("NVIDIA xStock"); the company's name is ours. */
+const toInstrument = (i: CatalogueInstrument): Instrument => {
+  const wrappers = i.wrappers.map(toWrapper);
+  const logo = wrappers.find((w) => w.issuer === "backed")?.icon;
+  return {
+    ticker: i.ticker,
+    name: DISPLAY_NAME[i.ticker] ?? i.ticker,
+    sector: SECTOR[i.ticker] ?? "Other",
+    about: ABOUT[i.ticker] ?? "",
+    ...(logo ? { logo } : {}),
+    wrappers,
+  };
+};
 
 /** The token set changes when an issuer lists something. Hours, not seconds. */
 export const useUniverse = () =>
   useQuery({
     queryKey: ["universe"],
-    queryFn: ({ signal }) => fetchUniverse(signal),
+    queryFn: async () =>
+      (await registry.instruments()).map(toInstrument).sort((a, b) => a.name.localeCompare(b.name)),
     staleTime: 60 * 60 * 1000,
   });
 
 export const usePrices = (mints: readonly string[]) =>
   useQuery({
     queryKey: ["prices", [...mints].sort().join(",")],
-    queryFn: ({ signal }) => fetchPrices(mints, signal),
+    queryFn: () => market.pricesFor(mints),
     enabled: mints.length > 0,
     refetchInterval: 20_000,
     staleTime: 10_000,
@@ -26,20 +133,27 @@ export const usePrices = (mints: readonly string[]) =>
 export const useCreditMarket = () =>
   useQuery({
     queryKey: ["credit-market"],
-    queryFn: ({ signal }) => fetchCreditMarket(signal),
+    queryFn: async (): Promise<CreditMarket> => toCreditMarket(await credit.current()),
     staleTime: 5 * 60 * 1000,
     refetchInterval: 5 * 60 * 1000,
   });
 
+const toCreditMarket = (m: ChainCreditMarket): CreditMarket => ({
+  collateral: m.collateral.map((c) => ({ symbol: c.symbol, ticker: c.ticker, maxLtv: c.maxLtv.toNumber() })),
+  borrowApy: m.borrowApy?.toNumber() ?? null,
+  supplyApy: m.supplyApy?.toNumber() ?? null,
+});
+
 export const useSession = () =>
   useQuery({
     queryKey: ["session"],
-    queryFn: ({ signal }) => fetchSession(signal),
+    queryFn: async (): Promise<Session> => {
+      const s = await sessions.current();
+      return { status: s.status, isOpen: s.isOpen, nextOpen: s.nextOpenAt, nextClose: s.nextCloseAt };
+    },
+    staleTime: 60_000,
     refetchInterval: 60_000,
-    staleTime: 30_000,
   });
-
-/* ── deriving what the screens need ─────────────────────────────────── */
 
 export type Priced = {
   readonly instrument: Instrument;
@@ -53,46 +167,34 @@ export type Priced = {
   readonly volume24h: number;
 };
 
-export const priceInstrument = (
-  instrument: Instrument,
-  prices: Record<string, JupPrice | null> | undefined,
-): Priced => {
+export const priceInstrument = (instrument: Instrument, prices: PriceMap | undefined): Priced => {
   const backed = instrument.wrappers.find((w) => w.issuer === "backed");
   const primary = backed ?? instrument.wrappers[0];
-  const p = primary ? prices?.[primary.mint] : null;
-  // Coerced, because a field Jupiter stops sending would otherwise surface as NaN.
-  const sum = (pick: (w: (typeof instrument.wrappers)[number]) => number | undefined) =>
-    instrument.wrappers.reduce((n, w) => n + (Number(pick(w)) || 0), 0);
+  const p = primary ? prices?.get(primary.mint) : undefined;
+  const sum = (pick: (w: Wrapper) => number) => instrument.wrappers.reduce((n, w) => n + pick(w), 0);
   return {
     instrument,
-    fair: p?.stockData?.price ?? null,
-    todayPct: p?.priceChange24h ?? null,
-    liquidity: sum((w) => prices?.[w.mint]?.liquidity ?? w.liquidity),
-    observedAt: p?.stockData?.updatedAt ? new Date(p.stockData.updatedAt) : null,
+    fair: p?.pricePerShare?.toNumber() ?? null,
+    todayPct: p?.changePct24h?.toNumber() ?? null,
+    liquidity: sum((w) => prices?.get(w.mint)?.liquidityUsd.toNumber() ?? w.liquidity),
+    observedAt: p?.observedAt ?? null,
     holders: sum((w) => w.holders),
     netBuyers24h: sum((w) => w.netBuyers24h),
     volume24h: sum((w) => w.volume24h),
   };
 };
 
-export const multiplierOf = (p: JupPrice | null | undefined) => p?.scaledUiConfig?.multiplier ?? 1;
+/**
+ * Shares per token, at the multiplier actually in force.
+ *
+ * A ScaledUiAmount mint carries the multiplier and the next one, with the second
+ * taking over at a timestamp. `@mercury/market` applies that rule; reading the
+ * raw field understates every share count from the moment a dividend goes
+ * effective. See ADR 0011.
+ */
+export const multiplierOf = (p: TokenPrice | undefined): Decimal => p?.multiplier ?? ONE;
 
 /* ── the decision ───────────────────────────────────────────────────── */
-
-const candidateFrom = (w: Wrapper, q: JupQuote, price: JupPrice | null | undefined): Candidate => ({
-  mint: w.mint,
-  symbol: w.symbol,
-  issuer: w.issuer,
-  multiplier: D(multiplierOf(price)),
-  quote: {
-    inAmount: D(Number(q.inAmount) / 10 ** USDC_DECIMALS),
-    outAmount: D(Number(q.outAmount) / 10 ** w.decimals),
-    priceImpact: D(Math.abs(Number(q.priceImpactPct))),
-    routeLabels: (q.routePlan ?? []).map((r) => r.swapInfo?.label ?? "?"),
-    quoteId: `${w.mint}:${q.contextSlot ?? Date.now()}`,
-    expiresAt: new Date(Date.now() + 20_000),
-  },
-});
 
 /**
  * One live quote per issuer at the amount actually being spent, then the real
@@ -102,26 +204,25 @@ const candidateFrom = (w: Wrapper, q: JupQuote, price: JupPrice | null | undefin
 export const useDecision = (
   instrument: Instrument | undefined,
   usd: number,
-  prices: Record<string, JupPrice | null> | undefined,
+  prices: PriceMap | undefined,
 ) => {
   const session = useSession();
   const amount = Number.isFinite(usd) && usd > 0 ? usd : 0;
 
-  const quotes = useQuery({
+  const quoted = useQuery({
     queryKey: ["quotes", instrument?.ticker, amount.toFixed(2)],
     enabled: !!instrument && amount > 0,
     staleTime: 10_000,
     refetchInterval: 20_000,
-    queryFn: async ({ signal }) => {
+    queryFn: async () => {
       const wrappers = instrument!.wrappers;
       return Promise.all(
-        wrappers.map(async (w) => {
-          try {
-            return { w, q: await fetchQuote(w.mint, amount, signal) };
-          } catch {
-            return { w, q: null }; // no route at this size
-          }
-        }),
+        wrappers.map(async (w) => ({
+          w,
+          q: await quotes
+            .quote({ side: "buy", mint: w.mint, decimals: w.decimals, amount: D(amount) })
+            .catch(() => null),
+        })),
       );
     },
   });
@@ -130,18 +231,14 @@ export const useDecision = (
   const fair = priced?.fair ?? null;
 
   let decision: Decision | null = null;
-  if (instrument && quotes.data && fair !== null && amount > 0) {
-    const candidates: Candidate[] = quotes.data.map(({ w, q }) =>
-      q
-        ? candidateFrom(w, q, prices?.[w.mint])
-        : {
-            mint: w.mint,
-            symbol: w.symbol,
-            issuer: w.issuer,
-            multiplier: D(multiplierOf(prices?.[w.mint])),
-            quote: null,
-          },
-    );
+  if (instrument && quoted.data && fair !== null && amount > 0) {
+    const candidates: Candidate[] = quoted.data.map(({ w, q }) => ({
+      mint: w.mint,
+      symbol: w.symbol,
+      issuer: w.issuer,
+      multiplier: multiplierOf(prices?.get(w.mint)),
+      quote: q,
+    }));
     decision = decide({
       ticker: instrument.ticker,
       side: "buy",
@@ -161,9 +258,9 @@ export const useDecision = (
 
   return {
     decision,
-    isLoading: quotes.isLoading || session.isLoading,
-    isFetching: quotes.isFetching,
-    error: quotes.error,
+    isLoading: quoted.isLoading || session.isLoading,
+    isFetching: quoted.isFetching,
+    error: quoted.error,
     session: session.data ?? null,
   };
 };

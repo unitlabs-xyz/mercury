@@ -6,6 +6,7 @@ import type {
   TokenRef,
   TokenRegistry,
 } from "../ports.js";
+import { defaultFetch } from "../fetch.js";
 
 /**
  * Jupiter's free tier. No key, no account, CORS-open. The paid host (api.jup.ag)
@@ -104,7 +105,7 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
 
   constructor(config: JupiterRegistryConfig = {}) {
     this.base = config.baseUrl ?? BASE;
-    this.doFetch = config.fetch ?? fetch;
+    this.doFetch = config.fetch ?? defaultFetch();
     this.ttlMs = config.ttlMs ?? DEFAULT_TTL_MS;
     this.now = config.now ?? Date.now;
   }

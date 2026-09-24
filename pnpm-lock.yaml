@@ -127,9 +127,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@mercury/chain':
+        specifier: workspace:*
+        version: link:../../packages/chain
       '@mercury/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mercury/market':
+        specifier: workspace:*
+        version: link:../../packages/market
       '@mercury/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
@@ -15603,7 +15609,7 @@ snapshots:
 
   extension-port-stream@3.0.0:
     dependencies:
-      readable-stream: 3.6.2
+      readable-stream: 4.7.0
       webextension-polyfill: 0.10.0
 
   fast-copy@3.1.0: {}
@@ -16973,8 +16979,8 @@ snapshots:
       '@adraffy/ens-normalize': 1.11.1
       '@noble/curves': 1.9.7
       '@noble/hashes': 1.8.0
-      '@scure/bip32': 1.6.2
-      '@scure/bip39': 1.5.4
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
       abitype: 1.0.8(typescript@5.9.3)(zod@3.25.76)
       eventemitter3: 5.0.1
     optionalDependencies:

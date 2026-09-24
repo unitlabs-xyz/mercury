@@ -1,4 +1,5 @@
 import type { SessionSource, SessionState } from "./ports.js";
+import { defaultFetch } from "@mercury/chain";
 
 /**
  * Pyth Hermes, no key. Only the metadata endpoint is reachable from a browser:
@@ -45,7 +46,7 @@ export class PythSessions implements SessionSource {
 
   constructor(config: PythSessionsConfig = {}) {
     this.base = config.baseUrl ?? BASE;
-    this.doFetch = config.fetch ?? fetch;
+    this.doFetch = config.fetch ?? defaultFetch();
     this.now = config.now ?? (() => new Date());
   }
 
