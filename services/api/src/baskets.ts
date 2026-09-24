@@ -1,4 +1,4 @@
-import type { Constituent } from "@harbor/core";
+import type { Constituent } from "@mercury/core";
 
 export interface BasketDef {
   readonly slug: string;

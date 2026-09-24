@@ -1,4 +1,4 @@
-import { DEFAULT_POLICY, D, decide, type Candidate, type Decision, type Side } from "@harbor/core";
+import { DEFAULT_POLICY, D, decide, type Candidate, type Decision, type Side } from "@mercury/core";
 import type { Deps } from "./deps.js";
 
 export interface PriceRequest {
@@ -10,7 +10,7 @@ export interface PriceRequest {
 
 /**
  * Gather every wrapper's quote, the reference price and the session, then let
- * `@harbor/core` decide. Nothing here makes a judgement; that all lives in `decide`.
+ * `@mercury/core` decide. Nothing here makes a judgement; that all lives in `decide`.
  */
 export async function priceOrder(deps: Deps, req: PriceRequest): Promise<Decision | null> {
   const [wrappers, reference, session] = await Promise.all([

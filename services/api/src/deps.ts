@@ -1,5 +1,5 @@
-import { JupiterUltra, SymmetryVenue, type BasketVenue, type QuoteSource, type TokenRegistry, type TriggerSource } from "@harbor/chain";
-import type { MultiplierSource, ReferenceSource, SessionSource } from "@harbor/market";
+import { JupiterUltra, SymmetryVenue, type BasketVenue, type QuoteSource, type TokenRegistry, type TriggerSource } from "@mercury/chain";
+import type { MultiplierSource, ReferenceSource, SessionSource } from "@mercury/market";
 import type { AuthDeps } from "./auth/middleware.js";
 import { createPrivyDirectory } from "./auth/identity.js";
 import { createPrivyVerifier } from "./auth/verifier.js";

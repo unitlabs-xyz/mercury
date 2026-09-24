@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "web", "runtimeExecutable": "pnpm", "runtimeArgs": ["--filter", "@harbor/web", "dev"], "port": 5173 }
+    { "name": "web", "runtimeExecutable": "pnpm", "runtimeArgs": ["--filter", "@mercury/web", "dev"], "port": 5173 }
   ]
 }

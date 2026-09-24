@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Harbor",
-    "slug": "harbor",
-    "scheme": "harbor",
+    "name": "Mercury",
+    "slug": "mercury",
+    "scheme": "mercury",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "works.hashira.harbor"
+      "bundleIdentifier": "works.hashira.mercury"
     },
     "plugins": [
       "expo-router"

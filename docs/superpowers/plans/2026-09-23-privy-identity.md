@@ -69,8 +69,8 @@
 - [ ] **Step 1: Install dependencies**
 
 ```bash
-pnpm --filter @harbor/api add drizzle-orm postgres
-pnpm --filter @harbor/api add -D drizzle-kit
+pnpm --filter @mercury/api add drizzle-orm postgres
+pnpm --filter @mercury/api add -D drizzle-kit
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -103,7 +103,7 @@ describe("schema", () => {
 
 - [ ] **Step 3: Run it to make sure it fails**
 
-Run: `pnpm --filter @harbor/api exec vitest run src/db/schema.test.ts`
+Run: `pnpm --filter @mercury/api exec vitest run src/db/schema.test.ts`
 Expected: FAIL — cannot resolve `./schema.js`.
 
 - [ ] **Step 4: Write the schema**
@@ -152,7 +152,7 @@ export type Wallet = typeof wallets.$inferSelect;
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `pnpm --filter @harbor/api exec vitest run src/db/schema.test.ts`
+Run: `pnpm --filter @mercury/api exec vitest run src/db/schema.test.ts`
 Expected: PASS, 2 tests.
 
 - [ ] **Step 6: Write the client and the Drizzle config**
@@ -185,12 +185,12 @@ export default {
 
 - [ ] **Step 7: Generate the migration**
 
-Run: `pnpm --filter @harbor/api exec drizzle-kit generate`
+Run: `pnpm --filter @mercury/api exec drizzle-kit generate`
 Expected: a new SQL file under `services/api/drizzle/`. Read it and confirm it creates exactly two tables and two unique indexes. If it tries to drop anything, stop — the config is pointed at the wrong schema.
 
 - [ ] **Step 8: Typecheck**
 
-Run: `pnpm --filter @harbor/api exec tsc --noEmit`
+Run: `pnpm --filter @mercury/api exec tsc --noEmit`
 Expected: no errors.
 
 - [ ] **Step 9: Commit**
@@ -217,7 +217,7 @@ The port exists so every later task can be tested without a network or a real Pr
 - [ ] **Step 1: Install the dependency**
 
 ```bash
-pnpm --filter @harbor/api add @privy-io/node
+pnpm --filter @mercury/api add @privy-io/node
 ```
 
 - [ ] **Step 2: Write the failing test**
@@ -257,7 +257,7 @@ describe("TokenVerifier", () => {
 
 - [ ] **Step 3: Run it to make sure it fails**
 
-Run: `pnpm --filter @harbor/api exec vitest run src/auth/verifier.test.ts`
+Run: `pnpm --filter @mercury/api exec vitest run src/auth/verifier.test.ts`
 Expected: FAIL — cannot resolve `./verifier.js`.
 
 - [ ] **Step 4: Write the implementation**
@@ -317,12 +317,12 @@ export const createPrivyVerifier = (opts: {
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `pnpm --filter @harbor/api exec vitest run src/auth/verifier.test.ts`
+Run: `pnpm --filter @mercury/api exec vitest run src/auth/verifier.test.ts`
 Expected: PASS, 2 tests.
 
 - [ ] **Step 6: Typecheck**
 
-Run: `pnpm --filter @harbor/api exec tsc --noEmit`
+Run: `pnpm --filter @mercury/api exec tsc --noEmit`
 Expected: no errors.
 
 - [ ] **Step 7: Commit**
@@ -426,7 +426,7 @@ describe("resolveIdentity", () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `pnpm --filter @harbor/api exec vitest run src/auth/identity.test.ts`
+Run: `pnpm --filter @mercury/api exec vitest run src/auth/identity.test.ts`
 Expected: FAIL — cannot resolve `./identity.js`.
 
 - [ ] **Step 3: Write the implementation**
@@ -517,12 +517,12 @@ export const resolveIdentity = async (
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `pnpm --filter @harbor/api exec vitest run src/auth/identity.test.ts`
+Run: `pnpm --filter @mercury/api exec vitest run src/auth/identity.test.ts`
 Expected: PASS, 4 tests.
 
 - [ ] **Step 5: Typecheck**
 
-Run: `pnpm --filter @harbor/api exec tsc --noEmit`
+Run: `pnpm --filter @mercury/api exec tsc --noEmit`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
@@ -628,7 +628,7 @@ describe("requireAuth", () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `pnpm --filter @harbor/api exec vitest run src/auth/middleware.test.ts`
+Run: `pnpm --filter @mercury/api exec vitest run src/auth/middleware.test.ts`
 Expected: FAIL — cannot resolve `./middleware.js`.
 
 - [ ] **Step 3: Write the middleware**
@@ -695,7 +695,7 @@ export const requireAuth = (
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `pnpm --filter @harbor/api exec vitest run src/auth/middleware.test.ts`
+Run: `pnpm --filter @mercury/api exec vitest run src/auth/middleware.test.ts`
 Expected: PASS, 5 tests.
 
 - [ ] **Step 5: Rewrite the config in `deps.ts`**
@@ -806,16 +806,16 @@ const config = readConfig();
 const port = Number(process.env.PORT ?? 8787);
 
 serve({ fetch: createApp(buildDeps(config), buildAuthDeps(config)).fetch, port }, (info) => {
-  console.log(`harbor api listening on :${info.port}`);
+  console.log(`mercury api listening on :${info.port}`);
 });
 ```
 
 - [ ] **Step 9: Run the whole API suite and typecheck**
 
-Run: `pnpm --filter @harbor/api exec vitest run`
+Run: `pnpm --filter @mercury/api exec vitest run`
 Expected: PASS, 13 tests across four files (2 schema, 2 verifier, 4 identity, 5 middleware).
 
-Run: `pnpm --filter @harbor/api exec tsc --noEmit`
+Run: `pnpm --filter @mercury/api exec tsc --noEmit`
 Expected: no errors. If `c.get("identity")` is typed `unknown`, the `declare module "hono"` block in `middleware.ts` is not being included — check it is imported somewhere in the compilation.
 
 - [ ] **Step 10: Commit**
@@ -868,13 +868,13 @@ Values stay empty. Real values go in `.env`, which `.gitignore` already covers �
 
 Create a Postgres database (Neon's free tier is fine), put its URL in `services/api/.env`, then:
 
-Run: `pnpm --filter @harbor/api exec drizzle-kit migrate`
+Run: `pnpm --filter @mercury/api exec drizzle-kit migrate`
 Expected: two tables created. Confirm with `\dt` in `psql` — you should see `user` and `wallet`.
 
 - [ ] **Step 4: Start the API**
 
-Run: `pnpm --filter @harbor/api dev`
-Expected: `harbor api listening on :8787`. If it exits with `PRIVY_VERIFICATION_KEY is required`, the `.env` is not being read — `tsx` loads it only if you are in the package directory or pass `--env-file`.
+Run: `pnpm --filter @mercury/api dev`
+Expected: `mercury api listening on :8787`. If it exits with `PRIVY_VERIFICATION_KEY is required`, the `.env` is not being read — `tsx` loads it only if you are in the package directory or pass `--env-file`.
 
 - [ ] **Step 5: Check the unauthenticated paths by hand**
 
@@ -920,7 +920,7 @@ git commit -m "chore: record the privy environment variables"
 - [ ] **Step 1: Install the dependency**
 
 ```bash
-pnpm --filter @harbor/web add @privy-io/react-auth
+pnpm --filter @mercury/web add @privy-io/react-auth
 ```
 
 Expect pnpm to warn about unmet optional peers (`@solana/kit`, `permissionless`, and others). That is correct and deliberate — do not install them.
@@ -976,12 +976,12 @@ Put the real App ID in `apps/web/.env`.
 
 - [ ] **Step 5: Verify it boots**
 
-Run: `pnpm --filter @harbor/web dev`
+Run: `pnpm --filter @mercury/web dev`
 Expected: the app renders as before. Open the console — no Privy errors. If you see `Invalid Privy app ID`, the value in `.env` is wrong or Vite was not restarted; Vite reads `.env` only at startup.
 
 - [ ] **Step 6: Typecheck and build**
 
-Run: `pnpm --filter @harbor/web exec tsc --noEmit -p tsconfig.json && pnpm --filter @harbor/web build`
+Run: `pnpm --filter @mercury/web exec tsc --noEmit -p tsconfig.json && pnpm --filter @mercury/web build`
 Expected: both clean.
 
 - [ ] **Step 7: Commit**
@@ -1052,7 +1052,7 @@ The third case matters: holding an *error* for 800ms makes a typo feel like a ne
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `pnpm --filter @harbor/web exec vitest run src/auth/useEmailLogin.test.ts`
+Run: `pnpm --filter @mercury/web exec vitest run src/auth/useEmailLogin.test.ts`
 Expected: FAIL — cannot resolve `./useEmailLogin.js`.
 
 - [ ] **Step 3: Write the hook**
@@ -1133,20 +1133,20 @@ export const useEmailLogin = () => {
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `pnpm --filter @harbor/web exec vitest run src/auth/useEmailLogin.test.ts`
+Run: `pnpm --filter @mercury/web exec vitest run src/auth/useEmailLogin.test.ts`
 Expected: PASS, 3 tests.
 
 If `vitest` is not configured in `apps/web`, add it:
 
 ```bash
-pnpm --filter @harbor/web add -D vitest
+pnpm --filter @mercury/web add -D vitest
 ```
 
 and add `"test": "vitest run"` to that package's scripts.
 
 - [ ] **Step 5: Typecheck**
 
-Run: `pnpm --filter @harbor/web exec tsc --noEmit -p tsconfig.json`
+Run: `pnpm --filter @mercury/web exec tsc --noEmit -p tsconfig.json`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
@@ -1225,7 +1225,7 @@ In the existing close-reset effect, replace `setPending(null)` with `reset()`.
 
 - [ ] **Step 6: Verify by hand — the fast path**
 
-Run: `pnpm --filter @harbor/web dev` with the API running.
+Run: `pnpm --filter @mercury/web dev` with the API running.
 
 1. Open the modal, enter a real address you can receive mail at, submit.
 2. The button reads "Sending", the hairline fills, and the step changes **when the hairline completes** — not before.
@@ -1275,7 +1275,7 @@ Throttle to Slow 3G and resend. Expected: the hairline fills once at the designe
 
 - [ ] **Step 10: Typecheck and build**
 
-Run: `pnpm --filter @harbor/web exec tsc --noEmit -p tsconfig.json && pnpm --filter @harbor/web build`
+Run: `pnpm --filter @mercury/web exec tsc --noEmit -p tsconfig.json && pnpm --filter @mercury/web build`
 Expected: both clean. Any "declared but never used" error means a constant survived Step 1.
 
 - [ ] **Step 11: Commit**
@@ -1346,7 +1346,7 @@ describe("apiFetch", () => {
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `pnpm --filter @harbor/web exec vitest run src/api/client.test.ts`
+Run: `pnpm --filter @mercury/web exec vitest run src/api/client.test.ts`
 Expected: FAIL — cannot resolve `./client.js`.
 
 - [ ] **Step 3: Write the client**
@@ -1396,7 +1396,7 @@ export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `pnpm --filter @harbor/web exec vitest run src/api/client.test.ts`
+Run: `pnpm --filter @mercury/web exec vitest run src/api/client.test.ts`
 Expected: PASS, 3 tests.
 
 - [ ] **Step 5: Prove the whole loop by hand**
@@ -1426,9 +1426,9 @@ Expected: one row, `kind = 'privy_embedded'`, and `address` matching what `/v1/m
 - [ ] **Step 7: Run everything and commit**
 
 ```bash
-pnpm --filter @harbor/api exec vitest run
-pnpm --filter @harbor/web exec vitest run
-pnpm --filter @harbor/core exec vitest run
+pnpm --filter @mercury/api exec vitest run
+pnpm --filter @mercury/web exec vitest run
+pnpm --filter @mercury/core exec vitest run
 ```
 
 Expected: 13, 6 and 35 passing respectively. `core` must be untouched at 35.

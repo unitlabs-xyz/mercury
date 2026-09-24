@@ -40,7 +40,7 @@ being able to leave with it.
 
 Five things a traditional broker cannot copy, argued in `docs/01-evidence.md`:
 
-1. **True exposure across issuers.** The same company exists as several tokens. Harbor sums them
+1. **True exposure across issuers.** The same company exists as several tokens. Mercury sums them
    with each token's multiplier rather than adding token counts, and warns on concentration. No
    broker has this problem, so no broker has this screen.
 2. **Protection from the wrong wrapper.** Same stock, two issuers, measurably different cost for
@@ -101,7 +101,7 @@ price* (one real share), *collateral factor*.
 
 ## Brand Commitments
 
-The name is **Harbor**, reversible but currently settled; nothing depends on it.
+The name is **Mercury**, reversible but currently settled; nothing depends on it.
 
 **Voice:** plain, specific, and willing to name what is wrong. The product states its own limits
 — what it refuses, what it cannot fill, what could go wrong when borrowing — because a financial
@@ -109,7 +109,7 @@ product that only describes good outcomes is the one users should not trust. Num
 say where they came from.
 
 **Third parties are named, never absorbed.** The basket page names Symmetry, the credit page
-names Kamino, prices credit their source. Harbor is not the custodian and will not imply it is.
+names Kamino, prices credit their source. Mercury is not the custodian and will not imply it is.
 
 ## Evidence on Hand
 

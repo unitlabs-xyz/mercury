@@ -1,4 +1,4 @@
-import type { Issuer } from "@harbor/core";
+import type { Issuer } from "@mercury/core";
 import { searchTokens, type JupToken } from "./jupiter";
 import { ABOUT, DISPLAY_NAME, SECTOR } from "./meta";
 

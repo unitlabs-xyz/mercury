@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { ApiError, Decision, MarketStatus } from "@harbor/types";
+import { ApiError, Decision, MarketStatus } from "@mercury/types";
 
-export class HarborError extends Error {
+export class MercuryError extends Error {
   constructor(readonly code: string, message: string, readonly status: number) {
     super(message);
-    this.name = "HarborError";
+    this.name = "MercuryError";
   }
 }
 
@@ -53,7 +53,7 @@ const BasketPreview = z.object({
 });
 
 /** A thin typed client. Every response is parsed, so nothing untyped reaches a component. */
-export class HarborClient {
+export class MercuryClient {
   private readonly doFetch: typeof fetch;
 
   constructor(private readonly options: ClientOptions) {
@@ -70,7 +70,7 @@ export class HarborClient {
 
     if (!res.ok) {
       const parsed = ApiError.safeParse(body);
-      throw new HarborError(
+      throw new MercuryError(
         parsed.success ? parsed.data.error.code : "internal",
         parsed.success ? parsed.data.error.message : `request failed with ${res.status}`,
         res.status,

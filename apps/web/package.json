@@ -1,5 +1,5 @@
 {
-  "name": "@harbor/web",
+  "name": "@mercury/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@harbor/core": "workspace:*",
-    "@harbor/sdk": "workspace:*",
+    "@mercury/core": "workspace:*",
+    "@mercury/sdk": "workspace:*",
     "@privy-io/react-auth": "^3.45.0",
     "@solana-program/memo": "^0.15.0",
     "@solana-program/system": "^0.15.0",
@@ -25,7 +25,7 @@
     "react-router-dom": "^7.1.0"
   },
   "devDependencies": {
-    "@harbor/tsconfig": "workspace:*",
+    "@mercury/tsconfig": "workspace:*",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

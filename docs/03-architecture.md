@@ -3,7 +3,7 @@
 ## Layout
 
 ```
-harbor/
+mercury/
 ├── apps/
 │   ├── mobile/          Expo + React Native. iOS only for now.
 │   ├── web/             Vite + React. The build judges will open.

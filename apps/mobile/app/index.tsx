@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <Text style={styles.word}>Harbor</Text>
+      <Text style={styles.word}>Mercury</Text>
       <Text style={styles.note}>iOS app starts once the web build is carrying itself.</Text>
     </View>
   );

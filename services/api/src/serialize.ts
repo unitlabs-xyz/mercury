@@ -1,6 +1,6 @@
-import type { Decision, PricedCandidate } from "@harbor/core";
-import { toWire } from "@harbor/core";
-import type { Decision as WireDecision, PricedCandidate as WirePricedCandidate } from "@harbor/types";
+import type { Decision, PricedCandidate } from "@mercury/core";
+import { toWire } from "@mercury/core";
+import type { Decision as WireDecision, PricedCandidate as WirePricedCandidate } from "@mercury/types";
 
 /**
  * Domain to wire. Every Decimal becomes a decimal string, because money never crosses

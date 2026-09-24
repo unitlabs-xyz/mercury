@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-09-20T09:54:09.675934Z",
-  "title": "Design System: Harbor",
+  "title": "Design System: Mercury",
   "extensions": {
     "colorMeta": {
       "harbour-teal": {
@@ -423,7 +423,7 @@
   ],
   "narrative": {
     "northStar": "The Printed Statement",
-    "overview": "Harbor is set, not styled. The ground is warm off-white paper rather than white or dark; structure comes from hairline rules and the edges of sheets, not from boxes with shadows; and every figure sits in a tabular column so that columns of money actually line up. Authority is meant to come from typesetting the way it does on a bank statement or a prospectus, where nothing is decorated and nothing needs to be.\n\nThe density is deliberately unhurried. A screen carries one idea, states it in a heading, supports it with one paragraph at reading measure, and then shows the numbers. Colour is scarce: a single teal appears only where something is actionable or live, and the gain/loss pair appears only on figures that actually moved. Most of any screen is paper, ink and rules.\n\nRestraint here is a trust argument, not a taste preference. This is a product that refuses orders, queues them, and tells people they can be sold out of a position while they sleep \u2014 the interface has to feel like it is reading from a record rather than selling something.",
+    "overview": "Mercury is set, not styled. The ground is warm off-white paper rather than white or dark; structure comes from hairline rules and the edges of sheets, not from boxes with shadows; and every figure sits in a tabular column so that columns of money actually line up. Authority is meant to come from typesetting the way it does on a bank statement or a prospectus, where nothing is decorated and nothing needs to be.\n\nThe density is deliberately unhurried. A screen carries one idea, states it in a heading, supports it with one paragraph at reading measure, and then shows the numbers. Colour is scarce: a single teal appears only where something is actionable or live, and the gain/loss pair appears only on figures that actually moved. Most of any screen is paper, ink and rules.\n\nRestraint here is a trust argument, not a taste preference. This is a product that refuses orders, queues them, and tells people they can be sold out of a position while they sleep \u2014 the interface has to feel like it is reading from a record rather than selling something.",
     "keyCharacteristics": [
       "Warm paper ground (Statement Paper #efede8), never white and never dark",
       "Hairline rules carry structure; borders replace shadows",

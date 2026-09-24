@@ -72,4 +72,4 @@ Recorded so they are easy to reverse.
 - **Redemption without us is verified before launch**, and stated in the product.
 - **`packages/core` never imports the Symmetry SDK**, keeping our own vault a week of work later
   rather than a rewrite.
-- **The name stays `harbor`** until you want otherwise. Nothing depends on it.
+- **The name stays `mercury`** until you want otherwise. Nothing depends on it.

@@ -1,4 +1,4 @@
-# Harbor — Design Brief
+# Mercury — Design Brief
 
 Hand this whole file to a designer. It is self-contained: what the app is, every screen,
 the real data to put in the mockups, and where to look for reference.
@@ -284,4 +284,4 @@ and were rejected. What is worth deciding deliberately:
 - **Row treatment** — filled rounded cards with a gap, Phantom-style, or a flat list on dividers
 - **How much atmosphere** — flat surfaces, or gradient and grain
 
-The name `Harbor` is a placeholder and is also open.
+The name `Mercury` is a placeholder and is also open.

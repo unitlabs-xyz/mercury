@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { allocate, D, toWire } from "@harbor/core";
-import { CreateOrderRequest, InvestBasketRequest } from "@harbor/types";
+import { allocate, D, toWire } from "@mercury/core";
+import { CreateOrderRequest, InvestBasketRequest } from "@mercury/types";
 import type { Deps } from "./deps.js";
 import { priceOrder } from "./pricing.js";
 import { decisionToWire } from "./serialize.js";

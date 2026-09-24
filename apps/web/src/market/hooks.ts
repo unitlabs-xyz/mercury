@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { D, DEFAULT_POLICY, decide, type Candidate, type Decision } from "@harbor/core";
+import { D, DEFAULT_POLICY, decide, type Candidate, type Decision } from "@mercury/core";
 import { USDC_DECIMALS, fetchPrices, fetchQuote, type JupPrice, type JupQuote } from "./jupiter";
 import { fetchCreditMarket } from "./kamino";
 import { fetchSession } from "./pyth";

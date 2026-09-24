@@ -79,12 +79,12 @@ runtime-agnostic: `fetch` is injected, no Node built-ins, no `window`.
 
 | Browser file today | Becomes | Implements |
 |---|---|---|
-| `market/pyth.ts` | `@harbor/market/pyth` | `SessionSource` |
-| `market/jupiter.ts` → `stockData.price` | `@harbor/market/jupiter` | `ReferenceSource` |
+| `market/pyth.ts` | `@mercury/market/pyth` | `SessionSource` |
+| `market/jupiter.ts` → `stockData.price` | `@mercury/market/jupiter` | `ReferenceSource` |
 | `market/jupiter.ts` → `scaledUiConfig` | same module | `MultiplierSource` |
-| `market/universe.ts` + `searchTokens` | `@harbor/chain/jupiter/registry` | `TokenRegistry` |
-| `market/jupiter.ts` → `/swap/v1/quote` | `@harbor/chain/jupiter/lite` | `QuoteSource` (keyless) |
-| `market/kamino.ts` | `@harbor/market/kamino` | new `CreditSource` port |
+| `market/universe.ts` + `searchTokens` | `@mercury/chain/jupiter/registry` | `TokenRegistry` |
+| `market/jupiter.ts` → `/swap/v1/quote` | `@mercury/chain/jupiter/lite` | `QuoteSource` (keyless) |
+| `market/kamino.ts` | `@mercury/market/kamino` | new `CreditSource` port |
 
 Stays in the web app: `hooks.ts` (React Query is app-level), `meta.ts` display names.
 
@@ -133,7 +133,7 @@ no reason to take the warning before we need the package.
 **Email is Privy's, not ours.** Privy sends the OTP; there is no hook to substitute a provider,
 and customising the sender or branding is enterprise-gated. No transactional email dependency in
 v1. When the worker starts sending fill and dividend notices in subsystem 4, the question to
-answer first is not which email service but whether Harbor stores addresses at all — docs/05
+answer first is not which email service but whether Mercury stores addresses at all — docs/05
 currently says it does not.
 
 The auth modal's step machine is kept as designed. `useLoginWithEmail` returns

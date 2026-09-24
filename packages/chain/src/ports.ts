@@ -1,4 +1,4 @@
-import type { Candidate, Decimal, Issuer, Side } from "@harbor/core";
+import type { Candidate, Decimal, Issuer, Side } from "@mercury/core";
 
 /**
  * The boundaries between our domain logic and the outside world.
@@ -64,7 +64,7 @@ export interface BasketWeight {
 }
 
 /**
- * Symmetry sits behind these four methods and nothing else. `@harbor/core` never
+ * Symmetry sits behind these four methods and nothing else. `@mercury/core` never
  * imports the SDK. That boundary is what keeps writing our own vault a week of work
  * rather than a rewrite. See ADR 0005.
  */

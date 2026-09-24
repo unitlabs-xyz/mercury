@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { Decision } from "@harbor/core";
+import type { Decision } from "@mercury/core";
 import { AppShell } from "./AppShell";
 import { BuySheet, REFUSE_COPY } from "./BuySheet";
 import { IssuerCompare } from "./IssuerCompare";
