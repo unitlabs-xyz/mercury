@@ -63,3 +63,27 @@ export interface TokenPrice {
 export interface PriceBoard {
   pricesFor(mints: readonly string[]): Promise<ReadonlyMap<string, TokenPrice>>;
 }
+
+export interface Collateral {
+  readonly symbol: string;
+  readonly ticker: string;
+  /** Share of the holding's value that can be borrowed against, as a ratio. */
+  readonly maxLtv: Decimal;
+}
+
+export interface CreditMarket {
+  readonly collateral: readonly Collateral[];
+  /** What borrowing a dollar costs per year right now. Floats with utilisation. */
+  readonly borrowApy: Decimal | null;
+  /** What supplying one earns. This is what `GET /v1/money` reports as the rate. */
+  readonly supplyApy: Decimal | null;
+}
+
+/**
+ * Kamino runs a dedicated xStocks market. We read it rather than describe it,
+ * because collateral factors are a risk parameter Kamino changes when it wants
+ * to, and a number typed into our source would quietly go stale.
+ */
+export interface CreditSource {
+  current(): Promise<CreditMarket>;
+}
