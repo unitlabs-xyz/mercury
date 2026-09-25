@@ -1,0 +1,75 @@
+---
+import Band from "../Band.astro";
+import Button from "../Button.astro";
+import Media from "../Media.astro";
+import ctaArt from "../../assets/ui/CTA.png";
+import ctaGrain from "../../assets/textures/CTATexture.png";
+
+const content = {
+  heading: ["Open an investment account", "in about a minute."],
+  note: "No paperwork, no waiting, no bank. Five dollars is enough to start.",
+  action: { label: "Open an account", href: "/signup" },
+};
+
+// The art is the full 1000 column at its own ratio.
+const FRAME = "1000 / 286";
+---
+
+<Band>
+  <Media
+    data-reveal
+    label="Open an investment account in about a minute"
+    src={ctaArt}
+    alt=""
+    ratio={FRAME}
+    radius={12}
+    textureSrc={ctaGrain}
+    parallax
+    quality={95}
+    sizes="(min-width: 1080px) 1000px, calc(100vw - 80px)"
+  >
+    <div class="cta-panel">
+      <div>
+        <h2 class="display-xl text-white">
+          {content.heading[0]}{" "}<br />{content.heading[1]}
+        </h2>
+        <p class="mt-3 text-[16px] leading-6 tracking-[-0.02em] text-white/80">{content.note}</p>
+      </div>
+      <Button href={content.action.href} variant="secondary">{content.action.label}</Button>
+    </div>
+  </Media>
+</Band>
+
+<style>
+  .cta-panel {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    /* The text block fills the 142 of content height exactly (53 + 53 + 12 +
+       24), and the button sits on the same bottom edge. */
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 32px;
+    /* 286 less 72 top and bottom leaves 142 for the content. */
+    padding: 72px 60px;
+  }
+
+  /* Side by side, the button crowds the second line of the title. */
+  @media (width < 56.25rem) {
+    :global(.frame:has(> .cta-panel)) {
+      --ratio: auto;
+    }
+
+    .cta-panel {
+      /* Relative, not static: the art and its grain are both out of flow, so
+         an unpositioned slot would be painted underneath them. */
+      position: relative;
+      z-index: 2;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 28px;
+      padding: 40px clamp(24px, 5vw, 60px);
+    }
+  }
+</style>

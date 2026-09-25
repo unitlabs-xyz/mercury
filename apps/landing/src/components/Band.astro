@@ -1,0 +1,27 @@
+---
+/**
+ * A full-width band. The ground runs edge to edge; the content sits in the shared
+ * 1000px `column`. `rule` adds a hairline seam, `tone` lifts a band onto white —
+ * both off by default, since the page reads as one continuous sheet.
+ */
+interface Props {
+  id?: string;
+  tone?: "shell" | "white" | "page";
+  /** Vertical rhythm. Two adjacent bands make the 100px gap between
+   *  sections; every band uses it. */
+  space?: "band" | "section" | "none";
+  rule?: boolean;
+  class?: string;
+}
+
+const { id, tone = "shell", space = "band", rule = false, class: className = "" } = Astro.props;
+
+const grounds = { shell: "bg-shell", white: "bg-white", page: "bg-page" } as const;
+const spaces = { band: "py-[50px]", section: "py-[50px]", none: "" } as const;
+---
+
+<section id={id} class:list={[grounds[tone], rule && "border-t border-hair", className]}>
+  <div class:list={["column", spaces[space]]}>
+    <slot />
+  </div>
+</section>

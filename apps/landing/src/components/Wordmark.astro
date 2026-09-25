@@ -1,0 +1,21 @@
+---
+import Logo from "../assets/brand/Logo.svg";
+import { site } from "../config/site";
+
+interface Props {
+  class?: string;
+  /** `data-reveal` and friends land on the link. */
+  [key: string]: unknown;
+}
+const { class: className = "", ...rest } = Astro.props;
+---
+
+<!-- Astro inlines the SVG, so the mark costs no extra request. -->
+<a
+  href="/"
+  class:list={["inline-flex items-center text-ink", className]}
+  aria-label={`${site.name} home`}
+  {...rest}
+>
+  <Logo height={24} width={117} aria-hidden="true" />
+</a>

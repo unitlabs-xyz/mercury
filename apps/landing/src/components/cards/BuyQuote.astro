@@ -1,0 +1,190 @@
+---
+import backed from "../../assets/brand/BackedWhiteLogo-keyed.png?url";
+import ondo from "../../assets/brand/OndoWhiteLogo-keyed.png?url";
+
+/**
+ * The buy-quote card that sits on the Invest backdrop. Built to the supplied
+ * SVG: a 294x234 content block, so it centres itself in the 347x280 pane.
+ *
+ * Baselines land on 14, 56, 110 and then 163 / 185 / 207 / 229 for the
+ * summary; the rows are 42 tall at y=30 and y=84; the rule sits at y=137.5.
+ */
+const ticker = { symbol: "NVDA", name: "Nvidia", amount: "$500" };
+
+const issuers = [
+  { logo: backed, w: 16, h: 16, label: "Backed · NVDAx", price: "$184.22", picked: true },
+  { logo: ondo, w: 17, h: 18, label: "Ondo · NVDAon", price: "$186.90", picked: false },
+];
+
+const summary = [
+  { label: "You pay", value: "$500.00", hero: true },
+  { label: "Price per share", value: "$184.22" },
+  { label: "Shares", value: "2.7141" },
+  { label: "Route", value: "USDC → NVDAx" },
+];
+---
+
+<div class="card">
+  <header class="head">
+    <p class="ticker">{ticker.symbol} &middot; {ticker.name}</p>
+    <p class="chip">{ticker.amount}</p>
+  </header>
+
+  {
+    issuers.map((issuer) => (
+      <div class:list={["row", issuer.picked ? "picked" : "muted"]}>
+        {issuer.picked && (
+          <svg class="tick" viewBox="0 0 14 11" width="14" height="11" fill="none" aria-hidden="true">
+            <path
+              d="M0 7.5L3.5 11L14 0"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        )}
+        <img class="logo" src={issuer.logo} width={issuer.w} height={issuer.h} alt="" aria-hidden="true" />
+        <p class="issuer">{issuer.label}</p>
+        <p class="price">{issuer.price}</p>
+      </div>
+    ))
+  }
+
+  <hr class="rule" />
+
+  <dl class="summary">
+    {
+      summary.map((line) => (
+        <div class="line">
+          <dt>{line.label}</dt>
+          <dd class:list={[line.hero && "hero"]}>{line.value}</dd>
+        </div>
+      ))
+    }
+  </dl>
+</div>
+
+<style>
+  .card {
+    width: 294px;
+    flex-shrink: 0;
+    color: #fcfcff;
+    letter-spacing: -0.02em;
+  }
+
+  .head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .ticker {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 18px;
+    color: #fff;
+  }
+
+  /* The line box is shorter than the chip and padded from the top, which
+     carries the figures down off the true centre onto the optical one. */
+  .chip {
+    width: 45px;
+    height: 18px;
+    padding-top: 1px;
+    border-radius: 4px;
+    background: rgb(255 255 255 / 0.14);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    color: #fff;
+    text-align: center;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    height: 42px;
+    padding: 0 12px;
+    border-radius: 6px;
+  }
+
+  .picked {
+    background: rgb(255 255 255 / 0.2);
+    color: #fff;
+  }
+
+  .muted {
+    margin-top: 12px;
+    background: rgb(255 255 255 / 0.05);
+    opacity: 0.8;
+  }
+
+  .tick {
+    flex-shrink: 0;
+    margin-right: 8px;
+    overflow: visible; /* the 1.5 stroke would otherwise clip on the box edge */
+  }
+
+  .logo {
+    display: block;
+    flex-shrink: 0;
+    margin-right: 5px;
+  }
+
+  .issuer,
+  .price {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .issuer {
+    font-weight: 500;
+  }
+
+  .price {
+    margin-left: auto;
+    font-weight: 600;
+  }
+
+  .picked .price {
+    font-weight: 700;
+  }
+
+  .rule {
+    height: 1px;
+    margin: 11px 0 12px;
+    border: 0;
+    background: rgb(255 255 255 / 0.1);
+  }
+
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .line dt,
+  .line dd {
+    opacity: 0.8;
+  }
+
+  .line dd {
+    font-weight: 500;
+  }
+
+  /* The one figure the card is actually about. Not named `lead`: that is a
+     global utility in global.css and would quietly restyle this to 17px. */
+  .line dd.hero {
+    font-weight: 700;
+    opacity: 1;
+  }
+</style>

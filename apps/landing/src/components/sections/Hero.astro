@@ -1,0 +1,59 @@
+---
+import Band from "../Band.astro";
+import Button from "../Button.astro";
+import Media from "../Media.astro";
+import heroImage from "../../assets/ui/Hero-2x.webp";
+
+const content = {
+  eyebrow: { live: "Open now,", rest: "Hold. Invest. Grow. Spend." },
+  heading: ["The financial account built", "for the onchain world."],
+  lead: "Hold your money, invest in stocks and ETFs, build diversified portfolios, spend with your card, and access your wealth — all from a single wallet.",
+  primary: { label: "Get started", href: "/signup" },
+  secondary: { label: "See how it works", href: "#how-it-works" },
+};
+---
+
+<Band space="none" class="pt-[60px] pb-[50px]">
+  <!-- Steps measured off the design. The headline sets its own breaks with <br>,
+       so it is not capped — Artnik runs a touch wider than the drawn line and a
+       520px cap would drop "built" onto a line of its own. -->
+  <div>
+    <p data-enter class="flex items-center gap-[4.5px] text-[12px] leading-[18px]">
+      <span class="size-1.5 shrink-0 rounded-full bg-live"></span>
+      <span class="text-live">{content.eyebrow.live}</span>
+      <span class="text-copy">{content.eyebrow.rest}</span>
+    </p>
+
+    <h1
+      data-enter
+      style="--reveal-delay:80ms"
+      class="mt-[10px] display-xl text-headline"
+    >
+      {content.heading[0]}{" "}<br />{content.heading[1]}
+    </h1>
+
+    <p data-enter style="--reveal-delay:150ms" class="mt-[14px] max-w-[min(520px,100%)] text-[16px] leading-[24px] text-copy">{content.lead}</p>
+
+    <div data-enter style="--reveal-delay:210ms" class="mt-[22px] flex flex-wrap gap-3">
+      <Button href={content.primary.href}>{content.primary.label}</Button>
+      <Button href={content.secondary.href} variant="secondary">{content.secondary.label}</Button>
+    </div>
+  </div>
+
+  <!-- 1000 x 420 at 12px, the size it was drawn at and the full width of the column. -->
+  <Media
+    data-enter
+    style="--reveal-delay:260ms"
+    label="Hero image"
+    src={heroImage}
+    alt=""
+    ratio="1000 / 420"
+    radius={12}
+    texture
+    parallax
+    quality={95}
+    sizes="(min-width: 1080px) 1000px, calc(100vw - 80px)"
+    priority
+    class="mt-14"
+  />
+</Band>

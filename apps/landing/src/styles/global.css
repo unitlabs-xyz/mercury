@@ -1,0 +1,281 @@
+@import "tailwindcss";
+
+/* Self-hosted, so the first paint never waits on a third party. */
+@import "@fontsource-variable/jetbrains-mono";
+
+/* ABC Diatype — body and UI. Subset to Latin, which takes each file from ~75KB
+   to ~19KB. Re-subset from the source .otf if you ever need more glyphs. */
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("../assets/fonts/ABCDiatype-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("../assets/fonts/ABCDiatype-Medium.woff2") format("woff2");
+  /* Diatype has nothing between Medium and Bold, so 600 takes Medium rather
+     than jumping to Bold. */
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("../assets/fonts/ABCDiatype-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* TT Artnik — titles only. The demo carries letters and a space and nothing
+   else: no digits, no punctuation. Anything it lacks falls through to Diatype. */
+@font-face {
+  font-family: "TT Artnik";
+  src: url("../assets/fonts/TTArtnik-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "TT Artnik";
+  src: url("../assets/fonts/TTArtnik-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "TT Artnik";
+  src: url("../assets/fonts/TTArtnik-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "TT Artnik";
+  src: url("../assets/fonts/TTArtnik-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* The token layer is the same one the app uses (apps/web/src/tokens.css).
+   Keep the two in step — they are one design system, see DESIGN.md. */
+@theme {
+  /* ground */
+  --color-page: #efede8;
+  /* The landing ground. The app's Fresh Sheet is #f7f6f2 — this one is its own
+     value on purpose, so do not "fix" it back to match apps/web. */
+  --color-shell: #f7f7f5;
+
+  /* ink. The hero sets headline in pure black and copy in #656565 — the design
+     moved to neutral greys, where the app's palette is warm. */
+  --color-headline: #000000;
+  --color-copy: #656565;
+  --color-live: #40a714;
+
+  --color-ink: #1b1a17;
+  --color-ink-soft: #3a372f;
+  --color-muted: #6b665c;
+  --color-faint: #6f6a60;
+
+  /* rules, in order of weight */
+  --color-edge: #dbd7ce;
+  --color-rule: #e7e3da;
+  --color-cardline: #e4e0d7;
+  --color-navline: #dfdbd2;
+  --color-dash: #cfcbc2;
+  --color-btnline: #d5d0c6;
+  --color-hair: #f0ede6;
+  --color-hairline: #f3f0e9;
+
+  /* fills */
+  --color-track: #f0ede5;
+  --color-chip: #f4f2ec;
+
+  /* brand */
+  --color-brand: #0f7480;
+  --color-brand-deep: #0b5c66;
+  --color-brand-tint: #e8f4f5;
+  --color-brand-line: #cbe4e7;
+  --color-brand-soft: #6ba8b0;
+
+  /* performance */
+  --color-up: #1a7f4b;
+  --color-up-deep: #177544;
+  --color-up-tint: #e7f3ec;
+  --color-up-line: #bcdcc9;
+  --color-down: #c0442f;
+  --color-down-deep: #b33d29;
+  --color-down-tint: #faebe8;
+  --color-down-line: #e8bdb4;
+  --color-warn: #8a5e10;
+  --color-warn-tint: #fbf3e0;
+  --color-warn-line: #e6d2a4;
+
+  --font-sans: "ABC Diatype", ui-sans-serif, Helvetica, sans-serif;
+  /* Titles. Diatype backs it up, and also supplies every glyph Artnik lacks. */
+  --font-display: "TT Artnik", "ABC Diatype", ui-sans-serif, Helvetica, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Its mirror, for anything leaving: slow to commit, quick to go. An
+     ease-out on an exit spends its tail on the last few pixels, which reads
+     as the thing hesitating on its way off screen. */
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+
+  /* Height of the sticky bar. Anchored sections clear it. */
+  --bar-h: 68px;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* No `scroll-behavior: smooth` — Lenis does the smoothing, and the two
+       fight over the same scroll position. Anchors go through Lenis instead. */
+    caret-color: var(--color-brand);
+    scrollbar-color: var(--color-dash) var(--color-shell);
+  }
+  body {
+    margin: 0;
+    /* Fresh Sheet is the landing ground; Statement Paper is the app's. */
+    background: var(--color-shell);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  section[id] {
+    scroll-margin-top: calc(var(--bar-h) + 16px);
+  }
+  ::selection {
+    background: var(--color-brand);
+    color: #fff;
+  }
+}
+
+/* The page column. Everything on the landing sits in this one 1000px measure,
+   centred, so the site reads as a single vertical run.
+
+   1080 = the 1000 measure plus its two 40px gutters, so at any viewport from
+   1080 up the content box is exactly 1000 and the desktop design is untouched.
+   Below that the gutters hold and the measure narrows with the window — no
+   step, and never edge to edge. */
+@utility column {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 1080px;
+  padding-inline: 40px;
+  @media (width < 40rem) {
+    padding-inline: 20px;
+  }
+}
+
+/* The 48px display heading, shared by every section. Holds at exactly 48/53
+   from 1080 up — the desktop design — and eases down below that so a long
+   title never has to break to four lines on a narrow screen. */
+@utility display-xl {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(30px, 4.6vw, 48px);
+  line-height: 1.1041666667; /* = 53 / 48, so the desktop metric is unchanged */
+  letter-spacing: -0.02em;
+}
+
+/* The manual breaks in the headings are set for the 1000 measure. On a narrow
+   screen they land mid-thought, so let the text wrap where it wants to. */
+@media (width < 56.25rem) {
+  h1 br,
+  h2 br {
+    display: none;
+  }
+}
+
+/* Tabular figures, so columns of money line up.
+   DESIGN.md sets this on `body` for the app, and that cannot carry over here:
+   ABC Diatype's `tnum` feature also swaps `space` for `space.tf`, a figure-width
+   space (234 units becomes 616), which stretches every gap between words. So it
+   goes on the figures themselves, and never on an element holding prose. */
+@utility figures {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 11px uppercase marker. The only place letter-spacing goes positive. */
+@utility stamp {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+/* The three type roles that step up on the landing's wide bands. */
+@utility display {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  @media (width >= 40rem) {
+    font-size: 52px;
+  }
+  @media (width >= 64rem) {
+    font-size: 62px;
+  }
+}
+
+@utility headline {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  @media (width >= 64rem) {
+    font-size: 40px;
+  }
+}
+
+@utility lead {
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--color-muted);
+}
+
+/* Prose stays at a reading measure rather than filling its container. */
+@utility measure {
+  max-width: 60ch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-property: color, background-color, border-color, opacity, fill, stroke !important;
+    transition-duration: 120ms !important;
+  }
+}
+
+/* Paper grain, laid over artwork so a flat gradient reads as a surface.
+   Generated rather than downloaded; swap the background-image for a file from
+   `src/assets/textures` if you want a photographed grain instead. */
+@utility grain {
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+/* Parallax lives in Media.astro, driven by a rAF scroll handler. The CSS
+   `animation-timeline: view()` version is prettier, but support is uneven and a
+   minifier will happily fold it into an invalid `animation` shorthand, so this
+   is one code path that works everywhere. Only the art moves; the grain is a
+   finish on the frame and holds still. */

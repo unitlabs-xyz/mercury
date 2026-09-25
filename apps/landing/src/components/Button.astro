@@ -1,0 +1,110 @@
+---
+interface Props {
+  href: string;
+  /** `ink` and `secondary` are the hero's pair; `primary` is the app's Harbour Teal. */
+  variant?: "ink" | "secondary" | "primary" | "onDark";
+  /** `md` is the 32px button the design uses; `sm` the 28px one in the bar. */
+  size?: "sm" | "md";
+  class?: string;
+}
+
+const { href, variant = "ink", size = "md", class: className = "" } = Astro.props;
+
+const base = "inline-flex items-center justify-center rounded-full text-[14px] font-medium tracking-[-0.02em]";
+
+const heights = { sm: "h-7", md: "h-8" } as const;
+const pads = { sm: "px-4", md: "px-[30px]" } as const;
+
+const skins = {
+  ink: "ink text-white",
+  secondary: "sheet text-black",
+  primary: "bg-brand text-white transition-colors duration-200 hover:bg-brand-deep",
+  onDark: "bg-white text-ink transition-colors duration-200 hover:bg-shell",
+} as const;
+---
+
+<a href={href} class:list={[base, heights[size], pads[size], skins[variant], className]}><slot /></a>
+
+<style>
+  /* Both buttons are the same object in two materials: a 1px edge, a stroke
+     just inside it, and a gradient face. `background-clip` keeps the face out
+     from under the edge — without it the gradient bleeds through and the edge
+     reads as a gradient too. */
+  .ink,
+  .sheet {
+    background-clip: padding-box;
+    /* The face is drawn at twice the height and parked at the bottom, so at
+       rest only the lower half shows. Hover slides the whole way to the top
+       half, which is the light end of each gradient — a position animates,
+       a background-image does not. */
+    background-size: 100% 200%;
+    background-position: 0 100%;
+    transition:
+      background-position 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out),
+      translate 220ms var(--ease-out);
+  }
+
+  .ink {
+    border: 1px solid #000;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+    background-image: linear-gradient(to bottom, #3a3a3a 0%, #2e2e2e 50%, #0f0f0f 100%);
+  }
+
+  /* From the supplied SVG: a #f4f4f4 edge, a black stroke just inside it at 6%
+     — the SVG's 9% reads too heavy over a single pixel — and a face running
+     #f3f3f3 at the top to white at the bottom. The stops above 50% are what
+     shows at rest; the flat white below it only slides in on hover. */
+  .sheet {
+    border: 1px solid #f4f4f4;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+    background-image: linear-gradient(to bottom, #ffffff 0%, #ffffff 45%, #f3f3f3 50%, #ffffff 100%);
+  }
+
+  /* Hover does three things at once so it reads without shouting: the face
+     moves to its light end, the button lifts a pixel, and a soft shadow
+     appears under it. */
+  .ink:hover,
+  .ink:focus-visible,
+  .sheet:hover,
+  .sheet:focus-visible {
+    background-position: 0 0;
+    translate: 0 -1px;
+  }
+
+  .ink:hover,
+  .ink:focus-visible {
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.24),
+      0 2px 8px rgb(0 0 0 / 0.22);
+  }
+
+  .sheet:hover,
+  .sheet:focus-visible {
+    box-shadow:
+      inset 0 0 0 1px rgb(0 0 0 / 0.06),
+      0 2px 8px rgb(16 32 56 / 0.12);
+  }
+
+  .ink:active,
+  .sheet:active {
+    translate: 0 0;
+    transition-duration: 90ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ink,
+    .sheet {
+      transition-duration: 120ms;
+    }
+
+    .ink:hover,
+    .ink:focus-visible,
+    .sheet:hover,
+    .sheet:focus-visible,
+    .ink:active,
+    .sheet:active {
+      translate: none;
+    }
+  }
+</style>

@@ -1,0 +1,35 @@
+---
+import "lenis/dist/lenis.css";
+---
+
+<script>
+  import Lenis from "lenis";
+
+  // Lenis scrolls the page for real — it sets scroll position rather than
+  // transforming a wrapper — so native scroll events still fire and anything
+  // reading getBoundingClientRect (the hero parallax) stays correct.
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  let lenis: Lenis | null = null;
+
+  const start = () => {
+    if (lenis || reduced.matches) return;
+    // No `offset` here: Lenis already honours the `scroll-margin-top` that
+    // global.css puts on anchored sections, and setting both lands anchors
+    // twice the bar's height down the page.
+    lenis = new Lenis({ autoRaf: true, anchors: true });
+    // Published so scroll-driven effects can paint inside Lenis's own frame
+    // rather than a frame behind it. See the parallax in Media.astro.
+    (window as any).lenis = lenis;
+    dispatchEvent(new Event("lenis:ready"));
+  };
+
+  const stop = () => {
+    lenis?.destroy();
+    lenis = null;
+    (window as any).lenis = null;
+    dispatchEvent(new Event("lenis:stop"));
+  };
+
+  reduced.addEventListener("change", () => (reduced.matches ? stop() : start()));
+  start();
+</script>

@@ -1,0 +1,227 @@
+---
+import Band from "../Band.astro";
+import { faqs } from "../../config/faqs";
+---
+
+<Band id="faqs">
+  <div class="faq-grid grid">
+    <h2 data-reveal class="display-xl text-headline">FAQs</h2>
+
+    {/* Not <details>: a closed <details> hides its content outright, so there
+        is nothing to transition. A button and a panel animate properly and
+        let one answer close as the next opens. */}
+    <div class="faq" data-reveal style="--reveal-delay:90ms">
+      {
+        faqs.map((faq, i) => (
+          <div class:list={["item", i === 0 && "open"]}>
+            <h3>
+              <button type="button" id={`faq-q-${i}`} aria-controls={`faq-a-${i}`} aria-expanded={i === 0 ? "true" : "false"}>
+                <span>{faq.q}</span>
+                <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </h3>
+            <div class="panel" id={`faq-a-${i}`} role="region" aria-labelledby={`faq-q-${i}`}>
+              <div class="panel-inner">
+                <p>{faq.a}</p>
+              </div>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</Band>
+
+<style>
+  /* The questions take 660 of the 1000, and the title the rest. The title
+     track has a floor so it cannot be squeezed to nothing before the
+     questions start giving way. */
+  .faq-grid {
+    grid-template-columns: minmax(150px, 1fr) minmax(0, 660px);
+    gap: 64px;
+  }
+
+  @media (width < 50rem) {
+    .faq-grid {
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+  }
+
+  /* 24 above and below every rule. */
+  .item {
+    padding: 24px 0;
+    border-bottom: 1px solid var(--color-hair);
+  }
+
+  .item:first-child {
+    padding-top: 0;
+  }
+
+  .item:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .item button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 28px;
+    letter-spacing: -0.02em;
+    color: var(--color-headline);
+  }
+
+  .faq {
+    /* --ease-out front-loads nearly all of its movement, which reads as a
+       snap. The previous curve went the other way: it ended on a flat tail,
+       so the last 3% of the height took a third of the time and felt like it
+       was hanging. easeOutCubic settles instead of trailing off. */
+    --glide: cubic-bezier(0.215, 0.61, 0.355, 1);
+    --open: 300ms;
+    --shut: 220ms;
+  }
+
+  .chev {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: var(--color-faint);
+    transition: rotate var(--open) var(--glide);
+  }
+
+  .open .chev {
+    rotate: 180deg;
+  }
+
+  /* 0fr to 1fr is the one height transition that works without a fixed px. */
+  .panel {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--shut) var(--glide);
+  }
+
+  .open .panel {
+    grid-template-rows: 1fr;
+    transition-duration: var(--open);
+  }
+
+  .panel-inner {
+    overflow: hidden;
+    /* Held back until the row has collapsed, so it leaves the a11y tree only
+       once it is actually out of sight. */
+    visibility: hidden;
+    transition: visibility 0s linear var(--shut);
+  }
+
+  .open .panel-inner {
+    visibility: visible;
+    transition-delay: 0s;
+  }
+
+  /* The copy rises and fades on its own rather than being uncovered by the
+     edge of the box, which is what made it read as a mask. */
+  .panel p {
+    margin-top: 4px;
+    font-size: 16px;
+    line-height: 24px;
+    letter-spacing: -0.02em;
+    color: var(--color-copy);
+    opacity: 0;
+    translate: 0 -6px;
+    transition:
+      opacity 110ms linear,
+      translate 110ms var(--glide);
+  }
+
+  /* No delay: the copy came in well after the box had finished, which is what
+     made it feel like it was crawling. It now rises with the panel. */
+  .open .panel p {
+    opacity: 1;
+    translate: 0 0;
+    transition:
+      opacity 150ms linear,
+      translate var(--open) var(--glide);
+  }
+
+  /* Held still while the tallest state is measured, so nothing animates. */
+  .faq.measuring,
+  .faq.measuring * {
+    transition: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chev,
+    .panel,
+    .panel-inner,
+    .panel p {
+      transition: none;
+    }
+
+    .panel p {
+      opacity: 1;
+      translate: none;
+    }
+  }
+</style>
+
+<script>
+  for (const list of document.querySelectorAll<HTMLElement>(".faq")) {
+    const items = [...list.querySelectorAll<HTMLElement>(".item")];
+
+    // Reserve the height of the tallest answer so opening one never shifts
+    // the CTA below. Measured rather than guessed, because the answers rewrap
+    // at every width.
+    const reserve = () => {
+      const wasOpen = items.find((item) => item.classList.contains("open"));
+      list.classList.add("measuring");
+      list.style.minHeight = "";
+
+      for (const item of items) item.classList.remove("open");
+      let tallest = list.getBoundingClientRect().height;
+
+      for (const item of items) {
+        item.classList.add("open");
+        tallest = Math.max(tallest, list.getBoundingClientRect().height);
+        item.classList.remove("open");
+      }
+
+      for (const item of items) item.classList.toggle("open", item === wasOpen);
+      list.style.minHeight = `${Math.ceil(tallest)}px`;
+      void list.offsetHeight;
+      list.classList.remove("measuring");
+    };
+
+    reserve();
+    if ("ResizeObserver" in window) {
+      let width = list.getBoundingClientRect().width;
+      new ResizeObserver(() => {
+        const next = list.getBoundingClientRect().width;
+        if (Math.abs(next - width) < 1) return;
+        width = next;
+        reserve();
+      }).observe(list);
+    }
+    addEventListener("load", reserve);
+
+    for (const item of items) {
+      const button = item.querySelector("button");
+      button?.addEventListener("click", () => {
+        const opening = !item.classList.contains("open");
+        // One at a time: whatever was open closes as this one opens.
+        for (const other of items) {
+          other.classList.toggle("open", other === item && opening);
+          other.querySelector("button")?.setAttribute("aria-expanded", String(other === item && opening));
+        }
+      });
+    }
+  }
+</script>

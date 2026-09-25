@@ -1,0 +1,104 @@
+---
+import Band from "../Band.astro";
+
+// The @3x files are built from the supplied PNGs by scripts/logos.ts — plate
+// flood-filled off, never upscaled. They display at ~30px, so the browser
+// downsamples a 2.2-3x original instead of stretching it.
+import Backed from "../../assets/brand/Backed@3x.png";
+import Ondo from "../../assets/brand/Ondo@3x.png";
+import xStocks from "../../assets/brand/xStocks@3x.png";
+import Solana from "../../assets/brand/Solana@3x.png";
+import Privy from "../../assets/brand/Privy@3x.png";
+import Jupiter from "../../assets/brand/Jupiter@3x.png";
+
+// ── Tune the strip here ──────────────────────────────────────────────────────
+// `h` is the rendered height in px for that one mark. Optical size, not measured
+// size: a wordmark with tall caps reads bigger than a lockup at the same height,
+// so nudge these until they *look* even. 30 is the design's ceiling.
+const logos = [
+  { name: "Backed", art: Backed, h: 30 },
+  { name: "Ondo", art: Ondo, h: 30 },
+  { name: "xStocks", art: xStocks, h: 27 },
+  { name: "Solana", art: Solana, h: 36 },
+  { name: "Privy", art: Privy, h: 26 },
+  { name: "Jupiter", art: Jupiter, h: 38 },
+];
+
+const GAP = 128; // px between marks, and the run's trailing pad
+const SPEED = 30; // px per second the strip travels — independent of GAP
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Width is each mark's own ratio at its height, stated so nothing reflows on load.
+const marks = logos.map((logo) => ({
+  name: logo.name,
+  src: logo.art.src,
+  h: logo.h,
+  w: Math.round((logo.art.width / logo.art.height) * logo.h),
+}));
+
+// The track slides exactly one run. Deriving the duration from that distance
+// keeps the speed fixed when GAP or a logo height changes.
+const runWidth = marks.reduce((sum, mark) => sum + mark.w, 0) + GAP * marks.length;
+const duration = Math.round(runWidth / SPEED);
+
+const caption = "Shares custodied and tokenised by";
+---
+<Band space="section">
+  <p data-reveal class="text-[14px] tracking-[-0.02em] text-copy">{caption}</p>
+
+  <!-- Two identical runs side by side. The track slides exactly one run's width
+       and restarts, which is seamless because the second run is already in the
+       first one's place. The copy is hidden from screen readers. -->
+  <div class="marquee mt-6" data-reveal style="--reveal-delay:90ms">
+    <div class="marquee-track flex w-max" style={`animation-duration:${duration}s`}>
+      {
+        [false, true].map((clone) => (
+          <ul class="flex shrink-0 items-center" style={`gap:${GAP}px;padding-right:${GAP}px`} aria-hidden={clone ? "true" : undefined}>
+            {marks.map((mark) => (
+              <li class="flex items-center">
+                <img
+                  src={mark.src}
+                  alt={clone ? "" : mark.name}
+                  width={mark.w}
+                  height={mark.h}
+                  loading="lazy"
+                  decoding="async"
+                  style={`height:${mark.h}px`}
+                  class="w-auto opacity-70"
+                />
+              </li>
+            ))}
+          </ul>
+        ))
+      }
+    </div>
+  </div>
+</Band>
+
+<style>
+  .marquee {
+    overflow: hidden;
+    /* Fade the ends so marks are not sliced off at the column edge. */
+    mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  }
+
+  .marquee-track {
+    animation: marquee-slide linear infinite;
+  }
+
+  .marquee:hover .marquee-track {
+    animation-play-state: paused;
+  }
+
+  @keyframes marquee-slide {
+    to {
+      transform: translate3d(-50%, 0, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marquee-track {
+      animation: none;
+    }
+  }
+</style>

@@ -50,7 +50,7 @@ Decisions live in [`docs/adr`](docs/adr). The backend design and its implementat
 apps/
   mobile/     Expo + React Native. iOS only for now.
   web/        Vite + React. The build judges will open.
-  landing/    Next.js. Marketing site.
+  landing/    Astro on bun. Marketing site. Outside the pnpm workspace.
 services/
   api/        Hono on Node. The only thing the apps talk to.
   worker/     Scheduled work: recurring buys, order watching, price cache.
@@ -71,11 +71,19 @@ Needs Node 24 and pnpm 10.
 ```bash
 pnpm install
 pnpm check          # lint, format, typecheck and test every package
+pnpm dev:api        # http://localhost:8787
+pnpm dev:web        # http://localhost:5173
+pnpm dev:landing    # http://localhost:3000
 ```
 
 Each of those four runs as its own GitHub Actions workflow on every pull request, so
 none of them needs running by hand to find out. `pnpm format` fixes formatting;
 `pnpm lint:fix` fixes what lint can fix on its own.
+
+The landing site is Astro on **bun**, with its own lockfile and its own
+`node_modules`. It is excluded from the pnpm workspace so the two installers stay out
+of each other's way, which also means `turbo build` skips it — `pnpm build:landing`
+builds it. You need bun installed for that one app; everything else is pnpm as before.
 
 `packages/core` runs with no keys, no database and no network — it performs no I/O at all, which
 is the point of it. `pnpm --filter @mercury/core exec vitest run` is the fastest way to see the
@@ -107,7 +115,7 @@ pnpm --filter @mercury/web dev                   # http://localhost:5173
 | `services/api`    | **Identity and read models done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity all answer from Postgres and chain. Execution is subsystem 3 |
 | `services/worker` | Job plan only. Runner is still to come                                                                                                                                                             |
 | `apps/web`        | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet                                                                                                      |
-| `apps/landing`    | Scaffolded                                                                                                                                                                                         |
+| `apps/landing`    | **Scaffolded on Astro.** Eight sections of the designed page, placeholder artwork, SEO and sitemap wired                                                                                           |
 | `apps/mobile`     | Not started, on purpose                                                                                                                                                                            |
 
 ## Ground rules

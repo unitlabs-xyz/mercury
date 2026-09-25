@@ -1,0 +1,36 @@
+---
+import Base from "../layouts/Base.astro";
+import { site } from "../config/site";
+import { faqs } from "../config/faqs";
+
+import Hero from "../components/sections/Hero.astro";
+import Trust from "../components/sections/Trust.astro";
+import Everything from "../components/sections/Everything.astro";
+import Pillars from "../components/sections/Pillars.astro";
+import OneNumber from "../components/sections/OneNumber.astro";
+import Custody from "../components/sections/Custody.astro";
+import Faqs from "../components/sections/Faqs.astro";
+import Cta from "../components/sections/Cta.astro";
+
+// The answers on the page, handed to search engines in the shape they index.
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((faq) => ({
+    "@type": "Question",
+    name: faq.q,
+    acceptedAnswer: { "@type": "Answer", text: faq.a },
+  })),
+};
+---
+
+<Base title={site.tagline} schema={[faqSchema]}>
+  <Hero />
+  <Trust />
+  <Everything />
+  <Pillars />
+  <OneNumber />
+  <Custody />
+  <Faqs />
+  <Cta />
+</Base>

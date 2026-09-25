@@ -1,0 +1,276 @@
+---
+import Band from "../Band.astro";
+import Media from "../Media.astro";
+import StatTile from "../cards/StatTile.astro";
+import OneAccountArt from "../../assets/ui/OneAccount.png";
+import oneAccountGrain from "../../assets/textures/OneAccountTextures.png";
+import portfolioPlate from "../../assets/ui/PortfolioInside.png";
+import nvidiaPlate from "../../assets/ui/NvidiaInside.png";
+
+// The frame is 1000x303 with 40 of padding, which leaves exactly the 223 the
+// two plates are cut to. 511 + 24 + 386 overruns that by a pixel, so the
+// columns take the 511:386 ratio and the gap stays at a true 24.
+const FRAME = "1001 / 303";
+const PAD = 40;
+const GAP = 24;
+
+const content = {
+  heading: ["One number for", "everything you hold."],
+  lead: "The same company can be held through either issuer, and each token is worth a different sliver of a share. Mercury counts the shares behind the, not the tokens.",
+  total: { label: "Portfolio value", value: "$12,480.62", pill: "\u2191 10.68%", note: "+$1,204.18 all time" },
+  split: [
+    { label: "Stocks", amount: 5785.49 },
+    { label: "Baskets", amount: 2150.4 },
+    { label: "Cash \u00b7 4.1%", amount: 4534.75 },
+  ],
+  issuerTitle: "Nvidia, across issuers",
+  issuers: [
+    { label: "NVDAx \u00b7 18 tokens", value: "$5,785.49" },
+    { label: "NVDAon \u00b7 40 tokens", value: "$2,150.40" },
+  ],
+  truePosition: { label: "True position", value: "22.00 shares" },
+  issuerNote: "Counting tokens would have said 58. Each one carries its own multiplier.",
+  holdings: [
+    { ticker: "NVDAx", name: "NVIDIA", value: "$4,206.18", change: "+2.4%" },
+    { ticker: "SPYx", name: "S&P 500", value: "$3,180.00", change: "+0.3%" },
+    { ticker: "GOOGLx", name: "Alphabet", value: "$1,842.44", change: "-0.8%" },
+    { ticker: "USDC", name: "Cash", value: "$1,752.00", change: "4.8% a year" },
+  ],
+};
+
+// The bar is three stacked fills, not three side by side: each layer runs from
+// the left edge to the end of its own row, so the one in front is the shortest.
+const total = content.split.reduce((sum, part) => sum + part.amount, 0);
+const runningTo = (n: number) =>
+  (content.split.slice(0, n).reduce((sum, part) => sum + part.amount, 0) / total) * 100;
+
+// Formatted from the same number the bar measures, so the rows and the fills
+// can never disagree.
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+const layers = [
+  { fill: "#dad7d0", width: runningTo(3) },
+  { fill: "#5ba3ad", width: runningTo(2) },
+  { fill: "#23747f", width: runningTo(1) },
+];
+---
+
+<Band id="baskets">
+  <h2 data-reveal class="display-xl text-headline">
+    {content.heading[0]}{" "}<br />{content.heading[1]}
+  </h2>
+  <p data-reveal style="--reveal-delay:80ms" class="mt-3 max-w-[min(620px,100%)] text-[16px] leading-6 tracking-[-0.02em] text-copy">{content.lead}</p>
+
+  <Media
+    data-reveal
+    style="--reveal-delay:160ms"
+    label="The portfolio total, and one company counted across both issuers"
+    src={OneAccountArt}
+    alt="The portfolio total, and one company counted across both issuers"
+    ratio={FRAME}
+    radius={12}
+    textureSrc={oneAccountGrain}
+    parallax
+    quality={95}
+    fit={[1000, 303]}
+    sizes="(min-width: 1080px) 1000px, calc(100vw - 80px)"
+    class="mt-6"
+  >
+    <div class="split" style={`padding:${PAD}px;gap:${GAP}px`}>
+      <div class="plate" style={`background-image:url(${portfolioPlate.src})`}>
+        <StatTile
+          label={content.total.label}
+          value={content.total.value}
+          pill={content.total.pill}
+          note={content.total.note}
+        />
+
+        <div class="bar">
+          {layers.map((layer) => <span style={`width:${layer.width}%;background:${layer.fill}`} />)}
+        </div>
+
+        <hr class="rule" />
+
+        <dl class="rows">
+          {
+            content.split.map((part) => (
+              <div class="row">
+                <dt>{part.label}</dt>
+                <dd>{money.format(part.amount)}</dd>
+              </div>
+            ))
+          }
+        </dl>
+      </div>
+      <div class="plate col" style={`background-image:url(${nvidiaPlate.src})`}>
+        {/* Same treatment as "Portfolio value" on the left plate. */}
+        <p class="text-[14px] font-bold leading-[18px] tracking-[-0.02em] text-white">{content.issuerTitle}</p>
+
+        {/* Rules and rows alternate on one 10px rhythm. */}
+        <div class="rows issuers">
+          <div class="hair" />
+          {
+            content.issuers.map((issuer) => (
+              <div class="row">
+                <span>{issuer.label}</span>
+                <span>{issuer.value}</span>
+              </div>
+            ))
+          }
+          <div class="hair" />
+          <div class="row">
+            <span>{content.truePosition.label}</span>
+            <span class="strong">{content.truePosition.value}</span>
+          </div>
+        </div>
+
+        <p class="note">{content.issuerNote}</p>
+      </div>
+    </div>
+  </Media>
+</Band>
+
+<style>
+  .split {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    /* Scaled to the frame down to the breakpoint below, where it stacks. */
+    scale: var(--fit, 1);
+    /* Not 511px and 386px: those plus the gap are a pixel wider than the
+       padded frame, so the ratio holds and the gap stays exact. */
+    grid-template-columns: 511fr 386fr;
+  }
+
+  /* Side by side, each plate is too narrow to hold its rows. One above the
+     other instead, in a frame tall enough to take them at full size. */
+  @media (width < 56.25rem) {
+    /* No ratio can hold here: the rows are a fixed height whatever the
+       width, so the frame has to take its height from them. */
+    :global(.frame:has(> .split)) {
+      --ratio: auto;
+    }
+
+    .split {
+      /* Relative, not static: the art and its grain are both out of flow, so
+         an unpositioned slot would be painted underneath them. */
+      position: relative;
+      z-index: 2;
+      grid-template-columns: 1fr;
+      scale: 1;
+      padding: 24px;
+      gap: 16px;
+    }
+  }
+
+  .bar {
+    position: relative;
+    height: 5px;
+    margin-top: 12px;
+    border-radius: 999px;
+  }
+
+  /* Every layer is a pill, not just the track. Because the layers are stacked
+     from the same left edge, each one's rounded RIGHT cap is what marks the
+     boundary with the layer behind it — a radius on the track alone would round
+     the two outer ends and leave the two joins square. Their left caps all sit
+     at the same place, so only the frontmost is ever seen. */
+  .bar span {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    border-radius: 999px;
+  }
+
+  .rule {
+    height: 1px;
+    margin-top: 12px;
+    border: 0;
+    background: rgb(255 255 255 / 0.1);
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 12px;
+    color: #fff;
+    letter-spacing: -0.02em;
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .row > :first-child {
+    opacity: 0.8;
+  }
+
+  .row > :last-child {
+    font-weight: 700;
+  }
+
+  /* On the issuer plate the figures sit at the same weight as their labels;
+     only the true position is picked out. */
+  .issuers {
+    gap: 10px;
+  }
+
+  .issuers .row > :last-child {
+    font-weight: 400;
+    opacity: 0.8;
+  }
+
+  .issuers .row > .strong {
+    font-weight: 700;
+    opacity: 1;
+  }
+
+  .hair {
+    height: 1px;
+    background: rgb(255 255 255 / 0.1);
+  }
+
+  .col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Takes whatever height is left under the rows. */
+  .note {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    margin-top: 10px;
+    padding: 0 12px;
+    border-radius: 6px;
+    background: rgb(255 255 255 / 0.14);
+    backdrop-filter: blur(8px);
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: -0.02em;
+    color: #fff;
+    opacity: 0.8;
+  }
+
+  /* At full width the box stretches into whatever the plate has left over, so
+     it needs no padding of its own. Narrower, it is only as tall as its two
+     lines and sits tight against them. */
+  @media (width < 67.5rem) {
+    .note {
+      padding: 12px 14px;
+    }
+  }
+
+  /* The plates are rectangular — their alpha is an overall translucency, not a
+     rounded cut-out — so the corners have to come from here. */
+  .plate {
+    padding: 20px;
+    border-radius: 12px;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+  }
+</style>

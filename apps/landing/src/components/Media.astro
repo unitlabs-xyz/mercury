@@ -1,0 +1,366 @@
+---
+import { Image, getImage } from "astro:assets";
+// A lossless 192px tile cut from textures/Gradient.png. The grain is uniform, so
+// one tile reproduces it exactly — and stays sharp, where re-encoding the whole
+// 1000px sheet as lossy WebP smooths the noise into mush.
+import grainTile from "../assets/textures/GrainTile.webp?url";
+
+/**
+ * The artwork slot. Holds a picture, a blurred backdrop with UI on top of it, or —
+ * until the real file lands — a gradient placeholder that names what belongs there.
+ *
+ * Pass an import from `src/assets` to get the optimised, responsive version:
+ *
+ *   import shot from "../../assets/ui/portfolio.png";
+ *   <Media label="Portfolio" src={shot} alt="The portfolio screen" />
+ *
+ * A string path (`/logos/x.svg`) is served from `public/` untouched.
+ */
+interface Props {
+  /** What belongs here. Used as the placeholder's name and the fallback alt text. */
+  label: string;
+  src?: ImageMetadata | string;
+  alt?: string;
+  tone?: keyof typeof tones;
+  ratio?: string;
+  /** Blur the artwork so a card can sit on top and stay readable. `true` is 24px. */
+  blur?: boolean | number;
+  /** Lay the grain from `assets/textures` over the top, on color-dodge. `true`
+   *  is 40%, as the design has it; pass a number to override the opacity.
+   *  The container isolates, so the blend stops here. */
+  texture?: boolean | number;
+  /** A grain sheet cut for this exact frame, in place of the tiled one. Drawn
+   *  at 100% x 100% with no repeat, and at full opacity — these exports bake
+   *  the 40% into their alpha, so dimming them again would double it up. */
+  textureSrc?: ImageMetadata;
+  /** Corner radius in px. 16 unless the design says otherwise. */
+  radius?: number;
+  /** Drift the art against the scroll. Does not combine with `blur`, which sets
+   *  its own transform. */
+  parallax?: boolean;
+  /** The box this frame's overlay was drawn to fit, `[width, height]`. Once
+   *  the frame is smaller than that on either axis the overlay is scaled to
+   *  match, so a hand-placed composition stays in proportion instead of
+   *  spilling out. Leave unset for frames whose contents reflow. */
+  fit?: [number, number];
+  /** Encoder quality. Gradient-heavy art needs more than the default 80. */
+  quality?: number;
+  /** `object-position`, for when the crop wants moving. */
+  position?: string;
+  /** Above the fold: loads eagerly and takes priority. Use once, on the hero. */
+  priority?: boolean;
+  sizes?: string;
+  class?: string;
+  /** Merged after the frame's own declarations. */
+  style?: string;
+  /** Anything else — `data-reveal` and friends — lands on the frame. */
+  [key: string]: unknown;
+}
+
+const tones = {
+  field: "linear-gradient(118deg, #8fa15a 0%, #c8bd6d 42%, #e6d79a 68%, #9db070 100%)",
+  ocean: "linear-gradient(118deg, #7fa7c9 0%, #a9c4dc 46%, #cfdce9 72%, #8fb2cf 100%)",
+  forest: "linear-gradient(118deg, #2f5d4a 0%, #4b7f5f 45%, #7ea77f 74%, #38624c 100%)",
+  sand: "linear-gradient(118deg, #b9a184 0%, #d6c3a5 44%, #e8dcc6 70%, #c0a98c 100%)",
+  teal: "linear-gradient(118deg, #0b5c66 0%, #0f7480 40%, #6ba8b0 72%, #52a3ae 100%)",
+  slate: "linear-gradient(118deg, #3a4a55 0%, #5c6f7c 46%, #8fa3ae 74%, #44555f 100%)",
+} as const;
+
+const {
+  label,
+  src,
+  alt,
+  tone = "field",
+  ratio = "16 / 9",
+  blur = false,
+  texture = false,
+  radius = 16,
+  parallax = false,
+  fit,
+  position = "center",
+  textureSrc,
+  quality = 90,
+  priority = false,
+  sizes = "(min-width: 1024px) 50vw, 100vw",
+  class: className = "",
+  style: extraStyle = "",
+  ...rest
+} = Astro.props;
+
+const isImported = typeof src === "object" && src !== null;
+// Never ask for a width the file does not have — Astro will not upscale — but
+// always offer the file's own width, or the largest step can land under the slot.
+const widths = isImported
+  ? [...new Set([...[640, 960, 1280, 1920].filter((w) => w < src.width), src.width])]
+  : [];
+const blurRadius = Number(blur) || (blur ? 24 : 0);
+// A fitted sheet already carries its opacity in the alpha; the shared tile
+// does not, so it gets the design's 40% here.
+const grainOpacity = typeof texture === "number" ? texture : textureSrc ? 1 : 0.4;
+const grainLayer = textureSrc
+  ? `background-image:url(${textureSrc.src});background-size:100% 100%;background-repeat:no-repeat`
+  : `background-image:url(${grainTile});background-size:192px 192px`;
+// A 24px copy of the same picture, blown up and blurred behind the real one,
+// so the frame holds its colour from the first paint instead of sitting empty
+// while the full image arrives. Costs a few hundred bytes and is not lazy.
+const lqip = isImported ? await getImage({ src, width: 24, quality: 32, format: "webp" }) : null;
+
+// Scale up slightly so the blur does not pull the edges in.
+const artStyle = [
+  `object-position:${position}`,
+  blurRadius ? `filter:blur(${blurRadius}px);transform:scale(1.06)` : "",
+]
+  .filter(Boolean)
+  .join(";");
+---
+
+<div
+  class:list={["frame relative isolate overflow-hidden", className]}
+  style={`--ratio-base:${ratio};border-radius:${radius}px${src ? "" : `;background:${tones[tone]}`}${extraStyle ? `;${extraStyle}` : ""}`}
+  data-placeholder={src ? undefined : label}
+  data-fit={fit ? fit.join(' ') : undefined}
+  {...rest}
+>
+  {
+    lqip ? (
+      <img class="lqip" src={lqip.src} alt="" aria-hidden="true" draggable="false" />
+    ) : null
+  }
+
+  {
+    isImported ? (
+      <Image
+        src={src}
+        alt={alt ?? label}
+        widths={widths.length ? widths : undefined}
+        sizes={sizes}
+        quality={quality}
+        loading={priority ? "eager" : "lazy"}
+        fetchpriority={priority ? "high" : "auto"}
+        decoding="async"
+        class:list={["art size-full object-cover", parallax && "parallax"]}
+        style={artStyle}
+      />
+    ) : typeof src === "string" ? (
+      <img
+        src={src}
+        alt={alt ?? label}
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
+        class:list={["size-full object-cover", parallax && "parallax"]}
+        style={artStyle}
+      />
+    ) : null
+  }
+
+  {
+    texture || textureSrc ? (
+      <span
+        class="pointer-events-none absolute inset-0 mix-blend-color-dodge"
+        style={`opacity:${grainOpacity};${grainLayer}`}
+        aria-hidden="true"
+      />
+    ) : null
+  }
+
+  <slot />
+</div>
+
+<style>
+  /* The frame's own ratio arrives inline as `--ratio-base`, and a section
+     overrides it at a breakpoint by setting `--ratio`. Two names, because an
+     inline custom property beats any stylesheet rule setting the same one —
+     the override has to come in on a channel the inline style never touches.
+     `--ratio: auto` hands the height to the slot's contents instead. */
+  .frame {
+    aspect-ratio: var(--ratio, var(--ratio-base));
+  }
+
+  /* Out of flow, so a frame set to size itself to its slot is not also being
+     given a height by the picture. With a ratio the two are equivalent. */
+  .frame > .art,
+  .frame > .lqip {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .lqip {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Overscaled so the blur does not pull the frame's edges inward. */
+    scale: 1.12;
+    filter: blur(18px);
+  }
+
+  /* Only hidden once the script is running, so a failed script leaves the
+     picture visible rather than blank. And even then, only for a moment: the
+     failsafe below brings it up whether or not the script ever arrives. */
+  :global(.js) .art {
+    opacity: 0;
+    transition: opacity 500ms var(--ease-out);
+    animation: art-failsafe 500ms var(--ease-out) 3s both;
+  }
+
+  :global(.js.watched) .art {
+    animation: none;
+  }
+
+  :global(.js) .art.ready {
+    opacity: 1;
+    animation: none;
+  }
+
+  @keyframes art-failsafe {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.js) .art {
+      transition-duration: 0s;
+    }
+  }
+</style>
+
+<script>
+  // Drift the art against the scroll for exactly as long as the frame is on
+  // screen — from its top edge crossing the bottom of the viewport to its
+  // bottom edge clearing the top — and hold still either side of that. The
+  // grain sits in a sibling and is left alone.
+  {
+    // ── Tune the drift here ──────────────────────────────────────────────────
+    // How far the art travels, as a fraction of the scroll it takes the frame
+    // to cross the screen. 0 is static; at 1 the art would stand still in the
+    // page while the frame slid past it. Raise for more movement.
+    const RATE = 0.16;
+    // The art is scaled up so the drift can never pull an edge into the frame.
+    // A short frame needs more scale than a tall one for the same travel, so
+    // cap it — past this the crop and the softness start to show.
+    const MAX_SCALE = 1.45;
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const layers = [...document.querySelectorAll<HTMLElement>(".parallax")];
+    const still = matchMedia("(prefers-reduced-motion: reduce)");
+
+    if (layers.length) {
+      type Item = { el: HTMLElement; docTop: number; span: number; travel: number; scale: number; last: string };
+      let items: Item[] = [];
+
+      // Measure once per layout change, not once per frame: reading a rect
+      // during the scroll callback forces a synchronous layout every frame.
+      // The scale falls out of the travel, so it is settled here too.
+      const measure = () => {
+        const y = window.scrollY;
+        const vh = window.innerHeight;
+        items = layers.flatMap((el) => {
+          const frame = el.parentElement;
+          if (!frame) return [];
+          const rect = frame.getBoundingClientRect();
+          const height = rect.height;
+          if (!height) return [];
+          // The scroll it takes the frame to cross the screen: in at the
+          // bottom, out at the top.
+          const span = vh + height;
+          // Peak-to-peak travel, capped by what MAX_SCALE can hide.
+          const travel = Math.min(RATE * span, (MAX_SCALE - 1) * height);
+          return [{ el, docTop: rect.top + y, span, travel, scale: 1 + travel / height, last: "" }];
+        });
+      };
+
+      const paint = () => {
+        const vh = window.innerHeight;
+        const y = window.scrollY;
+        for (const item of items) {
+          const { el, docTop, span, travel, scale } = item;
+          if (still.matches) {
+            if (item.last !== "") {
+              el.style.transform = "";
+              item.last = "";
+            }
+            continue;
+          }
+          // 0 as the top edge crosses the bottom of the screen, 1 as the bottom
+          // edge clears the top. The clamp is what stops the drift off screen:
+          // past either end the value is pinned and nothing is written.
+          const top = docTop - y;
+          const progress = Math.min(1, Math.max(0, (vh - top) / span));
+          // Centred on the frame, so the art sits true at the halfway point and
+          // leans equally either side of it.
+          const shift = ((progress - 0.5) * travel).toFixed(2);
+          // A 2D transform, deliberately — NOT translate3d. A 3D transform
+          // forces the image onto its own GPU layer, and the grain sibling then
+          // has to colour-dodge against a compositor snapshot of it. On some
+          // displays that snapshot lags the transform, so the texture appears
+          // to drift and then snap back when the layer is dropped on settle.
+          // Keeping it 2D leaves image and grain in one rasterisation pass.
+          const next = `translate(0, ${shift}px) scale(${scale.toFixed(4)})`;
+          // Lenis eases to a stop over many frames of sub-pixel movement.
+          // Skipping the unchanged write is what stops that reading as jitter.
+          if (next !== item.last) {
+            el.style.transform = next;
+            item.last = next;
+          }
+        }
+      };
+
+      const remeasure = () => {
+        measure();
+        paint();
+      };
+
+      // Lenis sets the scroll position inside its own rAF and emits `scroll`
+      // synchronously straight after. Painting there puts the transform in the
+      // same frame as the movement — listening for the native scroll event
+      // instead leaves it a frame behind, and a fast flick drags the edge into
+      // view before the transform catches up.
+      let bound: (() => void) | null = null;
+      const bind = () => {
+        const lenis = (window as any).lenis;
+        if (!lenis || bound) return;
+        lenis.on("scroll", paint);
+        bound = () => lenis.off("scroll", paint);
+        removeEventListener("scroll", onScroll);
+      };
+
+      let queued = false;
+      const onScroll = () => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          paint();
+        });
+      };
+
+      addEventListener("scroll", onScroll, { passive: true });
+      addEventListener("resize", remeasure, { passive: true });
+      addEventListener("load", remeasure);
+      addEventListener("lenis:ready", bind);
+      addEventListener("lenis:stop", () => {
+        bound?.();
+        bound = null;
+        addEventListener("scroll", onScroll, { passive: true });
+      });
+      still.addEventListener("change", remeasure);
+
+      // Artwork settling in shifts everything below it.
+      if ("ResizeObserver" in window) {
+        const ro = new ResizeObserver(remeasure);
+        for (const layer of layers) if (layer.parentElement) ro.observe(layer.parentElement);
+      }
+
+      remeasure();
+      bind();
+    }
+  }
+</script>

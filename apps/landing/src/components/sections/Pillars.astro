@@ -1,0 +1,104 @@
+---
+import Band from "../Band.astro";
+import Media from "../Media.astro";
+import Pane from "../Pane.astro";
+import StatTile from "../cards/StatTile.astro";
+import GrowArt from "../../assets/ui/Grow.png";
+import SpendArt from "../../assets/ui/Spend.png";
+import BorrowArt from "../../assets/ui/Borrow.png";
+import cardGrain from "../../assets/textures/GrowSpendBorrowTexture.png";
+import GrowPlate from "../../assets/ui/GrowInside.png";
+import SpendPlate from "../../assets/ui/SpendInside.png";
+import BorrowPlate from "../../assets/ui/BorrowInside.png";
+
+// 3x of 325.33 x 240. The export is 325x266, so the art crops a little off the
+// top and bottom rather than the card running as tall as the source.
+const FRAME = "976 / 720";
+// The pane sits 20 in from the frame's left, right and bottom, and takes its
+// height from its content plus 20 of padding. The plates stretch to fit.
+const PANE_INSET = 20;
+
+const content = [
+  {
+    stamp: "Grow",
+    title: "Money works while it waits.",
+    body: "Cash sitting between decisions still earns, and the shares you own quietly become more shares.",
+    media: { src: GrowArt, alt: "The cash balance, earning while it sits." },
+    figure: { plate: GrowPlate, w: 285, h: 120, label: "Available to invest", value: "$4,534.73", pill: "Earning 4.1%", note: "paid into this balance" },
+  },
+  {
+    stamp: "Spend",
+    title: "Spend without selling.",
+    body: "The Mercury Visa pays from a line held against your portfolio, so buying lunch never means closing a position.",
+    media: { src: SpendArt, alt: "A Visa card drawing on the same balance." },
+    figure: { plate: SpendPlate, w: 285, h: 114, label: "Mercury Visa · Platinum", dots: 3, value: "4417", note: "Spends from cash, never from shares" },
+  },
+  {
+    stamp: "Borrow",
+    title: "Borrow against your shares.",
+    body: "Borrow against what you already own. The position stays yours, and so does everything it earns while the loan is open.",
+    media: { src: BorrowArt, alt: "Borrowing power against the shares held." },
+    figure: { plate: BorrowPlate, w: 285, h: 114, label: "Borrowing power", value: "$4,280.00", note: "Against $12,480.62 held" },
+  },
+];
+---
+
+<Band id="card">
+  {/* 12px gutters, so each column is (1000 - 24) / 3. */}
+  <div class="trio grid gap-3">
+    {
+      content.map((item, i) => (
+        <article data-reveal style={`--reveal-delay:${i * 110}ms`}>
+          <p class="text-[14px] uppercase leading-6 tracking-[-0.02em] text-copy">{item.stamp}</p>
+          <h3 class="mt-3 text-[24px] font-medium leading-8 tracking-[-0.02em] text-headline">{item.title}</h3>
+          <p class="mt-3 text-[16px] leading-6 tracking-[-0.02em] text-copy">{item.body}</p>
+          <Media
+            label={item.media.alt}
+            src={item.media.src}
+            alt={item.media.alt}
+            ratio={FRAME}
+            radius={12}
+            textureSrc={cardGrain}
+            parallax
+            quality={95}
+            sizes="(min-width: 1080px) 326px, calc(100vw - 80px)"
+            class="mt-6"
+          >
+            <Pane
+              bg={item.figure.plate}
+              inset={PANE_INSET}
+              radius={14}
+              pad={20}
+            >
+              <StatTile
+                label={item.figure.label}
+                value={item.figure.value}
+                dots={item.figure.dots}
+                pill={item.figure.pill}
+                note={item.figure.note}
+              />
+            </Pane>
+          </Media>
+        </article>
+      ))
+    }
+  </div>
+</Band>
+
+<style>
+  .trio {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* A third of a narrow column leaves the figures unreadable. */
+  @media (width < 56.25rem) {
+    .trio {
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+
+    .trio :global(.frame) {
+      --ratio: 520 / 260;
+    }
+  }
+</style>

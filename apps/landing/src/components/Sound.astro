@@ -1,0 +1,108 @@
+---
+/**
+ * A short click for buttons, links and the accordion.
+ *
+ * Synthesised rather than loaded: two sine partials through a fast envelope
+ * cost nothing to ship and cannot be heard as a sample repeating. The context
+ * is only created on the first real gesture, since browsers refuse to start
+ * audio before one, and the whole thing stays off under reduced motion or
+ * once someone has muted it.
+ *
+ * Mute from the console at any time: Harbor.sound.off()
+ */
+---
+
+<script>
+  {
+    const KEY = "harbor:sound";
+    const quiet = matchMedia("(prefers-reduced-motion: reduce)");
+
+    let ctx: AudioContext | null = null;
+    let muted = false;
+    try {
+      muted = localStorage.getItem(KEY) === "off";
+    } catch {
+      /* storage blocked — treat as unmuted */
+    }
+
+    const allowed = () => !muted && !quiet.matches;
+
+    /** One soft blip: a fundamental, a quiet fifth above it, and a quick decay. */
+    const blip = (hz: number, gain: number, ms: number) => {
+      if (!allowed()) return;
+      ctx ??= new AudioContext();
+      if (ctx.state === "suspended") void ctx.resume();
+
+      const now = ctx.currentTime;
+      const level = ctx.createGain();
+      level.connect(ctx.destination);
+      // Never a hard edge: a 6ms ramp in, an exponential tail out.
+      level.gain.setValueAtTime(0.0001, now);
+      level.gain.exponentialRampToValueAtTime(gain, now + 0.006);
+      level.gain.exponentialRampToValueAtTime(0.0001, now + ms / 1000);
+
+      for (const [ratio, mix] of [
+        [1, 1],
+        [1.5, 0.28],
+      ] as const) {
+        const tone = ctx.createOscillator();
+        tone.type = "sine";
+        tone.frequency.setValueAtTime(hz * ratio, now);
+        const part = ctx.createGain();
+        part.gain.value = mix;
+        tone.connect(part).connect(level);
+        tone.start(now);
+        tone.stop(now + ms / 1000 + 0.02);
+      }
+    };
+
+    const press = () => blip(660, 0.035, 90);
+    const openPanel = () => blip(520, 0.03, 110);
+    const shutPanel = () => blip(390, 0.024, 90);
+
+    addEventListener(
+      "pointerdown",
+      (event) => {
+        const target = (event.target as Element | null)?.closest?.(
+          "a[href], button, summary, [role='button']",
+        );
+        if (!target) return;
+        if (target.closest(".faq")) {
+          target.closest(".item")?.classList.contains("open") ? shutPanel() : openPanel();
+          return;
+        }
+        press();
+      },
+      { passive: true },
+    );
+
+    // Deliberately not on every focus change — only when tabbing, so a mouse
+    // user does not hear the page click at them.
+    addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const active = document.activeElement;
+      if (active?.matches("a[href], button, summary, [role='button']")) press();
+    });
+
+    (window as any).Harbor = {
+      ...((window as any).Harbor ?? {}),
+      sound: {
+        off() {
+          muted = true;
+          try {
+            localStorage.setItem(KEY, "off");
+          } catch {}
+        },
+        on() {
+          muted = false;
+          try {
+            localStorage.setItem(KEY, "on");
+          } catch {}
+        },
+        get muted() {
+          return muted;
+        },
+      },
+    };
+  }
+</script>

@@ -1,0 +1,23 @@
+---
+import GlobeIcon from "../assets/brand/GlobeIcon.svg";
+
+/**
+ * Language control. A button until there is more than one locale to switch to —
+ * `site.locale` is the only one today, so this opens nothing yet.
+ */
+interface Props {
+  class?: string;
+}
+const { class: className = "" } = Astro.props;
+
+const current = { code: "en", label: "English" };
+---
+
+<button
+  type="button"
+  class:list={["inline-flex h-9 items-center gap-1.5", className]}
+  aria-label={`Language: ${current.label}`}
+>
+  <span class="uppercase">{current.code}</span>
+  <GlobeIcon width={14} height={14} class="text-current" aria-hidden="true" />
+</button>

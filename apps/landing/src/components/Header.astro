@@ -1,0 +1,321 @@
+---
+import { nav } from "../config/site";
+import Wordmark from "./Wordmark.astro";
+import Button from "./Button.astro";
+import LanguagePicker from "./LanguagePicker.astro";
+
+// One step for every item in the bar: 14px, -2% tracking.
+const item = "text-[14px] tracking-[-0.02em] text-muted transition-colors duration-200 hover:text-ink";
+---
+
+<header class="sticky top-0 z-40 bg-shell/85 backdrop-blur-[12px]" data-bar>
+  <div class="flex h-[var(--bar-h)] items-center justify-between column">
+    <Wordmark data-enter />
+
+    <!-- Logo aside, the bar is one right-aligned run. -->
+    <div class="flex items-center gap-5 lg:gap-9" data-enter style="--reveal-delay:90ms">
+      <nav aria-label="Main" class="hidden items-center gap-9 lg:flex">
+        {nav.map((link) => <a href={link.href} class={item}>{link.label}</a>)}
+      </nav>
+
+      {/* Both move into the sheet below the breakpoint, so the bar keeps to
+          the wordmark and the one control that opens everything else. The
+          wrappers do the hiding: the picker sets its own `display`, which
+          would beat a `hidden` passed down to it. */}
+      <div class="hidden lg:block">
+        <LanguagePicker class={item} />
+      </div>
+
+      <div class="hidden lg:block">
+        <Button href="/login" size="sm">Login</Button>
+      </div>
+
+      <button
+        type="button"
+        class="toggle lg:hidden"
+        aria-label="Open menu"
+        aria-expanded="false"
+        aria-controls="menu-sheet"
+        data-menu-toggle
+      >
+        <span class="bars" aria-hidden="true"><i></i><i></i></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+{/* Slides down from the top edge, the full width of the screen, and comes out
+    from behind the bar — which stays above it, so the logo and the close
+    control never move. */}
+<div class="scrim lg:hidden" data-menu-scrim hidden></div>
+
+<div id="menu-sheet" class="sheet lg:hidden" data-menu-sheet hidden>
+  <div class="column sheet-inner">
+    <nav aria-label="Menu" class="contents">
+      {
+        nav.map((link, i) => (
+          <a href={link.href} class="sheet-link" style={`--i:${i}`} data-menu-link>
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="sheet-foot" style={`--i:${nav.length}`}>
+      <LanguagePicker class="text-[14px] tracking-[-0.02em] text-muted" />
+      <Button href="/login" size="sm">Login</Button>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* The same material as the white button, so the two controls in the bar
+     are plainly the same object in different sizes: a #f4f4f4 edge, a 6%
+     stroke just inside it, and a face parked at its dark end until hover. */
+  .toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #f4f4f4;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+    background-image: linear-gradient(to bottom, #fff 0%, #fff 45%, #f3f3f3 50%, #fff 100%);
+    background-clip: padding-box;
+    background-size: 100% 200%;
+    background-position: 0 100%;
+    color: var(--color-ink-soft);
+    cursor: pointer;
+    transition:
+      background-position 220ms var(--ease-out),
+      box-shadow 220ms var(--ease-out),
+      translate 220ms var(--ease-out);
+  }
+
+  .toggle:hover,
+  .toggle:focus-visible {
+    background-position: 0 0;
+    translate: 0 -1px;
+    box-shadow:
+      inset 0 0 0 1px rgb(0 0 0 / 0.06),
+      0 2px 8px rgb(16 32 56 / 0.12);
+  }
+
+  .toggle:active {
+    translate: 0 0;
+    transition-duration: 90ms;
+  }
+
+  /* Two bars that fold into a cross. */
+  .bars {
+    position: relative;
+    display: block;
+    width: 15px;
+    height: 11px;
+  }
+
+  .bars i {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 15px;
+    height: 1.3px;
+    border-radius: 2px;
+    background: currentColor;
+    transition:
+      translate 260ms var(--ease-out),
+      rotate 260ms var(--ease-out);
+  }
+
+  .bars i:first-child {
+    translate: 0 -3px;
+  }
+
+  .bars i:last-child {
+    translate: 0 3px;
+  }
+
+  :global([data-menu-open]) .bars i:first-child {
+    translate: 0 0;
+    rotate: 45deg;
+  }
+
+  :global([data-menu-open]) .bars i:last-child {
+    translate: 0 0;
+    rotate: -45deg;
+  }
+
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: rgb(27 26 23 / 0.28);
+    opacity: 0;
+    /* Leaving is its own gesture: quicker, and eased in so it clears the
+       screen instead of trailing off. The open rules below restate the
+       transition with the entry timing. */
+    transition: opacity 200ms var(--ease-in);
+  }
+
+  .sheet {
+    position: fixed;
+    inset-inline: 0;
+    top: 0;
+    z-index: 30;
+    /* The bar's own height, so the links start clear of it. */
+    padding-top: var(--bar-h);
+    padding-bottom: 20px;
+    border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
+    background: var(--color-shell);
+    box-shadow: 0 18px 40px rgb(27 26 23 / 0.14);
+    translate: 0 -100%;
+    transition: translate 260ms var(--ease-in);
+  }
+
+  :global([data-menu-open]) .scrim {
+    opacity: 1;
+    transition: opacity 280ms var(--ease-out);
+  }
+
+  :global([data-menu-open]) .sheet {
+    translate: 0 0;
+    transition: translate 380ms var(--ease-out);
+  }
+
+  .sheet-inner {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sheet-link {
+    padding: 13px 0;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+    border-bottom: 1px solid var(--color-hair);
+    /* Each link follows the sheet down rather than arriving with it. */
+    opacity: 0;
+    translate: 0 -8px;
+    transition:
+      opacity 220ms linear,
+      translate 320ms var(--ease-out);
+  }
+
+  .sheet-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-top: 18px;
+    opacity: 0;
+    translate: 0 -8px;
+    /* On the way out they do not animate at all: they ride up inside the
+       sheet and are only reset once it has gone, which is why the delay
+       matches the sheet's exit. Two things moving at once read as a stutter. */
+    transition:
+      opacity 1ms linear 260ms,
+      translate 1ms linear 260ms;
+  }
+
+  :global([data-menu-open]) .sheet-foot {
+    opacity: 1;
+    translate: 0 0;
+    transition:
+      opacity 220ms linear,
+      translate 320ms var(--ease-out);
+    transition-delay: calc(120ms + var(--i) * 45ms);
+  }
+
+  :global([data-menu-open]) .sheet-link {
+    opacity: 1;
+    translate: 0 0;
+    transition:
+      opacity 220ms linear,
+      translate 320ms var(--ease-out);
+    transition-delay: calc(120ms + var(--i) * 45ms);
+  }
+
+  /* Astro scopes these selectors with the component's own attribute, which
+     outranks a `lg:hidden` on the element — so the breakpoint lives here, and
+     last, after every rule it has to beat. */
+  @media (width >= 64rem) {
+    .toggle,
+    .scrim,
+    .sheet {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bars i,
+    .scrim,
+    .sheet,
+    .sheet-link,
+    .sheet-foot {
+      transition-duration: 1ms;
+      transition-delay: 0ms;
+    }
+  }
+</style>
+
+<script is:inline>
+  (() => {
+    const toggle = document.querySelector("[data-menu-toggle]");
+    const sheet = document.querySelector("[data-menu-sheet]");
+    const scrim = document.querySelector("[data-menu-scrim]");
+    if (!toggle || !sheet || !scrim) return;
+
+    const root = document.documentElement;
+    let open = false;
+
+    const set = (next) => {
+      if (next === open) return;
+      open = next;
+
+      // Unhidden first so the panel can be laid out before it is asked to
+      // move; hidden again only once it has finished sliding back up.
+      if (open) {
+        sheet.hidden = false;
+        scrim.hidden = false;
+        // A frame between layout and the class, or the transition is skipped.
+        requestAnimationFrame(() => root.setAttribute("data-menu-open", ""));
+      } else {
+        root.removeAttribute("data-menu-open");
+      }
+
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+
+      // Lenis owns the wheel and touch handlers, so stopping it is the whole
+      // lock. Deliberately NOT `body { overflow: hidden }`: that makes the
+      // body a scroll container, and the sticky bar then anchors to the top
+      // of the document rather than the viewport — so once the page had been
+      // scrolled at all, the wordmark and the close control vanished.
+      const lenis = window.lenis;
+      if (open) lenis?.stop();
+      else lenis?.start();
+    };
+
+    sheet.addEventListener("transitionend", (e) => {
+      if (e.target !== sheet || e.propertyName !== "translate" || open) return;
+      sheet.hidden = true;
+      scrim.hidden = true;
+    });
+
+    toggle.addEventListener("click", () => set(!open));
+    scrim.addEventListener("click", () => set(false));
+    for (const link of document.querySelectorAll("[data-menu-link]")) {
+      link.addEventListener("click", () => set(false));
+    }
+    addEventListener("keydown", (e) => {
+      if (e.key === "Escape") set(false);
+    });
+    // The sheet is a small-screen affordance; widening past the breakpoint
+    // reveals the real nav and should leave nothing hanging.
+    matchMedia("(min-width: 64rem)").addEventListener("change", (e) => {
+      if (e.matches) set(false);
+    });
+  })();
+</script>

@@ -1,5 +1,8 @@
 packages:
   - "apps/*"
+  # The landing site is Astro on bun, with its own lockfile. It stays out of the
+  # pnpm workspace so the two installers never fight over apps/landing/node_modules.
+  - "!apps/landing"
   - "services/*"
   - "packages/*"
   - "tooling/*"

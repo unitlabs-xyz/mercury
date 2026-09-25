@@ -1,0 +1,124 @@
+---
+/**
+ * A label, a figure, and a note under it — the block used on the Grow, Spend
+ * and Borrow plates and on the Portfolio plate. One definition, so "same as
+ * the Grow part" keeps being true.
+ *
+ * Heights are deliberate: 18 + 4 + 36 + 4 + 16 = 78, or 82 when the note
+ * carries a pill, which is what the plates are cut to.
+ */
+interface Props {
+  label: string;
+  value: string;
+  /** Groups of four dots before the figure, for a masked card number. */
+  dots?: number;
+  /** A tinted chip at the head of the note. */
+  pill?: string;
+  note?: string;
+  class?: string;
+}
+
+const { label, value, dots, pill, note, class: className = "" } = Astro.props;
+---
+
+<div class:list={["tile", className]}>
+  <p class="tile-label">{label}</p>
+  <p class="tile-value">
+    {
+      dots ? (
+        <span class="dots">
+          {Array.from({ length: dots }).map(() => (
+            <span class="dot-group">
+              {Array.from({ length: 4 }).map(() => (
+                <span class="dot" />
+              ))}
+            </span>
+          ))}
+        </span>
+      ) : null
+    }
+    <span>{value}</span>
+  </p>
+  {
+    pill || note ? (
+      <p class="tile-note">
+        {pill ? <span class="pill">{pill}</span> : null}
+        {note ? <span>{note}</span> : null}
+      </p>
+    ) : null
+  }
+</div>
+
+<style>
+  .tile {
+    color: #fff;
+  }
+
+  /* -0.02em has to sit on each element, not on .tile: on the container it
+     resolves against the inherited 16px and is then passed down as a flat
+     -0.32px, so the 24px figure was tracked as if it were 16px. */
+  .tile-label,
+  .tile-value,
+  .tile-note {
+    letter-spacing: -0.02em;
+  }
+
+  .tile-label {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 18px;
+  }
+
+  .tile-value {
+    display: flex;
+    align-items: center;
+    /* Also the gap from the last group of dots to the digits. */
+    gap: 12px;
+    margin-top: 4px;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 36px;
+  }
+
+  .tile-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  /* The note itself carries the 80%, not the row: the pill has its own colour
+     and must not be dimmed with it. */
+  .tile-note > span:last-child {
+    opacity: 0.8;
+  }
+
+  /* 16px of line plus 2 top and bottom puts the row at 20, as measured. */
+  .pill {
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgb(203 255 180 / 0.14);
+    font-weight: 500;
+    line-height: 16px;
+    color: #78ef45;
+  }
+
+  .dots {
+    display: flex;
+    gap: 12px;
+  }
+
+  .dot-group {
+    display: flex;
+    gap: 2px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+</style>

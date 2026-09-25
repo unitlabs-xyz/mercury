@@ -1,0 +1,107 @@
+---
+import "../styles/global.css";
+import { site } from "../config/site";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import SmoothScroll from "../components/SmoothScroll.astro";
+import Reveal from "../components/Reveal.astro";
+import Sound from "../components/Sound.astro";
+
+// Preloaded because the hero is set in both of these: without it the browser only
+// discovers them after the stylesheet parses, and the title reflows.
+import diatypeRegular from "../assets/fonts/ABCDiatype-Regular.woff2?url";
+import artnikRegular from "../assets/fonts/TTArtnik-Regular.woff2?url";
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Extra JSON-LD blocks for this page, on top of the site-wide ones. */
+  schema?: Record<string, unknown>[];
+}
+
+const { title, description = site.description, schema = [] } = Astro.props;
+
+const canonical = new URL(Astro.url.pathname.replace(/\/$/, "") || "/", site.url).href;
+const ogImage = new URL("/og-image.png", site.url).href;
+const isHome = Astro.url.pathname === "/";
+
+const baseSchema: Record<string, unknown>[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: site.name,
+    url: site.url,
+    logo: new URL("/icon-512.png", site.url).href,
+    description: site.description,
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: site.name,
+    url: site.url,
+  },
+];
+---
+
+<!doctype html>
+<html lang={site.locale}>
+  <head>
+    {/* Set before first paint, so anything the scripts animate starts hidden
+        without a flash — and stays visible if the scripts never run. */}
+    <script is:inline>
+      document.documentElement.classList.add("js");
+    </script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{isHome ? site.name : `${title} — ${site.name}`}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="theme-color" content="#f7f7f5" />
+
+    <link rel="preload" href={diatypeRegular} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={artnikRegular} as="font" type="font/woff2" crossorigin />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content={site.twitter} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    {
+      [...baseSchema, ...schema].map((block) => (
+        <script type="application/ld+json" set:html={JSON.stringify(block)} is:inline />
+      ))
+    }
+  </head>
+  <body>
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-5 focus:top-5 focus:z-50 focus:rounded-[9px] focus:bg-ink focus:px-4 focus:py-2 focus:text-sm focus:text-white"
+    >
+      Skip to content
+    </a>
+    <SmoothScroll />
+    <Sound />
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+    {/* Last in the body: its inline script runs against a parsed DOM without
+        waiting on DOMContentLoaded, which deferred modules hold up. */}
+    <Reveal />
+  </body>
+</html>

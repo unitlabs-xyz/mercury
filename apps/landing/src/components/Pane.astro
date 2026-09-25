@@ -1,0 +1,80 @@
+---
+/**
+ * The frosted card that floats on a `<Media>` backdrop. Drop it in the slot:
+ *
+ *   <Media src={art} ...>
+ *     <Pane width={416} height={205}>…</Pane>
+ *   </Media>
+ *
+ * It sits above the grain, so the glass reads
+ * against a textured backdrop but its own surface stays smooth — as designed.
+ * The backdrop parallaxes underneath; the pane does not move with it.
+ */
+interface Props {
+  /** The pane's own artwork, exported at the pane's size. It carries the glass
+   *  and its rounded corners in its alpha, so it replaces the CSS wash and the
+   *  backdrop blur rather than sitting on top of them. */
+  bg?: ImageMetadata;
+  /** Size in px, taken from the design. Caps at the frame on small screens.
+   *  Omit either when `inset` or the content should decide it. */
+  width?: number;
+  height?: number;
+  /** Sit this far in from the frame's left, right and bottom edges. The pane
+   *  then takes its width from the frame and its height from its content. */
+  inset?: number;
+  radius?: number;
+  /** Sit this far up from the frame's bottom edge instead of centring. */
+  bottom?: number;
+  /** Inner padding: a number for px on all sides, or any CSS padding value. */
+  pad?: number | string;
+  class?: string;
+}
+
+const { bg, width, height, bottom, inset, radius = 16, pad = 24, class: className = "" } = Astro.props;
+
+const box = [
+  width ? `width:${width}px` : "",
+  height ? `height:${height}px` : "",
+  `border-radius:${radius}px`,
+  bg ? `background-image:url(${bg.src});background-size:100% 100%;background-repeat:no-repeat` : "",
+  `padding:${typeof pad === "number" ? `${pad}px` : pad}`,
+  bottom === undefined ? "" : `top:auto;bottom:${bottom}px;translate:-50% 0`,
+  inset === undefined
+    ? ""
+    : `top:auto;left:${inset}px;right:${inset}px;bottom:${inset}px;translate:none;width:auto`,
+]
+  .filter(Boolean)
+  .join(";");
+---
+
+<div class:list={["pane", bg ? "plated" : "glass", className]} style={box}>
+  <slot />
+</div>
+
+<style>
+  .pane {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    /* 1 unless the frame it sits in is narrower than the width the pane was
+       drawn for; see the fitter in Reveal.astro. */
+    scale: var(--fit, 1);
+    /* Content sits against the padding, top-left. The design insets it by
+       different amounts on each axis, so centring would fight it. */
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+
+    /* No border, and no inset highlight either — that reads as one. */
+    box-shadow: 0 8px 28px rgb(16 32 56 / 0.1);
+  }
+
+  /* Fallback when no artwork is supplied: approximate the glass in CSS. */
+  .glass {
+    background: rgb(255 255 255 / 0.18);
+    /* Unprefixed only — Lightning CSS adds the prefix its targets need. Writing
+       both made it keep the -webkit- one and drop the standard property. */
+    backdrop-filter: blur(24px) saturate(130%);
+  }
+</style>

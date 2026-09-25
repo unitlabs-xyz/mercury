@@ -1,0 +1,155 @@
+---
+import Band from "../Band.astro";
+import Media from "../Media.astro";
+import Check from "../Check.astro";
+import Pane from "../Pane.astro";
+import AddCash from "../cards/AddCash.astro";
+import BuyQuote from "../cards/BuyQuote.astro";
+import HoldArt from "../../assets/ui/Hold.png";
+import InvestArt from "../../assets/ui/Invest.png";
+import HoldGrain from "../../assets/textures/HoldGrain.png";
+import InvestGrain from "../../assets/textures/InvestGrain.png";
+import HoldPane from "../../assets/ui/HoldInside.png";
+import InvestPane from "../../assets/ui/InvestInside.png";
+
+// ── Layout ───────────────────────────────────────────────────────────────────
+// The row is 522 + 24 + 454 = the full 1000. Invest's *copy* stops at 426, but
+// its artwork runs to the column edge, which is how the design has it.
+const COLS = [522, 454]; // keep in step with the .cols tracks below
+const COPY = [522, 426];
+const MEDIA_H = 330;
+// ─────────────────────────────────────────────────────────────────────────────
+
+const content = {
+  heading: ["Everything your money does,", "in one account."],
+  lead: "No brokerage account, no identity check, no fiat rails. If you can hold a stablecoin, you can hold Nvidia.",
+  columns: [
+    {
+      stamp: "HOLD",
+      title: "Your money stays in your wallet.",
+      body: "Bring a wallet you already use, or make one with an email address. Harbor is an interface, not a custodian \u2014 it can neither move nor freeze what you hold.",
+      points: [
+        "USDC on Solana, in and out, with no bank in the middle.",
+        "Send and receive at any hour, including weekends",
+        "Leaving takes one transaction and nobody\u2019s permission",
+      ],
+      media: { src: HoldArt, alt: "Adding cash: a Solana deposit address with a QR code." },
+      grain: HoldGrain,
+      pane: { width: 416, height: 205, pad: "24px 31px", bg: HoldPane },
+    },
+    {
+      stamp: "INVEST",
+      title: "Turn stablecoins into real shares.",
+      body: "590 US stocks and funds, or a whole basket bought in one action and held afterwards as a single position.",
+      points: [
+        "From $5, in fractions of a share",
+        "A basket is one token you can hold and send",
+        "Set an amount to go in every week or month",
+      ],
+      media: { src: InvestArt, alt: "Buying Nvidia: two issuers quoted, with the cost broken down." },
+      grain: InvestGrain,
+      pane: { width: 347, height: 280, pad: "23px 26.5px", bg: InvestPane },
+    },
+  ],
+};
+---
+
+<Band id="how-it-works">
+  <h2 data-reveal class="display-xl text-headline">
+    {content.heading[0]}{" "}<br />{content.heading[1]}
+  </h2>
+  <p data-reveal style="--reveal-delay:80ms" class="mt-3 max-w-[min(520px,100%)] text-[16px] leading-[24px] tracking-[-0.02em] text-copy">{content.lead}</p>
+
+
+  <div class="cols mt-12 grid gap-6">
+    {
+      content.columns.map((col, i) => (
+        <div class="col" data-reveal style={`--reveal-delay:${i * 110}ms`}>
+          <div class="copy">
+          <p class="text-[14px] leading-6 tracking-[-0.02em] text-copy">{col.stamp}</p>
+          <h3 class="mt-2 text-[24px] font-medium leading-8 tracking-[-0.02em] text-headline">{col.title}</h3>
+          <p class="mt-2 text-[16px] leading-6 tracking-[-0.02em] text-copy" style={`max-width:min(${COPY[i]}px, 100%)`}>
+            {col.body}
+          </p>
+
+          {/* 12px in from the edge, then the tick, then 12px to the copy. */}
+          <ul class="mt-4 space-y-3 pl-3" style={`max-width:min(${COPY[i]}px, 100%)`}>
+            {col.points.map((point) => (
+              <li class="flex gap-3 text-[16px] leading-6 tracking-[-0.02em] text-copy">
+                <Check class="mt-[6px]" />
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+          </div>
+
+          <Media
+            label={col.media.alt}
+            src={col.media.src}
+            alt={col.media.alt}
+            ratio={`${COLS[i]} / ${MEDIA_H}`}
+            radius={12}
+            textureSrc={col.grain}
+            parallax
+            quality={95}
+            fit={[col.pane.width + 40, col.pane.height + 40]}
+            sizes={`(min-width: 1080px) ${COLS[i]}px, calc(100vw - 80px)`}
+            class="mt-4"
+            style={`--pane-ratio:${col.pane.width + 40} / ${col.pane.height + 40}`}
+          >
+            <Pane bg={col.pane.bg} width={col.pane.width} height={col.pane.height} pad={col.pane.pad}>
+              {i === 0 ? <AddCash /> : <BuyQuote />}
+            </Pane>
+          </Media>
+        </div>
+      ))
+    }
+  </div>
+</Band>
+
+<style>
+  /* COLS, as fr units: 522 and 454, which with the 24 gutter is the full
+     1000. They therefore come out at exactly their design widths here, and
+     hold that split in proportion as the column narrows. Keep in step with
+     COLS above — `fr` cannot be reached from a custom property. */
+  .cols {
+    grid-template-columns: 522fr 454fr;
+  }
+
+  /* The two runs of copy are not the same depth once the columns narrow, so
+     the art is pushed to a shared bottom edge rather than floating up with
+     whichever side happens to say less. */
+  .col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .copy {
+    /* Grows into the slack, never shrinks — shrinking would squeeze the copy
+       rather than leave the art where the column's own height puts it. */
+    flex: 1 0 auto;
+  }
+
+  /* Its height comes from its ratio, not from whatever the flex line has
+     left over. */
+  .col :global(.frame) {
+    flex-shrink: 0;
+  }
+
+  /* Stacked, each frame takes the shape of the card it holds, so the card
+     scales to the full width with an even margin instead of being letterboxed
+     by a ratio drawn for a wider column. */
+  @media (width < 56.25rem) {
+    .cols :global(.frame) {
+      --ratio: var(--pane-ratio);
+    }
+  }
+
+  /* Two columns of hand-set copy stop working before the art does. */
+  @media (width < 56.25rem) {
+    .cols {
+      grid-template-columns: 1fr;
+      gap: 48px;
+    }
+  }
+</style>

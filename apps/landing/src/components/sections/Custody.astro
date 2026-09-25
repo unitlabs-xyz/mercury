@@ -1,0 +1,165 @@
+---
+import Band from "../Band.astro";
+import Media from "../Media.astro";
+import custodianArt from "../../assets/ui/Custodian.png";
+import custodianGrain from "../../assets/textures/CustodianTextures.png";
+import custodianLayers from "../../assets/brand/CustodianLayers.png";
+
+const content = {
+  heading: ["Held by custodians.", "Controlled by you."],
+  lead: "Every token you hold is backed one for one by a real share at a regulated custodian. We never hold your keys, and no part of this product can move your money without you.",
+  media: { alt: "A share at a custodian, mirrored as a token on Solana, held in your wallet" },
+  pins: ["Your wallet", "Token on Solana", "Share at a custodian"],
+  columns: [
+    {
+      title: "Backed one for one",
+      body: "Every token maps to a share held at a named custodian. Backed and Ondo issue them; we say which one you are getting before you buy.",
+    },
+    {
+      title: "Every number has its source",
+      body: "Prices say where they were read and when. A figure with no provenance is a figure we would not show you.",
+    },
+    {
+      title: "Refused, not filled badly",
+      body: "When the token costs more than the share is worth, the order waits or is refused. A bad fill is worse than no fill.",
+    },
+  ],
+};
+---
+
+<Band>
+  {/* Two halves of the 1000 column, so the frame is a true 500. */}
+  <div class="halves grid items-center">
+    <div data-reveal>
+      <h2 class="display-xl text-headline">
+        {content.heading[0]}{" "}<br />{content.heading[1]}
+      </h2>
+      <p class="mt-3 max-w-[min(470px,100%)] text-[16px] leading-6 tracking-[-0.02em] text-copy">{content.lead}</p>
+    </div>
+    <Media
+      data-reveal
+      style="--reveal-delay:140ms"
+      label={content.media.alt}
+      src={custodianArt}
+      alt={content.media.alt}
+      ratio="500 / 235"
+      radius={12}
+      textureSrc={custodianGrain}
+      parallax
+      quality={95}
+      fit={[500, 235]}
+      sizes="(min-width: 1080px) 500px, calc(100vw - 80px)"
+    >
+      {/* 20 off the top and bottom, so the stack is 195 tall and its width
+          follows from that. The pins hang off its right edge. */}
+      <div class="diagram">
+        <img class="layers" src={custodianLayers.src} alt="" aria-hidden="true" draggable="false" />
+        <ul class="pins">
+          {
+            content.pins.map((pin) => (
+              <li>
+                <span class="pin-line" />
+                <span>{pin}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </Media>
+  </div>
+
+  <div class="trio mt-12 grid gap-3">
+    {
+      content.columns.map((col, i) => (
+        <div data-reveal style={`--reveal-delay:${i * 110}ms`}>
+          <h3 class="text-[24px] font-medium leading-8 tracking-[-0.02em] text-headline">{col.title}</h3>
+          <p class="mt-3 text-[16px] leading-6 tracking-[-0.02em] text-copy">{col.body}</p>
+        </div>
+      ))
+    }
+  </div>
+</Band>
+
+<style>
+  .halves {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* At the full 1000 the copy stops well short of the halfway line, so the
+     two sit flush as drawn. Narrower, the paragraph reaches it and needs a
+     gutter to keep off the artwork. */
+  @media (width < 67.5rem) {
+    .halves {
+      gap: 32px;
+    }
+  }
+
+  .trio {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* Half of a narrow column is not enough for either the copy or the
+     diagram, so they go one above the other and the frame keeps its size. */
+  @media (width < 56.25rem) {
+    .halves {
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+
+    .halves :global(.frame) {
+      width: 100%;
+      max-width: 500px;
+      margin-inline: auto;
+    }
+
+    .trio {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+  }
+
+  .diagram {
+    position: absolute;
+    inset: 20px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* The stack and its three labels are drawn to a 500 frame. Narrower than
+       that and the labels would run off the right edge, so the whole diagram
+       comes down together. */
+    scale: var(--fit, 1);
+  }
+
+  .layers {
+    height: 100%;
+    width: auto;
+    user-select: none;
+  }
+
+  .pins {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .pins li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 18px;
+    letter-spacing: -0.02em;
+    color: #fcfcff;
+  }
+
+  /* Starts at the stack's edge and runs to the label, so each one reads as
+     pointing at its layer. */
+  .pin-line {
+    flex-shrink: 0;
+    width: 33px;
+    height: 1px;
+    background: #fcfcff;
+    opacity: 0.5;
+  }
+</style>

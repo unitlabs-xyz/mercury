@@ -1,0 +1,23 @@
+---
+/** The supplied TickIcon: 16x13, drawn on the `live` green. */
+interface Props {
+  class?: string;
+}
+const { class: className = "" } = Astro.props;
+---
+
+<svg
+  width="16"
+  height="13"
+  viewBox="0 0 16 13"
+  fill="none"
+  aria-hidden="true"
+  class:list={["shrink-0", className]}
+>
+  <path
+    d="M0.75 8.25L4.25 11.75L14.75 0.75"
+    stroke="var(--color-live)"
+    stroke-width="1.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"></path>
+</svg>

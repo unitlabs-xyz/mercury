@@ -1,0 +1,170 @@
+---
+import qrcode from "../../assets/brand/QRCode-keyed.png?url";
+import qrMark from "../../assets/brand/QrLogoIcon.svg?url";
+
+/**
+ * The "Add cash" card that sits on the Hold backdrop. Built to the supplied
+ * SVG: a 354x154 content block, so it centres itself in the 416x205 pane.
+ *
+ * Every measurement below is taken off that SVG. Baselines land at 14, 35,
+ * 94 and 116; the QR is 106x106 at y=48; the address column starts at x=116.
+ */
+const address = "7xQmF4d8Vn...Mq1NdP4Rk9";
+---
+
+<div class="card">
+  <p class="title">Add cash</p>
+  <p class="lede">Send USDC to this address. It starts earning the moment it arrives.</p>
+
+  <div class="row">
+    <div class="qr">
+      <img
+        class="qr-code"
+        src={qrcode}
+        width="106"
+        height="106"
+        alt={`Solana deposit address ${address} as a QR code`}
+        loading="lazy"
+        decoding="async"
+        draggable="false"
+      />
+      {/* Sits over the badge the export bakes in, which is not ours. 26x25
+          covers its 24x24 plate with a pixel to spare on each side. */}
+      <img class="qr-mark" src={qrMark} width="26" height="25" alt="" aria-hidden="true" draggable="false" />
+    </div>
+
+    <div class="address">
+      <p class="label">Your Solana address</p>
+      <p class="value">
+        <span>{address}</span>
+        <button type="button" class="copy" data-address={address} aria-label="Copy the address">
+          {/* Kept on the SVG's own coordinates so the geometry is exactly as drawn. */}
+          <svg viewBox="270.667 106.625 10.75 10.75" width="11" height="11" fill="none" aria-hidden="true">
+            <path
+              d="M274.542 113.5C274.542 112.086 274.542 111.379 274.981 110.939C275.421 110.5 276.128 110.5 277.542 110.5L278.042 110.5C279.456 110.5 280.163 110.5 280.603 110.939C281.042 111.379 281.042 112.086 281.042 113.5V114C281.042 115.414 281.042 116.121 280.603 116.561C280.163 117 279.456 117 278.042 117H277.542C276.128 117 275.421 117 274.981 116.561C274.542 116.121 274.542 115.414 274.542 114L274.542 113.5Z"
+              stroke="currentColor"
+              stroke-width="0.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"></path>
+            <path
+              d="M278.542 110.5C278.541 109.021 278.518 108.256 278.088 107.731C278.005 107.63 277.912 107.537 277.811 107.454C277.258 107 276.436 107 274.792 107C273.148 107 272.326 107 271.773 107.454C271.672 107.537 271.579 107.63 271.496 107.731C271.042 108.284 271.042 109.106 271.042 110.75C271.042 112.394 271.042 113.216 271.496 113.769C271.579 113.87 271.672 113.963 271.773 114.046C272.298 114.476 273.063 114.499 274.542 114.5"
+              stroke="currentColor"
+              stroke-width="0.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"></path>
+          </svg>
+        </button>
+      </p>
+    </div>
+  </div>
+</div>
+
+<style>
+  .card {
+    width: 354px;
+    flex-shrink: 0;
+    color: #fcfcff;
+    letter-spacing: -0.02em;
+  }
+
+  /* Line boxes are sized so the baselines land where the SVG puts them —
+     14, 35, 94 and 116 — rather than on round numbers that read ~2px low. */
+  .title {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 19.4px;
+    color: #fff;
+  }
+
+  .lede {
+    margin-top: 2.6px;
+    font-size: 12px;
+    line-height: 18px;
+    color: #fff;
+  }
+
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .qr {
+    position: relative;
+    width: 106px;
+    height: 106px;
+    flex-shrink: 0;
+  }
+
+  /* No blend and no mask: scripts/qr.ts bakes the plate out to alpha 0. Both
+     of the CSS routes leave it at ~9% grey, because the plate is rgb(23,24,28)
+     rather than true black. */
+  .qr-code {
+    display: block;
+    width: 106px;
+    height: 106px;
+  }
+
+  .qr-code,
+  .qr-mark {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  /* Deliberately not blended: it carries a dark mark on white, which `lighten`
+     would erase. */
+  .qr-mark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    /* 0.7px right and down of dead centre, as the design has it. */
+    translate: calc(-50% + 0.7px) calc(-50% + 0.4px);
+  }
+
+  /* Not centred against the QR: the design sets this pair 2.5px above centre,
+     which is what puts the baselines on 94 and 116. */
+  .address {
+    margin-top: 33px;
+  }
+
+  .label {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 18px;
+    color: #fff;
+  }
+
+  .value {
+    display: flex;
+    align-items: center;
+    gap: 6.5px;
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 18px;
+    opacity: 0.8;
+  }
+
+  .copy {
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    color: currentColor;
+  }
+</style>
+
+<script>
+  // Progressive: the address reads fine without this, the button just copies it.
+  for (const button of document.querySelectorAll<HTMLButtonElement>(".copy[data-address]")) {
+    button.addEventListener("click", async () => {
+      const address = button.dataset.address;
+      if (!address) return;
+      try {
+        await navigator.clipboard.writeText(address);
+        button.setAttribute("aria-label", "Address copied");
+      } catch {
+        /* Clipboard blocked — leave the address on screen to select by hand. */
+      }
+    });
+  }
+</script>
