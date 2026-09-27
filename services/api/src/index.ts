@@ -8,7 +8,7 @@ const port = Number(process.env.PORT ?? 8787);
 
 const auth = buildAuthDeps(config);
 const deps = buildDeps(config);
-const read = buildReadDeps(auth.db, deps);
+const read = buildReadDeps(auth.db, deps, config);
 
 /**
  * The catalogue is filled on boot and then left alone: the token universe
@@ -24,4 +24,9 @@ syncCatalogue(auth.db, { catalogue: deps.catalogue, prices: deps.prices })
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
   console.log(`mercury api listening on :${info.port}`);
+  if (config.sendMode === "simulate") {
+    console.log(
+      "SEND_MODE=simulate: dry run. Signed transactions are simulated against mainnet and never sent.",
+    );
+  }
 });

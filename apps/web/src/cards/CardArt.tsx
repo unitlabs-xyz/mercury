@@ -29,17 +29,22 @@ export type Finish = keyof typeof FINISHES;
 export const CardArt = ({
   finish = "platinum",
   tier,
+  bare = false,
   className = "",
 }: {
   finish?: Finish;
   tier?: string;
+  /** Just the finish, for a thumbnail too small to carry the wordmarks. */
+  bare?: boolean;
   className?: string;
 }) => (
   <div
     className={`relative aspect-[1.586/1] w-full overflow-hidden rounded-[18px] ${className}`}
     style={{
       background: FINISHES[finish],
-      boxShadow: "0 24px 60px rgba(27,26,23,0.28), inset 0 1px 0 rgba(255,255,255,0.65)",
+      boxShadow: bare
+        ? "inset 0 0 0 1px rgba(27,26,23,0.08), inset 0 1px 0 rgba(255,255,255,0.65)"
+        : "0 24px 60px rgba(27,26,23,0.28), inset 0 1px 0 rgba(255,255,255,0.65)",
     }}
   >
     <span
@@ -50,27 +55,29 @@ export const CardArt = ({
           "linear-gradient(196deg,rgba(255,255,255,0.5) 0%,transparent 42%,rgba(27,26,23,0.12) 100%)",
       }}
     />
-    <div className="absolute inset-0 flex flex-col justify-between p-[7%]">
-      {/* Sized in em against the wordmark, so the mark scales with the card
+    {!bare && (
+      <div className="absolute inset-0 flex flex-col justify-between p-[7%]">
+        {/* Sized in em against the wordmark, so the mark scales with the card
           instead of resolving a percentage against an inline SVG. */}
-      <span
-        className={`flex items-center gap-[0.45em] text-[clamp(0.75rem,3.4cqw,1.05rem)] ${
-          finish === "basic" ? "text-white" : "text-ink"
-        }`}
-      >
-        <AnchorMark className="h-[1.25em] w-[1.25em] shrink-0" />
-        <span className="font-semibold tracking-[-0.02em]">Harbor</span>
-      </span>
-      <span className={`flex items-end justify-end ${finish === "basic" ? "text-white" : "text-ink"}`}>
-        <span className="text-right leading-none">
-          <Visa className="block text-[clamp(1.1rem,6cqw,2rem)]" />
-          {tier && (
-            <span className="mt-[2px] block text-[clamp(0.45rem,2cqw,0.6rem)] tracking-[0.14em] uppercase opacity-70">
-              {tier}
-            </span>
-          )}
+        <span
+          className={`flex items-center gap-[0.45em] text-[clamp(0.75rem,3.4cqw,1.05rem)] ${
+            finish === "basic" ? "text-white" : "text-ink"
+          }`}
+        >
+          <AnchorMark className="h-[1.25em] w-[1.25em] shrink-0" />
+          <span className="font-semibold tracking-[-0.02em]">Harbor</span>
         </span>
-      </span>
-    </div>
+        <span className={`flex items-end justify-end ${finish === "basic" ? "text-white" : "text-ink"}`}>
+          <span className="text-right leading-none">
+            <Visa className="block text-[clamp(1.1rem,6cqw,2rem)]" />
+            {tier && (
+              <span className="mt-[2px] block text-[clamp(0.45rem,2cqw,0.6rem)] tracking-[0.14em] uppercase opacity-70">
+                {tier}
+              </span>
+            )}
+          </span>
+        </span>
+      </div>
+    )}
   </div>
 );

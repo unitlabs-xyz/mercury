@@ -20,15 +20,13 @@ const DEFAULT_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Roughly the pool depth a $1,000 order needs to stay inside the policy's 1.5%
- * impact cap. An instrument where no wrapper clears this cannot be filled at a
- * normal size, so listing it would be an offer we cannot honour.
+ * impact cap. It no longer decides what is listed — every verified wrapper is —
+ * only what is *featured*: the short list a new visitor sees before searching.
  *
- * Measured 20 September 2026: every verified Backed wrapper sits above it
- * ($80k-$6.6m) and every Ondo one below ($80-$48k). Wrappers are never dropped
- * individually, only whole instruments, so the issuer comparison keeps both legs
- * wherever both exist.
+ * Measured 20 September 2026: every verified Backed wrapper on the old shelf sat
+ * above it ($80k-$6.6m) and every Ondo one below ($80-$48k).
  */
-export const MIN_LIQUIDITY_USD = D(70_000);
+export const FEATURED_LIQUIDITY_USD = D(70_000);
 
 const ISSUER_TAG: Record<Issuer, string> = { backed: "xstocks", ondo: "ondo" };
 
@@ -50,6 +48,8 @@ interface JupToken {
   readonly liquidity?: number;
   readonly holderCount?: number;
   readonly stats24h?: JupStats;
+  /** Absent when Jupiter has no market for the token at all. */
+  readonly usdPrice?: number | null;
 }
 
 export interface JupiterRegistryConfig {
@@ -86,6 +86,7 @@ const toWrapper = (t: JupToken, issuer: Issuer): CatalogueWrapper => ({
   netBuyers24h: Math.max(0, Math.round(t.stats24h?.numNetBuyers ?? 0)),
   volume24hUsd: num(t.stats24h?.buyVolume).add(num(t.stats24h?.sellVolume)),
   traders24h: Math.max(0, Math.round(t.stats24h?.numTraders ?? 0)),
+  hasMarket: typeof t.usdPrice === "number" && t.usdPrice > 0,
 });
 
 const toRef = (w: CatalogueWrapper, ticker: string): TokenRef => ({
@@ -110,6 +111,29 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
     this.now = config.now ?? Date.now;
   }
 
+  /**
+   * Every verified token in one call, then split by issuer tag. Search answers at
+   * most twenty results a query, which is what capped the old shelf at nineteen.
+   * If the full list is unavailable, the two searches still give the head of it.
+   */
+  private async universe(): Promise<readonly [readonly JupToken[], readonly JupToken[]]> {
+    try {
+      const res = await this.doFetch(`${this.base}/tokens/v2/tag?query=verified`);
+      if (!res.ok) throw new Error(`jupiter tag verified returned ${res.status}`);
+      const all = (await res.json()) as readonly JupToken[];
+      if (!Array.isArray(all) || all.length === 0) throw new Error("jupiter tag verified was empty");
+      const tagged = (issuer: Issuer) => all.filter((t) => (t.tags ?? []).includes(ISSUER_TAG[issuer]));
+      return [tagged("backed"), tagged("ondo")];
+    } catch {
+      // Ondo is allowed to fail: it is the second leg of a comparison, not the
+      // shelf. xStocks failing leaves nothing to show, so it throws.
+      return Promise.all([
+        this.search("xStock"),
+        this.search("Ondo Tokenized").catch(() => [] as readonly JupToken[]),
+      ]);
+    }
+  }
+
   private async search(query: string): Promise<readonly JupToken[]> {
     const res = await this.doFetch(`${this.base}/tokens/v2/search?query=${encodeURIComponent(query)}`);
     if (!res.ok) throw new Error(`jupiter search ${query} returned ${res.status}`);
@@ -120,13 +144,7 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
     const cached = this.cache;
     if (cached !== null && this.now() - cached.at < this.ttlMs) return cached.value;
 
-    // Ondo is allowed to fail: it is the second leg of a comparison, not the
-    // shelf. xStocks failing leaves nothing to show, so it throws.
-    const [xs, on] = await Promise.all([
-      this.search("xStock"),
-      this.search("Ondo Tokenized").catch(() => [] as readonly JupToken[]),
-    ]);
-
+    const [xs, on] = await this.universe();
     const byTicker = new Map<string, CatalogueWrapper[]>();
     const add = (tokens: readonly JupToken[], issuer: Issuer) => {
       for (const t of tokens) {
@@ -141,8 +159,9 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
     add(xs, "backed");
     add(on, "ondo");
 
+    // Everything verified is listed, however thin. Whether a thin one can fill an
+    // order is the decision engine's call at the amount asked, not the shelf's.
     const value = [...byTicker.entries()]
-      .filter(([, wrappers]) => wrappers.some((w) => w.liquidityUsd.gte(MIN_LIQUIDITY_USD)))
       .map(([ticker, wrappers]) => ({ ticker, wrappers: wrappers as readonly CatalogueWrapper[] }))
       .sort((a, b) => a.ticker.localeCompare(b.ticker));
 

@@ -5,14 +5,17 @@ import { instruments, orders, tokens } from "../db/schema.js";
 import type { CatalogueRow } from "../routes/instruments.js";
 
 /**
- * The stored catalogue, with live holder counts folded in.
+ * The stored catalogue, with the live registry figures folded in: holders,
+ * pool depth, volume, net buyers, traders, the icon, and whether Jupiter has a
+ * market for the token at all.
  *
- * Holder counts are deliberately not a column: they move every hour and nothing
- * decides anything from a stored copy of them. They come from the registry,
+ * None of these is a column: they move every hour and nothing decides anything
+ * from a stored copy of them. They come from the registry,
  * which caches the universe for an hour, so this costs one upstream call an hour
  * rather than one per request. If the registry is unreachable the counts are
  * zero and the popular shelf falls back to alphabetical — a worse shelf, not a
- * broken one.
+ * broken one. Pricing still runs, because a missing registry does not stop
+ * price/v3 answering; `hasMarket` defaults to true so it gets asked.
  */
 export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise<readonly CatalogueRow[]> {
   const [rows, live] = await Promise.all([
@@ -30,7 +33,7 @@ export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise
     catalogue.instruments().catch(() => []),
   ]);
 
-  const holdersByMint = new Map(live.flatMap((i) => i.wrappers.map((w) => [w.mint, w.holders] as const)));
+  const liveByMint = new Map(live.flatMap((i) => i.wrappers.map((w) => [w.mint, w] as const)));
 
   const wrappers = await db
     .select({
@@ -60,7 +63,13 @@ export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise
         decimals: w.decimals,
         multiplier: w.multiplier,
         isRoutable: w.isRoutable,
-        holders: holdersByMint.get(w.mint) ?? 0,
+        holders: liveByMint.get(w.mint)?.holders ?? 0,
+        icon: liveByMint.get(w.mint)?.icon ?? null,
+        liquidityUsd: liveByMint.get(w.mint)?.liquidityUsd.toFixed() ?? "0",
+        volume24hUsd: liveByMint.get(w.mint)?.volume24hUsd.toFixed() ?? "0",
+        netBuyers24h: liveByMint.get(w.mint)?.netBuyers24h ?? 0,
+        traders24h: liveByMint.get(w.mint)?.traders24h ?? 0,
+        hasMarket: liveByMint.get(w.mint)?.hasMarket ?? true,
       })),
   }));
 }

@@ -26,7 +26,9 @@ export interface CatalogueSummary {
  */
 export async function syncCatalogue(db: Db, deps: CatalogueDeps): Promise<CatalogueSummary> {
   const live = await deps.catalogue.instruments();
-  const mints = live.flatMap((i) => i.wrappers.map((w) => w.mint));
+  // Only wrappers Jupiter has a market for can be priced; asking about the rest
+  // would be hundreds of wasted ids. Their multiplier stays as stored, or one.
+  const mints = live.flatMap((i) => i.wrappers.filter((w) => w.hasMarket).map((w) => w.mint));
   const [prices, stored] = await Promise.all([
     deps.prices.pricesFor(mints),
     db.select({ mint: tokens.mint, multiplier: tokens.multiplier }).from(tokens),

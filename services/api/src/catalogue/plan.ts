@@ -61,6 +61,14 @@ const strip = (name: string): string =>
     .trim();
 
 /**
+ * Jupiter gives no sector. Funds name themselves, so those can be told apart
+ * from companies by the name alone; anything else waits for an editorial line
+ * in INSTRUMENT_META rather than a guess.
+ */
+const FUND = /\b(ETF|ETN|Trust|Fund|iShares|SPDR|Vanguard|Invesco|ProShares|Direxion|Treasury|Bond)\b/i;
+export const sectorOf = (name: string): string => (FUND.test(name) ? "Funds" : "Other");
+
+/**
  * The label is editorial; the arithmetic does not depend on it. A rise is how
  * these tokens pay a dividend. A rise that more than doubles is not a dividend
  * any issuer has ever paid, so it is called a split. A fall is something no
@@ -89,14 +97,17 @@ export function planCatalogue(input: CatalogueInput): CataloguePlan {
     if (lead === undefined) continue;
 
     const meta = INSTRUMENT_META[instrument.ticker];
+    const name = meta?.name ?? strip(lead.name);
+    // Ondo's names are the fund's own ("iShares Silver Trust"), so they classify better.
+    const ondo = instrument.wrappers.find((w) => w.issuer === "ondo");
     instruments.push({
       ticker: instrument.ticker,
-      name: meta?.name ?? strip(lead.name),
-      sector: meta?.sector ?? "Other",
+      name,
+      sector: meta?.sector ?? sectorOf(`${name} ${ondo === undefined ? "" : strip(ondo.name)}`),
       description: meta?.about ?? "",
       logoUrl: lead.icon,
-      // The registry has already dropped instruments no wrapper can fill, so
-      // anything that reaches here is tradable.
+      // Every verified instrument is listed. Whether a given amount can be filled
+      // is decided per order, and the shelf shows how deep the pool is.
       isTradable: true,
     });
 

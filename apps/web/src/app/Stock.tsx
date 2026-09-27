@@ -1,163 +1,250 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { Decision } from "@mercury/core";
+import { usePortfolio } from "../api/hooks";
+import { priceInstrument, useDecision, useInstrument, usePrices, useUniverse } from "../market/hooks";
+import { RANGES, changeFor, historyFor, type Range } from "../market/placeholder";
+import { ButtonLink } from "../ui/Button";
+import { BookmarkMark, Chevron, GlideRows, MoveChip, RangeSwitch, StatusChip } from "../ui/ds";
+import { Clock } from "../ui/icons";
 import { AppShell } from "./AppShell";
-import { BuySheet, REFUSE_COPY } from "./BuySheet";
-import { IssuerCompare } from "./IssuerCompare";
-import { LiveDot, PriceError } from "./LiveStatus";
-import { priceInstrument, useDecision, usePrices, useUniverse } from "../market/hooks";
-import { Alert, ArrowDown, ArrowUp, Clock } from "../ui/icons";
+import { BuySheet } from "./BuySheet";
+import { DotChart } from "./DotChart";
+import { usd, usdCompact, usdSigned } from "./format";
+import { RailList, Saved } from "./invest/Rail";
+import { Mark, points, type Row } from "./invest/shared";
+import { LiveStatusChip, PriceError } from "./LiveStatus";
+import { Skeleton } from "./portfolio/ui";
+import { About, Position, Stats } from "./stock/Panels";
+import { BorrowPanel } from "./stock/BorrowPanel";
+import { Routes } from "./stock/Routes";
+import { Ticket } from "./stock/Ticket";
+import { useWatchlist } from "./watchlist";
 
-const usd = (v: number) =>
-  v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
-
-/** The size the page compares at before the user names one of their own. */
-const SAMPLE = 1000;
-
-const Verdict = ({ decision }: { decision: Decision }) => {
-  if (decision.kind === "execute") return null;
-
-  if (decision.kind === "offer_queue") {
-    const premium = Number(decision.premium.toString()) * 100;
-    return (
-      <div className="flex gap-2.5 rounded-2xl border border-warn-line bg-warn-tint px-4 py-3.5">
-        <Clock className="mt-px size-4 shrink-0 text-warn" />
-        <p className="text-[13px] leading-[1.55] text-warn">
-          <span className="font-semibold">Trading {premium.toFixed(2)}% above the reference.</span> More than
-          we think you should pay. You can still buy, or let us hold the order and fill it when the price
-          comes back.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex gap-2.5 rounded-2xl border border-down-line bg-down-tint px-4 py-3.5">
-      <Alert className="mt-px size-4 shrink-0 text-down-deep" />
-      <p className="text-[13px] leading-[1.55] text-down-deep">
-        <span className="font-semibold">{REFUSE_COPY[decision.reason].title}.</span>{" "}
-        {REFUSE_COPY[decision.reason].body}
-      </p>
-    </div>
-  );
+const SINCE: Record<Range, string> = {
+  "1D": "today",
+  "1W": "past week",
+  "1M": "past month",
+  "1Y": "past year",
 };
 
 const Missing = ({ loading }: { loading: boolean }) => (
-  <AppShell current="invest" title="Invest">
-    <div className="mt-6 rounded-2xl border border-cardline bg-white px-6 py-12 text-center">
+  <AppShell current="invest" title="Invest" quiet>
+    <section className="rounded-xl bg-white px-6 py-12 text-center">
       {loading ? (
-        <p className="text-[15px] text-muted">Loading…</p>
+        <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
+          <Skeleton className="size-12 rounded-full" />
+          <Skeleton className="h-5 w-40" />
+        </div>
       ) : (
         <>
-          <p className="text-[15px] font-semibold">We don't have that one</p>
-          <p className="mt-1.5 text-[14px] text-muted">
+          <p className="text-[14px] leading-none font-medium text-ds-ink">We don't have that one</p>
+          <p className="mt-3 text-[14px] text-ds-muted">
             No verified tokenised version of that ticker exists yet.
           </p>
-          <Link
-            to="/invest"
-            className="mt-5 inline-flex h-10 items-center rounded-[10px] bg-ink px-4 text-[14px] font-semibold text-white transition-colors hover:bg-ink-soft"
-          >
+          <ButtonLink to="/invest" variant="primary" className="mt-5">
             Back to Invest
-          </Link>
+          </ButtonLink>
         </>
       )}
-    </div>
+    </section>
   </AppShell>
 );
 
+/**
+ * One stock, laid out like a broker's page and like the rest of the app: the
+ * chart and price lead, the figures a buyer checks sit under it, then where the
+ * order would go and what the thing is. The rail holds the order itself, what
+ * you already own, and similar stocks. The order amount drives the live route,
+ * so the table and the ticket always quote the same number.
+ */
 export const Stock = () => {
   const { ticker = "" } = useParams();
+  const [range, setRange] = useState<Range>("1D");
+  const [raw, setRaw] = useState("100");
   const [buying, setBuying] = useState(false);
+  const watchlist = useWatchlist();
 
+  // Any listed stock opens, featured or found by search; the rail reads the featured shelf.
+  const one = useInstrument(ticker);
   const universe = useUniverse();
-  const instrument = useMemo(
-    () => (universe.data ?? []).find((i) => i.ticker.toLowerCase() === ticker.toLowerCase()),
-    [universe.data, ticker],
-  );
+  const portfolio = usePortfolio();
+  const instrument = useMemo(() => one.data ?? undefined, [one.data]);
 
+  // Live prices for this stock's own tokens: the decision needs each multiplier and quote time.
   const mints = useMemo(() => instrument?.wrappers.map((w) => w.mint) ?? [], [instrument]);
   const prices = usePrices(mints);
   const priced = instrument ? priceInstrument(instrument, prices.data) : null;
-  const { decision, isLoading, session } = useDecision(instrument, SAMPLE, prices.data);
 
-  if (!instrument) return <Missing loading={universe.isLoading} />;
+  // Quote once the typing settles, not on every keystroke.
+  const amount = Number(raw) || 0;
+  const [settled, setSettled] = useState(amount);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(amount), 350);
+    return () => clearTimeout(t);
+  }, [amount]);
+  const { decision, isLoading, isFetching, session } = useDecision(
+    instrument,
+    Math.max(settled, 1),
+    prices.data,
+  );
 
-  const up = (priced?.todayPct ?? 0) >= 0;
-  const opensAt = session?.nextOpen
-    ? session.nextOpen.toLocaleString("en-US", {
-        weekday: "long",
-        hour: "numeric",
-        minute: "2-digit",
-        timeZone: "America/New_York",
-        timeZoneName: "short",
-      })
-    : null;
+  const fair = priced?.fair ?? null;
+  const todayPct = priced?.todayPct ?? null;
+  const series = useMemo(
+    () => (instrument ? historyFor(instrument.ticker, range, fair, todayPct) : null),
+    [instrument, fair, todayPct, range],
+  );
+  const chart = useMemo(() => (series ? points(series, range) : null), [series, range]);
+  // A pinch on the chart steps the range: out for more time, in for less.
+  const zoom = useCallback(
+    (dir: 1 | -1) =>
+      setRange((r) => RANGES[Math.min(RANGES.length - 1, Math.max(0, RANGES.indexOf(r) + dir))]!),
+    [],
+  );
+
+  if (!instrument || !priced) return <Missing loading={one.isLoading} />;
+
+  const t = instrument.ticker;
+  const change = changeFor(t, range, priced.todayPct);
+  const changeUsd = priced.fair === null ? null : priced.fair - priced.fair / (1 + change / 100);
+  const up = change >= 0;
+  const saved = watchlist.has(t);
+  const holding = portfolio.data?.holdings.find((h) => h.ticker === t);
+  const cash = portfolio.data ? Number(portfolio.data.cashUsd) : null;
+  const owned = new Set(portfolio.data?.holdings.map((h) => h.ticker));
+
+  const similar: Row[] = (universe.data ?? [])
+    .filter((i) => i.ticker !== t && i.sector === instrument.sector)
+    .concat((universe.data ?? []).filter((i) => i.ticker !== t && i.sector !== instrument.sector))
+    .slice(0, 4)
+    .map((i) => {
+      const p = priceInstrument(i, undefined);
+      return {
+        ...p,
+        change: p.todayPct ?? 0,
+        spark: historyFor(i.ticker, "1D", p.fair, p.todayPct),
+        owned: owned.has(i.ticker),
+        saved: watchlist.has(i.ticker),
+      };
+    });
+
+  const opensAt = session?.nextOpen?.toLocaleString("en-US", {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+    timeZoneName: "short",
+  });
 
   return (
-    <AppShell
-      current="invest"
-      title={instrument.name}
-      aside={
-        <span className="rounded-md bg-chip px-2 py-1 font-mono text-[12px] text-ink-soft">
-          {instrument.ticker}
-        </span>
-      }
-      actions={
-        <>
-          <LiveDot fetching={prices.isFetching} at={prices.dataUpdatedAt} />
-          <Link
-            to="/invest"
-            className="flex h-11 items-center rounded-[9px] border border-cardline px-4 text-[14px] font-medium transition-colors hover:bg-white sm:h-9 sm:px-3.5"
-          >
-            All stocks
+    <AppShell current="invest" title={instrument.name} quiet>
+      <nav aria-label="Breadcrumb" className="mb-4 flex items-center justify-between gap-3 md:mb-6">
+        <p className="flex items-center gap-2 text-[14px] leading-none text-ds-muted">
+          <Link to="/invest" className="transition-colors hover:text-ds-ink">
+            Invest
           </Link>
-        </>
-      }
-    >
-      <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        <div className="space-y-5">
-          <section className="rounded-2xl border border-cardline bg-white px-5 py-5 sm:px-6">
-            <div className="flex items-center gap-3.5">
-              {instrument.logo ? (
-                <img src={instrument.logo} alt="" width={40} height={40} className="size-10 rounded-full" />
-              ) : (
-                <span className="grid size-10 place-items-center rounded-full bg-chip text-[13px] font-bold text-ink-soft">
-                  {instrument.ticker.slice(0, 2)}
-                </span>
-              )}
-              <p className="text-[14px] text-muted">{instrument.sector}</p>
-            </div>
+          <Chevron />
+          <span className="text-ds-ink">{instrument.name}</span>
+        </p>
+        <LiveStatusChip fetching={prices.isFetching} at={prices.dataUpdatedAt} />
+      </nav>
 
-            <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="text-[32px] font-semibold tracking-[-0.02em] tabular-nums">
-                {priced?.fair === null || priced?.fair === undefined ? (
-                  <span className="inline-block h-8 w-36 animate-pulse rounded bg-chip align-middle" />
-                ) : (
-                  usd(priced.fair)
-                )}
-              </span>
-              {priced?.todayPct !== null && priced?.todayPct !== undefined && (
-                <span
-                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-[13px] font-semibold tabular-nums ${
-                    up ? "bg-up-tint text-up-deep" : "bg-down-tint text-down-deep"
+      <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
+        <div className="flex min-w-0 flex-col gap-4 md:gap-6">
+          {/* The price and its chart, set like the market cards and the performance card. */}
+          <section aria-label="Price" className="flex min-w-0 flex-col rounded-xl bg-white p-1">
+            <div className="px-5 pt-5 pb-5">
+              <div className="flex items-center justify-between gap-3">
+                {/* The page's subject, larger than a card's: a 48px logo, the name at 20
+                    with its chips beside it, and ticker and sector under it at 14. */}
+                <div className="flex min-w-0 items-center gap-4">
+                  <Mark i={instrument} size={48} />
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
+                      <h1 className="truncate text-[20px] leading-none font-medium text-ds-ink">
+                        {instrument.name}
+                      </h1>
+                      <span className="flex flex-wrap items-center gap-[5px]">
+                        <StatusChip tone="neutral" size="md">
+                          {instrument.wrappers.length} {instrument.wrappers.length === 1 ? "token" : "tokens"}
+                        </StatusChip>
+                        {!instrument.featured && (
+                          <span title="About the largest order that stays inside the 1.5% price impact limit">
+                            <StatusChip tone="warn" size="md">
+                              Up to {usdCompact(instrument.maxOrderUsd)} an order
+                            </StatusChip>
+                          </span>
+                        )}
+                        {holding && (
+                          <StatusChip tone="owned" size="md">
+                            Owned
+                          </StatusChip>
+                        )}
+                      </span>
+                    </div>
+                    <p className="mt-2 truncate text-[14px] leading-none text-ds-muted">
+                      {t} · {instrument.sector}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => watchlist.toggle(t)}
+                  aria-pressed={saved}
+                  aria-label={saved ? `Remove ${instrument.name} from watchlist` : `Save ${instrument.name}`}
+                  title={saved ? "Remove from watchlist" : "Save to watchlist"}
+                  className={`-mr-2 grid size-8 shrink-0 place-items-center rounded-lg transition-[background-color,color,transform] duration-150 hover:bg-black/[0.06] active:scale-90 ${
+                    saved ? "text-black" : "text-ds-muted hover:text-ds-ink"
                   }`}
                 >
-                  {up ? <ArrowUp className="size-3.5" /> : <ArrowDown className="size-3.5" />}
-                  {Math.abs(priced.todayPct).toFixed(2)}% today
-                </span>
-              )}
-            </div>
-            <p className="mt-2 text-[13px] text-muted">Price of one real share.</p>
+                  <BookmarkMark filled={saved} />
+                </button>
+              </div>
 
-            {session && !session.isOpen && (
-              <p className="mt-4 flex items-start gap-2 rounded-xl border border-hair bg-shell px-3.5 py-3 text-[13px] leading-[1.5] text-muted">
-                <Clock className="mt-px size-4 shrink-0 text-faint" />
-                The exchange is shut. You can still buy — the token trades all week — but we check the price
-                against the reference before we do.
-                {opensAt && ` Opens ${opensAt}.`}
+              <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  {priced.fair === null ? (
+                    <Skeleton className="h-9 w-44" />
+                  ) : (
+                    <p className="text-[36px] leading-none font-medium text-ds-ink">{usd(priced.fair)}</p>
+                  )}
+                  <p className="mt-3 flex items-center gap-1.5 text-[12px] leading-none">
+                    <MoveChip value={change} light />
+                    <span className={up ? "text-ds-up" : "text-ds-fall-light"}>{usdSigned(changeUsd)}</span>
+                    <span className="text-ds-ink/80">{SINCE[range]}</span>
+                  </p>
+                </div>
+                <RangeSwitch options={RANGES} value={range} onChange={setRange} />
+              </div>
+
+              <div className="mt-[14px] flex h-[340px]">
+                {chart ? (
+                  <DotChart series={chart} label={SINCE[range]} scale="price" onZoom={zoom} />
+                ) : (
+                  <Skeleton className="h-full w-full" />
+                )}
+              </div>
+            </div>
+
+            {session && (
+              <p className="flex items-start gap-2 rounded-lg bg-ds-panel px-5 py-[9px] text-[12px] leading-[1.45] text-ds-muted [&_svg]:mt-px">
+                <Clock className="size-3.5 shrink-0" />
+                {session.isOpen
+                  ? "US market open. The token tracks the live share price."
+                  : `US market closed${opensAt ? `, opens ${opensAt}` : ""}. The token still trades, and we check its price against the reference before you buy.`}
               </p>
             )}
           </section>
+
+          {/* What you hold of it and what it could borrow, side by side and level; one alone takes the row. */}
+          <div className="grid items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
+            {holding && <Position h={holding} />}
+            <BorrowPanel ticker={instrument.ticker} name={instrument.name} />
+          </div>
+
+          <Stats p={priced} />
+
+          <About i={instrument} />
 
           {prices.isError ? (
             <PriceError
@@ -165,51 +252,48 @@ export const Stock = () => {
               onRetry={() => void prices.refetch()}
             />
           ) : (
-            <>
-              {decision && <Verdict decision={decision} />}
-              <IssuerCompare
-                decision={decision}
-                amount={SAMPLE}
-                loading={isLoading}
-                wrappers={instrument.wrappers}
-              />
-            </>
-          )}
-
-          {instrument.about && (
-            <section className="rounded-2xl border border-cardline bg-white px-5 py-5 sm:px-6">
-              <h2 className="text-[15px] font-semibold">About</h2>
-              <p className="mt-2 text-[14px] leading-[1.6] text-ink-soft">{instrument.about}</p>
-            </section>
+            <Routes
+              decision={decision}
+              amount={Math.max(settled, 1)}
+              loading={isLoading || isFetching}
+              wrappers={instrument.wrappers}
+            />
           )}
         </div>
 
-        <aside className="lg:sticky lg:top-6">
-          <div className="rounded-2xl border border-cardline bg-white px-5 py-5">
-            <p className="text-[13px] text-muted">Buy {instrument.name}</p>
-            <p className="mt-1 text-[14px] leading-[1.5] text-ink-soft">
-              We quote every issuer for the amount you enter and take the cheaper one per real share.
-            </p>
-            <button
-              type="button"
-              onClick={() => setBuying(true)}
-              disabled={priced?.fair == null}
-              className="mt-4 h-11 w-full rounded-[10px] bg-brand text-[15px] font-semibold text-white transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-chip disabled:text-faint"
-            >
-              Buy
-            </button>
-            <button
-              type="button"
-              disabled
-              className="mt-2 h-11 w-full cursor-not-allowed rounded-[10px] border border-cardline text-[15px] font-medium text-faint"
-            >
-              Set up recurring
-            </button>
-          </div>
+        <aside className="flex flex-col gap-4 md:gap-6 xl:sticky xl:top-20">
+          <Ticket
+            name={instrument.name}
+            raw={raw}
+            onRaw={setRaw}
+            settled={settled}
+            cash={cash}
+            decision={settled === amount ? decision : null}
+            quoting={isLoading || settled !== amount}
+            fair={priced.fair}
+            onReview={() => setBuying(true)}
+          />
+          {similar.length > 0 && (
+            <RailList label="Similar" meta="Today" to="/invest" linkLabel="All stocks">
+              <GlideRows as="ul">
+                {similar.map((r) => (
+                  <li key={r.instrument.ticker}>
+                    <Saved r={r} />
+                  </li>
+                ))}
+              </GlideRows>
+            </RailList>
+          )}
         </aside>
       </div>
 
-      <BuySheet instrument={instrument} prices={prices.data} open={buying} onClose={() => setBuying(false)} />
+      <BuySheet
+        instrument={instrument}
+        prices={prices.data}
+        open={buying}
+        onClose={() => setBuying(false)}
+        initial={amount}
+      />
     </AppShell>
   );
 };

@@ -127,7 +127,7 @@ const Refuse = ({ d }: { d: RefuseDecision }) => {
 const Line = ({ k, v, mono = false }: { k: string; v: string; mono?: boolean }) => (
   <div className="flex items-baseline justify-between gap-4">
     <dt className="text-muted">{k}</dt>
-    <dd className={`text-right font-medium tabular-nums ${mono ? "font-mono text-[13px]" : ""}`}>{v}</dd>
+    <dd className={`text-right font-medium ${mono ? "font-mono text-[13px]" : ""}`}>{v}</dd>
   </div>
 );
 
@@ -138,17 +138,24 @@ export const BuySheet = ({
   prices,
   open,
   onClose,
+  initial,
 }: {
   instrument: Instrument;
   prices: PriceMap | undefined;
   open: boolean;
   onClose: () => void;
+  /** The amount already typed on the page, so confirming never means typing it twice. */
+  initial?: number | undefined;
 }) => {
   const available = Number(useMoney().data?.balanceUsd ?? 0);
   const [raw, setRaw] = useState("100");
   const [placed, setPlaced] = useState<Decision | null>(null);
 
   const amount = Number(raw) || 0;
+
+  useEffect(() => {
+    if (open && initial) setRaw(String(initial));
+  }, [open, initial]);
 
   // Quoting on every keystroke would hammer a free endpoint and flicker the
   // numbers while someone is still typing. Settle first, then quote.
@@ -223,7 +230,7 @@ export const BuySheet = ({
                 onChange={(e) => setRaw(e.target.value.replace(/[^0-9.]/g, ""))}
                 inputMode="decimal"
                 aria-label="Amount in dollars"
-                className="w-full bg-transparent text-[26px] font-semibold tabular-nums outline-none"
+                className="w-full bg-transparent text-[26px] font-semibold outline-none"
               />
             </label>
 

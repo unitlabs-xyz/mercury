@@ -49,11 +49,13 @@ export const IssuerCompare = ({
   if (!decision)
     return (
       <section className="overflow-hidden rounded-2xl border border-cardline bg-white">
-        <div className="border-b border-hair px-5 py-4 sm:px-6">
-          <h2 className="text-[15px] font-semibold">{loading ? "Quoting every issuer…" : "No quote yet"}</h2>
+        <div className="border-b border-hair px-5 pt-4 pb-3">
+          <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
+            {loading ? "Quoting every issuer…" : "No quote yet"}
+          </h2>
         </div>
         {(wrappers.length > 0 ? wrappers : [null, null]).map((w, i) => (
-          <div key={w?.mint ?? i} className="border-b border-hair px-5 py-4 last:border-b-0 sm:px-6">
+          <div key={w?.mint ?? i} className="border-b border-hair px-5 py-3 last:border-b-0">
             <span className="flex items-center gap-2">
               <span className="font-mono text-[14px] font-medium">
                 {w?.symbol ?? <span className="inline-block h-4 w-16 rounded bg-chip align-middle" />}
@@ -74,13 +76,19 @@ export const IssuerCompare = ({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-cardline bg-white">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-hair px-5 py-4 sm:px-6">
-        <h2 className="text-[15px] font-semibold">
-          {decision.candidates.length > 1 ? "We checked both issuers" : "We checked every issuer"}
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pt-4 pb-3">
+        <h2 className="text-[14px] font-semibold tracking-[-0.01em]">
+          {decision.candidates.length > 1 ? "Where your order goes" : "Your route"}
         </h2>
-        <span className="rounded-full bg-chip px-2.5 py-1 text-[12px] font-medium text-ink-soft">
-          for {usd(amount)}
-        </span>
+        <span className="text-[12px] text-faint">Quoted for {usd(amount)}</span>
+      </div>
+
+      <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.1fr)_76px] gap-3 border-y border-hair bg-shell/60 px-5 py-2 text-[11px] font-medium tracking-[0.03em] text-faint uppercase sm:grid">
+        <span>Token</span>
+        <span className="text-right">Shares per token</span>
+        <span className="text-right">Impact</span>
+        <span className="text-right">Per share</span>
+        <span />
       </div>
 
       {decision.candidates.map((c) => {
@@ -91,58 +99,51 @@ export const IssuerCompare = ({
           verdict === "dearer" && price !== null && bestPrice !== null ? (price / bestPrice - 1) * 100 : null;
 
         return (
-          <div key={c.mint} className="border-b border-hair px-5 py-4 last:border-b-0 sm:px-6">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[14px] font-medium">{c.symbol}</span>
-              <span className="truncate text-[13px] text-muted">{ISSUER_NAME[c.issuer]}</span>
+          <div
+            key={c.mint}
+            className="grid grid-cols-[minmax(0,1fr)_auto_76px] items-center gap-3 border-b border-hair px-5 py-2.5 text-[13px] last:border-b-0 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,1.1fr)_76px]"
+          >
+            <span className="min-w-0">
+              <span className="block truncate font-mono font-medium">{c.symbol}</span>
+              <span className="block truncate text-[11px] text-faint">{ISSUER_NAME[c.issuer]}</span>
+            </span>
+            <span className="hidden text-right font-mono text-[12px] text-muted sm:block">
+              ×{Number(c.multiplier.toString()).toFixed(4)}
+            </span>
+            <span className="hidden text-right text-muted sm:block">
+              {impact === null ? "No route" : `${(impact * 100).toFixed(2)}%`}
+            </span>
+            <span className="text-right">
               <span
-                className={`ml-auto shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold tracking-[0.04em] uppercase ${CHIP[verdict]}`}
+                className={`block font-semibold ${
+                  verdict === "best" ? "text-up-deep" : verdict === "refused" ? "text-down-deep" : ""
+                }`}
               >
-                {LABEL[verdict]}
+                {price === null ? "—" : usd(price)}
               </span>
-            </div>
-
-            <div className="mt-2 flex items-end justify-between gap-3">
-              <span className="shrink-0 font-mono text-[12px] whitespace-nowrap text-faint">
-                ×{Number(c.multiplier.toString()).toFixed(6)}
-                <span className="hidden sm:inline"> per token</span>
-              </span>
-              <span className="text-right">
-                <span
-                  className={`block text-[15px] font-semibold tabular-nums ${
-                    verdict === "best" ? "text-up-deep" : verdict === "refused" ? "text-down-deep" : ""
-                  }`}
-                >
-                  {price === null ? "—" : `${usd(price)} per share`}
+              {dearer !== null && dearer >= 0.01 && (
+                <span className="block text-[11px] text-faint">
+                  +{dearer.toFixed(dearer < 10 ? 2 : 0)}% dearer
                 </span>
-                <span className="mt-0.5 block text-[12px] tabular-nums text-muted">
-                  {impact === null ? "no route" : `${(impact * 100).toFixed(2)}% impact`}
-                  {dearer !== null && dearer >= 0.01 && (
-                    <> · +{dearer.toFixed(dearer < 10 ? 2 : 0)}% dearer</>
-                  )}
-                </span>
-              </span>
-            </div>
+              )}
+            </span>
+            <span
+              className={`justify-self-end rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.04em] uppercase ${CHIP[verdict]}`}
+            >
+              {LABEL[verdict]}
+            </span>
           </div>
         );
       })}
 
-      <p className="border-t border-hair bg-shell px-5 py-3.5 text-[13px] leading-[1.5] text-muted sm:px-6">
-        {decision.candidates.some((c) => !c.viable) ? (
-          <>
-            {decision.candidates
-              .filter((c) => !c.viable)
-              .map((c) => `${c.symbol}: ${REJECTION[c.rejection ?? ""] ?? "unusable"}`)
-              .join(" · ")}
-            . Prices are per real share, corrected by each token's multiplier — comparing raw token prices
-            gets the answer wrong.
-          </>
-        ) : (
-          <>
-            Prices are per real share, corrected by each token's multiplier — comparing raw token prices gets
-            the answer wrong. It is worked out again whenever you change the amount.
-          </>
-        )}
+      <p className="border-t border-hair bg-shell/60 px-5 py-2.5 text-[11px] leading-[1.5] text-muted">
+        {decision.candidates.some((c) => !c.viable) &&
+          `${decision.candidates
+            .filter((c) => !c.viable)
+            .map((c) => `${c.symbol}: ${REJECTION[c.rejection ?? ""] ?? "unusable"}`)
+            .join(" · ")}. `}
+        Prices are per real share, corrected by each token's multiplier, and re-quoted whenever the amount
+        changes.
       </p>
     </section>
   );

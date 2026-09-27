@@ -4,22 +4,10 @@ import { EASE } from "../motion/config";
 import { AnchorMark } from "./Logo";
 
 /**
- * Modal shell: escape and backdrop close it, Tab stays inside, the page stops
- * scrolling behind it, and focus returns to whatever opened it.
+ * What every overlay does while open: Escape closes it, Tab stays inside it,
+ * the page stops scrolling behind it, and focus returns to whatever opened it.
  */
-export const Dialog = ({
-  open,
-  onClose,
-  labelledBy,
-  children,
-  className = "",
-}: {
-  open: boolean;
-  onClose: () => void;
-  labelledBy: string;
-  children: ReactNode;
-  className?: string;
-}) => {
+const useOverlay = (open: boolean, onClose: () => void) => {
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
 
@@ -58,6 +46,25 @@ export const Dialog = ({
     };
   }, [open, onClose]);
 
+  return panel;
+};
+
+/** Modal shell, centred over the page. */
+export const Dialog = ({
+  open,
+  onClose,
+  labelledBy,
+  children,
+  className = "",
+}: {
+  open: boolean;
+  onClose: () => void;
+  labelledBy: string;
+  children: ReactNode;
+  className?: string;
+}) => {
+  const panel = useOverlay(open, onClose);
+
   return (
     <AnimatePresence>
       {open && (
@@ -82,7 +89,7 @@ export const Dialog = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.99 }}
             transition={{ duration: 0.32, ease: EASE }}
-            className={`w-full overflow-hidden rounded-[20px] bg-white shadow-[0_24px_60px_rgba(27,26,23,0.28)] ${className}`}
+            className={`w-full overflow-hidden rounded-[20px] bg-white ${className}`}
           >
             {children}
           </motion.div>
@@ -91,6 +98,88 @@ export const Dialog = ({
     </AnimatePresence>
   );
 };
+
+/**
+ * A panel that slides in from the right edge, the full height of the window:
+ * for a task that needs the page beside it (borrowing, with the loan's figures
+ * still in view). The page dims a little behind it; a click there, Escape or
+ * the close button put it away. Full width on a phone.
+ */
+export const SidePanel = ({
+  open,
+  onClose,
+  labelledBy,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  labelledBy: string;
+  children: ReactNode;
+}) => {
+  const panel = useOverlay(open, onClose);
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-100 flex justify-end bg-black/20"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          onMouseDown={(e: MouseEvent<HTMLDivElement>) => {
+            if (e.target === e.currentTarget) onClose();
+          }}
+        >
+          <motion.div
+            ref={panel}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={labelledBy}
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ duration: 0.34, ease: EASE }}
+            className="flex h-full w-full max-w-[460px] flex-col overflow-y-auto bg-white sm:m-2 sm:h-[calc(100%-16px)] sm:rounded-xl"
+          >
+            {children}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+/** A side panel's title row: the title at 20, one line of context under it, and the close button. */
+export const PanelHeader = ({
+  id,
+  title,
+  sub,
+  onClose,
+}: {
+  id: string;
+  title: ReactNode;
+  sub?: ReactNode;
+  onClose: () => void;
+}) => (
+  <header className="flex items-start justify-between gap-3 px-6 pt-6">
+    <div className="min-w-0">
+      <h2 id={id} className="text-[20px] leading-none font-medium text-ds-ink">
+        {title}
+      </h2>
+      {sub && <p className="mt-3 text-[14px] leading-[1.45] text-ds-muted">{sub}</p>}
+    </div>
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label="Close"
+      className="-mt-1 -mr-2 grid size-8 shrink-0 place-items-center rounded-lg text-ds-muted transition-colors hover:bg-black/[0.06] hover:text-ds-ink"
+    >
+      <svg viewBox="0 0 12 12" width={12} height={12} fill="none" aria-hidden>
+        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+      </svg>
+    </button>
+  </header>
+);
 
 /**
  * The sheet the form is about to be written onto: ruled ledger paper with a

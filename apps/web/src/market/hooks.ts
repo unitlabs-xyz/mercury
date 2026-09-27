@@ -9,12 +9,7 @@ import {
   type Decision,
   type Issuer,
 } from "@mercury/core";
-import {
-  JupiterLite,
-  JupiterRegistry,
-  type CatalogueInstrument,
-  type CatalogueWrapper,
-} from "@mercury/chain";
+import { JupiterLite, JupiterRegistry } from "@mercury/chain";
 import {
   JupiterMarket,
   KaminoCredit,
@@ -22,7 +17,8 @@ import {
   type CreditMarket as ChainCreditMarket,
   type TokenPrice,
 } from "@mercury/market";
-import { ABOUT, DISPLAY_NAME, SECTOR } from "./meta";
+import type { Instrument as WireInstrument } from "@mercury/types";
+import { ApiError, apiFetch } from "../api/client";
 
 /**
  * The app's view of the market.
@@ -66,6 +62,12 @@ export type Instrument = {
   readonly about: string;
   readonly logo?: string;
   readonly wrappers: readonly Wrapper[];
+  /** On the short shelf. Everything else is found by search. */
+  readonly featured: boolean;
+  /** About the largest order the deepest pool takes inside the impact cap. The quote decides. */
+  readonly maxOrderUsd: number;
+  /** The server's price when it sent the list, so a shelf needs no second request. */
+  readonly quote: { readonly fair: number | null; readonly todayPct: number | null };
 };
 
 export type Session = {
@@ -84,40 +86,101 @@ export type CreditMarket = {
 
 export { XSTOCKS_MARKET } from "@mercury/market";
 
-const toWrapper = (w: CatalogueWrapper): Wrapper => ({
-  mint: w.mint,
-  symbol: w.symbol,
-  issuer: w.issuer,
-  decimals: w.decimals,
-  ...(w.icon ? { icon: w.icon } : {}),
-  liquidity: w.liquidityUsd.toNumber(),
-  holders: w.holders,
-  netBuyers24h: w.netBuyers24h,
-  volume24h: w.volume24hUsd.toNumber(),
-  traders24h: w.traders24h,
-});
-
-/** Jupiter names the token ("NVIDIA xStock"); the company's name is ours. */
-const toInstrument = (i: CatalogueInstrument): Instrument => {
-  const wrappers = i.wrappers.map(toWrapper);
-  const logo = wrappers.find((w) => w.issuer === "backed")?.icon;
+const toInstrument = (i: WireInstrument & { description?: string | null }): Instrument => {
+  const wrappers: Wrapper[] = i.wrappers.map((w) => ({
+    mint: w.mint,
+    symbol: w.symbol,
+    issuer: w.issuer,
+    decimals: w.decimals,
+    ...(w.icon ? { icon: w.icon } : {}),
+    liquidity: Number(w.liquidityUsd),
+    holders: w.holders,
+    netBuyers24h: w.netBuyers24h,
+    volume24h: Number(w.volume24hUsd),
+    traders24h: w.traders24h,
+  }));
   return {
     ticker: i.ticker,
-    name: DISPLAY_NAME[i.ticker] ?? i.ticker,
-    sector: SECTOR[i.ticker] ?? "Other",
-    about: ABOUT[i.ticker] ?? "",
-    ...(logo ? { logo } : {}),
+    name: i.name,
+    sector: i.sector ?? "Other",
+    about: i.description ?? "",
+    ...(i.logoUrl ? { logo: i.logoUrl } : {}),
     wrappers,
+    featured: i.featured,
+    maxOrderUsd: Number(i.maxOrderUsd),
+    quote: { fair: Number(i.pricePerShare), todayPct: Number(i.changePct24h) },
   };
 };
 
-/** The token set changes when an issuer lists something. Hours, not seconds. */
+/**
+ * The website lists only what someone could actually buy. An instrument whose
+ * every pool is empty has a price and nothing behind it; the API still returns
+ * it, because other clients may want to say so, but a shelf should not.
+ */
+const buyable = (i: Instrument) => i.wrappers.some((w) => w.liquidity > 0);
+
+const list = async (query = ""): Promise<Instrument[]> =>
+  (await apiFetch<{ instruments: WireInstrument[] }>(`/v1/instruments${query}`)).instruments
+    .map(toInstrument)
+    .filter(buyable);
+
+/**
+ * The featured shelf, from our API: the instruments deep enough to fill a
+ * normal order. Everything else is one search away. Polled, because the list
+ * carries each price and a shelf should not go stale while it is open.
+ */
 export const useUniverse = () =>
   useQuery({
-    queryKey: ["universe"],
+    queryKey: ["instruments", "featured"],
+    queryFn: () => list(),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+
+/** Any instrument by name or ticker, across the whole catalogue. */
+export const useInstrumentSearch = (q: string) =>
+  useQuery({
+    queryKey: ["instruments", "search", q],
+    queryFn: () => list(`?q=${encodeURIComponent(q)}`),
+    enabled: q.length > 0,
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
+  });
+
+/** Exactly these tickers, featured or not — a portfolio's holdings. */
+export const useInstruments = (tickers: readonly string[]) => {
+  const key = [...tickers].sort().join(",");
+  return useQuery({
+    queryKey: ["instruments", "tickers", key],
     queryFn: async () =>
-      (await registry.instruments()).map(toInstrument).sort((a, b) => a.name.localeCompare(b.name)),
-    staleTime: 60 * 60 * 1000,
+      (
+        await apiFetch<{ instruments: WireInstrument[] }>(
+          `/v1/instruments?tickers=${encodeURIComponent(key)}`,
+        )
+      ).instruments.map(toInstrument),
+    enabled: key.length > 0,
+    staleTime: 60_000,
+  });
+};
+
+/** One instrument's page. Null when we do not list it, or when nothing could buy it. */
+export const useInstrument = (ticker: string) =>
+  useQuery({
+    queryKey: ["instruments", "one", ticker.toUpperCase()],
+    queryFn: async (): Promise<Instrument | null> => {
+      try {
+        const body = await apiFetch<{ instrument: WireInstrument }>(
+          `/v1/instruments/${encodeURIComponent(ticker)}`,
+        );
+        const i = toInstrument(body.instrument);
+        return buyable(i) ? i : null;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+    enabled: ticker.length > 0,
+    staleTime: 30_000,
   });
 
 export const usePrices = (mints: readonly string[]) =>
@@ -174,8 +237,8 @@ export const priceInstrument = (instrument: Instrument, prices: PriceMap | undef
   const sum = (pick: (w: Wrapper) => number) => instrument.wrappers.reduce((n, w) => n + pick(w), 0);
   return {
     instrument,
-    fair: p?.pricePerShare?.toNumber() ?? null,
-    todayPct: p?.changePct24h?.toNumber() ?? null,
+    fair: p?.pricePerShare?.toNumber() ?? instrument.quote.fair,
+    todayPct: p?.changePct24h?.toNumber() ?? instrument.quote.todayPct,
     liquidity: sum((w) => prices?.get(w.mint)?.liquidityUsd.toNumber() ?? w.liquidity),
     observedAt: p?.observedAt ?? null,
     holders: sum((w) => w.holders),

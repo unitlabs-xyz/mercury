@@ -61,7 +61,7 @@ export const Welcome = () => {
         <ol className="mt-8 grid gap-6">
           {STEPS.map((s, i) => (
             <li key={s.title} className="flex gap-4">
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand-tint text-[13px] font-semibold text-brand-deep tabular-nums">
+              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand-tint text-[13px] font-semibold text-brand-deep">
                 {i + 1}
               </span>
               <div>

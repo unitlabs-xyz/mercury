@@ -35,3 +35,14 @@ export const shares = (v: string | number | null | undefined): string =>
 export const isUp = (v: string | number | null | undefined): boolean => Number(v ?? 0) >= 0;
 
 export const count = (n: number): string => new Intl.NumberFormat("en-US").format(n);
+
+/** For a figure that only needs its size: $1.83M, $48.2k, $912. */
+export const usdCompact = (v: string | number | null | undefined): string =>
+  v === null || v === undefined || v === ""
+    ? "—"
+    : new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        notation: "compact",
+        maximumFractionDigits: Math.abs(Number(v)) >= 1000 ? 1 : 0,
+      }).format(Number(v));

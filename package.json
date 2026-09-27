@@ -18,7 +18,8 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "check": "pnpm lint && pnpm format:check && pnpm -r typecheck && pnpm -r test"
+    "check": "pnpm lint && pnpm format:check && pnpm -r typecheck && pnpm -r test",
+    "dev:web:sample": "pnpm --filter @mercury/web dev:sample"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

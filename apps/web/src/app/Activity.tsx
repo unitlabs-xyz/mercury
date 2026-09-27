@@ -1,93 +1,71 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useId, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { EASE } from "../motion/config";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronRight,
-  Clock,
-  Close,
-  Grid,
-  List,
-  Plus,
-  Refresh,
-  Repeat,
-  Search,
-  Trend,
-  Download,
-} from "../ui/icons";
-import { type Event, type EventKind, type Group } from "./activity-data";
+import { Button, ButtonLink } from "../ui/Button";
+import { Chevron, InfoTip, Pagination, StatusChip } from "../ui/ds";
+import { Close, Download, Search } from "../ui/icons";
+import { type Event, type Group } from "./activity-data";
 import { downloadCsv } from "./activity-export";
 import { MONTH_OPTIONS, TYPE_OPTIONS, filterEvents, groupByDay, yearOptions } from "./activity-filters";
-import { useActivityFeed } from "../api/hooks";
-import { toEvent } from "./activity-map";
+import { useEvents } from "./useEvents";
+import { EVENT_ICON } from "./portfolio/Feed";
 import { Select } from "../ui/Select";
 import { useActivityParams } from "./useActivityParams";
 import { AppShell } from "./AppShell";
 
-const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
-  buy: { icon: <Trend className="size-4" />, tone: "bg-brand-tint text-brand" },
-  sell: { icon: <ArrowDown className="size-4" />, tone: "bg-chip text-ink-soft" },
-  basket: { icon: <Grid className="size-4" />, tone: "bg-brand-tint text-brand" },
-  recurring: { icon: <Repeat className="size-4" />, tone: "bg-brand-tint text-brand" },
-  dividend: { icon: <Refresh className="size-4" />, tone: "bg-up-tint text-up-deep" },
-  receive: { icon: <ArrowDown className="size-4" />, tone: "bg-up-tint text-up-deep" },
-  send: { icon: <ArrowUp className="size-4" />, tone: "bg-chip text-ink-soft" },
-  interest: { icon: <Plus className="size-4" />, tone: "bg-up-tint text-up-deep" },
-  queued: { icon: <Clock className="size-4" />, tone: "bg-warn-tint text-warn" },
-};
-
+/** "+$12.42", "−$200.00": one true sign, money in green. */
 const Amount = ({ event }: { event: Event }) => {
   if (!event.amount) return null;
-  const tone = event.flow === "in" ? "text-up-deep" : event.flow === "out" ? "text-ink" : "text-up-deep";
   const sign = event.flow === "in" ? "+" : event.flow === "out" ? "−" : "";
   return (
-    <span className={`text-[14px] font-semibold tabular-nums ${tone}`}>
+    <span
+      className={`text-[14px] leading-none font-medium whitespace-nowrap ${event.flow === "out" ? "text-ds-ink" : "text-ds-up"}`}
+    >
       {sign}
       {event.amount}
     </span>
   );
 };
 
+/**
+ * One event: a 60px row on the grey panel, as the list rows are, that turns
+ * white under the pointer and opens in place to its details and the
+ * transaction behind it.
+ */
 const Row = ({ event }: { event: Event }) => {
   const [open, setOpen] = useState(false);
   const id = useId();
-  const look = LOOK[event.kind];
-
   return (
-    <div className="border-b border-hair last:border-b-0">
+    <div className={`rounded-md transition-colors ${open ? "bg-white" : "hover:bg-white"}`}>
       <button
         type="button"
         aria-expanded={open}
         aria-controls={`event-${id}`}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3.5 px-5 py-4 text-left transition-colors hover:bg-shell sm:px-6"
+        className="flex h-15 w-full items-center gap-3 px-4 text-left"
       >
-        <span className={`grid size-9 shrink-0 place-items-center rounded-full ${look.tone}`}>
-          {look.icon}
-        </span>
-
+        <span className="shrink-0 [&>svg]:size-9">{EVENT_ICON[event.kind]}</span>
         <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[15px] font-semibold">{event.title}</span>
+          <span className="flex min-w-0 items-center gap-[5px]">
+            <span className="truncate text-[14px] leading-[18px] font-medium text-ds-ink">{event.title}</span>
             {event.pending && (
-              <span className="rounded bg-warn-tint px-1.5 py-0.5 text-[11px] font-semibold tracking-[0.06em] text-warn uppercase">
-                Pending
+              <span className="shrink-0">
+                <StatusChip tone="pending">Pending</StatusChip>
               </span>
             )}
           </span>
-          <span className="mt-0.5 block text-[13px] leading-[1.45] text-muted">{event.sub}</span>
+          {event.sub && (
+            <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">{event.sub}</span>
+          )}
         </span>
-
         <span className="flex shrink-0 items-center gap-3">
           <Amount event={event} />
           <motion.span
             animate={{ rotate: open ? 90 : 0 }}
             transition={{ duration: 0.25, ease: EASE }}
-            className="inline-flex text-faint"
+            className="inline-flex text-ds-muted"
           >
-            <ChevronRight className="size-4" />
+            <Chevron />
           </motion.span>
         </span>
       </button>
@@ -100,46 +78,52 @@ const Row = ({ event }: { event: Event }) => {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{
-              height: { duration: 0.3, ease: EASE },
-              opacity: { duration: 0.22, delay: open ? 0.06 : 0 },
-            }}
+            transition={{ height: { duration: 0.3, ease: EASE }, opacity: { duration: 0.2 } }}
             className="overflow-hidden"
           >
-            <div className="mx-5 mb-5 rounded-xl bg-shell p-5 sm:mx-6">
-              <dl className="grid gap-2.5">
-                {event.details.map((d) => (
-                  <div key={d.label} className="flex items-baseline justify-between gap-6">
-                    <dt className="text-[13px] text-muted">{d.label}</dt>
-                    <dd
-                      className={`text-right text-[13px] font-medium tabular-nums ${
-                        d.tone === "up"
-                          ? "text-up-deep"
-                          : d.tone === "down"
-                            ? "text-down-deep"
-                            : d.tone === "muted"
-                              ? "text-faint"
-                              : "text-ink"
-                      }`}
+            <div className="px-4 pb-4 pl-[64px]">
+              {event.details.length > 0 && (
+                <dl className="flex flex-col gap-3">
+                  {event.details.map((d) => (
+                    <div
+                      key={d.label}
+                      className="flex h-5 items-center justify-between gap-6 text-[14px] leading-none"
                     >
-                      {d.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-
+                      <dt className="text-ds-muted">{d.label}</dt>
+                      <dd
+                        className={`text-right font-medium ${
+                          d.tone === "up"
+                            ? "text-ds-up"
+                            : d.tone === "down"
+                              ? "text-ds-down"
+                              : d.tone === "muted"
+                                ? "text-ds-muted"
+                                : "text-ds-ink"
+                        }`}
+                      >
+                        {d.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
               {event.signature ? (
                 <a
                   href={`https://solscan.io/tx/${event.signature}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-4 flex items-center justify-between gap-4 border-t border-cardline pt-4 text-[12px] text-brand underline-offset-4 hover:underline"
+                  className={`${event.details.length ? "mt-4" : ""} flex items-center justify-between gap-4 rounded-lg bg-ds-panel px-3 py-2.5 text-[12px] text-ds-muted transition-colors hover:text-ds-ink`}
                 >
                   <span className="truncate font-mono">{event.signature}</span>
-                  <span className="shrink-0 font-semibold">View on chain</span>
+                  <span className="flex shrink-0 items-center gap-[5px] font-medium text-ds-link">
+                    View on chain
+                    <Chevron />
+                  </span>
                 </a>
               ) : (
-                <p className="mt-4 border-t border-cardline pt-4 text-[12px] text-faint">
+                <p
+                  className={`${event.details.length ? "mt-4" : ""} rounded-lg bg-ds-panel px-3 py-2.5 text-[12px] text-ds-muted`}
+                >
                   Nothing on chain yet. The order rests until its price is met.
                 </p>
               )}
@@ -151,40 +135,12 @@ const Row = ({ event }: { event: Event }) => {
   );
 };
 
-const NoMatch = ({ onClear }: { onClear: () => void }) => (
-  <div className="grid place-items-center px-6 py-16 text-center">
-    <span className="grid size-12 place-items-center rounded-full bg-shell text-faint">
-      <Search className="size-5" />
-    </span>
-    <p className="mt-4 text-[16px] font-semibold">Nothing matches that</p>
-    <p className="mt-1.5 max-w-[38ch] text-[14px] leading-[1.5] text-muted text-pretty">
-      Try a different word, or widen the filter.
-    </p>
-    <button
-      type="button"
-      onClick={onClear}
-      className="mt-5 rounded-[9px] border border-btnline bg-white px-4 py-2 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
-    >
-      Clear filters
-    </button>
-  </div>
-);
-
-const Empty = () => (
-  <div className="grid place-items-center px-6 py-20 text-center">
-    <span className="grid size-12 place-items-center rounded-full bg-shell text-faint">
-      <List className="size-5" />
-    </span>
-    <p className="mt-4 text-[16px] font-semibold">Nothing has happened yet</p>
-    <p className="mt-1.5 max-w-[42ch] text-[14px] leading-[1.5] text-muted text-pretty">
-      Every buy, sell, dividend and transfer will show here, each with the transaction behind it one tap away.
-    </p>
-    <Link
-      to="/money"
-      className="mt-6 rounded-[9px] bg-brand px-5 py-2.5 max-sm:min-h-11 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
-    >
-      Add cash to start
-    </Link>
+/** An empty panel: one line and, where it helps, one action. */
+const Blank = ({ title, body, action }: { title: string; body: string; action?: ReactNode }) => (
+  <div className="flex flex-col items-center px-6 py-14 text-center">
+    <p className="text-[14px] leading-none font-medium text-ds-ink">{title}</p>
+    <p className="mt-3 max-w-[44ch] text-[14px] leading-[1.45] text-ds-muted">{body}</p>
+    {action && <div className="mt-5">{action}</div>}
   </div>
 );
 
@@ -192,9 +148,7 @@ const PER_PAGE = 10;
 
 export const Activity = () => {
   const { group, year, month, query, page, write, reset } = useActivityParams();
-  const feed = useActivityFeed();
-
-  const events = useMemo(() => (feed.data?.items ?? []).map(toEvent), [feed.data]);
+  const { events } = useEvents();
   const total = events.length;
 
   const filtered = useMemo(
@@ -213,28 +167,33 @@ export const Activity = () => {
   const to = Math.min(current * PER_PAGE, filtered.length);
 
   return (
-    <AppShell
-      current="activity"
-      title="Activity"
-      aside={
-        <span className="text-[13px] text-muted tabular-nums">
-          {narrowed ? `${filtered.length} of ${total} events` : `${total} events`}
-        </span>
-      }
-      actions={
-        <button
-          type="button"
-          onClick={() => downloadCsv(filtered)}
-          disabled={filtered.length === 0}
-          className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint"
-        >
-          <Download className="size-[15px]" />
-          Export CSV
-        </button>
-      }
-    >
-      <div className="mt-6 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div className="flex flex-wrap gap-2">
+    <AppShell current="activity" title="Activity" quiet>
+      <section aria-label="Activity" className="min-w-0 rounded-xl bg-white p-1">
+        <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 text-[14px] leading-none">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h1 className="text-[20px] leading-none font-medium text-ds-ink">Activity</h1>
+            <span className="text-ds-muted">
+              {filtered.length === 0
+                ? narrowed
+                  ? `0 of ${total}`
+                  : ""
+                : pages > 1
+                  ? `${from}–${to} of ${filtered.length}`
+                  : narrowed
+                    ? `${filtered.length} of ${total}`
+                    : `${total} ${total === 1 ? "event" : "events"}`}
+            </span>
+            <InfoTip label="About this list" align="start">
+              Every row links to the transaction on Solana. Nothing here is a number you have to take on
+              trust.
+            </InfoTip>
+          </div>
+          <Button icon={<Download />} onClick={() => downloadCsv(filtered)} disabled={filtered.length === 0}>
+            Export CSV
+          </Button>
+        </header>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1 px-5">
           <Select
             label="Type"
             value={group}
@@ -256,101 +215,69 @@ export const Activity = () => {
             onChange={(v) => write({ month: v })}
             widthClass="w-[168px]"
           />
+          <label className="flex h-8 w-full items-center gap-2 rounded-lg bg-ds-panel px-3 text-ds-muted sm:ml-auto sm:w-[237px]">
+            <Search className="size-3.5 shrink-0" />
+            <input
+              value={query}
+              // Typing replaces rather than pushes, so Back does not walk
+              // through every keystroke.
+              onChange={(e) => write({ query: e.target.value }, { replace: true })}
+              type="search"
+              placeholder="Search events"
+              aria-label="Search activity"
+              className="min-w-0 flex-1 bg-transparent text-[14px] text-ds-ink outline-none placeholder:text-ds-muted"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => write({ query: "" }, { replace: true })}
+                aria-label="Clear search"
+                className="shrink-0 text-ds-muted transition-colors hover:text-ds-ink"
+              >
+                <Close className="size-3.5" />
+              </button>
+            )}
+          </label>
         </div>
 
-        <label className="flex items-center gap-2.5 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 focus-within:border-brand xl:w-[280px]">
-          <Search className="size-4 shrink-0 text-faint" />
-          <input
-            value={query}
-            // Typing replaces rather than pushes, so Back does not walk
-            // through every keystroke.
-            onChange={(e) => write({ query: e.target.value }, { replace: true })}
-            type="search"
-            placeholder="Search events"
-            aria-label="Search activity"
-            className="min-w-0 flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => write({ query: "" }, { replace: true })}
-              aria-label="Clear search"
-              className="shrink-0 text-faint transition-colors hover:text-ink"
-            >
-              <Close className="size-4" />
-            </button>
+        <div className="mt-3 rounded-lg bg-ds-panel p-1">
+          {total === 0 ? (
+            <Blank
+              title="Nothing has happened yet"
+              body="Every buy, sell, dividend and transfer will show here, each with the transaction behind it one tap away."
+              action={
+                <ButtonLink to="?add=cash" variant="primary">
+                  Add cash to start
+                </ButtonLink>
+              }
+            />
+          ) : filtered.length === 0 ? (
+            <Blank
+              title="Nothing matches that"
+              body="Try a different word, or widen the filter."
+              action={<Button onClick={reset}>Clear filters</Button>}
+            />
+          ) : (
+            days.map((day) => (
+              <div key={day.date}>
+                <h2 className="px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted">
+                  {day.label}
+                </h2>
+                <div className="flex flex-col gap-1">
+                  {day.events.map((event) => (
+                    <Row key={event.date + event.title} event={event} />
+                  ))}
+                </div>
+              </div>
+            ))
           )}
-        </label>
-      </div>
-
-      <section className="mt-4 overflow-hidden rounded-2xl border border-cardline bg-white">
-        {total === 0 ? (
-          <Empty />
-        ) : filtered.length === 0 ? (
-          <NoMatch onClear={reset} />
-        ) : (
-          days.map((day) => (
-            <div key={day.date}>
-              <h2 className="border-b border-hair bg-shell/60 px-5 py-2.5 text-[12px] font-semibold tracking-[0.04em] text-faint uppercase sm:px-6">
-                {day.label}
-              </h2>
-              {day.events.map((event) => (
-                <Row key={event.date + event.title} event={event} />
-              ))}
+          {pages > 1 && (
+            <div className="pt-3 pb-[17px]">
+              <Pagination page={current - 1} count={pages} onPage={(n) => write({ page: n + 1 })} />
             </div>
-          ))
-        )}
+          )}
+        </div>
       </section>
-
-      {filtered.length > 0 && (
-        <nav aria-label="Pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[13px] text-muted tabular-nums">
-            Showing {from}–{to} of {filtered.length}
-          </p>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => write({ page: current - 1 })}
-              disabled={current === 1}
-              aria-label="Previous page"
-              className="grid size-11 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline sm:size-9"
-            >
-              <ChevronRight className="size-4 rotate-180" />
-            </button>
-
-            {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => write({ page: n })}
-                aria-current={n === current ? "page" : undefined}
-                className={`grid size-11 place-items-center rounded-[9px] text-[13px] font-medium tabular-nums transition-colors sm:size-9 ${
-                  n === current
-                    ? "bg-ink text-white"
-                    : "border border-cardline bg-white text-ink-soft hover:border-faint"
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-
-            <button
-              type="button"
-              onClick={() => write({ page: current + 1 })}
-              disabled={current === pages}
-              aria-label="Next page"
-              className="grid size-11 place-items-center rounded-[9px] border border-cardline bg-white text-ink-soft transition-colors hover:border-faint disabled:cursor-not-allowed disabled:text-faint disabled:hover:border-cardline sm:size-9"
-            >
-              <ChevronRight className="size-4" />
-            </button>
-          </div>
-        </nav>
-      )}
-
-      <p className="mt-4 text-[13px] text-muted">
-        Every row links to the transaction on Solana. Nothing here is a number you have to take on trust.
-      </p>
     </AppShell>
   );
 };

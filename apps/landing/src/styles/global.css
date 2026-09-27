@@ -65,9 +65,9 @@
 @theme {
   /* ground */
   --color-page: #efede8;
-  /* The landing ground. The app's Fresh Sheet is #f7f6f2 — this one is its own
-     value on purpose, so do not "fix" it back to match apps/web. */
-  --color-shell: #f7f7f5;
+  /* The landing ground: the same #f3f3f3 page grey as the web app
+     (apps/web --color-page), so landing and dashboard read as one surface. */
+  --color-shell: #f3f3f3;
 
   /* ink. The hero sets headline in pure black and copy in #656565 — the design
      moved to neutral greys, where the app's palette is warm. */
@@ -140,7 +140,7 @@
   }
   body {
     margin: 0;
-    /* Fresh Sheet is the landing ground; Statement Paper is the app's. */
+    /* The landing ground, the web app's page grey. */
     background: var(--color-shell);
     color: var(--color-ink);
     font-family: var(--font-sans);

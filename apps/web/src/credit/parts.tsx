@@ -24,7 +24,7 @@ export const RateCompare = ({ apy }: { apy: number | null | undefined }) => (
       {ALTERNATIVES.map((a) => (
         <div key={a.label}>
           <dt className="text-[13px] text-muted">{a.label}</dt>
-          <dd className="mt-1 text-[18px] font-semibold tabular-nums">{a.range}</dd>
+          <dd className="mt-1 text-[18px] font-semibold">{a.range}</dd>
         </div>
       ))}
     </dl>
@@ -35,7 +35,7 @@ export const RateCompare = ({ apy }: { apy: number | null | undefined }) => (
           Because the collateral is already on chain and nobody underwrites you
         </p>
       </div>
-      <span className="shrink-0 border-b-2 border-up pb-1 text-[30px] font-semibold tracking-[-0.02em] text-up-deep tabular-nums">
+      <span className="shrink-0 border-b-2 border-up pb-1 text-[30px] font-semibold tracking-[-0.02em] text-up-deep">
         {apy == null ? "—" : `${(apy * 100).toFixed(2)}%`}
       </span>
     </div>
@@ -102,10 +102,8 @@ export const CollateralTable = ({
                     <span className="font-mono text-[12px] text-faint">{c.symbol}</span>
                   </span>
                 </span>
-                <span className="w-[120px] text-right text-[15px] font-semibold tabular-nums">
-                  {pctOf(c.maxLtv)}
-                </span>
-                <span className="w-[150px] text-right text-[15px] tabular-nums text-muted">
+                <span className="w-[120px] text-right text-[15px] font-semibold">{pctOf(c.maxLtv)}</span>
+                <span className="w-[150px] text-right text-[15px] text-muted">
                   ${(EXAMPLE * c.maxLtv).toLocaleString("en-US")}
                 </span>
               </div>

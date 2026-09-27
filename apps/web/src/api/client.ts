@@ -1,3 +1,4 @@
+import { SAMPLE, sampleResponse } from "../dev/sample";
 import { getAccessToken } from "@privy-io/react-auth";
 
 const BASE = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8787";
@@ -23,6 +24,11 @@ export class ApiError extends Error {
  * is not an error — the server decides whether the route needed them.
  */
 export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
+  // Dev-only sample data for design review; always false in a build.
+  if (SAMPLE) {
+    const sample = sampleResponse(path);
+    if (sample !== undefined) return sample as T;
+  }
   const [token, identityToken] = await Promise.all([
     getAccessToken(),
     // Older builds of the SDK do not export this; a missing identity token

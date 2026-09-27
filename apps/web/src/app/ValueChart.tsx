@@ -1,6 +1,15 @@
+import { SAMPLE, SAMPLE_HISTORY } from "../dev/sample";
+import type { Point } from "./DotChart";
 import { Clock } from "../ui/icons";
+import { DotChart } from "./DotChart";
 
-export type Range = "1W" | "1M";
+export type Range = "1D" | "1W" | "1M";
+
+export const RANGE_LABEL: Record<Range, string> = {
+  "1D": "today",
+  "1W": "the last week",
+  "1M": "the last month",
+};
 
 /**
  * There is no chart yet, and this says so rather than drawing one.
@@ -12,21 +21,29 @@ export type Range = "1W" | "1M";
  *
  * Until that exists the honest thing is an empty state. A line drawn from a
  * deterministic random walk looked convincing, which is exactly what made it
- * the wrong thing to ship.
+ * the wrong thing to ship. The dot chart is ready for when it does.
  */
-export const ValueChart = ({ range }: { range: Range }) => (
-  <div
-    role="img"
-    aria-label={`Value over ${range === "1W" ? "the last week" : "the last month"}: not enough history yet`}
-    className="grid h-[180px] place-items-center rounded-xl border border-dashed border-hair bg-shell/60 px-6 text-center"
-  >
-    <div>
-      <Clock className="mx-auto size-[18px] text-faint" />
-      <p className="mt-2.5 text-[13px] font-medium text-ink-soft">Not enough history yet</p>
-      <p className="mx-auto mt-1 max-w-[38ch] text-[12px] text-faint">
-        We record your balance hourly from the day you open the account. The chart appears once there is more
-        than a day of it.
-      </p>
+/** The account's value over a range, or null when there is no history to show. */
+export const useHistory = (range: Range): readonly Point[] | null => (SAMPLE ? SAMPLE_HISTORY[range] : null);
+
+export const ValueChart = ({ range, onZoom }: { range: Range; onZoom?: (dir: 1 | -1) => void }) => {
+  const series = useHistory(range);
+  return series ? (
+    <DotChart series={series} label={RANGE_LABEL[range]} {...(onZoom ? { onZoom } : {})} />
+  ) : (
+    <div
+      role="img"
+      aria-label={`Value over ${RANGE_LABEL[range]}: not enough history yet`}
+      className="grid h-full min-h-[200px] w-full place-items-center rounded-xl border border-dashed border-hair bg-shell/60 px-6 text-center"
+    >
+      <div>
+        <Clock className="mx-auto size-[18px] text-faint" />
+        <p className="mt-2.5 text-[13px] font-medium text-ink-soft">Not enough history yet</p>
+        <p className="mx-auto mt-1 max-w-[38ch] text-[12px] text-faint">
+          We record your balance hourly from the day you open the account. The chart appears once there is
+          more than a day of it.
+        </p>
+      </div>
     </div>
-  </div>
-);
+  );
+};

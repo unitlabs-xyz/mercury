@@ -53,6 +53,7 @@ const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   } satisfies ChainReader,
   multipliers: { multiplierFor: async () => D(1), isPaused: async () => false } satisfies MultiplierSource,
   usdcMint: USDC,
+  pledged: async () => [],
   ...over,
 });
 
@@ -68,6 +69,24 @@ const appWith = (d: PortfolioDeps, walletAddress: string | null = "WaLLeT") => {
 };
 
 describe("GET /v1/portfolio", () => {
+  it("reports how many of a holding's shares are pledged to Kamino", async () => {
+    // Two shares held in total, one of them pledged: still owned, still in the position.
+    const d = deps({ pledged: async () => [{ mint: NVDAX, rawAmount: 100_000_000n, decimals: 8 }] });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]).toMatchObject({ shares: "2", pledgedShares: "1" });
+  });
+
+  it("still answers from the stored books when reconciliation cannot run", async () => {
+    const d = deps({
+      reconcile: async () => {
+        throw new Error("kamino unreachable");
+      },
+    });
+    const res = await appWith(d).request("/v1/portfolio");
+    expect(res.status).toBe(200);
+    expect((await portfolioOf(res)).holdings[0]!.shares).toBe("2");
+  });
+
   it("values a holding at the live price and reports its profit", async () => {
     const res = await appWith(deps()).request("/v1/portfolio");
     expect(res.status).toBe(200);

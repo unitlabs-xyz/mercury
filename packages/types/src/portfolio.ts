@@ -10,6 +10,8 @@ export const Holding = z.object({
   unrealisedPnlUsd: Usd,
   changePct24h: Ratio,
   wrapperCount: z.number().int().positive(),
+  /** Of `shares`, how many are pledged to Kamino as collateral. Still owned; not sellable until withdrawn. */
+  pledgedShares: Usd.optional(),
 });
 
 export const Portfolio = z.object({

@@ -40,11 +40,15 @@ export const toEvent = (i: ActivityItem): Event => {
     kind,
     title: i.title,
     sub: i.subtitle ?? "",
+    // The amount is stored unsigned; the direction lives in `flow`, so a row
+    // never shows the API's sign and its own ("$-200.00", "--$200.00").
     amount:
       i.amountUsd === null
         ? null
-        : Number(i.amountUsd).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-    flow: FLOW[kind] ?? null,
+        : Math.abs(Number(i.amountUsd)).toLocaleString("en-US", { style: "currency", currency: "USD" }),
+    flow:
+      FLOW[kind] ??
+      (i.amountUsd === null || Number(i.amountUsd) === 0 ? null : Number(i.amountUsd) < 0 ? "out" : "in"),
     details: [],
     ...(i.txSignature ? { signature: i.txSignature } : {}),
   };

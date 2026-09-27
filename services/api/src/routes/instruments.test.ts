@@ -25,6 +25,12 @@ const catalogue: readonly CatalogueRow[] = [
         multiplier: "1.5",
         isRoutable: true,
         holders: 108_418,
+        icon: null,
+        liquidityUsd: "2800000",
+        volume24hUsd: "400000",
+        netBuyers24h: 13,
+        traders24h: 190,
+        hasMarket: true,
       },
     ],
   },
@@ -44,9 +50,54 @@ const catalogue: readonly CatalogueRow[] = [
         multiplier: "1",
         isRoutable: true,
         holders: 250_000,
+        icon: null,
+        liquidityUsd: "6600000",
+        volume24hUsd: "900000",
+        netBuyers24h: 40,
+        traders24h: 500,
+        hasMarket: true,
       },
     ],
   },
+];
+
+const THINX = "ThinMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+const DEADX = "DeadMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+const thin = (
+  ticker: string,
+  name: string,
+  mint: string,
+  liquidityUsd: string,
+  hasMarket: boolean,
+): CatalogueRow => ({
+  ticker,
+  name,
+  sector: "Other",
+  description: "",
+  logoUrl: null,
+  isTradable: true,
+  wrappers: [
+    {
+      mint,
+      symbol: `${ticker}x`,
+      issuer: "backed",
+      decimals: 8,
+      multiplier: "1",
+      isRoutable: false,
+      holders: 12,
+      icon: null,
+      liquidityUsd,
+      volume24hUsd: "0",
+      netBuyers24h: 0,
+      traders24h: 0,
+      hasMarket,
+    },
+  ],
+});
+const everything: readonly CatalogueRow[] = [
+  ...catalogue,
+  thin("ASML", "ASML Holding", THINX, "2000", true),
+  thin("DEAD", "Deadco", DEADX, "0", false),
 ];
 
 const price = (mint: string, over: Partial<TokenPrice> = {}): TokenPrice => ({
@@ -161,6 +212,92 @@ describe("GET /v1/instruments", () => {
     const d = deps({ prices: { pricesFor: async () => new Map() } });
     const shelf = await shelfOf(await app(d).request("/v1/instruments"));
     expect(shelf).toEqual([]);
+  });
+});
+
+describe("GET /v1/instruments, featured and search", () => {
+  // The board prices by liquidity as the registry reported it, so the thin row stays thin.
+  const wide = (over: Partial<InstrumentDeps> = {}) =>
+    deps({
+      catalogue: async () => everything,
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(mints.map((m) => [m, price(m, { liquidityUsd: m === THINX ? D(2_000) : D(1_000_000) })])),
+      },
+      ...over,
+    });
+
+  it("shows only the featured, deep instruments with no parameters", async () => {
+    const shelf = await shelfOf(await app(wide()).request("/v1/instruments"));
+    expect(shelf.map((i) => i.ticker)).toEqual(["NVDA", "SPY"]);
+    expect(shelf.every((i) => i.featured)).toBe(true);
+  });
+
+  it("finds a thin instrument by search, marked unfeatured with a small order ceiling", async () => {
+    const shelf = await shelfOf(await app(wide()).request("/v1/instruments?q=asml"));
+    expect(shelf.map((i) => i.ticker)).toEqual(["ASML"]);
+    expect(shelf[0]).toMatchObject({ featured: false, liquidityUsd: "2000", maxOrderUsd: "30" });
+  });
+
+  it("returns everything with a market for scope=all, and never an unpriced one", async () => {
+    const shelf = await shelfOf(await app(wide()).request("/v1/instruments?scope=all"));
+    expect(shelf.map((i) => i.ticker).sort()).toEqual(["ASML", "NVDA", "SPY"]);
+  });
+
+  it("does not ask price/v3 about a token Jupiter has no market for", async () => {
+    const asked: string[] = [];
+    const d = wide({
+      prices: {
+        pricesFor: async (mints) => {
+          asked.push(...mints);
+          return new Map(mints.map((m) => [m, price(m)]));
+        },
+      },
+    });
+    await app(d).request("/v1/instruments?scope=all");
+    expect(asked).not.toContain(DEADX);
+  });
+
+  it("fetches exactly the tickers asked for, featured or not", async () => {
+    const shelf = await shelfOf(await app(wide()).request("/v1/instruments?tickers=asml,spy"));
+    expect(shelf.map((i) => i.ticker).sort()).toEqual(["ASML", "SPY"]);
+  });
+
+  it("ranks an exact ticker match above a name that merely contains the term", async () => {
+    const rows = [
+      ...everything,
+      { ...thin("NVDL", "Leveraged Nvidia", "NvdlMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "5000", true) },
+    ];
+    const shelf = await shelfOf(
+      await app(wide({ catalogue: async () => rows })).request("/v1/instruments?q=nvd"),
+    );
+    expect(shelf[0]!.ticker).toBe("NVDA");
+  });
+
+  it("serves repeat requests from the price cache for fifteen seconds", async () => {
+    let calls = 0;
+    let clock = 0;
+    const d = wide({
+      now: () => clock,
+      prices: {
+        pricesFor: async (mints) => {
+          calls += 1;
+          return new Map(mints.map((m) => [m, price(m)]));
+        },
+      },
+    });
+    const a = app(d);
+    await a.request("/v1/instruments");
+    await a.request("/v1/instruments");
+    expect(calls).toBe(1);
+    clock = 15_001;
+    await a.request("/v1/instruments");
+    expect(calls).toBe(2);
+  });
+
+  it("opens a thin instrument's own page", async () => {
+    const { instrument } = await detailOf(await app(wide()).request("/v1/instruments/ASML"));
+    expect(instrument.featured).toBe(false);
   });
 });
 

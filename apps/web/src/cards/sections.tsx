@@ -97,7 +97,7 @@ export const HowItWorks = () => (
       <ol className="space-y-4">
         {STEPS.map((s) => (
           <li key={s.n} className="flex gap-5">
-            <span className="mt-1 font-mono text-[12px] text-faint tabular-nums">{s.n}</span>
+            <span className="mt-1 font-mono text-[12px] text-faint">{s.n}</span>
             <span className="min-w-0 flex-1 rounded-2xl border border-cardline bg-white px-5 py-4">
               <span className="block text-[16px] font-semibold">{s.title}</span>
               <span className="mt-1.5 block text-[14px] leading-[1.6] text-muted text-pretty">{s.body}</span>
@@ -134,9 +134,7 @@ export const TwoModes = () => {
               type="button"
               onClick={() => setMode(m)}
               className={`h-11 rounded-full px-6 text-[13px] font-semibold tracking-[0.06em] uppercase transition-colors ${
-                mode === m
-                  ? "bg-white text-ink shadow-[0_1px_2px_rgba(27,26,23,0.07)]"
-                  : "text-muted hover:text-ink"
+                mode === m ? "bg-white text-ink" : "text-muted hover:text-ink"
               }`}
             >
               {m} mode
@@ -264,17 +262,14 @@ export const Plans = () => (
           <div className="flex items-start justify-between gap-3 px-5 pt-5">
             <h3 className="text-[16px] font-semibold">{p.name}</h3>
             <span className="w-[42%] shrink-0 [container-type:inline-size]">
-              <CardArt
-                finish={p.finish}
-                className="!rounded-[8px] !shadow-[0_4px_14px_rgba(27,26,23,0.18)]"
-              />
+              <CardArt finish={p.finish} className="!rounded-[8px]" />
             </span>
           </div>
           <dl className="mt-4">
             {PLAN_ROWS.map((row) => (
               <div key={row.key} className="border-t border-hair px-5 py-3">
                 <dt className="stamp">{row.label}</dt>
-                <dd className="mt-1 text-[15px] font-medium tabular-nums">{p[row.key]}</dd>
+                <dd className="mt-1 text-[15px] font-medium">{p[row.key]}</dd>
               </div>
             ))}
           </dl>

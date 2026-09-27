@@ -44,7 +44,7 @@ export const HeaderChrome = () => {
   const panel = open ? PANELS[open] : null;
 
   return (
-    <div ref={box} className="relative flex items-center gap-0.5">
+    <div ref={box} className="relative flex items-center gap-2">
       {(Object.keys(PANELS) as Panel[]).map((key) => {
         const Icon = key === "alerts" ? Bell : Cog;
         const active = open === key;
@@ -56,11 +56,11 @@ export const HeaderChrome = () => {
             aria-haspopup="dialog"
             aria-expanded={active}
             onClick={() => setOpen(active ? null : key)}
-            className={`grid size-9 max-sm:size-11 place-items-center rounded-[9px] transition-colors ${
-              active ? "bg-white text-ink" : "text-muted hover:bg-white hover:text-ink"
+            className={`grid size-9 place-items-center rounded-lg bg-white transition-colors max-sm:size-10 ${
+              active ? "text-ds-ink" : "text-ds-muted hover:text-ds-ink"
             }`}
           >
-            <Icon className="size-[18px]" />
+            <Icon className="size-4" />
           </button>
         );
       })}
@@ -69,10 +69,10 @@ export const HeaderChrome = () => {
         <div
           role="dialog"
           aria-label={panel.label}
-          className="absolute top-[calc(100%+10px)] right-0 z-40 w-[272px] rounded-[14px] border border-cardline bg-white p-4 shadow-[0_6px_20px_rgba(27,26,23,0.12)]"
+          className="absolute top-[calc(100%+10px)] right-0 z-40 w-[300px] rounded-xl bg-white px-5 py-4 outline-1 outline-black/10"
         >
-          <p className="text-[14px] font-semibold">{panel.title}</p>
-          <p className="mt-1.5 text-[13px] leading-[1.55] text-muted text-pretty">{panel.body}</p>
+          <p className="text-[14px] leading-none font-medium text-ds-ink">{panel.title}</p>
+          <p className="mt-3 text-[14px] leading-[1.45] text-ds-muted text-pretty">{panel.body}</p>
         </div>
       )}
     </div>

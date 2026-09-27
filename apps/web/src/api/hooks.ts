@@ -1,6 +1,7 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { MarketStatus, Money, Portfolio } from "@mercury/types";
+import { SAMPLE } from "../dev/sample";
 import { apiFetch } from "./client";
 
 /**
@@ -17,7 +18,8 @@ import { apiFetch } from "./client";
  */
 export const useSignedIn = (): boolean => {
   const { ready, authenticated } = usePrivy();
-  return ready && authenticated;
+  // Dev-only sample data counts as signed in; always false in a build.
+  return SAMPLE || (ready && authenticated);
 };
 
 /** Holdings and cash. The server reconciles the wallet against its lots first. */
@@ -74,3 +76,15 @@ export const useMarketStatus = () => {
     refetchInterval: 60_000,
   });
 };
+
+/**
+ * Whether the API sends transactions or only simulates them (SEND_MODE). Public
+ * and read once, so every screen can say "dry run" before anyone signs.
+ */
+export const useSendMode = () =>
+  useQuery({
+    queryKey: ["api", "send-mode"],
+    queryFn: async () =>
+      (await apiFetch<{ sendMode?: "broadcast" | "simulate" }>("/health")).sendMode ?? "broadcast",
+    staleTime: Infinity,
+  });

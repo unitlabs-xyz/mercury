@@ -96,20 +96,20 @@ export const Select = ({
         aria-expanded={open}
         aria-labelledby={`${id}-label`}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 rounded-[9px] border border-cardline bg-white px-3.5 py-2.5 text-left max-sm:min-h-11 text-[13px] transition-colors hover:border-faint"
+        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg bg-ds-panel px-3 text-left text-[14px] leading-none transition-colors hover:bg-ds-tag max-sm:h-10"
       >
         <span className="min-w-0 truncate">
-          <span id={`${id}-label`} className="text-faint">
+          <span id={`${id}-label`} className="text-ds-muted">
             {label}:{" "}
           </span>
-          <span className="font-medium text-ink">{selected?.label}</span>
+          <span className="text-ds-ink">{selected?.label}</span>
         </span>
         <motion.span
           animate={{ rotate: open ? 90 : 0 }}
           transition={{ duration: 0.2, ease: EASE }}
-          className="inline-flex shrink-0 text-faint"
+          className="inline-flex shrink-0 text-ds-muted"
         >
-          <ChevronRight className="size-4" />
+          <ChevronRight className="size-3.5" />
         </motion.span>
       </button>
 
@@ -122,7 +122,7 @@ export const Select = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.16, ease: EASE }}
-            className="absolute z-50 mt-1.5 max-h-[280px] w-full overflow-y-auto rounded-xl border border-cardline bg-white p-1.5 shadow-[0_12px_32px_rgba(27,26,23,0.14)]"
+            className="absolute z-50 mt-1 max-h-[280px] w-full overflow-y-auto rounded-lg bg-white p-1 outline-1 outline-black/10"
           >
             {options.map((o, i) => {
               const isSelected = o.value === value;
@@ -133,12 +133,12 @@ export const Select = ({
                     tabIndex={-1}
                     onClick={() => commit(o.value)}
                     onMouseEnter={() => setCursor(i)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[13px] transition-colors ${
-                      i === cursor ? "bg-shell" : ""
-                    } ${isSelected ? "font-semibold text-ink" : "text-ink-soft"}`}
+                    className={`flex h-8 w-full items-center justify-between gap-2 rounded-md px-3 text-left text-[14px] leading-none transition-colors ${
+                      i === cursor ? "bg-ds-panel" : ""
+                    } ${isSelected ? "font-medium text-ds-ink" : "text-ds-ink"}`}
                   >
                     {o.label}
-                    {isSelected && <span className="text-brand">✓</span>}
+                    {isSelected && <span className="text-ds-link">✓</span>}
                   </button>
                 </li>
               );

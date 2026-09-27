@@ -10,12 +10,15 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@kamino-finance/klend-sdk": "12.0.0",
     "@mercury/chain": "workspace:*",
     "@mercury/core": "workspace:*",
     "@mercury/market": "workspace:*",
     "@mercury/types": "workspace:*",
-    "@hono/node-server": "^1.13.0",
     "@privy-io/node": "^0.35.0",
+    "@solana/kit": "2.3.0",
+    "bn.js": "^5.2.5",
     "decimal.js": "^10.4.3",
     "drizzle-orm": "^0.45.3",
     "hono": "^4.6.0",
@@ -25,6 +28,7 @@
   },
   "devDependencies": {
     "@mercury/tsconfig": "workspace:*",
+    "@types/bn.js": "^5.2.0",
     "@types/node": "^22.10.0",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.19.0",

@@ -1,0 +1,238 @@
+import type { Money, Portfolio } from "@mercury/types";
+import type { Dashboard } from "../api/dashboard";
+import type { Event } from "../app/activity-data";
+import type { Point } from "../app/DotChart";
+
+/**
+ * SAMPLE DATA, FOR LOOKING AT THE DESIGN. Never in a build.
+ *
+ * On only under `pnpm dev:web:sample` (vite dev with VITE_SAMPLE=1). The
+ * `import.meta.env.DEV` check is false in every production build, so the
+ * bundler drops all of this there. It answers the app's own API reads with the
+ * numbers in the portfolio design, so each screen can be checked against it.
+ * Everything it does not cover (instruments, logos, market status) still goes
+ * to the real API.
+ */
+export const SAMPLE = import.meta.env.DEV && import.meta.env["VITE_SAMPLE"] === "1";
+
+const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+const holding = (
+  ticker: string,
+  name: string,
+  shares: string,
+  value: number,
+  cost: number,
+  today: string,
+  wrapperCount = 1,
+): Portfolio["holdings"][number] => ({
+  ticker,
+  name,
+  shares,
+  valueUsd: value.toFixed(2),
+  costBasisUsd: cost.toFixed(2),
+  unrealisedPnlUsd: (value - cost).toFixed(2),
+  changePct24h: today,
+  wrapperCount,
+  pledgedShares: ticker === "SPY" ? "3" : "0",
+});
+
+// Nvidia and Tesla are left out on purpose, so some listed stocks show as not owned.
+const holdings = [
+  holding("SPY", "S&P 500", "5.998", 3893.99, 3622.4, "0.31"),
+  holding("AAPL", "Apple", "3.120", 768.14, 700, "0.62", 2),
+  holding("HOOD", "Robinhood", "4.800", 583.39, 474, "3.12"),
+  holding("GOOGL", "Alphabet", "1.650", 412.5, 430.01, "-0.41", 2),
+  holding("META", "Meta", "0.520", 380.36, 350, "2.35"),
+];
+const cash = 4534.73;
+const stocks = holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
+
+const portfolio: Portfolio = {
+  totalValueUsd: (stocks + cash).toFixed(2),
+  cashUsd: cash.toFixed(2),
+  changeUsd: "39.32",
+  changePct: "0.32",
+  holdings,
+};
+
+const money: Money = {
+  balanceUsd: cash.toFixed(2),
+  yieldApr: "0.041",
+  interestEarnedYtdUsd: "48.20",
+  depositAddress: "7xQmF4d8Vn2pLs9jKcRb3TyWuAeH6gZxMq1NdP4Rk9",
+  borrowingPower: { availableUsd: "2700", enabled: true },
+} as Money;
+
+/** GET /v1/borrow, in its wire shape: 3 SPYx pledged, $1,988.23 owed, healthy. */
+const row = (ticker: string, ltv: number, lt: number, price: number, deposited: number, free: number) => ({
+  ticker,
+  isStock: true,
+  decimals: 8,
+  ltv: String(ltv),
+  liquidationThreshold: String(lt),
+  pricePerToken: String(price),
+  depositedTokens: String(deposited),
+  depositedUsd: (deposited * price).toFixed(2),
+  depositableTokens: String(free),
+  depositableUsd: (free * price).toFixed(2),
+  safeLimitUsd: ((deposited + free) * price * ltv * 0.8).toFixed(2),
+  borrowableUsd: (free * price * ltv * 0.8).toFixed(2),
+  cushionAtTarget: (1 - (ltv * 0.8) / lt).toFixed(4),
+  liquidationPrice: deposited > 0 ? (1988.23 / (deposited * lt)).toFixed(2) : null,
+  liquidationDistance: deposited > 0 ? (1 - 1988.23 / (deposited * lt) / price).toFixed(4) : null,
+});
+const borrow = {
+  safetyTarget: "0.8",
+  cashUsd: cash.toFixed(2),
+  // 3 SPYx and $5,930 of Bitcoin pledged against $1,988.23: using 25%, limit 60%, as in the design.
+  collateralUsd: (3 * 664.22 + 0.07 * 84_720).toFixed(2),
+  debtUsd: "1988.23",
+  borrowableNowUsd: "812.40",
+  overTargetUsd: "0",
+  health: "healthy",
+  locked: false,
+  usage: "0.32",
+  repayToClearMarginCallUsd: "0",
+  dropToMarginCall: "0.5882",
+  borrowableUsd: "2700",
+  spendableUsd: (cash + 2700).toFixed(2),
+  ltv: "0.25",
+  liquidationLtv: "0.32",
+  safeUntilDrop: "0.68",
+  poolAvailableUsd: "538408.73",
+  borrowApy: "0.0578",
+  obligation: "SampleObligation11111111111111111111111111",
+  collateral: [
+    { ...row("cbBTC", 0.75, 0.8, 84_720, 0.07, 0), isStock: false },
+    row("SPY", 0.73, 0.75, 664.22, 3, 2.998),
+    // Accepted by Kamino, but none held: they do not show as borrowable.
+    row("NVDA", 0.55, 0.65, 222.11, 0, 0),
+    row("TSLA", 0.55, 0.65, 426.07, 0, 0),
+    row("GOOGL", 0.6, 0.7, 250, 0, 1.65),
+    row("AAPL", 0.4, 0.5, 246.2, 0, 3.12),
+    row("HOOD", 0.3, 0.4, 122.79, 0, 4.8),
+  ],
+};
+
+export const SAMPLE_DASHBOARD: Dashboard = {
+  loan: null,
+  card: {
+    plan: "Gold",
+    finish: "gold",
+    last4: "4821",
+    mode: "credit",
+    monthlyLimitUsd: 3986,
+    spentThisMonthUsd: 1240.18,
+    statementBalanceUsd: 986.4,
+    statementDue: day(9),
+    minimumDueUsd: 40,
+    autopay: true,
+    cashbackRate: 0.015,
+    cashbackEarnedUsd: 18.6,
+    frozen: false,
+    transactions: [],
+  },
+  upcoming: [
+    { date: day(2), kind: "recurring", title: "Recurring buy", detail: "", amountUsd: 50 },
+    { date: day(3), kind: "queued", title: "Queued order · Apple", detail: "", amountUsd: 100 },
+    { date: day(5), kind: "interest", title: "Interest payout", detail: "", amountUsd: 15.49 },
+    { date: day(9), kind: "card", title: "Card statement due", detail: "", amountUsd: 986.4 },
+  ],
+  ltv: null,
+};
+
+export const SAMPLE_EVENTS: Event[] = [
+  { date: day(0), kind: "send", title: "Sent USDC", sub: "", amount: "$250.00", flow: "out", details: [] },
+  {
+    date: day(0),
+    kind: "dividend",
+    title: "Dividend reinvested",
+    sub: "",
+    amount: "0.003 shares",
+    flow: "in",
+    details: [],
+  },
+  {
+    date: day(0),
+    kind: "queued",
+    title: "Order queued",
+    sub: "",
+    amount: "$100.00",
+    flow: "out",
+    pending: true,
+    details: [],
+  },
+  {
+    date: day(-1),
+    kind: "buy",
+    title: "Bought Meta",
+    sub: "",
+    amount: "$500.00",
+    flow: "out",
+    details: [],
+  },
+  {
+    date: day(-1),
+    kind: "interest",
+    title: "Interest paid",
+    sub: "",
+    amount: "$12.42",
+    flow: "in",
+    details: [],
+  },
+  {
+    date: day(-2),
+    kind: "recurring",
+    title: "Recurring run · $200 into S&P 500",
+    sub: "",
+    amount: "$200.00",
+    flow: "out",
+    details: [],
+  },
+] as Event[];
+
+/** The last month of account value, ending at the design's +$547.62. */
+const series = (n: number, label: (i: number) => string): Point[] => {
+  let v = 11_932.99;
+  return Array.from({ length: n }, (_, i) => {
+    const f = i / (n - 1);
+    // A dip in the first third, then a climb: the shape in the design.
+    v =
+      11_932.99 +
+      547.62 * f -
+      520 * Math.sin(Math.PI * Math.min(1, f * 1.8)) * (1 - f) +
+      40 * Math.sin(i * 1.7);
+    if (i === n - 1) v = 12_480.61;
+    return { label: label(i), value: Math.round(v * 100) / 100 };
+  });
+};
+export const SAMPLE_HISTORY = {
+  "1D": series(48, (i) =>
+    new Date(Date.now() - (47 - i) * 30 * 60_000).toLocaleString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  ),
+  "1W": series(56, (i) =>
+    new Date(Date.now() - (55 - i) * 3 * 3_600_000).toLocaleString("en-US", {
+      weekday: "short",
+      day: "numeric",
+      hour: "2-digit",
+    }),
+  ),
+  "1M": series(60, (i) => {
+    const d = new Date(Date.now() - (59 - i) * 12 * 3_600_000);
+    return `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })}`;
+  }),
+};
+
+/** The API reads this answers. Anything else goes to the real API. */
+export const sampleResponse = (path: string): unknown | undefined => {
+  const route = path.split("?")[0];
+  if (route === "/v1/portfolio") return portfolio;
+  if (route === "/v1/money") return money;
+  if (route === "/v1/borrow") return borrow;
+  if (route === "/v1/activity") return { items: [], nextCursor: null };
+  return undefined;
+};

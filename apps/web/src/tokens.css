@@ -1,9 +1,90 @@
 @import "tailwindcss";
 
+/* ABC Diatype, the brand face, the same files as the landing (apps/landing),
+   subset to Latin. Diatype has nothing between Medium and Bold, so 600 takes
+   Medium rather than jumping to Bold. */
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("/fonts/ABCDiatype-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("/fonts/ABCDiatype-Medium.woff2") format("woff2");
+  font-weight: 500 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ABC Diatype";
+  src: url("/fonts/ABCDiatype-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   /* ground */
-  --color-page: #efede8;
+  --color-page: #f3f3f3;
   --color-shell: #f7f6f2;
+
+  /* design system v2. Type: ABC Diatype; all dashboard text at -2% letter spacing (set on AppShell). */
+  /* design system v2, from the Figma nav: the neutrals the new screens are built on */
+  --color-ds-ink: #171717;
+  --color-ds-muted: #656565;
+  --color-ds-divider: #e6e6e6;
+  --color-ds-chevron: #5c5c5c;
+  --color-ds-avatar: #d9d9d9;
+  /* the portfolio header */
+  --color-ds-panel: #f7f7f7;
+  --color-ds-link: #007681;
+  /* Coming up icons (comingup.svg): circle and stroke per kind */
+  --color-ds-up-recurring-bg: #e5f4f4;
+  --color-ds-up-recurring: #2a8e97;
+  --color-ds-up-queued-bg: #fdf3d9;
+  --color-ds-up-queued: #925a0a;
+  --color-ds-up-interest-bg: #e2f4e9;
+  --color-ds-up-interest: #007242;
+  --color-ds-up-card-bg: #f4f3eb;
+  --color-ds-up-card: #393830;
+  /* Recent activity icons (activity.svg): tinted circle, then stroke. */
+  --color-ds-act-send-bg: #f4f2ec;
+  --color-ds-act-send: #393830;
+  --color-ds-act-dividend-bg: #e4f3ec;
+  --color-ds-act-dividend: #007242;
+  --color-ds-act-buy-bg: #e5f4f5;
+  --color-ds-act-buy: #007682;
+  --color-ds-pending-chip: #fef3de;
+  /* Holdings (holdings.svg): the Today chip falling, a losing return, the neutral tag. */
+  --color-ds-fall-chip: rgb(227 119 119 / 0.14);
+  --color-ds-fall: #d42919;
+  /* The fall on list rows (waitlist.svg): a lighter red. */
+  --color-ds-fall-light: #dc5043;
+  --color-ds-loss: #c94d42;
+  --color-ds-tag: #f3f3f3;
+  --color-ds-chip-pending: #935b00;
+  /* status chips: tint behind, the ink at 80% */
+  --color-ds-chip-up: #318b33;
+  --color-ds-warn-chip: rgb(203 180 137 / 0.22);
+  --color-ds-chip-warn: #8a6a2a;
+  --color-ds-chip-down: #b33d29;
+  /* segmented meter (borrowing.svg): used, room to the limit, warning, danger */
+  --color-ds-meter-used: #23747f;
+  --color-ds-meter-room: #62aea9;
+  --color-ds-meter-warn: #cbb489;
+  --color-ds-meter-danger: #b9a0a0;
+  --color-ds-up: #1d7d1f;
+  --color-ds-gain: #5ab35c;
+  --color-ds-tray: #f7f7f7;
+  --color-ds-live: #539f55;
+  /* The flow strip on the market cards (top3.svg). */
+  --color-ds-flow-bg: #e7f2f3;
+  --color-ds-flow: #28525d;
+  --color-ds-up-chip: rgb(89 200 87 / 0.14);
+  --color-ds-down: #c0442f;
+  --color-ds-down-chip: rgb(192 68 47 / 0.12);
 
   /* ink */
   --color-ink: #1b1a17;
@@ -53,7 +134,16 @@
   --color-up-line: #bcdcc9;
   --color-warn-line: #e6d2a4;
 
-  --font-sans: "Instrument Sans", ui-sans-serif, Helvetica, sans-serif;
+  /* Chart series, in fixed order. Validated as a set (lightness band, chroma,
+     CVD and normal-vision separation, 3:1 on white) with the dataviz validator;
+     change one and re-run it. Status greens and reds are never a series. */
+  --color-series-1: #00879f;
+  --color-series-2: #c4812f;
+  --color-series-3: #7163e0;
+  --color-series-4: #cf5a86;
+  --color-series-5: #3c63c4;
+
+  --font-sans: "ABC Diatype", ui-sans-serif, Helvetica, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -67,19 +157,29 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scroll-behavior: smooth;
+    /* The page colour on html too, so overscroll past the top or bottom shows the same grey. */
+    background: var(--color-page);
   }
   body {
     margin: 0;
-    background: var(--color-shell);
+    background: var(--color-page);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-variant-numeric: tabular-nums;
+    /* Proportional figures: Diatype's tabular set widens commas and stops to a full digit. */
+    font-variant-numeric: normal;
   }
   /* One ring for every focusable thing, so keyboard users always see where they are. */
   :focus-visible {
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
     border-radius: 3px;
+  }
+  /* Tailwind v4 leaves buttons on the arrow cursor; everything clickable gets the hand. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label:has(> input[type="checkbox"]),
+  select {
+    cursor: pointer;
   }
   /* The bar is sticky, so anchored sections need to clear it. */
   section[id] {
@@ -91,18 +191,18 @@
   }
   html {
     caret-color: var(--color-brand);
-    scrollbar-color: var(--color-dash) var(--color-shell);
+    scrollbar-color: var(--color-dash) var(--color-page);
   }
   ::-webkit-scrollbar {
     width: 12px;
     height: 12px;
   }
   ::-webkit-scrollbar-track {
-    background: var(--color-shell);
+    background: var(--color-page);
   }
   ::-webkit-scrollbar-thumb {
     background: var(--color-dash);
-    border: 3px solid var(--color-shell);
+    border: 3px solid var(--color-page);
     border-radius: 999px;
   }
   ::-webkit-scrollbar-thumb:hover {
@@ -160,5 +260,45 @@
   &:hover::after,
   &:focus-visible::after {
     transform: scaleX(1);
+  }
+}
+
+/* Design-system buttons (ui/Button.tsx): the edge is a border, the fall is a
+   gradient, the inner line is an inset shadow, exactly as layered in the design. */
+@layer components {
+  .button-primary {
+    color: #fff;
+    border: 1px solid #000;
+    background: linear-gradient(to bottom, #2e2e2e, #0f0f0f);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2);
+    transition: filter 150ms;
+  }
+  .button-primary:hover:not(:disabled) {
+    filter: brightness(1.25);
+  }
+  .button-secondary {
+    color: var(--color-ds-ink);
+    border: 1px solid #e9e9e5;
+    background: linear-gradient(to bottom, #fff, #eee);
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.05);
+    transition: filter 150ms;
+  }
+  .button-secondary:hover:not(:disabled) {
+    filter: brightness(0.98);
+  }
+}
+
+/* `truncate` clips to the line box, and with `leading-none` the line box is the
+   font size, so descenders (g, y, p) and accents lose their tips. Clip instead
+   of hide, and let the clip reach 0.2em past the box: no margin or padding
+   changes, so every line keeps its place; only the clipping area grows. */
+@layer utilities {
+  .truncate {
+    overflow: clip;
+    overflow-clip-margin: 0.2em;
+    /* A clipped box is not a scroll container, so as a flex or grid item it
+       would no longer shrink below its text (hidden did). Let it, so the
+       ellipsis appears instead of the text running into its neighbour. */
+    min-inline-size: 0;
   }
 }

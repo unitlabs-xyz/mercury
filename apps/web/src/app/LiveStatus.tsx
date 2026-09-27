@@ -1,13 +1,28 @@
+import { LiveChip } from "../ui/ds";
 import { Alert, Refresh } from "../ui/icons";
 
 /**
  * Says where the number came from and how old it is. A price with no provenance
  * is a claim; this makes it a reading.
  */
+/** The live state as the design's chip: "Live", "Updating" while fetching, or how stale it is. */
+export const LiveStatusChip = ({ fetching, at }: { fetching: boolean; at: number | undefined }) => {
+  const age = at ? Math.round((Date.now() - at) / 1000) : null;
+  return (
+    <LiveChip
+      pulsing={fetching}
+      label={fetching ? "Updating" : age === null || age < 30 ? "Live" : `${age}s ago`}
+    />
+  );
+};
+
 export const LiveDot = ({ fetching, at }: { fetching: boolean; at: number | undefined }) => {
   const age = at ? Math.round((Date.now() - at) / 1000) : null;
   return (
-    <span className="flex items-center gap-2 rounded-full border border-cardline bg-white px-3 py-1.5 text-[12px] text-muted">
+    <span
+      data-no-flash
+      className="flex items-center gap-2 rounded-full border border-cardline bg-white px-3 py-1.5 text-[12px] text-muted"
+    >
       <span className="relative flex size-2">
         {fetching && (
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-up opacity-60" />

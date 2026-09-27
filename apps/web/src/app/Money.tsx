@@ -1,75 +1,86 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { ArrowUp, Plus, Trend } from "../ui/icons";
+import { useBorrow } from "../api/borrow";
+import { useMoney, useSignedIn } from "../api/hooks";
+import { Button, ButtonLink } from "../ui/Button";
+import { ArrowUp, Plus } from "../ui/icons";
 import { AppShell } from "./AppShell";
-import { useMoney } from "../api/hooks";
+import { usePanels } from "./Panels";
 import { pct, usd } from "./format";
+import { BorrowSection } from "./money/BorrowSection";
+import { HeaderFigure } from "./portfolio/Summary";
+import { Skeleton } from "./portfolio/ui";
 import { Receive } from "./Receive";
-import { Send } from "./Send";
 
+/**
+ * Cash, set like the portfolio: the header card leads with what you can spend
+ * on shares and the three verbs, the figures that follow from it in a grey
+ * panel on the right; then borrowing against your stocks, with adding cash in
+ * the rail beside it.
+ */
 export const Money = () => {
-  const [sending, setSending] = useState(false);
+  // Add cash and Send are the app's side panels, opened on top of this page.
+  const panels = usePanels();
+  const signedIn = useSignedIn();
   const money = useMoney();
+  const borrow = useBorrow();
+  const m = money.data;
+  const b = borrow.data;
+  const apr = Number(m?.yieldApr ?? 0);
 
   return (
-    <AppShell
-      current="money"
-      title="Money"
-      actions={
-        <>
-          <button
-            type="button"
-            onClick={() => setSending(true)}
-            className="flex items-center gap-[7px] rounded-[9px] border border-btnline bg-white px-3.5 py-2.5 max-sm:min-h-11 text-[13px] font-medium text-ink-soft transition-colors hover:border-faint"
-          >
-            <ArrowUp className="size-[15px] rotate-45" />
-            Send
-          </button>
-          <a
-            href="#receive"
-            className="flex items-center gap-[7px] rounded-[9px] bg-brand px-4 py-2.5 max-sm:min-h-11 text-[13px] font-semibold text-white transition-colors hover:bg-brand-deep"
-          >
-            <Plus className="size-[15px]" />
-            Add cash
-          </a>
-        </>
-      }
-    >
-      <section className="mt-6 grid gap-[18px] xl:grid-cols-[392px_minmax(0,1fr)]">
-        <article className="flex flex-col rounded-2xl border border-cardline bg-white px-6 py-[22px]">
-          <p className="text-[13px] font-medium text-muted">Available to invest</p>
-          <p className="mt-2 text-[42px] leading-[1.1] font-semibold tracking-[-0.035em] tabular-nums">
-            {usd(money.data?.balanceUsd)}
-          </p>
-          <p className="mt-2.5 flex flex-wrap items-center gap-2.5">
-            <span className="rounded-md bg-up-tint px-2 py-[3px] text-[14px] font-semibold text-up-deep">
-              Earning {pct(Number(money.data?.yieldApr ?? 0) * 100)}
-            </span>
-            <span className="text-[13px] text-faint">paid into this balance</span>
-          </p>
-
-          <dl className="mt-7 grid gap-3 border-t border-hair pt-5">
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-[13px] text-ink-soft">Interest earned this year</dt>
-              <dd className="text-[13px] font-semibold tabular-nums">
-                {usd(money.data?.interestEarnedYtdUsd)}
-              </dd>
+    <AppShell current="money" title="Money" quiet>
+      <div className="flex flex-col gap-4 md:gap-6">
+        <section aria-label="Cash" className="flex flex-col rounded-xl bg-white xl:min-h-[189px] xl:flex-row">
+          <div className="shrink-0 p-6 xl:w-[395px]">
+            <p className="text-[14px] leading-none font-medium text-ds-ink">Available to invest</p>
+            {m ? (
+              <p className="mt-[9px] text-[36px] leading-none font-medium text-ds-ink">{usd(m.balanceUsd)}</p>
+            ) : (
+              <Skeleton className="mt-2 h-9 w-48" />
+            )}
+            <p className="mt-3 flex items-center gap-1.5 text-[12px] leading-none">
+              <span className="inline-flex h-5 items-center rounded-md bg-ds-up-chip px-2 text-ds-up">
+                <span className="opacity-80">Earning {pct(apr * 100)}</span>
+              </span>
+              <span className="text-ds-ink/80">paid into this balance</span>
+            </p>
+            <div className="mt-[22px] flex flex-wrap gap-2">
+              <ButtonLink to="/invest" variant="primary">
+                Invest
+              </ButtonLink>
+              <Button icon={<Plus />} onClick={panels.addCash}>
+                Add cash
+              </Button>
+              <Button icon={<ArrowUp className="rotate-45" />} onClick={panels.send}>
+                Send
+              </Button>
             </div>
+          </div>
+
+          <dl className="m-1 grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5 sm:grid-cols-3 xl:flex xl:flex-1 xl:items-center xl:justify-between xl:py-0 xl:pr-[61px] xl:pl-[85px]">
+            <HeaderFigure
+              label="Interest this year"
+              value={m ? usd(m.interestEarnedYtdUsd) : "—"}
+              sub="Paid into your cash"
+              tone={m && Number(m.interestEarnedYtdUsd) > 0 ? "up" : undefined}
+            />
+            <HeaderFigure label="Yield" value={pct(apr * 100)} sub="A year, variable" />
+            <HeaderFigure
+              label="Spendable"
+              value={b ? usd(b.spendableUsd) : "—"}
+              sub={b ? `Cash + ${usd(b.borrowableUsd, 0)} borrowing` : "Cash and borrowing"}
+            />
           </dl>
+        </section>
 
-          <Link
-            to="/portfolio"
-            className="mt-auto flex items-center justify-center gap-2 rounded-[10px] bg-brand px-5 py-3 pt-3 text-[14px] font-semibold text-white transition-colors hover:bg-brand-deep"
-          >
-            <Trend className="size-4" />
-            Put it to work
-          </Link>
-        </article>
-
-        <Receive />
-      </section>
-
-      <Send open={sending} onClose={() => setSending(false)} />
+        {signedIn ? (
+          <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
+            <BorrowSection />
+            <Receive />
+          </div>
+        ) : (
+          <Receive />
+        )}
+      </div>
     </AppShell>
   );
 };

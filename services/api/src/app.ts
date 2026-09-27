@@ -9,6 +9,8 @@ import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
+import { borrowRoutes } from "./routes/borrow.js";
+import { sendRoutes } from "./routes/send.js";
 import { instrumentRoutes } from "./routes/instruments.js";
 import { moneyRoutes } from "./routes/money.js";
 import { portfolioRoutes } from "./routes/portfolio.js";
@@ -29,7 +31,13 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
   app.use("*", cors());
 
-  app.get("/health", (c) => c.json({ ok: true }));
+  // Public, so the app can say "dry run" before anyone signs anything.
+  app.get("/health", (c) => c.json({ ok: true, sendMode: read.send.mode ?? "broadcast" }));
+
+  // Market data is public: the shelf and a stock page read the same for anyone,
+  // and a visitor browsing before signing in should see prices. Registered ahead
+  // of the auth middleware, which only guards the routes after it.
+  app.route("/", instrumentRoutes(read.instruments));
 
   app.use("/v1/*", requireAuth(auth));
 
@@ -41,11 +49,11 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
 
   /** Who is calling, and which wallet is theirs. The first authenticated route. */
   app.get("/v1/me", (c) => c.json(c.get("identity")));
-
-  app.route("/", instrumentRoutes(read.instruments));
   app.route("/", portfolioRoutes(read.portfolio));
   app.route("/", moneyRoutes(read.money));
   app.route("/", activityRoutes(read.activity));
+  app.route("/", borrowRoutes(read.borrow));
+  app.route("/", sendRoutes(read.send));
 
   app.get("/v1/market/status", async (c) => {
     const s = await market().sessions.current();

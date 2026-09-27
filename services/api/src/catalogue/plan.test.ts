@@ -19,6 +19,7 @@ const wrapper = (over: Partial<CatalogueInstrument["wrappers"][number]> = {}) =>
   netBuyers24h: 13,
   volume24hUsd: D(400_000),
   traders24h: 190,
+  hasMarket: true,
   ...over,
 });
 
@@ -65,6 +66,27 @@ describe("planCatalogue", () => {
       now: NOW,
     });
     expect(plan.instruments[0]).toMatchObject({ ticker: "ASML", name: "ASML Holding", sector: "Other" });
+  });
+
+  it("files a fund under Funds from its own name, and guesses no sector for a company", () => {
+    const plan = planCatalogue({
+      live: [
+        live({
+          ticker: "SLV",
+          wrappers: [
+            wrapper({ symbol: "SLVon", issuer: "ondo", name: "iShares Silver Trust (Ondo Tokenized)" }),
+          ],
+        }),
+        live({ ticker: "ACME", wrappers: [wrapper({ symbol: "ACMEx", name: "Acme Corp xStock" })] }),
+      ],
+      prices: new Map(),
+      stored: [],
+      now: NOW,
+    });
+    expect(plan.instruments.map((i) => [i.ticker, i.sector])).toEqual([
+      ["SLV", "Funds"],
+      ["ACME", "Other"],
+    ]);
   });
 
   it("takes the logo from the Backed wrapper", () => {

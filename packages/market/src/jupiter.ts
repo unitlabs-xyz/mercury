@@ -6,6 +6,9 @@ import { defaultFetch } from "@mercury/chain";
 /** Jupiter's free tier. Keyless and CORS-open, which is what makes it the fallback path. */
 const BASE = "https://lite-api.jup.ag";
 
+/** The most ids price/v3 takes in one request. */
+const PRICE_BATCH = 50;
+
 interface JupPrice {
   readonly usdPrice?: number;
   readonly decimals?: number;
@@ -52,9 +55,17 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
     const board = new Map<string, TokenPrice>();
     if (mints.length === 0) return board;
 
-    const res = await this.doFetch(`${this.base}/price/v3?ids=${mints.join(",")}`);
-    if (!res.ok) throw new Error(`jupiter price/v3 returned ${res.status}`);
-    const body = (await res.json()) as Record<string, JupPrice | null>;
+    // price/v3 answers at most 50 ids per call, so a full catalogue goes in batches.
+    const batches: string[][] = [];
+    for (let i = 0; i < mints.length; i += PRICE_BATCH) batches.push(mints.slice(i, i + PRICE_BATCH));
+    const pages = await Promise.all(
+      batches.map(async (ids) => {
+        const res = await this.doFetch(`${this.base}/price/v3?ids=${ids.join(",")}`);
+        if (!res.ok) throw new Error(`jupiter price/v3 returned ${res.status}`);
+        return (await res.json()) as Record<string, JupPrice | null>;
+      }),
+    );
+    const body: Record<string, JupPrice | null> = Object.assign({}, ...pages);
 
     for (const mint of mints) {
       const p = body[mint];

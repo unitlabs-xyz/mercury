@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHolding } from "@mercury/core";
-import type { ChainReader } from "@mercury/chain";
+import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
@@ -30,6 +30,8 @@ export interface PortfolioDeps {
   readonly chain: ChainReader;
   readonly multipliers: MultiplierSource;
   readonly usdcMint: string;
+  /** Stock pledged to Kamino by mint, raw. Still held: it counts in the position. */
+  readonly pledged: (walletAddress: string) => Promise<readonly TokenBalance[]>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -51,12 +53,18 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // Nothing is owned yet, which is an empty portfolio and not an error.
     if (identity.walletAddress === null) return c.json(EMPTY);
 
-    await deps.reconcile(identity.userId, identity.walletAddress);
+    // A reconciliation that cannot see the whole picture (Kamino down, say) is
+    // skipped, not run on half of it: the stored position is stale but right.
+    await deps.reconcile(identity.userId, identity.walletAddress).catch((err: unknown) => {
+      console.warn("portfolio: reconcile skipped", err);
+    });
 
-    const [rows, balances] = await Promise.all([
+    const [rows, balances, pledged] = await Promise.all([
       deps.holdings(identity.userId),
       deps.chain.tokenBalances(identity.walletAddress),
+      deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
     ]);
+    const pledgedByMint = new Map(pledged.map((p) => [p.mint, p]));
 
     const mints = rows.flatMap((r) => r.wrappers.map((w) => w.mint));
     const board = await deps.prices.pricesFor(mints);
@@ -83,6 +91,14 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       total = total.add(valueUsd);
       change = change.add(movedUsd);
 
+      // Pledged tokens are shares too, at the same multiplier as the wallet's.
+      const pledgedShares = row.wrappers.reduce((s, w) => {
+        const p = pledgedByMint.get(w.mint);
+        if (p === undefined) return s;
+        const multiplier = board.get(w.mint)?.multiplier ?? D(1);
+        return s.add(D(p.rawAmount.toString()).div(D(10).pow(p.decimals)).mul(multiplier));
+      }, ZERO);
+
       holdings.push({
         ticker: row.ticker,
         name: row.name,
@@ -92,6 +108,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         unrealisedPnlUsd: toWire(valueUsd.sub(row.costBasisUsd)),
         changePct24h: toWire(changePct24h),
         wrapperCount: row.wrappers.length,
+        pledgedShares: toWire(pledgedShares.gt(row.shares) ? row.shares : pledgedShares),
       });
     }
 

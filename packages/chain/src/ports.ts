@@ -94,6 +94,8 @@ export interface CatalogueWrapper {
   readonly netBuyers24h: number;
   readonly volume24hUsd: Decimal;
   readonly traders24h: number;
+  /** Jupiter prices it at all. False means no pool: nothing to quote, nothing to show. */
+  readonly hasMarket: boolean;
 }
 
 export interface CatalogueInstrument {

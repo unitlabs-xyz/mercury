@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:sample": "VITE_SAMPLE=1 vite"
   },
   "dependencies": {
     "@mercury/chain": "workspace:*",

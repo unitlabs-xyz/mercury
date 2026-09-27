@@ -1,0 +1,147 @@
+import type { Decision } from "@mercury/core";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { Button } from "../../ui/Button";
+import { RailHead } from "../../ui/ds";
+import { Alert, Clock } from "../../ui/icons";
+import { REFUSE_COPY } from "../BuySheet";
+import { ISSUER_NAME } from "../IssuerCompare";
+import { usd } from "../format";
+import { RailLine } from "./Panels";
+
+const PRESETS = [50, 100, 250, 500];
+
+const num = (d: { toString(): string } | null | undefined) => (d ? Number(d.toString()) : null);
+
+/** A note under the figures: warn or down tint, 12px, the icon beside the copy. */
+const Note = ({ tone, icon, children }: { tone: "warn" | "down"; icon: ReactNode; children: ReactNode }) => (
+  <p
+    className={`mx-5 mt-4 flex gap-2 rounded-lg px-3 py-2.5 text-[12px] leading-[1.45] ${
+      tone === "warn" ? "bg-ds-warn-chip text-ds-chip-warn" : "bg-ds-down-chip text-ds-chip-down"
+    } [&_svg]:mt-px [&_svg]:size-3.5 [&_svg]:shrink-0`}
+  >
+    {icon}
+    <span>{children}</span>
+  </p>
+);
+
+/**
+ * The order, on the page rather than behind a button, as a rail card: the
+ * amount in a white well on the grey panel with the presets under it, then the
+ * live answer for exactly that amount (which issuer, at what price per real
+ * share, for how many shares), then the one primary action. Review opens the
+ * confirmation with the same figure.
+ */
+export const Ticket = ({
+  name,
+  raw,
+  onRaw,
+  settled,
+  cash,
+  decision,
+  quoting,
+  fair,
+  onReview,
+}: {
+  name: string;
+  raw: string;
+  onRaw: (v: string) => void;
+  /** The amount once typing pauses: the quote, and every figure read from it, follow this. */
+  settled: number;
+  cash: number | null;
+  decision: Decision | null;
+  quoting: boolean;
+  fair: number | null;
+  onReview: () => void;
+}) => {
+  const amount = Number(raw) || 0;
+  const best = decision && decision.kind !== "refuse" ? decision.best : null;
+  const price = num(best?.pricePerShare) ?? fair;
+  const impact = num(best?.priceImpact);
+  const over = cash !== null && amount > cash;
+
+  return (
+    <section aria-label={`Buy ${name}`} className="min-w-0 rounded-xl bg-white p-1">
+      <div className="px-5 pt-4">
+        <RailHead title={`Buy ${name}`} meta={cash === null ? undefined : `${usd(cash)} cash`} />
+      </div>
+
+      <div className="mt-[11px] rounded-lg bg-ds-panel p-1">
+        <label className="flex h-15 items-center gap-1 rounded-md bg-white px-4 outline-offset-0 focus-within:outline-1 focus-within:outline-black/10">
+          <span className="text-[28px] leading-none font-medium text-ds-muted">$</span>
+          <input
+            value={raw}
+            onChange={(e) => onRaw(e.target.value.replace(/[^0-9.]/g, ""))}
+            inputMode="decimal"
+            aria-label="Amount in dollars"
+            className="w-full bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none"
+          />
+          <span className="shrink-0 text-[12px] text-ds-muted">USD</span>
+        </label>
+        <div className="mt-1 grid grid-cols-4 gap-1" role="group" aria-label="Amount presets">
+          {PRESETS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onRaw(String(p))}
+              aria-pressed={amount === p}
+              className={`h-8 rounded-md border text-[14px] leading-none text-ds-ink transition-colors max-sm:h-10 ${
+                amount === p
+                  ? "border-black/10 bg-linear-to-b from-white to-[#eeeeee]"
+                  : "border-transparent hover:bg-white/70"
+              }`}
+            >
+              ${p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <dl className="flex flex-col gap-3 px-5 pt-5">
+        <RailLine k="Price per share">{price === null ? "—" : usd(price)}</RailLine>
+        <RailLine k="You get">
+          {quoting ? "Quoting…" : price && settled > 0 ? `${(settled / price).toFixed(4)} shares` : "—"}
+        </RailLine>
+        <RailLine k="Best route">
+          {best ? `${ISSUER_NAME[best.issuer]} · ${best.symbol}` : quoting ? "Quoting…" : "—"}
+        </RailLine>
+        <RailLine k="Price impact">{impact === null ? "—" : `${(impact * 100).toFixed(2)}%`}</RailLine>
+      </dl>
+
+      {decision?.kind === "offer_queue" && (
+        <Note tone="warn" icon={<Clock />}>
+          Above the reference price right now. You can buy, or queue it to fill when the price comes back.
+        </Note>
+      )}
+      {decision?.kind === "refuse" && (
+        <Note tone="down" icon={<Alert />}>
+          <span className="font-medium">{REFUSE_COPY[decision.reason].title}.</span>{" "}
+          {REFUSE_COPY[decision.reason].body}
+        </Note>
+      )}
+      {over && (
+        <Note tone="down" icon={<Alert />}>
+          More than your cash.{" "}
+          <Link to="/money" className="font-medium underline underline-offset-2">
+            Add cash
+          </Link>
+        </Note>
+      )}
+
+      <div className="px-5 pt-5 pb-5">
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={onReview}
+          disabled={amount <= 0 || over || fair === null || decision?.kind === "refuse"}
+          className="w-full"
+        >
+          {decision?.kind === "offer_queue" ? "Review or queue" : "Review order"}
+        </Button>
+        <p className="mt-3 text-center text-[12px] leading-none text-ds-muted">
+          Quoted across every issuer for this exact amount
+        </p>
+      </div>
+    </section>
+  );
+};

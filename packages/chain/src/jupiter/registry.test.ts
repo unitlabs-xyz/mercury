@@ -2,12 +2,9 @@ import { describe, expect, it } from "vitest";
 import { fails, fakeFetch, jupSearchImpostors, jupSearchOndo, jupSearchXStock } from "../testing/index.js";
 import { JupiterRegistry } from "./registry.js";
 
-/** Both searches answered from the recorded universe. */
-const live = () =>
-  fakeFetch({
-    "query=xStock": jupSearchXStock,
-    "query=Ondo%20Tokenized": jupSearchOndo,
-  });
+/** The full verified list, answered from the recorded universe. */
+const FULL = [...jupSearchXStock, ...jupSearchOndo];
+const live = () => fakeFetch({ "tag?query=verified": FULL });
 
 describe("JupiterRegistry", () => {
   it("strips the wrapper suffix to get the real ticker", async () => {
@@ -28,7 +25,7 @@ describe("JupiterRegistry", () => {
     // Stonk" mints with one holder each. A symbol match alone would route money
     // into one of them.
     const r = new JupiterRegistry({
-      fetch: fakeFetch({ "query=xStock": jupSearchImpostors, "query=Ondo%20Tokenized": [] }),
+      fetch: fakeFetch({ "tag?query=verified": jupSearchImpostors }),
     });
     const mints = (await r.all()).map((t) => t.mint);
     const fakes = jupSearchImpostors.filter((t) => t.isVerified !== true).map((t) => t.id);
@@ -36,12 +33,57 @@ describe("JupiterRegistry", () => {
     for (const fake of fakes) expect(mints).not.toContain(fake);
   });
 
-  it("drops an instrument no wrapper can fill at a normal size", async () => {
+  it("keeps a thin instrument listed; filling it is the engine's call, not the shelf's", async () => {
     const thin = jupSearchXStock.map((t) => ({ ...t, liquidity: 1_000 }));
+    const r = new JupiterRegistry({ fetch: fakeFetch({ "tag?query=verified": thin }) });
+    const listed = await r.instruments();
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed.every((i) => i.wrappers.every((w) => w.liquidityUsd.eq(1_000)))).toBe(true);
+  });
+
+  it("reads the whole universe in one call, not twenty results a search", async () => {
+    let calls = 0;
+    const many = Array.from({ length: 60 }, (_, n) => ({
+      ...jupSearchXStock[0]!,
+      id: `Mint${n}xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`,
+      symbol: `T${n}x`,
+    }));
+    const f = fakeFetch({ "tag?query=verified": many });
     const r = new JupiterRegistry({
-      fetch: fakeFetch({ "query=xStock": thin, "query=Ondo%20Tokenized": [] }),
+      fetch: ((input: Parameters<typeof fetch>[0]) => {
+        calls += 1;
+        return f(input);
+      }) as typeof fetch,
     });
-    expect(await r.instruments()).toEqual([]);
+    expect((await r.instruments()).length).toBe(60);
+    expect(calls).toBe(1);
+  });
+
+  it("says whether Jupiter has a market for each wrapper", async () => {
+    const [a, b] = jupSearchXStock;
+    const r = new JupiterRegistry({
+      fetch: fakeFetch({
+        "tag?query=verified": [
+          { ...a!, usdPrice: 180 },
+          { ...b!, usdPrice: null },
+        ],
+      }),
+    });
+    const wrappers = (await r.instruments()).flatMap((i) => i.wrappers);
+    expect(wrappers.find((w) => w.mint === a!.id)?.hasMarket).toBe(true);
+    expect(wrappers.find((w) => w.mint === b!.id)?.hasMarket).toBe(false);
+  });
+
+  it("falls back to the two searches when the full list is unavailable", async () => {
+    const r = new JupiterRegistry({
+      fetch: fakeFetch({
+        "tag?query=verified": fails(503),
+        "query=xStock": jupSearchXStock,
+        "query=Ondo%20Tokenized": jupSearchOndo,
+      }),
+    });
+    const nvda = (await r.instruments()).find((i) => i.ticker === "NVDA");
+    expect(nvda!.wrappers.map((w) => w.issuer).sort()).toEqual(["backed", "ondo"]);
   });
 
   it("answers wrappersFor with the four fields the decision path needs", async () => {
@@ -62,7 +104,7 @@ describe("JupiterRegistry", () => {
 
   it("calls each upstream once and serves the rest from cache", async () => {
     let calls = 0;
-    const counted = fakeFetch({ "query=xStock": jupSearchXStock, "query=Ondo%20Tokenized": jupSearchOndo });
+    const counted = fakeFetch({ "tag?query=verified": FULL });
     const r = new JupiterRegistry({
       fetch: ((input: Parameters<typeof fetch>[0]) => {
         calls += 1;
@@ -72,12 +114,12 @@ describe("JupiterRegistry", () => {
     await r.instruments();
     await r.instruments();
     await r.wrappersFor("NVDA");
-    expect(calls).toBe(2);
+    expect(calls).toBe(1);
   });
 
   it("re-reads once the cache is stale", async () => {
     let calls = 0;
-    const counted = fakeFetch({ "query=xStock": jupSearchXStock, "query=Ondo%20Tokenized": jupSearchOndo });
+    const counted = fakeFetch({ "tag?query=verified": FULL });
     let clock = 0;
     const r = new JupiterRegistry({
       ttlMs: 1_000,
@@ -90,12 +132,16 @@ describe("JupiterRegistry", () => {
     await r.instruments();
     clock = 1_001;
     await r.instruments();
-    expect(calls).toBe(4);
+    expect(calls).toBe(2);
   });
 
   it("keeps the xStocks leg when Ondo's search fails", async () => {
     const r = new JupiterRegistry({
-      fetch: fakeFetch({ "query=xStock": jupSearchXStock, "query=Ondo%20Tokenized": fails(500) }),
+      fetch: fakeFetch({
+        "tag?query=verified": fails(503),
+        "query=xStock": jupSearchXStock,
+        "query=Ondo%20Tokenized": fails(500),
+      }),
     });
     const instruments = await r.instruments();
     expect(instruments.length).toBeGreaterThan(0);
@@ -104,7 +150,11 @@ describe("JupiterRegistry", () => {
 
   it("fails loudly when the xStocks search fails, because there is nothing left", async () => {
     const r = new JupiterRegistry({
-      fetch: fakeFetch({ "query=xStock": fails(500), "query=Ondo%20Tokenized": [] }),
+      fetch: fakeFetch({
+        "tag?query=verified": fails(503),
+        "query=xStock": fails(500),
+        "query=Ondo%20Tokenized": [],
+      }),
     });
     await expect(r.instruments()).rejects.toThrow("500");
   });

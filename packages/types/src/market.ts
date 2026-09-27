@@ -8,6 +8,13 @@ export const Wrapper = z.object({
   multiplier: Usd,
   decimals: z.number().int().min(0).max(18),
   isRoutable: z.boolean(),
+  icon: z.string().nullable(),
+  /** Pool depth on Jupiter, USD. Zero means no pool at all. */
+  liquidityUsd: Usd,
+  holders: z.number().int().min(0),
+  volume24hUsd: Usd,
+  netBuyers24h: z.number().int(),
+  traders24h: z.number().int().min(0),
 });
 
 export const Instrument = z.object({
@@ -18,6 +25,16 @@ export const Instrument = z.object({
   pricePerShare: Usd,
   changePct24h: Ratio,
   status: InstrumentStatus,
+  /** On the short shelf a first visit sees. Everything else is found by search. */
+  featured: z.boolean(),
+  /** Across every wrapper. */
+  liquidityUsd: Usd,
+  /** About the largest order the deepest pool takes inside the impact cap. An estimate; the quote decides. */
+  maxOrderUsd: Usd,
+  holders: z.number().int().min(0),
+  volume24hUsd: Usd,
+  netBuyers24h: z.number().int(),
+  traders24h: z.number().int().min(0),
   wrappers: z.array(Wrapper),
 });
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 const KEY = "harbor.watchlist";
 
@@ -13,8 +13,9 @@ const read = (): string[] => {
 
 /** Per-browser convenience, deliberately not account state. Nothing here is money. */
 export const useWatchlist = () => {
-  const [tickers, setTickers] = useState<string[]>([]);
-  useEffect(() => setTickers(read()), []);
+  // Read on the first render, not in an effect: the saved rows must be there
+  // from the start, or the watchlist would open them in as if just added.
+  const [tickers, setTickers] = useState<string[]>(read);
 
   const toggle = useCallback((ticker: string) => {
     setTickers((prev) => {
