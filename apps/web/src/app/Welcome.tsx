@@ -1,9 +1,9 @@
-import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PRESS } from "../motion/config";
+import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { Plus } from "../ui/icons";
+import { MercuryLogo } from "../ui/Logo";
 
 const SEEN = "harbor.welcome.seen";
 
@@ -46,53 +46,50 @@ export const Welcome = () => {
   };
 
   return (
-    <Dialog open={open} onClose={dismiss} labelledBy="welcome-heading" className="max-w-[560px]">
-      <div className="p-7 sm:p-10">
+    <Dialog open={open} onClose={dismiss} labelledBy="welcome-heading" className="max-w-[440px] !rounded-xl">
+      <div className="px-6 pt-6 pb-6">
+        <MercuryLogo className="h-6 w-auto text-ds-ink" />
         <h2
           id="welcome-heading"
-          className="text-[26px] leading-[1.15] font-semibold tracking-[-0.03em] text-balance sm:text-[34px]"
+          className="mt-7 text-[20px] leading-[1.2] font-medium text-ds-ink text-balance"
         >
           Three steps and you own shares
         </h2>
-        <p className="mt-3 text-[15px] leading-[1.55] text-muted text-pretty">
+        <p className="mt-3 text-[14px] leading-[1.5] text-ds-muted text-pretty">
           Your wallet is live and empty. Here is what happens next.
         </p>
 
-        <ol className="mt-8 grid gap-6">
+        {/* The steps as rows on the grey panel, as the app's lists are set. */}
+        <ol className="mt-6 flex flex-col gap-1 rounded-lg bg-ds-panel p-1">
           {STEPS.map((s, i) => (
-            <li key={s.title} className="flex gap-4">
-              <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand-tint text-[13px] font-semibold text-brand-deep">
+            <li key={s.title} className="flex gap-3 rounded-md bg-white px-4 py-3.5">
+              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-ds-panel text-[12px] leading-none font-medium text-ds-ink">
                 {i + 1}
               </span>
-              <div>
-                <p className="text-[16px] font-semibold tracking-[-0.01em]">{s.title}</p>
-                <p className="mt-1 text-[14px] leading-[1.5] text-muted text-pretty">{s.body}</p>
+              <div className="min-w-0">
+                <p className="text-[14px] leading-6 font-medium text-ds-ink">{s.title}</p>
+                <p className="mt-1 text-[12px] leading-[1.5] text-ds-muted text-pretty">{s.body}</p>
               </div>
             </li>
           ))}
         </ol>
 
-        <div className="mt-9 flex flex-col-reverse items-stretch gap-3 border-t border-hair pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={dismiss}
-            className="flex min-h-11 items-center justify-center rounded-[10px] px-3 text-[14px] font-medium text-muted transition-colors hover:bg-shell hover:text-ink"
-          >
+        <div className="mt-6 grid grid-cols-2 gap-1">
+          <Button onClick={dismiss} className="w-full">
             Look around first
-          </button>
-          <motion.button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
+            icon={<Plus />}
             onClick={() => {
               dismiss();
-              navigate("/money#receive");
+              // Opens the Add cash panel over this page.
+              navigate({ search: "?add=cash" });
             }}
-            whileTap={{ scale: 0.97 }}
-            transition={PRESS}
-            className="flex items-center justify-center gap-2 rounded-[9px] bg-brand px-5 py-3 text-[14px] font-semibold text-white transition-colors hover:bg-brand-deep"
+            className="w-full"
           >
-            <Plus className="size-4" />
             Add cash
-          </motion.button>
+          </Button>
         </div>
       </div>
     </Dialog>

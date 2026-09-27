@@ -1,5 +1,5 @@
 ---
-import { nav } from "../config/site";
+import { nav, site } from "../config/site";
 import Wordmark from "./Wordmark.astro";
 import Button from "./Button.astro";
 import LanguagePicker from "./LanguagePicker.astro";
@@ -27,7 +27,7 @@ const item = "text-[14px] tracking-[-0.02em] text-muted transition-colors durati
       </div>
 
       <div class="hidden lg:block">
-        <Button href="/login" size="sm">Login</Button>
+        <Button href={site.app} size="sm">Login</Button>
       </div>
 
       <button
@@ -63,7 +63,7 @@ const item = "text-[14px] tracking-[-0.02em] text-muted transition-colors durati
 
     <div class="sheet-foot" style={`--i:${nav.length}`}>
       <LanguagePicker class="text-[14px] tracking-[-0.02em] text-muted" />
-      <Button href="/login" size="sm">Login</Button>
+      <Button href={site.app} size="sm">Login</Button>
     </div>
   </div>
 </div>

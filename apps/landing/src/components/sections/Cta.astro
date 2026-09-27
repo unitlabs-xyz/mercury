@@ -1,4 +1,5 @@
 ---
+import { site } from "../../config/site";
 import Band from "../Band.astro";
 import Button from "../Button.astro";
 import Media from "../Media.astro";
@@ -8,7 +9,7 @@ import ctaGrain from "../../assets/textures/CTATexture.png";
 const content = {
   heading: ["Open an investment account", "in about a minute."],
   note: "No paperwork, no waiting, no bank. Five dollars is enough to start.",
-  action: { label: "Open an account", href: "/signup" },
+  action: { label: "Open an account", href: site.app },
 };
 
 // The art is the full 1000 column at its own ratio.

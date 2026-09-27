@@ -4,8 +4,11 @@
  */
 export const site = {
   name: "Mercury",
-  // TODO: the real domain. It feeds canonical URLs, OG tags and the sitemap.
-  url: "https://mercury.example",
+  // The landing domain. It feeds canonical URLs, OG tags and the sitemap.
+  url: "https://trymercury.xyz",
+  // The web app, where Login and every "get started" button go. Its own domain
+  // (app.trymercury.xyz) once DNS points there; the Vercel address until then.
+  app: "https://mercury-web-nine.vercel.app/",
   tagline: "The financial account built for the onchain world.",
   description:
     "Hold stablecoins, buy tokenized US shares, spend with a card, and borrow against what you own — all from a wallet you control.",
