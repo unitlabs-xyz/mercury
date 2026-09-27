@@ -1,7 +1,7 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { MarketStatus, Money, Portfolio } from "@mercury/types";
-import { SAMPLE } from "../dev/sample";
+import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { apiFetch } from "./client";
 
 /**
@@ -19,7 +19,7 @@ import { apiFetch } from "./client";
 export const useSignedIn = (): boolean => {
   const { ready, authenticated } = usePrivy();
   // Dev-only sample data counts as signed in; always false in a build.
-  return SAMPLE || (ready && authenticated);
+  return SAMPLE_NO_LOGIN || (ready && authenticated);
 };
 
 /** Holdings and cash. The server reconciles the wallet against its lots first. */

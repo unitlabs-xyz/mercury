@@ -24,7 +24,7 @@ export class ApiError extends Error {
  * is not an error — the server decides whether the route needed them.
  */
 export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
-  // Dev-only sample data for design review; always false in a build.
+  // Sample data for design review (VITE_SAMPLE=1); off in a normal build.
   if (SAMPLE) {
     const sample = sampleResponse(path);
     if (sample !== undefined) return sample as T;

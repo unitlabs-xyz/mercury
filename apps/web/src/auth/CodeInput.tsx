@@ -64,14 +64,16 @@ export const CodeInput = ({
             autoComplete={i === 0 ? "one-time-code" : "off"}
             maxLength={1}
             aria-label={`Digit ${i + 1} of ${LENGTH}`}
-            className={`h-[54px] w-full min-w-0 rounded-xl border text-center font-mono text-[22px] font-medium caret-brand transition-colors duration-200 outline-none sm:h-[60px] sm:text-[24px] ${
+            className={`h-[54px] w-full min-w-0 rounded-lg border text-center text-[24px] font-medium text-ds-ink caret-ds-ink transition-colors duration-200 outline-none sm:h-[60px] ${
               status === "done"
-                ? "border-[1.5px] border-up bg-up-tint text-up-deep"
+                ? "border-transparent bg-ds-up-chip text-ds-up"
                 : status === "checking"
-                  ? "border-[1.5px] border-brand-soft bg-shell text-muted"
-                  : filled || active
-                    ? "border-[1.5px] border-brand bg-white"
-                    : "border-cardline bg-shell"
+                  ? "border-transparent bg-ds-panel text-ds-muted"
+                  : active
+                    ? "border-black/15 bg-white"
+                    : filled
+                      ? "border-black/10 bg-white"
+                      : "border-transparent bg-ds-panel"
             }`}
           />
         );

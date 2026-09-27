@@ -47,7 +47,7 @@ export const Borrowing = ({ m, loading }: { m: Model | undefined; loading: boole
             sub={
               m.available > 0
                 ? "Available to borrow, at the 80% safety limit"
-                : "Buy SPY, QQQ, NVDA or another accepted stock to borrow against it"
+                : "Buy a stock Kamino accepts to borrow against it"
             }
           />
         </div>

@@ -34,12 +34,12 @@ export const ValueChart = ({ range, onZoom }: { range: Range; onZoom?: (dir: 1 |
     <div
       role="img"
       aria-label={`Value over ${RANGE_LABEL[range]}: not enough history yet`}
-      className="grid h-full min-h-[200px] w-full place-items-center rounded-xl border border-dashed border-hair bg-shell/60 px-6 text-center"
+      className="grid min-h-[200px] w-full place-items-center rounded-lg bg-ds-panel px-6 py-8 text-center"
     >
       <div>
-        <Clock className="mx-auto size-[18px] text-faint" />
-        <p className="mt-2.5 text-[13px] font-medium text-ink-soft">Not enough history yet</p>
-        <p className="mx-auto mt-1 max-w-[38ch] text-[12px] text-faint">
+        <Clock className="mx-auto size-4 text-ds-muted" />
+        <p className="mt-3 text-[14px] leading-none font-medium text-ds-ink">Not enough history yet</p>
+        <p className="mx-auto mt-2.5 max-w-[40ch] text-[12px] leading-[1.45] text-ds-muted">
           We record your balance hourly from the day you open the account. The chart appears once there is
           more than a day of it.
         </p>

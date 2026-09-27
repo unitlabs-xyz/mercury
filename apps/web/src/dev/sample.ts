@@ -4,16 +4,19 @@ import type { Event } from "../app/activity-data";
 import type { Point } from "../app/DotChart";
 
 /**
- * SAMPLE DATA, FOR LOOKING AT THE DESIGN. Never in a build.
+ * SAMPLE DATA, FOR LOOKING AT THE DESIGN.
  *
- * On only under `pnpm dev:web:sample` (vite dev with VITE_SAMPLE=1). The
- * `import.meta.env.DEV` check is false in every production build, so the
- * bundler drops all of this there. It answers the app's own API reads with the
+ * On wherever VITE_SAMPLE=1: `pnpm dev:web:sample` locally, or a deployed
+ * preview built with it set (the design demo). Off, the bundler drops all of
+ * this. Locally it also skips sign-in; a deployed build still signs you in
+ * with Privy, then shows these figures instead of your account's. It answers the app's own API reads with the
  * numbers in the portfolio design, so each screen can be checked against it.
  * Everything it does not cover (instruments, logos, market status) still goes
  * to the real API.
  */
-export const SAMPLE = import.meta.env.DEV && import.meta.env["VITE_SAMPLE"] === "1";
+export const SAMPLE = import.meta.env["VITE_SAMPLE"] === "1";
+/** Local sample runs only: straight past sign-in. A deployed sample build keeps it. */
+export const SAMPLE_NO_LOGIN = SAMPLE && import.meta.env.DEV;
 
 const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 

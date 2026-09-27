@@ -230,7 +230,8 @@ export const Performance = ({
         </div>
         <RangeSwitch options={RANGES} value={range} onChange={setRange} />
       </header>
-      <div className="mt-[14px] flex min-h-[365px] flex-1">
+      {/* The chart takes its full height only when there is a line to draw. */}
+      <div className={`mt-[14px] flex flex-1 ${history ? "min-h-[365px]" : ""}`}>
         <ValueChart
           range={range}
           onZoom={(dir) =>
@@ -275,7 +276,14 @@ export const Allocation = ({ m }: { m: Model | undefined }) => (
       {!m ? (
         <Skeleton className="h-[208px] w-full" />
       ) : m.total === 0 ? (
-        <p className="text-[14px] text-ds-muted">Add cash to see where your money sits.</p>
+        <div className="grid min-h-[200px] place-items-center rounded-lg bg-ds-panel px-6 py-8 text-center">
+          <div>
+            <p className="text-[14px] leading-none font-medium text-ds-ink">Nothing to show yet</p>
+            <p className="mx-auto mt-2.5 max-w-[34ch] text-[12px] leading-[1.45] text-ds-muted">
+              Add cash or buy a stock, and this shows where your money sits.
+            </p>
+          </div>
+        </div>
       ) : (
         <HexAllocation slices={slicesOf(m)} total={m.total} />
       )}
