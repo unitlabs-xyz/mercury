@@ -1,14 +1,27 @@
 {
-  "name": "Harbor",
-  "short_name": "Harbor",
-  "description": "Buy real shares of Nvidia, Apple or the S&P 500 with stablecoins.",
-  "start_url": "/",
+  "name": "Mercury App",
+  "short_name": "Mercury",
+  "description": "Hold stablecoins, buy tokenized US shares, spend with a card, and borrow against what you own \u2014 all from a wallet you control.",
+  "start_url": "/portfolio",
   "display": "standalone",
-  "background_color": "#F7F6F2",
-  "theme_color": "#F7F6F2",
+  "background_color": "#F3F3F3",
+  "theme_color": "#F3F3F3",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

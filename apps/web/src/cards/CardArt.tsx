@@ -65,7 +65,7 @@ export const CardArt = ({
           }`}
         >
           <AnchorMark className="h-[1.25em] w-[1.25em] shrink-0" />
-          <span className="font-semibold tracking-[-0.02em]">Harbor</span>
+          <span className="font-semibold tracking-[-0.02em]">Mercury</span>
         </span>
         <span className={`flex items-end justify-end ${finish === "basic" ? "text-white" : "text-ink"}`}>
           <span className="text-right leading-none">

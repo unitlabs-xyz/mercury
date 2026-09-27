@@ -14,3 +14,6 @@ ios/
 android/
 *.log
 .astro/
+
+# Vercel build output and project links
+.vercel

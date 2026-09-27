@@ -73,14 +73,14 @@ export const Footer = () => (
 
         <div className="mt-6 grid max-w-[46ch] gap-2.5 text-[13px] leading-[1.6] text-faint">
           <p>
-            Harbor is an interface to tokenised securities issued by Backed and Ondo Global Markets. It is not
+            Mercury is an interface to tokenised securities issued by Backed and Ondo Global Markets. It is not
             a broker and not a custodian: it cannot move, freeze or borrow against anything you hold.
           </p>
           <p>
             Investing carries risk. The value of your holdings can fall as well as rise, and past performance
             does not guarantee future results. Nothing on this page is investment advice.
           </p>
-          <p>Harbor is not affiliated with Backed, Ondo, Solana or Privy.</p>
+          <p>Mercury is not affiliated with Backed, Ondo, Solana or Privy.</p>
         </div>
       </div>
 
@@ -104,7 +104,7 @@ export const Footer = () => (
     </div>
 
     <div className="gutter mx-auto w-full max-w-[1440px] border-t border-hair py-6">
-      <span className="text-[13px] text-faint">© 2026 Harbor</span>
+      <span className="text-[13px] text-faint">© 2026 Mercury</span>
     </div>
   </footer>
 );

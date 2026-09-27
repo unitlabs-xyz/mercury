@@ -19,12 +19,12 @@ const ASSURANCES: { icon: ReactNode; title: string; body: string }[] = [
   {
     icon: <Blocks className="size-[18px]" />,
     title: "It's on-chain.",
-    body: "Your shares and your cash live on Solana, not on Harbor.",
+    body: "Your shares and your cash live on Solana, not on Mercury.",
   },
   {
     icon: <Sliders className="size-[18px]" />,
     title: "You're in control.",
-    body: "Transactions need your approval. Harbor cannot move your funds.",
+    body: "Transactions need your approval. Mercury cannot move your funds.",
   },
   {
     icon: <Key className="size-[18px]" />,
@@ -365,7 +365,7 @@ export const AuthModal = () => {
 
                     <p className="mt-8 flex items-center gap-[11px] rounded-xl border border-[#CBE4E7] bg-[#F1F7F8] px-4 py-3.5 text-[14px] leading-[1.45] text-brand-deep">
                       <Lock className="size-[17px] shrink-0" />
-                      Only you can approve transactions. Neither Harbor nor Privy can move your funds.
+                      Only you can approve transactions. Neither Mercury nor Privy can move your funds.
                     </p>
                   </>
                 )}

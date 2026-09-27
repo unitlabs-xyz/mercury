@@ -307,7 +307,7 @@ export const NonCustodial = () => (
       </h2>
       <div className="space-y-4 text-[15px] leading-[1.65] text-ink-soft">
         <p>
-          Harbor never holds your funds. Your main assets earn yield through Kamino Finance — a non-custodial
+          Mercury never holds your funds. Your main assets earn yield through Kamino Finance — a non-custodial
           DeFi protocol with $2.8B TVL, 18+ audits, and zero bad debt across its history. Card transactions
           settle through Visa. Smart contracts are audited by FYEO.
         </p>

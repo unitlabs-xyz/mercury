@@ -14,7 +14,7 @@ const STEPS = [
   },
   {
     title: "Pick what to hold",
-    body: "A single company, or a whole basket in one action. Harbor quotes both issuers and routes to whichever is genuinely cheaper at your size.",
+    body: "A single company, or a whole basket in one action. Mercury quotes both issuers and routes to whichever is genuinely cheaper at your size.",
   },
   {
     title: "Watch it work",
