@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig } from "./deps.js";
 import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
+import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { createApp } from "./app.js";
 
 const config = readConfig();
@@ -60,6 +61,23 @@ every("position-sync", 2_000, async () => {
   if (s.written === 0 && s.failed === 0) return null;
   return (
     `${s.written} rows across ${s.reconciled}/${s.wallets} wallets` +
+    (s.failed > 0 ? `, ${s.failed} failed` : "")
+  );
+});
+
+/**
+ * Thirty seconds, because this answers "what happened" and `position-sync`
+ * already answers "what do I hold" every two. The balance a user checks is the
+ * fresh one; only the row in the feed waits.
+ *
+ * Two streams per wallet — its own address for native SOL, its USDC account for
+ * cash — so a quiet pass is four calls a minute per wallet and says nothing.
+ */
+every("wallet-events", 30_000, async () => {
+  const s = await syncAllWalletEvents(auth.db, { history: deps.history });
+  if (s.written === 0 && s.failed === 0) return null;
+  return (
+    `${s.written} rows across ${s.checked}/${s.wallets} wallets` +
     (s.failed > 0 ? `, ${s.failed} failed` : "")
   );
 });

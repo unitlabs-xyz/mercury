@@ -6,6 +6,7 @@ import {
   USDC_MINT,
   type BasketVenue,
   type SupportedStocks,
+  type ChainHistory,
   type ChainReader,
   type QuoteSource,
   type TokenRegistry,
@@ -52,6 +53,8 @@ export interface Deps {
   readonly prices: PriceBoard;
   readonly credit: CreditSource;
   readonly chain: ChainReader;
+  /** The same adapter, asked what happened rather than what is held. */
+  readonly history: ChainHistory;
   readonly baskets: BasketVenue;
   /** Kamino's xStocks market through the klend SDK: reads, and unsigned transactions. */
   readonly lending: LendingSource;
@@ -156,6 +159,7 @@ export function buildDeps(config: Config): Deps {
     prices: market,
     credit: new KaminoCredit(),
     chain,
+    history: chain,
     baskets: new SymmetryVenue({ rpcUrl: config.solanaRpcUrl }),
     lending: new KaminoLending({
       rpcUrl: config.solanaRpcUrl,
