@@ -27,6 +27,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@mercury/tsconfig": "workspace:*",
     "@types/bn.js": "^5.2.0",
     "@types/node": "^22.10.0",

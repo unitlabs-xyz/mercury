@@ -299,7 +299,7 @@ importers:
         version: 10.6.0
       drizzle-orm:
         specifier: ^0.45.3
-        version: 0.45.3(postgres@3.4.9)
+        version: 0.45.3(@electric-sql/pglite@0.5.8)(postgres@3.4.9)
       hono:
         specifier: ^4.6.0
         version: 4.13.8
@@ -313,6 +313,9 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.8
+        version: 0.5.8
       '@mercury/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
@@ -1208,6 +1211,9 @@ packages:
   '@egjs/hammerjs@2.0.17':
     resolution: {integrity: sha512-XQsZgjm2EcVUiZQf11UBJQfmZeEmOW8DpI1gsFeln6w0ae0ii4dMQEQ0kjl6DspdWX1aGY1/loyXnP0JS06e/A==}
     engines: {node: '>=0.8.0'}
+
+  '@electric-sql/pglite@0.5.8':
+    resolution: {integrity: sha512-n9tsbUOhwx2epK1V0ZG9Ar4SHWUju04dhmzZXiSBXwBoleOvIfals33NAaWgagQVAL4Rbvx/Ptsu3P+pA09f6Q==}
 
   '@emotion/is-prop-valid@1.4.0':
     resolution: {integrity: sha512-QgD4fyscGcbbKwJmqNvUMSE02OsHUa+lAWKdEUIJKgqe5IwRSKd7+KhibEWdaKwgjLj0DRSHA9biAIqGBk05lw==}
@@ -9945,6 +9951,8 @@ snapshots:
     dependencies:
       '@types/hammerjs': 2.0.46
 
+  '@electric-sql/pglite@0.5.8': {}
+
   '@emotion/is-prop-valid@1.4.0':
     dependencies:
       '@emotion/memoize': 0.9.0
@@ -16260,8 +16268,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.13
 
-  drizzle-orm@0.45.3(postgres@3.4.9):
+  drizzle-orm@0.45.3(@electric-sql/pglite@0.5.8)(postgres@3.4.9):
     optionalDependencies:
+      '@electric-sql/pglite': 0.5.8
       postgres: 3.4.9
 
   dunder-proto@1.0.1:
