@@ -3,7 +3,9 @@ import type { Decision, OfferQueueDecision, ExecuteDecision, RefuseDecision } fr
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
 import { useMoney } from "../api/hooks";
-import { IssuerCompare, ISSUER_NAME } from "./IssuerCompare";
+import { ISSUER_NAME } from "./IssuerCompare";
+import { Routes } from "./stock/Routes";
+import { Button } from "../ui/Button";
 import { useDecision } from "../market/hooks";
 import type { Instrument, PriceMap } from "../market/hooks";
 
@@ -38,7 +40,9 @@ const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
         <Line k="You pay" v={usd(amount)} />
         <Line k="Price per share" v={usd(price)} />
         <Line k="Shares" v={(amount / price).toFixed(4)} />
-        <Line k="Route" v={d.best.routeLabels.join(" → ")} mono />
+        {/* Not monospace: "Raydium CLMM" is the name of a venue, not a
+            measurement. Mono here was a costume for "technical". */}
+        <Line k="Route" v={d.best.routeLabels.join(" → ")} />
       </dl>
       {d.warning && (
         <p className="mt-4 flex gap-2 rounded-xl border border-warn-line bg-warn-tint px-3.5 py-3 text-[13px] leading-[1.5] text-warn">
@@ -124,10 +128,10 @@ const Refuse = ({ d }: { d: RefuseDecision }) => {
   );
 };
 
-const Line = ({ k, v, mono = false }: { k: string; v: string; mono?: boolean }) => (
+const Line = ({ k, v }: { k: string; v: string }) => (
   <div className="flex items-baseline justify-between gap-4">
     <dt className="text-muted">{k}</dt>
-    <dd className={`text-right font-medium ${mono ? "font-mono text-[13px]" : ""}`}>{v}</dd>
+    <dd className="text-right font-medium">{v}</dd>
   </div>
 );
 
@@ -272,32 +276,36 @@ export const BuySheet = ({
               )}
             </div>
 
+            {/* The same table the page shows, not a second one that renders the
+                same facts in its own uppercase headers, monospace symbols and
+                solid chips. `bare` drops its card: this is already inside one. */}
             <div className="mt-5">
-              <IssuerCompare
+              <Routes
                 decision={decision}
                 amount={Math.max(settled, 0.01)}
                 loading={isLoading || isFetching}
                 wrappers={instrument.wrappers}
+                bare
               />
             </div>
           </div>
 
           <div className="flex shrink-0 gap-2.5 border-t border-hair bg-white px-6 py-4 sm:px-7">
-            <button
-              type="button"
-              onClick={close}
-              className="h-11 flex-1 rounded-[10px] border border-cardline text-[15px] font-medium transition-colors hover:bg-shell"
-            >
+            {/* The design system's buttons. These were hand-rolled: a teal
+                rectangle at h-11 for the primary action, where every other
+                button in the app is a near-black pill at h-10. */}
+            <Button size="lg" onClick={close} className="flex-1">
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="lg"
+              variant="primary"
               disabled={blocked}
               onClick={() => decision && setPlaced(decision)}
-              className="h-11 flex-[1.6] rounded-[10px] bg-brand text-[15px] font-semibold text-white transition-colors hover:bg-brand-deep disabled:cursor-not-allowed disabled:bg-chip disabled:text-faint"
+              className="flex-[1.6]"
             >
               {cta}
-            </button>
+            </Button>
           </div>
         </>
       )}
