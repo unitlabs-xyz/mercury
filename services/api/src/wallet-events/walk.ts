@@ -10,8 +10,22 @@ export interface StreamWalk {
   readonly newestSignature: string | null;
 }
 
+export interface WalkOptions {
+  /**
+   * Walk the address's full history instead of baselining on first sight.
+   *
+   * First-sighting is right for a wallet's own address: a Privy wallet has no
+   * history to lose, and an external one's years of it are out of scope per
+   * ADR 0003. A token account the job itself just discovered is neither —
+   * its history is bounded and minutes old by construction, so baselining it
+   * would drop the very deposit that funded it.
+   */
+  readonly backfill?: boolean;
+}
+
 /**
- * Every signature on one address since `cursor`.
+ * Every signature on one address since `cursor`, or its whole history when
+ * `backfill` is set and there is no cursor yet.
  *
  * The paging loop is the whole point. `getSignaturesForAddress` returns at most
  * `limit` signatures, newest first, so if more than a page has happened since
@@ -27,11 +41,10 @@ export async function walkStream(
   history: ChainHistory,
   address: string,
   cursor: string | null,
+  options: WalkOptions = {},
 ): Promise<StreamWalk> {
-  if (cursor === null) {
-    // First sight: note where we are and emit nothing. A wallet Privy created
-    // during sign-up has no history to lose, and an external wallet with years
-    // of it is out of scope in v1 per ADR 0003.
+  if (cursor === null && options.backfill !== true) {
+    // First sight: note where we are and emit nothing.
     const page = await history.signatures(address, { limit: 1 });
     return { signatures: [], newestSignature: page[0]?.signature ?? null };
   }
@@ -42,7 +55,7 @@ export async function walkStream(
   for (;;) {
     const page = await history.signatures(address, {
       limit: PAGE,
-      until: cursor,
+      ...(cursor === null ? {} : { until: cursor }),
       ...(before === undefined ? {} : { before }),
     });
     collected.push(...page);

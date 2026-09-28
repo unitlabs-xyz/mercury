@@ -86,4 +86,13 @@ describe("walkStream", () => {
     // The cursor still advances past the failure, or it would be retried forever.
     expect(walk.newestSignature).toBe("sig-0003");
   });
+
+  it("walks the whole history on first sight when backfill is set, instead of baselining", async () => {
+    const n = nodeWith([ref(3), ref(2), ref(1)]);
+    const walk = await walkStream(n.history, ADDRESS, null, { backfill: true });
+    expect(walk.signatures.map((s) => s.signature)).toEqual(["sig-0001", "sig-0002", "sig-0003"]);
+    expect(walk.newestSignature).toBe("sig-0003");
+    // No `until`: a freshly discovered stream has no cursor to bound the walk.
+    expect(n.asked).toEqual([{ limit: 100 }]);
+  });
 });

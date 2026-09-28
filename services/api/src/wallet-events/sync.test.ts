@@ -81,7 +81,8 @@ describe("syncAllWalletEvents", () => {
     expect(rows[0]!.title).toBe("Added cash");
     expect(rows[0]!.mint).toBe(USDC_MINT);
     expect(rows[0]!.txSignature).toBe(SIG);
-    expect(Number(rows[0]!.amountUsd)).toBe(500);
+    // The exact string, not a float round-trip: never a float for money.
+    expect(rows[0]!.amountUsd).toBe("500.000000000000000000");
     expect(rows[0]!.occurredAt).toEqual(new Date(1_790_573_221 * 1000));
 
     // Replay the same window: the unique index must absorb it.
@@ -89,6 +90,61 @@ describe("syncAllWalletEvents", () => {
     const second = await syncAllWalletEvents(db, { history });
     expect(second.written).toBe(0);
     expect(await db.select().from(activities).where(eq(activities.userId, userId))).toHaveLength(1);
+  });
+
+  it("backfills a token stream discovered this pass, instead of losing what happened before it was found", async () => {
+    const { db, userId } = await seed();
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
+    // The wallet's own stream is already established; its USDC account has not
+    // been discovered yet — this pass is the one that finds it.
+    await db.insert(walletStreams).values({ walletId: wallet!.id, address: WALLET, cursor: "older" });
+
+    const SIG_T = "sig-T-creates-the-ata";
+    const SIG_U = "sig-U-second-deposit";
+    const refT: SignatureRef = { signature: SIG_T, slot: 100, blockTime: 1_790_573_100, failed: false };
+    const refU: SignatureRef = { signature: SIG_U, slot: 200, blockTime: 1_790_573_400, failed: false };
+    const txT: TransactionDetail = {
+      signature: SIG_T,
+      blockTime: 1_790_573_100,
+      accountKeys: [],
+      feeLamports: 0n,
+      preLamports: [],
+      postLamports: [],
+      preTokens: [],
+      postTokens: [{ mint: USDC_MINT, owner: WALLET, rawAmount: 300_000_000n, decimals: 6 }],
+    };
+    const txU: TransactionDetail = {
+      signature: SIG_U,
+      blockTime: 1_790_573_400,
+      accountKeys: [],
+      feeLamports: 0n,
+      preLamports: [],
+      postLamports: [],
+      preTokens: [{ mint: USDC_MINT, owner: WALLET, rawAmount: 300_000_000n, decimals: 6 }],
+      postTokens: [{ mint: USDC_MINT, owner: WALLET, rawAmount: 500_000_000n, decimals: 6 }],
+    };
+
+    // The ATA's own signature history holds both: T, the transaction that
+    // created and funded it, and U, a later deposit from someone else. Real
+    // Solana indexes both under the ATA once it exists, but only T also shows
+    // up under the wallet's own address — which is exactly why a stream
+    // discovered this pass has to be walked in full rather than baselined to
+    // its newest entry: baselining would record U as the starting point and
+    // never emit it.
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve([USDC_ACCOUNT]),
+      signatures: (addr) => Promise.resolve(addr === USDC_ACCOUNT ? [refU, refT] : []),
+      transaction: (sig) => Promise.resolve(sig === SIG_T ? txT : sig === SIG_U ? txU : null),
+    };
+
+    const summary = await syncAllWalletEvents(db, { history });
+    expect(summary.written).toBe(2);
+
+    const rows = await db.select().from(activities).where(eq(activities.userId, userId));
+    expect(rows.map((r) => r.txSignature).sort()).toEqual([SIG_T, SIG_U].sort());
+
+    const ataStream = await db.select().from(walletStreams).where(eq(walletStreams.address, USDC_ACCOUNT));
+    expect(ataStream[0]!.cursor).toBe(SIG_U);
   });
 
   it("leaves the cursor alone when a transaction cannot be fetched, so nothing is stepped over", async () => {
