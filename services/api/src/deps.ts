@@ -237,7 +237,7 @@ export function buildReadDeps(
       usdcMint: USDC_MINT,
       pledged: (wallet) => pledgedByMint(deps.lending, wallet),
     },
-    money: { chain: deps.chain, credit: deps.credit, usdcMint: USDC_MINT },
+    money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
     borrow: { lending: deps.lending, chain: deps.chain, usdcMint: USDC_MINT },

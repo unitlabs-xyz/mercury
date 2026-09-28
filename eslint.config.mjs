@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
+import reactHooks from "eslint-plugin-react-hooks";
 
 /**
  * One flat config for the whole workspace.
@@ -115,6 +116,27 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+
+  /**
+   * The rules of hooks, for every component in the apps.
+   *
+   * A hook called conditionally, or after an early return, breaks at runtime
+   * and typecheck cannot see it: hook state is matched by call order, so a
+   * skipped call silently hands a component another hook's state. This is the
+   * one class of React bug with no compile-time signal at all, which is why it
+   * is an error rather than a warning.
+   */
+  {
+    files: ["apps/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks },
+    rules: {
+      "react-hooks/rules-of-hooks": "error",
+      // Exhaustive deps warns rather than fails: a stale closure is a real bug,
+      // but so is a dependency added only to quiet a linter, and the difference
+      // needs a reader.
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
 
