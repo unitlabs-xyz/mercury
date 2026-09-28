@@ -134,6 +134,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
           userId,
           instrumentId: p.instrumentId,
           shares: fixed(p.shares),
+          sharesWithBasis: fixed(p.sharesWithBasisUsd),
           costBasisUsd: fixed(p.costBasisUsd),
           avgUnitCostUsd: fixed(p.avgUnitCostUsd),
           updatedAt: new Date(),
@@ -142,6 +143,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
           target: [positions.userId, positions.instrumentId],
           set: {
             shares: fixed(p.shares),
+            sharesWithBasis: fixed(p.sharesWithBasisUsd),
             costBasisUsd: fixed(p.costBasisUsd),
             avgUnitCostUsd: fixed(p.avgUnitCostUsd),
             updatedAt: new Date(),

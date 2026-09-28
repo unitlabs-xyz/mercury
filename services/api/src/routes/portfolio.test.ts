@@ -37,6 +37,7 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
   ticker: "NVDA",
   name: "Nvidia",
   shares: D(2),
+  sharesWithBasis: D(2),
   costBasisUsd: D(300),
   avgUnitCostUsd: D(150),
   wrappers: [{ mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 }],
@@ -44,7 +45,6 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
 });
 
 const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
-  reconcile: async () => undefined,
   holdings: async () => [holding()],
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) } satisfies PriceBoard,
   chain: {
@@ -76,15 +76,14 @@ describe("GET /v1/portfolio", () => {
     expect(body.holdings[0]).toMatchObject({ shares: "2", pledgedShares: "1" });
   });
 
-  it("still answers from the stored books when reconciliation cannot run", async () => {
-    const d = deps({
-      reconcile: async () => {
-        throw new Error("kamino unreachable");
-      },
-    });
-    const res = await appWith(d).request("/v1/portfolio");
-    expect(res.status).toBe(200);
-    expect((await portfolioOf(res)).holdings[0]!.shares).toBe("2");
+  it("answers from the stored books alone, writing nothing", async () => {
+    // The route has no way to write: reconciliation is the worker's, on its
+    // own clock. Two identical reads therefore cannot produce two different
+    // sets of books, which is the whole reason it moved.
+    const a = await portfolioOf(await appWith(deps()).request("/v1/portfolio"));
+    const b = await portfolioOf(await appWith(deps()).request("/v1/portfolio"));
+    expect(a).toEqual(b);
+    expect(a.holdings[0]!.shares).toBe("2");
   });
 
   it("values a holding at the live price and reports its profit", async () => {
@@ -139,15 +138,25 @@ describe("GET /v1/portfolio", () => {
     expect(body.changePct).toBe("25");
   });
 
-  it("reconciles before it reads, so the portfolio follows the chain", async () => {
-    const calls: string[] = [];
+  it("reports profit only on the shares it has a cost for", async () => {
+    // Five shares held, a lot covering two of them. Treating the other three
+    // as free would report their whole value as profit; the honest figure is
+    // measured over what we can prove was paid for.
     const d = deps({
-      reconcile: async (userId, wallet) => {
-        calls.push(`${userId}:${wallet}`);
-      },
+      holdings: async () => [holding({ shares: D(5), sharesWithBasis: D(2), costBasisUsd: D(300) })],
     });
-    await appWith(d).request("/v1/portfolio");
-    expect(calls).toEqual(["user-1:WaLLeT"]);
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!.valueUsd).toBe("1000"); // 5 shares at $200
+    expect(body.holdings[0]!.unrealisedPnlUsd).toBe("100"); // 2 x $200 - $300
+  });
+
+  it("says how many of the shares a cost is known for", async () => {
+    const d = deps({
+      holdings: async () => [holding({ shares: D(5), sharesWithBasis: D(2) })],
+    });
+    const res = await appWith(d).request("/v1/portfolio");
+    const body = (await res.json()) as { holdings: { sharesWithBasis: string }[] };
+    expect(body.holdings[0]!.sharesWithBasis).toBe("2");
   });
 
   it("answers an empty portfolio for a session with no wallet yet", async () => {

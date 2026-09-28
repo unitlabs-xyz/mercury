@@ -5,7 +5,8 @@ import {
   SymmetryVenue,
   USDC_MINT,
   type BasketVenue,
-  type CatalogueSource,
+  type SupportedStocks,
+  type ChainHistory,
   type ChainReader,
   type QuoteSource,
   type TokenRegistry,
@@ -16,7 +17,9 @@ import {
   KaminoCredit,
   MintMultipliers,
   PythSessions,
+  YahooHistory,
   type CreditSource,
+  type HistorySource,
   type MultiplierSource,
   type PriceBoard,
   type ReferenceSource,
@@ -36,14 +39,14 @@ import type { InstrumentDeps } from "./routes/instruments.js";
 import type { MoneyDeps } from "./routes/money.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
-import { countBuyers30d, readCatalogue } from "./instruments/queries.js";
+import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
-import { reconcile } from "./portfolio/apply.js";
+import type { ReconcileDeps } from "./portfolio/apply.js";
 
 export interface Deps {
   readonly registry: TokenRegistry;
-  readonly catalogue: CatalogueSource;
+  readonly supportedStocks: SupportedStocks;
   readonly quotes: QuoteSource;
   readonly triggers: TriggerSource;
   readonly sessions: SessionSource;
@@ -51,7 +54,11 @@ export interface Deps {
   readonly multipliers: MultiplierSource;
   readonly prices: PriceBoard;
   readonly credit: CreditSource;
+  /** Price history for the underlying share, for charts and the returns table. */
+  readonly priceHistory: HistorySource;
   readonly chain: ChainReader;
+  /** The same adapter, asked what happened rather than what is held. */
+  readonly history: ChainHistory;
   readonly baskets: BasketVenue;
   /** Kamino's xStocks market through the klend SDK: reads, and unsigned transactions. */
   readonly lending: LendingSource;
@@ -145,7 +152,7 @@ export function buildDeps(config: Config): Deps {
 
   return {
     registry,
-    catalogue: registry,
+    supportedStocks: registry,
     quotes: new JupiterLite(),
     triggers: new JupiterTriggersNotYet(),
     sessions: new PythSessions(),
@@ -155,7 +162,12 @@ export function buildDeps(config: Config): Deps {
     multipliers: new MintMultipliers({ chain }),
     prices: market,
     credit: new KaminoCredit(),
+    // Unofficial, keyless, and the only equity history we can reach: Pyth
+    // Benchmarks refuses equity feeds on our entitlement and serves one
+    // timestamp per call rather than a range. See the adapter for the measurements.
+    priceHistory: new YahooHistory(),
     chain,
+    history: chain,
     baskets: new SymmetryVenue({ rpcUrl: config.solanaRpcUrl }),
     lending: new KaminoLending({
       rpcUrl: config.solanaRpcUrl,
@@ -191,26 +203,33 @@ export interface ReadDeps {
  * The read side. Each route module takes its queries as functions rather than a
  * database handle, which is what lets every route be tested with a plain object.
  */
+/**
+ * What the background sync needs. Built here so it shares one construction with
+ * the read path — including the pledged-stock view, because pledging is not
+ * selling and the books have to keep reading it as held.
+ */
+export function buildReconcileDeps(deps: Deps): ReconcileDeps {
+  return {
+    chain: withPledged(deps.chain, deps.lending),
+    prices: deps.prices,
+    multipliers: deps.multipliers,
+  };
+}
+
 export function buildReadDeps(
   db: Db,
   deps: Deps,
   config: Pick<Config, "solanaRpcUrl" | "sendMode">,
 ): ReadDeps {
-  // The books read pledged stock as still held: pledging is not selling.
-  const reconcileDeps = {
-    chain: withPledged(deps.chain, deps.lending),
-    prices: deps.prices,
-    multipliers: deps.multipliers,
-  };
   return {
     instruments: {
-      catalogue: () => readCatalogue(db, deps.catalogue),
+      supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),
       prices: deps.prices,
       sessions: deps.sessions,
+      history: deps.priceHistory,
     },
     portfolio: {
-      reconcile: (userId, wallet) => reconcile(db, reconcileDeps, userId, wallet),
       holdings: (userId) => readHoldings(db, userId),
       prices: deps.prices,
       chain: deps.chain,
@@ -218,7 +237,7 @@ export function buildReadDeps(
       usdcMint: USDC_MINT,
       pledged: (wallet) => pledgedByMint(deps.lending, wallet),
     },
-    money: { chain: deps.chain, credit: deps.credit, usdcMint: USDC_MINT },
+    money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
     borrow: { lending: deps.lending, chain: deps.chain, usdcMint: USDC_MINT },

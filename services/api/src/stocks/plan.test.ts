@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import type { CatalogueInstrument } from "@mercury/chain";
+import type { ListedInstrument } from "@mercury/chain";
 import type { TokenPrice } from "@mercury/market";
-import { planCatalogue } from "./plan.js";
+import { planStocks } from "./plan.js";
 
 const NOW = new Date("2026-09-24T12:00:00Z");
 const MINT = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 
-const wrapper = (over: Partial<CatalogueInstrument["wrappers"][number]> = {}) => ({
+const wrapper = (over: Partial<ListedInstrument["wrappers"][number]> = {}) => ({
   mint: MINT,
   symbol: "NVDAx",
   issuer: "backed" as const,
@@ -23,7 +23,7 @@ const wrapper = (over: Partial<CatalogueInstrument["wrappers"][number]> = {}) =>
   ...over,
 });
 
-const live = (over: Partial<CatalogueInstrument> = {}): CatalogueInstrument => ({
+const live = (over: Partial<ListedInstrument> = {}): ListedInstrument => ({
   ticker: "NVDA",
   wrappers: [wrapper()],
   ...over,
@@ -46,9 +46,9 @@ const priced = (over: Partial<TokenPrice> = {}): ReadonlyMap<string, TokenPrice>
     ],
   ]);
 
-describe("planCatalogue", () => {
+describe("planStocks", () => {
   it("names an instrument from our own editorial, not from the token", () => {
-    const plan = planCatalogue({ live: [live()], prices: priced(), stored: [], now: NOW });
+    const plan = planStocks({ live: [live()], prices: priced(), stored: [], now: NOW });
     expect(plan.instruments[0]).toMatchObject({
       ticker: "NVDA",
       name: "Nvidia",
@@ -59,7 +59,7 @@ describe("planCatalogue", () => {
   });
 
   it("falls back to the issuer's name with the suffix stripped, for a ticker nobody has written up", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live({ ticker: "ASML", wrappers: [wrapper({ symbol: "ASMLx", name: "ASML Holding xStock" })] })],
       prices: new Map(),
       stored: [],
@@ -69,7 +69,7 @@ describe("planCatalogue", () => {
   });
 
   it("files a fund under Funds from its own name, and guesses no sector for a company", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [
         live({
           ticker: "SLV",
@@ -90,18 +90,18 @@ describe("planCatalogue", () => {
   });
 
   it("takes the logo from the Backed wrapper", () => {
-    const plan = planCatalogue({ live: [live()], prices: priced(), stored: [], now: NOW });
+    const plan = planStocks({ live: [live()], prices: priced(), stored: [], now: NOW });
     expect(plan.instruments[0]!.logoUrl).toBe("https://example.test/nvdax.png");
   });
 
   it("stores the live multiplier against the token", () => {
-    const plan = planCatalogue({ live: [live()], prices: priced(), stored: [], now: NOW });
+    const plan = planStocks({ live: [live()], prices: priced(), stored: [], now: NOW });
     expect(plan.tokens[0]).toMatchObject({ ticker: "NVDA", mint: MINT, issuer: "backed", decimals: 8 });
     expect(plan.tokens[0]!.multiplier).toBe("1.001701196801074");
   });
 
   it("keeps the stored multiplier when Jupiter has no price for the mint", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: new Map(),
       stored: [{ mint: MINT, multiplier: "1.0009180758490996" }],
@@ -112,12 +112,12 @@ describe("planCatalogue", () => {
   });
 
   it("defaults a brand-new token with no price to a multiplier of one", () => {
-    const plan = planCatalogue({ live: [live()], prices: new Map(), stored: [], now: NOW });
+    const plan = planStocks({ live: [live()], prices: new Map(), stored: [], now: NOW });
     expect(plan.tokens[0]!.multiplier).toBe("1");
   });
 
   it("writes an event when the multiplier moves, because that is a dividend", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: priced(),
       stored: [{ mint: MINT, multiplier: "1.0009180758490996" }],
@@ -135,7 +135,7 @@ describe("planCatalogue", () => {
   });
 
   it("writes no event when nothing moved, so a sync is idempotent", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: priced(),
       stored: [{ mint: MINT, multiplier: "1.001701196801074" }],
@@ -145,7 +145,7 @@ describe("planCatalogue", () => {
   });
 
   it("calls a multiplier that more than doubles a split, not a dividend", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: priced({ multiplier: D(4) }),
       stored: [{ mint: MINT, multiplier: "1" }],
@@ -155,7 +155,7 @@ describe("planCatalogue", () => {
   });
 
   it("will not guess at a multiplier that fell", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: priced({ multiplier: D("0.9") }),
       stored: [{ mint: MINT, multiplier: "1" }],
@@ -165,7 +165,7 @@ describe("planCatalogue", () => {
   });
 
   it("marks a token unroutable when its pool has emptied", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live({ wrappers: [wrapper({ liquidityUsd: D(0) })] })],
       prices: priced({ liquidityUsd: D(0) }),
       stored: [],
@@ -182,7 +182,7 @@ describe("planCatalogue", () => {
       decimals: 6,
       liquidityUsd: D(40_000),
     });
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live({ wrappers: [wrapper(), ondo] })],
       prices: priced(),
       stored: [],

@@ -1,0 +1,138 @@
+import { describe, expect, it } from "vitest";
+import type { TokenBalanceEntry, TransactionDetail } from "@mercury/chain";
+import { USDC_MINT } from "@mercury/chain";
+import { movementsIn, NATIVE_SOL_MINT } from "./movements.js";
+
+const WALLET = "6Yg9nNQEqCQBMcYHLrrfj6qGjcR6hvhdhHQZPjtDqLRT";
+const OTHER = "FMVHP1xw6ZHB9zLGyrJeeAvEzCBgouH8bPzdkYqq2C5W";
+const SIG = "5f121XsT7YRkYk5SoDMSMAtCmKKwm58NhWumjUNCtR4o6qPBgwCT2upBB3uUizLsykU51RSvLt1Z8Cwt5RXFcbAW";
+const NOW = new Date("2026-09-28T12:00:00.000Z");
+
+const usdc = (owner: string, amount: bigint): TokenBalanceEntry => ({
+  mint: USDC_MINT,
+  owner,
+  rawAmount: amount,
+  decimals: 6,
+});
+
+/** The wallet is the fee payer at index 0 unless a test says otherwise. */
+const tx = (over: Partial<TransactionDetail> = {}): TransactionDetail => ({
+  signature: SIG,
+  blockTime: 1_790_573_221,
+  accountKeys: [WALLET, OTHER],
+  feeLamports: 5_000n,
+  preLamports: [1_000_000_000n, 0n],
+  postLamports: [999_995_000n, 0n],
+  preTokens: [],
+  postTokens: [],
+  ...over,
+});
+
+const ctx = { wallet: WALLET, now: NOW };
+
+describe("movementsIn — USDC", () => {
+  it("reads a first deposit, where the account was created by this transaction and has no pre entry", () => {
+    const m = movementsIn(tx({ preTokens: [], postTokens: [usdc(WALLET, 500_000_000n)] }), ctx);
+    expect(m).toHaveLength(1);
+    expect(m[0]!.mint).toBe(USDC_MINT);
+    expect(m[0]!.kind).toBe("transfer_in");
+    expect(m[0]!.title).toBe("Added cash");
+    expect(m[0]!.amountUsd!.toFixed()).toBe("500");
+    expect(m[0]!.signature).toBe(SIG);
+    expect(m[0]!.occurredAt).toEqual(new Date(1_790_573_221 * 1000));
+  });
+
+  it("reads a withdrawal as money leaving", () => {
+    const m = movementsIn(
+      tx({ preTokens: [usdc(WALLET, 500_000_000n)], postTokens: [usdc(WALLET, 200_000_000n)] }),
+      ctx,
+    );
+    expect(m).toHaveLength(1);
+    expect(m[0]!.kind).toBe("transfer_out");
+    expect(m[0]!.title).toBe("Sent cash");
+    expect(m[0]!.amountUsd!.toFixed()).toBe("300");
+  });
+
+  it("sums two accounts for the same mint, which a wallet is allowed to have", () => {
+    const m = movementsIn(
+      tx({
+        preTokens: [usdc(WALLET, 100_000_000n), usdc(WALLET, 0n)],
+        postTokens: [usdc(WALLET, 100_000_000n), usdc(WALLET, 50_000_000n)],
+      }),
+      ctx,
+    );
+    expect(m).toHaveLength(1);
+    expect(m[0]!.amountUsd!.toFixed()).toBe("50");
+  });
+
+  it("ignores another owner's accounts in the same transaction", () => {
+    const m = movementsIn(tx({ preTokens: [usdc(OTHER, 0n)], postTokens: [usdc(OTHER, 900_000_000n)] }), ctx);
+    expect(m).toEqual([]);
+  });
+
+  it("falls back to the given clock when the node reports no block time", () => {
+    const m = movementsIn(tx({ blockTime: null, postTokens: [usdc(WALLET, 1_000_000n)] }), ctx);
+    expect(m[0]!.occurredAt).toEqual(NOW);
+  });
+});
+
+describe("movementsIn — native SOL", () => {
+  it("reads an incoming transfer where the wallet is not the fee payer", () => {
+    const m = movementsIn(
+      tx({
+        accountKeys: [OTHER, WALLET],
+        preLamports: [5_000_000_000n, 1_000_000_000n],
+        postLamports: [3_799_994_700n, 2_200_000_000n],
+      }),
+      ctx,
+    );
+    expect(m).toHaveLength(1);
+    expect(m[0]!.mint).toBe(NATIVE_SOL_MINT);
+    expect(m[0]!.kind).toBe("transfer_in");
+    expect(m[0]!.title).toBe("Received SOL");
+    expect(m[0]!.subtitle).toBe("1.2 SOL");
+    expect(m[0]!.amountUsd).toBeNull();
+  });
+
+  it("emits nothing when the only lamport change is the fee the wallet paid", () => {
+    // preLamports/postLamports in the default differ by exactly feeLamports.
+    expect(movementsIn(tx(), ctx)).toEqual([]);
+  });
+
+  it("adds the fee back, so an outgoing transfer reports the amount sent and not the gas", () => {
+    const m = movementsIn(tx({ preLamports: [1_000_000_000n, 0n], postLamports: [499_995_000n, 0n] }), ctx);
+    expect(m).toHaveLength(1);
+    expect(m[0]!.kind).toBe("transfer_out");
+    expect(m[0]!.subtitle).toBe("0.5 SOL");
+  });
+
+  it("suppresses the SOL leg when the same transaction moved USDC, because that is rent and gas", () => {
+    const m = movementsIn(
+      tx({
+        preLamports: [1_000_000_000n, 0n],
+        postLamports: [997_955_720n, 0n], // fee plus rent for the new token account
+        postTokens: [usdc(WALLET, 500_000_000n)],
+      }),
+      ctx,
+    );
+    expect(m).toHaveLength(1);
+    expect(m[0]!.mint).toBe(USDC_MINT);
+  });
+
+  it("emits nothing when the wallet is not an account key at all", () => {
+    const m = movementsIn(tx({ accountKeys: [OTHER], preLamports: [1n], postLamports: [2n] }), ctx);
+    expect(m).toEqual([]);
+  });
+
+  it("does not trim a whole number to nonsense", () => {
+    const m = movementsIn(
+      tx({
+        accountKeys: [OTHER, WALLET],
+        preLamports: [0n, 0n],
+        postLamports: [0n, 100_000_000_000n],
+      }),
+      ctx,
+    );
+    expect(m[0]!.subtitle).toBe("100 SOL");
+  });
+});

@@ -7,6 +7,7 @@ import pythSpy from "./fixtures/pyth-spy.json";
 import kaminoReserves from "./fixtures/kamino-reserves.json";
 import rpcMintNvda from "./fixtures/rpc-mint-nvda.json";
 import rpcTokenAccounts from "./fixtures/rpc-token-accounts.json";
+import yahooChartNvda from "./fixtures/yahoo-chart-nvda.json";
 
 export {
   jupSearchXStock,
@@ -18,6 +19,7 @@ export {
   kaminoReserves,
   rpcMintNvda,
   rpcTokenAccounts,
+  yahooChartNvda,
 };
 
 /** The mints the fixtures are built around, so tests do not paste base58 by hand. */

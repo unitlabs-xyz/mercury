@@ -3,6 +3,7 @@ import { z } from "zod";
 import { D, toWire, ZERO, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { capacity, safeHeadroomAfter, safeLimitAfter, type CapacityInput } from "../lending/capacity.js";
+import { capacityInputFor } from "../lending/input.js";
 import type { LendingIntent, LendingSource } from "../lending/ports.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
@@ -44,18 +45,8 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
   const app = new Hono();
 
   /** Everything the capacity maths needs for one wallet, fetched together. */
-  const inputFor = async (wallet: string): Promise<CapacityInput> => {
-    const [terms, position, balances] = await Promise.all([
-      deps.lending.terms(),
-      deps.lending.position(wallet),
-      deps.chain.tokenBalances(wallet),
-    ]);
-    const usdc = balances.find((b) => b.mint === deps.usdcMint);
-    const cashUsd = usdc === undefined ? ZERO : D(usdc.rawAmount.toString()).div(D(10).pow(usdc.decimals));
-    const walletByMint = new Map<string, bigint>();
-    for (const b of balances) walletByMint.set(b.mint, (walletByMint.get(b.mint) ?? 0n) + b.rawAmount);
-    return { terms, position, wallet: walletByMint, cashUsd };
-  };
+  const inputFor = async (wallet: string): Promise<CapacityInput> =>
+    capacityInputFor(deps, wallet, await deps.chain.tokenBalances(wallet));
 
   const summaryJson = (input: CapacityInput) => {
     const s = capacity(input);

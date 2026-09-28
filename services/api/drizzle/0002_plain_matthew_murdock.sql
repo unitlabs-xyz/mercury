@@ -1,0 +1,1 @@
+ALTER TABLE "position" ADD COLUMN "shares_with_basis" numeric(38, 18) DEFAULT '0' NOT NULL;

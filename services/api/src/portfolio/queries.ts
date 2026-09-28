@@ -16,6 +16,7 @@ export async function readHoldings(db: Db, userId: string): Promise<readonly Hol
       ticker: instruments.ticker,
       name: instruments.name,
       shares: positions.shares,
+      sharesWithBasis: positions.sharesWithBasis,
       costBasisUsd: positions.costBasisUsd,
       avgUnitCostUsd: positions.avgUnitCostUsd,
     })
@@ -40,6 +41,7 @@ export async function readHoldings(db: Db, userId: string): Promise<readonly Hol
     ticker: row.ticker,
     name: row.name,
     shares: D(row.shares),
+    sharesWithBasis: D(row.sharesWithBasis),
     costBasisUsd: D(row.costBasisUsd),
     avgUnitCostUsd: D(row.avgUnitCostUsd),
     wrappers: wrappers

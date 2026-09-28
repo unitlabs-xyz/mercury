@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePortfolio } from "../api/hooks";
-import { priceInstrument, useInstrumentSearch, useUniverse } from "../market/hooks";
-import { changeFor, historyFor, type Range } from "../market/placeholder";
+import {
+  priceInstrument,
+  useHistories,
+  useInstrumentSearch,
+  useUniverse,
+  type History,
+  type Span,
+} from "../market/hooks";
 import { AppShell } from "./AppShell";
 import { Markets } from "./invest/Top";
 import { MostBought, Movers, Sectors, Watchlist } from "./invest/Rail";
@@ -21,8 +27,8 @@ const INDEXES = ["SPY", "QQQ", "GLD"];
  * switch drives only the panel it sits in; the rail always reads today.
  */
 export const Invest = () => {
-  const [marketRange, setMarketRange] = useState<Range>("1D");
-  const [listRange, setListRange] = useState<Range>("1D");
+  const [marketRange, setMarketRange] = useState<Span>("1D");
+  const [listRange, setListRange] = useState<Span>("1D");
   const [sector, setSector] = useState("All");
   const watchlist = useWatchlist();
 
@@ -43,14 +49,24 @@ export const Invest = () => {
   // so a bookmark swaps only its own row's object: every other row keeps its
   // identity and skips re-rendering (and redrawing its dot chart).
   const build = useCallback(
-    (range: Range, source: readonly Instrument[] | undefined): Row[] => {
+    (
+      range: Span,
+      source: readonly Instrument[] | undefined,
+      history: ReadonlyMap<string, History | null> | undefined,
+    ): Row[] => {
       const owned = new Set(portfolio.data?.holdings.map((h) => h.ticker));
       return (source ?? []).map((i) => {
         const p = priceInstrument(i, undefined);
+        const h = history?.get(i.ticker) ?? null;
         return {
           ...p,
-          change: changeFor(i.ticker, range, p.todayPct),
-          spark: historyFor(i.ticker, range, p.fair, p.todayPct),
+          // Over a day the live 24h move is the better number: it is what the
+          // price beside it is quoted against, and tokenised stocks trade
+          // around the clock while a session does not.
+          change: range === "1D" ? (p.todayPct ?? 0) : (h?.changePct ?? 0),
+          // Null until it arrives, and null if the provider has none. Either
+          // way the row draws no chart rather than an invented one.
+          spark: h === null ? null : h.points.map((pt) => pt.price),
           owned: owned.has(i.ticker),
           saved: false,
         };
@@ -75,19 +91,32 @@ export const Invest = () => {
     [watchlist.tickers, savedCopy],
   );
 
-  // A search replaces the shelf with results from the whole catalogue.
+  // A search replaces the shelf with every stock we support.
   const searching = term.length > 0;
-  const listBase = useMemo(
-    () => build(listRange, searching ? search.data : universe.data),
-    [build, listRange, searching, search.data, universe.data],
+  const shown = useMemo(
+    () => (searching ? (search.data ?? []) : (universe.data ?? [])).map((i) => i.ticker),
+    [searching, search.data, universe.data],
   );
-  const todayBase = useMemo(() => build("1D", universe.data), [build, universe.data]);
+  const universeTickers = useMemo(() => (universe.data ?? []).map((i) => i.ticker), [universe.data]);
+  // Three spans are on screen at once. React Query collapses these to one
+  // request whenever they agree, which on a first load they usually do.
+  const listHistory = useHistories(shown, listRange);
+  const todayHistory = useHistories(universeTickers, "1D");
+  const indexHistory = useHistories(INDEXES, marketRange);
+  const listBase = useMemo(
+    () => build(listRange, searching ? search.data : universe.data, listHistory.data),
+    [build, listRange, searching, search.data, universe.data, listHistory.data],
+  );
+  const todayBase = useMemo(
+    () => build("1D", universe.data, todayHistory.data),
+    [build, universe.data, todayHistory.data],
+  );
   const indexBase = useMemo(
     () =>
-      build(marketRange, universe.data)
+      build(marketRange, universe.data, indexHistory.data)
         .filter((r) => INDEXES.includes(r.instrument.ticker))
         .sort((a, b) => INDEXES.indexOf(a.instrument.ticker) - INDEXES.indexOf(b.instrument.ticker)),
-    [build, marketRange, universe.data],
+    [build, marketRange, universe.data, indexHistory.data],
   );
   const list = useMemo(() => mark(listBase), [mark, listBase]);
   const today = useMemo(() => mark(todayBase), [mark, todayBase]);

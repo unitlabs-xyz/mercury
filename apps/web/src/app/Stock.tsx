@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { usePortfolio } from "../api/hooks";
-import { priceInstrument, useDecision, useInstrument, usePrices, useUniverse } from "../market/hooks";
-import { RANGES, changeFor, historyFor, type Range } from "../market/placeholder";
+import {
+  priceInstrument,
+  RANGES,
+  useDecision,
+  useHistories,
+  useHistory,
+  useInstrument,
+  usePrices,
+  useUniverse,
+  type Span,
+} from "../market/hooks";
+
 import { ButtonLink } from "../ui/Button";
 import { BookmarkMark, Chevron, GlideRows, MoveChip, RangeSwitch, StatusChip } from "../ui/ds";
 import { Clock } from "../ui/icons";
@@ -20,11 +30,13 @@ import { Routes } from "./stock/Routes";
 import { Ticket } from "./stock/Ticket";
 import { useWatchlist } from "./watchlist";
 
-const SINCE: Record<Range, string> = {
+const SINCE: Record<Span, string> = {
   "1D": "today",
   "1W": "past week",
   "1M": "past month",
+  "6M": "past six months",
   "1Y": "past year",
+  "5Y": "past five years",
 };
 
 const Missing = ({ loading }: { loading: boolean }) => (
@@ -59,7 +71,7 @@ const Missing = ({ loading }: { loading: boolean }) => (
  */
 export const Stock = () => {
   const { ticker = "" } = useParams();
-  const [range, setRange] = useState<Range>("1D");
+  const [range, setRange] = useState<Span>("1D");
   const [raw, setRaw] = useState("100");
   const [buying, setBuying] = useState(false);
   const watchlist = useWatchlist();
@@ -88,24 +100,36 @@ export const Stock = () => {
     prices.data,
   );
 
-  const fair = priced?.fair ?? null;
-  const todayPct = priced?.todayPct ?? null;
-  const series = useMemo(
-    () => (instrument ? historyFor(instrument.ticker, range, fair, todayPct) : null),
-    [instrument, fair, todayPct, range],
-  );
+  // Already anchored server-side onto the live share price, so the line ends
+  // where the figure above it says it should.
+  const history = useHistory(instrument?.ticker ?? "", range);
+  const series = useMemo(() => history.data?.points.map((p) => p.price) ?? null, [history.data]);
   const chart = useMemo(() => (series ? points(series, range) : null), [series, range]);
   // A pinch on the chart steps the range: out for more time, in for less.
   const zoom = useCallback(
     (dir: 1 | -1) =>
-      setRange((r) => RANGES[Math.min(RANGES.length - 1, Math.max(0, RANGES.indexOf(r) + dir))]!),
+      setRange((r: Span) => RANGES[Math.min(RANGES.length - 1, Math.max(0, RANGES.indexOf(r) + dir))]!),
     [],
+  );
+
+  // Chosen above the early return, because their sparklines need a hook.
+  const similarTickers = (universe.data ?? [])
+    .filter((i) => i.ticker !== instrument?.ticker && i.sector === instrument?.sector)
+    .concat(
+      (universe.data ?? []).filter((i) => i.ticker !== instrument?.ticker && i.sector !== instrument?.sector),
+    )
+    .slice(0, 4);
+  const similarHistory = useHistories(
+    similarTickers.map((i) => i.ticker),
+    "1D",
   );
 
   if (!instrument || !priced) return <Missing loading={one.isLoading} />;
 
   const t = instrument.ticker;
-  const change = changeFor(t, range, priced.todayPct);
+  // Over a day the live 24h move is the better number: it is what the price
+  // beside it is quoted against, and these trade around the clock.
+  const change = range === "1D" ? (priced.todayPct ?? 0) : (history.data?.changePct ?? 0);
   const changeUsd = priced.fair === null ? null : priced.fair - priced.fair / (1 + change / 100);
   const up = change >= 0;
   const saved = watchlist.has(t);
@@ -113,20 +137,17 @@ export const Stock = () => {
   const cash = portfolio.data ? Number(portfolio.data.cashUsd) : null;
   const owned = new Set(portfolio.data?.holdings.map((h) => h.ticker));
 
-  const similar: Row[] = (universe.data ?? [])
-    .filter((i) => i.ticker !== t && i.sector === instrument.sector)
-    .concat((universe.data ?? []).filter((i) => i.ticker !== t && i.sector !== instrument.sector))
-    .slice(0, 4)
-    .map((i) => {
-      const p = priceInstrument(i, undefined);
-      return {
-        ...p,
-        change: p.todayPct ?? 0,
-        spark: historyFor(i.ticker, "1D", p.fair, p.todayPct),
-        owned: owned.has(i.ticker),
-        saved: watchlist.has(i.ticker),
-      };
-    });
+  const similar: Row[] = similarTickers.map((i) => {
+    const p = priceInstrument(i, undefined);
+    const h = similarHistory.data?.get(i.ticker) ?? null;
+    return {
+      ...p,
+      change: p.todayPct ?? 0,
+      spark: h === null ? null : h.points.map((pt) => pt.price),
+      owned: owned.has(i.ticker),
+      saved: watchlist.has(i.ticker),
+    };
+  });
 
   const opensAt = session?.nextOpen?.toLocaleString("en-US", {
     weekday: "short",

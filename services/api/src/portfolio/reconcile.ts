@@ -34,7 +34,7 @@ export interface LotWrite {
 }
 
 export interface ActivityWrite {
-  readonly kind: "transfer_in" | "dividend";
+  readonly kind: "dividend";
   readonly title: string;
   readonly subtitle: string;
   readonly amountUsd: Decimal | null;
@@ -45,7 +45,10 @@ export interface ActivityWrite {
 
 export interface PositionWrite {
   readonly instrumentId: string;
+  /** What the chain says is held. */
   readonly shares: Decimal;
+  /** How many of those shares we hold a lot for, and so can price a cost against. */
+  readonly sharesWithBasisUsd: Decimal;
   readonly costBasisUsd: Decimal;
   readonly avgUnitCostUsd: Decimal;
 }
@@ -59,12 +62,13 @@ export interface Reconciliation {
 /** Smallest units to whole tokens. Exact: a Decimal divide, never a float. */
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
 
-/** Trims trailing zeros so "1 share" does not read as "1.000000000000000000 shares". */
+/**
+ * Trims trailing zeros so "1 share" does not read as "1.000000000000000000
+ * shares" — but only after a decimal point: "100" must not become "1".
+ */
 const plural = (shares: Decimal): string => {
-  const n = shares
-    .toDecimalPlaces(6)
-    .toFixed()
-    .replace(/\.?0+$/, "");
+  const s = shares.toDecimalPlaces(6).toFixed();
+  const n = s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
   return `${n} ${shares.eq(1) ? "share" : "shares"}`;
 };
 
@@ -81,54 +85,34 @@ const plural = (shares: Decimal): string => {
 export function planReconciliation(held: readonly HeldToken[], now: Date): Reconciliation {
   const lots: LotWrite[] = [];
   const activity: ActivityWrite[] = [];
-  const byInstrument = new Map<string, { shares: Decimal; cost: Decimal }>();
+  const byInstrument = new Map<string, { shares: Decimal; withBasis: Decimal; cost: Decimal }>();
 
   for (const token of held) {
-    const expectedShares = scaled(token.chainRawAmount, token.decimals).mul(token.multiplier);
-    let shares = token.recordedShares;
-    let cost = token.recordedCostUsd;
+    // What the chain says you hold. This is a fact and it is never inferred.
+    const chainShares = scaled(token.chainRawAmount, token.decimals).mul(token.multiplier);
 
-    const reference = token.referencePricePerShare;
-    if (reference !== null) {
-      // 1. Tokens arrived that we never sold. We cannot know what they cost, so
-      //    the lot is priced at today's reference and flagged as an estimate.
-      const surplus = token.chainRawAmount - token.recordedRawAmount;
-      if (surplus > 0n) {
-        const gained = scaled(surplus, token.decimals).mul(token.multiplier);
-        lots.push({
-          tokenId: token.tokenId,
-          instrumentId: token.instrumentId,
-          tokenQty: surplus,
-          shares: gained,
-          unitCostUsd: reference,
-          source: "transfer_in",
-          isEstimated: true,
-          acquiredAt: now,
-        });
-        activity.push({
-          kind: "transfer_in",
-          title: `Received ${token.symbol}`,
-          subtitle: `${plural(gained)}, cost estimated at today's price`,
-          amountUsd: gained.mul(reference),
-          refTable: "token",
-          refId: token.tokenId,
-          occurredAt: now,
-        });
-        shares = shares.add(gained);
-        cost = cost.add(gained.mul(reference));
-      }
+    let recordedShares = token.recordedShares;
+    const cost = token.recordedCostUsd;
 
-      // 2. More shares than our lots account for, with no new tokens to explain
-      //    them: the multiplier rose, which is a dividend. Zero cost, so the
-      //    average cost per share falls. That is correct — the same money now
-      //    buys more shares — and it is the figure other integrations get wrong.
-      const shortfall = expectedShares.sub(shares);
-      if (shortfall.gt(ZERO)) {
+    // A dividend: the multiplier rose, so the tokens we have lots for are worth
+    // more shares than those lots record. Zero cost, so the average cost per
+    // share falls — the same money now buys more shares, which is the figure
+    // other integrations get wrong.
+    //
+    // Driven by the multiplier on the lots we hold, never by a gap between the
+    // chain and our records. A gap means tokens arrived from somewhere we did
+    // not witness, and calling that a dividend would hand the holder free
+    // shares in the accounts.
+    const recordedQty = scaled(token.recordedRawAmount, token.decimals);
+    if (recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
+      const recordedMultiplier = recordedShares.div(recordedQty);
+      if (token.multiplier.gt(recordedMultiplier)) {
+        const gained = recordedQty.mul(token.multiplier.sub(recordedMultiplier));
         lots.push({
           tokenId: token.tokenId,
           instrumentId: token.instrumentId,
           tokenQty: 0n,
-          shares: shortfall,
+          shares: gained,
           unitCostUsd: ZERO,
           source: "dividend",
           isEstimated: false,
@@ -137,26 +121,35 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
         activity.push({
           kind: "dividend",
           title: `${token.ticker} paid a dividend`,
-          subtitle: `${plural(shortfall)} added, at no cost`,
-          amountUsd: shortfall.mul(reference),
+          subtitle: `${plural(gained)} added, at no cost`,
+          amountUsd: token.referencePricePerShare === null ? null : gained.mul(token.referencePricePerShare),
           refTable: "token",
           refId: token.tokenId,
           occurredAt: now,
         });
-        shares = shares.add(shortfall);
+        recordedShares = recordedShares.add(gained);
       }
     }
 
-    // 3. Tokens left the wallet, or we could not price an arrival. Either way the
-    //    position takes the smaller of the two truths: never more shares than the
-    //    chain holds, and never more than we have a cost for. Cost scales with it,
-    //    which leaves the average untouched — that is average-cost accounting.
-    const target = Decimal.min(shares, expectedShares);
-    const ratio = shares.isZero() ? ZERO : target.div(shares);
+    // Two separate truths, kept separate.
+    //
+    // `shares` is the chain's answer to what you hold. `withBasis` is how much
+    // of it we can prove a cost for, which is whatever our lots cover — a
+    // deposit we did not witness has no lot, so it counts toward the holding
+    // and not toward the basis. Nothing here invents a price: a share with no
+    // lot behind it is reported as one we have no cost for, and the screens say
+    // so rather than showing a profit measured against a guess.
+    //
+    // Lots can also exceed the chain, when tokens left the wallet by a path we
+    // do not track yet. The basis is then capped and its cost scaled with it,
+    // which leaves the average untouched — that is average-cost accounting.
+    const withBasis = Decimal.min(recordedShares, chainShares);
+    const ratio = recordedShares.isZero() ? ZERO : withBasis.div(recordedShares);
 
-    const running = byInstrument.get(token.instrumentId) ?? { shares: ZERO, cost: ZERO };
+    const running = byInstrument.get(token.instrumentId) ?? { shares: ZERO, withBasis: ZERO, cost: ZERO };
     byInstrument.set(token.instrumentId, {
-      shares: running.shares.add(target),
+      shares: running.shares.add(chainShares),
+      withBasis: running.withBasis.add(withBasis),
       cost: running.cost.add(cost.mul(ratio)),
     });
   }
@@ -164,8 +157,9 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
   const positions: PositionWrite[] = [...byInstrument.entries()].map(([instrumentId, r]) => ({
     instrumentId,
     shares: r.shares,
+    sharesWithBasisUsd: r.withBasis,
     costBasisUsd: r.cost,
-    avgUnitCostUsd: r.shares.isZero() ? ZERO : r.cost.div(r.shares),
+    avgUnitCostUsd: r.withBasis.isZero() ? ZERO : r.cost.div(r.withBasis),
   }));
 
   return { lots, activity, positions };

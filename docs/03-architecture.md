@@ -85,13 +85,19 @@ user has granted, it asks Privy to sign inside a policy. See [ADR 0003](adr/0003
 
 Everything on a clock:
 
-| Job                | Cadence                              | Does                                                                                  |
-| ------------------ | ------------------------------------ | ------------------------------------------------------------------------------------- |
-| `price-cache`      | 15s while market open, 60s otherwise | Reference prices, session state, per-token multipliers                                |
-| `multiplier-watch` | 5 min                                | Detects multiplier changes and writes a dividend event per holder                     |
-| `queued-orders`    | 60s                                  | Checks the status of Jupiter trigger orders and records fills                         |
-| `recurring`        | hourly                               | Finds plans due, creates orders, notifies the user to approve or uses the session key |
-| `position-sync`    | 5 min                                | Reconciles our view of balances against chain                                         |
+| Job                | Cadence                              | Does                                                                                   |
+| ------------------ | ------------------------------------ | -------------------------------------------------------------------------------------- |
+| `price-cache`      | 15s while market open, 60s otherwise | Reference prices, session state, per-token multipliers                                 |
+| `multiplier-watch` | 5 min                                | Detects multiplier changes and writes a dividend event per holder                      |
+| `queued-orders`    | 60s                                  | Checks the status of Jupiter trigger orders and records fills                          |
+| `recurring`        | hourly                               | Finds plans due, creates orders, notifies the user to approve or uses the session key  |
+| `position-sync`    | 2s                                   | Reconciles our view of balances against chain                                          |
+| `wallet-events`    | 30s                                  | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers |
+
+`wallet-events` reads transaction history, not balances, and writes to the activity feed only —
+it never touches `lot` or `position`; that stays `position-sync`'s job. It runs as an interval
+inside `services/api` (the same loop as `position-sync`), not in this package — it is grouped
+with the other clocked jobs here for cadence, not by process.
 
 ## Request path for a buy
 

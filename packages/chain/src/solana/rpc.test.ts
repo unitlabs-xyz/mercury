@@ -212,3 +212,78 @@ describe("SolanaRpc.mintConfig", () => {
     expect(await rpc.mintConfig("NotAMint")).toBeNull();
   });
 });
+
+describe("SolanaRpc.transaction", () => {
+  const SIGNATURE =
+    "5f121XsT7YRkYk5SoDMSMAtCmKKwm58NhWumjUNCtR4o6qPBgwCT2upBB3uUizLsykU51RSvLt1Z8Cwt5RXFcbAW";
+
+  it("returns null when the node has no such transaction, or has pruned it — worth a retry", async () => {
+    const rpc = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: { jsonrpc: "2.0", id: 1, result: null } }),
+    });
+    expect(await rpc.transaction(SIGNATURE)).toBeNull();
+  });
+
+  /**
+   * Distinct from "no such transaction": the node has the transaction but not
+   * its metadata, which is permanent for that signature and unretryable. With
+   * no meta there is no balance to read either, so an empty transaction is
+   * the honest answer, not a `null` that stops the walk cold forever.
+   */
+  it("returns an empty transaction, not null, when the node has it but no metadata", async () => {
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        blockTime: 1_790_000_000,
+        transaction: { message: { accountKeys: [{ pubkey: FIXTURE_OWNER }] } },
+        meta: null,
+      },
+    };
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: body }) });
+    const detail = await rpc.transaction(SIGNATURE);
+    expect(detail).toEqual({
+      signature: SIGNATURE,
+      blockTime: 1_790_000_000,
+      accountKeys: [FIXTURE_OWNER],
+      feeLamports: 0n,
+      preLamports: [],
+      postLamports: [],
+      preTokens: [],
+      postTokens: [],
+    });
+  });
+
+  it("decodes the fee, lamport balances and token balances as bigint when metadata is present", async () => {
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        blockTime: 1_790_000_000,
+        transaction: { message: { accountKeys: [{ pubkey: FIXTURE_OWNER }] } },
+        meta: {
+          fee: 5000,
+          preBalances: [1_000_000_000],
+          postBalances: [999_995_000],
+          preTokenBalances: [],
+          postTokenBalances: [
+            { mint: USDC_MINT, owner: FIXTURE_OWNER, uiTokenAmount: { amount: "500000000", decimals: 6 } },
+          ],
+        },
+      },
+    };
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: body }) });
+    const detail = await rpc.transaction(SIGNATURE);
+    expect(detail).toEqual({
+      signature: SIGNATURE,
+      blockTime: 1_790_000_000,
+      accountKeys: [FIXTURE_OWNER],
+      feeLamports: 5000n,
+      preLamports: [1_000_000_000n],
+      postLamports: [999_995_000n],
+      preTokens: [],
+      postTokens: [{ mint: USDC_MINT, owner: FIXTURE_OWNER, rawAmount: 500_000_000n, decimals: 6 }],
+    });
+  });
+});

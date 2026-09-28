@@ -51,6 +51,32 @@ export const wallets = pgTable(
   (t) => [uniqueIndex("wallet_address_idx").on(t.address)],
 );
 
+/**
+ * One signature stream we follow for a wallet.
+ *
+ * A row rather than a column per stream: a wallet follows its own address for
+ * native SOL and its USDC token account for cash today, and following a stock
+ * account later is an insert rather than a migration.
+ *
+ * The RPC indexes a transaction under its account keys, and an SPL transfer's
+ * accounts do not include the recipient's wallet — so the wallet address alone
+ * would find a first deposit and miss every one after it.
+ */
+export const walletStreams = pgTable(
+  "wallet_stream",
+  {
+    walletId: uuid("wallet_id")
+      .notNull()
+      .references(() => wallets.id, { onDelete: "cascade" }),
+    /** The address whose signatures this row follows. */
+    address: text("address").notNull(),
+    /** Newest signature processed. Null until the first pass records where we are. */
+    cursor: text("cursor"),
+    checkedAt: timestamp("checked_at", { withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.walletId, t.address] })],
+);
+
 /** A money column. Wide enough for a share count and a price alike. */
 const usd = (name: string) => numeric(name, { precision: 38, scale: 18 });
 
@@ -151,7 +177,15 @@ export const positions = pgTable(
     instrumentId: uuid("instrument_id")
       .notNull()
       .references(() => instruments.id, { onDelete: "cascade" }),
+    /** What the chain says is held. Never inferred. */
     shares: usd("shares").notNull(),
+    /**
+     * How many of those shares we hold a lot for. Shares that arrived from
+     * somewhere we did not witness have no lot and no cost, and are counted in
+     * `shares` but not here — so profit is measured against what we can prove
+     * was paid rather than against a price we guessed.
+     */
+    sharesWithBasis: usd("shares_with_basis").notNull().default("0"),
     costBasisUsd: usd("cost_basis_usd").notNull(),
     avgUnitCostUsd: usd("avg_unit_cost_usd").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -220,8 +254,21 @@ export const activities = pgTable(
     refTable: text("ref_table"),
     refId: uuid("ref_id"),
     txSignature: text("tx_signature"),
+    /** Which asset moved. Null on a row with no single asset, such as a dividend. */
+    mint: text("mint"),
   },
-  (t) => [index("activity_user_occurred_idx").on(t.userId, t.occurredAt, t.id)],
+  (t) => [
+    index("activity_user_occurred_idx").on(t.userId, t.occurredAt, t.id),
+    /**
+     * The idempotency guarantee. A movement seen twice — a crash between
+     * writing and advancing a cursor, a transaction that appears in both of a
+     * wallet's streams, or two API instances running the job — is written once.
+     *
+     * Rows where `mint` is null are not constrained, which is what lets the
+     * dividend rows `position-sync` writes carry no mint and no signature.
+     */
+    uniqueIndex("activity_signature_mint_idx").on(t.userId, t.txSignature, t.mint),
+  ],
 );
 export type User = typeof users.$inferSelect;
 export type Wallet = typeof wallets.$inferSelect;
@@ -232,3 +279,4 @@ export type Lot = typeof lots.$inferSelect;
 export type Position = typeof positions.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type Activity = typeof activities.$inferSelect;
+export type WalletStream = typeof walletStreams.$inferSelect;
