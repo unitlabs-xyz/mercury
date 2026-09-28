@@ -31,8 +31,8 @@ const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
         <p className="mt-1 text-[13px] leading-[1.5] text-up-deep/85">
           {ISSUER_NAME[d.best.issuer]} is the cheaper route at this size — {usd(price)} per share,{" "}
           {Math.abs(premium) < 0.01
-            ? "in line with the reference price"
-            : `${Math.abs(premium).toFixed(2)}% ${premium > 0 ? "above" : "below"} the reference price`}
+            ? "in line with the real share price"
+            : `${Math.abs(premium).toFixed(2)}% ${premium > 0 ? "above" : "below"} the real share price`}
           .
         </p>
       </div>
@@ -66,8 +66,8 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
           Worth waiting
         </p>
         <p className="mt-1 text-[13px] leading-[1.5] text-warn/90">
-          The market is shut, and the token is {premium.toFixed(2)}% above the reference price — more than we
-          think you should pay. We can hold the order and fill it when the price comes back.
+          The US market is shut, and this is trading {premium.toFixed(2)}% above the real share price — more
+          than we think you should pay. We can hold your order and place it when the price comes back.
         </p>
       </div>
       <dl className="mt-4 space-y-2.5 text-[14px]">
@@ -80,11 +80,12 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
             d.marketOpensAt
               ? `${d.marketOpensAt.toLocaleString("en-US", {
                   weekday: "long",
+                  timeZone: "America/New_York",
+                })} at ${d.marketOpensAt.toLocaleString("en-US", {
                   hour: "numeric",
                   minute: "2-digit",
                   timeZone: "America/New_York",
-                  timeZoneName: "short",
-                })}, when the exchange opens`
+                })} ET, when the US market opens`
               : "When the price returns"
           }
         />
@@ -96,26 +97,33 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
   );
 };
 
+/*
+ * Why an order will not go through, in the reader's words rather than ours.
+ * "Route", "the pool", "slip", "liquidity", "the reference price" and
+ * "ex-dividend" are how we describe the machinery; none of them tell someone
+ * new to shares what happened or what to do next. Each one names the problem
+ * and, where there is one, the way out.
+ */
 export const REFUSE_COPY: Record<RefuseDecision["reason"], { title: string; body: string }> = {
-  below_minimum: { title: "Too small to trade", body: "The smallest order we can route is $5." },
+  below_minimum: { title: "Too small to buy", body: "The smallest order we can place is $5." },
   no_route: {
-    title: "No route right now",
-    body: "Neither issuer has liquidity for this stock at the moment. Try again shortly.",
+    title: "Can't buy this right now",
+    body: "There isn't enough of it available to trade at the moment. Try again shortly.",
   },
   impact_too_high: {
     title: "This order would move the price",
-    body: "At this size the pool cannot fill you without a large slip. Try a smaller amount, or queue it for when the market opens.",
+    body: "At this size, buying would push the price up against you. Try a smaller amount, or wait until the US market opens.",
   },
   reference_stale: {
-    title: "No fresh price",
-    body: "We have not had a reference price recently enough to trade safely against it.",
+    title: "Price is out of date",
+    body: "We can't confirm what a share is worth right now, so we're not placing orders. Try again in a moment.",
   },
   instrument_halted: { title: "Trading halted", body: "The exchange has halted this stock." },
   corp_action_pending: {
-    title: "Dividend pending",
-    body: "This stock has gone ex-dividend and the token has not been adjusted yet. Trading reopens once it is.",
+    title: "Dividend being applied",
+    body: "Your share count is about to change. Buying reopens as soon as it has.",
   },
-  no_candidates: { title: "Not available", body: "We do not have a tokenised version of this stock." },
+  no_candidates: { title: "Not available", body: "We don't offer this stock yet." },
 };
 
 const Refuse = ({ d }: { d: RefuseDecision }) => {
