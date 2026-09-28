@@ -250,9 +250,13 @@ export const Stock = () => {
             {session && (
               <p className="flex items-start gap-2 rounded-lg bg-ds-panel px-5 py-[9px] text-[12px] leading-[1.45] text-ds-muted [&_svg]:mt-px">
                 <Clock className="size-3.5 shrink-0" />
+                {/* Plain words, because most people reading this are new to
+                    shares: "the token" and "the reference" are our vocabulary,
+                    not theirs. What they need to know is that trading here does
+                    not stop when the exchange does, and what we do about the gap. */}
                 {session.isOpen
-                  ? "US market open. The token tracks the live share price."
-                  : `US market closed${opensAt ? `, opens ${opensAt}` : ""}. The token still trades, and we check its price against the reference before you buy.`}
+                  ? `US market open, so this follows ${instrument.name}'s share price as it moves.`
+                  : `US market closed${opensAt ? ` until ${opensAt}` : ""}. You can still buy — we compare the price here against a real share first, and offer to wait if it has drifted too far.`}
               </p>
             )}
           </section>

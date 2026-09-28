@@ -4,21 +4,13 @@
     {
       "name": "api",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--filter",
-        "@mercury/api",
-        "dev"
-      ],
+      "runtimeArgs": ["--filter", "@mercury/api", "dev"],
       "port": 8787
     },
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--filter",
-        "@mercury/web",
-        "dev"
-      ],
+      "runtimeArgs": ["--filter", "@mercury/web", "dev"],
       "port": 5173
     }
   ]

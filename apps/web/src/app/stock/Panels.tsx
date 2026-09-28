@@ -109,6 +109,7 @@ export const FigureCard = ({
   value,
   sub,
   tone,
+  wide,
   children,
   action,
 }: {
@@ -117,6 +118,8 @@ export const FigureCard = ({
   value: ReactNode;
   sub: ReactNode;
   tone?: "up" | "down" | "warn" | undefined;
+  /** How many figures share a row on a card that has the page to itself. */
+  wide?: 3 | 4;
   children: ReactNode;
   action?: ReactNode;
 }) => (
@@ -127,8 +130,13 @@ export const FigureCard = ({
         <RailFigure value={value} sub={sub} tone={tone} />
       </div>
     </div>
-    {/* Two figures a row at half width; four in one row when the card has the page to itself. */}
-    <dl className="mt-4 grid flex-1 grid-cols-2 content-start gap-x-6 gap-y-4 rounded-lg bg-ds-panel px-5 py-4 @2xl:grid-cols-4">
+    {/* Two figures a row at half width; the full set in one row when the card has
+        the page to itself — three or four, so a card never leaves a column empty. */}
+    <dl
+      className={`mt-4 grid flex-1 grid-cols-2 content-start gap-x-6 gap-y-4 rounded-lg bg-ds-panel px-5 py-4 ${
+        wide === 3 ? "@2xl:grid-cols-3" : "@2xl:grid-cols-4"
+      }`}
+    >
       {children}
     </dl>
     {/* 24px from the card's sides and 20px from its foot, counting the card's own 4px. */}
