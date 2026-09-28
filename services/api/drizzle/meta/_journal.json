@@ -22,6 +22,13 @@
       "when": 1790566068316,
       "tag": "0002_plain_matthew_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790576581422,
+      "tag": "0003_elite_sumo",
+      "breakpoints": true
     }
   ]
 }

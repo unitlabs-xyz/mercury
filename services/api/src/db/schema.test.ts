@@ -139,3 +139,17 @@ describe("read model schema", () => {
     expect(getTableColumns(lots).tokenQty.getSQLType()).toBe("bigint");
   });
 });
+
+import { walletStreams } from "./schema.js";
+
+describe("wallet event streams", () => {
+  it("follows an address per wallet, with a cursor and a last-checked time", () => {
+    const cols = Object.keys(getTableColumns(walletStreams));
+    expect(cols).toEqual(expect.arrayContaining(["walletId", "address", "cursor", "checkedAt"]));
+  });
+
+  it("tells an activity row which asset moved, so cash and SOL are distinguishable", () => {
+    const cols = Object.keys(getTableColumns(activities));
+    expect(cols).toEqual(expect.arrayContaining(["mint", "txSignature"]));
+  });
+});
