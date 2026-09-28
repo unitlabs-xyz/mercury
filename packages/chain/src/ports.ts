@@ -139,3 +139,59 @@ export interface ChainReader {
   /** Null when the account does not exist or is not a Token-2022 mint. */
   mintConfig(mint: string): Promise<MintConfig | null>;
 }
+
+/** One signature from an address's history. */
+export interface SignatureRef {
+  readonly signature: string;
+  readonly slot: number;
+  /** Seconds since the epoch. Null on a block the node has not timestamped. */
+  readonly blockTime: number | null;
+  /** A failed transaction moved nothing, and is skipped rather than read. */
+  readonly failed: boolean;
+}
+
+export interface SignaturePage {
+  readonly limit: number;
+  /** Stop once this signature is reached. */
+  readonly until?: string;
+  /** Start below this signature. How the walk pages back through a busy window. */
+  readonly before?: string;
+}
+
+/** One token account's balance on one side of a transaction. */
+export interface TokenBalanceEntry {
+  readonly mint: string;
+  /** The wallet that owns the token account, not the account address. */
+  readonly owner: string | null;
+  readonly rawAmount: bigint;
+  readonly decimals: number;
+}
+
+export interface TransactionDetail {
+  readonly signature: string;
+  readonly blockTime: number | null;
+  /** Account keys in index order; under jsonParsed this includes lookup-table entries. */
+  readonly accountKeys: readonly string[];
+  readonly feeLamports: bigint;
+  readonly preLamports: readonly bigint[];
+  readonly postLamports: readonly bigint[];
+  readonly preTokens: readonly TokenBalanceEntry[];
+  readonly postTokens: readonly TokenBalanceEntry[];
+}
+
+/**
+ * What happened to an address, as opposed to what it holds.
+ *
+ * A separate port from `ChainReader` rather than three more methods on it:
+ * `withPledged` implements `ChainReader` as an object literal to fold in stock
+ * pledged to Kamino, and a wrapper about holdings has no business answering
+ * questions about signatures.
+ */
+export interface ChainHistory {
+  /** The owner's token accounts for one mint. Empty when they have none yet. */
+  tokenAccountsFor(owner: string, mint: string): Promise<readonly string[]>;
+  /** Newest first, as the node returns them. */
+  signatures(address: string, page: SignaturePage): Promise<readonly SignatureRef[]>;
+  /** Null when the node has no such transaction, or has pruned it. */
+  transaction(signature: string): Promise<TransactionDetail | null>;
+}

@@ -1,5 +1,14 @@
 import { D, ONE, type Decimal } from "@mercury/core";
-import type { ChainReader, MintConfig, TokenBalance } from "../ports.js";
+import type {
+  ChainHistory,
+  ChainReader,
+  MintConfig,
+  SignaturePage,
+  SignatureRef,
+  TokenBalance,
+  TokenBalanceEntry,
+  TransactionDetail,
+} from "../ports.js";
 import { defaultFetch } from "../fetch.js";
 
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -37,6 +46,48 @@ interface ParsedMint {
   };
 }
 
+interface RpcSignature {
+  readonly signature: string;
+  readonly slot: number;
+  readonly blockTime: number | null;
+  readonly err: unknown;
+}
+
+interface RpcTokenBalance {
+  readonly mint: string;
+  readonly owner?: string;
+  readonly uiTokenAmount: { readonly amount: string; readonly decimals: number };
+}
+
+interface RpcTransaction {
+  readonly blockTime: number | null;
+  readonly transaction: {
+    readonly message: { readonly accountKeys: readonly { readonly pubkey: string }[] };
+  };
+  readonly meta: {
+    readonly fee: number;
+    readonly preBalances: readonly number[];
+    readonly postBalances: readonly number[];
+    readonly preTokenBalances?: readonly RpcTokenBalance[];
+    readonly postTokenBalances?: readonly RpcTokenBalance[];
+  } | null;
+}
+
+/**
+ * The ceiling the node compares a transaction's version against, not an
+ * assertion about what exists. A transaction above it returns an error rather
+ * than a result, and version 1 is already 14% of a mainnet block — so 0 would
+ * park a cursor forever on the first one the walk met.
+ */
+const MAX_TX_VERSION = 255;
+
+const toEntry = (b: RpcTokenBalance): TokenBalanceEntry => ({
+  mint: b.mint,
+  owner: b.owner ?? null,
+  rawAmount: BigInt(b.uiTokenAmount.amount),
+  decimals: b.uiTokenAmount.decimals,
+});
+
 export interface SolanaRpcConfig {
   readonly rpcUrl: string;
   readonly fetch?: typeof fetch;
@@ -48,7 +99,7 @@ export interface SolanaRpcConfig {
  * until subsystem 3, where signing needs it, and everything read here is
  * already decoded by the node when asked for `jsonParsed`.
  */
-export class SolanaRpc implements ChainReader {
+export class SolanaRpc implements ChainReader, ChainHistory {
   private readonly doFetch: typeof fetch;
   private readonly now: () => number;
 
@@ -143,5 +194,61 @@ export class SolanaRpc implements ChainReader {
     const at = state["newMultiplierEffectiveTimestamp"];
     if (typeof next !== "string" || typeof at !== "number") return current;
     return this.now() >= at * 1000 ? D(next) : current;
+  }
+
+  /**
+   * The owner's token accounts for one mint, by address.
+   *
+   * A mint filter rather than a program filter: the mint implies its program,
+   * so this is one call. It also finds a non-associated account, which deriving
+   * the associated address would miss.
+   */
+  async tokenAccountsFor(owner: string, mint: string): Promise<readonly string[]> {
+    const res = await this.call<{ value: readonly { pubkey: string }[] }>("getTokenAccountsByOwner", [
+      owner,
+      { mint },
+      { encoding: "jsonParsed" },
+    ]);
+    return res.value.map((a) => a.pubkey);
+  }
+
+  async signatures(address: string, page: SignaturePage): Promise<readonly SignatureRef[]> {
+    // Built by spread: `exactOptionalPropertyTypes` rejects an explicit
+    // undefined, and the node treats a null `until` as a malformed request.
+    const params = {
+      limit: page.limit,
+      ...(page.until === undefined ? {} : { until: page.until }),
+      ...(page.before === undefined ? {} : { before: page.before }),
+    };
+    const res = await this.call<readonly RpcSignature[]>("getSignaturesForAddress", [address, params]);
+    return res.map((s) => ({
+      signature: s.signature,
+      slot: s.slot,
+      blockTime: s.blockTime,
+      failed: s.err !== null && s.err !== undefined,
+    }));
+  }
+
+  /**
+   * Lamports arrive as JSON numbers and become bigint here, so nothing
+   * downstream can do float arithmetic on money.
+   */
+  async transaction(signature: string): Promise<TransactionDetail | null> {
+    const res = await this.call<RpcTransaction | null>("getTransaction", [
+      signature,
+      { encoding: "jsonParsed", maxSupportedTransactionVersion: MAX_TX_VERSION },
+    ]);
+    if (res === null || res.meta === null) return null;
+    const meta = res.meta;
+    return {
+      signature,
+      blockTime: res.blockTime,
+      accountKeys: res.transaction.message.accountKeys.map((k) => k.pubkey),
+      feeLamports: BigInt(meta.fee),
+      preLamports: meta.preBalances.map((n) => BigInt(n)),
+      postLamports: meta.postBalances.map((n) => BigInt(n)),
+      preTokens: (meta.preTokenBalances ?? []).map(toEntry),
+      postTokens: (meta.postTokenBalances ?? []).map(toEntry),
+    };
   }
 }
