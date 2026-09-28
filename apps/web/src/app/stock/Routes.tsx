@@ -34,14 +34,6 @@ const verdictOf = (c: PricedCandidate, best: PricedCandidate | null): Verdict =>
 
 /** Token, shares per token, impact, per share, verdict: the holdings table's fixed right-hand columns. */
 const COLS = "grid-cols-[minmax(0,1fr)_120px_100px_130px_88px]";
-/*
- * The buy dialog gives this about 400px on a desktop and 330 on a phone; the
- * full table needs 560, enough to push the verdict past the right edge — and
- * the verdict is the column saying a route is not being used. "Shares per
- * token" is the one to lose: it reads the same on every row, so it separates
- * nothing, and the dialog states the share count outright a few lines above.
- */
-const COLS_BARE = "grid-cols-[minmax(0,1fr)_54px_70px_72px]";
 
 /**
  * Both issuers, priced per real share rather than per token, for the amount
@@ -54,28 +46,19 @@ export const Routes = ({
   amount,
   loading,
   wrappers,
-  bare = false,
 }: {
   decision: Decision | null;
   amount: number;
   loading: boolean;
   wrappers: readonly Wrapper[];
-  /**
-   * Drop the card around it, for somewhere that is already a card — the buy
-   * dialog. A white card inside a white dialog is a border drawn for no reason.
-   */
-  bare?: boolean;
 }) => {
   const best = decision && decision.kind !== "refuse" ? decision.best : null;
   const bestPrice = best?.pricePerShare ? Number(best.pricePerShare.toString()) : null;
   const refused = decision?.candidates.filter((c) => !c.viable) ?? [];
 
   return (
-    <section
-      aria-label="Where your order goes"
-      className={bare ? "min-w-0" : "min-w-0 rounded-xl bg-white p-1"}
-    >
-      <div className={bare ? "" : "px-5 pt-4"}>
+    <section aria-label="Where your order goes" className="min-w-0 rounded-xl bg-white p-1">
+      <div className="px-5 pt-4">
         <RailHead
           title={decision && decision.candidates.length === 1 ? "Your route" : "Where your order goes"}
           meta={
@@ -95,12 +78,10 @@ export const Routes = ({
       </div>
 
       <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
-        <div className={bare ? "min-w-[288px]" : "min-w-[560px]"}>
-          <div
-            className={`grid ${bare ? COLS_BARE : COLS} ${bare ? "px-3" : "px-4"} pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}
-          >
+        <div className="min-w-[560px]">
+          <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
             <span>Token</span>
-            {!bare && <span className="text-right">Shares per token</span>}
+            <span className="text-right">Shares per token</span>
             <span className="text-right">Impact</span>
             <span className="text-right">Per share</span>
             <span />
@@ -111,7 +92,7 @@ export const Routes = ({
               ? (wrappers.length ? wrappers : [null, null]).map((w, i) => (
                   <div
                     key={w?.mint ?? i}
-                    className={`grid h-15 ${bare ? COLS_BARE : COLS} items-center rounded-md ${bare ? "px-3" : "px-4"} text-[14px] leading-none`}
+                    className={`grid h-15 ${COLS} items-center rounded-md px-4 text-[14px] leading-none`}
                   >
                     <span>
                       <span className="block font-medium text-ds-ink">
@@ -121,7 +102,7 @@ export const Routes = ({
                         {w ? ISSUER_NAME[w.issuer] : <Skeleton className="h-3 w-12" />}
                       </span>
                     </span>
-                    {!bare && <Skeleton className="ml-auto h-3.5 w-14" />}
+                    <Skeleton className="ml-auto h-3.5 w-14" />
                     <Skeleton className="ml-auto h-3.5 w-12" />
                     <Skeleton className="ml-auto h-3.5 w-16" />
                     <Skeleton className="ml-auto h-[17px] w-12" />
@@ -138,7 +119,7 @@ export const Routes = ({
                   return (
                     <div
                       key={c.mint}
-                      className={`grid h-15 ${bare ? COLS_BARE : COLS} items-center rounded-md ${bare ? "px-3" : "px-4"} text-[14px] leading-none ${
+                      className={`grid h-15 ${COLS} items-center rounded-md px-4 text-[14px] leading-none ${
                         verdict === "best" ? "bg-white" : ""
                       }`}
                     >
@@ -148,11 +129,9 @@ export const Routes = ({
                           {ISSUER_NAME[c.issuer]}
                         </span>
                       </span>
-                      {!bare && (
-                        <span className="text-right text-ds-muted">
-                          ×{Number(c.multiplier.toString()).toFixed(4)}
-                        </span>
-                      )}
+                      <span className="text-right text-ds-muted">
+                        ×{Number(c.multiplier.toString()).toFixed(4)}
+                      </span>
                       <span className="text-right text-ds-muted">
                         {impact === null ? "No route" : `${(impact * 100).toFixed(2)}%`}
                       </span>

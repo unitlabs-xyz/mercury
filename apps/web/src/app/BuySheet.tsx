@@ -4,7 +4,6 @@ import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
 import { useMoney } from "../api/hooks";
 import { ISSUER_NAME } from "./IssuerCompare";
-import { Routes } from "./stock/Routes";
 import { Button } from "../ui/Button";
 import { useDecision } from "../market/hooks";
 import type { Instrument, PriceMap } from "../market/hooks";
@@ -23,26 +22,29 @@ const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
   const premium = (num(d.premium) ?? 0) * 100;
   return (
     <>
-      <div className="rounded-xl border border-up-line bg-up-tint px-4 py-3.5">
-        <p className="flex items-center gap-2 text-[14px] font-semibold text-up-deep">
-          <Check className="size-4" />
-          Ready to buy
-        </p>
-        <p className="mt-1 text-[13px] leading-[1.5] text-up-deep/85">
-          {ISSUER_NAME[d.best.issuer]} is the cheaper route at this size — {usd(price)} per share,{" "}
-          {Math.abs(premium) < 0.01
-            ? "in line with the real share price"
-            : `${Math.abs(premium).toFixed(2)}% ${premium > 0 ? "above" : "below"} the real share price`}
-          .
-        </p>
-      </div>
-      <dl className="mt-4 space-y-2.5 text-[14px]">
+      {/*
+       * No "Ready to buy" banner: an enabled Buy now already says that, and a
+       * green box saying the thing is fine is the kind of reassurance a product
+       * gives instead of information.
+       *
+       * The two facts it did carry are kept, because nothing else here holds
+       * them — which issuer won, and what this costs against a real share.
+       */}
+      <dl className="space-y-2.5 text-[14px]">
         <Line k="You pay" v={usd(amount)} />
-        <Line k="Price per share" v={usd(price)} />
+        <Line
+          k="Price per share"
+          v={usd(price)}
+          sub={
+            Math.abs(premium) < 0.01
+              ? "In line with the real share price"
+              : `${Math.abs(premium).toFixed(2)}% ${premium > 0 ? "above" : "below"} the real share price`
+          }
+        />
         <Line k="Shares" v={(amount / price).toFixed(4)} />
         {/* Not monospace: "Raydium CLMM" is the name of a venue, not a
             measurement. Mono here was a costume for "technical". */}
-        <Line k="Route" v={d.best.routeLabels.join(" → ")} />
+        <Line k="Route" v={`${ISSUER_NAME[d.best.issuer]} · ${d.best.routeLabels.join(" → ")}`} />
       </dl>
       {d.warning && (
         <p className="mt-4 flex gap-2 rounded-xl border border-warn-line bg-warn-tint px-3.5 py-3 text-[13px] leading-[1.5] text-warn">
@@ -136,10 +138,13 @@ const Refuse = ({ d }: { d: RefuseDecision }) => {
   );
 };
 
-const Line = ({ k, v }: { k: string; v: string }) => (
+const Line = ({ k, v, sub }: { k: string; v: string; sub?: string }) => (
   <div className="flex items-baseline justify-between gap-4">
     <dt className="text-muted">{k}</dt>
-    <dd className="text-right font-medium">{v}</dd>
+    <dd className="text-right">
+      <span className="block font-medium">{v}</span>
+      {sub && <span className="mt-[3px] block text-[12px] leading-[1.4] text-muted">{sub}</span>}
+    </dd>
   </div>
 );
 
@@ -177,7 +182,7 @@ export const BuySheet = ({
     return () => clearTimeout(t);
   }, [amount]);
 
-  const { decision, isLoading, isFetching } = useDecision(open ? instrument : undefined, settled, prices);
+  const { decision, isLoading } = useDecision(open ? instrument : undefined, settled, prices);
 
   const typing = settled !== amount;
   const overBalance = amount > available;
@@ -282,19 +287,6 @@ export const BuySheet = ({
                   {decision.kind === "refuse" && <Refuse d={decision} />}
                 </>
               )}
-            </div>
-
-            {/* The same table the page shows, not a second one that renders the
-                same facts in its own uppercase headers, monospace symbols and
-                solid chips. `bare` drops its card: this is already inside one. */}
-            <div className="mt-5">
-              <Routes
-                decision={decision}
-                amount={Math.max(settled, 0.01)}
-                loading={isLoading || isFetching}
-                wrappers={instrument.wrappers}
-                bare
-              />
             </div>
           </div>
 
