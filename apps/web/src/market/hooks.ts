@@ -137,7 +137,7 @@ export const useUniverse = () =>
     refetchInterval: 30_000,
   });
 
-/** Any instrument by name or ticker, across the whole catalogue. */
+/** Any instrument by name or ticker, across every stock we support. */
 export const useInstrumentSearch = (q: string) =>
   useQuery({
     queryKey: ["instruments", "search", q],

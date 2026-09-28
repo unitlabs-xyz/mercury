@@ -5,7 +5,7 @@ import {
   SymmetryVenue,
   USDC_MINT,
   type BasketVenue,
-  type CatalogueSource,
+  type SupportedStocks,
   type ChainReader,
   type QuoteSource,
   type TokenRegistry,
@@ -36,14 +36,14 @@ import type { InstrumentDeps } from "./routes/instruments.js";
 import type { MoneyDeps } from "./routes/money.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
-import { countBuyers30d, readCatalogue } from "./instruments/queries.js";
+import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 
 export interface Deps {
   readonly registry: TokenRegistry;
-  readonly catalogue: CatalogueSource;
+  readonly supportedStocks: SupportedStocks;
   readonly quotes: QuoteSource;
   readonly triggers: TriggerSource;
   readonly sessions: SessionSource;
@@ -145,7 +145,7 @@ export function buildDeps(config: Config): Deps {
 
   return {
     registry,
-    catalogue: registry,
+    supportedStocks: registry,
     quotes: new JupiterLite(),
     triggers: new JupiterTriggersNotYet(),
     sessions: new PythSessions(),
@@ -211,7 +211,7 @@ export function buildReadDeps(
 ): ReadDeps {
   return {
     instruments: {
-      catalogue: () => readCatalogue(db, deps.catalogue),
+      supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),
       prices: deps.prices,
       sessions: deps.sessions,

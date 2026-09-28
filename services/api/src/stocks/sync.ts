@@ -1,16 +1,16 @@
 import { sql } from "drizzle-orm";
-import type { CatalogueSource } from "@mercury/chain";
+import type { SupportedStocks } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
 import { instruments, multiplierEvents, tokens } from "../db/schema.js";
-import { planCatalogue } from "./plan.js";
+import { planStocks } from "./plan.js";
 
-export interface CatalogueDeps {
-  readonly catalogue: CatalogueSource;
+export interface StocksDeps {
+  readonly supportedStocks: SupportedStocks;
   readonly prices: PriceBoard;
 }
 
-export interface CatalogueSummary {
+export interface StocksSummary {
   readonly instruments: number;
   readonly tokens: number;
   readonly events: number;
@@ -18,14 +18,14 @@ export interface CatalogueSummary {
 
 /**
  * Reads the live universe and writes it down. Everything that decides *what* to
- * write is in `planCatalogue`; this only reads, calls and writes.
+ * write is in `planStocks`; this only reads, calls and writes.
  *
  * Upserts throughout, keyed on the natural keys — a ticker and a mint — so
  * running it twice changes nothing the second time. The worker takes this over
  * in subsystem 4; until then the API calls it on boot.
  */
-export async function syncCatalogue(db: Db, deps: CatalogueDeps): Promise<CatalogueSummary> {
-  const live = await deps.catalogue.instruments();
+export async function syncStocks(db: Db, deps: StocksDeps): Promise<StocksSummary> {
+  const live = await deps.supportedStocks.instruments();
   // Only wrappers Jupiter has a market for can be priced; asking about the rest
   // would be hundreds of wasted ids. Their multiplier stays as stored, or one.
   const mints = live.flatMap((i) => i.wrappers.filter((w) => w.hasMarket).map((w) => w.mint));
@@ -34,7 +34,7 @@ export async function syncCatalogue(db: Db, deps: CatalogueDeps): Promise<Catalo
     db.select({ mint: tokens.mint, multiplier: tokens.multiplier }).from(tokens),
   ]);
 
-  const plan = planCatalogue({ live, prices, stored, now: new Date() });
+  const plan = planStocks({ live, prices, stored, now: new Date() });
   if (plan.instruments.length === 0) return { instruments: 0, tokens: 0, events: 0 };
 
   const instrumentIds = new Map<string, string>();

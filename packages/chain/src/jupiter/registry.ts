@@ -1,11 +1,5 @@
 import { D, ZERO, type Decimal, type Issuer } from "@mercury/core";
-import type {
-  CatalogueInstrument,
-  CatalogueSource,
-  CatalogueWrapper,
-  TokenRef,
-  TokenRegistry,
-} from "../ports.js";
+import type { ListedInstrument, SupportedStocks, ListedWrapper, TokenRef, TokenRegistry } from "../ports.js";
 import { defaultFetch } from "../fetch.js";
 
 /**
@@ -74,7 +68,7 @@ const keep = (t: JupToken, issuer: Issuer): boolean =>
 /** Coerced through Decimal, because a field Jupiter stops sending must not become NaN. */
 const num = (v: number | undefined): Decimal => (typeof v === "number" && Number.isFinite(v) ? D(v) : ZERO);
 
-const toWrapper = (t: JupToken, issuer: Issuer): CatalogueWrapper => ({
+const toWrapper = (t: JupToken, issuer: Issuer): ListedWrapper => ({
   mint: t.id,
   symbol: t.symbol,
   issuer,
@@ -89,7 +83,7 @@ const toWrapper = (t: JupToken, issuer: Issuer): CatalogueWrapper => ({
   hasMarket: typeof t.usdPrice === "number" && t.usdPrice > 0,
 });
 
-const toRef = (w: CatalogueWrapper, ticker: string): TokenRef => ({
+const toRef = (w: ListedWrapper, ticker: string): TokenRef => ({
   mint: w.mint,
   symbol: w.symbol,
   ticker,
@@ -97,12 +91,12 @@ const toRef = (w: CatalogueWrapper, ticker: string): TokenRef => ({
   decimals: w.decimals,
 });
 
-export class JupiterRegistry implements TokenRegistry, CatalogueSource {
+export class JupiterRegistry implements TokenRegistry, SupportedStocks {
   private readonly base: string;
   private readonly doFetch: typeof fetch;
   private readonly ttlMs: number;
   private readonly now: () => number;
-  private cache: { at: number; value: readonly CatalogueInstrument[] } | null = null;
+  private cache: { at: number; value: readonly ListedInstrument[] } | null = null;
 
   constructor(config: JupiterRegistryConfig = {}) {
     this.base = config.baseUrl ?? BASE;
@@ -140,12 +134,12 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
     return (await res.json()) as readonly JupToken[];
   }
 
-  async instruments(): Promise<readonly CatalogueInstrument[]> {
+  async instruments(): Promise<readonly ListedInstrument[]> {
     const cached = this.cache;
     if (cached !== null && this.now() - cached.at < this.ttlMs) return cached.value;
 
     const [xs, on] = await this.universe();
-    const byTicker = new Map<string, CatalogueWrapper[]>();
+    const byTicker = new Map<string, ListedWrapper[]>();
     const add = (tokens: readonly JupToken[], issuer: Issuer) => {
       for (const t of tokens) {
         if (!keep(t, issuer)) continue;
@@ -162,7 +156,7 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
     // Everything verified is listed, however thin. Whether a thin one can fill an
     // order is the decision engine's call at the amount asked, not the shelf's.
     const value = [...byTicker.entries()]
-      .map(([ticker, wrappers]) => ({ ticker, wrappers: wrappers as readonly CatalogueWrapper[] }))
+      .map(([ticker, wrappers]) => ({ ticker, wrappers: wrappers as readonly ListedWrapper[] }))
       .sort((a, b) => a.ticker.localeCompare(b.ticker));
 
     this.cache = { at: this.now(), value };

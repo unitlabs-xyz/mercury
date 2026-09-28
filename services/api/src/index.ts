@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig } from "./deps.js";
-import { syncCatalogue } from "./catalogue/sync.js";
+import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { createApp } from "./app.js";
 
@@ -35,15 +35,15 @@ const every = (name: string, ms: number, run: () => Promise<string | null>) => {
 
 /**
  * The background half of the system. This is the only thing that writes a
- * catalogue row or a position: no request does, so the same read twice cannot
+ * stock row or a position: no request does, so the same read twice cannot
  * produce two different answers.
  *
  * It runs here because the API is a long-running server. There is no separate
  * worker process — `services/worker` cannot reach the database — and no
  * serverless cron, because this is not deployed as functions.
  */
-every("catalogue", 6 * 60 * 60 * 1000, async () => {
-  const s = await syncCatalogue(auth.db, { catalogue: deps.catalogue, prices: deps.prices });
+every("stocks", 6 * 60 * 60 * 1000, async () => {
+  const s = await syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices });
   return `${s.instruments} instruments, ${s.tokens} tokens`;
 });
 

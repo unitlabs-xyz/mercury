@@ -75,7 +75,7 @@ export const Invest = () => {
     [watchlist.tickers, savedCopy],
   );
 
-  // A search replaces the shelf with results from the whole catalogue.
+  // A search replaces the shelf with every stock we support.
   const searching = term.length > 0;
   const listBase = useMemo(
     () => build(listRange, searching ? search.data : universe.data),

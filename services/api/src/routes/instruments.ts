@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { D, DEFAULT_POLICY, toWire, ZERO, type Decimal, type Issuer } from "@mercury/core";
 import type { PriceBoard, SessionSource, TokenPrice } from "@mercury/market";
 
-export interface CatalogueWrapperRow {
+export interface StockWrapperRow {
   readonly mint: string;
   readonly symbol: string;
   readonly issuer: Issuer;
@@ -20,18 +20,18 @@ export interface CatalogueWrapperRow {
   readonly hasMarket: boolean;
 }
 
-export interface CatalogueRow {
+export interface StockRow {
   readonly ticker: string;
   readonly name: string;
   readonly sector: string | null;
   readonly description: string | null;
   readonly logoUrl: string | null;
   readonly isTradable: boolean;
-  readonly wrappers: readonly CatalogueWrapperRow[];
+  readonly wrappers: readonly StockWrapperRow[];
 }
 
 export interface InstrumentDeps {
-  readonly catalogue: () => Promise<readonly CatalogueRow[]>;
+  readonly supportedStocks: () => Promise<readonly StockRow[]>;
   /** How many Mercury accounts bought this in the last thirty days. Detail page only. */
   readonly buyers30d: (ticker: string) => Promise<number>;
   readonly prices: PriceBoard;
@@ -48,7 +48,7 @@ const fail = (code: string, message: string) => ({ error: { code, message } });
  */
 export const FEATURED_LIQUIDITY_USD = D(70_000);
 
-/** Search answers a page, not the catalogue. */
+/** Search answers a page, not the whole list. */
 const SEARCH_LIMIT = 50;
 
 /** Prices move every few seconds; a request should not cost a round trip per wrapper. */
@@ -63,13 +63,13 @@ const PRICE_TTL_MS = 15_000;
 const maxOrderOf = (liquidity: Decimal): Decimal => liquidity.mul(DEFAULT_POLICY.maxPriceImpact);
 
 interface Priced {
-  readonly row: CatalogueRow;
+  readonly row: StockRow;
   readonly pricePerShare: Decimal;
   readonly changePct24h: Decimal;
-  readonly liquidity: (w: CatalogueWrapperRow) => Decimal;
+  readonly liquidity: (w: StockWrapperRow) => Decimal;
 }
 
-const bestLiquidity = (row: CatalogueRow) =>
+const bestLiquidity = (row: StockRow) =>
   row.wrappers.reduce((best, w) => (D(w.liquidityUsd).gt(best) ? D(w.liquidityUsd) : best), ZERO);
 
 export function instrumentRoutes(deps: InstrumentDeps): Hono {
@@ -97,7 +97,7 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
   };
 
   /** Price the given rows. No price, no row: showing an instrument at zero would be a price. */
-  const price = async (rows: readonly CatalogueRow[]): Promise<readonly Priced[]> => {
+  const price = async (rows: readonly StockRow[]): Promise<readonly Priced[]> => {
     const board = await pricesFor(
       rows.flatMap((r) => r.wrappers.filter((w) => w.hasMarket).map((w) => w.mint)),
     );
@@ -107,7 +107,7 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
       // pools are the deep ones and its feed is the one that keeps updating.
       const lead =
         [row.wrappers.find((w) => w.issuer === "backed"), ...row.wrappers]
-          .filter((w): w is CatalogueWrapperRow => w !== undefined)
+          .filter((w): w is StockWrapperRow => w !== undefined)
           .find((w) => board.get(w.mint)?.pricePerShare != null) ?? undefined;
       const p = lead === undefined ? undefined : board.get(lead.mint);
       if (p === undefined || p.pricePerShare === null) continue;
@@ -161,12 +161,12 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
 
   /**
    * The shelf. With no parameters, the featured instruments only — the short list
-   * a first visit needs. `q` searches the whole catalogue by ticker and name,
+   * a first visit needs. `q` searches every supported stock by ticker and name,
    * `tickers` fetches exactly those (a portfolio's holdings), `scope=all` returns
    * everything with a market. `sector` and `shelf` narrow and order any of them.
    */
   app.get("/v1/instruments", async (c) => {
-    const [rows, session] = await Promise.all([deps.catalogue(), deps.sessions.current()]);
+    const [rows, session] = await Promise.all([deps.supportedStocks(), deps.sessions.current()]);
     const listed = rows.filter((r) => r.isTradable);
 
     const q = c.req.query("q")?.trim().toLowerCase();
@@ -179,12 +179,12 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
     const shelf = c.req.query("shelf");
     const all = c.req.query("scope") === "all";
 
-    let chosen: readonly CatalogueRow[];
+    let chosen: readonly StockRow[];
     if (tickers !== undefined && tickers.length > 0) {
       chosen = listed.filter((r) => tickers.includes(r.ticker));
     } else if (q !== undefined && q.length > 0) {
       // Ticker matches first, exact before prefix, then names; the deepest pool breaks ties.
-      const rank = (r: CatalogueRow) => {
+      const rank = (r: StockRow) => {
         const t = r.ticker.toLowerCase();
         return t === q ? 0 : t.startsWith(q) ? 1 : t.includes(q) ? 2 : 3;
       };
@@ -219,7 +219,7 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
 
   app.get("/v1/instruments/:ticker", async (c) => {
     const ticker = c.req.param("ticker").toUpperCase();
-    const [rows, session] = await Promise.all([deps.catalogue(), deps.sessions.current()]);
+    const [rows, session] = await Promise.all([deps.supportedStocks(), deps.sessions.current()]);
     const row = rows.find((r) => r.isTradable && r.ticker === ticker);
     const [found] = row === undefined ? [] : await price([row]);
     if (found === undefined) return c.json(fail("not_found", `We do not list ${ticker}.`), 404);

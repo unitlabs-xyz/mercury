@@ -3,12 +3,12 @@ import { Hono } from "hono";
 import { D } from "@mercury/core";
 import type { TokenPrice } from "@mercury/market";
 import { Instrument } from "@mercury/types";
-import { instrumentRoutes, type CatalogueRow, type InstrumentDeps } from "./instruments.js";
+import { instrumentRoutes, type StockRow, type InstrumentDeps } from "./instruments.js";
 
 const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 const SPYX = "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W";
 
-const catalogue: readonly CatalogueRow[] = [
+const supportedStocks: readonly StockRow[] = [
   {
     ticker: "NVDA",
     name: "Nvidia",
@@ -69,7 +69,7 @@ const thin = (
   mint: string,
   liquidityUsd: string,
   hasMarket: boolean,
-): CatalogueRow => ({
+): StockRow => ({
   ticker,
   name,
   sector: "Other",
@@ -94,8 +94,8 @@ const thin = (
     },
   ],
 });
-const everything: readonly CatalogueRow[] = [
-  ...catalogue,
+const everything: readonly StockRow[] = [
+  ...supportedStocks,
   thin("ASML", "ASML Holding", THINX, "2000", true),
   thin("DEAD", "Deadco", DEADX, "0", false),
 ];
@@ -112,7 +112,7 @@ const price = (mint: string, over: Partial<TokenPrice> = {}): TokenPrice => ({
 });
 
 const deps = (over: Partial<InstrumentDeps> = {}): InstrumentDeps => ({
-  catalogue: async () => catalogue,
+  supportedStocks: async () => supportedStocks,
   buyers30d: async () => 0,
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) },
   sessions: {
@@ -202,7 +202,7 @@ describe("GET /v1/instruments", () => {
 
   it("leaves out an instrument nothing can fill", async () => {
     const d = deps({
-      catalogue: async () => catalogue.map((c) => ({ ...c, isTradable: c.ticker !== "SPY" })),
+      supportedStocks: async () => supportedStocks.map((c) => ({ ...c, isTradable: c.ticker !== "SPY" })),
     });
     const shelf = await shelfOf(await app(d).request("/v1/instruments"));
     expect(shelf.map((i) => i.ticker)).toEqual(["NVDA"]);
@@ -219,7 +219,7 @@ describe("GET /v1/instruments, featured and search", () => {
   // The board prices by liquidity as the registry reported it, so the thin row stays thin.
   const wide = (over: Partial<InstrumentDeps> = {}) =>
     deps({
-      catalogue: async () => everything,
+      supportedStocks: async () => everything,
       prices: {
         pricesFor: async (mints) =>
           new Map(mints.map((m) => [m, price(m, { liquidityUsd: m === THINX ? D(2_000) : D(1_000_000) })])),
@@ -269,7 +269,7 @@ describe("GET /v1/instruments, featured and search", () => {
       { ...thin("NVDL", "Leveraged Nvidia", "NvdlMintxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "5000", true) },
     ];
     const shelf = await shelfOf(
-      await app(wide({ catalogue: async () => rows })).request("/v1/instruments?q=nvd"),
+      await app(wide({ supportedStocks: async () => rows })).request("/v1/instruments?q=nvd"),
     );
     expect(shelf[0]!.ticker).toBe("NVDA");
   });

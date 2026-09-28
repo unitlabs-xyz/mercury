@@ -1,5 +1,5 @@
 import { D, ONE, type Decimal, type Issuer } from "@mercury/core";
-import type { CatalogueInstrument } from "@mercury/chain";
+import type { ListedInstrument } from "@mercury/chain";
 import type { TokenPrice } from "@mercury/market";
 import { INSTRUMENT_META } from "../db/seed/instruments.js";
 
@@ -8,8 +8,8 @@ export interface StoredTokenRow {
   readonly multiplier: string;
 }
 
-export interface CatalogueInput {
-  readonly live: readonly CatalogueInstrument[];
+export interface StocksInput {
+  readonly live: readonly ListedInstrument[];
   readonly prices: ReadonlyMap<string, TokenPrice>;
   readonly stored: readonly StoredTokenRow[];
   readonly now: Date;
@@ -43,7 +43,7 @@ export interface MultiplierEventRow {
   readonly observedAt: Date;
 }
 
-export interface CataloguePlan {
+export interface StocksPlan {
   readonly instruments: readonly InstrumentRow[];
   readonly tokens: readonly TokenRow[];
   readonly events: readonly MultiplierEventRow[];
@@ -84,7 +84,7 @@ const kindOf = (from: Decimal, to: Decimal): MultiplierEventRow["kind"] => {
  * database, no clock, no network. Everything that decides what gets written
  * lives here, so all of it is testable in milliseconds.
  */
-export function planCatalogue(input: CatalogueInput): CataloguePlan {
+export function planStocks(input: StocksInput): StocksPlan {
   const storedByMint = new Map(input.stored.map((t) => [t.mint, t]));
 
   const instruments: InstrumentRow[] = [];

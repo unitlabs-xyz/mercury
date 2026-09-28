@@ -79,8 +79,8 @@ export interface BasketVenue {
   value(basketId: string): Promise<{ nav: Decimal; navPerToken: Decimal; weights: readonly BasketWeight[] }>;
 }
 
-/** What the catalogue sync needs and `TokenRegistry` deliberately does not carry. */
-export interface CatalogueWrapper {
+/** What the stock sync needs and `TokenRegistry` deliberately does not carry. */
+export interface ListedWrapper {
   readonly mint: string;
   readonly symbol: string;
   readonly issuer: Issuer;
@@ -98,9 +98,9 @@ export interface CatalogueWrapper {
   readonly hasMarket: boolean;
 }
 
-export interface CatalogueInstrument {
+export interface ListedInstrument {
   readonly ticker: string;
-  readonly wrappers: readonly CatalogueWrapper[];
+  readonly wrappers: readonly ListedWrapper[];
 }
 
 /**
@@ -108,8 +108,8 @@ export interface CatalogueInstrument {
  * `instrument` and `token` tables. Kept separate so the decision path keeps
  * depending on the four fields it actually needs.
  */
-export interface CatalogueSource {
-  instruments(): Promise<readonly CatalogueInstrument[]>;
+export interface SupportedStocks {
+  instruments(): Promise<readonly ListedInstrument[]>;
 }
 
 /** One token account's worth, in the mint's smallest unit. Never a float. */

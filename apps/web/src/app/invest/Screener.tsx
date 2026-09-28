@@ -189,7 +189,7 @@ export const Screener = ({
   rows: readonly Row[];
   range: Range;
   onRange: (r: Range) => void;
-  /** Typed here, searched on the server across the whole catalogue. */
+  /** Typed here, searched on the server across every stock we support. */
   query: string;
   onQuery: (q: string) => void;
   /** True while a search is in flight, so an empty table is not mistaken for no results. */

@@ -1,11 +1,11 @@
 import { and, eq, gte, sql } from "drizzle-orm";
-import type { CatalogueSource } from "@mercury/chain";
+import type { SupportedStocks } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { instruments, orders, tokens } from "../db/schema.js";
-import type { CatalogueRow } from "../routes/instruments.js";
+import type { StockRow } from "../routes/instruments.js";
 
 /**
- * The stored catalogue, with the live registry figures folded in: holders,
+ * The stored stocks, with the live registry figures folded in: holders,
  * pool depth, volume, net buyers, traders, the icon, and whether Jupiter has a
  * market for the token at all.
  *
@@ -17,7 +17,10 @@ import type { CatalogueRow } from "../routes/instruments.js";
  * broken one. Pricing still runs, because a missing registry does not stop
  * price/v3 answering; `hasMarket` defaults to true so it gets asked.
  */
-export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise<readonly CatalogueRow[]> {
+export async function readSupportedStocks(
+  db: Db,
+  supportedStocks: SupportedStocks,
+): Promise<readonly StockRow[]> {
   const [rows, live] = await Promise.all([
     db
       .select({
@@ -30,7 +33,7 @@ export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise
         instrumentId: instruments.id,
       })
       .from(instruments),
-    catalogue.instruments().catch(() => []),
+    supportedStocks.instruments().catch(() => []),
   ]);
 
   const liveByMint = new Map(live.flatMap((i) => i.wrappers.map((w) => [w.mint, w] as const)));

@@ -4,7 +4,7 @@
 
 **Goal:** The API answers portfolio, money, activity and instrument reads from Postgres and from chain, with every market number read live from an upstream and no invented figure anywhere in the server.
 
-**Architecture:** The browser already implements the market ports the server declares but never implemented. This plan lifts those five modules into `@mercury/market` and `@mercury/chain` as runtime-agnostic adapters — `fetch` injected, no Node built-ins, no `window` — then lands the Drizzle tables from docs/05, a catalogue sync that turns the live token universe into `instrument` and `token` rows, a holdings reconciliation that turns a wallet's on-chain balances into lots and positions, and the read routes on top. `buildDeps()` stops throwing.
+**Architecture:** The browser already implements the market ports the server declares but never implemented. This plan lifts those five modules into `@mercury/market` and `@mercury/chain` as runtime-agnostic adapters — `fetch` injected, no Node built-ins, no `window` — then lands the Drizzle tables from docs/05, a supportedStocks sync that turns the live token universe into `instrument` and `token` rows, a holdings reconciliation that turns a wallet's on-chain balances into lots and positions, and the read routes on top. `buildDeps()` stops throwing.
 
 **Tech Stack:** TypeScript strict, Hono, Drizzle ORM 0.45 + postgres-js, Vitest 3, `decimal.js`. No new runtime dependency is installed by this plan.
 
@@ -93,7 +93,7 @@ Selling does not exist until subsystem 3, so the only way tokens leave in this s
 | `src/testing/fixtures.ts`     | Re-exports the recorded JSON fixtures under stable names.                                                                     |
 | `src/testing/fixtures/*.json` | Recorded upstream responses. Committed.                                                                                       |
 | `src/testing/record.ts`       | The recorder that produced them. Run by hand, never in CI. Self-contained: no relative imports.                               |
-| `src/jupiter/registry.ts`     | `JupiterRegistry` — `TokenRegistry` and `CatalogueSource`. The lift of `universe.ts` plus `searchTokens`.                     |
+| `src/jupiter/registry.ts`     | `JupiterRegistry` — `TokenRegistry` and `SupportedStocks`. The lift of `universe.ts` plus `searchTokens`.                     |
 | `src/jupiter/lite.ts`         | `JupiterLite` — keyless `QuoteSource` on `/swap/v1/quote`, for pricing a decision.                                            |
 | `src/solana/rpc.ts`           | `SolanaRpc` — `ChainReader`. Token balances and mint config over plain JSON-RPC.                                              |
 
@@ -111,8 +111,8 @@ Selling does not exist until subsystem 3, so the only way tokens leave in this s
 | File                         | Responsibility                                                                                        |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `src/db/seed/instruments.ts` | Ticker → display name, sector, description. The server's editorial layer over what Jupiter knows.     |
-| `src/catalogue/plan.ts`      | Pure. Live catalogue + stored rows → inserts, updates and multiplier events.                          |
-| `src/catalogue/sync.ts`      | The thin shell that reads the tables, calls `planCatalogue`, writes the result.                       |
+| `src/stocks/plan.ts`         | Pure. Live supportedStocks + stored rows → inserts, updates and multiplier events.                    |
+| `src/stocks/sync.ts`         | The thin shell that reads the tables, calls `planStocks`, writes the result.                          |
 | `src/portfolio/reconcile.ts` | Pure. Chain balances + recorded lots → new lots, activity and positions. The heart of this subsystem. |
 | `src/portfolio/apply.ts`     | The thin shell: load what `planReconciliation` needs, write what it returns.                          |
 | `src/routes/portfolio.ts`    | `GET /v1/portfolio`, `GET /v1/portfolio/exposure/:ticker`.                                            |
@@ -125,14 +125,14 @@ Selling does not exist until subsystem 3, so the only way tokens leave in this s
 
 | File                                       | Change                                                                                                                         |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `packages/chain/src/ports.ts`              | Add `CatalogueSource`, `ChainReader`, and their types. `TokenRegistry` is unchanged.                                           |
+| `packages/chain/src/ports.ts`              | Add `SupportedStocks`, `ChainReader`, and their types. `TokenRegistry` is unchanged.                                           |
 | `packages/chain/src/index.ts`              | Export the new modules.                                                                                                        |
 | `packages/chain/package.json`              | Subpath exports so `@mercury/chain/jupiter/registry` and friends resolve, plus `@mercury/chain/testing`.                       |
 | `packages/market/src/ports.ts`             | Add `PriceBoard`, `TokenPrice`, `CreditSource`, `CreditMarket`. Correct the `ReferenceSource` and `MultiplierSource` comments. |
 | `packages/market/src/index.ts`             | Export the new modules.                                                                                                        |
 | `packages/market/package.json`             | Subpath exports.                                                                                                               |
 | `services/api/src/db/schema.ts`            | Seven new tables. `user` and `wallet` are untouched.                                                                           |
-| `services/api/src/deps.ts`                 | `Deps` gains `catalogue`, `chain`, `prices`, `credit`. `buildDeps` stops throwing.                                             |
+| `services/api/src/deps.ts`                 | `Deps` gains `supportedStocks`, `chain`, `prices`, `credit`. `buildDeps` stops throwing.                                       |
 | `services/api/src/app.ts`                  | Mount the four route modules; the in-memory `orders` Map is deleted.                                                           |
 | `services/api/.env.example`                | `JUPITER_API_KEY` moves from "subsystem 3 onward" to a note that nothing in the server needs it yet.                           |
 | `README.md`                                | Build-state table.                                                                                                             |
@@ -553,7 +553,7 @@ git commit -m "test: recorded upstream fixtures and a fake fetch for adapter tes
 
 ## Task 2: The token registry
 
-The lift of `apps/web/src/market/universe.ts` and the `searchTokens` half of `jupiter.ts`. It implements two ports: `TokenRegistry`, which `pricing.ts` already consumes, and a new `CatalogueSource`, which Task 10 uses to fill the `instrument` and `token` tables. One class, because it is one pair of upstream calls.
+The lift of `apps/web/src/market/universe.ts` and the `searchTokens` half of `jupiter.ts`. It implements two ports: `TokenRegistry`, which `pricing.ts` already consumes, and a new `SupportedStocks`, which Task 10 uses to fill the `instrument` and `token` tables. One class, because it is one pair of upstream calls.
 
 **Files:**
 
@@ -565,15 +565,15 @@ The lift of `apps/web/src/market/universe.ts` and the `searchTokens` half of `ju
 **Interfaces:**
 
 - Consumes: `fakeFetch`, `jupSearchXStock`, `jupSearchOndo`, `jupSearchImpostors` from Task 1.
-- Produces: `class JupiterRegistry implements TokenRegistry, CatalogueSource` with `constructor(config?: JupiterRegistryConfig)`; the types `CatalogueWrapper`, `CatalogueInstrument`, `CatalogueSource`; the constant `MIN_LIQUIDITY_USD`.
+- Produces: `class JupiterRegistry implements TokenRegistry, SupportedStocks` with `constructor(config?: JupiterRegistryConfig)`; the types `ListedWrapper`, `ListedInstrument`, `SupportedStocks`; the constant `MIN_LIQUIDITY_USD`.
 
 - [ ] **Step 1: Add the port**
 
 Append to `packages/chain/src/ports.ts`:
 
 ```ts
-/** What the catalogue sync needs and `TokenRegistry` deliberately does not carry. */
-export interface CatalogueWrapper {
+/** What the stock sync needs and `TokenRegistry` deliberately does not carry. */
+export interface ListedWrapper {
   readonly mint: string;
   readonly symbol: string;
   readonly issuer: Issuer;
@@ -589,9 +589,9 @@ export interface CatalogueWrapper {
   readonly traders24h: number;
 }
 
-export interface CatalogueInstrument {
+export interface ListedInstrument {
   readonly ticker: string;
-  readonly wrappers: readonly CatalogueWrapper[];
+  readonly wrappers: readonly ListedWrapper[];
 }
 
 /**
@@ -599,8 +599,8 @@ export interface CatalogueInstrument {
  * `instrument` and `token` tables. Kept separate so the decision path keeps
  * depending on the four fields it actually needs.
  */
-export interface CatalogueSource {
-  instruments(): Promise<readonly CatalogueInstrument[]>;
+export interface SupportedStocks {
+  instruments(): Promise<readonly ListedInstrument[]>;
 }
 ```
 
@@ -733,13 +733,7 @@ Create `packages/chain/src/jupiter/registry.ts`:
 
 ```ts
 import { D, ZERO, type Decimal, type Issuer } from "@mercury/core";
-import type {
-  CatalogueInstrument,
-  CatalogueSource,
-  CatalogueWrapper,
-  TokenRef,
-  TokenRegistry,
-} from "../ports.js";
+import type { ListedInstrument, SupportedStocks, ListedWrapper, TokenRef, TokenRegistry } from "../ports.js";
 
 /**
  * Jupiter's free tier. No key, no account, CORS-open. The paid host (api.jup.ag)
@@ -807,7 +801,7 @@ const keep = (t: JupToken, issuer: Issuer): boolean =>
 /** Coerced through Decimal, because a field Jupiter stops sending must not become NaN. */
 const num = (v: number | undefined): Decimal => (typeof v === "number" && Number.isFinite(v) ? D(v) : ZERO);
 
-const toWrapper = (t: JupToken, issuer: Issuer): CatalogueWrapper => ({
+const toWrapper = (t: JupToken, issuer: Issuer): ListedWrapper => ({
   mint: t.id,
   symbol: t.symbol,
   issuer,
@@ -821,12 +815,12 @@ const toWrapper = (t: JupToken, issuer: Issuer): CatalogueWrapper => ({
   traders24h: Math.max(0, Math.round(t.stats24h?.numTraders ?? 0)),
 });
 
-export class JupiterRegistry implements TokenRegistry, CatalogueSource {
+export class JupiterRegistry implements TokenRegistry, SupportedStocks {
   private readonly base: string;
   private readonly doFetch: typeof fetch;
   private readonly ttlMs: number;
   private readonly now: () => number;
-  private cache: { at: number; value: readonly CatalogueInstrument[] } | null = null;
+  private cache: { at: number; value: readonly ListedInstrument[] } | null = null;
 
   constructor(config: JupiterRegistryConfig = {}) {
     this.base = config.baseUrl ?? BASE;
@@ -841,7 +835,7 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
     return (await res.json()) as readonly JupToken[];
   }
 
-  async instruments(): Promise<readonly CatalogueInstrument[]> {
+  async instruments(): Promise<readonly ListedInstrument[]> {
     const cached = this.cache;
     if (cached !== null && this.now() - cached.at < this.ttlMs) return cached.value;
 
@@ -852,7 +846,7 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
       this.search("Ondo Tokenized").catch(() => [] as readonly JupToken[]),
     ]);
 
-    const byTicker = new Map<string, CatalogueWrapper[]>();
+    const byTicker = new Map<string, ListedWrapper[]>();
     const add = (tokens: readonly JupToken[], issuer: Issuer) => {
       for (const t of tokens) {
         if (!keep(t, issuer)) continue;
@@ -868,7 +862,7 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
 
     const value = [...byTicker.entries()]
       .filter(([, wrappers]) => wrappers.some((w) => w.liquidityUsd.gte(MIN_LIQUIDITY_USD)))
-      .map(([ticker, wrappers]) => ({ ticker, wrappers: wrappers as readonly CatalogueWrapper[] }))
+      .map(([ticker, wrappers]) => ({ ticker, wrappers: wrappers as readonly ListedWrapper[] }))
       .sort((a, b) => a.ticker.localeCompare(b.ticker));
 
     this.cache = { at: this.now(), value };
@@ -889,7 +883,7 @@ export class JupiterRegistry implements TokenRegistry, CatalogueSource {
   }
 }
 
-const toRef = (w: CatalogueWrapper, ticker: string): TokenRef => ({
+const toRef = (w: ListedWrapper, ticker: string): TokenRef => ({
   mint: w.mint,
   symbol: w.symbol,
   ticker,
@@ -3112,21 +3106,21 @@ git commit -m "feat: the read-model tables from docs/05"
 
 ---
 
-## Task 10: Filling the catalogue
+## Task 10: Filling the supportedStocks
 
 The live token universe becomes `instrument` and `token` rows. The decision of what to store is a pure function so it can be tested without a database; the shell around it does nothing but read, call and write.
 
 **Files:**
 
 - Create: `services/api/src/db/seed/instruments.ts`
-- Create: `services/api/src/catalogue/plan.ts`
-- Create: `services/api/src/catalogue/plan.test.ts`
-- Create: `services/api/src/catalogue/sync.ts`
+- Create: `services/api/src/stocks/plan.ts`
+- Create: `services/api/src/stocks/plan.test.ts`
+- Create: `services/api/src/stocks/sync.ts`
 
 **Interfaces:**
 
-- Consumes: `CatalogueSource`, `CatalogueInstrument` from `@mercury/chain`; `PriceBoard`, `TokenPrice` from `@mercury/market`.
-- Produces: `planCatalogue(input: CatalogueInput): CataloguePlan`; `syncCatalogue(db: Db, deps: { catalogue: CatalogueSource; prices: PriceBoard }): Promise<CatalogueSummary>`; `INSTRUMENT_META`.
+- Consumes: `SupportedStocks`, `ListedInstrument` from `@mercury/chain`; `PriceBoard`, `TokenPrice` from `@mercury/market`.
+- Produces: `planStocks(input: StocksInput): StocksPlan`; `syncStocks(db: Db, deps: { supportedStocks: SupportedStocks; prices: PriceBoard }): Promise<StocksSummary>`; `INSTRUMENT_META`.
 
 - [ ] **Step 1: Write the editorial seed**
 
@@ -3266,19 +3260,19 @@ export const INSTRUMENT_META: Readonly<Record<string, InstrumentMetaEntry>> = {
 
 - [ ] **Step 2: Write the failing test**
 
-Create `services/api/src/catalogue/plan.test.ts`:
+Create `services/api/src/stocks/plan.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import type { CatalogueInstrument } from "@mercury/chain";
+import type { ListedInstrument } from "@mercury/chain";
 import type { TokenPrice } from "@mercury/market";
-import { planCatalogue } from "./plan.js";
+import { planStocks } from "./plan.js";
 
 const NOW = new Date("2026-09-24T12:00:00Z");
 const MINT = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 
-const wrapper = (over: Partial<CatalogueInstrument["wrappers"][number]> = {}) => ({
+const wrapper = (over: Partial<ListedInstrument["wrappers"][number]> = {}) => ({
   mint: MINT,
   symbol: "NVDAx",
   issuer: "backed" as const,
@@ -3293,7 +3287,7 @@ const wrapper = (over: Partial<CatalogueInstrument["wrappers"][number]> = {}) =>
   ...over,
 });
 
-const live = (over: Partial<CatalogueInstrument> = {}): CatalogueInstrument => ({
+const live = (over: Partial<ListedInstrument> = {}): ListedInstrument => ({
   ticker: "NVDA",
   wrappers: [wrapper()],
   ...over,
@@ -3316,9 +3310,9 @@ const priced = (over: Partial<TokenPrice> = {}): ReadonlyMap<string, TokenPrice>
     ],
   ]);
 
-describe("planCatalogue", () => {
+describe("planStocks", () => {
   it("names an instrument from our own editorial, not from the token", () => {
-    const plan = planCatalogue({ live: [live()], prices: priced(), stored: [], now: NOW });
+    const plan = planStocks({ live: [live()], prices: priced(), stored: [], now: NOW });
     expect(plan.instruments[0]).toMatchObject({
       ticker: "NVDA",
       name: "Nvidia",
@@ -3329,7 +3323,7 @@ describe("planCatalogue", () => {
   });
 
   it("falls back to the issuer's name with the suffix stripped, for a ticker nobody has written up", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live({ ticker: "ASML", wrappers: [wrapper({ symbol: "ASMLx", name: "ASML Holding xStock" })] })],
       prices: new Map(),
       stored: [],
@@ -3339,18 +3333,18 @@ describe("planCatalogue", () => {
   });
 
   it("takes the logo from the Backed wrapper", () => {
-    const plan = planCatalogue({ live: [live()], prices: priced(), stored: [], now: NOW });
+    const plan = planStocks({ live: [live()], prices: priced(), stored: [], now: NOW });
     expect(plan.instruments[0]!.logoUrl).toBe("https://example.test/nvdax.png");
   });
 
   it("stores the live multiplier against the token", () => {
-    const plan = planCatalogue({ live: [live()], prices: priced(), stored: [], now: NOW });
+    const plan = planStocks({ live: [live()], prices: priced(), stored: [], now: NOW });
     expect(plan.tokens[0]).toMatchObject({ ticker: "NVDA", mint: MINT, issuer: "backed", decimals: 8 });
     expect(plan.tokens[0]!.multiplier).toBe("1.001701196801074");
   });
 
   it("keeps the stored multiplier when Jupiter has no price for the mint", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: new Map(),
       stored: [{ mint: MINT, multiplier: "1.0009180758490996" }],
@@ -3361,12 +3355,12 @@ describe("planCatalogue", () => {
   });
 
   it("defaults a brand-new token with no price to a multiplier of one", () => {
-    const plan = planCatalogue({ live: [live()], prices: new Map(), stored: [], now: NOW });
+    const plan = planStocks({ live: [live()], prices: new Map(), stored: [], now: NOW });
     expect(plan.tokens[0]!.multiplier).toBe("1");
   });
 
   it("writes an event when the multiplier moves, because that is a dividend", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: priced(),
       stored: [{ mint: MINT, multiplier: "1.0009180758490996" }],
@@ -3384,7 +3378,7 @@ describe("planCatalogue", () => {
   });
 
   it("writes no event when nothing moved, so a sync is idempotent", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: priced(),
       stored: [{ mint: MINT, multiplier: "1.001701196801074" }],
@@ -3394,7 +3388,7 @@ describe("planCatalogue", () => {
   });
 
   it("calls a multiplier that more than doubles a split, not a dividend", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: priced({ multiplier: D(4) }),
       stored: [{ mint: MINT, multiplier: "1" }],
@@ -3404,7 +3398,7 @@ describe("planCatalogue", () => {
   });
 
   it("will not guess at a multiplier that fell", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live()],
       prices: priced({ multiplier: D("0.9") }),
       stored: [{ mint: MINT, multiplier: "1" }],
@@ -3414,7 +3408,7 @@ describe("planCatalogue", () => {
   });
 
   it("marks a token unroutable when its pool has emptied", () => {
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live({ wrappers: [wrapper({ liquidityUsd: D(0) })] })],
       prices: priced({ liquidityUsd: D(0) }),
       stored: [],
@@ -3431,7 +3425,7 @@ describe("planCatalogue", () => {
       decimals: 6,
       liquidityUsd: D(40_000),
     });
-    const plan = planCatalogue({
+    const plan = planStocks({
       live: [live({ wrappers: [wrapper(), ondo] })],
       prices: priced(),
       stored: [],
@@ -3445,16 +3439,16 @@ describe("planCatalogue", () => {
 
 - [ ] **Step 3: Run it and watch it fail**
 
-Run: `pnpm --filter @mercury/api exec vitest run src/catalogue`
+Run: `pnpm --filter @mercury/api exec vitest run src/stocks`
 Expected: FAIL — `Failed to resolve import "./plan.js"`.
 
 - [ ] **Step 4: Implement the plan**
 
-Create `services/api/src/catalogue/plan.ts`:
+Create `services/api/src/stocks/plan.ts`:
 
 ```ts
 import { D, ONE, type Decimal, type Issuer } from "@mercury/core";
-import type { CatalogueInstrument } from "@mercury/chain";
+import type { ListedInstrument } from "@mercury/chain";
 import type { TokenPrice } from "@mercury/market";
 import { INSTRUMENT_META } from "../db/seed/instruments.js";
 
@@ -3463,8 +3457,8 @@ export interface StoredTokenRow {
   readonly multiplier: string;
 }
 
-export interface CatalogueInput {
-  readonly live: readonly CatalogueInstrument[];
+export interface StocksInput {
+  readonly live: readonly ListedInstrument[];
   readonly prices: ReadonlyMap<string, TokenPrice>;
   readonly stored: readonly StoredTokenRow[];
   readonly now: Date;
@@ -3498,7 +3492,7 @@ export interface MultiplierEventRow {
   readonly observedAt: Date;
 }
 
-export interface CataloguePlan {
+export interface StocksPlan {
   readonly instruments: readonly InstrumentRow[];
   readonly tokens: readonly TokenRow[];
   readonly events: readonly MultiplierEventRow[];
@@ -3531,7 +3525,7 @@ const kindOf = (from: Decimal, to: Decimal): MultiplierEventRow["kind"] => {
  * database, no clock, no network. Everything that decides what gets written
  * lives here, so all of it is testable in milliseconds.
  */
-export function planCatalogue(input: CatalogueInput): CataloguePlan {
+export function planStocks(input: StocksInput): StocksPlan {
   const storedByMint = new Map(input.stored.map((t) => [t.mint, t]));
 
   const instruments: InstrumentRow[] = [];
@@ -3595,27 +3589,27 @@ export function planCatalogue(input: CatalogueInput): CataloguePlan {
 
 - [ ] **Step 5: Run it and watch it pass**
 
-Run: `pnpm --filter @mercury/api exec vitest run src/catalogue`
+Run: `pnpm --filter @mercury/api exec vitest run src/stocks`
 Expected: PASS, 12 tests.
 
 - [ ] **Step 6: Write the shell**
 
-Create `services/api/src/catalogue/sync.ts`:
+Create `services/api/src/stocks/sync.ts`:
 
 ```ts
 import { sql } from "drizzle-orm";
-import type { CatalogueSource } from "@mercury/chain";
+import type { SupportedStocks } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
 import { instruments, multiplierEvents, tokens } from "../db/schema.js";
-import { planCatalogue } from "./plan.js";
+import { planStocks } from "./plan.js";
 
-export interface CatalogueDeps {
-  readonly catalogue: CatalogueSource;
+export interface StocksDeps {
+  readonly supportedStocks: SupportedStocks;
   readonly prices: PriceBoard;
 }
 
-export interface CatalogueSummary {
+export interface StocksSummary {
   readonly instruments: number;
   readonly tokens: number;
   readonly events: number;
@@ -3623,22 +3617,22 @@ export interface CatalogueSummary {
 
 /**
  * Reads the live universe and writes it down. Everything that decides *what* to
- * write is in `planCatalogue`; this only reads, calls and writes.
+ * write is in `planStocks`; this only reads, calls and writes.
  *
  * Upserts throughout, keyed on the natural keys — a ticker and a mint — so
  * running it twice changes nothing the second time. The worker takes this over
  * in subsystem 4; until then the API calls it on boot and the instruments route
  * calls it when the table is empty.
  */
-export async function syncCatalogue(db: Db, deps: CatalogueDeps): Promise<CatalogueSummary> {
-  const live = await deps.catalogue.instruments();
+export async function syncStocks(db: Db, deps: StocksDeps): Promise<StocksSummary> {
+  const live = await deps.supportedStocks.instruments();
   const mints = live.flatMap((i) => i.wrappers.map((w) => w.mint));
   const [prices, stored] = await Promise.all([
     deps.prices.pricesFor(mints),
     db.select({ mint: tokens.mint, multiplier: tokens.multiplier }).from(tokens),
   ]);
 
-  const plan = planCatalogue({ live, prices, stored, now: new Date() });
+  const plan = planStocks({ live, prices, stored, now: new Date() });
   if (plan.instruments.length === 0) return { instruments: 0, tokens: 0, events: 0 };
 
   const instrumentIds = new Map<string, string>();
@@ -3720,11 +3714,11 @@ cd services/api && node --env-file=.env -e '
 const { createDb } = await import("./src/db/client.ts");
 const { JupiterRegistry } = await import("@mercury/chain");
 const { JupiterMarket } = await import("@mercury/market");
-const { syncCatalogue } = await import("./src/catalogue/sync.ts");
+const { syncStocks } = await import("./src/stocks/sync.ts");
 const db = createDb(process.env.DATABASE_URL);
 const registry = new JupiterRegistry();
-console.log(await syncCatalogue(db, { catalogue: registry, prices: new JupiterMarket({ registry }) }));
-console.log(await syncCatalogue(db, { catalogue: registry, prices: new JupiterMarket({ registry }) }));
+console.log(await syncStocks(db, { supportedStocks: registry, prices: new JupiterMarket({ registry }) }));
+console.log(await syncStocks(db, { supportedStocks: registry, prices: new JupiterMarket({ registry }) }));
 process.exit(0);
 '
 ```
@@ -5396,7 +5390,7 @@ The shelf the web app browses, and the end of the in-memory `orders` Map the spe
 
 **Interfaces:**
 
-- Produces: `instrumentRoutes(deps: InstrumentDeps): Hono`; `readCatalogue(db: Db, catalogue: CatalogueSource): Promise<readonly CatalogueRow[]>`; `countBuyers30d(db: Db, ticker: string): Promise<number>`; `OrderStore`, `pgOrderStore(db: Db): OrderStore`, `memoryOrderStore(): OrderStore`.
+- Produces: `instrumentRoutes(deps: InstrumentDeps): Hono`; `readSupportedStocks(db: Db, supportedStocks: SupportedStocks): Promise<readonly StockRow[]>`; `countBuyers30d(db: Db, ticker: string): Promise<number>`; `OrderStore`, `pgOrderStore(db: Db): OrderStore`, `memoryOrderStore(): OrderStore`.
 
 - [ ] **Step 1: Write the failing instruments test**
 
@@ -5407,12 +5401,12 @@ import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { D } from "@mercury/core";
 import type { TokenPrice } from "@mercury/market";
-import { instrumentRoutes, type CatalogueRow, type InstrumentDeps } from "./instruments.js";
+import { instrumentRoutes, type StockRow, type InstrumentDeps } from "./instruments.js";
 
 const NVDAX = "Xsc9";
 const SPYX = "XsoC";
 
-const catalogue: readonly CatalogueRow[] = [
+const supportedStocks: readonly StockRow[] = [
   {
     ticker: "NVDA",
     name: "Nvidia",
@@ -5465,7 +5459,7 @@ const price = (mint: string, over: Partial<TokenPrice> = {}): TokenPrice => ({
 });
 
 const deps = (over: Partial<InstrumentDeps> = {}): InstrumentDeps => ({
-  catalogue: async () => catalogue,
+  supportedStocks: async () => supportedStocks,
   buyers30d: async () => 0,
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) },
   sessions: {
@@ -5544,7 +5538,7 @@ describe("GET /v1/instruments", () => {
 
   it("leaves out an instrument nothing can fill", async () => {
     const d = deps({
-      catalogue: async () => catalogue.map((c) => ({ ...c, isTradable: c.ticker !== "SPY" })),
+      supportedStocks: async () => supportedStocks.map((c) => ({ ...c, isTradable: c.ticker !== "SPY" })),
     });
     const body = await (await app(d).request("/v1/instruments")).json();
     expect(body.instruments.map((i: { ticker: string }) => i.ticker)).toEqual(["NVDA"]);
@@ -5607,7 +5601,7 @@ import { Hono } from "hono";
 import { D, toWire, ZERO, type Decimal, type Issuer } from "@mercury/core";
 import type { PriceBoard, SessionSource } from "@mercury/market";
 
-export interface CatalogueWrapperRow {
+export interface StockWrapperRow {
   readonly mint: string;
   readonly symbol: string;
   readonly issuer: Issuer;
@@ -5617,18 +5611,18 @@ export interface CatalogueWrapperRow {
   readonly holders: number;
 }
 
-export interface CatalogueRow {
+export interface StockRow {
   readonly ticker: string;
   readonly name: string;
   readonly sector: string | null;
   readonly description: string | null;
   readonly logoUrl: string | null;
   readonly isTradable: boolean;
-  readonly wrappers: readonly CatalogueWrapperRow[];
+  readonly wrappers: readonly StockWrapperRow[];
 }
 
 export interface InstrumentDeps {
-  readonly catalogue: () => Promise<readonly CatalogueRow[]>;
+  readonly supportedStocks: () => Promise<readonly StockRow[]>;
   /** How many Mercury accounts bought this in the last thirty days. Detail page only. */
   readonly buyers30d: (ticker: string) => Promise<number>;
   readonly prices: PriceBoard;
@@ -5638,7 +5632,7 @@ export interface InstrumentDeps {
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
 interface Priced {
-  readonly row: CatalogueRow;
+  readonly row: StockRow;
   readonly pricePerShare: Decimal;
   readonly changePct24h: Decimal;
   readonly holders: number;
@@ -5649,7 +5643,7 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
 
   /** Everything the shelf and the detail page share: the rows, priced, with the session. */
   const priceAll = async (): Promise<{ priced: readonly Priced[]; status: string }> => {
-    const [rows, session] = await Promise.all([deps.catalogue(), deps.sessions.current()]);
+    const [rows, session] = await Promise.all([deps.supportedStocks(), deps.sessions.current()]);
     const tradable = rows.filter((r) => r.isTradable);
     const board = await deps.prices.pricesFor(tradable.flatMap((r) => r.wrappers.map((w) => w.mint)));
 
@@ -5736,19 +5730,19 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
 
 Run again. Expected: PASS, 13 tests.
 
-- [ ] **Step 3: Write the catalogue query**
+- [ ] **Step 3: Write the supportedStocks query**
 
 Create `services/api/src/instruments/queries.ts`:
 
 ```ts
 import { and, eq, gte, sql } from "drizzle-orm";
-import type { CatalogueSource } from "@mercury/chain";
+import type { SupportedStocks } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { instruments, orders, tokens } from "../db/schema.js";
-import type { CatalogueRow } from "../routes/instruments.js";
+import type { StockRow } from "../routes/instruments.js";
 
 /**
- * The stored catalogue, with live holder counts folded in.
+ * The stored supportedStocks, with live holder counts folded in.
  *
  * Holder counts are deliberately not a column: they move every hour and nothing
  * decides anything from a stored copy of them. They come from the registry,
@@ -5757,7 +5751,10 @@ import type { CatalogueRow } from "../routes/instruments.js";
  * zero and the popular shelf falls back to alphabetical — a worse shelf, not a
  * broken one.
  */
-export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise<readonly CatalogueRow[]> {
+export async function readSupportedStocks(
+  db: Db,
+  supportedStocks: SupportedStocks,
+): Promise<readonly StockRow[]> {
   const [rows, live] = await Promise.all([
     db
       .select({
@@ -5770,7 +5767,7 @@ export async function readCatalogue(db: Db, catalogue: CatalogueSource): Promise
         instrumentId: instruments.id,
       })
       .from(instruments),
-    catalogue.instruments().catch(() => []),
+    supportedStocks.instruments().catch(() => []),
   ]);
 
   const holdersByMint = new Map(live.flatMap((i) => i.wrappers.map((w) => [w.mint, w.holders] as const)));
@@ -6127,7 +6124,7 @@ import {
   SolanaRpc,
   SymmetryVenue,
   type BasketVenue,
-  type CatalogueSource,
+  type SupportedStocks,
   type ChainReader,
   type QuoteSource,
   type TokenRegistry,
@@ -6149,7 +6146,7 @@ import {
 ```ts
 export interface Deps {
   readonly registry: TokenRegistry;
-  readonly catalogue: CatalogueSource;
+  readonly supportedStocks: SupportedStocks;
   readonly quotes: QuoteSource;
   readonly triggers: TriggerSource;
   readonly sessions: SessionSource;
@@ -6183,7 +6180,7 @@ export function buildDeps(config: Config): Deps {
 
   return {
     registry,
-    catalogue: registry,
+    supportedStocks: registry,
     quotes: new JupiterLite(),
     triggers: new JupiterTriggersNotYet(),
     sessions: new PythSessions(),
@@ -6221,7 +6218,7 @@ import type { MoneyDeps } from "./routes/money.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import type { OrderStore } from "./orders/store.js";
 import { pgOrderStore } from "./orders/store.js";
-import { countBuyers30d, readCatalogue } from "./instruments/queries.js";
+import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import { reconcile } from "./portfolio/apply.js";
@@ -6243,7 +6240,7 @@ export function buildReadDeps(db: Db, deps: Deps): ReadDeps {
   const reconcileDeps = { chain: deps.chain, prices: deps.prices, multipliers: deps.multipliers };
   return {
     instruments: {
-      catalogue: () => readCatalogue(db, deps.catalogue),
+      supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),
       prices: deps.prices,
       sessions: deps.sessions,
@@ -6265,14 +6262,14 @@ export function buildReadDeps(db: Db, deps: Deps): ReadDeps {
 
 Add `import type { Db } from "./db/client.js";` at the top if it is not already there.
 
-- [ ] **Step 2: Boot with a catalogue**
+- [ ] **Step 2: Boot with a supportedStocks**
 
 Replace `services/api/src/index.ts`:
 
 ```ts
 import { serve } from "@hono/node-server";
 import { buildAuthDeps, buildDeps, buildReadDeps, readConfig } from "./deps.js";
-import { syncCatalogue } from "./catalogue/sync.js";
+import { syncStocks } from "./stocks/sync.js";
 import { createApp } from "./app.js";
 
 const config = readConfig();
@@ -6283,16 +6280,18 @@ const deps = buildDeps(config);
 const read = buildReadDeps(auth.db, deps);
 
 /**
- * The catalogue is filled on boot and then left alone: the token universe
+ * The supportedStocks is filled on boot and then left alone: the token universe
  * changes when an issuer lists something, which is hours, not seconds. The
  * worker takes this over in subsystem 4.
  *
  * A failure here is logged and not fatal. The instruments shelf would be empty,
  * but identity, money and activity have nothing to do with Jupiter being up.
  */
-syncCatalogue(auth.db, { catalogue: deps.catalogue, prices: deps.prices })
-  .then((summary) => console.log(`catalogue: ${summary.instruments} instruments, ${summary.tokens} tokens`))
-  .catch((error: unknown) => console.error("catalogue sync failed, shelf will be empty:", error));
+syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices })
+  .then((summary) =>
+    console.log(`supportedStocks: ${summary.instruments} instruments, ${summary.tokens} tokens`),
+  )
+  .catch((error: unknown) => console.error("supportedStocks sync failed, shelf will be empty:", error));
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
   console.log(`mercury api listening on :${info.port}`);
@@ -6447,7 +6446,7 @@ Numbers moving is the market. A field disappearing is a break — `git diff` the
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com pnpm --filter @mercury/market exec vitest run parity.live
 ```
 
-- [ ] **The catalogue sync is idempotent against the real database** — Task 10, Step 7.
+- [ ] **The supportedStocks sync is idempotent against the real database** — Task 10, Step 7.
 
 - [ ] **A funded wallet reconciles correctly.** This is the one thing the fixtures cannot prove, because `rpc-token-accounts.json` is hand-written. Send a small amount of any xStock to the Privy wallet from subsystem 1, then:
 

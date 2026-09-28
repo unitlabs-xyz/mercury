@@ -55,7 +55,7 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
     const board = new Map<string, TokenPrice>();
     if (mints.length === 0) return board;
 
-    // price/v3 answers at most 50 ids per call, so a full catalogue goes in batches.
+    // price/v3 answers at most 50 ids per call, so the whole list goes in batches.
     const batches: string[][] = [];
     for (let i = 0; i < mints.length; i += PRICE_BATCH) batches.push(mints.slice(i, i + PRICE_BATCH));
     const pages = await Promise.all(
