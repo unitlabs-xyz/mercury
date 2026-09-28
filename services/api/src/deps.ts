@@ -192,9 +192,9 @@ export interface ReadDeps {
  * database handle, which is what lets every route be tested with a plain object.
  */
 /**
- * What the background sync needs. Built here so the cron path and the API
- * share one construction — including the pledged-stock view, because pledging
- * is not selling and the books have to keep reading it as held.
+ * What the background sync needs. Built here so it shares one construction with
+ * the read path — including the pledged-stock view, because pledging is not
+ * selling and the books have to keep reading it as held.
  */
 export function buildReconcileDeps(deps: Deps): ReconcileDeps {
   return {

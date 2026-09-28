@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig } from "./deps.js";
-import { syncAllPositions } from "./portfolio/sync.js";
 import { syncCatalogue } from "./catalogue/sync.js";
+import { syncAllPositions } from "./portfolio/sync.js";
 import { createApp } from "./app.js";
 
 const config = readConfig();
@@ -12,41 +12,46 @@ const deps = buildDeps(config);
 const read = buildReadDeps(auth.db, deps, config);
 
 /**
- * The catalogue is filled on boot and then left alone: the token universe
- * changes when an issuer lists something, which is hours, not seconds.
+ * A background job, on its own clock.
  *
- * A failure here is logged and not fatal. The instruments shelf would be empty,
- * but identity, money and activity have nothing to do with Jupiter being up.
+ * The next run is scheduled after the last one finishes, never on a fixed
+ * tick: a pass that overruns its interval must not have a second one start
+ * behind it and write the same rows twice. A failure is logged and the
+ * schedule continues — an upstream being down is a reason to try again later,
+ * not to stop trying.
  */
-syncCatalogue(auth.db, { catalogue: deps.catalogue, prices: deps.prices })
-  .then((summary) => console.log(`catalogue: ${summary.instruments} instruments, ${summary.tokens} tokens`))
-  .catch((error: unknown) => console.error("catalogue sync failed, shelf will be empty:", error));
+const every = (name: string, ms: number, run: () => Promise<string | null>) => {
+  const tick = async () => {
+    try {
+      const note = await run();
+      if (note !== null) console.log(`${name}: ${note}`);
+    } catch (error: unknown) {
+      console.error(`${name} failed:`, error);
+    }
+    setTimeout(() => void tick(), ms).unref();
+  };
+  void tick();
+};
 
 /**
- * The background half, on a long-running server. Serverless has no such thing,
- * so the deployed API runs the same function from `/cron/position-sync` on a
- * Vercel Cron instead — see vercel.ts. Either way it is the only writer of a
- * position, and no read ever triggers it.
+ * The background half of the system. This is the only thing that writes a
+ * catalogue row or a position: no request does, so the same read twice cannot
+ * produce two different answers.
  *
- * Runs sequentially: a pass that overran its interval must not have a second
- * one start behind it and write the same books twice.
+ * It runs here because the API is a long-running server. There is no separate
+ * worker process — `services/worker` cannot reach the database — and no
+ * serverless cron, because this is not deployed as functions.
  */
-const POSITION_SYNC_MS = 5 * 60 * 1000;
-const positionSync = async () => {
-  try {
-    const summary = await syncAllPositions(auth.db, buildReconcileDeps(deps));
-    if (summary.wallets > 0) {
-      console.log(
-        `position-sync: ${summary.reconciled}/${summary.wallets} wallets` +
-          (summary.failed > 0 ? `, ${summary.failed} failed` : ""),
-      );
-    }
-  } catch (error: unknown) {
-    console.error("position-sync failed:", error);
-  }
-  setTimeout(() => void positionSync(), POSITION_SYNC_MS);
-};
-setTimeout(() => void positionSync(), 10_000);
+every("catalogue", 6 * 60 * 60 * 1000, async () => {
+  const s = await syncCatalogue(auth.db, { catalogue: deps.catalogue, prices: deps.prices });
+  return `${s.instruments} instruments, ${s.tokens} tokens`;
+});
+
+every("position-sync", 5 * 60 * 1000, async () => {
+  const s = await syncAllPositions(auth.db, buildReconcileDeps(deps));
+  if (s.wallets === 0) return null;
+  return `${s.reconciled}/${s.wallets} wallets` + (s.failed > 0 ? `, ${s.failed} failed` : "");
+});
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
   console.log(`mercury api listening on :${info.port}`);
