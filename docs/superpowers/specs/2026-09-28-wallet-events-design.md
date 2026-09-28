@@ -54,11 +54,20 @@ everything. So it owns events and nothing else.
 
 `wallet-events` follows **native SOL and USDC**. Not the stock wrappers.
 
-Stock arriving is already visible: `position-sync` sees it in the `token`
-table, writes a lot and a position, and the holding appears on the portfolio
-screen within two seconds. Its activity row is poorer than a history-derived
-one — no signature, an invented timestamp — but the movement is not _lost_.
-Cash is, completely, and that is the gap worth closing.
+Stock arriving already updates the _holding_: `position-sync` sees the
+balance in the `token` table, and `shares` on the position reflects it within
+two seconds. It does not update the _feed_. `planReconciliation` writes a lot,
+and the one activity row that goes with a lot, only for a dividend — an
+incoming transfer it cannot price gets neither, since 61de2af removed the lot
+priced at today's reference (a guess wearing the clothes of a record) along
+with the activity row that went with it. So a stock deposit shows up as owned
+and does not show up in Activity at all, which is a real gap and not merely a
+poorer row than history would produce. §13 records it.
+
+Cash was worse before this spec: USDC is not in the `token` table, so a
+deposit updated nothing at all — not the feed, not a position, nothing to
+look at. That total silence, not stock's partial one, is the gap worth
+closing here.
 
 Following stock as well would mean a signature stream per token account per
 wallet. §10 shows what that costs on a public RPC, and it buys a better
@@ -74,10 +83,11 @@ that. Recorded as the upgrade path once there is a paid RPC or an indexer.
 
 ## 3 · What each job writes, after this
 
-`position-sync` is **unchanged**. It keeps `lot`, `position`, and the activity
-it already writes for stock arriving and for dividends. A dividend is a change
-in the mint's multiplier, not a transaction on the holder's wallet, so there is
-no signature to find and history could not see it even if it looked.
+`position-sync` is **unchanged**. It keeps `lot`, `position`, and the one
+activity row it writes — for a dividend, not for stock arriving; see §2's
+correction. A dividend is a change in the mint's multiplier, not a
+transaction on the holder's wallet, so there is no signature to find and
+history could not see it even if it looked.
 
 `wallet-events` writes **transfer activity for SOL and USDC only**. It never
 writes a lot and never touches a position. The two jobs do not overlap, because
@@ -309,21 +319,43 @@ movement; a unique index does not constrain rows where a column is null.
 
 Two streams per wallet, one `getSignaturesForAddress` each on a quiet pass,
 both returning empty. At 30 seconds that is **4 calls a minute per wallet**.
-Fifty wallets is 200 a minute, a little over 3 a second — within what the
-public RPC tolerates, measured at one error in ten on a burst.
+Fifty wallets is 200 a minute.
 
-An active wallet costs one `getTransaction` per new signature, bounded by how
-much the account actually does. One fetch serves both assets.
+That is not 200 a minute spread evenly over the minute. `syncAllWalletEvents`
+walks wallets serially, and each wallet's streams serially, and every
+transaction inside a stream serially — there is never more than one request
+in flight. So the question is not a rate against the public RPC's ceiling; it
+is how long that many sequential round trips take. At the public RPC's
+roughly 300ms round trip, fifty wallets' worth of quiet-pass calls already
+comes to about 30 seconds — the whole interval — before a single wallet has
+had any activity worth an extra `getTransaction`.
 
-This is the arithmetic that rules out following stock as well. A stream per
-token account would make a wallet holding four wrappers cost 10 calls a minute
-instead of 4, and fifty such wallets would sit at 8 a second — past the limit,
-for events already on screen within two seconds.
+**The binding constraint is latency, not the RPC's rate ceiling.** The
+arithmetic that gets to "a little over 3 a second" describes a rate the code
+never produces, sequential as it is. Nothing piles up behind that, though:
+`every()` in `services/api/src/index.ts` schedules the next run only after
+the current one finishes, so a slow pass does not queue a second one behind
+it. What happens instead is that the cadence slips — a pass that should start
+every 30 seconds starts every "30 seconds plus however long the last one
+took," silently, with no error and nothing to notice it by. Fifty wallets
+already spends the whole budget on empty streams alone; more wallets, or a
+slower RPC, push the real interval past 30 seconds with no signal that it
+happened.
+
+An active wallet costs one additional `getTransaction` per new signature,
+serial with everything else, bounded by how much the account actually does.
+One fetch serves both assets.
+
+This is still the arithmetic that rules out following stock as well: a stream
+per token account would turn a wallet holding four wrappers into 10
+sequential calls a minute instead of 4, and the latency problem above would
+arrive at proportionally fewer wallets rather than being a separate concern.
 
 `position-sync` stays at 2 seconds, so the **balance** a user sees updates
-almost immediately; only the **row in the feed** waits up to 30 seconds. That
-asymmetry is deliberate: the number is what people check, and it is the cheap
-one to keep fresh.
+almost immediately; only the **row in the feed** waits at least 30 seconds,
+and more once enough wallets exist to push the pass past its own interval.
+That asymmetry is deliberate: the number is what people check, and it is the
+cheap one to keep fresh.
 
 ---
 
@@ -366,8 +398,13 @@ A cursor advances only after the activity rows for its stream are committed.
 
 Written down as cut so nobody rediscovers them as gaps:
 
-- **Stock transfers**, per §2. They are visible through `position-sync`; what
-  they lack is a signature and an honest timestamp.
+- **Stock transfers**, per §2. `position-sync` updates the holding, not the
+  feed: an incoming transfer gets no lot, and therefore no activity row at
+  all — not merely one that is missing a signature and an honest timestamp.
+  A stock deposit is invisible in Activity today. Closing that is more
+  `position-sync`'s shape of problem than `wallet-events`'s: it already sees
+  the balance, and would need either a lot it can honestly price or a rule
+  for writing an activity row with none behind it.
 - **Counterparty attribution.** "From whom" needs instruction parsing and
   address labelling. The signature links to an explorer that already does it.
 - **Memos.**
@@ -385,3 +422,26 @@ Written down as cut so nobody rediscovers them as gaps:
 | Does the public RPC sustain two streams a wallet at demo wallet counts? | Measuring once more than a handful of accounts exist. The fallback is a longer interval, which costs latency and nothing else.          |
 | Is a SOL row worth showing at all?                                      | Watching a real feed. §6 suppresses gas and rent, so what is left is someone deliberately sending SOL — rare, and real when it happens. |
 | Should a deposit notify the user rather than only appear in the feed?   | A product decision, not a technical one. The rows this spec writes are what any notification would be built on.                         |
+
+**A known mislabel, surfaced here rather than fixed here.** `movementsIn`
+classifies purely on the sign of the wallet's USDC delta: positive is "Added
+cash", negative is "Sent cash". `services/api/src/routes/borrow.ts` moves
+USDC into and out of the wallet for `borrow`, `repay`, `deposit`, and
+`withdraw` against Kamino, and every one of those is, at the RPC level,
+indistinguishable from an ordinary transfer: a Kamino borrow pays USDC into
+the wallet's own token account, which is exactly the `preTokenBalances` /
+`postTokenBalances` shape of someone sending the wallet money. Borrowing $500
+against stock writes "Added cash · $500" into the feed today — debt presented
+as a deposit. The blindness runs the other way too: once subsystem 3's
+execution lands, a buy pulls USDC out of the wallet to pay for the fill, and
+`movementsIn` will write "Sent cash" beside the fill's own row — one purchase
+described as two events, one of them mislabelled. The sign of a balance
+change cannot tell a deposit from a drawdown, or a purchase from a
+withdrawal, because nothing in the token-balance diff says which program
+moved the money or why. Closing it needs a signal `movementsIn` does not have
+today: the other program the transaction touched (Kamino's, Jupiter's), or a
+same-signature marker that `routes/borrow.ts` and the execution path write
+themselves, that `wallet-events` could use to relabel or suppress its own
+row. Left open on purpose — which label is correct, and whether the
+history-derived row should be replaced or only tagged, is a product decision
+being raised separately from this fix, not one this spec makes for it.
