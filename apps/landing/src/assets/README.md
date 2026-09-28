@@ -13,20 +13,20 @@ A file in here that nothing imports is never shipped.
 third-party logos as SVG. Files here are copied to the output byte for byte: no
 optimisation, no hashing, no dead-file pruning.
 
-> Rule of thumb: if a *person* reaches it through the page, `src/assets`. If a
-> *machine* reaches it by typing the URL, `public`.
+> Rule of thumb: if a _person_ reaches it through the page, `src/assets`. If a
+> _machine_ reaches it by typing the URL, `public`.
 
 ## Where each kind goes
 
-| What | Where | Notes |
-| --- | --- | --- |
-| Section artwork, hero, blurred backdrops | `src/assets/backgrounds/` | The big photographic panels |
-| Product screenshots, UI crops | `src/assets/ui/` | Export at 2× the slot's CSS width |
-| Grain, paper, noise, fabric | `src/assets/textures/` | Tileable. A generated grain already exists — see below |
-| Our own mark, in-page illustrations | `src/assets/brand/` | Import an SVG and render it as a component: `import Logo from "…/Logo.svg"` then `<Logo />`. It inlines, so it costs no request and can take `currentColor` |
-| Web fonts (`.woff2`) | `src/assets/fonts/` | Declared in `styles/global.css`; hashed by the build |
-| Partner and issuer logos | `public/logos/` | SVG. Backed, Ondo, xStocks, Solana and Privy are already here |
-| Favicons, `og-image.png`, `site.webmanifest` | `public/` | Fixed names, referenced in `Base.astro` |
+| What                                         | Where                     | Notes                                                                                                                                                       |
+| -------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Section artwork, hero, blurred backdrops     | `src/assets/backgrounds/` | The big photographic panels                                                                                                                                 |
+| Product screenshots, UI crops                | `src/assets/ui/`          | Export at 2× the slot's CSS width                                                                                                                           |
+| Grain, paper, noise, fabric                  | `src/assets/textures/`    | Tileable. A generated grain already exists — see below                                                                                                      |
+| Our own mark, in-page illustrations          | `src/assets/brand/`       | Import an SVG and render it as a component: `import Logo from "…/Logo.svg"` then `<Logo />`. It inlines, so it costs no request and can take `currentColor` |
+| Web fonts (`.woff2`)                         | `src/assets/fonts/`       | Declared in `styles/global.css`; hashed by the build                                                                                                        |
+| Partner and issuer logos                     | `public/logos/`           | SVG. Backed, Ondo, xStocks, Solana and Privy are already here                                                                                               |
+| Favicons, `og-image.png`, `site.webmanifest` | `public/`                 | Fixed names, referenced in `Base.astro`                                                                                                                     |
 
 ## Using one
 
@@ -63,7 +63,7 @@ width it needs.
 - **Textures:** PNG or WebP, tileable, 256–512px square. Keep them to a few KB — a
   texture that costs 300KB is a texture nobody waits for.
 - **Logos and diagrams:** SVG. Run them through SVGO and strip the editor metadata.
-- **Anything blurred:** export it *small*. A backdrop under a 24px blur can be 600px
+- **Anything blurred:** export it _small_. A backdrop under a 24px blur can be 600px
   wide and nobody can tell, which makes it the cheapest image on the page.
 
 ## The grain
@@ -75,5 +75,5 @@ you want a photographed one.
 
 ## Naming
 
-Lowercase, hyphenated, and named for what it *is* rather than where it currently sits:
+Lowercase, hyphenated, and named for what it _is_ rather than where it currently sits:
 `hero-field.jpg`, not `section-1-bg.jpg`. Artwork gets moved; sections get renumbered.

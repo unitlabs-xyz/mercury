@@ -96,4 +96,3 @@ export const LoanMeter = ({
 
 /** The loan now, as `loanShape` reads it: today's debt against today's deposits. */
 export const loanNow = (b: Borrow) => loanShape(b, b.debtUsd, (r) => r.depositedTokens);
-

@@ -28,6 +28,9 @@ app.get("/cron/catalogue", async (c) => {
   return c.json({ ok: true, ...summary });
 });
 
-app.route("/", createApp(() => deps, auth, read));
+app.route(
+  "/",
+  createApp(() => deps, auth, read),
+);
 
 export default getRequestListener(app.fetch);

@@ -21,6 +21,9 @@ export default tseslint.config(
       "**/.turbo/**",
       "**/build/**",
       "**/.expo/**",
+      // Astro writes these. apps/landing is its own bun project outside the
+      // pnpm workspace, but it still sits in this repo, so `eslint .` walks it.
+      "**/.astro/**",
       // Recorded upstream responses and generated migrations. Neither is source.
       "packages/chain/src/testing/fixtures/**",
       "services/api/drizzle/**",

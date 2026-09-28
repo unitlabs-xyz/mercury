@@ -23,7 +23,6 @@ const DISPLAY_HEIGHT = 90;
 const dekey = async (file: string) => {
   const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
-  const px = (x: number, y: number) => (y * width + x) * 4;
   const lum = (i: number) => 0.299 * data[i]! + 0.587 * data[i + 1]! + 0.114 * data[i + 2]!;
 
   const seen = new Uint8Array(width * height);
@@ -37,18 +36,29 @@ const dekey = async (file: string) => {
     if (data[i + 3]! === 0 || lum(i) >= PLATE) queue.push(n);
   };
 
-  for (let x = 0; x < width; x++) { push(x, 0); push(x, height - 1); }
-  for (let y = 0; y < height; y++) { push(0, y); push(width - 1, y); }
+  for (let x = 0; x < width; x++) {
+    push(x, 0);
+    push(x, height - 1);
+  }
+  for (let y = 0; y < height; y++) {
+    push(0, y);
+    push(width - 1, y);
+  }
 
   while (queue.length) {
     const n = queue.pop()!;
     data[n * 4 + 3] = 0;
     const x = n % width;
     const y = (n / width) | 0;
-    push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1);
+    push(x + 1, y);
+    push(x - 1, y);
+    push(x, y + 1);
+    push(x, y - 1);
   }
 
-  return sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  return sharp(data, { raw: { width, height, channels: 4 } })
+    .png()
+    .toBuffer();
 };
 
 for (const name of NAMES) {

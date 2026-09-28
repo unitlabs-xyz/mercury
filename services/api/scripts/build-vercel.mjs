@@ -14,7 +14,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, ".vercel", "output");
 const fn = join(out, "functions", "index.func");
 // Orca is a dependency of Kamino's, not ours, so it resolves from Kamino's folder.
-const kamino = dirname(createRequire(import.meta.url).resolve("@kamino-finance/klend-sdk/package.json", { paths: [root] }));
+const kamino = dirname(
+  createRequire(import.meta.url).resolve("@kamino-finance/klend-sdk/package.json", { paths: [root] }),
+);
 
 await rm(out, { recursive: true, force: true });
 await mkdir(fn, { recursive: true });
@@ -54,7 +56,11 @@ for (const [pkg, file] of WASM) {
 
 await writeFile(
   join(fn, ".vc-config.json"),
-  JSON.stringify({ runtime: "nodejs22.x", handler: "index.mjs", launcherType: "Nodejs", maxDuration: 60 }, null, 2),
+  JSON.stringify(
+    { runtime: "nodejs22.x", handler: "index.mjs", launcherType: "Nodejs", maxDuration: 60 },
+    null,
+    2,
+  ),
 );
 await writeFile(join(fn, "package.json"), JSON.stringify({ type: "module" }));
 
