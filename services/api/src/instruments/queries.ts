@@ -80,10 +80,10 @@ export async function readSupportedStocks(
 /**
  * Distinct accounts that filled a buy of this instrument in the last thirty days.
  *
- * `apps/web/src/market/placeholder.ts` invents this number today, and says in its
- * own header that it needs our order table. This is that table. It reads zero
- * until subsystem 3 writes a fill, and zero is the true answer in the meantime —
- * the UI should show nothing rather than a number nobody has earned.
+ * This reads zero until subsystem 3 writes a fill, and zero is the true answer
+ * in the meantime — the UI shows nothing rather than a number nobody has
+ * earned. It was the last figure on that page invented from a hash of the
+ * ticker; the rest now come from real price history.
  */
 export async function countBuyers30d(db: Db, ticker: string): Promise<number> {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);

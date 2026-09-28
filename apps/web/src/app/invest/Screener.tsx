@@ -268,7 +268,8 @@ export const Screener = ({
           <InfoTip label="About this list" align="start">
             Showing the stocks deep enough for a normal order. Search finds any other tokenised stock with a
             market; thin ones show roughly the largest order they take. Prices, holders, volume and 24h moves
-            are live. Charts and returns beyond a day are sample data until the returns service ships.
+            are live. Charts are the underlying share&rsquo;s own history, re-levelled onto the token&rsquo;s
+            live price &mdash; the two trade a little apart.
           </InfoTip>
         </div>
         <div className="flex w-full flex-wrap items-center gap-1 sm:w-auto">

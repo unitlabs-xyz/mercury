@@ -320,8 +320,8 @@ describe("GET /v1/instruments/:ticker", () => {
   });
 
   it("counts how many people here actually bought it", async () => {
-    // The figure `placeholder.ts` invented. It is our own order table now, so it
-    // is honest and it is zero until subsystem 3 starts writing fills.
+    // This comes from our own order table, so it is honest and it is zero
+    // until subsystem 3 starts writing fills.
     const d = deps({ buyers30d: async (ticker) => (ticker === "NVDA" ? 37 : 0) });
     const { buyers30d } = await detailOf(await app(d).request("/v1/instruments/NVDA"));
     expect(buyers30d).toBe(37);
