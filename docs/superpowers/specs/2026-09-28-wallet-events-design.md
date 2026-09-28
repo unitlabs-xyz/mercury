@@ -1,8 +1,10 @@
 # Wallet events design
 
-**Status:** accepted, 28 September 2026. Revised the same day, after the walk
-was verified against mainnet and the first version's central mechanism was
-found not to work. §4 records what was wrong.
+**Status:** accepted, 28 September 2026. Revised twice the same day: once
+after the walk was verified against mainnet and the first version's central
+mechanism was found not to work (§4), and again after a token stream
+discovered mid-pass turned out to need backfilling rather than baselining
+(§8).
 
 Cash arrives silently. The Money screen reads the USDC balance from chain on
 every request, so the number is always right — but nothing is ever written
@@ -247,15 +249,25 @@ somebody remembering to add them. **No frontend change is needed.**
 
 ## 8 · First sight
 
-**No backfill.** A stream with no cursor records its newest signature and emits
-nothing. Everything after that is captured.
+**No backfill, with one exception.** A stream with no cursor normally records
+its newest signature and emits nothing; everything after that is captured.
+Both of a wallet's streams start this way the first time we ever see that
+wallet: a token account discovered on that very first pass could be freshly
+funded or years old, and there is no way to tell which, so it is baselined
+exactly like the wallet's own address.
+
+A token account discovered on a _later_ pass, once the wallet is already
+known, is different — it is walked in full instead of baselined. It did not
+exist at the wallet's last check and does now, so its entire history is
+bounded and minutes old, and baselining it would discard the very deposits
+that created it.
 
 Privy creates the wallet during sign-up, so the window in which a deposit could
 be missed is the gap between account creation and the first pass on a wallet
 that has never held anything. External wallets, which could arrive with years
 of history, are out of scope in v1 per ADR 0003 — and are the thing that would
-make this decision wrong, so it is written here rather than left to be
-rediscovered.
+make baselining the wallet's own address wrong, so it is written here rather
+than left to be rediscovered.
 
 ---
 
