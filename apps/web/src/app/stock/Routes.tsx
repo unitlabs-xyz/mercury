@@ -13,10 +13,20 @@ const REJECTION: Record<string, string> = {
 
 type Verdict = "best" | "dearer" | "refused";
 
+/*
+ * "Not used" rather than "Refused": the table asks where your order goes, and
+ * this is the row it does not go to. Refusal is our word for the rule that
+ * fired, not the reader's for what happened.
+ *
+ * Deliberately not naming the cause here — this verdict also covers a route
+ * that does not exist and one that returns nothing, so "too expensive" would
+ * be false for two of the three. The tip above the table names the actual
+ * reason per token.
+ */
 const VERDICT: Record<Verdict, { label: string; tone: Tone }> = {
   best: { label: "Best", tone: "up" },
   dearer: { label: "Tradable", tone: "neutral" },
-  refused: { label: "Refused", tone: "down" },
+  refused: { label: "Not used", tone: "down" },
 };
 
 const verdictOf = (c: PricedCandidate, best: PricedCandidate | null): Verdict =>

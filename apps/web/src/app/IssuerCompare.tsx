@@ -21,7 +21,8 @@ const verdictOf = (c: PricedCandidate, best: PricedCandidate | null): Verdict =>
 const LABEL: Record<Verdict, string> = {
   best: "Best",
   dearer: "Tradable",
-  refused: "Refused",
+  // The reader's word for what happened, not ours for the rule that fired.
+  refused: "Not used",
 };
 
 const CHIP: Record<Verdict, string> = {
