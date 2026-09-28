@@ -8,6 +8,8 @@ export interface SyncSummary {
   readonly wallets: number;
   readonly reconciled: number;
   readonly failed: number;
+  /** Lots and activity rows written. Zero on a pass that found nothing new. */
+  readonly written: number;
 }
 
 /**
@@ -31,13 +33,16 @@ export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<Syn
 
   let reconciled = 0;
   let failed = 0;
+  let written = 0;
 
   for (const row of rows) {
     try {
       const held = await loadHeldTokens(db, deps, row.userId, row.address);
       if (held.length === 0) continue;
-      await applyReconciliation(db, row.userId, planReconciliation(held, new Date()));
+      const plan = planReconciliation(held, new Date());
+      await applyReconciliation(db, row.userId, plan);
       reconciled += 1;
+      written += plan.lots.length + plan.activity.length;
     } catch (error: unknown) {
       failed += 1;
       // The wallet, never the address: an address in a log is a person's
@@ -46,5 +51,5 @@ export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<Syn
     }
   }
 
-  return { wallets: rows.length, reconciled, failed };
+  return { wallets: rows.length, reconciled, failed, written };
 }

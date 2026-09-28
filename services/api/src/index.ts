@@ -47,10 +47,21 @@ every("stocks", 6 * 60 * 60 * 1000, async () => {
   return `${s.instruments} instruments, ${s.tokens} tokens`;
 });
 
-every("position-sync", 5 * 60 * 1000, async () => {
+/**
+ * Two seconds, so a deposit shows up while the person who made it is still
+ * looking at the screen.
+ *
+ * At that cadence a quiet pass is the common case, so only a pass that changed
+ * something or failed says anything — logging every two seconds would bury the
+ * passes that matter.
+ */
+every("position-sync", 2_000, async () => {
   const s = await syncAllPositions(auth.db, buildReconcileDeps(deps));
-  if (s.wallets === 0) return null;
-  return `${s.reconciled}/${s.wallets} wallets` + (s.failed > 0 ? `, ${s.failed} failed` : "");
+  if (s.written === 0 && s.failed === 0) return null;
+  return (
+    `${s.written} rows across ${s.reconciled}/${s.wallets} wallets` +
+    (s.failed > 0 ? `, ${s.failed} failed` : "")
+  );
 });
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
