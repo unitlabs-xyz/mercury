@@ -385,6 +385,22 @@ describe("GET /v1/instruments/:ticker/history", () => {
     expect(Number(changePct)).toBeCloseTo(25, 6);
   });
 
+  it("rounds a price to what a chart can draw, not to what a Decimal can hold", async () => {
+    const res = await app(deps({ history: historyOf(series) })).request(
+      "/v1/instruments/NVDA/history?span=1M",
+    );
+    const { points, changePct } = (await res.json()) as {
+      points: [number, string][];
+      changePct: string;
+    };
+    // Full precision put 39 significant digits on every point and made a year
+    // of them 14 KB. Six decimals is past anything a pixel can show.
+    for (const [, price] of points) {
+      expect((price.split(".")[1] ?? "").length).toBeLessThanOrEqual(6);
+    }
+    expect((changePct.split(".")[1] ?? "").length).toBeLessThanOrEqual(4);
+  });
+
   it("carries each point as [unix seconds, price]", async () => {
     const res = await app(deps({ history: historyOf(series) })).request(
       "/v1/instruments/NVDA/history?span=1M",
@@ -433,5 +449,66 @@ describe("returns on the detail page", () => {
     expect(Number(returns["y1"])).toBeCloseTo(25, 6);
     // Three points seconds apart is far too short a span to annualise.
     expect(returns["cagr5y"]).toBeNull();
+  });
+});
+
+describe("GET /v1/instruments/history (many tickers, one span)", () => {
+  const withHistory = () => deps({ history: historyOf(series) });
+
+  it("is not shadowed by the single-ticker route", async () => {
+    // Hono matches in registration order. If this route were registered after
+    // /v1/instruments/:ticker, ":ticker" would bind to "history" and 404.
+    const res = await app(withHistory()).request("/v1/instruments/history?tickers=NVDA&span=1M");
+    expect(res.status).toBe(200);
+  });
+
+  it("returns a series per ticker, each anchored to its own price", async () => {
+    const res = await app(withHistory()).request("/v1/instruments/history?tickers=NVDA,SPY&span=1M");
+    const body = (await res.json()) as {
+      span: string;
+      series: Record<string, { points: [number, string][] } | null>;
+    };
+    expect(Object.keys(body.series).sort()).toEqual(["NVDA", "SPY"]);
+    // The fixture prices one share at 200 for every ticker.
+    expect(Number(body.series["NVDA"]!.points[2]![1])).toBeCloseTo(200, 6);
+    expect(Number(body.series["SPY"]!.points[2]![1])).toBeCloseTo(200, 6);
+  });
+
+  it("gives null for a ticker rather than dropping it, so a caller can tell the two apart", async () => {
+    const res = await app(withHistory()).request("/v1/instruments/history?tickers=NVDA,NOPE&span=1M");
+    const { series: got } = (await res.json()) as { series: Record<string, unknown | null> };
+    expect(Object.keys(got).sort()).toEqual(["NOPE", "NVDA"]);
+    expect(got["NOPE"]).toBeNull();
+  });
+
+  it("is null for every ticker when the provider has no history", async () => {
+    const res = await app(deps()).request("/v1/instruments/history?tickers=NVDA,SPY&span=1M");
+    const { series: got } = (await res.json()) as { series: Record<string, unknown | null> };
+    expect(Object.values(got)).toEqual([null, null]);
+  });
+
+  it("answers an empty ask with an empty map rather than an error", async () => {
+    const res = await app(withHistory()).request("/v1/instruments/history?span=1M");
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { series: object }).series).toEqual({});
+  });
+
+  it("asks each ticker once however many times it appears", async () => {
+    let calls = 0;
+    const counting = deps({
+      history: {
+        seriesFor: async (...args) => {
+          calls += 1;
+          return historyOf(series).seriesFor(...args);
+        },
+      },
+    });
+    await app(counting).request("/v1/instruments/history?tickers=NVDA,NVDA,nvda&span=1M");
+    expect(calls).toBe(1);
+  });
+
+  it("refuses a span it does not serve", async () => {
+    const res = await app(withHistory()).request("/v1/instruments/history?tickers=NVDA&span=10Y");
+    expect(res.status).toBe(400);
   });
 });

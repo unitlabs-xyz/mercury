@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { Range } from "../../market/placeholder";
+import type { Span } from "../../market/hooks";
 import { BookmarkMark, GlideRows, InfoTip, MoveChip, Pagination, RangeSwitch, StatusChip } from "../../ui/ds";
 import { DotChart, TINY } from "../DotChart";
 import { usd, usdCompact } from "../format";
@@ -18,7 +18,7 @@ const VALUE: Record<SortKey, (r: Row) => number | string> = {
 };
 
 /** The list offers the three ranges the design shows. */
-const LIST_RANGES: Range[] = ["1D", "1W", "1M"];
+const LIST_RANGES: Span[] = ["1D", "1W", "1M"];
 
 /** At most this many rows a page; the pager only shows when there are more. */
 const PAGE = 20;
@@ -94,7 +94,7 @@ const Head = ({
  * the list's gliding white sheet. Numbers medium, labels regular, 14 over 12.
  */
 /** Memoised: a bookmark or a hover elsewhere must not redraw every row's chart. */
-const Line = memo(({ r, range, onToggle }: { r: Row; range: Range; onToggle: (ticker: string) => void }) => (
+const Line = memo(({ r, range, onToggle }: { r: Row; range: Span; onToggle: (ticker: string) => void }) => (
   <li data-row className="relative">
     <Link
       to={`/invest/${r.instrument.ticker}`}
@@ -187,8 +187,8 @@ export const Screener = ({
   onToggle,
 }: {
   rows: readonly Row[];
-  range: Range;
-  onRange: (r: Range) => void;
+  range: Span;
+  onRange: (r: Span) => void;
   /** Typed here, searched on the server across every stock we support. */
   query: string;
   onQuery: (q: string) => void;

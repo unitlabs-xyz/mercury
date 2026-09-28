@@ -1,7 +1,7 @@
 import type { Portfolio } from "@mercury/types";
 import type { ReactNode } from "react";
 import type { Instrument, Priced } from "../../market/hooks";
-import { historyFor, performanceFor } from "../../market/placeholder";
+import { useHistory, useReturns } from "../../market/hooks";
 import { InfoTip, MoveChip, RailFigure, RailHead } from "../../ui/ds";
 import { ISSUER_NAME } from "../IssuerCompare";
 import { usd, usdCompact, usdSigned } from "../format";
@@ -32,18 +32,19 @@ export const RailLine = ({ k, children }: { k: string; children: ReactNode }) =>
  */
 export const Stats = ({ p }: { p: Priced }) => {
   const t = p.instrument.ticker;
-  const day = historyFor(t, "1D", p.fair, p.todayPct);
-  const year = historyFor(t, "1Y", p.fair, p.todayPct);
-  const week = historyFor(t, "1W", p.fair, p.todayPct);
-  const perf = performanceFor(t);
+  const dayHistory = useHistory(t, "1D");
+  const yearHistory = useHistory(t, "1Y");
+  const weekHistory = useHistory(t, "1W");
+  const perf = useReturns(t);
+  const day = dayHistory.data?.points.map((pt) => pt.price) ?? null;
+  const year = yearHistory.data?.points.map((pt) => pt.price) ?? null;
   const traders = p.instrument.wrappers.reduce((s, w) => s + w.traders24h, 0);
-  const weekPct = week ? (week[week.length - 1]! / week[0]! - 1) * 100 : null;
   const returns: [string, number | null][] = [
-    ["1W", weekPct],
-    ["1M", perf.m1],
-    ["6M", perf.m6],
-    ["1Y", perf.y1],
-    ["5Y, a year", perf.cagr5y],
+    ["1W", weekHistory.data?.changePct ?? null],
+    ["1M", perf.data?.m1 ?? null],
+    ["6M", perf.data?.m6 ?? null],
+    ["1Y", perf.data?.y1 ?? null],
+    ["5Y, a year", perf.data?.cagr5y ?? null],
   ];
 
   return (
@@ -55,8 +56,9 @@ export const Stats = ({ p }: { p: Priced }) => {
             <span className="flex items-center gap-2 text-ds-muted">
               Live from chain
               <InfoTip label="Which figures are live">
-                Price, volume, liquidity, holders and routes are read live from chain. The chart, ranges and
-                returns beyond a day are sample data until the returns service ships.
+                Price, volume, liquidity, holders and routes are read live from chain. The chart and returns
+                are the underlying share&rsquo;s own history, re-levelled onto the token&rsquo;s live price —
+                the two trade a little apart.
               </InfoTip>
             </span>
           }

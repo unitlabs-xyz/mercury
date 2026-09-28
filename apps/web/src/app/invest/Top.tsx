@@ -1,6 +1,6 @@
 import { memo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { performanceFor, type Range } from "../../market/placeholder";
+import { useReturns, type Span } from "../../market/hooks";
 import { MoveChip, RangeSwitch } from "../../ui/ds";
 import { DotChart, SMALL } from "../DotChart";
 import { usd } from "../format";
@@ -8,7 +8,7 @@ import { Skeleton } from "../portfolio/ui";
 import { Mark, compact, points, type Row } from "./shared";
 
 /** The market header offers the three ranges the design shows. */
-const MARKET_RANGES: Range[] = ["1D", "1W", "1M"];
+const MARKET_RANGES: Span[] = ["1D", "1W", "1M"];
 
 /** The flow strip's icon: two people behind a third, as drawn in top3.svg. */
 const People = () => (
@@ -44,8 +44,8 @@ const Save = ({ on }: { on: boolean }) => (
  */
 /** Memoised, like the list rows: a bookmark elsewhere must not redraw these charts. */
 const IndexCard = memo(
-  ({ r, range, onToggle }: { r: Row; range: Range; onToggle: (ticker: string) => void }) => {
-    const perf = performanceFor(r.instrument.ticker);
+  ({ r, range, onToggle }: { r: Row; range: Span; onToggle: (ticker: string) => void }) => {
+    const returns = useReturns(r.instrument.ticker);
     const to = `/invest/${r.instrument.ticker}`;
     return (
       <article className="relative flex min-w-0 flex-col rounded-xl bg-white p-1">
@@ -128,8 +128,10 @@ const IndexCard = memo(
             </div>
             <div className="pb-0.5">
               <dt className="text-[14px] leading-none text-ds-muted">5Y average</dt>
+              {/* A dash while it loads and a dash if there is none: a 0.0% would
+                  read as a company that went nowhere for five years. */}
               <dd className="mt-[9px] text-[20px] leading-none font-medium text-ds-up">
-                {perf.cagr5y.toFixed(1)}%
+                {returns.data?.cagr5y == null ? "—" : `${returns.data.cagr5y.toFixed(1)}%`}
               </dd>
             </div>
             <dd className="flex h-7 items-center rounded-lg bg-ds-panel px-[17px] text-[16px] leading-none text-ds-muted">
@@ -158,8 +160,8 @@ export const Markets = ({
 }: {
   indexes: readonly Row[];
   loading: boolean;
-  range: Range;
-  onRange: (r: Range) => void;
+  range: Span;
+  onRange: (r: Span) => void;
   onToggle: (ticker: string) => void;
   live: ReactNode;
 }) => (

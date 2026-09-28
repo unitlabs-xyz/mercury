@@ -22,7 +22,8 @@ const DAY = 86_400;
 describe("YahooHistory.seriesFor", () => {
   it("asks for the range and interval that span, and identifies itself", async () => {
     const seen: string[] = [];
-    const headers: (HeadersInit | undefined)[] = [];
+    // `HeadersInit` is not a global under lib ES2023, so take fetch's own type.
+    const headers: NonNullable<Parameters<typeof fetch>[1]>["headers"][] = [];
     const doFetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       seen.push(String(input));
       headers.push(init?.headers);

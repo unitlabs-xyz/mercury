@@ -7,6 +7,7 @@ import {
   type HistorySource,
   type PriceBoard,
   type SessionSource,
+  type Span,
   type TokenPrice,
 } from "@mercury/market";
 
@@ -53,7 +54,27 @@ export interface InstrumentDeps {
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
 /** A figure the provider had nothing for stays null on the wire, never zero. */
-const toWireOrNull = (v: Decimal | null): string | null => (v === null ? null : toWire(v));
+const toWireOrNull = (v: Decimal | null): string | null =>
+  v === null ? null : toWire(v.toDecimalPlaces(PCT_DP));
+
+/** The asked-for span, or null if it is not one we serve. Defaults to a month. */
+const spanOf = (asked: string | undefined): Span | null => SPANS.find((s) => s === (asked ?? "1M")) ?? null;
+
+/** A shelf draws many sparklines at once; this bounds the fan-out upstream. */
+const MAX_TICKERS = 60;
+
+/**
+ * History goes on the wire rounded, unlike every other money figure here.
+ *
+ * These are drawn, not settled: a chart resolves to a pixel and a return is
+ * shown to one decimal. Full Decimal precision put a 39-digit price on every
+ * one of a year's 251 points and made that response 14 KB, five times what it
+ * needs to be for precision no screen can render. Anchoring has already
+ * re-levelled these anyway, so they are derived figures rather than a record
+ * of anything.
+ */
+const CHART_DP = 6;
+const PCT_DP = 4;
 
 /**
  * The featured shelf: instruments where some wrapper's pool is deep enough that
@@ -230,6 +251,59 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
     return c.json({ instruments: priced.map((p) => toInstrument(p, session.status)) });
   });
 
+  /**
+   * Sparklines for a shelf: one span across many tickers, in one round trip.
+   *
+   * Registered before `/v1/instruments/:ticker/history` deliberately — Hono
+   * matches in registration order, and after it this path would bind `:ticker`
+   * to the literal "history" and answer 404 for every request.
+   *
+   * A ticker the provider has no history for comes back null rather than being
+   * omitted, so a caller can tell "no chart for this one" from "not asked for".
+   */
+  app.get("/v1/instruments/history", async (c) => {
+    const span = spanOf(c.req.query("span"));
+    if (span === null) {
+      return c.json(fail("validation_failed", `span must be one of ${SPANS.join(", ")}.`), 400);
+    }
+
+    const asked = (c.req.query("tickers") ?? "")
+      .split(",")
+      .map((t) => t.trim().toUpperCase())
+      .filter((t) => t.length > 0);
+    const tickers = [...new Set(asked)].slice(0, MAX_TICKERS);
+    if (tickers.length === 0) return c.json({ span, series: {} });
+
+    const rows = await deps.supportedStocks();
+    const priced = await price(rows.filter((r) => r.isTradable && tickers.includes(r.ticker)));
+    const byTicker = new Map(priced.map((p) => [p.row.ticker, p]));
+
+    // In parallel: these are independent reads and the page waits on the
+    // slowest, not the sum. Every span is cached by the adapter, so a shelf
+    // reloaded within the ttl costs nothing upstream at all.
+    const series = await Promise.all(
+      tickers.map(async (ticker) => {
+        const p = byTicker.get(ticker);
+        if (p === undefined) return [ticker, null] as const;
+        const s = await deps.history.seriesFor(ticker, span);
+        if (s === null) return [ticker, null] as const;
+        const anchored = anchoredTo(s, p.pricePerShare);
+        return [
+          ticker,
+          {
+            changePct: toWire(anchored.changePct.toDecimalPlaces(PCT_DP)),
+            points: anchored.points.map((pt) => [
+              Math.floor(pt.at.getTime() / 1000),
+              toWire(pt.price.toDecimalPlaces(CHART_DP)),
+            ]),
+          },
+        ] as const;
+      }),
+    );
+
+    return c.json({ span, series: Object.fromEntries(series) });
+  });
+
   app.get("/v1/instruments/:ticker", async (c) => {
     const ticker = c.req.param("ticker").toUpperCase();
     const [rows, session] = await Promise.all([deps.supportedStocks(), deps.sessions.current()]);
@@ -273,9 +347,8 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
    */
   app.get("/v1/instruments/:ticker/history", async (c) => {
     const ticker = c.req.param("ticker").toUpperCase();
-    const asked = c.req.query("span") ?? "1M";
-    const span = SPANS.find((s) => s === asked);
-    if (span === undefined) {
+    const span = spanOf(c.req.query("span"));
+    if (span === null) {
       return c.json(fail("validation_failed", `span must be one of ${SPANS.join(", ")}.`), 400);
     }
 
@@ -293,10 +366,13 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
     return c.json({
       span,
       // The move over the span, which anchoring does not touch.
-      changePct: toWire(anchored.changePct),
+      changePct: toWire(anchored.changePct.toDecimalPlaces(PCT_DP)),
       // [unix seconds, price] per point: a year is 251 of them, and the object
       // form would triple the bytes for names the client already knows.
-      points: anchored.points.map((pt) => [Math.floor(pt.at.getTime() / 1000), toWire(pt.price)]),
+      points: anchored.points.map((pt) => [
+        Math.floor(pt.at.getTime() / 1000),
+        toWire(pt.price.toDecimalPlaces(CHART_DP)),
+      ]),
     });
   });
 

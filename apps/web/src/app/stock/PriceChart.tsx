@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Range } from "../../market/placeholder";
+import type { Span } from "../../market/hooks";
 import { usd, usdSigned } from "../format";
 import { resample } from "../Sparkline";
 
@@ -15,17 +15,21 @@ const niceStep = (span: number) => {
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag;
 };
 
-const AXIS: Record<Range, Intl.DateTimeFormatOptions> = {
+const AXIS: Record<Span, Intl.DateTimeFormatOptions> = {
   "1D": { hour: "numeric" },
   "1W": { weekday: "short", day: "numeric" },
   "1M": { day: "numeric", month: "short" },
+  "6M": { day: "numeric", month: "short" },
   "1Y": { month: "short", year: "2-digit" },
+  "5Y": { month: "short", year: "2-digit" },
 };
-const TIP: Record<Range, Intl.DateTimeFormatOptions> = {
+const TIP: Record<Span, Intl.DateTimeFormatOptions> = {
   "1D": { weekday: "short", hour: "numeric", minute: "2-digit" },
   "1W": { weekday: "short", day: "numeric", hour: "numeric", minute: "2-digit" },
   "1M": { weekday: "short", day: "numeric", month: "short" },
+  "6M": { day: "numeric", month: "short", year: "numeric" },
   "1Y": { day: "numeric", month: "short", year: "numeric" },
+  "5Y": { month: "short", year: "numeric" },
 };
 
 /**
@@ -41,7 +45,7 @@ export const PriceChart = ({
 }: {
   values: readonly number[] | null;
   times: readonly Date[];
-  range: Range;
+  range: Span;
 }) => {
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });

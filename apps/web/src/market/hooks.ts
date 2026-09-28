@@ -163,25 +163,143 @@ export const useInstruments = (tickers: readonly string[]) => {
   });
 };
 
+/** The move over each period, as percentages. Null where the provider has none. */
+export type Returns = {
+  readonly m1: number | null;
+  readonly m6: number | null;
+  readonly y1: number | null;
+  readonly cagr5y: number | null;
+};
+
+type WireReturns = Record<keyof Returns, string | null>;
+
+const pct = (v: string | null | undefined): number | null =>
+  v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v);
+
+type Detail = { readonly instrument: Instrument | null; readonly returns: Returns };
+
+const EMPTY_RETURNS: Returns = { m1: null, m6: null, y1: null, cagr5y: null };
+
+/**
+ * One instrument's page, fetched once.
+ *
+ * The detail response carries the instrument and its returns together, so both
+ * hooks below read the same cache entry rather than asking twice for one page.
+ */
+const detailQuery = (ticker: string) => ({
+  queryKey: ["instruments", "one", ticker.toUpperCase()],
+  queryFn: async (): Promise<Detail> => {
+    try {
+      const body = await apiFetch<{ instrument: WireInstrument; returns?: WireReturns }>(
+        `/v1/instruments/${encodeURIComponent(ticker)}`,
+      );
+      const i = toInstrument(body.instrument);
+      const r = body.returns;
+      return {
+        instrument: buyable(i) ? i : null,
+        returns:
+          r === undefined
+            ? EMPTY_RETURNS
+            : { m1: pct(r.m1), m6: pct(r.m6), y1: pct(r.y1), cagr5y: pct(r.cagr5y) },
+      };
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return { instrument: null, returns: EMPTY_RETURNS };
+      throw e;
+    }
+  },
+  enabled: ticker.length > 0,
+  staleTime: 30_000,
+});
+
 /** One instrument's page. Null when we do not list it, or when nothing could buy it. */
 export const useInstrument = (ticker: string) =>
+  useQuery({ ...detailQuery(ticker), select: (d: Detail) => d.instrument });
+
+/**
+ * What the underlying share did over each period.
+ *
+ * Every figure is nullable and a null stays null all the way to the screen: a
+ * period we have no history for is a blank, never a zero. A zero would read as
+ * "it went nowhere", which is a claim about the company we have no basis for.
+ */
+export const useReturns = (ticker: string) =>
+  useQuery({ ...detailQuery(ticker), select: (d: Detail) => d.returns });
+
+/** The spans the chart offers, shortest first. */
+export type Span = "1D" | "1W" | "1M" | "6M" | "1Y" | "5Y";
+
+export type History = {
+  /** Oldest first. Already anchored server-side to the live share price. */
+  readonly points: readonly { readonly at: Date; readonly price: number }[];
+  readonly changePct: number;
+};
+
+/**
+ * One span of a ticker's price history.
+ *
+ * Null is a missing chart, and the screen draws none. It is deliberately not an
+ * empty series: a flat line reads as a price that never moved, which is exactly
+ * the invented-data failure this replaced.
+ */
+export const useHistory = (ticker: string, span: Span) =>
   useQuery({
-    queryKey: ["instruments", "one", ticker.toUpperCase()],
-    queryFn: async (): Promise<Instrument | null> => {
+    queryKey: ["instruments", "history", ticker.toUpperCase(), span],
+    queryFn: async (): Promise<History | null> => {
       try {
-        const body = await apiFetch<{ instrument: WireInstrument }>(
-          `/v1/instruments/${encodeURIComponent(ticker)}`,
+        const body = await apiFetch<{ changePct: string; points: [number, string][] }>(
+          `/v1/instruments/${encodeURIComponent(ticker)}/history?span=${span}`,
         );
-        const i = toInstrument(body.instrument);
-        return buyable(i) ? i : null;
+        return {
+          changePct: Number(body.changePct),
+          points: body.points.map(([at, price]) => ({ at: new Date(at * 1000), price: Number(price) })),
+        };
       } catch (e) {
         if (e instanceof ApiError && e.status === 404) return null;
         throw e;
       }
     },
     enabled: ticker.length > 0,
-    staleTime: 30_000,
+    // Intraday spans move while someone watches; the rest settle once a day.
+    staleTime: span === "1D" || span === "1W" ? 60_000 : 10 * 60 * 1000,
   });
+
+/** The spans the range switch offers. A subset of what the API serves. */
+export const RANGES: readonly Span[] = ["1D", "1W", "1M", "1Y"];
+
+/**
+ * One span across many tickers, in one request.
+ *
+ * A shelf draws a sparkline per row, and a hook per row would be a request per
+ * row. The map is keyed by ticker and a ticker with no history is present and
+ * null, so a row can tell "no chart" from "not loaded yet".
+ */
+export const useHistories = (tickers: readonly string[], span: Span) => {
+  const key = [...new Set(tickers.map((t) => t.toUpperCase()))].sort().join(",");
+  return useQuery({
+    queryKey: ["instruments", "histories", key, span],
+    queryFn: async (): Promise<ReadonlyMap<string, History | null>> => {
+      const body = await apiFetch<{
+        series: Record<string, { changePct: string; points: [number, string][] } | null>;
+      }>(`/v1/instruments/history?tickers=${encodeURIComponent(key)}&span=${span}`);
+      return new Map(
+        Object.entries(body.series).map(([ticker, s]) => [
+          ticker,
+          s === null
+            ? null
+            : {
+                changePct: Number(s.changePct),
+                points: s.points.map(([at, price]) => ({
+                  at: new Date(at * 1000),
+                  price: Number(price),
+                })),
+              },
+        ]),
+      );
+    },
+    enabled: key.length > 0,
+    staleTime: span === "1D" || span === "1W" ? 60_000 : 10 * 60 * 1000,
+  });
+};
 
 export const usePrices = (mints: readonly string[]) =>
   useQuery({

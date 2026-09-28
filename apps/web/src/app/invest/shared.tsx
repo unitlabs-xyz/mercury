@@ -1,5 +1,5 @@
 import type { Instrument, Priced } from "../../market/hooks";
-import type { Range } from "../../market/placeholder";
+import type { Span } from "../../market/hooks";
 import type { Point } from "../DotChart";
 
 /** A stock as the Invest page reads it: live price and flow, plus the range it is being looked at over. */
@@ -40,7 +40,14 @@ export const compact = (v: number) =>
     ? "—"
     : new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v);
 
-const SPAN_MS: Record<Range, number> = { "1D": 864e5, "1W": 6048e5, "1M": 2592e6, "1Y": 31536e6 };
+const SPAN_MS: Record<Span, number> = {
+  "1D": 864e5,
+  "1W": 6048e5,
+  "1M": 2592e6,
+  "6M": 15552e6,
+  "1Y": 31536e6,
+  "5Y": 157788e6,
+};
 
 /** One formatter per range, made once: building them per dot was most of a chart's render time. */
 const LABEL: Record<"1D" | "1W" | "other", Intl.DateTimeFormat> = {
@@ -50,7 +57,7 @@ const LABEL: Record<"1D" | "1W" | "other", Intl.DateTimeFormat> = {
 };
 
 /** Readings spread evenly over the range, each named for the tooltip: "14:00", "Sat 19", "27 Sep". */
-export const points = (values: readonly number[], range: Range): Point[] => {
+export const points = (values: readonly number[], range: Span): Point[] => {
   const span = SPAN_MS[range];
   const now = Date.now();
   const fmt = range === "1D" || range === "1W" ? LABEL[range] : LABEL.other;
