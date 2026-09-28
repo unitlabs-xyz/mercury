@@ -22,7 +22,8 @@ export const useSignedIn = (): boolean => {
   return SAMPLE_NO_LOGIN || (ready && authenticated);
 };
 
-/** Holdings and cash. The server reconciles the wallet against its lots first. */
+/** Holdings and cash, as the server last recorded them. A read writes nothing:
+ * the books are brought level with the chain by the background sync. */
 export const usePortfolio = () => {
   const signedIn = useSignedIn();
   return useQuery({

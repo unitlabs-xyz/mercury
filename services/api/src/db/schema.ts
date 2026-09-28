@@ -151,7 +151,15 @@ export const positions = pgTable(
     instrumentId: uuid("instrument_id")
       .notNull()
       .references(() => instruments.id, { onDelete: "cascade" }),
+    /** What the chain says is held. Never inferred. */
     shares: usd("shares").notNull(),
+    /**
+     * How many of those shares we hold a lot for. Shares that arrived from
+     * somewhere we did not witness have no lot and no cost, and are counted in
+     * `shares` but not here — so profit is measured against what we can prove
+     * was paid rather than against a price we guessed.
+     */
+    sharesWithBasis: usd("shares_with_basis").notNull().default("0"),
     costBasisUsd: usd("cost_basis_usd").notNull(),
     avgUnitCostUsd: usd("avg_unit_cost_usd").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

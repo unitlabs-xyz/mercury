@@ -15,6 +15,13 @@
       "when": 1790233088386,
       "tag": "0001_nostalgic_tana_nile",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790566068316,
+      "tag": "0002_plain_matthew_murdock",
+      "breakpoints": true
     }
   ]
 }

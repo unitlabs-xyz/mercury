@@ -39,7 +39,7 @@ import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import { countBuyers30d, readCatalogue } from "./instruments/queries.js";
 import { readHoldings } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
-import { reconcile } from "./portfolio/apply.js";
+import type { ReconcileDeps } from "./portfolio/apply.js";
 
 export interface Deps {
   readonly registry: TokenRegistry;
@@ -191,17 +191,24 @@ export interface ReadDeps {
  * The read side. Each route module takes its queries as functions rather than a
  * database handle, which is what lets every route be tested with a plain object.
  */
+/**
+ * What the background sync needs. Built here so the cron path and the API
+ * share one construction — including the pledged-stock view, because pledging
+ * is not selling and the books have to keep reading it as held.
+ */
+export function buildReconcileDeps(deps: Deps): ReconcileDeps {
+  return {
+    chain: withPledged(deps.chain, deps.lending),
+    prices: deps.prices,
+    multipliers: deps.multipliers,
+  };
+}
+
 export function buildReadDeps(
   db: Db,
   deps: Deps,
   config: Pick<Config, "solanaRpcUrl" | "sendMode">,
 ): ReadDeps {
-  // The books read pledged stock as still held: pledging is not selling.
-  const reconcileDeps = {
-    chain: withPledged(deps.chain, deps.lending),
-    prices: deps.prices,
-    multipliers: deps.multipliers,
-  };
   return {
     instruments: {
       catalogue: () => readCatalogue(db, deps.catalogue),
@@ -210,7 +217,6 @@ export function buildReadDeps(
       sessions: deps.sessions,
     },
     portfolio: {
-      reconcile: (userId, wallet) => reconcile(db, reconcileDeps, userId, wallet),
       holdings: (userId) => readHoldings(db, userId),
       prices: deps.prices,
       chain: deps.chain,

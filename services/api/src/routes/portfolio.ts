@@ -17,14 +17,14 @@ export interface HoldingRow {
   readonly ticker: string;
   readonly name: string;
   readonly shares: Decimal;
+  /** Of those shares, how many we hold a lot for. */
+  readonly sharesWithBasis: Decimal;
   readonly costBasisUsd: Decimal;
   readonly avgUnitCostUsd: Decimal;
   readonly wrappers: readonly HoldingWrapper[];
 }
 
 export interface PortfolioDeps {
-  /** Brings the lots in line with the chain before anything is read. */
-  readonly reconcile: (userId: string, walletAddress: string) => Promise<void>;
   readonly holdings: (userId: string) => Promise<readonly HoldingRow[]>;
   readonly prices: PriceBoard;
   readonly chain: ChainReader;
@@ -53,11 +53,9 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // Nothing is owned yet, which is an empty portfolio and not an error.
     if (identity.walletAddress === null) return c.json(EMPTY);
 
-    // A reconciliation that cannot see the whole picture (Kamino down, say) is
-    // skipped, not run on half of it: the stored position is stale but right.
-    await deps.reconcile(identity.userId, identity.walletAddress).catch((err: unknown) => {
-      console.warn("portfolio: reconcile skipped", err);
-    });
+    // Nothing is written here. A GET reports what is known; bringing the
+    // records in line with the chain is the worker's job, on its own clock.
+    // See services/worker: position-sync.
 
     const [rows, balances, pledged] = await Promise.all([
       deps.holdings(identity.userId),
@@ -105,7 +103,11 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         shares: toWire(row.shares),
         valueUsd: toWire(valueUsd),
         costBasisUsd: toWire(row.costBasisUsd),
-        unrealisedPnlUsd: toWire(valueUsd.sub(row.costBasisUsd)),
+        // Measured over the shares a lot covers, not over the holding. Shares
+        // that arrived from outside have no cost we can prove, and pretending
+        // their basis is zero would report the whole of their value as profit.
+        unrealisedPnlUsd: toWire(row.sharesWithBasis.mul(perShare).sub(row.costBasisUsd)),
+        sharesWithBasis: toWire(row.sharesWithBasis),
         changePct24h: toWire(changePct24h),
         wrapperCount: row.wrappers.length,
         pledgedShares: toWire(pledgedShares.gt(row.shares) ? row.shares : pledgedShares),

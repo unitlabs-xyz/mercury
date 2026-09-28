@@ -2,5 +2,15 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm vercel-build"
+  "buildCommand": "pnpm vercel-build",
+  "crons": [
+    {
+      "path": "/cron/catalogue",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/cron/position-sync",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }
