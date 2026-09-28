@@ -238,7 +238,27 @@ export class SolanaRpc implements ChainReader, ChainHistory {
       signature,
       { encoding: "jsonParsed", maxSupportedTransactionVersion: MAX_TX_VERSION },
     ]);
-    if (res === null || res.meta === null) return null;
+    // No such transaction, or the node has pruned it: a later node, or the
+    // same one later, might answer differently. Worth retrying.
+    if (res === null) return null;
+    // The node has the transaction but not its metadata. Distinct from the
+    // above, and not a retry candidate: the transaction exists and always
+    // will, so this answer never changes. Stopping the walk here, as a
+    // missing transaction does, would wedge that signature forever. With no
+    // meta there is also no balance to read, so there is nothing to lose by
+    // reporting it as an empty transaction and letting the walk advance.
+    if (res.meta === null) {
+      return {
+        signature,
+        blockTime: res.blockTime,
+        accountKeys: res.transaction.message.accountKeys.map((k) => k.pubkey),
+        feeLamports: 0n,
+        preLamports: [],
+        postLamports: [],
+        preTokens: [],
+        postTokens: [],
+      };
+    }
     const meta = res.meta;
     return {
       signature,

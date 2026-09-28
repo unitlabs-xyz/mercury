@@ -95,4 +95,22 @@ describe("walkStream", () => {
     // No `until`: a freshly discovered stream has no cursor to bound the walk.
     expect(n.asked).toEqual([{ limit: 100 }]);
   });
+
+  it("throws once paging passes the cap, rather than reading a whole address's history in one pass", async () => {
+    // 5,001 signatures — enough for 50 full pages plus one more — and a
+    // cursor that is not among them. That is what a cursor aged out of the
+    // node's index looks like: `until` is never satisfied, so nothing but the
+    // cap stops the walk from paging back through everything.
+    const history = Array.from({ length: 5001 }, (_, i) => ref(5001 - i));
+    const n = nodeWith(history);
+    await expect(walkStream(n.history, ADDRESS, "sig-9999")).rejects.toThrow(/50 pages/);
+  });
+
+  it("names the stream in the cap error, never the address", async () => {
+    const history = Array.from({ length: 5001 }, (_, i) => ref(5001 - i));
+    const n = nodeWith(history);
+    await expect(walkStream(n.history, ADDRESS, "sig-9999", { label: "its USDC stream" })).rejects.toThrow(
+      /its USDC stream/,
+    );
+  });
 });

@@ -15,8 +15,8 @@ export interface Job {
  * | queued-orders    | 60s                   | Polls Jupiter trigger orders, records fills       |
  * | recurring        | hourly                | Runs due plans through Privy delegated actions    |
  * | position-sync    | 5 min                 | LIVE, but in services/api: an interval in index.ts |
- * |                  |                       | and /cron/position-sync on serverless. It needs    |
- * |                  |                       | the database, which this package cannot reach.     |
+ * |                  |                       | It needs the database, which this package cannot   |
+ * |                  |                       | reach.                                              |
  */
 export const JOB_PLAN = [
   { name: "price-cache", everyMs: 15_000 },

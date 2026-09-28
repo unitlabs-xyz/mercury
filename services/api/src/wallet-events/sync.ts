@@ -41,16 +41,6 @@ async function syncWallet(
 ): Promise<number> {
   const existing = await db.select().from(walletStreams).where(eq(walletStreams.walletId, walletId));
   const byAddress = new Map(existing.map((s) => [s.address, s]));
-  // Whether the wallet's own stream predates this pass. Only then can a token
-  // stream discovered below be trusted to be genuinely new: on the wallet's
-  // very first pass we cannot tell a just-funded account from a years-old
-  // external one, so it gets baselined like the wallet's own address does.
-  const walletAlreadyKnown = byAddress.has(address);
-  // Addresses whose stream row this pass created, on a wallet already known.
-  // Their history is bounded and minutes old by construction, so they are
-  // backfilled in full below rather than baselined — see the note on
-  // `WalkOptions.backfill`.
-  const discovered = new Set<string>();
 
   // The wallet's own address finds native SOL, and the transaction that creates
   // the USDC account. Its USDC account finds every transfer after that one.
@@ -60,6 +50,15 @@ async function syncWallet(
     await db.insert(walletStreams).values({ walletId, address }).onConflictDoNothing();
     byAddress.set(address, { walletId, address, cursor: null, checkedAt: null });
   }
+
+  // The wallet's own persisted cursor, read now — before this pass can move
+  // it — so the backfill decision below rests on durable state rather than
+  // this pass's memory. A pass that discovers a token stream, commits it, and
+  // then dies before finishing must look to the next pass exactly like what
+  // it is: an already-known wallet with one stream still unwalked. Memory of
+  // "I just discovered this" does not survive that crash; a null cursor next
+  // to a wallet whose own stream has moved on does.
+  const own = byAddress.get(address);
 
   const hasTokenStream = [...byAddress.keys()].some((a) => a !== address);
   if (!hasTokenStream) {
@@ -73,16 +72,27 @@ async function syncWallet(
       if (byAddress.has(account)) continue;
       await db.insert(walletStreams).values({ walletId, address: account }).onConflictDoNothing();
       byAddress.set(account, { walletId, address: account, cursor: null, checkedAt: null });
-      if (walletAlreadyKnown) discovered.add(account);
     }
   }
+
+  // A token stream with no cursor, on a wallet whose own stream already has
+  // one, can only be a stream discovered after the wallet became known: on
+  // the wallet's very first pass every stream starts with a null cursor, own
+  // address included, so `own` being unset (or itself still null) is what
+  // keeps that case baselined rather than backfilled. See §8 of the design
+  // doc.
+  const shouldBackfill = (s: { address: string; cursor: string | null }): boolean =>
+    s.address !== address && s.cursor === null && own?.cursor != null;
 
   const found = new Map<string, SignatureRef>();
   const advances: Advance[] = [];
 
   for (const stream of byAddress.values()) {
     const walk = await walkStream(deps.history, stream.address, stream.cursor, {
-      backfill: discovered.has(stream.address),
+      backfill: shouldBackfill(stream),
+      // Identifies the stream in a page-cap error without the address itself
+      // — never the address, never logged.
+      label: stream.address === address ? "the wallet's own stream" : "its USDC stream",
     });
     for (const sig of walk.signatures) found.set(sig.signature, sig);
     if (walk.newestSignature !== null) {

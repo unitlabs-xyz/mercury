@@ -54,8 +54,8 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     if (identity.walletAddress === null) return c.json(EMPTY);
 
     // Nothing is written here. A GET reports what is known; bringing the
-    // records in line with the chain is the worker's job, on its own clock.
-    // See services/worker: position-sync.
+    // records in line with the chain is position-sync's job, on its own
+    // clock. See services/api/src/index.ts: position-sync.
 
     const [rows, balances, pledged] = await Promise.all([
       deps.holdings(identity.userId),

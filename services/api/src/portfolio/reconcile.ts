@@ -62,12 +62,13 @@ export interface Reconciliation {
 /** Smallest units to whole tokens. Exact: a Decimal divide, never a float. */
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
 
-/** Trims trailing zeros so "1 share" does not read as "1.000000000000000000 shares". */
+/**
+ * Trims trailing zeros so "1 share" does not read as "1.000000000000000000
+ * shares" — but only after a decimal point: "100" must not become "1".
+ */
 const plural = (shares: Decimal): string => {
-  const n = shares
-    .toDecimalPlaces(6)
-    .toFixed()
-    .replace(/\.?0+$/, "");
+  const s = shares.toDecimalPlaces(6).toFixed();
+  const n = s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
   return `${n} ${shares.eq(1) ? "share" : "shares"}`;
 };
 

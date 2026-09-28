@@ -147,6 +147,89 @@ describe("syncAllWalletEvents", () => {
     expect(ataStream[0]!.cursor).toBe(SIG_U);
   });
 
+  it("still backfills a stream discovered by a pass that then fails, instead of baselining it on retry", async () => {
+    // This is the exact sequence f877820 was written to prevent, and the one
+    // that broke it again: the stream row is discovered and committed, the
+    // pass then dies before it can walk it, and a naive retry — one that
+    // decides "backfill" from what this pass remembers rather than from what
+    // is on disk — sees no memory of the discovery and baselines the stream
+    // instead, silently dropping everything that funded it.
+    const { db, userId } = await seed();
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
+    await db.insert(walletStreams).values({ walletId: wallet!.id, address: WALLET, cursor: "older" });
+
+    const SIG_T = "sig-T-creates-the-ata-retry";
+    const SIG_U = "sig-U-second-deposit-retry";
+    const refT: SignatureRef = { signature: SIG_T, slot: 100, blockTime: 1_790_573_100, failed: false };
+    const refU: SignatureRef = { signature: SIG_U, slot: 200, blockTime: 1_790_573_400, failed: false };
+    const txT: TransactionDetail = {
+      signature: SIG_T,
+      blockTime: 1_790_573_100,
+      accountKeys: [],
+      feeLamports: 0n,
+      preLamports: [],
+      postLamports: [],
+      preTokens: [],
+      postTokens: [{ mint: USDC_MINT, owner: WALLET, rawAmount: 300_000_000n, decimals: 6 }],
+    };
+    const txU: TransactionDetail = {
+      signature: SIG_U,
+      blockTime: 1_790_573_400,
+      accountKeys: [],
+      feeLamports: 0n,
+      preLamports: [],
+      postLamports: [],
+      preTokens: [{ mint: USDC_MINT, owner: WALLET, rawAmount: 300_000_000n, decimals: 6 }],
+      postTokens: [{ mint: USDC_MINT, owner: WALLET, rawAmount: 500_000_000n, decimals: 6 }],
+    };
+
+    // Fails once, on whichever signature is read first, then answers
+    // correctly for the rest of this pass and every pass after it — a single
+    // transient RPC error, not a permanently broken node.
+    let failedOnce = false;
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve([USDC_ACCOUNT]),
+      signatures: (addr) => Promise.resolve(addr === USDC_ACCOUNT ? [refU, refT] : []),
+      transaction: (sig) => {
+        if (!failedOnce) {
+          failedOnce = true;
+          return Promise.resolve(null);
+        }
+        return Promise.resolve(sig === SIG_T ? txT : sig === SIG_U ? txU : null);
+      },
+    };
+
+    // Pass one: the ATA is discovered and its stream row committed, but the
+    // transaction read fails, so the pass throws and nothing else is written.
+    const first = await syncAllWalletEvents(db, { history });
+    expect(first.failed).toBe(1);
+    expect(first.written).toBe(0);
+
+    const ataAfterFirst = await db
+      .select()
+      .from(walletStreams)
+      .where(eq(walletStreams.address, USDC_ACCOUNT));
+    expect(ataAfterFirst).toHaveLength(1);
+    expect(ataAfterFirst[0]!.cursor).toBeNull();
+
+    // Pass two: the ATA's stream row already exists with a null cursor, so
+    // this pass never re-runs discovery — it has to recognise the backfill
+    // from that null cursor sitting next to the wallet's own already-advanced
+    // one, not from any memory of pass one.
+    const second = await syncAllWalletEvents(db, { history });
+    expect(second.failed).toBe(0);
+    expect(second.written).toBe(2);
+
+    const rows = await db.select().from(activities).where(eq(activities.userId, userId));
+    expect(rows.map((r) => r.txSignature).sort()).toEqual([SIG_T, SIG_U].sort());
+
+    const ataAfterSecond = await db
+      .select()
+      .from(walletStreams)
+      .where(eq(walletStreams.address, USDC_ACCOUNT));
+    expect(ataAfterSecond[0]!.cursor).toBe(SIG_U);
+  });
+
   it("leaves the cursor alone when a transaction cannot be fetched, so nothing is stepped over", async () => {
     const { db } = await seed();
     const [wallet] = await db.select().from(wallets).where(eq(wallets.address, WALLET));

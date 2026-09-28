@@ -93,6 +93,14 @@ describe("planReconciliation: a dividend", () => {
     ]);
   });
 
+  it("does not trim significant zeros from a whole-number share count", () => {
+    // A multiplier that hands over exactly 100 whole shares must read "100
+    // shares", not "1 shares" — the failure mode of a trim that strips
+    // trailing zeros without checking for a decimal point first.
+    const plan = planReconciliation([withLot({ multiplier: D(101) })], NOW);
+    expect(plan.activity[0]!.subtitle).toBe("100 shares added, at no cost");
+  });
+
   it("makes the average cost per share fall, which is the whole point", () => {
     // docs/05: recomputing shares from the current multiplier without writing
     // the lot would show a phantom gain and an overstated cost basis at once.
