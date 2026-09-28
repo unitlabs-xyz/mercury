@@ -57,6 +57,47 @@ describe("syncAllWalletEvents", () => {
     expect(streams.every((s) => s.cursor === SIG)).toBe(true);
   });
 
+  it("backfills the very first deposit into a fresh wallet, even though the wallet's own stream has no prior history to baseline against", async () => {
+    // The regression this guards: a Privy wallet is created off-chain, so its
+    // own address can have zero signature history for any number of passes.
+    // The pass where the first deposit lands is often also the first pass
+    // that ever touches the wallet's own stream — so if "was this wallet
+    // already known" were read from the wallet's own cursor rather than from
+    // whether its stream row already existed, that cursor would still be
+    // null on exactly this pass, and the newly discovered USDC stream would
+    // baseline right along with it, losing the deposit that funded it.
+    const { db, userId } = await seed();
+
+    let ataExists = false;
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve(ataExists ? [USDC_ACCOUNT] : []),
+      signatures: (addr) => {
+        if (!ataExists) return Promise.resolve([]);
+        return Promise.resolve(addr === WALLET || addr === USDC_ACCOUNT ? [ref] : []);
+      },
+      transaction: (signature) => Promise.resolve(signature === SIG ? deposit : null),
+    };
+
+    // Pass one: nothing on chain yet. The wallet's own stream is created and
+    // baselines on empty history, same as any brand-new wallet — its cursor
+    // stays null because there is nothing yet to advance it past.
+    const first = await syncAllWalletEvents(db, { history });
+    expect(first.written).toBe(0);
+    const ownAfterFirst = await db.select().from(walletStreams).where(eq(walletStreams.address, WALLET));
+    expect(ownAfterFirst[0]!.cursor).toBeNull();
+
+    // Pass two: the deposit lands, creating the ATA. The same signature shows
+    // up under both streams — it is "the transaction that creates the USDC
+    // account" per spec §4 — and the ATA must be backfilled, not baselined.
+    ataExists = true;
+    const second = await syncAllWalletEvents(db, { history });
+    expect(second.written).toBe(1);
+
+    const rows = await db.select().from(activities).where(eq(activities.userId, userId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.txSignature).toBe(SIG);
+  });
+
   it("writes a deposit once, and writes nothing at all on a second pass", async () => {
     const { db, userId } = await seed();
     // Put both streams behind the deposit, so the first pass has work to do.

@@ -51,14 +51,18 @@ async function syncWallet(
     byAddress.set(address, { walletId, address, cursor: null, checkedAt: null });
   }
 
-  // The wallet's own persisted cursor, read now — before this pass can move
-  // it — so the backfill decision below rests on durable state rather than
-  // this pass's memory. A pass that discovers a token stream, commits it, and
-  // then dies before finishing must look to the next pass exactly like what
-  // it is: an already-known wallet with one stream still unwalked. Memory of
-  // "I just discovered this" does not survive that crash; a null cursor next
-  // to a wallet whose own stream has moved on does.
-  const own = byAddress.get(address);
+  // Whether the wallet predates this pass — read from `existing`, so from the
+  // database as it stood *before* the own-row insert above, not from the
+  // wallet's own stream's cursor. Those are not the same thing: a Privy
+  // wallet is created off-chain, so its own address can have zero signature
+  // history for any number of passes, and the first thing to ever touch it is
+  // often the very deposit that creates its USDC account. On that pass, the
+  // wallet's own cursor is still null going in — it only becomes non-null
+  // once this pass's own walk sets it — so testing the cursor would baseline
+  // the ATA on exactly the pass that needs it backfilled. Whether the row
+  // already existed does not have that problem: it is fixed before either
+  // stream is walked.
+  const walletKnownBefore = existing.some((r) => r.address === address);
 
   const hasTokenStream = [...byAddress.keys()].some((a) => a !== address);
   if (!hasTokenStream) {
@@ -75,14 +79,13 @@ async function syncWallet(
     }
   }
 
-  // A token stream with no cursor, on a wallet whose own stream already has
-  // one, can only be a stream discovered after the wallet became known: on
-  // the wallet's very first pass every stream starts with a null cursor, own
-  // address included, so `own` being unset (or itself still null) is what
-  // keeps that case baselined rather than backfilled. See §8 of the design
-  // doc.
+  // A token stream with no cursor, on a wallet that already existed before
+  // this pass, can only be a stream discovered after the wallet became known:
+  // on the wallet's very first pass every stream starts with a null cursor,
+  // own address included, and `walletKnownBefore` is what keeps that case
+  // baselined rather than backfilled. See §8 of the design doc.
   const shouldBackfill = (s: { address: string; cursor: string | null }): boolean =>
-    s.address !== address && s.cursor === null && own?.cursor != null;
+    s.address !== address && s.cursor === null && walletKnownBefore;
 
   const found = new Map<string, SignatureRef>();
   const advances: Advance[] = [];
@@ -91,8 +94,10 @@ async function syncWallet(
     const walk = await walkStream(deps.history, stream.address, stream.cursor, {
       backfill: shouldBackfill(stream),
       // Identifies the stream in a page-cap error without the address itself
-      // — never the address, never logged.
-      label: stream.address === address ? "the wallet's own stream" : "its USDC stream",
+      // — never the address, never logged. Not "its USDC stream": §9 expects
+      // a stock token account to arrive the same way later, as a row rather
+      // than a migration, and it would not be USDC.
+      label: stream.address === address ? "the wallet's own stream" : "a token stream",
     });
     for (const sig of walk.signatures) found.set(sig.signature, sig);
     if (walk.newestSignature !== null) {
