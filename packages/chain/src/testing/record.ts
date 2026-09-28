@@ -17,11 +17,14 @@ const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 const SPYX = "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W";
 
-const get = async (url: string): Promise<unknown> => {
-  const res = await fetch(url);
+const get = async (url: string, headers: Record<string, string> = {}): Promise<unknown> => {
+  const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`${url} returned ${res.status}`);
   return res.json();
 };
+
+/** Yahoo answers 429 to a request with no User-Agent. Measured 28 September 2026. */
+const BROWSER_UA = { "user-agent": "Mozilla/5.0" };
 
 const rpc = async (method: string, params: unknown[]): Promise<unknown> => {
   const res = await fetch(process.env["SOLANA_RPC_URL"] ?? "https://api.mainnet-beta.solana.com", {
@@ -61,3 +64,7 @@ await save(
   ),
 );
 await save("rpc-mint-nvda", await rpc("getAccountInfo", [NVDAX, { encoding: "jsonParsed" }]));
+await save(
+  "yahoo-chart-nvda",
+  await get("https://query1.finance.yahoo.com/v8/finance/chart/NVDA?range=1mo&interval=1d", BROWSER_UA),
+);

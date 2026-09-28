@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { D } from "@mercury/core";
-import type { TokenPrice } from "@mercury/market";
+import type { TokenPrice, HistorySource } from "@mercury/market";
 import { Instrument } from "@mercury/types";
 import { instrumentRoutes, type StockRow, type InstrumentDeps } from "./instruments.js";
 
@@ -111,9 +111,13 @@ const price = (mint: string, over: Partial<TokenPrice> = {}): TokenPrice => ({
   ...over,
 });
 
+/** A provider with nothing, so the default deps exercise the no-history path. */
+const noHistory: HistorySource = { seriesFor: async () => null };
+
 const deps = (over: Partial<InstrumentDeps> = {}): InstrumentDeps => ({
   supportedStocks: async () => supportedStocks,
   buyers30d: async () => 0,
+  history: noHistory,
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) },
   sessions: {
     current: async () => ({
@@ -333,5 +337,101 @@ describe("GET /v1/instruments/:ticker", () => {
     const res = await app(deps()).request("/v1/instruments/TSLA");
     expect(res.status).toBe(404);
     expect((await errorOf(res)).error.code).toBe("not_found");
+  });
+});
+
+/** A provider that serves one shape for every ticker it is asked about. */
+const historyOf = (pts: readonly (readonly [number, number])[]): HistorySource => ({
+  seriesFor: async () =>
+    pts.length < 2
+      ? null
+      : {
+          points: pts.map(([t, v]) => ({ at: new Date(t * 1000), price: D(v) })),
+          changePct: D(pts[pts.length - 1]![1])
+            .div(D(pts[0]![1]))
+            .sub(1)
+            .mul(100),
+        },
+});
+
+/** Three points that move 100 -> 125, i.e. +25% across whatever span is asked. */
+const series = [
+  [1_000, 100],
+  [2_000, 110],
+  [3_000, 125],
+] as const;
+
+describe("GET /v1/instruments/:ticker/history", () => {
+  it("anchors the last point to the live share price, so chart and headline agree", async () => {
+    const res = await app(deps({ history: historyOf(series) })).request(
+      "/v1/instruments/NVDA/history?span=1M",
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { span: string; changePct: string; points: [number, string][] };
+
+    expect(body.span).toBe("1M");
+    expect(body.points.length).toBe(3);
+    // The fixture prices one share at 200; the series ends at 125.
+    expect(Number(body.points[2]![1])).toBeCloseTo(200, 6);
+    // Every point scales by the same factor, so the shape is untouched.
+    expect(Number(body.points[0]![1])).toBeCloseTo(160, 6);
+  });
+
+  it("reports the move from the unanchored series, because re-levelling is not a rewrite", async () => {
+    const res = await app(deps({ history: historyOf(series) })).request(
+      "/v1/instruments/NVDA/history?span=1M",
+    );
+    const { changePct } = (await res.json()) as { changePct: string };
+    expect(Number(changePct)).toBeCloseTo(25, 6);
+  });
+
+  it("carries each point as [unix seconds, price]", async () => {
+    const res = await app(deps({ history: historyOf(series) })).request(
+      "/v1/instruments/NVDA/history?span=1M",
+    );
+    const { points } = (await res.json()) as { points: [number, string][] };
+    expect(points[0]![0]).toBe(1_000);
+    expect(typeof points[0]![1]).toBe("string");
+  });
+
+  it("defaults to a month when no span is asked for", async () => {
+    const res = await app(deps({ history: historyOf(series) })).request("/v1/instruments/NVDA/history");
+    expect(((await res.json()) as { span: string }).span).toBe("1M");
+  });
+
+  it("refuses a span it does not serve", async () => {
+    const res = await app(deps({ history: historyOf(series) })).request(
+      "/v1/instruments/NVDA/history?span=10Y",
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("is a missing chart, not an empty one, when the provider has no history", async () => {
+    const res = await app(deps()).request("/v1/instruments/NVDA/history?span=1M");
+    expect(res.status).toBe(404);
+  });
+
+  it("is not found for a ticker we do not list", async () => {
+    const res = await app(deps({ history: historyOf(series) })).request(
+      "/v1/instruments/NOPE/history?span=1M",
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("returns on the detail page", () => {
+  it("are null throughout when the provider has no history, never zero", async () => {
+    const res = await app(deps()).request("/v1/instruments/NVDA");
+    const { returns } = (await res.json()) as { returns: Record<string, string | null> };
+    expect(returns).toEqual({ m1: null, m6: null, y1: null, cagr5y: null });
+  });
+
+  it("carry the move for each span the provider answers", async () => {
+    const res = await app(deps({ history: historyOf(series) })).request("/v1/instruments/NVDA");
+    const { returns } = (await res.json()) as { returns: Record<string, string | null> };
+    expect(Number(returns["m1"])).toBeCloseTo(25, 6);
+    expect(Number(returns["y1"])).toBeCloseTo(25, 6);
+    // Three points seconds apart is far too short a span to annualise.
+    expect(returns["cagr5y"]).toBeNull();
   });
 });

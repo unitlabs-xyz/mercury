@@ -87,3 +87,36 @@ export interface CreditMarket {
 export interface CreditSource {
   current(): Promise<CreditMarket>;
 }
+
+/** The spans a chart or a returns table asks for. */
+export type Span = "1D" | "1W" | "1M" | "6M" | "1Y" | "5Y";
+
+export const SPANS: readonly Span[] = ["1D", "1W", "1M", "6M", "1Y", "5Y"];
+
+export interface SeriesPoint {
+  readonly at: Date;
+  readonly price: Decimal;
+}
+
+export interface Series {
+  readonly points: readonly SeriesPoint[];
+  /** The move across the whole span, from the first close to the last. */
+  readonly changePct: Decimal;
+}
+
+/**
+ * Price history for the *underlying* equity, not the wrapper.
+ *
+ * The token trades at a basis to the share it represents — measured at -0.78%
+ * on NVDAx against NVDA on 28 September 2026, and wider while the US market is
+ * shut. So a series from here is the shape and the percentage move; the level
+ * is anchored to the live price before it reaches a screen, or the chart would
+ * end somewhere other than the number printed above it.
+ *
+ * Null means the provider has nothing for that ticker, which is a missing
+ * chart. Nothing here invents a price to fill the gap: a fabricated line is
+ * the bug this port exists to remove.
+ */
+export interface HistorySource {
+  seriesFor(ticker: string, span: Span): Promise<Series | null>;
+}

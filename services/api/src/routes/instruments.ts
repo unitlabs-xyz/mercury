@@ -1,6 +1,14 @@
 import { Hono } from "hono";
 import { D, DEFAULT_POLICY, toWire, ZERO, type Decimal, type Issuer } from "@mercury/core";
-import type { PriceBoard, SessionSource, TokenPrice } from "@mercury/market";
+import {
+  anchoredTo,
+  returnsFor,
+  SPANS,
+  type HistorySource,
+  type PriceBoard,
+  type SessionSource,
+  type TokenPrice,
+} from "@mercury/market";
 
 export interface StockWrapperRow {
   readonly mint: string;
@@ -36,11 +44,16 @@ export interface InstrumentDeps {
   readonly buyers30d: (ticker: string) => Promise<number>;
   readonly prices: PriceBoard;
   readonly sessions: SessionSource;
+  /** Price history for the underlying share. Detail page and its chart only. */
+  readonly history: HistorySource;
   /** Injected so tests can move the clock under the price cache. */
   readonly now?: () => number;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
+
+/** A figure the provider had nothing for stays null on the wire, never zero. */
+const toWireOrNull = (v: Decimal | null): string | null => (v === null ? null : toWire(v));
 
 /**
  * The featured shelf: instruments where some wrapper's pool is deep enough that
@@ -225,9 +238,65 @@ export function instrumentRoutes(deps: InstrumentDeps): Hono {
     if (found === undefined) return c.json(fail("not_found", `We do not list ${ticker}.`), 404);
     // One query, on the one page that shows it. Putting it on the shelf would be
     // a query per row for a number nobody reads there.
+    // Both are the detail page's own, and neither belongs on the shelf: one is
+    // a query per row, the other four upstream calls per row.
+    const [buyers30d, returns] = await Promise.all([
+      deps.buyers30d(ticker),
+      returnsFor(deps.history, ticker),
+    ]);
+
     return c.json({
       instrument: toInstrument(found, session.status),
-      buyers30d: await deps.buyers30d(ticker),
+      buyers30d,
+      // Null throughout when the provider has no history. The screen draws a
+      // blank row; it does not print a zero, which would read as "went nowhere".
+      returns: {
+        m1: toWireOrNull(returns.m1),
+        m6: toWireOrNull(returns.m6),
+        y1: toWireOrNull(returns.y1),
+        cagr5y: toWireOrNull(returns.cagr5y),
+      },
+    });
+  });
+
+  /**
+   * One span of a ticker's price history, for the chart.
+   *
+   * The series describes the underlying share and the screen prints what the
+   * wrapper trades at, so it is anchored to the live price before it leaves
+   * here — otherwise the line ends somewhere other than the number above it,
+   * by the basis between the two (-0.78% on NVDAx when that was measured).
+   *
+   * 404 rather than an empty series when the provider has nothing: a chart that
+   * cannot be drawn is a missing chart, and the screen says so instead of
+   * drawing a flat line that looks like a price that never moved.
+   */
+  app.get("/v1/instruments/:ticker/history", async (c) => {
+    const ticker = c.req.param("ticker").toUpperCase();
+    const asked = c.req.query("span") ?? "1M";
+    const span = SPANS.find((s) => s === asked);
+    if (span === undefined) {
+      return c.json(fail("validation_failed", `span must be one of ${SPANS.join(", ")}.`), 400);
+    }
+
+    const rows = await deps.supportedStocks();
+    const row = rows.find((r) => r.isTradable && r.ticker === ticker);
+    const [found] = row === undefined ? [] : await price([row]);
+    if (found === undefined) return c.json(fail("not_found", `We do not list ${ticker}.`), 404);
+
+    const series = await deps.history.seriesFor(ticker, span);
+    if (series === null) {
+      return c.json(fail("not_found", `No price history for ${ticker}.`), 404);
+    }
+
+    const anchored = anchoredTo(series, found.pricePerShare);
+    return c.json({
+      span,
+      // The move over the span, which anchoring does not touch.
+      changePct: toWire(anchored.changePct),
+      // [unix seconds, price] per point: a year is 251 of them, and the object
+      // form would triple the bytes for names the client already knows.
+      points: anchored.points.map((pt) => [Math.floor(pt.at.getTime() / 1000), toWire(pt.price)]),
     });
   });
 

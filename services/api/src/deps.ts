@@ -17,7 +17,9 @@ import {
   KaminoCredit,
   MintMultipliers,
   PythSessions,
+  YahooHistory,
   type CreditSource,
+  type HistorySource,
   type MultiplierSource,
   type PriceBoard,
   type ReferenceSource,
@@ -52,6 +54,8 @@ export interface Deps {
   readonly multipliers: MultiplierSource;
   readonly prices: PriceBoard;
   readonly credit: CreditSource;
+  /** Price history for the underlying share, for charts and the returns table. */
+  readonly priceHistory: HistorySource;
   readonly chain: ChainReader;
   /** The same adapter, asked what happened rather than what is held. */
   readonly history: ChainHistory;
@@ -158,6 +162,10 @@ export function buildDeps(config: Config): Deps {
     multipliers: new MintMultipliers({ chain }),
     prices: market,
     credit: new KaminoCredit(),
+    // Unofficial, keyless, and the only equity history we can reach: Pyth
+    // Benchmarks refuses equity feeds on our entitlement and serves one
+    // timestamp per call rather than a range. See the adapter for the measurements.
+    priceHistory: new YahooHistory(),
     chain,
     history: chain,
     baskets: new SymmetryVenue({ rpcUrl: config.solanaRpcUrl }),
@@ -219,6 +227,7 @@ export function buildReadDeps(
       buyers30d: (ticker) => countBuyers30d(db, ticker),
       prices: deps.prices,
       sessions: deps.sessions,
+      history: deps.priceHistory,
     },
     portfolio: {
       holdings: (userId) => readHoldings(db, userId),
