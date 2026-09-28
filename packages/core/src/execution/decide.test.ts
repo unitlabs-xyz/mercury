@@ -146,6 +146,15 @@ describe("guards", () => {
     expect(d.kind === "refuse" && d.reason).toBe("reference_stale");
   });
 
+  it("accepts a reference as old as the feed behind it actually gets", () => {
+    // Jupiter's stock quote advanced 137s between refreshes when measured on
+    // 28 September 2026. A window tighter than that refuses real orders for
+    // part of every cycle, which is what 120s did. The guard has to clear the
+    // interval of the source it is guarding.
+    const d = decide(buyInput({ reference: reference(222.365, 0, 150) }));
+    expect(d.kind).not.toBe("refuse");
+  });
+
   it("allows an older reference while the market is shut", () => {
     const d = decide(buyInput({ reference: reference(222.365, 0, 10 * 60), status: "closed" }));
     expect(d.kind).not.toBe("refuse");
