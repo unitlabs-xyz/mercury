@@ -30,6 +30,7 @@ const priceCandidate = (candidate: Candidate, side: Side, maxPriceImpact: Decima
     multiplier: candidate.multiplier,
     routeLabels: candidate.quote?.routeLabels ?? [],
     quoteId: candidate.quote?.quoteId ?? null,
+    quoteRaw: candidate.quote?.raw ?? null,
   };
 
   if (candidate.quote === null) {
@@ -37,18 +38,20 @@ const priceCandidate = (candidate: Candidate, side: Side, maxPriceImpact: Decima
       ...base,
       pricePerToken: null,
       pricePerShare: null,
+      worstPricePerShare: null,
       priceImpact: null,
       viable: false,
       rejection: "no_route",
     };
   }
 
-  const { inAmount, outAmount, priceImpact } = candidate.quote;
+  const { inAmount, outAmount, minOutAmount, priceImpact } = candidate.quote;
   if (outAmount.lte(ZERO) || inAmount.lte(ZERO)) {
     return {
       ...base,
       pricePerToken: null,
       pricePerShare: null,
+      worstPricePerShare: null,
       priceImpact,
       viable: false,
       rejection: "zero_output",
@@ -62,18 +65,38 @@ const priceCandidate = (candidate: Candidate, side: Side, maxPriceImpact: Decima
   // and on the S&P 500 it is wrong by more than three times the true gap. See docs/01.
   const pricePerShare = pricePerToken.div(candidate.multiplier);
 
+  /*
+   * The same arithmetic against the route's floor rather than its expectation.
+   * A buy spends a fixed amount for at least `minOutAmount` tokens, so fewer
+   * tokens is a dearer share; a sell delivers fixed tokens for at least
+   * `minOutAmount` dollars, so that is the least it can fetch. Either way the
+   * result is the side of the quote the user can actually be held to.
+   */
+  const worstPricePerShare = minOutAmount.lte(ZERO)
+    ? null
+    : (side === "buy" ? inAmount.div(minOutAmount) : minOutAmount.div(inAmount)).div(candidate.multiplier);
+
   if (priceImpact.gt(maxPriceImpact)) {
     return {
       ...base,
       pricePerToken,
       pricePerShare,
+      worstPricePerShare,
       priceImpact,
       viable: false,
       rejection: "impact_too_high",
     };
   }
 
-  return { ...base, pricePerToken, pricePerShare, priceImpact, viable: true, rejection: null };
+  return {
+    ...base,
+    pricePerToken,
+    pricePerShare,
+    worstPricePerShare,
+    priceImpact,
+    viable: true,
+    rejection: null,
+  };
 };
 
 const rank = (a: PricedCandidate, b: PricedCandidate, side: Side): number => {
@@ -104,6 +127,7 @@ export function decide(input: DecisionInput): Decision {
     status,
     candidates: priced,
     decidedAt: now,
+    maxSlippageBps: policy.slippageBps,
   });
 
   // 1. Guards that do not depend on any quote.
@@ -158,6 +182,7 @@ export function decide(input: DecisionInput): Decision {
     status,
     candidates: priced,
     decidedAt: now,
+    maxSlippageBps: policy.slippageBps,
     best,
     premium,
   };

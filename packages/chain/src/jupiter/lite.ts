@@ -1,7 +1,7 @@
 import { D, type Decimal } from "@mercury/core";
 import type { Candidate } from "@mercury/core";
-import type { QuoteRequest, QuoteSource } from "../ports.js";
-import { USDC_DECIMALS, USDC_MINT } from "./ultra.js";
+import type { QuoteRequest, QuoteSource, RedeemableQuote } from "../ports.js";
+import { USDC_DECIMALS, USDC_MINT } from "../usdc.js";
 import { defaultFetch } from "../fetch.js";
 
 const LITE = "https://lite-api.jup.ag";
@@ -20,6 +20,8 @@ const fromBase = (raw: string, decimals: number): Decimal => D(raw).div(D(10).po
 interface JupQuote {
   readonly inAmount?: string;
   readonly outAmount?: string;
+  /** The floor the route will not fill below, already net of `slippageBps`. */
+  readonly otherAmountThreshold?: string;
   readonly priceImpactPct?: string;
   readonly routePlan?: readonly { readonly swapInfo?: { readonly label?: string } }[];
   readonly contextSlot?: number;
@@ -32,11 +34,17 @@ export interface JupiterLiteConfig {
 }
 
 /**
- * Jupiter's keyless `/swap/v1/quote`. This is the *pricing* half of the pair the
- * backend design calls for: a real routed quote for the real amount, which is
- * what the order would actually fill at. The *executing* half is `JupiterUltra`,
- * which takes a key and arrives with subsystem 3. Both satisfy `QuoteSource`, so
- * `priceOrder` never learns which one it has.
+ * Jupiter's keyless `/swap/v1/quote` and `/swap/v1/swap`: a real routed quote
+ * for the real amount, and the transaction that fills that same quote.
+ *
+ * This used to be the pricing half of a pair whose executing half was
+ * `JupiterUltra`, behind an API key. That split meant the quote a user was
+ * shown and the quote they filled at came from two different systems, and
+ * nothing compared them — the premium check ran on a number that never
+ * executed. Probing the keyless endpoint on 29 September 2026 showed it builds
+ * a signable v0 transaction from the verbatim quote payload, with the token
+ * account creation folded in and no key required, so the split had nothing left
+ * to buy. One quote is now priced, checked and filled.
  */
 export class JupiterLite implements QuoteSource {
   private readonly base: string;
@@ -46,6 +54,8 @@ export class JupiterLite implements QuoteSource {
   constructor(config: JupiterLiteConfig = {}) {
     this.base = config.baseUrl ?? LITE;
     this.doFetch = config.fetch ?? defaultFetch();
+    // A fallback only. Order pricing passes the policy's value on every call;
+    // this covers a caller that has no policy to hand.
     this.slippageBps = config.slippageBps ?? 50;
   }
 
@@ -76,22 +86,59 @@ export class JupiterLite implements QuoteSource {
     return {
       inAmount: body.inAmount === undefined ? req.amount : fromBase(body.inAmount, inDecimals),
       outAmount,
+      // Jupiter's own floor rather than `outAmount` scaled by the slippage we
+      // asked for: the route enforces this number, so it is the one a promise
+      // can be made against. Absent, the floor is the expectation — which is
+      // the honest reading of a quote that declines to name one.
+      minOutAmount:
+        body.otherAmountThreshold === undefined
+          ? outAmount
+          : fromBase(body.otherAmountThreshold, outDecimals),
       // Straight from the string. Going through a JS number would round a
       // number that decides whether an order is allowed to fill.
       priceImpact: D(body.priceImpactPct ?? "0").abs(),
       routeLabels: [...new Set((body.routePlan ?? []).map((r) => r.swapInfo?.label ?? "unknown"))],
-      // Lite has no request id. The slot makes it unique enough to tell two
-      // quotes apart; nothing redeems it, because execution re-quotes on Ultra.
+      // The slot tells two quotes of the same mint apart. It identifies a quote;
+      // `raw` is what redeems one.
       quoteId: `${req.mint}:${body.contextSlot ?? 0}`,
       expiresAt: new Date(Date.now() + QUOTE_TTL_MS),
+      raw: body,
     };
   }
 
-  buildSwap(_quoteId: string, _owner: string): Promise<readonly string[]> {
-    return Promise.reject(
-      new Error(
-        "JupiterLite.buildSwap: the keyless endpoint prices orders, it does not build them. Execution uses JupiterUltra — subsystem 3.",
-      ),
-    );
+  /**
+   * The transaction that fills exactly the quote passed in. `raw` goes back
+   * unread and unmodified — Jupiter prices the route it already chose, so
+   * nothing between the check and the fill can re-route the order.
+   */
+  async buildSwap(quote: RedeemableQuote, owner: string): Promise<readonly string[]> {
+    if (quote.raw === null || quote.raw === undefined) {
+      throw new Error("JupiterLite.buildSwap: the quote carries no payload to redeem.");
+    }
+
+    const res = await this.doFetch(`${this.base}/swap/v1/swap`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        quoteResponse: quote.raw,
+        userPublicKey: owner,
+        // The buyer may not hold the token yet. Jupiter folds the account
+        // creation into the same transaction, so a first purchase is one signature.
+        wrapAndUnwrapSol: true,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`jupiter build failed: ${res.status} ${detail.slice(0, 200)}`);
+    }
+
+    const body = (await res.json()) as { swapTransaction?: string; simulationError?: unknown };
+    if (body.swapTransaction === undefined) throw new Error("jupiter returned no transaction");
+    // Jupiter simulates before it answers. A failure here is the route telling
+    // us this will not land, which is cheaper to learn now than after a signature.
+    if (body.simulationError !== null && body.simulationError !== undefined) {
+      throw new Error(`jupiter simulation failed: ${JSON.stringify(body.simulationError).slice(0, 200)}`);
+    }
+    return [body.swapTransaction];
   }
 }

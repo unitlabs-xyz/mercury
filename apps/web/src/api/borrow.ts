@@ -156,8 +156,6 @@ export const useBorrowAction = () => {
         },
       );
       const signatures: string[] = [];
-      let note: string | null = null;
-      let simulated = false;
       for (const [i, tx] of built.transactions.entries()) {
         setProgress({ at: i + 1, of: built.transactions.length });
         setStep("signing");
@@ -178,18 +176,9 @@ export const useBorrowAction = () => {
         });
         if (sent.status === "failed") throw new Error(sent.error ?? "The transaction failed on chain.");
         signatures.push(sent.signature);
-        if (sent.status === "simulated") {
-          simulated = true;
-          // The action needs the setup to exist on chain first, and a dry run never creates it.
-          if (built.firstTime && i === 0 && built.transactions.length > 1) {
-            note =
-              "Step 1 of 2 (opening your Kamino account) passed. Step 2 builds on it, so it can only be checked once step 1 is sent for real.";
-            break;
-          }
-        }
       }
       setStep("done");
-      return { signatures, simulated, note };
+      return { signatures };
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["api"] });

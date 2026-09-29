@@ -17,9 +17,7 @@
         "dark": "./assets/icon-dark.png"
       }
     },
-    "plugins": [
-      "expo-router"
-    ],
+    "plugins": ["expo-router"],
     "experiments": {
       "typedRoutes": true
     }

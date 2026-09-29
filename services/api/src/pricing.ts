@@ -25,7 +25,15 @@ export async function priceOrder(deps: Deps, req: PriceRequest): Promise<Decisio
   const candidates: Candidate[] = await Promise.all(
     wrappers.map(async (w) => {
       const [quote, multiplier, paused] = await Promise.all([
-        deps.quotes.quote({ side: req.side, mint: w.mint, decimals: w.decimals, amount }),
+        // Slippage is a policy number, not an adapter default: it is spent from
+        // the same budget as the premium tolerance, so the policy names it.
+        deps.quotes.quote({
+          side: req.side,
+          mint: w.mint,
+          decimals: w.decimals,
+          amount,
+          slippageBps: DEFAULT_POLICY.slippageBps,
+        }),
         deps.multipliers.multiplierFor(w.mint),
         deps.multipliers.isPaused(w.mint),
       ]);

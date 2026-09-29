@@ -149,13 +149,22 @@ export const Stock = () => {
     };
   });
 
-  const opensAt = session?.nextOpen?.toLocaleString("en-US", {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-    timeZoneName: "short",
-  });
+  /**
+   * "Monday at 9:30 AM ET". The zone name is written rather than formatted:
+   * `timeZoneName: "short"` swaps between EDT and EST across the year, and a
+   * reader who has to know which one applies today has been told too much. ET
+   * is true in both halves.
+   */
+  const opensAt = session?.nextOpen
+    ? `${session.nextOpen.toLocaleString("en-US", {
+        weekday: "long",
+        timeZone: "America/New_York",
+      })} at ${session.nextOpen.toLocaleString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: "America/New_York",
+      })} ET`
+    : undefined;
 
   return (
     <AppShell current="invest" title={instrument.name} quiet>
@@ -247,13 +256,26 @@ export const Stock = () => {
               </div>
             </div>
 
+            {/* The state first and what it means for you second, because the two
+                are not equally urgent. Plain words throughout: "the token" and
+                "the reference" are our vocabulary, and most people reading this
+                are new to shares. */}
             {session && (
-              <p className="flex items-start gap-2 rounded-lg bg-ds-panel px-5 py-[9px] text-[12px] leading-[1.45] text-ds-muted [&_svg]:mt-px">
-                <Clock className="size-3.5 shrink-0" />
-                {session.isOpen
-                  ? "US market open. The token tracks the live share price."
-                  : `US market closed${opensAt ? `, opens ${opensAt}` : ""}. The token still trades, and we check its price against the reference before you buy.`}
-              </p>
+              <div className="flex items-start gap-2 rounded-lg bg-ds-panel px-5 py-3 text-[12px] leading-[1.45] [&_svg]:mt-0.5">
+                <Clock className="size-3.5 shrink-0 text-ds-muted" />
+                <div className="min-w-0">
+                  <p className="font-medium text-ds-ink">
+                    {session.isOpen
+                      ? "US markets are open."
+                      : `US markets are closed${opensAt ? ` until ${opensAt}` : ""}.`}
+                  </p>
+                  <p className="mt-1 text-ds-muted">
+                    {session.isOpen
+                      ? `Prices here follow ${instrument.name}’s live share price.`
+                      : "You can still place your order. We’ll check the latest market price before processing it and let you know if there’s a significant difference."}
+                  </p>
+                </div>
+              </div>
             )}
           </section>
 

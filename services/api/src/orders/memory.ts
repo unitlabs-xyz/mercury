@@ -27,5 +27,13 @@ export const memoryOrderStore = (): OrderStore => {
       if (row === undefined || row.order.userId !== userId) return;
       rows.set(id, { order: row.order, stored: { ...row.stored, status } });
     },
+    async reprice(userId, id, next) {
+      const row = rows.get(id);
+      if (row === undefined || row.order.userId !== userId) return;
+      rows.set(id, {
+        order: { ...row.order, ...next },
+        stored: { ...row.stored, decision: next.decision, status: next.status },
+      });
+    },
   };
 };

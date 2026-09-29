@@ -146,6 +146,15 @@ describe("guards", () => {
     expect(d.kind === "refuse" && d.reason).toBe("reference_stale");
   });
 
+  it("accepts a reference as old as the feed behind it actually gets", () => {
+    // Jupiter's stock quote advanced 137s between refreshes when measured on
+    // 28 September 2026. A window tighter than that refuses real orders for
+    // part of every cycle, which is what 120s did. The guard has to clear the
+    // interval of the source it is guarding.
+    const d = decide(buyInput({ reference: reference(222.365, 0, 150) }));
+    expect(d.kind).not.toBe("refuse");
+  });
+
   it("allows an older reference while the market is shut", () => {
     const d = decide(buyInput({ reference: reference(222.365, 0, 10 * 60), status: "closed" }));
     expect(d.kind).not.toBe("refuse");
@@ -221,5 +230,47 @@ describe("policy", () => {
   it("defaults to a 1% premium tolerance and 1.5% impact ceiling", () => {
     expect(DEFAULT_POLICY.premiumTolerance.eq(fromPct(D(1)))).toBe(true);
     expect(DEFAULT_POLICY.maxPriceImpact.eq(fromPct(D(1.5)))).toBe(true);
+  });
+});
+
+describe("the bound the user can be held to", () => {
+  it("prices the worst case above the expected one for a buy, by the slippage asked for", () => {
+    const d = decide(buyInput());
+    expect(d.kind).toBe("execute");
+    if (d.kind !== "execute") return;
+
+    const worst = d.best.worstPricePerShare!;
+    expect(worst.gt(d.best.pricePerShare!)).toBe(true);
+    // 50 bps of slippage buys 50 bps fewer tokens, so the share costs 1/0.995
+    // more — 50.25 bps, not 50. The bound is the reciprocal, not the discount.
+    const gap = worst.div(d.best.pricePerShare!).sub(1);
+    expect(asBps(gap).toNumber()).toBeCloseTo(50.25, 1);
+  });
+
+  it("prices the worst case below the expected one for a sell, because less comes back", () => {
+    const d = decide(
+      buyInput({
+        side: "sell",
+        amount: D(4),
+        candidates: [{ ...NVDA_CANDIDATES[0]!, quote: quote(4, 890, 0.02) }],
+      }),
+    );
+    expect(d.kind).toBe("execute");
+    if (d.kind !== "execute") return;
+
+    const worst = d.best.worstPricePerShare!;
+    expect(worst.lt(d.best.pricePerShare!)).toBe(true);
+    expect(asBps(D(1).sub(worst.div(d.best.pricePerShare!))).toNumber()).toBeCloseTo(50, 0);
+  });
+
+  it("carries the slippage the prices were quoted with, so nothing spends it silently", () => {
+    expect(decide(buyInput()).maxSlippageBps).toBe(DEFAULT_POLICY.slippageBps);
+    expect(decide(buyInput({ policy: withPolicy({ slippageBps: 17 }) })).maxSlippageBps).toBe(17);
+  });
+
+  it("leaves the bound empty for a candidate that has no route to bound", () => {
+    const d = decide(buyInput({ candidates: [{ ...NVDA_CANDIDATES[0]!, quote: null }] }));
+    expect(d.candidates[0]!.worstPricePerShare).toBeNull();
+    expect(d.candidates[0]!.pricePerShare).toBeNull();
   });
 });

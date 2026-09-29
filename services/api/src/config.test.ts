@@ -7,16 +7,23 @@ const base = {
   SOLANA_RPC_URL: "https://rpc.example",
 };
 
-describe("SEND_MODE", () => {
-  it("sends for real by default", () => {
-    expect(readConfig(base).sendMode).toBe("broadcast");
+describe("readConfig", () => {
+  it("reads what the server cannot start without", () => {
+    const config = readConfig(base);
+    expect(config.databaseUrl).toBe(base.DATABASE_URL);
+    expect(config.privyAppId).toBe(base.PRIVY_APP_ID);
+    expect(config.solanaRpcUrl).toBe(base.SOLANA_RPC_URL);
   });
 
-  it("is a dry run when set to simulate", () => {
-    expect(readConfig({ ...base, SEND_MODE: "simulate" }).sendMode).toBe("simulate");
+  it("names the one that is missing rather than failing somewhere later", () => {
+    const { SOLANA_RPC_URL: _omitted, ...without } = base;
+    expect(() => readConfig(without)).toThrow("SOLANA_RPC_URL");
   });
 
-  it("refuses to start on anything else, so a typo can never quietly mean send", () => {
-    expect(() => readConfig({ ...base, SEND_MODE: "simulated" })).toThrow("SEND_MODE");
+  it("leaves the optional scan endpoint off rather than undefined", () => {
+    expect("solanaScanRpcUrl" in readConfig(base)).toBe(false);
+    expect(readConfig({ ...base, SOLANA_SCAN_RPC_URL: "https://scan.example" }).solanaScanRpcUrl).toBe(
+      "https://scan.example",
+    );
   });
 });

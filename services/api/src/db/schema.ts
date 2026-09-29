@@ -213,17 +213,15 @@ export const orders = pgTable(
     chosenTokenId: uuid("chosen_token_id").references(() => tokens.id),
     referencePrice: usd("reference_price"),
     premiumPct: usd("premium_pct"),
+    /*
+     * `partially_filled` and `expired` were listed here and no code path could
+     * write either: a swap is one atomic transaction, and expiry belonged to
+     * trigger orders, which are not built. The column is plain text with no
+     * database constraint, so narrowing the list needs no migration — it only
+     * stops the type from advertising states the system cannot reach.
+     */
     status: text("status", {
-      enum: [
-        "pending",
-        "executing",
-        "filled",
-        "queued",
-        "partially_filled",
-        "expired",
-        "cancelled",
-        "refused",
-      ],
+      enum: ["pending", "executing", "filled", "queued", "cancelled", "refused"],
     }).notNull(),
     txSignature: text("tx_signature"),
     triggerOrderAccount: text("trigger_order_account"),

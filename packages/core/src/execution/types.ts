@@ -19,11 +19,28 @@ export interface Quote {
   readonly inAmount: Decimal;
   /** Tokens for a buy, USD for a sell. */
   readonly outAmount: Decimal;
+  /**
+   * The least the route will hand back before it aborts, at the slippage it was
+   * quoted with. `outAmount` is what the route expects; this is what it promises,
+   * and it is the only one of the two a user can be held to. Jupiter returns it
+   * as `otherAmountThreshold`.
+   *
+   * Required rather than optional: an adapter that forgets to carry the floor
+   * would silently drop the guarantee rather than fail to compile.
+   */
+  readonly minOutAmount: Decimal;
   /** As a ratio, not a percentage. 0.0085 is 85 basis points. */
   readonly priceImpact: Decimal;
   readonly routeLabels: readonly string[];
   readonly quoteId: string;
   readonly expiresAt: Date;
+  /**
+   * The provider's own quote payload, verbatim and opaque. Core never reads it;
+   * it travels back to the adapter that produced it, which is what lets a quote
+   * be redeemed for a transaction rather than re-fetched and re-priced. Dropped
+   * at the wire boundary — it never reaches a client or the database.
+   */
+  readonly raw: unknown;
 }
 
 export interface Candidate {
@@ -50,6 +67,17 @@ export interface ReferencePrice {
 export interface ExecutionPolicy {
   readonly maxPriceImpact: Decimal;
   readonly premiumTolerance: Decimal;
+  /**
+   * How far the fill may land under the quote before the route aborts. Spent
+   * out of the same budget as `premiumTolerance`, so it belongs beside it
+   * rather than buried in whichever adapter happens to be quoting.
+   */
+  readonly slippageBps: number;
+  /**
+   * How far the price may move against the user between the quote they were
+   * shown and the quote that gets built, before we stop and ask again.
+   */
+  readonly maxQuoteDriftBps: number;
   readonly maxReferenceAgeSecOpen: number;
   readonly maxReferenceAgeSecClosed: number;
   readonly minOrderUsd: Decimal;
@@ -79,11 +107,19 @@ export interface PricedCandidate {
   readonly pricePerToken: Decimal | null;
   /** The number that matters. Token price corrected by the multiplier. */
   readonly pricePerShare: Decimal | null;
+  /**
+   * The bound on `pricePerShare`: the most a buy can pay, the least a sell can
+   * receive. Derived from the route's guaranteed floor, not from the expected
+   * amount, so it is the number a promise can be made against.
+   */
+  readonly worstPricePerShare: Decimal | null;
   readonly priceImpact: Decimal | null;
   readonly routeLabels: readonly string[];
   readonly viable: boolean;
   readonly rejection: CandidateRejection | null;
   readonly quoteId: string | null;
+  /** The provider payload from `Quote.raw`, carried through so the winner can be built. */
+  readonly quoteRaw: unknown;
 }
 
 export type RefuseReason =
@@ -103,6 +139,8 @@ interface DecisionBase {
   readonly status: InstrumentStatus;
   readonly candidates: readonly PricedCandidate[];
   readonly decidedAt: Date;
+  /** The slippage every candidate here was quoted with. See `worstPricePerShare`. */
+  readonly maxSlippageBps: number;
 }
 
 export interface ExecuteDecision extends DecisionBase {
