@@ -8,6 +8,12 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    /**
+     * Whatever the route attached to the refusal. A price that moved between
+     * confirming and signing carries the new decision here, so the sheet can
+     * show what changed instead of only saying that something did.
+     */
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -49,9 +55,9 @@ export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise
   if (!res.ok) {
     const err =
       body && typeof body === "object" && "error" in body
-        ? (body.error as { code?: string; message?: string })
+        ? (body.error as { code?: string; message?: string; details?: unknown })
         : {};
-    throw new ApiError(res.status, err.code ?? "unknown", err.message ?? res.statusText);
+    throw new ApiError(res.status, err.code ?? "unknown", err.message ?? res.statusText, err.details);
   }
   return body as T;
 };

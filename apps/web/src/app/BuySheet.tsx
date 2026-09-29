@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import type { Decision, OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@mercury/core";
+import type { OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@mercury/core";
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
 import { useMoney } from "../api/hooks";
+import { PriceMoved, STEP_LABEL, useBuyAction } from "../api/orders";
 import { ISSUER_NAME } from "./IssuerCompare";
 import { Button } from "../ui/Button";
 import { useDecision } from "../market/hooks";
@@ -81,15 +82,19 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
           <Clock className="size-4" />
           Worth waiting
         </p>
+        {/* This used to end "We can hold your order and place it when the price
+            comes back", which is a trigger order — something we do not build
+            yet. A panel that offers it above a button that cannot do it is the
+            worst of both. What is true is the advice. */}
         <p className="mt-1 text-[13px] leading-[1.5] text-warn/90">
           The US market is shut, and this is trading {premium.toFixed(2)}% above the real share price — more
-          than we think you should pay. We can hold your order and place it when the price comes back.
+          than we think you should pay. The gap usually closes once the market opens.
         </p>
       </div>
       <dl className="mt-4 space-y-2.5 text-[14px]">
         <Line k="You'd pay now" v={`${usd(price)} per share`} />
-        <Line k="Fills at or below" v={`${usd(trigger)} per share`} />
-        <Line k="Amount held" v={usd(amount)} />
+        <Line k="Worth paying" v={`${usd(trigger)} per share`} sub="Around what it should cost" />
+        <Line k="Your amount" v={usd(amount)} />
         <Line
           k="Latest"
           v={
@@ -102,12 +107,12 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
                   minute: "2-digit",
                   timeZone: "America/New_York",
                 })} ET, when the US market opens`
-              : "When the price returns"
+              : "When the US market opens"
           }
         />
       </dl>
       <p className="mt-4 text-[13px] leading-[1.5] text-muted">
-        Your cash stays yours and keeps earning while it waits. Cancel any time.
+        Your cash stays yours in the meantime, and keeps earning.
       </p>
     </>
   );
@@ -180,7 +185,8 @@ export const BuySheet = ({
 }) => {
   const available = Number(useMoney().data?.balanceUsd ?? 0);
   const [raw, setRaw] = useState("100");
-  const [placed, setPlaced] = useState<Decision | null>(null);
+  const buy = useBuyAction();
+  const placed = buy.data ?? null;
 
   const amount = Number(raw) || 0;
 
@@ -200,19 +206,35 @@ export const BuySheet = ({
 
   const typing = settled !== amount;
   const overBalance = amount > available;
+  const working = buy.isPending;
+  /*
+   * `offer_queue` blocks the button. The decision means the market is shut and
+   * the price is far enough above fair that we decline to fill it; the answer
+   * `decide` offers is a trigger order, which does not exist. Sending it anyway
+   * would reach the server and come back refused every single time.
+   */
   const blocked =
-    amount <= 0 || overBalance || !decision || decision.kind === "refuse" || typing || isLoading;
+    working || amount <= 0 || overBalance || !decision || decision.kind !== "execute" || typing || isLoading;
 
-  const cta = !decision
-    ? "Getting a quote\u2026"
-    : decision.kind === "offer_queue"
-      ? "Queue this order"
-      : decision.kind === "refuse"
-        ? "Unavailable"
-        : "Buy now";
+  // The price moved between the quote we showed and the one the server would
+  // fill at. Not an error so much as a question, so it reads as one.
+  const moved = buy.error instanceof PriceMoved ? buy.error : null;
+  const failed = buy.error !== null && moved === null ? buy.error : null;
+
+  const cta = working
+    ? STEP_LABEL[buy.step ?? "pricing"]
+    : moved
+      ? "Buy at the new price"
+      : !decision
+        ? "Getting a quote\u2026"
+        : decision.kind === "offer_queue"
+          ? "Not placing this now"
+          : decision.kind === "refuse"
+            ? "Unavailable"
+            : "Buy now";
 
   const close = () => {
-    setPlaced(null);
+    buy.reset();
     onClose();
   };
 
@@ -227,15 +249,17 @@ export const BuySheet = ({
         <div className="px-6 py-6 sm:px-7">
           <div className="py-4 text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-up-tint text-up-deep">
-              {placed.kind === "offer_queue" ? <Clock className="size-6" /> : <Check className="size-6" />}
+              <Check className="size-6" />
             </span>
             <h2 id="buy-title" className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">
-              {placed.kind === "offer_queue" ? "Order queued" : "Bought"}
+              {placed.simulated ? "Dry run" : "Bought"}
             </h2>
+            {/* The numbers read off the chain, not the ones we quoted. What
+                someone wants after buying is what they actually got. */}
             <p className="mx-auto mt-2 max-w-[38ch] text-[14px] leading-[1.55] text-muted">
-              {placed.kind === "offer_queue"
-                ? `${usd(settled)} of ${instrument.name} is waiting on your price. You'll see it in Activity.`
-                : `${usd(settled)} of ${instrument.name} is in your portfolio.`}
+              {placed.simulated
+                ? `This server is in dry-run mode, so nothing was sent. ${usd(settled)} of ${instrument.name} would have been bought.`
+                : `${Number(placed.shares).toFixed(4)} shares of ${instrument.name} at ${usd(Number(placed.pricePerShare))} a share.`}
             </p>
             <button
               type="button"
@@ -284,6 +308,20 @@ export const BuySheet = ({
               </p>
             )}
 
+            {moved && (
+              <p className="mt-3 flex gap-2 rounded-xl border border-warn-line bg-warn-tint px-3.5 py-3 text-[13px] leading-[1.5] text-warn">
+                <Alert className="mt-px size-4 shrink-0" />
+                The price moved while you were deciding, so we stopped rather than buy at it. Buying again
+                uses the price below.
+              </p>
+            )}
+            {failed && (
+              <p className="mt-3 flex gap-2 rounded-xl border border-down-line bg-down-tint px-3.5 py-3 text-[13px] leading-[1.5] text-down-deep">
+                <Alert className="mt-px size-4 shrink-0" />
+                {failed.message}
+              </p>
+            )}
+
             <div className="mt-5">
               {!decision ? (
                 <div className="rounded-xl border border-cardline bg-shell px-4 py-3.5">
@@ -315,7 +353,7 @@ export const BuySheet = ({
               size="lg"
               variant="primary"
               disabled={blocked}
-              onClick={() => decision && setPlaced(decision)}
+              onClick={() => buy.mutate({ ticker: instrument.ticker, usd: settled })}
               className="flex-[1.6]"
             >
               {cta}
