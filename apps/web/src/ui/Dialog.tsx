@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 import { EASE } from "../motion/config";
-import { AnchorMark } from "./Logo";
+import { MercuryMark } from "./Logo";
 
 /**
  * What every overlay does while open: Escape closes it, Tab stays inside it,
@@ -183,13 +183,13 @@ export const PanelHeader = ({
 
 /**
  * The sheet the form is about to be written onto: ruled ledger paper with a
- * margin rule down the left, and the anchor set into the stock as a watermark
+ * margin rule down the left, and the mark set into the stock as a watermark
  * that the rules print straight over. Decorative, desktop only.
  */
 export const RuledSheet = () => (
   <div aria-hidden className="relative hidden overflow-hidden border-l border-hair bg-shell lg:block">
     {/* Centred in the ruled field rather than the panel, so the margin does not push it off. */}
-    <AnchorMark className="absolute top-1/2 left-[calc(50%+18px)] size-[148px] -translate-x-1/2 -translate-y-1/2 text-ink/[0.05]" />
+    <MercuryMark className="absolute top-1/2 left-[calc(50%+18px)] size-[148px] -translate-x-1/2 -translate-y-1/2 text-ink/[0.05]" />
     <div className="absolute inset-0 bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_27px,var(--color-rule)_27px,var(--color-rule)_28px)]" />
     <div className="absolute inset-y-0 left-[36px] w-px bg-brand-soft/55" />
   </div>

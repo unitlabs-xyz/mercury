@@ -63,7 +63,8 @@ const baseSchema: Record<string, unknown>[] = [
     <link rel="preload" href={artnikRegular} as="font" type="font/woff2" crossorigin />
 
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/favicon-32.png" sizes="32x32" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="/favicon-32-dark.png" sizes="32x32" type="image/png" media="(prefers-color-scheme: dark)" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="sitemap" href="/sitemap-index.xml" />

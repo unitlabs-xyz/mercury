@@ -4,15 +4,22 @@
     "slug": "mercury",
     "scheme": "mercury",
     "version": "0.1.0",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F7F6F2",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "works.hashira.mercury"
+      "bundleIdentifier": "works.hashira.mercury",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png"
+      }
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
       "typedRoutes": true
     }
