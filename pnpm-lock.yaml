@@ -138,6 +138,9 @@ importers:
       motion:
         specifier: ^13.4.0
         version: 13.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      qrcode-generator:
+        specifier: ^2.0.4
+        version: 2.0.4
       react:
         specifier: ^19.0.0
         version: 19.3.0
@@ -7339,6 +7342,9 @@ packages:
   qified@0.10.1:
     resolution: {integrity: sha512-+Owyggi9IxT1ePKGafcI87ubSmxol6smwJ+RAHDQlx9+9cPwFWDiKFFCPuWhr9ignlGpZ9vDQLw67N4dcTVFEA==}
     engines: {node: '>=20'}
+
+  qrcode-generator@2.0.4:
+    resolution: {integrity: sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g==}
 
   qrcode-terminal@0.11.0:
     resolution: {integrity: sha512-Uu7ii+FQy4Qf82G4xu7ShHhjhGahEpCWc3x8UavY3CTcWV+ufmmCtwkr7ZKsX42jdL0kr1B5FKUeqJvAn51jzQ==}
@@ -18517,6 +18523,8 @@ snapshots:
   qified@0.10.1:
     dependencies:
       hookified: 2.2.0
+
+  qrcode-generator@2.0.4: {}
 
   qrcode-terminal@0.11.0: {}
 
