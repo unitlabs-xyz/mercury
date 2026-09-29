@@ -29,6 +29,13 @@
       "when": 1790576581422,
       "tag": "0003_elite_sumo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790693678827,
+      "tag": "0004_waitlist",
+      "breakpoints": true
     }
   ]
 }

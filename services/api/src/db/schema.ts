@@ -278,3 +278,22 @@ export type Position = typeof positions.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type Activity = typeof activities.$inferSelect;
 export type WalletStream = typeof walletStreams.$inferSelect;
+
+/**
+ * People who asked to be told when Mercury opens. Not users: nobody here has
+ * signed in, so this is the one table that holds an email, and it is never
+ * joined to anything. Read only through the admin export or the database.
+ */
+export const waitlist = pgTable(
+  "waitlist",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Lower-cased on the way in, so the unique index catches a second signup. */
+    email: text("email").notNull(),
+    name: text("name"),
+    country: text("country").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("waitlist_email_idx").on(t.email)],
+);
+export type WaitlistEntry = typeof waitlist.$inferSelect;

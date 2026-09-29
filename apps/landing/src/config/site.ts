@@ -6,15 +6,21 @@ export const site = {
   name: "Mercury",
   // The landing domain. It feeds canonical URLs, OG tags and the sitemap.
   url: "https://trymercury.xyz",
-  // The web app, where Login and every "get started" button go. Its own domain
+  // The web app. Nothing links to it while signup is a waitlist. Its own domain
   // (app.trymercury.xyz) once DNS points there; the Vercel address until then.
   app: "https://mercury-web-nine.vercel.app/",
+  // The API the waitlist form posts to. Set PUBLIC_API_URL on the Vercel project;
+  // unset, it is the API running locally.
+  api: (import.meta.env.PUBLIC_API_URL ?? "http://localhost:8787").replace(/\/$/, ""),
+  // Where every "join" button scrolls to: the form in the closing band.
+  waitlist: "#waitlist",
   tagline: "The financial account built for the onchain world.",
   description:
     "Hold stablecoins, buy tokenized US shares, spend with a card, and borrow against what you own — all from a wallet you control.",
   locale: "en",
-  twitter: "@mercury",
-} as const;
+  twitter: "@trymercury_",
+  socials: [{ label: "X", href: "https://x.com/trymercury_" }],
+};
 
 export const nav = [
   { label: "How it works", href: "#how-it-works" },
@@ -38,6 +44,10 @@ export const footerNav = [
       { label: "About", href: "/about" },
       { label: "Contact", href: "/contact" },
     ],
+  },
+  {
+    heading: "Follow",
+    links: site.socials,
   },
   {
     heading: "Legal",

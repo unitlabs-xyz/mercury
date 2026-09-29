@@ -39,6 +39,7 @@ import type { InstrumentDeps } from "./routes/instruments.js";
 import type { MoneyDeps } from "./routes/money.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
+import { pgWaitlist, type WaitlistDeps } from "./routes/waitlist.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings } from "./portfolio/queries.js";
@@ -77,6 +78,8 @@ export interface Config {
   readonly solanaRpcUrl: string;
   /** Optional. Program scans (Kamino's reserve lookup), if the main RPC plan refuses them. */
   readonly solanaScanRpcUrl?: string;
+  /** Optional. The bearer token for `GET /admin/waitlist`; unset, that route is a 404. */
+  readonly waitlistAdminToken?: string;
 }
 
 const required = (env: NodeJS.ProcessEnv, key: string): string => {
@@ -94,6 +97,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
+    ...(env["WAITLIST_ADMIN_TOKEN"] ? { waitlistAdminToken: env["WAITLIST_ADMIN_TOKEN"] } : {}),
   };
 }
 
@@ -177,6 +181,7 @@ export interface ReadDeps {
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
   readonly orders: OrderStore;
+  readonly waitlist: WaitlistDeps;
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
   readonly send: SendDeps;
@@ -199,7 +204,7 @@ export function buildReconcileDeps(deps: Deps): ReconcileDeps {
   };
 }
 
-export function buildReadDeps(db: Db, deps: Deps, config: Pick<Config, "solanaRpcUrl">): ReadDeps {
+export function buildReadDeps(db: Db, deps: Deps, config: Pick<Config, "solanaRpcUrl" | "waitlistAdminToken">): ReadDeps {
   return {
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
@@ -219,6 +224,7 @@ export function buildReadDeps(db: Db, deps: Deps, config: Pick<Config, "solanaRp
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
+    waitlist: pgWaitlist(db, config.waitlistAdminToken),
     fills: {
       tokenRef: (mint) => tokenRefFor(db, mint),
       settle: (input) => settleOrder(db, input),

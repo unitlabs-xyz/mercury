@@ -33,6 +33,7 @@ const baseSchema: Record<string, unknown>[] = [
     url: site.url,
     logo: new URL("/icon-512.png", site.url).href,
     description: site.description,
+    sameAs: site.socials.map((s) => s.href),
   },
   {
     "@context": "https://schema.org",

@@ -6,9 +6,10 @@ interface Props {
   /** `md` is the 32px button the design uses; `sm` the 28px one in the bar. */
   size?: "sm" | "md";
   class?: string;
+  [attr: `data-${string}`]: unknown;
 }
 
-const { href, variant = "ink", size = "md", class: className = "" } = Astro.props;
+const { href, variant = "ink", size = "md", class: className = "", ...rest } = Astro.props;
 
 const base = "inline-flex items-center justify-center rounded-full text-[14px] font-medium tracking-[-0.02em]";
 
@@ -23,7 +24,7 @@ const skins = {
 } as const;
 ---
 
-<a href={href} class:list={[base, heights[size], pads[size], skins[variant], className]}><slot /></a>
+<a href={href} {...rest} class:list={[base, heights[size], pads[size], skins[variant], className]}><slot /></a>
 
 <style>
   /* Both buttons are the same object in two materials: a 1px edge, a stroke

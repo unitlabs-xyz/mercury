@@ -1,0 +1,171 @@
+---
+import { site } from "../config/site";
+
+// Three fields and a button, in one row wherever it fits. Name is optional;
+// email and country are what the list is for.
+---
+
+<form class="waitlist" data-waitlist action={`${site.api}/waitlist`} method="post" novalidate>
+  <label class="sr-only" for="wl-name">Name</label>
+  <input id="wl-name" name="name" type="text" autocomplete="name" placeholder="Name" maxlength="120" />
+
+  <label class="sr-only" for="wl-email">Email</label>
+  <input id="wl-email" name="email" type="email" autocomplete="email" placeholder="Email" required maxlength="254" />
+
+  <label class="sr-only" for="wl-country">Country</label>
+  <input id="wl-country" name="country" type="text" autocomplete="country-name" placeholder="Country" required maxlength="80" />
+
+  <button type="submit">Join the waitlist</button>
+
+  <p class="status" role="status" aria-live="polite" data-waitlist-status></p>
+</form>
+
+<style>
+  .waitlist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: min(100%, 720px);
+  }
+
+  input {
+    flex: 1 1 150px;
+    min-width: 0;
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid rgb(255 255 255 / 0.28);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.1);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    font-size: 14px;
+    letter-spacing: -0.02em;
+    outline: none;
+    transition:
+      border-color 200ms var(--ease-out),
+      background-color 200ms var(--ease-out);
+  }
+
+  input::placeholder {
+    color: rgb(255 255 255 / 0.65);
+  }
+
+  input:focus-visible {
+    border-color: rgb(255 255 255 / 0.7);
+    background: rgb(255 255 255 / 0.16);
+  }
+
+  input[aria-invalid="true"] {
+    border-color: #f2a597;
+  }
+
+  /* The secondary button's material, as a real <button>. */
+  button {
+    flex: 0 0 auto;
+    height: 36px;
+    padding: 0 22px;
+    border: 1px solid #f4f4f4;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+    background-image: linear-gradient(to bottom, #fff 0%, #fff 45%, #f3f3f3 50%, #fff 100%);
+    background-clip: padding-box;
+    background-size: 100% 200%;
+    background-position: 0 100%;
+    color: #000;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    cursor: pointer;
+    transition:
+      background-position 220ms var(--ease-out),
+      translate 220ms var(--ease-out),
+      opacity 200ms linear;
+  }
+
+  button:hover,
+  button:focus-visible {
+    background-position: 0 0;
+    translate: 0 -1px;
+  }
+
+  button:disabled {
+    opacity: 0.6;
+    cursor: progress;
+    translate: none;
+  }
+
+  .status {
+    flex-basis: 100%;
+    min-height: 20px;
+    font-size: 13px;
+    line-height: 20px;
+    letter-spacing: -0.02em;
+    color: rgb(255 255 255 / 0.85);
+  }
+
+  .status:empty {
+    display: none;
+  }
+
+  /* Once in, the fields go and the confirmation is the whole form. */
+  .waitlist[data-done] > :not(.status) {
+    display: none;
+  }
+
+  .waitlist[data-done] .status {
+    font-size: 16px;
+    color: #fff;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    input,
+    button {
+      transition-duration: 1ms;
+    }
+  }
+</style>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("[data-waitlist]");
+  const status = form?.querySelector<HTMLElement>("[data-waitlist-status]");
+
+  if (form && status) {
+    const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const email = field("email");
+      const country = field("country");
+      const bad = [email, country].filter((input) => !input.checkValidity() || input.value.trim().length < 2);
+      for (const input of [email, country]) input.setAttribute("aria-invalid", String(bad.includes(input)));
+      if (bad.length > 0) {
+        status.textContent = "Enter a valid email and your country.";
+        bad[0]!.focus();
+        return;
+      }
+
+      const button = form.querySelector("button")!;
+      button.disabled = true;
+      status.textContent = "";
+
+      try {
+        const res = await fetch(form.action, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: email.value,
+            country: country.value,
+            ...(field("name").value.trim() ? { name: field("name").value } : {}),
+          }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        form.setAttribute("data-done", "");
+        status.textContent = "You're on the list. We'll email you when Mercury opens.";
+      } catch {
+        status.textContent = "That didn't go through. Try again in a moment.";
+        button.disabled = false;
+      }
+    });
+  }
+</script>
