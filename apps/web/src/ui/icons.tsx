@@ -133,6 +133,17 @@ export const Help = (p: Icon) => (
   </svg>
 );
 
+/* Not in the handoff: the set had no way out of the account. Door on the
+   left, arrow leaving it — the shape every app uses for this, so it needs
+   no learning. */
+export const SignOut = (p: Icon) => (
+  <svg {...base} strokeWidth={1.8} {...p}>
+    <path d="M9.5 20H5.5A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4h4" />
+    <path d="M16 8l4 4-4 4" />
+    <path d="M20 12H10" />
+  </svg>
+);
+
 export const ArrowDown = (p: Icon) => (
   <svg {...base} strokeWidth={2.6} {...p}>
     <path d="M12 5v14" />
