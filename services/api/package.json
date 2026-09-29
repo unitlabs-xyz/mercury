@@ -7,7 +7,8 @@
     "dev": "tsx watch --env-file=.env src/index.ts",
     "start": "tsx --env-file=.env src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "vercel-build": "node scripts/build-vercel.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
@@ -32,6 +33,7 @@
     "@types/bn.js": "^5.2.0",
     "@types/node": "^22.10.0",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.25.12",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

@@ -29,7 +29,8 @@ export const nav = [
   { label: "FAQs", href: "#faqs" },
 ] as const;
 
-export const footerNav = [
+// Links without an href are pages that do not exist yet: shown, not clickable.
+export const footerNav: readonly { heading: string; links: readonly { label: string; href?: string }[] }[] = [
   {
     heading: "Explore",
     links: [
@@ -41,8 +42,8 @@ export const footerNav = [
   {
     heading: "Company",
     links: [
-      { label: "About", href: "/about" },
-      { label: "Contact", href: "/contact" },
+      { label: "About" },
+      { label: "Contact" },
     ],
   },
   {
@@ -52,8 +53,8 @@ export const footerNav = [
   {
     heading: "Legal",
     links: [
-      { label: "Terms", href: "/terms" },
-      { label: "Privacy", href: "/privacy" },
+      { label: "Terms" },
+      { label: "Privacy" },
     ],
   },
-] as const;
+];
