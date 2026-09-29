@@ -204,7 +204,11 @@ export function buildReconcileDeps(deps: Deps): ReconcileDeps {
   };
 }
 
-export function buildReadDeps(db: Db, deps: Deps, config: Pick<Config, "solanaRpcUrl" | "waitlistAdminToken">): ReadDeps {
+export function buildReadDeps(
+  db: Db,
+  deps: Deps,
+  config: Pick<Config, "solanaRpcUrl" | "waitlistAdminToken">,
+): ReadDeps {
   return {
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
