@@ -30,8 +30,6 @@ export interface BuyResult {
   readonly shares: string;
   readonly pricePerShare: string;
   readonly usd: string;
-  /** True when the server is in dry-run mode: nothing was sent, nothing recorded. */
-  readonly simulated: boolean;
 }
 
 /**
@@ -123,19 +121,6 @@ export async function placeBuy(io: BuyIo, intent: BuyIntent): Promise<BuyResult>
   );
   if (sent.status === "failed") throw new Error(sent.error ?? "The transaction failed on chain.");
 
-  // A dry run never reaches the chain, so there is no fill to read and nothing
-  // to record. Saying so beats a confirm that comes back 404.
-  if (sent.status === "simulated") {
-    io.onStep("done");
-    return {
-      orderId: created.orderId,
-      shares: "0",
-      pricePerShare: "0",
-      usd: String(intent.usd),
-      simulated: true,
-    };
-  }
-
   io.onStep("recording");
   const filled = await io.post<{ shares: string; pricePerShare: string; usd: string }>(
     `/v1/orders/${created.orderId}/confirm`,
@@ -143,7 +128,7 @@ export async function placeBuy(io: BuyIo, intent: BuyIntent): Promise<BuyResult>
   );
 
   io.onStep("done");
-  return { orderId: created.orderId, ...filled, simulated: false };
+  return { orderId: created.orderId, ...filled };
 }
 
 /** `placeBuy` with this app's plumbing behind it, and a step to render. */

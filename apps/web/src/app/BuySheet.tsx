@@ -252,14 +252,13 @@ export const BuySheet = ({
               <Check className="size-6" />
             </span>
             <h2 id="buy-title" className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">
-              {placed.simulated ? "Dry run" : "Bought"}
+              Bought
             </h2>
             {/* The numbers read off the chain, not the ones we quoted. What
                 someone wants after buying is what they actually got. */}
             <p className="mx-auto mt-2 max-w-[38ch] text-[14px] leading-[1.55] text-muted">
-              {placed.simulated
-                ? `This server is in dry-run mode, so nothing was sent. ${usd(settled)} of ${instrument.name} would have been bought.`
-                : `${Number(placed.shares).toFixed(4)} shares of ${instrument.name} at ${usd(Number(placed.pricePerShare))} a share.`}
+              {Number(placed.shares).toFixed(4)} shares of {instrument.name} at{" "}
+              {usd(Number(placed.pricePerShare))} a share.
             </p>
             <button
               type="button"

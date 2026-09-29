@@ -216,17 +216,10 @@ export const BorrowSheet = ({
             <span className="grid size-11 place-items-center rounded-full bg-ds-up-chip text-ds-up">
               <Check className="size-5" />
             </span>
-            <p className="mt-4 text-[20px] leading-none font-medium text-ds-ink">
-              {action.data?.simulated ? "Dry run passed" : "Done"}
-            </p>
+            <p className="mt-4 text-[20px] leading-none font-medium text-ds-ink">Done</p>
             <p className="mt-3 text-[14px] leading-[1.45] text-ds-muted">
-              {action.data?.simulated
-                ? "Signed and checked against mainnet. Nothing was sent, and your position has not changed."
-                : "Confirmed on chain. Your position is updating."}
+              Confirmed on chain. Your position is updating.
             </p>
-            {action.data?.note && (
-              <p className="mt-2 text-[12px] leading-[1.5] text-ds-muted">{action.data.note}</p>
-            )}
             <Button variant="primary" size="lg" onClick={onClose} className="mt-6 w-full">
               Close
             </Button>

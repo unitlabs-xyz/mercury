@@ -36,7 +36,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.use("*", cors());
 
   // Public, so the app can say "dry run" before anyone signs anything.
-  app.get("/health", (c) => c.json({ ok: true, sendMode: read.send.mode ?? "broadcast" }));
+  app.get("/health", (c) => c.json({ ok: true }));
 
   // Market data is public: the shelf and a stock page read the same for anyone,
   // and a visitor browsing before signing in should see prices. Registered ahead

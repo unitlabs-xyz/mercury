@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { AuthProvider } from "../auth/AuthContext";
 import { AuthModal } from "../auth/AuthModal";
-import { DryRunBadge } from "./DryRunBadge";
 import { LoanAlert } from "./LoanAlert";
 import { TopBar, type NavKey } from "./TopBar";
 
@@ -45,7 +44,6 @@ export const AppShell = ({
         </div>
       </main>
     </div>
-    <DryRunBadge />
     <AuthModal />
   </AuthProvider>
 );

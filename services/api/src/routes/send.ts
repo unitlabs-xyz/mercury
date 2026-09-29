@@ -14,11 +14,24 @@ import type {} from "../auth/middleware.js";
 
 export interface SendDeps {
   readonly rpcUrl: string;
-  /** "simulate" is a dry run: the signed transaction is simulated and never sent. */
-  readonly mode?: "broadcast" | "simulate";
   /** How long to wait for confirmation before answering "pending". */
   readonly confirmMs?: number;
 }
+
+/**
+ * The program's own reason, in words someone can act on.
+ *
+ * Preflight rejections arrive as a wall of JSON with the useful sentence
+ * buried in the logs. This used to live in a dry-run branch, where it was only
+ * ever read by whoever was testing; it belongs on the path real orders take.
+ */
+const reasonFrom = (raw: string): string => {
+  if (raw.includes("AccountNotFound") || raw.includes("InsufficientFundsForFee")) {
+    return "the wallet has no SOL to pay the network fee. Add a little SOL (0.01 is plenty) and try again.";
+  }
+  const line = raw.split("\n").find((l) => /Error Message:/.test(l));
+  return line === undefined ? raw : line.replace(/^.*Error Message:\s*/, "");
+};
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
@@ -28,6 +41,11 @@ const Body = z.object({ transaction: z.string().min(1) });
  * Broadcasts a transaction the user's wallet has already signed, and waits for
  * it to confirm. The browser never needs an RPC endpoint of its own, so a paid
  * RPC key never ships to it.
+ *
+ * There is one mode and it sends. A dry run used to sit in front of this,
+ * which meant every screen downstream carried a second set of copy for a state
+ * that only ever happened to us — and a way for a build to look like it worked
+ * without anything leaving the machine.
  *
  * It relays only transactions whose fee payer is the caller's own wallet, from
  * the identity token Privy signed. Anything else would make this an open relay
@@ -60,42 +78,6 @@ export function sendRoutes(deps: SendDeps): Hono {
     if (payer !== wallet)
       return c.json(fail("forbidden", "The fee payer is not this account's wallet."), 403);
 
-    if (deps.mode === "simulate") {
-      // A dry run: the real signed transaction, run against mainnet, never sent.
-      // Signatures are checked too, so a wrongly signed transaction fails here as it would live.
-      const sim = await rpc
-        .simulateTransaction(parsed.data.transaction as Base64EncodedWireTransaction, {
-          encoding: "base64",
-          sigVerify: true,
-          commitment: "confirmed",
-        })
-        .send();
-      const logs = (sim.value.logs ?? [])
-        .filter((l) => /Error|failed|Instruction:|success/.test(l))
-        .slice(-12);
-      const units = sim.value.unitsConsumed?.toString() ?? null;
-      if (sim.value.err !== null) {
-        const raw = JSON.stringify(sim.value.err, (_, v: unknown) =>
-          typeof v === "bigint" ? v.toString() : v,
-        );
-        // The program's own last error line names the failing check; the raw code is the fallback.
-        const reason = raw.includes("AccountNotFound")
-          ? "the wallet has no SOL to pay the network fee. Add a little SOL (0.01 is plenty) and try again."
-          : ([...logs].reverse().find((l) => /Error Message:|Error:/.test(l)) ?? raw);
-        return c.json(
-          {
-            ...fail("simulation_failed", `Dry run failed: ${reason}`),
-            signature,
-            logs,
-            unitsConsumed: units,
-          },
-          422,
-        );
-      }
-      // A dry run: the real signed transaction, run against mainnet, never sent.
-      return c.json({ signature, status: "simulated", ok: true, unitsConsumed: units, logs });
-    }
-
     try {
       await rpc
         .sendTransaction(parsed.data.transaction as Base64EncodedWireTransaction, {
@@ -107,7 +89,7 @@ export function sendRoutes(deps: SendDeps): Hono {
     } catch (err) {
       // Preflight failures carry the program's own reason; pass it on rather than a generic 500.
       const message = err instanceof Error ? err.message : "The network rejected the transaction.";
-      return c.json(fail("send_failed", message), 422);
+      return c.json(fail("send_failed", reasonFrom(message)), 422);
     }
 
     const deadline = Date.now() + confirmMs;

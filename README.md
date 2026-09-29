@@ -109,10 +109,8 @@ feed in step with the chain. There is nothing else to start.
 
 ### Buying something, for real
 
-`SEND_MODE=simulate` in the example is a dry run — signed transactions are
-simulated against mainnet and never sent, which is how to click through the app
-for free. **Set it to `broadcast` to actually buy.** The app has no test mode
-beyond this and no testnet: xStocks and Kamino exist on mainnet only.
+There is one mode and it sends. No dry run, no fixtures, no testnet — xStocks
+and Kamino exist on mainnet only, so anything you press here spends real money.
 
 1. Sign in with an email. Privy creates a real Solana wallet on first sign-in.
 2. Copy the address from **Money → Receive** and send it USDC. Mainnet USDC

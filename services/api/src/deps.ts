@@ -77,27 +77,12 @@ export interface Config {
   readonly solanaRpcUrl: string;
   /** Optional. Program scans (Kamino's reserve lookup), if the main RPC plan refuses them. */
   readonly solanaScanRpcUrl?: string;
-  /** Execution only — subsystem 3. Absent until then. */
-  /**
-   * "broadcast" sends signed transactions to the network. "simulate" is a dry
-   * run: each is simulated against mainnet and nothing is sent. Anything else
-   * refuses to start, so a typo can never quietly mean "send".
-   */
-  readonly sendMode: SendMode;
 }
-
-export type SendMode = "broadcast" | "simulate";
 
 const required = (env: NodeJS.ProcessEnv, key: string): string => {
   const value = env[key];
   if (value === undefined || value.length === 0) throw new Error(`${key} is required`);
   return value;
-};
-
-const sendModeOf = (value: string | undefined): SendMode => {
-  if (value === undefined || value === "" || value === "broadcast") return "broadcast";
-  if (value === "simulate") return "simulate";
-  throw new Error(`SEND_MODE must be "broadcast" or "simulate", not "${value}"`);
 };
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -106,7 +91,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: required(env, "DATABASE_URL"),
     privyAppId: required(env, "PRIVY_APP_ID"),
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
-    sendMode: sendModeOf(env["SEND_MODE"]),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
@@ -215,11 +199,7 @@ export function buildReconcileDeps(deps: Deps): ReconcileDeps {
   };
 }
 
-export function buildReadDeps(
-  db: Db,
-  deps: Deps,
-  config: Pick<Config, "solanaRpcUrl" | "sendMode">,
-): ReadDeps {
+export function buildReadDeps(db: Db, deps: Deps, config: Pick<Config, "solanaRpcUrl">): ReadDeps {
   return {
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
@@ -244,6 +224,6 @@ export function buildReadDeps(
       settle: (input) => settleOrder(db, input),
     },
     borrow: { lending: deps.lending, chain: deps.chain, usdcMint: USDC_MINT },
-    send: { rpcUrl: config.solanaRpcUrl, mode: config.sendMode },
+    send: { rpcUrl: config.solanaRpcUrl },
   };
 }

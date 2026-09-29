@@ -51,7 +51,6 @@ describe("placeBuy", () => {
       shares: "0.4498",
       pricePerShare: "222.33",
       usd: "100",
-      simulated: false,
     });
   });
 
@@ -78,15 +77,6 @@ describe("placeBuy", () => {
     expect((error as PriceMoved).decision).toEqual(EXECUTE);
     // Nothing was signed, and nothing was sent.
     expect(calls).toEqual(["/v1/orders", "/v1/orders/order-1/execute"]);
-  });
-
-  it("does not try to record a dry run, because there is nothing on chain to read", async () => {
-    const { deps, calls } = io({
-      "/v1/transactions/send": { signature: "SIG", status: "simulated" },
-    });
-    const result = await placeBuy(deps, intent);
-    expect(result.simulated).toBe(true);
-    expect(calls).not.toContain("/v1/orders/order-1/confirm");
   });
 
   it("reports the chain's own reason when the transaction fails", async () => {
