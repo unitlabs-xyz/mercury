@@ -264,8 +264,11 @@ export const Activity = () => {
                   {day.label}
                 </h2>
                 <div className="flex flex-col gap-1">
-                  {day.events.map((event) => (
-                    <Row key={event.date + event.title} event={event} />
+                  {/* Date and title are not unique: two "Received SOL" on one day
+                      collide, and React drops one of them. The signature is the
+                      real identity; only rows without one fall back to position. */}
+                  {day.events.map((event, i) => (
+                    <Row key={event.signature ?? `${event.date}-${event.title}-${i}`} event={event} />
                   ))}
                 </div>
               </div>

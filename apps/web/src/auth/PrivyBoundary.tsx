@@ -7,28 +7,35 @@ const APP_ID = import.meta.env["VITE_PRIVY_APP_ID"] as string | undefined;
 
 /*
  * Privy's own signing UI reads the chain through this, so without it the
- * embedded wallet never registers as a Solana Standard wallet — `useWallets()`
- * comes back empty ("No wallet is connected to sign with") and opening the
- * signature screen throws "No RPC configuration found for chain solana:mainnet",
- * which took the whole app down with it.
+ * signature screen throws "No RPC configuration found for chain
+ * solana:mainnet" and takes the whole app down with it.
  *
- * The public endpoint by default rather than the API's key: this runs in the
- * browser, where anything we put here ships to every visitor. Privy uses it to
- * describe the transaction being signed, not to poll, so the public rate limit
- * is enough. VITE_SOLANA_RPC_URL overrides it with a browser-safe endpoint.
+ * It has to be an endpoint that serves BROWSERS. Solana's public RPC
+ * (api.mainnet-beta.solana.com) is not one: it answers the CORS preflight
+ * with an allow, then returns 403 to any request carrying an Origin header.
+ * Privy swallows that as "Failed to prepare transaction" and shows an empty
+ * amount and fee, which reads like a broken wallet rather than a blocked
+ * request. Measured: 403 with an Origin header, 200 without.
+ *
+ * So there is no keyless default worth shipping, and a default that 403s is
+ * worse than none. This is required, like the app id above it.
+ *
+ * Whatever goes here ships to every visitor, so use a key that is restricted
+ * by domain at the provider rather than a server key.
  */
-const RPC_URL =
-  (import.meta.env["VITE_SOLANA_RPC_URL"] as string | undefined) ?? "https://api.mainnet-beta.solana.com";
+const RPC_URL = import.meta.env["VITE_SOLANA_RPC_URL"] as string | undefined;
 
 /* Built once. Rebuilding these per render would reconnect the socket each time. */
-const SOLANA = {
-  rpcs: {
-    "solana:mainnet": {
-      rpc: createSolanaRpc(RPC_URL),
-      rpcSubscriptions: createSolanaRpcSubscriptions(RPC_URL.replace(/^http/, "ws")),
-    },
-  },
-} as const;
+const SOLANA = RPC_URL
+  ? ({
+      rpcs: {
+        "solana:mainnet": {
+          rpc: createSolanaRpc(RPC_URL),
+          rpcSubscriptions: createSolanaRpcSubscriptions(RPC_URL.replace(/^http/, "ws")),
+        },
+      },
+    } as const)
+  : null;
 
 /**
  * Solana only, email only. Ethereum embedded wallets are explicitly off: we
@@ -37,6 +44,10 @@ const SOLANA = {
  */
 export const PrivyBoundary = ({ children }: { children: ReactNode }) => {
   if (!APP_ID) throw new Error("VITE_PRIVY_APP_ID is not set");
+  if (!SOLANA)
+    throw new Error(
+      "VITE_SOLANA_RPC_URL is not set. Privy signs through it, and Solana's public RPC returns 403 to browsers, so there is no default that works.",
+    );
   return (
     <PrivyProvider
       appId={APP_ID}
