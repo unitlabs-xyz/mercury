@@ -22,9 +22,11 @@ node_modules
 coverage
 **/coverage
 
-# Front ends. The Dockerfile copies packages/, services/api and tooling/ only;
-# apps/* would be several hundred MB of context for files never copied.
-apps
+# The other front ends. apps/web has its own Dockerfile and has to stay in the
+# context; landing is Astro on its own lockfile and mobile is Expo, and neither
+# image copies them.
+apps/landing
+apps/mobile
 
 # Docs, design and planning material.
 docs
