@@ -49,11 +49,19 @@ const IndexCard = memo(
     const to = `/invest/${r.instrument.ticker}`;
     return (
       <article className="relative flex min-w-0 flex-col rounded-xl bg-white p-1">
+        {/*
+          Not "2.7K more buyers than sellers in 24h". That is a day's net flow,
+          led with, in colour, as the first thing on the card — which is the
+          thing ADR 0009 rules out: nothing that makes trading more often feel
+          like progress. Key stats dropped the same figure for the same reason,
+          and this card was still leading with it.
+
+          How many people hold it says something a buyer can use, and says it
+          about holding.
+        */}
         <p className="flex h-8 items-center gap-2 rounded-lg bg-ds-flow-bg pl-5 text-[12px] leading-none text-ds-flow">
           <People />
-          {r.netBuyers24h > 0
-            ? `${compact(r.netBuyers24h)} more buyers than sellers in 24h`
-            : `${compact(r.holders)} wallets hold this`}
+          {`${compact(r.holders)} wallets hold this`}
         </p>
 
         <div className="flex flex-1 flex-col px-5 pt-4 pb-4">

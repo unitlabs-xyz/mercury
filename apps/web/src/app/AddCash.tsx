@@ -1,6 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { useId, useState, type ReactNode } from "react";
+import { EASE } from "../motion/config";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { StatusChip } from "../ui/ds";
+import { ChevronDown } from "../ui/icons";
 import { DepositAddress } from "./Receive";
 
 type Method = {
@@ -13,6 +16,95 @@ type Method = {
   icon: ReactNode;
   /** Not live yet: shown so people know it is coming, but cannot be picked. */
   soon?: boolean;
+};
+
+/**
+ * Name, description and right-hand figure. The same row whether it can be
+ * picked or not.
+ *
+ * A row in the list is one line tall and truncates, because it is one of
+ * several being scanned. A row behind the fold wraps instead: it is read
+ * rather than scanned, and "ACH or wire fro…" is not worth opening a fold for.
+ */
+const Row = ({ method, dim }: { method: Method; dim?: boolean }) => (
+  <>
+    <span className={dim ? "opacity-60" : undefined}>{method.icon}</span>
+    <span className={`min-w-0 flex-1 ${dim ? "opacity-60" : ""}`}>
+      <span className={`block text-[14px] leading-[18px] font-medium text-ds-ink ${dim ? "" : "truncate"}`}>
+        {method.title}
+      </span>
+      <span className={`mt-0.5 block text-[12px] leading-4 text-ds-muted ${dim ? "" : "truncate"}`}>
+        {method.sub}
+      </span>
+    </span>
+    <span className="shrink-0 text-right">
+      {method.soon ? (
+        // The method's own note. "Soon" was a second, shorter way of saying
+        // the same thing, in a chip beside the one that already said it.
+        <StatusChip tone="neutral" size="md">
+          {method.note}
+        </StatusChip>
+      ) : (
+        <>
+          <span className="block text-[14px] leading-[18px] font-medium text-ds-ink">{method.figure}</span>
+          <span className="mt-0.5 block text-[12px] leading-4 text-ds-muted">{method.note}</span>
+        </>
+      )}
+    </span>
+  </>
+);
+
+/**
+ * The methods that are not built yet, behind one line.
+ *
+ * They were laid out beside the only one that works, three greyed rows taking
+ * four fifths of the list — so the panel read as a choice between four things
+ * when it is a choice between one. Folded away they are still an answer to
+ * "can I use my bank", which is why they are here at all, and no longer the
+ * first thing the eye lands on.
+ */
+const OtherMethods = ({ methods }: { methods: readonly Method[] }) => {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  if (methods.length === 0) return null;
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={`other-methods-${id}`}
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-10 w-full items-center gap-2 rounded-md px-3 text-left text-[14px] leading-none font-medium text-ds-muted transition-colors hover:bg-white/60 hover:text-ds-ink"
+      >
+        Other methods
+        <ChevronDown
+          className={`size-3.5 text-ds-chevron transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.ul
+            id={`other-methods-${id}`}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ height: { duration: 0.3, ease: EASE }, opacity: { duration: 0.2 } }}
+            className="overflow-hidden"
+          >
+            {methods.map((m) => (
+              // Not buttons and not radios: there is nothing to choose here
+              // until they exist, and a disabled control invites the click
+              // that does nothing.
+              <li key={m.key} className="flex min-h-15 items-center gap-3 px-3 py-2.5">
+                <Row method={m} dim />
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 };
 
 /** The method's mark: a 32px circle with a line icon, as the list rows' logos sit. */
@@ -83,6 +175,10 @@ const METHODS: readonly Method[] = [
   },
 ];
 
+/** What you can actually use today, and what is only announced. */
+const LIVE = METHODS.filter((m) => !m.soon);
+const SOON = METHODS.filter((m) => m.soon);
+
 /**
  * Adding cash, as a side panel: every way in as a row, the one that works
  * today first and chosen, the ones coming through Bridge marked Soon; under
@@ -104,7 +200,7 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
           aria-label="How to add cash"
           className="flex flex-col gap-1 rounded-lg bg-ds-panel p-1"
         >
-          {METHODS.map((m) => {
+          {LIVE.map((m) => {
             const on = pick === m.key;
             return (
               <button
@@ -112,42 +208,26 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
                 type="button"
                 role="radio"
                 aria-checked={on}
-                aria-disabled={m.soon}
-                disabled={m.soon}
                 onClick={() => setPick(m.key)}
-                className={`flex h-15 items-center gap-3 rounded-md px-3 text-left transition-colors disabled:cursor-not-allowed ${
-                  on ? "bg-white outline-1 outline-black/10" : m.soon ? "" : "hover:bg-white/60"
+                className={`flex h-15 items-center gap-3 rounded-md px-3 text-left transition-colors ${
+                  on ? "bg-white outline-1 outline-black/10" : "hover:bg-white/60"
                 }`}
               >
-                <span className={m.soon ? "opacity-60" : undefined}>{m.icon}</span>
-                <span className={`min-w-0 flex-1 ${m.soon ? "opacity-60" : ""}`}>
-                  <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">
-                    {m.title}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">{m.sub}</span>
-                </span>
-                <span className="shrink-0 text-right">
-                  {m.soon ? (
-                    <StatusChip tone="neutral" size="md">
-                      Soon
-                    </StatusChip>
-                  ) : (
-                    <>
-                      <span className="block text-[14px] leading-[18px] font-medium text-ds-ink">
-                        {m.figure}
-                      </span>
-                      <span className="mt-0.5 block text-[12px] leading-4 text-ds-muted">{m.note}</span>
-                    </>
-                  )}
-                </span>
+                <Row method={m} />
               </button>
             );
           })}
+
+          <OtherMethods methods={SOON} />
         </div>
 
         {pick === "solana" && (
           <div className="mt-6">
-            <p className="text-[14px] leading-none font-medium text-ds-ink">Send USDC to this address</p>
+            {/* Not "Send USDC to this address": the note directly beneath it
+                names the token and the network, and says what happens to
+                anything else. The heading is here to separate the methods from
+                the address, not to repeat the rule under it. */}
+            <p className="text-[14px] leading-none font-medium text-ds-ink">Send to this address</p>
             <div className="mt-3">
               <DepositAddress />
             </div>

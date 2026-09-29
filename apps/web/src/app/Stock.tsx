@@ -194,10 +194,11 @@ export const Stock = () => {
                       <h1 className="truncate text-[20px] leading-none font-medium text-ds-ink">
                         {instrument.name}
                       </h1>
+                      {/* The token count was here too. "Where your order goes"
+                          lists them by name and issuer, and About names them
+                          again below that — a header badge saying how many
+                          there are added a third telling and no new fact. */}
                       <span className="flex flex-wrap items-center gap-[5px]">
-                        <StatusChip tone="neutral" size="md">
-                          {instrument.wrappers.length} {instrument.wrappers.length === 1 ? "token" : "tokens"}
-                        </StatusChip>
                         {!instrument.featured && (
                           <span title="About the largest order that stays inside the 1.5% price impact limit">
                             <StatusChip tone="warn" size="md">

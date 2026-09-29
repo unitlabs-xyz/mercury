@@ -27,8 +27,8 @@ export const RailLine = ({ k, children }: { k: string; children: ReactNode }) =>
 /**
  * The figures a buyer checks before buying, laid out like the portfolio
  * header: the title row, then the figures in a grey panel 4px in from the
- * card's edge, then the returns as move chips. Live figures and sample ones
- * are named apart in the page's footnote.
+ * card's edge, then the returns as move chips. Where each figure comes from
+ * is named in the tip beside the title.
  */
 export const Stats = ({ p }: { p: Priced }) => {
   const t = p.instrument.ticker;
@@ -200,10 +200,15 @@ export const Position = ({ h }: { h: Holding }) => {
 /** What it is, then the plain facts of how you hold it here, in a grey panel. */
 export const About = ({ i }: { i: Instrument }) => {
   const issuers = [...new Set(i.wrappers.map((w) => ISSUER_NAME[w.issuer]))];
+  /*
+   * No "Tokens" row. "Where your order goes" lists every token by name
+   * against its issuer, its price and whether it won — which is the same
+   * list, doing something with it. Who issues them is a fact about the
+   * company's wrapper rather than about this order, so that one stays.
+   */
   const facts: [string, string][] = [
     ["Sector", i.sector],
     ["Ticker", i.ticker],
-    ["Tokens", i.wrappers.map((w) => w.symbol).join(" · ")],
     ["Issued by", issuers.join(" and ")],
     ["Trades", "Around the clock, on Solana"],
     ["Minimum", "$5"],

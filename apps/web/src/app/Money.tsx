@@ -8,13 +8,16 @@ import { pct, usd } from "./format";
 import { BorrowSection } from "./money/BorrowSection";
 import { HeaderFigure } from "./portfolio/Summary";
 import { Skeleton } from "./portfolio/ui";
-import { Receive } from "./Receive";
 
 /**
  * Cash, set like the portfolio: the header card leads with what you can spend
  * on shares and the three verbs, the figures that follow from it in a grey
- * panel on the right; then borrowing against your stocks, with adding cash in
- * the rail beside it.
+ * panel on the right; then borrowing against your stocks.
+ *
+ * Adding cash is a verb up there, not a card down here. The rail used to hold
+ * a second copy of the deposit panel — the same address, the same QR code and
+ * the same warning as the side panel the Add cash button opens, a scroll below
+ * the button that opens it.
  */
 export const Money = () => {
   // Add cash and Send are the app's side panels, opened on top of this page.
@@ -72,14 +75,7 @@ export const Money = () => {
           </dl>
         </section>
 
-        {signedIn ? (
-          <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
-            <BorrowSection />
-            <Receive />
-          </div>
-        ) : (
-          <Receive />
-        )}
+        {signedIn && <BorrowSection />}
       </div>
     </AppShell>
   );
