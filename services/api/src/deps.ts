@@ -39,6 +39,7 @@ import type { InstrumentDeps } from "./routes/instruments.js";
 import type { MoneyDeps } from "./routes/money.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
+import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
@@ -195,6 +196,7 @@ export interface ReadDeps {
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
   readonly orders: OrderStore;
+  readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
   readonly send: SendDeps;
 }
@@ -240,6 +242,10 @@ export function buildReadDeps(
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
+    fills: {
+      tokenRef: (mint) => tokenRefFor(db, mint),
+      settle: (input) => settleOrder(db, input),
+    },
     borrow: { lending: deps.lending, chain: deps.chain, usdcMint: USDC_MINT },
     send: { rpcUrl: config.solanaRpcUrl, mode: config.sendMode },
   };

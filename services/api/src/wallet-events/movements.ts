@@ -61,6 +61,29 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
 
   const usdc = sumOwned(tx.postTokens, ctx.wallet, USDC_MINT) - sumOwned(tx.preTokens, ctx.wallet, USDC_MINT);
 
+  /*
+   * A swap is not a cash transfer.
+   *
+   * Dollars leaving this wallet while a token arrives in it is one event — a
+   * trade — and the order that placed it writes the row, with the shares and
+   * the price on it. Reporting the cash leg here as well would put "Sent cash
+   * $100" in the feed beside "Bought NVDA", two rows for one thing, and the
+   * unique index would not catch it because the two carry different mints.
+   *
+   * The same reasoning the SOL rule below already uses: when a transaction did
+   * something larger, its cash movement is part of that thing and not an event
+   * of its own.
+   *
+   * A trade nobody confirmed therefore has no row at all until it is confirmed,
+   * which is recoverable — a duplicate in the feed is not.
+   */
+  const tradedAnotherToken = [...new Set([...tx.preTokens, ...tx.postTokens].map((e) => e.mint))].some(
+    (mint) =>
+      mint !== USDC_MINT &&
+      sumOwned(tx.postTokens, ctx.wallet, mint) !== sumOwned(tx.preTokens, ctx.wallet, mint),
+  );
+  if (usdc !== 0n && tradedAnotherToken) return moved;
+
   if (usdc !== 0n) {
     moved.push({
       mint: USDC_MINT,

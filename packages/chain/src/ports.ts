@@ -189,6 +189,13 @@ export interface TokenBalanceEntry {
 export interface TransactionDetail {
   readonly signature: string;
   readonly blockTime: number | null;
+  /**
+   * False when the transaction failed on chain, and also when the node kept the
+   * transaction but not its metadata — in that case nothing can be confirmed
+   * about it, and "we could not confirm this worked" is the safe reading for a
+   * caller about to write money into the books.
+   */
+  readonly succeeded: boolean;
   /** Account keys in index order; under jsonParsed this includes lookup-table entries. */
   readonly accountKeys: readonly string[];
   readonly feeLamports: bigint;

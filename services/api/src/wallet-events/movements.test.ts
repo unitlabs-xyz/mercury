@@ -19,6 +19,7 @@ const usdc = (owner: string, amount: bigint): TokenBalanceEntry => ({
 const tx = (over: Partial<TransactionDetail> = {}): TransactionDetail => ({
   signature: SIG,
   blockTime: 1_790_573_221,
+  succeeded: true,
   accountKeys: [WALLET, OTHER],
   feeLamports: 5_000n,
   preLamports: [1_000_000_000n, 0n],
@@ -134,5 +135,58 @@ describe("movementsIn — native SOL", () => {
       ctx,
     );
     expect(m[0]!.subtitle).toBe("100 SOL");
+  });
+});
+
+describe("a swap is not a cash transfer", () => {
+  const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
+  const stock = (owner: string, amount: bigint): TokenBalanceEntry => ({
+    mint: NVDAX,
+    owner,
+    rawAmount: amount,
+    decimals: 8,
+  });
+
+  it("writes nothing for a buy, because the order that placed it writes the row", () => {
+    const m = movementsIn(
+      tx({
+        preTokens: [usdc(WALLET, 500_000_000n)],
+        postTokens: [usdc(WALLET, 400_000_000n), stock(WALLET, 44_901_800n)],
+      }),
+      { wallet: WALLET, now: NOW },
+    );
+    expect(m).toEqual([]);
+  });
+
+  it("writes nothing for a sell either", () => {
+    const m = movementsIn(
+      tx({
+        preTokens: [stock(WALLET, 44_901_800n), usdc(WALLET, 0n)],
+        postTokens: [stock(WALLET, 0n), usdc(WALLET, 99_500_000n)],
+      }),
+      { wallet: WALLET, now: NOW },
+    );
+    expect(m).toEqual([]);
+  });
+
+  it("still reports plain cash arriving, which is the case the job exists for", () => {
+    const m = movementsIn(tx({ preTokens: [], postTokens: [usdc(WALLET, 500_000_000n)] }), {
+      wallet: WALLET,
+      now: NOW,
+    });
+    expect(m.length).toBe(1);
+    expect(m[0]!.title).toBe("Added cash");
+  });
+
+  it("is not fooled by somebody else's token moving in the same transaction", () => {
+    const m = movementsIn(
+      tx({
+        preTokens: [usdc(WALLET, 500_000_000n), stock(OTHER, 10n)],
+        postTokens: [usdc(WALLET, 400_000_000n), stock(OTHER, 20n)],
+      }),
+      { wallet: WALLET, now: NOW },
+    );
+    expect(m.length).toBe(1);
+    expect(m[0]!.title).toBe("Sent cash");
   });
 });

@@ -88,9 +88,12 @@ export const UnsignedTxResponse = z.object({
   transactions: z.array(z.string()),
   expiresAt: Iso,
 });
-export const ConfirmOrderRequest = z.object({ signature: z.string() });
+/* A Solana signature is 64 bytes in base58, which is 87 or 88 characters. The
+   floor keeps a pasted fragment from reaching an RPC as a lookup. */
+export const ConfirmOrderRequest = z.object({ signature: z.string().min(64).max(96) });
 
 export type Decision = z.infer<typeof Decision>;
 export type Order = z.infer<typeof Order>;
 export type PricedCandidate = z.infer<typeof PricedCandidate>;
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequest>;
+export type ConfirmOrderRequest = z.infer<typeof ConfirmOrderRequest>;

@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { allocate, D, DEFAULT_POLICY, toWire } from "@mercury/core";
-import { CreateOrderRequest, InvestBasketRequest, type ErrorCode } from "@mercury/types";
+import { ConfirmOrderRequest, CreateOrderRequest, InvestBasketRequest, type ErrorCode } from "@mercury/types";
 import type { Deps } from "./deps.js";
 import { priceOrder } from "./pricing.js";
 import { gateExecution } from "./orders/gate.js";
+import { planFill } from "./orders/fill.js";
 import { decisionToWire } from "./serialize.js";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
@@ -199,6 +200,82 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       // The quote behind this transaction, not a round number: Jupiter's keyless
       // quotes hold for twenty seconds and the decision was made on one of them.
       expiresAt: new Date(fresh.decidedAt.getTime() + 20_000).toISOString(),
+    });
+  });
+
+  /**
+   * Record an order that landed. The last step, and the only one that writes
+   * money into the books.
+   *
+   * The client hands over a signature; everything else is read from the chain.
+   * What the user was quoted, what they were charged and what they received are
+   * three different numbers, and only the last two are facts — so the lot is
+   * written from the wallet's own balances before and after the transaction,
+   * never from the decision that preceded it.
+   *
+   * Safe to call twice. The order row is claimed with a conditional update, so
+   * a client that retries a confirm it already made is told the order was
+   * settled and nothing is written a second time.
+   */
+  app.post("/v1/orders/:id/confirm", async (c) => {
+    const identity = c.get("identity");
+    const parsed = ConfirmOrderRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+
+    const order = await read.orders.byId(identity.userId, c.req.param("id"));
+    if (order === null) return c.json(fail("not_found", "Unknown order."), 404);
+
+    const decision = order.decision as ReturnType<typeof decisionToWire>;
+    if (decision.kind === "refuse") return c.json(fail("instrument_not_tradable", decision.detail), 409);
+
+    const owner = identity.walletAddress;
+    if (owner === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+
+    const mint = decision.best.mint;
+    const [ref, token, multiplier] = await Promise.all([
+      read.fills.tokenRef(mint),
+      market().registry.byMint(mint),
+      market().multipliers.multiplierFor(mint),
+    ]);
+    if (ref === null || token === null) return c.json(fail("not_found", "Unknown token."), 404);
+
+    // Not yet on chain is a different answer from never: a client can confirm
+    // before the node it asks has caught up, and that is worth retrying.
+    const tx = await market().history.transaction(parsed.data.signature);
+    if (tx === null) {
+      return c.json(fail("not_found", "That transaction has not reached the chain yet."), 404);
+    }
+
+    const fill = planFill(tx, {
+      wallet: owner,
+      side: decision.side,
+      mint,
+      decimals: token.decimals,
+      multiplier: multiplier ?? D(1),
+      now: new Date(),
+    });
+    if (fill.kind === "not_a_fill") return c.json(fail("validation_failed", fill.detail), 422);
+
+    const settled = await read.fills.settle({
+      userId: identity.userId,
+      orderId: order.id,
+      signature: parsed.data.signature,
+      side: decision.side,
+      ticker: decision.ticker,
+      mint,
+      tokenId: ref.tokenId,
+      instrumentId: ref.instrumentId,
+      fill,
+    });
+
+    return c.json({
+      status: "filled",
+      alreadySettled: settled.kind === "already_settled",
+      shares: toWire(fill.shares),
+      pricePerShare: toWire(fill.pricePerShare),
+      usd: toWire(fill.usd),
+      realisedPnlUsd:
+        settled.kind === "settled" && settled.realisedPnlUsd !== null ? toWire(settled.realisedPnlUsd) : null,
     });
   });
 
