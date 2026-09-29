@@ -5,7 +5,6 @@ import { Button } from "../../ui/Button";
 import { RailHead } from "../../ui/ds";
 import { Alert, Clock } from "../../ui/icons";
 import { REFUSE_COPY } from "../BuySheet";
-import { ISSUER_NAME } from "../IssuerCompare";
 import { usd } from "../format";
 import { RailLine } from "./Panels";
 
@@ -75,10 +74,19 @@ export const AmountWell = ({ raw, onRaw }: { raw: string; onRaw: (v: string) => 
 
 /**
  * The order, on the page rather than behind a button, as a rail card: the
- * amount in a white well on the grey panel with the presets under it, then the
- * live answer for exactly that amount (which issuer, at what price per real
- * share, for how many shares), then the one primary action. Review opens the
+ * amount in a white well on the grey panel with the presets under it, the one
+ * thing that follows from it, then the one primary action. Review opens the
  * confirmation with the same figure.
+ *
+ * It used to carry the winning issuer and the price impact as well, which are
+ * the table's two comparison columns restated — and on a wide screen the two
+ * cards are level, so those numbers were on screen twice at once. The table
+ * compares the issuers; the ticket answers what this amount buys.
+ *
+ * The price per share stays, even though the table shows it too. The ticket is
+ * sticky and the table is not, so for most of the page this is the only place
+ * the price of the order appears — and the figure in the header is the real
+ * share price, which is a different number from what this order pays.
  */
 export const Ticket = ({
   name,
@@ -105,7 +113,6 @@ export const Ticket = ({
   const amount = Number(raw) || 0;
   const best = decision && decision.kind !== "refuse" ? decision.best : null;
   const price = num(best?.pricePerShare) ?? fair;
-  const impact = num(best?.priceImpact);
   const over = cash !== null && amount > cash;
 
   return (
@@ -121,16 +128,14 @@ export const Ticket = ({
         <RailLine k="You get">
           {quoting ? "Quoting…" : price && settled > 0 ? `${(settled / price).toFixed(4)} shares` : "—"}
         </RailLine>
-        <RailLine k="Best route">
-          {best ? `${ISSUER_NAME[best.issuer]} · ${best.symbol}` : quoting ? "Quoting…" : "—"}
-        </RailLine>
-        <RailLine k="Price impact">{impact === null ? "—" : `${(impact * 100).toFixed(2)}%`}</RailLine>
       </dl>
 
+      {/* Not "we can wait and place it when the price comes back": that is a
+          trigger order, which is not built. Saying it here and then opening a
+          dialog whose only button is dead spends a click to say no. */}
       {decision?.kind === "offer_queue" && (
         <Note tone="warn" icon={<Clock />}>
-          Above the real share price right now. You can buy anyway, or we can wait and place it when the price
-          comes back.
+          Trading above the real share price, and the US market is shut. The gap usually closes once it opens.
         </Note>
       )}
       {decision?.kind === "refuse" && (
@@ -153,14 +158,17 @@ export const Ticket = ({
           variant="primary"
           size="lg"
           onClick={onReview}
-          disabled={amount <= 0 || over || fair === null || decision?.kind === "refuse"}
+          disabled={
+            amount <= 0 ||
+            over ||
+            fair === null ||
+            decision?.kind === "refuse" ||
+            decision?.kind === "offer_queue"
+          }
           className="w-full"
         >
-          {decision?.kind === "offer_queue" ? "Review or queue" : "Review order"}
+          Review order
         </Button>
-        <p className="mt-3 text-center text-[12px] leading-none text-ds-muted">
-          Quoted across every issuer for this exact amount
-        </p>
       </div>
     </section>
   );
