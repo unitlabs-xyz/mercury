@@ -3,7 +3,6 @@ import qrcode from "qrcode-generator";
 import { useMemo, useState, type ReactNode } from "react";
 import { useMoney } from "../api/hooks";
 import { Button } from "../ui/Button";
-import { InfoTip, RailHead } from "../ui/ds";
 import { Alert, Check, Copy } from "../ui/icons";
 
 /**
@@ -148,15 +147,24 @@ const ShareAddress = () => {
 };
 
 /**
- * The Solana deposit, wherever it is shown: the address and its code on a grey
- * panel, the two ways to hand it over, then the one rule that loses money if
- * broken. The rail card and the Add cash panel both use this.
+ * The Solana deposit, wherever it is shown: the one rule that loses money if
+ * broken, then the address and its code on a grey panel, then the two ways to
+ * hand it over. The rail card and the Add cash panel both use this.
+ *
+ * The rule leads. It used to sit under the buttons, below the fold of the Add
+ * cash panel, where it was read after the address had already been copied —
+ * and the line above it said only what to send, never what not to. One note,
+ * before the address, saying both.
  */
 export const DepositAddress = () => {
   const address = useMoney().data?.depositAddress;
   return (
     <>
-      <div className="flex items-center gap-4 rounded-lg bg-ds-panel p-4">
+      <p className="flex items-start gap-2 rounded-lg bg-ds-warn-chip px-4 py-3 text-[12px] leading-[1.45] text-ds-chip-warn">
+        <Alert className="mt-px size-3.5 shrink-0" />
+        Solana network only, and USDC only. Anything sent on another network, or in another token, is lost.
+      </p>
+      <div className="mt-1 flex items-center gap-4 rounded-lg bg-ds-panel p-4">
         <QrBlock value={address} />
         <div className="min-w-0 flex-1">
           <p className="text-[12px] leading-none text-ds-muted">Your Solana address</p>
@@ -169,36 +177,6 @@ export const DepositAddress = () => {
         <CopyAddress />
         <ShareAddress />
       </div>
-      <p className="mt-4 flex items-start gap-2 rounded-lg bg-ds-warn-chip px-4 py-3 text-[12px] leading-[1.45] text-ds-chip-warn">
-        <Alert className="mt-px size-3.5 shrink-0" />
-        Solana network only, and USDC only. Anything sent on another network, or in another token, is lost.
-      </p>
     </>
   );
 };
-
-/** Adding cash, as a rail card: the one instruction, then the deposit address. */
-export const Receive = () => (
-  <section id="receive" aria-label="Add cash" className="min-w-0 scroll-mt-20 rounded-xl bg-white p-1">
-    <div className="px-5 pt-4">
-      <RailHead
-        title="Add cash"
-        meta={
-          <span className="flex items-center gap-2 text-ds-muted">
-            USDC on Solana
-            <InfoTip label="Other ways to add cash">
-              Bank transfers and debit cards are coming, through Bridge. Until then, send USDC on Solana from
-              any wallet or exchange.
-            </InfoTip>
-          </span>
-        }
-      />
-      <p className="mt-[13px] text-[14px] leading-[1.45] text-ds-muted">
-        Send USDC to this address. It starts earning the moment it arrives.
-      </p>
-    </div>
-    <div className="mt-4">
-      <DepositAddress />
-    </div>
-  </section>
-);

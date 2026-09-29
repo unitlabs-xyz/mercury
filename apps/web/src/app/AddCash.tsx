@@ -147,7 +147,11 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
 
         {pick === "solana" && (
           <div className="mt-6">
-            <p className="text-[14px] leading-none font-medium text-ds-ink">Send USDC to this address</p>
+            {/* Not "Send USDC to this address": the note directly beneath it
+                names the token and the network, and says what happens to
+                anything else. The heading is here to separate the methods from
+                the address, not to repeat the rule under it. */}
+            <p className="text-[14px] leading-none font-medium text-ds-ink">Send to this address</p>
             <div className="mt-3">
               <DepositAddress />
             </div>
