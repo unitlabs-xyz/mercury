@@ -168,6 +168,34 @@ docker build -f services/api/Dockerfile -t mercury-api .
 docker run --rm -p 8787:8787 -e DATABASE_URL=... -e PRIVY_APP_ID=... -e SOLANA_RPC_URL=... mercury-api
 ```
 
+### Deploying the web app
+
+`apps/web/Dockerfile` builds the SPA and serves it with nginx. Same rule as the
+API: **the build context is the repo root**, because the app imports the same
+workspace packages.
+
+| Setting             | Value                  |
+| ------------------- | ---------------------- |
+| Build Pack          | `Dockerfile`           |
+| Base Directory      | `/`                    |
+| Dockerfile Location | `/apps/web/Dockerfile` |
+| Ports Exposes       | `80`                   |
+
+**The `VITE_` variables are build-time, not runtime.** Vite substitutes them
+into the bundle during `vite build`; setting them on a running container does
+nothing. In Coolify each one must be ticked **Build Variable**:
+
+- `VITE_API_URL` — e.g. `https://mercury-dev.thecircleco.xyz`
+- `VITE_PRIVY_APP_ID`
+
+The build refuses to run without either, on purpose. Both fail quietly
+otherwise: unset, `VITE_API_URL` falls back to `http://localhost:8787` and
+every visitor's browser calls their own machine, and `VITE_PRIVY_APP_ID`
+throws on first render for a white screen. Neither shows up until someone
+opens the site, so the Dockerfile stops the build instead.
+
+Changing either one needs a rebuild, not a restart.
+
 ## State of the build
 
 | Package           | State                                                                                                                                                                                                                                                                                    |

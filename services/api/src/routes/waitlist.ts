@@ -84,10 +84,16 @@ export function waitlistRoutes(deps: WaitlistDeps) {
   app.post("/waitlist", async (c) => {
     const parsed = JoinWaitlistRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
-      return c.json({ error: { code: "validation_failed", message: "Enter a valid email and country." } }, 400);
+      return c.json(
+        { error: { code: "validation_failed", message: "Enter a valid email and country." } },
+        400,
+      );
     }
     if (!(await deps.acceptsMail(parsed.data.email.split("@")[1]!))) {
-      return c.json({ error: { code: "validation_failed", message: "That email's domain doesn't accept mail." } }, 400);
+      return c.json(
+        { error: { code: "validation_failed", message: "That email's domain doesn't accept mail." } },
+        400,
+      );
     }
     await deps.join(parsed.data);
     return c.json({ ok: true });

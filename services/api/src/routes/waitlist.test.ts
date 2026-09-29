@@ -34,16 +34,22 @@ describe("waitlist", () => {
     const db = await testDb();
     const guarded = waitlistRoutes(pgWaitlist(db, "secret", anyDomain));
     expect((await guarded.request("/admin/waitlist")).status).toBe(404);
-    expect((await guarded.request("/admin/waitlist", { headers: { authorization: "Bearer wrong" } })).status).toBe(404);
+    expect(
+      (await guarded.request("/admin/waitlist", { headers: { authorization: "Bearer wrong" } })).status,
+    ).toBe(404);
 
     const open = waitlistRoutes(pgWaitlist(db, undefined, anyDomain));
-    expect((await open.request("/admin/waitlist", { headers: { authorization: "Bearer undefined" } })).status).toBe(404);
+    expect(
+      (await open.request("/admin/waitlist", { headers: { authorization: "Bearer undefined" } })).status,
+    ).toBe(404);
   });
 
   it("exports CSV", async () => {
     const app = waitlistRoutes(pgWaitlist(await testDb(), "secret", anyDomain));
     await post(app, { email: "a@b.co", name: 'Quote "Q"', country: "India" });
-    const res = await app.request("/admin/waitlist?format=csv", { headers: { authorization: "Bearer secret" } });
+    const res = await app.request("/admin/waitlist?format=csv", {
+      headers: { authorization: "Bearer secret" },
+    });
     const text = await res.text();
     expect(text.split("\n")[0]).toBe("email,name,country,created_at");
     expect(text).toContain('"Quote ""Q"""');

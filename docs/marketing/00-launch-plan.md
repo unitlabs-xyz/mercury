@@ -15,13 +15,13 @@ without selling.
 
 **Message ladder** (reveal in this order; each phase adds one rung):
 
-| Rung | Message | Proof we can show |
-| ---- | ------- | ----------------- |
-| 1. The problem | Tokenized stocks are real, but the same share can cost you 7x through the wrong token, and nothing warns you | `docs/01-evidence.md`, Finding 2 |
-| 2. The product | An investment account in your wallet: stocks, baskets, recurring, one portfolio | The web app |
-| 3. The edge | We check both issuers on every order; we wait rather than fill at a weekend premium; we count shares, not tokens | Issuer comparison, queue state, exposure sheet |
-| 4. The trust | Your wallet, your keys. Leaving is trivial and we say so | Custody section, send flow |
-| 5. The future | Borrow without selling. Spend without selling. Creator baskets | Roadmap only, labelled "coming" |
+| Rung           | Message                                                                                                          | Proof we can show                              |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 1. The problem | Tokenized stocks are real, but the same share can cost you 7x through the wrong token, and nothing warns you     | `docs/01-evidence.md`, Finding 2               |
+| 2. The product | An investment account in your wallet: stocks, baskets, recurring, one portfolio                                  | The web app                                    |
+| 3. The edge    | We check both issuers on every order; we wait rather than fill at a weekend premium; we count shares, not tokens | Issuer comparison, queue state, exposure sheet |
+| 4. The trust   | Your wallet, your keys. Leaving is trivial and we say so                                                         | Custody section, send flow                     |
+| 5. The future  | Borrow without selling. Spend without selling. Creator baskets                                                   | Roadmap only, labelled "coming"                |
 
 **Lead with investing, not the card.** The Colosseum page and the landing hero lead with
 spending and the Mercury Visa, but the card is version two at the earliest. Marketing the card
@@ -32,7 +32,7 @@ first sets up a promise the waitlist cannot redeem. Card = rung 5, always marked
 ## 2 · Guardrails (from PRODUCT.md, non-negotiable in public)
 
 - **No invented traction.** No user counts, testimonials, "thousands on the waitlist", partner
-  logos. Protocols are *named* (Jupiter, Kamino, Symmetry, Backed, Ondo), never implied as partners.
+  logos. Protocols are _named_ (Jupiter, Kamino, Symmetry, Backed, Ondo), never implied as partners.
 - **Re-run every number the day it is posted.** The evidence doc says so itself. Always state the
   order size ("on a $1,000 buy") and the date read. Screenshot the raw quote and keep it.
 - **No return figures, no yield promises.** Returns are placeholders in the product. The 4.1%
@@ -55,7 +55,7 @@ first sets up a promise the waitlist cannot redeem. Card = rung 5, always marked
 - [ ] Landing hero eyebrow says **"Open now"** → change to waitlist wording; primary CTA → waitlist.
 - [ ] Pillars "Spend" and "Borrow" cards: add a "Coming" stamp.
 - [ ] Waitlist form: email (required), wallet address (optional), one question —
-      *"What would you buy first?"* (free text). That answer is research and content.
+      _"What would you buy first?"_ (free text). That answer is research and content.
 - [ ] Confirmation screen with a share-to-X link prefilled with the teaser line.
 - [ ] OG image: the issuer-comparison card on true black.
 - [ ] X bio: `An investment account that lives in your wallet. Real US stocks, onchain. Building for @colosseum. Waitlist ↓` + trymercury.xyz
@@ -67,16 +67,18 @@ first sets up a promise the waitlist cannot redeem. Card = rung 5, always marked
 ## 4 · Phases
 
 ### Phase 1 · Tease (30 Sep – 5 Oct)
+
 Goal: people know the problem exists and that someone is fixing it. Product barely shown.
 
-| Date | X | Instagram |
-| ---- | - | --------- |
-| Wed 30 Sep | **Post 1**: the Nvidia wrapper post (below). Pin it. | Same fact as a 3-slide carousel |
-| Thu 1 Oct | "Your broker closes Friday at 4pm. Your wallet doesn't." + blurred app shot | Story: countdown sticker |
-| Sat 3 Oct | Weekend post: live screenshot of the market-closed banner, "US market is shut. These tokens aren't. Here's what that does to price." Short thread with real Saturday readings | Reel: 10s screen recording of the banner |
-| Mon 5 Oct | Multiplier explainer: "You don't hold 58 Nvidia tokens. You hold 22 shares." | Carousel: "tokens ≠ shares" |
+| Date       | X                                                                                                                                                                             | Instagram                                |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Wed 30 Sep | **Post 1**: the Nvidia wrapper post (below). Pin it.                                                                                                                          | Same fact as a 3-slide carousel          |
+| Thu 1 Oct  | "Your broker closes Friday at 4pm. Your wallet doesn't." + blurred app shot                                                                                                   | Story: countdown sticker                 |
+| Sat 3 Oct  | Weekend post: live screenshot of the market-closed banner, "US market is shut. These tokens aren't. Here's what that does to price." Short thread with real Saturday readings | Reel: 10s screen recording of the banner |
+| Mon 5 Oct  | Multiplier explainer: "You don't hold 58 Nvidia tokens. You hold 22 shares."                                                                                                  | Carousel: "tokens ≠ shares"              |
 
 ### Phase 2 · Build in public (6 – 10 Oct)
+
 Goal: show it working, real money, small sizes. One 15–30s clip per day.
 
 - Buy $5 of NVDAx end to end, real fill, transaction link in reply.
@@ -86,18 +88,21 @@ Goal: show it working, real money, small sizes. One 15–30s clip per day.
 - Founders reply under every post with the "why" behind the screen (ADRs make great replies).
 
 ### Phase 3 · Submission (11 – 12 Oct)
+
 - **11 Oct:** launch thread, 6–8 posts, the 4-minute demo video native on X (not a YouTube link),
   GitHub link (open source is a judging criterion and a credibility signal on CT), waitlist.
 - Quote-post from all three founder accounts, spaced a few hours apart across time zones.
 - Instagram: cut-down 45s reel of the demo + carousel of the five differentiators.
 
 ### Phase 4 · Judging window (13 – 23 Oct)
+
 - Waitlist count and the "what would you buy first?" answers become the traction slide
   in the business plan. Real numbers only.
 - Post the most interesting (anonymised) answers: "Most asked-for first buy so far: …"
 - One post per ADR decision people argue about ("Why we will never build margin").
 
 ### Phase 5 · After (Nov onward)
+
 Roadmap reveals, one rung at a time: gifting a holding by link → borrowing without selling
 (with the Monday-gap risk stated up front) → the card → creator baskets.
 
@@ -133,6 +138,7 @@ stacks, no "gm", no "LFG", no "revolutionising finance".
 ## 7 · Instagram playbook
 
 Instagram's audience is less crypto-native, so explain more, jargon less.
+
 - **Carousels** for explainers (problem → why → what Mercury does), 3–6 slides, true black,
   Geist, one green. Match the product exactly.
 - **Reels** of the real app, 10–30s, captions burned in, no talking head needed.
@@ -143,12 +149,12 @@ Instagram's audience is less crypto-native, so explain more, jargon less.
 
 ## 8 · What we measure
 
-| Metric | Why |
-| ------ | --- |
+| Metric                                         | Why                                              |
+| ---------------------------------------------- | ------------------------------------------------ |
 | Waitlist signups (and % with a wallet address) | Traction for judges; wallet = real crypto holder |
-| Signups per post (UTM per post) | Which pillar actually converts |
-| X profile visits / followers per post | Reach of the tease |
-| "What would you buy first?" answers | Decides baskets and future content |
+| Signups per post (UTM per post)                | Which pillar actually converts                   |
+| X profile visits / followers per post          | Reach of the tease                               |
+| "What would you buy first?" answers            | Decides baskets and future content               |
 
 UTM every link: `?utm_source=x&utm_campaign=tease&utm_content=post1`.
 
@@ -198,28 +204,28 @@ First reply: `Waitlist: trymercury.xyz?utm_source=x&utm_campaign=tease&utm_conte
 4. "Pick the wrong one and you overpay. Nothing warns you."
 5. "Mercury checks both, every order. Waitlist in bio."
 
-Caption: *Tokenized stocks let anyone with a crypto wallet own real US shares. But the same
+Caption: _Tokenized stocks let anyone with a crypto wallet own real US shares. But the same
 share can trade as different tokens at very different prices. We're building the investment
-account that picks the right one for you. Waitlist link in bio.*
+account that picks the right one for you. Waitlist link in bio._
 
 ---
 
 ## 10 · Validation teasers (replaces Post 1 as the opener)
 
 Goal: ask, don't announce. Mercury is named only in the bio, never pitched in the post.
-2–4 tags per post, tag people *in a reply* ("curious what @x and @y think") rather than stacking
+2–4 tags per post, tag people _in a reply_ ("curious what @x and @y think") rather than stacking
 10 handles in the post, which X treats as spam and suppresses. Verify every handle before posting.
 
-| # | Post | Format | Validates | Tag |
-| - | ---- | ------ | --------- | --- |
-| 1 | If you already hold USDC, would you buy real US stocks from the same wallet? | Poll: Yes, already do / Yes if it was easy / No, I use a broker / No, never | Core demand | @xStocksFi @OndoFinance |
-| 2 | Same share. Two tokens. Different price. Which do you buy? (NVDAx vs NVDAon, prices shown, no answer) | Image quiz, answer in a reply 24h later | Wrapper problem awareness | @JupiterExchange |
-| 3 | Onchain stocks don't need another trading terminal. They need a boring brokerage account. Agree? | Hot take | Investing-not-trading positioning | @solana @colosseum |
-| 4 | It's Saturday. US market is shut. Your tokenized Nvidia is trading. Buy now or wait for Monday's price? | Poll, post on a weekend | Queue / premium gate | @xStocksFi @PythNetwork |
-| 5 | Pick 5 stocks you'd hold for 10 years without looking. Best answers become a basket. | Open reply thread | Basket demand + content | Quote-tag 3–4 investors you know |
-| 6 | Would you rather sell your stocks to pay for something, or borrow against them and keep them? | Poll | V2 borrowing / card | @KaminoFinance |
-| 7 | Outside the US: what's actually stopped you from owning US stocks? | Poll: Can't open an account / Fees / Minimums / Never thought about it | Global thesis | Founder accounts only |
-| 8 | Building something for people who hold crypto but want to own real companies. What's the one thing it must do? | Open question | Feature priorities | @colosseum |
+| #   | Post                                                                                                           | Format                                                                      | Validates                         | Tag                              |
+| --- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------- | -------------------------------- |
+| 1   | If you already hold USDC, would you buy real US stocks from the same wallet?                                   | Poll: Yes, already do / Yes if it was easy / No, I use a broker / No, never | Core demand                       | @xStocksFi @OndoFinance          |
+| 2   | Same share. Two tokens. Different price. Which do you buy? (NVDAx vs NVDAon, prices shown, no answer)          | Image quiz, answer in a reply 24h later                                     | Wrapper problem awareness         | @JupiterExchange                 |
+| 3   | Onchain stocks don't need another trading terminal. They need a boring brokerage account. Agree?               | Hot take                                                                    | Investing-not-trading positioning | @solana @colosseum               |
+| 4   | It's Saturday. US market is shut. Your tokenized Nvidia is trading. Buy now or wait for Monday's price?        | Poll, post on a weekend                                                     | Queue / premium gate              | @xStocksFi @PythNetwork          |
+| 5   | Pick 5 stocks you'd hold for 10 years without looking. Best answers become a basket.                           | Open reply thread                                                           | Basket demand + content           | Quote-tag 3–4 investors you know |
+| 6   | Would you rather sell your stocks to pay for something, or borrow against them and keep them?                  | Poll                                                                        | V2 borrowing / card               | @KaminoFinance                   |
+| 7   | Outside the US: what's actually stopped you from owning US stocks?                                             | Poll: Can't open an account / Fees / Minimums / Never thought about it      | Global thesis                     | Founder accounts only            |
+| 8   | Building something for people who hold crypto but want to own real companies. What's the one thing it must do? | Open question                                                               | Feature priorities                | @colosseum                       |
 
 ---
 
