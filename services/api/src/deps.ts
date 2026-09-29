@@ -78,7 +78,6 @@ export interface Config {
   /** Optional. Program scans (Kamino's reserve lookup), if the main RPC plan refuses them. */
   readonly solanaScanRpcUrl?: string;
   /** Execution only — subsystem 3. Absent until then. */
-  readonly jupiterApiKey?: string;
   /**
    * "broadcast" sends signed transactions to the network. "simulate" is a dry
    * run: each is simulated against mainnet and nothing is sent. Anything else
@@ -102,7 +101,6 @@ const sendModeOf = (value: string | undefined): SendMode => {
 };
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const jupiterApiKey = env["JUPITER_API_KEY"];
   const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
   return {
     databaseUrl: required(env, "DATABASE_URL"),
@@ -112,7 +110,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
-    ...(jupiterApiKey ? { jupiterApiKey } : {}),
   };
 }
 
@@ -140,11 +137,11 @@ export function buildAuthDeps(config: Config): AuthDeps {
  * server does not start. Dummy data belongs in the client while the interface is being
  * built, never in the server.
  *
- * Nothing here takes a key. Quotes come from Jupiter's keyless endpoint, which is
- * what prices a decision; `JUPITER_API_KEY` buys Ultra, which *executes* one, and
- * arrives with subsystem 3. Triggers are subsystem 3 as well, and baskets are
- * blocked on the Symmetry spike — both are present so the object is whole, and
- * both throw if called.
+ * Nothing here takes a key. Jupiter's keyless endpoints both price an order and
+ * build the transaction that fills it, which is the whole of execution — the
+ * Ultra adapter that once needed `JUPITER_API_KEY` is gone, and so is the key.
+ * Triggers are the one piece still missing, and baskets are blocked on the
+ * Symmetry spike — both are present so the object is whole, and both throw.
  */
 export function buildDeps(config: Config): Deps {
   const registry = new JupiterRegistry();
