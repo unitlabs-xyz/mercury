@@ -14,6 +14,8 @@ import { EASE } from "./motion/config";
 const Portfolio = lazy(() => import("./app/Portfolio").then((m) => ({ default: m.Portfolio })));
 const Invest = lazy(() => import("./app/Invest").then((m) => ({ default: m.Invest })));
 const Stock = lazy(() => import("./app/Stock").then((m) => ({ default: m.Stock })));
+const Baskets = lazy(() => import("./app/Baskets").then((m) => ({ default: m.Baskets })));
+const Basket = lazy(() => import("./app/Basket").then((m) => ({ default: m.Basket })));
 const Money = lazy(() => import("./app/Money").then((m) => ({ default: m.Money })));
 const Activity = lazy(() => import("./app/Activity").then((m) => ({ default: m.Activity })));
 const Cards = lazy(() => import("./cards/Cards").then((m) => ({ default: m.Cards })));
@@ -60,6 +62,22 @@ export const App = () => (
               element={
                 <RequireAuth>
                   <Stock />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/baskets"
+              element={
+                <RequireAuth>
+                  <Baskets />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/baskets/:slug"
+              element={
+                <RequireAuth>
+                  <Basket />
                 </RequireAuth>
               }
             />
