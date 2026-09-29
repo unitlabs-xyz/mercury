@@ -261,19 +261,19 @@ export const Stock = () => {
                 are not equally urgent. Plain words throughout: "the token" and
                 "the reference" are our vocabulary, and most people reading this
                 are new to shares. */}
-            {session && (
+            {/* Only when the market is shut. Open is the ordinary case and
+                needs no notice: a banner that is always there is furniture,
+                and the one time it carries news it reads as furniture too. */}
+            {session && !session.isOpen && (
               <div className="flex items-start gap-2 rounded-lg bg-ds-panel px-5 py-3 text-[12px] leading-[1.45] [&_svg]:mt-0.5">
                 <Clock className="size-3.5 shrink-0 text-ds-muted" />
                 <div className="min-w-0">
                   <p className="font-medium text-ds-ink">
-                    {session.isOpen
-                      ? "US markets are open."
-                      : `US markets are closed${opensAt ? ` until ${opensAt}` : ""}.`}
+                    US markets are closed{opensAt ? ` until ${opensAt}` : ""}.
                   </p>
                   <p className="mt-1 text-ds-muted">
-                    {session.isOpen
-                      ? `Prices here follow ${instrument.name}’s live share price.`
-                      : "You can still place your order. We’ll check the latest market price before processing it and let you know if there’s a significant difference."}
+                    You can still place your order. We’ll check the latest market price before processing it
+                    and let you know if there’s a significant difference.
                   </p>
                 </div>
               </div>
