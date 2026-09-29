@@ -103,20 +103,44 @@ pnpm --filter @mercury/api dev                   # http://localhost:8787
 pnpm --filter @mercury/web dev                   # http://localhost:5173
 ```
 
+The API is the whole backend: the background jobs run inside it, so starting it
+loads every stock from Jupiter on boot and then keeps positions and the activity
+feed in step with the chain. There is nothing else to start.
+
+### Buying something, for real
+
+There is one mode and it sends. No dry run, no fixtures, no testnet — xStocks
+and Kamino exist on mainnet only, so anything you press here spends real money.
+
+1. Sign in with an email. Privy creates a real Solana wallet on first sign-in.
+2. Copy the address from **Money → Receive** and send it USDC. Mainnet USDC
+   (`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`), not USDT and not devnet.
+   The deposit shows up within two seconds; the feed row takes up to thirty.
+3. Open any stock, type an amount, **Review order**, **Buy now**. Privy asks you
+   to approve the signature.
+4. Watch it land: the sheet reports the shares and the price it actually filled
+   at, read back off the chain rather than from the quote.
+
+The minimum order is $5. Expect a few dollars of USDC and a little SOL for fees.
+
+Solana's public RPC will rate-limit this — `position-sync` alone polls it every
+two seconds, and 429s were routine during testing. Put a Helius or Triton URL in
+`SOLANA_RPC_URL` before spending much time in the app.
+
 ## State of the build
 
-| Package           | State                                                                                                                                                                                              |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/core`   | **Done and tested.** 35 tests. Execution engine, cost basis, exposure, basket allocation                                                                                                           |
-| `packages/types`  | Done. Zod wire schemas                                                                                                                                                                             |
-| `packages/chain`  | Registry, keyless quotes and Solana reads done and tested. Jupiter Ultra written, unused until execution. Symmetry awaits the spike                                                                |
-| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic                                                                   |
-| `packages/sdk`    | Done. Typed client, every response parsed                                                                                                                                                          |
-| `services/api`    | **Identity and read models done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity all answer from Postgres and chain. Execution is subsystem 3 |
-| `services/worker` | Job plan only. Runner is still to come                                                                                                                                                             |
-| `apps/web`        | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet                                                                                                      |
-| `apps/landing`    | **Scaffolded on Astro.** Eight sections of the designed page, placeholder artwork, SEO and sitemap wired                                                                                           |
-| `apps/mobile`     | Not started, on purpose                                                                                                                                                                            |
+| Package           | State                                                                                                                                                                                                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core`   | **Done and tested.** 40 tests. Execution engine, cost basis, exposure, basket allocation                                                                                                                                                                                                 |
+| `packages/types`  | Done. Zod wire schemas                                                                                                                                                                                                                                                                   |
+| `packages/chain`  | Registry, Solana reads, and Jupiter's keyless endpoints — which both price an order and build the transaction that fills it. Symmetry awaits the spike                                                                                                                                   |
+| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic                                                                                                                                                         |
+| `packages/sdk`    | Done. Typed client, every response parsed                                                                                                                                                                                                                                                |
+| `services/api`    | **Identity, read models and execution done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity answer from Postgres and chain; an order prices, builds, settles and writes its own lot. Trigger orders are the one piece still missing |
+| `services/worker` | Job plan only. Runner is still to come                                                                                                                                                                                                                                                   |
+| `apps/web`        | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet, and the buy sheet places a real order                                                                                                                                                     |
+| `apps/landing`    | **Scaffolded on Astro.** Eight sections of the designed page, placeholder artwork, SEO and sitemap wired                                                                                                                                                                                 |
+| `apps/mobile`     | Not started, on purpose                                                                                                                                                                                                                                                                  |
 
 ## Ground rules
 

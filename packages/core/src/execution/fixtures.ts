@@ -1,16 +1,27 @@
 import { D, fromPct } from "../money.js";
-import type { Candidate, DecisionInput, ReferencePrice } from "./types.js";
+import type { Candidate, DecisionInput, Quote, ReferencePrice } from "./types.js";
 import { DEFAULT_POLICY } from "./policy.js";
 
 export const NOW = new Date("2026-09-19T18:00:00Z");
 
-export const quote = (inAmount: number, outAmount: number, impactPct: number, label = "Riptide") => ({
+export const quote = (
+  inAmount: number,
+  outAmount: number,
+  impactPct: number,
+  label = "Riptide",
+  slippageBps = DEFAULT_POLICY.slippageBps,
+): Quote => ({
   inAmount: D(inAmount),
   outAmount: D(outAmount),
+  // Jupiter's `otherAmountThreshold`: the expected out, less the slippage the
+  // quote was asked for. Measured against a live quote on 29 September 2026,
+  // where a 50 bps request came back exactly 50 bps under `outAmount`.
+  minOutAmount: D(outAmount).mul(D(1).sub(D(slippageBps).div(10_000))),
   priceImpact: fromPct(D(impactPct)),
   routeLabels: [label],
   quoteId: `q-${label}-${outAmount}`,
   expiresAt: new Date(NOW.getTime() + 30_000),
+  raw: { fixture: label, outAmount },
 });
 
 export const reference = (pricePerShare: number, pendingDividendNet = 0, ageSec = 5): ReferencePrice => ({

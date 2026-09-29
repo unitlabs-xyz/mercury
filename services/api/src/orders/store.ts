@@ -2,8 +2,12 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { instruments, orders, tokens } from "../db/schema.js";
 
-export type OrderStatus =
-  "pending" | "executing" | "filled" | "queued" | "partially_filled" | "expired" | "cancelled" | "refused";
+/*
+ * `partially_filled` and `expired` were here with nothing able to write them.
+ * A swap is one atomic transaction — it lands or it does not — and expiry
+ * belonged to trigger orders, which are not built. See @mercury/types.
+ */
+export type OrderStatus = "pending" | "executing" | "filled" | "queued" | "cancelled" | "refused";
 
 export interface NewOrder {
   readonly userId: string;
@@ -11,6 +15,15 @@ export interface NewOrder {
   readonly side: "buy" | "sell";
   readonly usdAmount: string;
   /** The Decision from `@mercury/core`, already serialised. Kept verbatim. */
+  readonly decision: unknown;
+  readonly chosenMint: string | null;
+  readonly referencePrice: string | null;
+  readonly premiumPct: string | null;
+  readonly status: OrderStatus;
+}
+
+/** The fields a re-decision replaces. The winner can change, so the token can too. */
+export interface Repricing {
   readonly decision: unknown;
   readonly chosenMint: string | null;
   readonly referencePrice: string | null;
@@ -29,6 +42,13 @@ export interface OrderStore {
   create(order: NewOrder): Promise<StoredOrder>;
   byId(userId: string, id: string): Promise<StoredOrder | null>;
   setStatus(userId: string, id: string, status: OrderStatus): Promise<void>;
+  /**
+   * Replace the decision on an order that is about to be built, or that we are
+   * refusing to build. Execution re-prices before it signs, and the row has to
+   * end up holding the decision that was actually acted on rather than the one
+   * the user first saw — otherwise the audit trail records a price nobody filled.
+   */
+  reprice(userId: string, id: string, next: Repricing): Promise<void>;
 }
 
 /**
@@ -38,6 +58,12 @@ export interface OrderStore {
  * one wrapper and not the other, the answer is a row — that is the whole reason
  * docs/05 keeps the blob rather than the fields it contains.
  */
+const tokenIdFor = async (db: Db, mint: string | null): Promise<string | null> =>
+  mint === null
+    ? null
+    : ((await db.select({ id: tokens.id }).from(tokens).where(eq(tokens.mint, mint)).limit(1))[0]?.id ??
+      null);
+
 export const pgOrderStore = (db: Db): OrderStore => ({
   async create(order) {
     const [instrument] = await db
@@ -47,12 +73,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
       .limit(1);
     if (instrument === undefined) throw new Error(`no instrument row for ${order.ticker}`);
 
-    const chosenTokenId =
-      order.chosenMint === null
-        ? null
-        : ((
-            await db.select({ id: tokens.id }).from(tokens).where(eq(tokens.mint, order.chosenMint)).limit(1)
-          )[0]?.id ?? null);
+    const chosenTokenId = await tokenIdFor(db, order.chosenMint);
 
     const [saved] = await db
       .insert(orders)
@@ -106,6 +127,19 @@ export const pgOrderStore = (db: Db): OrderStore => ({
     await db
       .update(orders)
       .set({ status })
+      .where(and(eq(orders.id, id), eq(orders.userId, userId)));
+  },
+
+  async reprice(userId, id, next) {
+    await db
+      .update(orders)
+      .set({
+        decision: next.decision,
+        chosenTokenId: await tokenIdFor(db, next.chosenMint),
+        referencePrice: next.referencePrice,
+        premiumPct: next.premiumPct,
+        status: next.status,
+      })
       .where(and(eq(orders.id, id), eq(orders.userId, userId)));
   },
 });

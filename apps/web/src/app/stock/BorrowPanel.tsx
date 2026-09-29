@@ -89,37 +89,45 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
   }
 
   // Not held yet: what it would lend, the figures up front in a grey panel.
+  //
+  // Three figures, and each one has to earn its place by saying something the
+  // card does not already say. The loan is the headline in dollars and the rate
+  // is in the header, so a "lends up to 44%" and an "interest 5.8%" would be
+  // those two facts printed twice. What is left is the margin we keep under
+  // Kamino, how far the price can fall, and what the loan costs in money.
+  const loan = 1000 * target;
   return (
     <FigureCard
       label="Borrow against it"
       head={<RailHead title="Borrow against it" meta={`${pct(borrow.data.borrowApy * 100, 1)} a year`} />}
-      value={usd(1000 * target, 0)}
+      value={usd(loan, 0)}
       sub={`Loan against every $1,000 of ${name} you hold`}
+      wide={3}
     >
+      {/* Kamino's ceiling, not ours: the number worth showing is the one we do
+          not use. We stop short of it so a normal fall does not sell the stock. */}
       <HeaderFigure
         size="md"
-        label="Lends up to"
-        value={pct(target * 100, 1)}
-        sub={`Of its value · Kamino max ${pct(row.ltv * 100, 0)}`}
+        label="Kamino lends up to"
+        value={pct(row.ltv * 100, 0)}
+        sub={`We stop at ${pct(target * 100, 0)}, for headroom`}
       />
+      {/* The liquidation, in the only terms a reader can act on. Deliberately
+          untinted: green would read as a verdict on a position they do not hold,
+          and the held card colours it by their real distance instead. */}
       <HeaderFigure
         size="md"
         label="Safe unless it falls"
         value={pct(row.cushionAtTarget * 100, 0)}
-        sub="Borrowing the full amount"
-        tone="up"
+        sub={`Borrowing the full ${usd(loan, 0)}, before Kamino sells`}
       />
+      {/* The rate as money. The header already gives the percentage; what it
+          does not give is what a year of it costs against the loan above. */}
       <HeaderFigure
         size="md"
         label="Interest"
-        value={pct(borrow.data.borrowApy * 100, 1)}
-        sub="A year, variable"
-      />
-      <HeaderFigure
-        size="md"
-        label="Kamino sells at"
-        value={pct(row.liquidationThreshold * 100, 0)}
-        sub="Loan to value, nothing pledged yet"
+        value={`${usd(loan * borrow.data.borrowApy, 0)} a year`}
+        sub={`On the full ${usd(loan, 0)}, variable`}
       />
     </FigureCard>
   );

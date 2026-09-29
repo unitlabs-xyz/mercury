@@ -39,6 +39,7 @@ import type { InstrumentDeps } from "./routes/instruments.js";
 import type { MoneyDeps } from "./routes/money.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
+import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
@@ -76,17 +77,7 @@ export interface Config {
   readonly solanaRpcUrl: string;
   /** Optional. Program scans (Kamino's reserve lookup), if the main RPC plan refuses them. */
   readonly solanaScanRpcUrl?: string;
-  /** Execution only — subsystem 3. Absent until then. */
-  readonly jupiterApiKey?: string;
-  /**
-   * "broadcast" sends signed transactions to the network. "simulate" is a dry
-   * run: each is simulated against mainnet and nothing is sent. Anything else
-   * refuses to start, so a typo can never quietly mean "send".
-   */
-  readonly sendMode: SendMode;
 }
-
-export type SendMode = "broadcast" | "simulate";
 
 const required = (env: NodeJS.ProcessEnv, key: string): string => {
   const value = env[key];
@@ -94,24 +85,15 @@ const required = (env: NodeJS.ProcessEnv, key: string): string => {
   return value;
 };
 
-const sendModeOf = (value: string | undefined): SendMode => {
-  if (value === undefined || value === "" || value === "broadcast") return "broadcast";
-  if (value === "simulate") return "simulate";
-  throw new Error(`SEND_MODE must be "broadcast" or "simulate", not "${value}"`);
-};
-
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const jupiterApiKey = env["JUPITER_API_KEY"];
   const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
   return {
     databaseUrl: required(env, "DATABASE_URL"),
     privyAppId: required(env, "PRIVY_APP_ID"),
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
-    sendMode: sendModeOf(env["SEND_MODE"]),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
-    ...(jupiterApiKey ? { jupiterApiKey } : {}),
   };
 }
 
@@ -139,11 +121,11 @@ export function buildAuthDeps(config: Config): AuthDeps {
  * server does not start. Dummy data belongs in the client while the interface is being
  * built, never in the server.
  *
- * Nothing here takes a key. Quotes come from Jupiter's keyless endpoint, which is
- * what prices a decision; `JUPITER_API_KEY` buys Ultra, which *executes* one, and
- * arrives with subsystem 3. Triggers are subsystem 3 as well, and baskets are
- * blocked on the Symmetry spike — both are present so the object is whole, and
- * both throw if called.
+ * Nothing here takes a key. Jupiter's keyless endpoints both price an order and
+ * build the transaction that fills it, which is the whole of execution — the
+ * Ultra adapter that once needed `JUPITER_API_KEY` is gone, and so is the key.
+ * Triggers are the one piece still missing, and baskets are blocked on the
+ * Symmetry spike — both are present so the object is whole, and both throw.
  */
 export function buildDeps(config: Config): Deps {
   const registry = new JupiterRegistry();
@@ -195,6 +177,7 @@ export interface ReadDeps {
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
   readonly orders: OrderStore;
+  readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
   readonly send: SendDeps;
 }
@@ -216,11 +199,7 @@ export function buildReconcileDeps(deps: Deps): ReconcileDeps {
   };
 }
 
-export function buildReadDeps(
-  db: Db,
-  deps: Deps,
-  config: Pick<Config, "solanaRpcUrl" | "sendMode">,
-): ReadDeps {
+export function buildReadDeps(db: Db, deps: Deps, config: Pick<Config, "solanaRpcUrl">): ReadDeps {
   return {
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
@@ -240,7 +219,11 @@ export function buildReadDeps(
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
+    fills: {
+      tokenRef: (mint) => tokenRefFor(db, mint),
+      settle: (input) => settleOrder(db, input),
+    },
     borrow: { lending: deps.lending, chain: deps.chain, usdcMint: USDC_MINT },
-    send: { rpcUrl: config.solanaRpcUrl, mode: config.sendMode },
+    send: { rpcUrl: config.solanaRpcUrl },
   };
 }

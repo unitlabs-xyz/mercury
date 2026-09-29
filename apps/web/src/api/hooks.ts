@@ -77,15 +77,3 @@ export const useMarketStatus = () => {
     refetchInterval: 60_000,
   });
 };
-
-/**
- * Whether the API sends transactions or only simulates them (SEND_MODE). Public
- * and read once, so every screen can say "dry run" before anyone signs.
- */
-export const useSendMode = () =>
-  useQuery({
-    queryKey: ["api", "send-mode"],
-    queryFn: async () =>
-      (await apiFetch<{ sendMode?: "broadcast" | "simulate" }>("/health")).sendMode ?? "broadcast",
-    staleTime: Infinity,
-  });

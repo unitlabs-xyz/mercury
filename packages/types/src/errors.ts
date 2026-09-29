@@ -6,6 +6,8 @@ export const ErrorCode = z.enum([
   "validation_failed",
   "rate_limited",
   "quote_expired",
+  /** The price moved against the user between confirming and building. */
+  "price_moved",
   "instrument_not_tradable",
   "upstream_unavailable",
   "internal",

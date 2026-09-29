@@ -20,6 +20,7 @@ const seed = async () => {
 const deposit: TransactionDetail = {
   signature: SIG,
   blockTime: 1_790_573_221,
+  succeeded: true,
   accountKeys: ["FMVHP1xw6ZHB9zLGyrJeeAvEzCBgouH8bPzdkYqq2C5W", USDC_ACCOUNT],
   feeLamports: 5_000n,
   preLamports: [1_000_000_000n, 2_039_280n],
@@ -147,6 +148,7 @@ describe("syncAllWalletEvents", () => {
     const txT: TransactionDetail = {
       signature: SIG_T,
       blockTime: 1_790_573_100,
+      succeeded: true,
       accountKeys: [],
       feeLamports: 0n,
       preLamports: [],
@@ -157,6 +159,7 @@ describe("syncAllWalletEvents", () => {
     const txU: TransactionDetail = {
       signature: SIG_U,
       blockTime: 1_790_573_400,
+      succeeded: true,
       accountKeys: [],
       feeLamports: 0n,
       preLamports: [],
@@ -206,6 +209,7 @@ describe("syncAllWalletEvents", () => {
     const txT: TransactionDetail = {
       signature: SIG_T,
       blockTime: 1_790_573_100,
+      succeeded: true,
       accountKeys: [],
       feeLamports: 0n,
       preLamports: [],
@@ -216,6 +220,7 @@ describe("syncAllWalletEvents", () => {
     const txU: TransactionDetail = {
       signature: SIG_U,
       blockTime: 1_790_573_400,
+      succeeded: true,
       accountKeys: [],
       feeLamports: 0n,
       preLamports: [],

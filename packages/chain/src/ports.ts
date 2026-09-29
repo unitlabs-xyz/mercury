@@ -31,11 +31,30 @@ export interface QuoteRequest {
   readonly slippageBps?: number;
 }
 
-/** Jupiter Ultra. See ADR 0008: we never compose, so Jupiter handles landing. */
+/** See ADR 0008: we never compose, so the aggregator handles landing. */
 export interface QuoteSource {
   quote(req: QuoteRequest): Promise<Candidate["quote"]>;
-  /** Base64 unsigned transactions for the caller to sign. */
-  buildSwap(quoteId: string, owner: string): Promise<readonly string[]>;
+  /**
+   * Base64 unsigned transactions for the caller to sign.
+   *
+   * Takes the quote itself rather than an identifier for it. An id has to be
+   * redeemable somewhere, and the only place that held one was a second
+   * provider with a second set of prices — so the order was priced against one
+   * quote and filled against another. Passing the quote back to the adapter
+   * that produced it keeps the two the same object.
+   */
+  buildSwap(quote: RedeemableQuote, owner: string): Promise<readonly string[]>;
+}
+
+/**
+ * What it takes to turn a quote back into a transaction: the provider's own
+ * payload, plus the id it is known by so a failure can name it. `Quote` and
+ * `PricedCandidate` both carry these, which is how a quote survives the trip
+ * from pricing to signing without being re-fetched.
+ */
+export interface RedeemableQuote {
+  readonly quoteId: string | null;
+  readonly raw: unknown;
 }
 
 export interface TriggerOrder {
@@ -170,6 +189,13 @@ export interface TokenBalanceEntry {
 export interface TransactionDetail {
   readonly signature: string;
   readonly blockTime: number | null;
+  /**
+   * False when the transaction failed on chain, and also when the node kept the
+   * transaction but not its metadata — in that case nothing can be confirmed
+   * about it, and "we could not confirm this worked" is the safe reading for a
+   * caller about to write money into the books.
+   */
+  readonly succeeded: boolean;
   /** Account keys in index order; under jsonParsed this includes lookup-table entries. */
   readonly accountKeys: readonly string[];
   readonly feeLamports: bigint;

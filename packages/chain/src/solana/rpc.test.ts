@@ -246,6 +246,9 @@ describe("SolanaRpc.transaction", () => {
     expect(detail).toEqual({
       signature: SIGNATURE,
       blockTime: 1_790_000_000,
+      // Without metadata nothing about this transaction can be confirmed, and
+      // a caller about to write money into the books should not be told it worked.
+      succeeded: false,
       accountKeys: [FIXTURE_OWNER],
       feeLamports: 0n,
       preLamports: [],
@@ -278,6 +281,7 @@ describe("SolanaRpc.transaction", () => {
     expect(detail).toEqual({
       signature: SIGNATURE,
       blockTime: 1_790_000_000,
+      succeeded: true,
       accountKeys: [FIXTURE_OWNER],
       feeLamports: 5000n,
       preLamports: [1_000_000_000n],
@@ -285,5 +289,28 @@ describe("SolanaRpc.transaction", () => {
       preTokens: [],
       postTokens: [{ mint: USDC_MINT, owner: FIXTURE_OWNER, rawAmount: 500_000_000n, decimals: 6 }],
     });
+  });
+
+  it("reports a transaction that failed on chain as not having succeeded", async () => {
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      result: {
+        blockTime: 1_790_000_000,
+        transaction: { message: { accountKeys: [{ pubkey: FIXTURE_OWNER }] } },
+        meta: {
+          err: { InstructionError: [3, { Custom: 6001 }] },
+          fee: 5000,
+          preBalances: [1_000_000_000],
+          postBalances: [999_995_000],
+          preTokenBalances: [],
+          postTokenBalances: [],
+        },
+      },
+    };
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: body }) });
+    // The fee still came out, which is exactly why the flag has to be read
+    // rather than inferred from balances having changed.
+    expect((await rpc.transaction(SIGNATURE))?.succeeded).toBe(false);
   });
 });

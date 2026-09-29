@@ -65,6 +65,8 @@ interface RpcTransaction {
     readonly message: { readonly accountKeys: readonly { readonly pubkey: string }[] };
   };
   readonly meta: {
+    /** Null on success; an object naming the instruction that failed otherwise. */
+    readonly err?: unknown;
     readonly fee: number;
     readonly preBalances: readonly number[];
     readonly postBalances: readonly number[];
@@ -251,6 +253,7 @@ export class SolanaRpc implements ChainReader, ChainHistory {
       return {
         signature,
         blockTime: res.blockTime,
+        succeeded: false,
         accountKeys: res.transaction.message.accountKeys.map((k) => k.pubkey),
         feeLamports: 0n,
         preLamports: [],
@@ -263,6 +266,7 @@ export class SolanaRpc implements ChainReader, ChainHistory {
     return {
       signature,
       blockTime: res.blockTime,
+      succeeded: meta.err === null || meta.err === undefined,
       accountKeys: res.transaction.message.accountKeys.map((k) => k.pubkey),
       feeLamports: BigInt(meta.fee),
       preLamports: meta.preBalances.map((n) => BigInt(n)),

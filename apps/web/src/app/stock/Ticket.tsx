@@ -129,7 +129,8 @@ export const Ticket = ({
 
       {decision?.kind === "offer_queue" && (
         <Note tone="warn" icon={<Clock />}>
-          Above the reference price right now. You can buy, or queue it to fill when the price comes back.
+          Above the real share price right now. You can buy anyway, or we can wait and place it when the price
+          comes back.
         </Note>
       )}
       {decision?.kind === "refuse" && (

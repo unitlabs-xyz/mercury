@@ -84,9 +84,4 @@ every("wallet-events", 30_000, async () => {
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
   console.log(`mercury api listening on :${info.port}`);
-  if (config.sendMode === "simulate") {
-    console.log(
-      "SEND_MODE=simulate: dry run. Signed transactions are simulated against mainnet and never sent.",
-    );
-  }
 });

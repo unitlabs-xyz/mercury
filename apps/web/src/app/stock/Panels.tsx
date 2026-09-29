@@ -38,7 +38,6 @@ export const Stats = ({ p }: { p: Priced }) => {
   const perf = useReturns(t);
   const day = dayHistory.data?.points.map((pt) => pt.price) ?? null;
   const year = yearHistory.data?.points.map((pt) => pt.price) ?? null;
-  const traders = p.instrument.wrappers.reduce((s, w) => s + w.traders24h, 0);
   const returns: [string, number | null][] = [
     ["1W", weekHistory.data?.changePct ?? null],
     ["1M", perf.data?.m1 ?? null],
@@ -50,39 +49,39 @@ export const Stats = ({ p }: { p: Priced }) => {
   return (
     <section aria-label="Key stats" className="min-w-0 rounded-xl bg-white p-1">
       <div className="px-5 pt-4">
+        {/* "Live from chain" was true of five of the eight figures. The ranges
+            and every return come from the share's own price history, so the
+            headline claimed a source for numbers that do not have it. The tip
+            named both and the label contradicted it; the label is what gets read. */}
         <RailHead
           title="Key stats"
           meta={
             <span className="flex items-center gap-2 text-ds-muted">
-              Live from chain
-              <InfoTip label="Which figures are live">
-                Price, volume, liquidity, holders and routes are read live from chain. The chart and returns
-                are the underlying share&rsquo;s own history, re-levelled onto the token&rsquo;s live price —
-                the two trade a little apart.
+              Live
+              <InfoTip label="Where these come from">
+                The ranges and returns follow {p.instrument.name}&rsquo;s own share price. Volume and holders
+                are read from Solana, where the token trades. Nothing here is typed in by us.
               </InfoTip>
             </span>
           }
         />
       </div>
+      {/* Four figures, one row.
+          Cut: "24h ago", which is the price in the header minus the change
+          beside it; "Traders 24h" and "Net buyers 24h", which measure churn on
+          a product for people who mean to hold something (ADR 0009); and
+          "Liquidity", which the buy sheet answers better by quoting the price
+          impact at the size actually being ordered. */}
       <dl className="mt-[11px] grid grid-cols-2 gap-x-6 gap-y-6 rounded-lg bg-ds-panel px-5 py-5 sm:grid-cols-4">
-        <HeaderFigure size="md" label="24h ago" value={day ? usd(day[0]) : "—"} />
-        <HeaderFigure size="md" label="Day range" value={range(day)} />
-        <HeaderFigure size="md" label="52-week range" value={range(year)} />
-        <HeaderFigure size="md" label="Volume 24h" value={usdCompact(p.volume24h)} />
-        <HeaderFigure size="md" label="Liquidity" value={usdCompact(p.liquidity)} sub="Across all issuers" />
-        <HeaderFigure size="md" label="Holders" value={compact(p.holders)} sub="Wallets on chain" />
-        <HeaderFigure size="md" label="Traders 24h" value={compact(traders)} sub="Bought or sold" />
+        <HeaderFigure size="md" label="Today's range" value={range(day)} sub="Low to high" />
+        <HeaderFigure size="md" label="52-week range" value={range(year)} sub="Low to high" />
         <HeaderFigure
           size="md"
-          label="Net buyers 24h"
-          value={
-            p.netBuyers24h === 0
-              ? "0"
-              : `${p.netBuyers24h > 0 ? "+" : "−"}${compact(Math.abs(p.netBuyers24h))}`
-          }
-          sub={p.netBuyers24h >= 0 ? "More buying than selling" : "More selling than buying"}
-          tone={p.netBuyers24h > 0 ? "up" : p.netBuyers24h < 0 ? "down" : undefined}
+          label="Traded today"
+          value={usdCompact(p.volume24h)}
+          sub="Across all issuers"
         />
+        <HeaderFigure size="md" label="Holders" value={compact(p.holders)} sub="Wallets that own it" />
       </dl>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4 text-[14px] leading-none">
         <span className="font-medium text-ds-ink">Returns</span>
@@ -109,6 +108,7 @@ export const FigureCard = ({
   value,
   sub,
   tone,
+  wide,
   children,
   action,
 }: {
@@ -117,6 +117,8 @@ export const FigureCard = ({
   value: ReactNode;
   sub: ReactNode;
   tone?: "up" | "down" | "warn" | undefined;
+  /** How many figures share a row on a card that has the page to itself. */
+  wide?: 3 | 4;
   children: ReactNode;
   action?: ReactNode;
 }) => (
@@ -127,8 +129,13 @@ export const FigureCard = ({
         <RailFigure value={value} sub={sub} tone={tone} />
       </div>
     </div>
-    {/* Two figures a row at half width; four in one row when the card has the page to itself. */}
-    <dl className="mt-4 grid flex-1 grid-cols-2 content-start gap-x-6 gap-y-4 rounded-lg bg-ds-panel px-5 py-4 @2xl:grid-cols-4">
+    {/* Two figures a row at half width; the full set in one row when the card has
+        the page to itself — three or four, so a card never leaves a column empty. */}
+    <dl
+      className={`mt-4 grid flex-1 grid-cols-2 content-start gap-x-6 gap-y-4 rounded-lg bg-ds-panel px-5 py-4 ${
+        wide === 3 ? "@2xl:grid-cols-3" : "@2xl:grid-cols-4"
+      }`}
+    >
       {children}
     </dl>
     {/* 24px from the card's sides and 20px from its foot, counting the card's own 4px. */}

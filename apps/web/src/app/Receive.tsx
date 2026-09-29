@@ -1,32 +1,81 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useState, type ReactNode } from "react";
+import qrcode from "qrcode-generator";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMoney } from "../api/hooks";
 import { Button } from "../ui/Button";
 import { InfoTip, RailHead } from "../ui/ds";
 import { Alert, Check, Copy } from "../ui/icons";
 
-/** Stands in until a real address encoder is wired up. */
-export const QrBlock = ({ size = 112 }: { size?: number }) => (
-  <div
-    aria-hidden
-    style={{ width: size, height: size }}
-    className="grid shrink-0 grid-cols-7 grid-rows-7 gap-[2px] rounded-lg bg-ds-ink p-2.5"
-  >
-    {[
-      "col-start-1 col-end-4 row-start-1 row-end-4 rounded-sm",
-      "col-start-5 col-end-8 row-start-1 row-end-4 rounded-sm",
-      "col-start-1 col-end-4 row-start-5 row-end-8 rounded-sm",
-      "col-start-5 col-end-6 row-start-5 row-end-6",
-      "col-start-7 col-end-8 row-start-5 row-end-6",
-      "col-start-6 col-end-7 row-start-6 row-end-7",
-      "col-start-5 col-end-6 row-start-7 row-end-8",
-      "col-start-7 col-end-8 row-start-7 row-end-8",
-      "col-start-4 col-end-5 row-start-4 row-end-5",
-    ].map((cls) => (
-      <span key={cls} className={`bg-white ${cls}`} />
-    ))}
-  </div>
-);
+/**
+ * The address, as a code a phone can actually read.
+ *
+ * This was nine hard-coded squares arranged to look like a QR code. It was
+ * `aria-hidden`, so it was decoration by the letter of it — but it sat in the
+ * funding panel beside a real address, and the thing a person does when they
+ * see a QR code next to an address is point a phone at it.
+ *
+ * Dark modules on white, which is the way round the spec requires. The old
+ * block was white on ink and nobody noticed, because it encoded nothing;
+ * inverted codes are read by some scanners and not others, and a wallet that
+ * cannot read this one costs someone their deposit.
+ *
+ * Error correction level Q recovers a quarter of the code. For this address
+ * length that is the same 33 modules as level M, so the tolerance is free.
+ */
+export const QUIET = 4;
+
+/**
+ * The code as one SVG path, offset by its quiet zone. Separated from the
+ * component so it can be tested: a QR code that renders beautifully and
+ * decodes to nothing looks exactly like one that works.
+ */
+export const qrPath = (value: string): { d: string; extent: number } | null => {
+  if (value.length === 0) return null;
+  const qr = qrcode(0, "Q");
+  qr.addData(value, "Byte");
+  qr.make();
+  const count = qr.getModuleCount();
+  let d = "";
+  for (let row = 0; row < count; row++) {
+    for (let col = 0; col < count; col++) {
+      if (qr.isDark(row, col)) d += `M${col + QUIET} ${row + QUIET}h1v1h-1z`;
+    }
+  }
+  return { d, extent: count + QUIET * 2 };
+};
+
+export const QrBlock = ({ value, size = 112 }: { value?: string | undefined; size?: number }) => {
+  const path = useMemo(() => (value ? qrPath(value) : null), [value]);
+
+  // No address yet. A placeholder that is plainly a placeholder, rather than
+  // something that looks scannable and is not.
+  if (path === null) {
+    return (
+      <div
+        aria-hidden
+        style={{ width: size, height: size }}
+        className="shrink-0 rounded-lg border border-dashed border-cardline bg-ds-panel"
+      />
+    );
+  }
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${path.extent} ${path.extent}`}
+      role="img"
+      aria-label="Your Solana address as a QR code"
+      className="shrink-0 rounded-lg bg-white"
+      shapeRendering="crispEdges"
+    >
+      {/* The quiet zone is part of the code, not padding around it: without four
+          clear modules on every side, a scanner may not find the code at all. */}
+      <rect width={path.extent} height={path.extent} fill="white" />
+      <path d={path.d} fill="var(--color-ds-ink)" />
+    </svg>
+  );
+};
 
 /** A button's contents crossfading to what it says now, instead of snapping. */
 const Swap = ({ k, children }: { k: string; children: ReactNode }) => (
@@ -108,7 +157,7 @@ export const DepositAddress = () => {
   return (
     <>
       <div className="flex items-center gap-4 rounded-lg bg-ds-panel p-4">
-        <QrBlock />
+        <QrBlock value={address} />
         <div className="min-w-0 flex-1">
           <p className="text-[12px] leading-none text-ds-muted">Your Solana address</p>
           <p className="mt-2 font-mono text-[13px] leading-[1.5] break-all text-ds-ink">
