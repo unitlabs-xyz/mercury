@@ -214,7 +214,14 @@ export const BuySheet = ({
    * would reach the server and come back refused every single time.
    */
   const blocked =
-    working || amount <= 0 || overBalance || !decision || decision.kind !== "execute" || typing || isLoading;
+    working ||
+    amount <= 0 ||
+    overBalance ||
+    !decision ||
+    decision.kind !== "execute" ||
+    typing ||
+    isLoading ||
+    !buy.walletReady;
 
   // The price moved between the quote we showed and the one the server would
   // fill at. Not an error so much as a question, so it reads as one.
@@ -225,13 +232,15 @@ export const BuySheet = ({
     ? STEP_LABEL[buy.step ?? "pricing"]
     : moved
       ? "Buy at the new price"
-      : !decision
-        ? "Getting a quote\u2026"
-        : decision.kind === "offer_queue"
-          ? "Not placing this now"
-          : decision.kind === "refuse"
-            ? "Unavailable"
-            : "Buy now";
+      : !buy.walletReady
+        ? "Preparing your wallet\u2026"
+        : !decision
+          ? "Getting a quote\u2026"
+          : decision.kind === "offer_queue"
+            ? "Not placing this now"
+            : decision.kind === "refuse"
+              ? "Unavailable"
+              : "Buy now";
 
   const close = () => {
     buy.reset();

@@ -186,5 +186,9 @@ export const useBorrowAction = () => {
     onError: () => setStep(null),
   });
 
-  return { ...mutation, step, progress, reset: () => (mutation.reset(), setStep(null)) };
+  /* Same race the buy sheet waits out: Privy fills the wallet list a beat
+     after load, and an empty list there is not a missing wallet. */
+  const walletReady = wallets[0] !== undefined;
+
+  return { ...mutation, step, progress, walletReady, reset: () => (mutation.reset(), setStep(null)) };
 };

@@ -164,5 +164,14 @@ export const useBuyAction = () => {
     onError: () => setStep(null),
   });
 
-  return { ...mutation, step, reset: () => (mutation.reset(), setStep(null)) };
+  /*
+   * Privy hydrates the wallet list about 350ms after load, so for that moment
+   * `wallets` is empty on a perfectly healthy session. Pressing Buy inside it
+   * used to throw "No wallet is connected to sign with." — which reads as
+   * "connect a wallet", when the wallet is ours and is simply not ready yet.
+   * The sheet waits for this instead.
+   */
+  const walletReady = wallets[0] !== undefined;
+
+  return { ...mutation, step, walletReady, reset: () => (mutation.reset(), setStep(null)) };
 };

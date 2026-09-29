@@ -38,6 +38,7 @@ COPY apps/web/ apps/web/
 
 ARG VITE_API_URL
 ARG VITE_PRIVY_APP_ID
+ARG VITE_SOLANA_RPC_URL
 
 # Fail here rather than ship a broken bundle. Both variables have quiet
 # failure modes: VITE_API_URL falls back to http://localhost:8787, so every
@@ -49,8 +50,12 @@ RUN test -n "$VITE_API_URL" \
 RUN test -n "$VITE_PRIVY_APP_ID" \
   || (echo "ERROR: VITE_PRIVY_APP_ID must be set as a BUILD argument (Coolify: tick 'Build Variable'). Unset, the app throws on first render." && exit 1)
 
+RUN test -n "$VITE_SOLANA_RPC_URL" \
+  || (echo "ERROR: VITE_SOLANA_RPC_URL must be set as a BUILD argument (Coolify: tick 'Build Variable'). Privy signs through it, and Solana's public RPC returns 403 to browsers, so there is no default that works. Use a key restricted by domain: this ships to every visitor." && exit 1)
+
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_PRIVY_APP_ID=$VITE_PRIVY_APP_ID
+ENV VITE_SOLANA_RPC_URL=$VITE_SOLANA_RPC_URL
 
 RUN pnpm --filter @mercury/web build
 
