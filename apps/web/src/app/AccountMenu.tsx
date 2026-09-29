@@ -1,19 +1,25 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Link } from "react-router-dom";
 import { useMoney, usePortfolio, useSignedIn } from "../api/hooks";
 import { useAuthModal } from "../auth/AuthContext";
-import { Check, ChevronDown, Copy } from "../ui/icons";
+import { Check, ChevronDown, Copy, Mail, SignOut } from "../ui/icons";
 import { usd } from "./format";
 
 const short = (a: string) => (a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
 
+/** The one channel we have. app.trymercury.xyz is the app's own domain. */
+const SUPPORT = "mailto:support@trymercury.xyz";
+
 /**
- * The account, always in reach: the cash you can spend sits in the bar itself,
- * so deciding what to buy never needs a trip to Portfolio. The panel adds who
- * is signed in, the wallet address, and the few verbs that change the balance.
- * Signed out, the same spot is the way in.
+ * The account. The bar carries who you are and nothing else, so the header
+ * stays quiet; opening it gives the email, the wallet address, the cash you
+ * can spend, and the two things that are not a place to go.
+ *
+ * It used to list Portfolio, Money and Activity. All three sit in the nav to
+ * the left at every width, so the menu was a second copy of a nav the reader
+ * could already see — fuller, but no more use. Signed out, the same spot is
+ * the way in.
  */
 export const AccountMenu = () => {
   const signedIn = useSignedIn();
@@ -61,6 +67,10 @@ export const AccountMenu = () => {
   };
 
   const initial = email.slice(0, 1).toUpperCase();
+  /* One row's worth of styling, shared so the two actions sit on the same rhythm.
+     The icon stays muted in both rows: it marks the row, the word names it. */
+  const row =
+    "flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-[14px] leading-none transition-colors hover:bg-white";
 
   return (
     <div ref={box} className="relative">
@@ -69,8 +79,8 @@ export const AccountMenu = () => {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`Account, ${usd(cash)} cash to invest`}
-        className={`flex h-9 items-center gap-2 rounded-full bg-white py-1 pr-3 pl-1 outline-1 transition-colors max-sm:h-10 ${
+        aria-label="Account"
+        className={`flex h-9 items-center gap-2 rounded-full bg-white py-1 pr-2.5 pl-1 outline-1 transition-colors max-sm:h-10 ${
           open ? "outline-black/10" : "outline-transparent hover:outline-black/10"
         }`}
       >
@@ -79,12 +89,6 @@ export const AccountMenu = () => {
           className="grid size-7 shrink-0 place-items-center rounded-full bg-ds-avatar text-[12px] font-medium text-ds-ink"
         >
           {initial}
-        </span>
-        <span className="hidden text-left leading-none sm:block">
-          <span className="block text-[13px] font-medium text-ds-ink">
-            {cash === undefined ? "—" : usd(cash)}
-          </span>
-          <span className="mt-[3px] block text-[11px] text-ds-muted">cash to invest</span>
         </span>
         <ChevronDown
           className={`size-3.5 text-ds-chevron transition-transform ${open ? "rotate-180" : ""}`}
@@ -104,8 +108,10 @@ export const AccountMenu = () => {
             // from the white cards it opens over.
             className="absolute top-[calc(100%+8px)] right-0 z-40 w-[280px] rounded-xl bg-white p-1 outline-1 outline-black/15"
           >
-            {/* Who is signed in, and the wallet address to copy. */}
-            <div className="flex items-center gap-3 px-3 py-3">
+            {/* Who is signed in, the wallet address to copy, and — since the bar
+                no longer carries it — what there is to spend. Two lines a side,
+                so the block reads as one row rather than three stacked facts. */}
+            <div className="flex items-start gap-3 px-3 py-3">
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-ds-avatar text-[13px] font-medium text-ds-ink">
                 {initial}
               </span>
@@ -123,40 +129,36 @@ export const AccountMenu = () => {
                   </button>
                 )}
               </div>
+              <span className="shrink-0 text-right">
+                <span className="block text-[14px] leading-none font-medium text-ds-ink">
+                  {cash === undefined ? "—" : usd(cash)}
+                </span>
+                <span className="mt-1.5 block text-[11px] leading-none text-ds-muted">cash to invest</span>
+              </span>
             </div>
 
-            {/* Where to go, and nothing else: the figures live on the pages. */}
-            <nav
-              aria-label="Account"
-              className="flex flex-col gap-px rounded-lg bg-ds-panel p-1"
-              onClick={() => setOpen(false)}
-            >
-              {[
-                { to: "/portfolio", label: "Portfolio" },
-                { to: "/money", label: "Money", meta: cash === undefined ? undefined : usd(cash) },
-                { to: "/activity", label: "Activity" },
-              ].map((l) => (
-                <Link
-                  key={l.to}
-                  to={l.to}
-                  className="flex h-9 items-center justify-between rounded-md px-3 text-[14px] leading-none text-ds-ink transition-colors hover:bg-white"
-                >
-                  {l.label}
-                  {l.meta && <span className="text-[12px] text-ds-muted">{l.meta}</span>}
-                </Link>
-              ))}
-            </nav>
-
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                void logout();
-              }}
-              className="mt-1 flex h-9 w-full items-center rounded-md px-4 text-left text-[14px] leading-none text-ds-muted transition-colors hover:bg-ds-panel hover:text-ds-ink"
-            >
-              Sign out
-            </button>
+            {/* What is left once the destinations go: the two things that are not
+                a place to go. Sign out stays muted, so the pair does not read as
+                two equal offers. */}
+            <div className="flex flex-col gap-px rounded-lg bg-ds-panel p-1">
+              {/* An envelope rather than a lifebuoy: this opens a mail client, and
+                  the icon should say so before the click does. */}
+              <a href={SUPPORT} onClick={() => setOpen(false)} className={`${row} text-ds-ink`}>
+                <Mail className="size-4 shrink-0 text-ds-muted" />
+                Support
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  void logout();
+                }}
+                className={`${row} text-ds-muted hover:text-ds-ink`}
+              >
+                <SignOut className="size-4 shrink-0" />
+                Sign out
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -12,7 +12,13 @@ const PRESETS = [50, 100, 250, 500];
 
 const num = (d: { toString(): string } | null | undefined) => (d ? Number(d.toString()) : null);
 
-/** A note under the figures: warn or down tint, 12px, the icon beside the copy. */
+/**
+ * A note above the button: a light tint, 12px, the icon beside the copy.
+ *
+ * The copy is ink rather than the tint's own colour. Body text in #b33d29 on a
+ * red field is three reds saying one thing, and it shouted in a page that
+ * otherwise speaks quietly. The icon carries the signal; the words are read.
+ */
 export const Note = ({
   tone,
   icon,
@@ -24,7 +30,9 @@ export const Note = ({
 }) => (
   <p
     className={`mx-5 mt-4 flex gap-2 rounded-lg px-3 py-2.5 text-[12px] leading-[1.45] ${
-      tone === "warn" ? "bg-ds-warn-chip text-ds-chip-warn" : "bg-ds-down-chip text-ds-chip-down"
+      tone === "warn"
+        ? "bg-ds-warn-chip text-ds-ink [&_svg]:text-ds-chip-warn"
+        : "bg-ds-down-chip text-ds-ink [&_svg]:text-ds-chip-down"
     } [&_svg]:mt-px [&_svg]:size-3.5 [&_svg]:shrink-0`}
   >
     {icon}
@@ -115,6 +123,27 @@ export const Ticket = ({
   const price = num(best?.pricePerShare) ?? fair;
   const over = cash !== null && amount > cash;
 
+  /*
+   * Whether the note belongs under the amount or above the button.
+   *
+   * The test is whether typing a different number fixes it. Too small, or more
+   * than you hold, are both answered by the field directly above — so they sit
+   * with it, quietly, and the disabled button is the consequence rather than
+   * the thing being explained. A halt, a stale price or a market with no depth
+   * are not the amount's fault and still take the note above the button.
+   */
+  const tooSmall = decision?.kind === "refuse" && decision.reason === "below_minimum";
+  const amountHint = over ? (
+    <>
+      More than your cash.{" "}
+      <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
+        Add cash
+      </Link>
+    </>
+  ) : tooSmall ? (
+    REFUSE_COPY.below_minimum.body
+  ) : null;
+
   return (
     <section aria-label={`Buy ${name}`} className="min-w-0 rounded-xl bg-white p-1">
       <div className="px-5 pt-4">
@@ -122,6 +151,8 @@ export const Ticket = ({
       </div>
 
       <AmountWell raw={raw} onRaw={onRaw} />
+
+      {amountHint && <p className="mx-5 mt-2.5 text-[12px] leading-[1.45] text-ds-muted">{amountHint}</p>}
 
       <dl className="flex flex-col gap-3 px-5 pt-5">
         <RailLine k="Price per share">{price === null ? "—" : usd(price)}</RailLine>
@@ -138,21 +169,12 @@ export const Ticket = ({
           Trading above the real share price, and the US market is shut. The gap usually closes once it opens.
         </Note>
       )}
-      {decision?.kind === "refuse" && (
+      {decision?.kind === "refuse" && !tooSmall && (
         <Note tone="down" icon={<Alert />}>
           <span className="font-medium">{REFUSE_COPY[decision.reason].title}.</span>{" "}
           {REFUSE_COPY[decision.reason].body}
         </Note>
       )}
-      {over && (
-        <Note tone="down" icon={<Alert />}>
-          More than your cash.{" "}
-          <Link to="/money" className="font-medium underline underline-offset-2">
-            Add cash
-          </Link>
-        </Note>
-      )}
-
       <div className="px-5 pt-5 pb-5">
         <Button
           variant="primary"
