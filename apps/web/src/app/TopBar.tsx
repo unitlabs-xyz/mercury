@@ -12,7 +12,7 @@ type Item = { key: NavKey; label: string; to?: string };
 const NAV: Item[] = [
   { key: "portfolio", label: "Portfolio", to: "/portfolio" },
   { key: "invest", label: "Invest", to: "/invest" },
-  { key: "baskets", label: "Basket" },
+  { key: "baskets", label: "Baskets", to: "/baskets" },
   { key: "recurring", label: "Recurring" },
   { key: "money", label: "Money", to: "/money" },
   { key: "activity", label: "Activity", to: "/activity" },

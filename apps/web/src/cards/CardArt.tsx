@@ -1,4 +1,4 @@
-import { AnchorMark } from "../ui/Logo";
+import { MercuryMark } from "../ui/Logo";
 
 /** The Visa wordmark, drawn rather than fetched so it renders offline. */
 const Visa = ({ className = "" }: { className?: string }) => (
@@ -64,7 +64,7 @@ export const CardArt = ({
             finish === "basic" ? "text-white" : "text-ink"
           }`}
         >
-          <AnchorMark className="h-[1.25em] w-[1.25em] shrink-0" />
+          <MercuryMark className="h-[1.25em] w-[1.25em] shrink-0" />
           <span className="font-semibold tracking-[-0.02em]">Mercury</span>
         </span>
         <span className={`flex items-end justify-end ${finish === "basic" ? "text-white" : "text-ink"}`}>

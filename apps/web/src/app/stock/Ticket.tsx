@@ -14,7 +14,15 @@ const PRESETS = [50, 100, 250, 500];
 const num = (d: { toString(): string } | null | undefined) => (d ? Number(d.toString()) : null);
 
 /** A note under the figures: warn or down tint, 12px, the icon beside the copy. */
-const Note = ({ tone, icon, children }: { tone: "warn" | "down"; icon: ReactNode; children: ReactNode }) => (
+export const Note = ({
+  tone,
+  icon,
+  children,
+}: {
+  tone: "warn" | "down";
+  icon: ReactNode;
+  children: ReactNode;
+}) => (
   <p
     className={`mx-5 mt-4 flex gap-2 rounded-lg px-3 py-2.5 text-[12px] leading-[1.45] ${
       tone === "warn" ? "bg-ds-warn-chip text-ds-chip-warn" : "bg-ds-down-chip text-ds-chip-down"
@@ -24,6 +32,46 @@ const Note = ({ tone, icon, children }: { tone: "warn" | "down"; icon: ReactNode
     <span>{children}</span>
   </p>
 );
+
+/**
+ * The amount, in a white well on the grey panel 4px in from the card's edge,
+ * with the presets under it. The stock ticket and the basket ticket share it.
+ */
+export const AmountWell = ({ raw, onRaw }: { raw: string; onRaw: (v: string) => void }) => {
+  const amount = Number(raw) || 0;
+  return (
+    <div className="mt-[11px] rounded-lg bg-ds-panel p-1">
+      <label className="flex h-15 items-center gap-1 rounded-md bg-white px-4 outline-offset-0 focus-within:outline-1 focus-within:outline-black/10">
+        <span className="text-[28px] leading-none font-medium text-ds-muted">$</span>
+        <input
+          value={raw}
+          onChange={(e) => onRaw(e.target.value.replace(/[^0-9.]/g, ""))}
+          inputMode="decimal"
+          aria-label="Amount in dollars"
+          className="w-full bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none"
+        />
+        <span className="shrink-0 text-[12px] text-ds-muted">USD</span>
+      </label>
+      <div className="mt-1 grid grid-cols-4 gap-1" role="group" aria-label="Amount presets">
+        {PRESETS.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onRaw(String(p))}
+            aria-pressed={amount === p}
+            className={`h-8 rounded-md border text-[14px] leading-none text-ds-ink transition-colors max-sm:h-10 ${
+              amount === p
+                ? "border-black/10 bg-linear-to-b from-white to-[#eeeeee]"
+                : "border-transparent hover:bg-white/70"
+            }`}
+          >
+            ${p}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 /**
  * The order, on the page rather than behind a button, as a rail card: the
@@ -66,36 +114,7 @@ export const Ticket = ({
         <RailHead title={`Buy ${name}`} meta={cash === null ? undefined : `${usd(cash)} cash`} />
       </div>
 
-      <div className="mt-[11px] rounded-lg bg-ds-panel p-1">
-        <label className="flex h-15 items-center gap-1 rounded-md bg-white px-4 outline-offset-0 focus-within:outline-1 focus-within:outline-black/10">
-          <span className="text-[28px] leading-none font-medium text-ds-muted">$</span>
-          <input
-            value={raw}
-            onChange={(e) => onRaw(e.target.value.replace(/[^0-9.]/g, ""))}
-            inputMode="decimal"
-            aria-label="Amount in dollars"
-            className="w-full bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none"
-          />
-          <span className="shrink-0 text-[12px] text-ds-muted">USD</span>
-        </label>
-        <div className="mt-1 grid grid-cols-4 gap-1" role="group" aria-label="Amount presets">
-          {PRESETS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => onRaw(String(p))}
-              aria-pressed={amount === p}
-              className={`h-8 rounded-md border text-[14px] leading-none text-ds-ink transition-colors max-sm:h-10 ${
-                amount === p
-                  ? "border-black/10 bg-linear-to-b from-white to-[#eeeeee]"
-                  : "border-transparent hover:bg-white/70"
-              }`}
-            >
-              ${p}
-            </button>
-          ))}
-        </div>
-      </div>
+      <AmountWell raw={raw} onRaw={onRaw} />
 
       <dl className="flex flex-col gap-3 px-5 pt-5">
         <RailLine k="Price per share">{price === null ? "—" : usd(price)}</RailLine>
