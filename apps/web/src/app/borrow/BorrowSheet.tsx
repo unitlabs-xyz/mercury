@@ -182,7 +182,7 @@ export const BorrowSheet = ({
   }
 
   const busy = action.isPending;
-  const canSubmit = !!intent && value > 0 && !typing && !blocked && !busy && !paused;
+  const canSubmit = !!intent && value > 0 && !typing && !blocked && !busy && !paused && action.walletReady;
   const inTokens = tab === "withdraw" || tab === "pledge";
   const unit = inTokens ? `${row?.ticker ?? ""}x` : "USD";
 
