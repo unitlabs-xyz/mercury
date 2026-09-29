@@ -8,7 +8,6 @@
     "./testing": "./src/testing/index.ts",
     "./jupiter/registry": "./src/jupiter/registry.ts",
     "./jupiter/lite": "./src/jupiter/lite.ts",
-    "./jupiter/ultra": "./src/jupiter/ultra.ts",
     "./solana/rpc": "./src/solana/rpc.ts"
   },
   "scripts": {
