@@ -20,6 +20,14 @@ const num = (d: { toString(): string } | null | undefined) => (d ? Number(d.toSt
 const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
   const price = num(d.best.pricePerShare) ?? 0;
   const premium = (num(d.premium) ?? 0) * 100;
+  /*
+   * The floor the route will not fill below. A buy spends a fixed number of
+   * dollars, so what moves while the order lands is the number of shares that
+   * come back — and until now that movement was allowed for in the quote,
+   * bounded by the route, and named nowhere on screen. It is worth up to half
+   * of the premium we promise to protect, so it gets a number.
+   */
+  const worst = num(d.best.worstPricePerShare);
   return (
     <>
       {/*
@@ -41,7 +49,13 @@ const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
               : `${Math.abs(premium).toFixed(2)}% ${premium > 0 ? "above" : "below"} the real share price`
           }
         />
-        <Line k="Shares" v={(amount / price).toFixed(4)} />
+        <Line
+          k="Shares"
+          v={(amount / price).toFixed(4)}
+          {...(worst && worst > price
+            ? { sub: `At least ${(amount / worst).toFixed(4)} if the price moves before it lands` }
+            : {})}
+        />
         {/* Not monospace: "Raydium CLMM" is the name of a venue, not a
             measurement. Mono here was a costume for "technical". */}
         <Line k="Route" v={`${ISSUER_NAME[d.best.issuer]} · ${d.best.routeLabels.join(" → ")}`} />

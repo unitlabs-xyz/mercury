@@ -10,6 +10,8 @@ export const PricedCandidate = z.object({
   multiplier: Usd,
   pricePerToken: Usd.nullable(),
   pricePerShare: Usd.nullable(),
+  /** The bound: the most a buy pays per share, the least a sell receives. */
+  worstPricePerShare: Usd.nullable(),
   priceImpact: Ratio.nullable(),
   routeLabels: z.array(z.string()),
   viable: z.boolean(),
@@ -34,6 +36,8 @@ const decisionBase = {
   status: InstrumentStatus,
   candidates: z.array(PricedCandidate),
   decidedAt: Iso,
+  /** The slippage these prices were quoted with, spent from the same budget as the premium. */
+  maxSlippageBps: z.number(),
 };
 
 export const Decision = z.discriminatedUnion("kind", [
@@ -55,16 +59,14 @@ export const Decision = z.discriminatedUnion("kind", [
   z.object({ ...decisionBase, kind: z.literal("refuse"), reason: RefuseReason, detail: z.string() }),
 ]);
 
-export const OrderStatus = z.enum([
-  "pending",
-  "executing",
-  "filled",
-  "queued",
-  "partially_filled",
-  "expired",
-  "cancelled",
-  "refused",
-]);
+/*
+ * `partially_filled` and `expired` were here and had no writer anywhere: a
+ * swap is one atomic transaction that either lands or does not, and expiry
+ * belonged to trigger orders, which do not exist yet. A status nothing can
+ * reach is a promise to a reader that the system never keeps. They come back
+ * with the code that would set them.
+ */
+export const OrderStatus = z.enum(["pending", "executing", "filled", "queued", "cancelled", "refused"]);
 
 export const Order = z.object({
   id: z.string().uuid(),

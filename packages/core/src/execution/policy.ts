@@ -18,10 +18,25 @@ import type { ExecutionPolicy } from "./types.js";
  * is a reference that updates in seconds — Pyth publishes equities
  * continuously, and ADR 0010's reason for not reading it (CORS) stopped
  * applying when pricing moved to the server.
+ *
+ * `slippageBps` lived in the Jupiter adapter as a hardcoded 50, which put half
+ * of the 100 basis point premium tolerance outside the tolerance's own reach:
+ * an order could clear the premium check by 40 basis points and still fill 50
+ * worse, and no number on screen said so. It is policy, so it sits in policy,
+ * and `worstPricePerShare` now carries the bound onto the screen. The value is
+ * unchanged — the defect was the silence, not the size.
+ *
+ * `maxQuoteDriftBps` is the gap between "the market moved" and "this is not
+ * what you agreed to". Execution re-quotes and re-decides before it builds, so
+ * some drift is expected and healthy; 50 basis points of adverse movement in
+ * the seconds between confirming and signing is not, and earns a second look
+ * rather than a silent fill.
  */
 export const DEFAULT_POLICY: ExecutionPolicy = {
   maxPriceImpact: fromPct(D(1.5)),
   premiumTolerance: fromPct(D(1)),
+  slippageBps: 50,
+  maxQuoteDriftBps: 50,
   maxReferenceAgeSecOpen: 300,
   maxReferenceAgeSecClosed: 900,
   minOrderUsd: D(5),

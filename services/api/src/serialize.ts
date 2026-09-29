@@ -5,6 +5,10 @@ import type { Decision as WireDecision, PricedCandidate as WirePricedCandidate }
 /**
  * Domain to wire. Every Decimal becomes a decimal string, because money never crosses
  * a boundary as a number. See docs/05.
+ *
+ * `quoteId` and `quoteRaw` are deliberately absent. The provider payload is how
+ * a quote gets redeemed for a transaction; it stays on the server, inside the
+ * request that fetched it, and never reaches a client or the `decision` column.
  */
 const candidate = (c: PricedCandidate): WirePricedCandidate => ({
   mint: c.mint,
@@ -13,6 +17,7 @@ const candidate = (c: PricedCandidate): WirePricedCandidate => ({
   multiplier: toWire(c.multiplier),
   pricePerToken: c.pricePerToken === null ? null : toWire(c.pricePerToken),
   pricePerShare: c.pricePerShare === null ? null : toWire(c.pricePerShare),
+  worstPricePerShare: c.worstPricePerShare === null ? null : toWire(c.worstPricePerShare),
   priceImpact: c.priceImpact === null ? null : toWire(c.priceImpact),
   routeLabels: [...c.routeLabels],
   viable: c.viable,
@@ -28,6 +33,7 @@ export const decisionToWire = (d: Decision): WireDecision => {
     status: d.status,
     candidates: d.candidates.map(candidate),
     decidedAt: d.decidedAt.toISOString(),
+    maxSlippageBps: d.maxSlippageBps,
   };
 
   switch (d.kind) {
