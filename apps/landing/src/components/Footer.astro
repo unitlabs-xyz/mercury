@@ -10,7 +10,7 @@ const year = new Date().getFullYear();
     <div class="flex flex-col justify-between gap-10 md:flex-row">
       <div>
         <Wordmark />
-        <p class="mt-3 max-w-[34ch] text-[13px] text-muted">{site.tagline}</p>
+        <p class="mt-3 whitespace-nowrap text-[13px] text-muted">{site.tagline}</p>
       </div>
 
       <div class="grid grid-cols-2 gap-10 sm:grid-cols-4 md:gap-16">
@@ -21,13 +21,17 @@ const year = new Date().getFullYear();
               <ul class="mt-3 space-y-2">
                 {group.links.map((link) => (
                   <li>
-                    <a
-                      href={link.href}
-                      class="text-[13px] text-muted transition-colors hover:text-ink"
-                      {...(link.href.startsWith("http") ? { target: "_blank", rel: "noopener" } : {})}
-                    >
-                      {link.label}
-                    </a>
+                    {link.href ? (
+                      <a
+                        href={link.href}
+                        class="text-[13px] text-muted transition-colors hover:text-ink"
+                        {...(link.href.startsWith("http") ? { target: "_blank", rel: "noopener" } : {})}
+                      >
+                        {link.label}
+                      </a>
+                    ) : (
+                      <span class="text-[13px] text-muted">{link.label}</span>
+                    )}
                   </li>
                 ))}
               </ul>

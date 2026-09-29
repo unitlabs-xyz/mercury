@@ -43,12 +43,14 @@ const FRAME = "1000 / 286";
   .cta-panel {
     position: absolute;
     inset: 0;
+    /* Above the art, its grain and the waitlist's success shimmer. */
+    z-index: 2;
     display: flex;
     /* Title and note on top, the form beneath them, all on the left edge. */
     flex-direction: column;
     justify-content: center;
-    gap: 24px;
-    padding: 36px 60px;
+    gap: 44px;
+    padding: 28px 60px;
   }
 
   /* Below this the form wraps onto more lines than the art's ratio can hold. */

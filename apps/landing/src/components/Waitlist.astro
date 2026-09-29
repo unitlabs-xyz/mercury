@@ -3,6 +3,15 @@ import { site } from "../config/site";
 
 // Three fields and a button, in one row wherever it fits. Name is optional;
 // email and country are what the list is for.
+
+// ISO 3166 regions, named in English at build time so the page ships no list
+// of its own. The value stored is the name, which is what the list reads by.
+const REGIONS =
+  "AF AX AL DZ AS AD AO AI AQ AG AR AM AW AU AT AZ BS BH BD BB BY BE BZ BJ BM BT BO BQ BA BW BR IO BN BG BF BI CV KH CM CA KY CF TD CL CN CX CC CO KM CG CD CK CR CI HR CU CW CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FK FO FJ FI FR GF PF GA GM GE DE GH GI GR GL GD GP GU GT GG GN GW GY HT VA HN HK HU IS IN ID IR IQ IE IM IL IT JM JP JE JO KZ KE KI KP KR XK KW KG LA LV LB LS LR LY LI LT LU MO MG MW MY MV ML MT MH MQ MR MU YT MX FM MD MC MN ME MS MA MZ MM NA NR NP NL NC NZ NI NE NG NU NF MK MP NO OM PK PW PS PA PG PY PE PH PN PL PT PR QA RE RO RU RW BL SH KN LC MF PM VC WS SM ST SA SN RS SC SL SG SX SK SI SB SO ZA GS SS ES LK SD SR SJ SE CH SY TW TJ TZ TH TL TG TK TO TT TN TR TM TC TV UG UA AE GB US UM UY UZ VU VE VN VG VI WF EH YE ZM ZW";
+const names = new Intl.DisplayNames(["en"], { type: "region" });
+const countries = REGIONS.split(" ")
+  .map((code) => ({ code, name: names.of(code) ?? code }))
+  .sort((a, b) => a.name.localeCompare(b.name, "en"));
 ---
 
 <form class="waitlist" data-waitlist action={`${site.api}/waitlist`} method="post" novalidate>
@@ -13,7 +22,12 @@ import { site } from "../config/site";
   <input id="wl-email" name="email" type="email" autocomplete="email" placeholder="Email" required maxlength="254" />
 
   <label class="sr-only" for="wl-country">Country</label>
-  <input id="wl-country" name="country" type="text" autocomplete="country-name" placeholder="Country" required maxlength="80" />
+  <div class="select">
+    <select id="wl-country" name="country" autocomplete="country-name" required>
+      <option value="" disabled selected>Country</option>
+      {countries.map((c) => <option value={c.name} data-code={c.code}>{c.name}</option>)}
+    </select>
+  </div>
 
   <button type="submit">Join the waitlist</button>
 
@@ -22,13 +36,15 @@ import { site } from "../config/site";
 
 <style>
   .waitlist {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     width: min(100%, 720px);
   }
 
-  input {
+  input,
+  select {
     flex: 1 1 150px;
     min-width: 0;
     height: 36px;
@@ -46,16 +62,58 @@ import { site } from "../config/site";
       background-color 200ms var(--ease-out);
   }
 
+  /* The native control, restyled: no OS chrome, our own chevron, and the
+     placeholder option dimmed like an input's placeholder. */
+  .select {
+    position: relative;
+    display: flex;
+    flex: 1 1 150px;
+    min-width: 0;
+  }
+
+  .select::after {
+    content: "";
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-right: 1.3px solid rgb(255 255 255 / 0.75);
+    border-bottom: 1.3px solid rgb(255 255 255 / 0.75);
+    translate: 0 -70%;
+    rotate: 45deg;
+    pointer-events: none;
+  }
+
+  select {
+    width: 100%;
+    padding-right: 34px;
+    appearance: none;
+    cursor: pointer;
+    text-overflow: ellipsis;
+  }
+
+  select:invalid {
+    color: rgb(255 255 255 / 0.65);
+  }
+
+  /* The open list is drawn by the OS on a light sheet. */
+  option {
+    color: #000;
+  }
+
   input::placeholder {
     color: rgb(255 255 255 / 0.65);
   }
 
-  input:focus-visible {
+  input:focus-visible,
+  select:focus-visible {
     border-color: rgb(255 255 255 / 0.7);
     background: rgb(255 255 255 / 0.16);
   }
 
-  input[aria-invalid="true"] {
+  input[aria-invalid="true"],
+  select[aria-invalid="true"] {
     border-color: #f2a597;
   }
 
@@ -94,8 +152,12 @@ import { site } from "../config/site";
     translate: none;
   }
 
+  /* Hung below the fields, out of flow, so a message never moves anything. */
   .status {
-    flex-basis: 100%;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin: 8px 0 0;
     min-height: 20px;
     font-size: 13px;
     line-height: 20px;
@@ -112,13 +174,74 @@ import { site } from "../config/site";
     display: none;
   }
 
+  /* The form keeps the height the fields had (locked in the script), and the
+     confirmation sits where they were. */
+  .waitlist[data-done] {
+    align-items: center;
+  }
+
   .waitlist[data-done] .status {
+    position: static;
+    margin: 0;
     font-size: 16px;
     color: #fff;
   }
 
+  /*
+   * The success shimmer: one soft sheen that travels across the art, beneath
+   * the text. A single wide gradient moved by background-position, so there
+   * are no edges to see; screen, so it only ever brightens the picture; and it fades in and out as it goes, so
+   * it never arrives or leaves as a layer. Made in the script and placed in
+   * the art's frame, hence global.
+   */
+  :global(.wl-shimmer) {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    /* Eased stops, so the band has no visible edge — just light that swells
+       and falls away. Capped at 30%: bright enough to see, never enough to
+       wash the white text out. */
+    background-image: linear-gradient(
+      122deg,
+      rgb(255 255 255 / 0) 32%,
+      rgb(255 255 255 / 0.04) 38%,
+      rgb(255 255 255 / 0.14) 43%,
+      rgb(255 255 255 / 0.26) 48%,
+      rgb(255 255 255 / 0.3) 50%,
+      rgb(255 255 255 / 0.26) 52%,
+      rgb(255 255 255 / 0.14) 57%,
+      rgb(255 255 255 / 0.04) 62%,
+      rgb(255 255 255 / 0) 68%
+    );
+    background-size: 300% 100%;
+    background-repeat: no-repeat;
+    background-position: 100% 0;
+    opacity: 0;
+    animation: wl-sheen 2000ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes wl-sheen {
+    0% {
+      background-position: 100% 0;
+      opacity: 0;
+    }
+    15% {
+      opacity: 1;
+    }
+    80% {
+      opacity: 1;
+    }
+    100% {
+      background-position: 0% 0;
+      opacity: 0;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     input,
+    select,
     button {
       transition-duration: 1ms;
     }
@@ -126,22 +249,88 @@ import { site } from "../config/site";
 </style>
 
 <script>
+  // Stricter than type="email", which accepts "a@b": a real domain with a dot
+  // and a letters-only ending of two or more.
+  const EMAIL = /^[^\s@]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i;
+
+  // The misspellings that account for most bad signups.
+  const TYPOS: Record<string, string> = {
+    "gmial.com": "gmail.com", "gmai.com": "gmail.com", "gmal.com": "gmail.com", "gamil.com": "gmail.com",
+    "gnail.com": "gmail.com", "gmail.co": "gmail.com", "gmail.con": "gmail.com", "gmail.cm": "gmail.com",
+    "gmaill.com": "gmail.com", "hotmial.com": "hotmail.com", "hotmai.com": "hotmail.com", "hotmail.co": "hotmail.com",
+    "yahoo.co": "yahoo.com", "yaho.com": "yahoo.com", "yahooo.com": "yahoo.com", "outlok.com": "outlook.com",
+    "outloo.com": "outlook.com", "outlook.co": "outlook.com", "icloud.co": "icloud.com", "iclod.com": "icloud.com",
+  };
+
+  /** One sweep of light across the art the form sits on, then gone. */
+  const shimmer = (form: HTMLElement) => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const frame = form.closest(".frame");
+    if (!frame) return;
+    const light = document.createElement("div");
+    light.className = "wl-shimmer";
+    light.setAttribute("aria-hidden", "true");
+    // Beneath the text: before the panel that holds the heading and form.
+    const panel = [...frame.children].find((child) => child.contains(form)) ?? null;
+    frame.insertBefore(light, panel);
+    light.addEventListener("animationend", () => light.remove());
+  };
+
   const form = document.querySelector<HTMLFormElement>("[data-waitlist]");
   const status = form?.querySelector<HTMLElement>("[data-waitlist-status]");
 
   if (form && status) {
-    const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+    const email = form.elements.namedItem("email") as HTMLInputElement;
+    const country = form.elements.namedItem("country") as HTMLSelectElement;
+    const name = form.elements.namedItem("name") as HTMLInputElement;
+
+    // Start on the visitor's own country where the browser says what it is.
+    const region = navigator.language.split("-")[1]?.toUpperCase();
+    const mine = region ? country.querySelector<HTMLOptionElement>(`option[data-code="${region}"]`) : null;
+    if (mine) mine.selected = true;
+
+    const emailProblem = (value: string): string | null => {
+      const v = value.trim();
+      if (v.length === 0) return "Enter your email.";
+      if (!EMAIL.test(v)) return "That doesn't look like a valid email.";
+      const domain = v.split("@")[1]!.toLowerCase();
+      const fix = TYPOS[domain];
+      if (fix) return `Did you mean ${v.split("@")[0]}@${fix}?`;
+      return null;
+    };
+
+    const mark = (el: HTMLElement, bad: boolean) => el.setAttribute("aria-invalid", String(bad));
+
+    // Checked as soon as they leave the field, not only on submit.
+    email.addEventListener("blur", () => {
+      if (email.value.trim().length === 0) return;
+      const problem = emailProblem(email.value);
+      mark(email, problem !== null);
+      status.textContent = problem ?? "";
+    });
+    email.addEventListener("input", () => {
+      if (email.getAttribute("aria-invalid") === "true" && emailProblem(email.value) === null) {
+        mark(email, false);
+        status.textContent = "";
+      }
+    });
+    country.addEventListener("change", () => mark(country, false));
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
-      const email = field("email");
-      const country = field("country");
-      const bad = [email, country].filter((input) => !input.checkValidity() || input.value.trim().length < 2);
-      for (const input of [email, country]) input.setAttribute("aria-invalid", String(bad.includes(input)));
-      if (bad.length > 0) {
-        status.textContent = "Enter a valid email and your country.";
-        bad[0]!.focus();
+      const problem = emailProblem(email.value);
+      mark(email, problem !== null);
+      mark(country, country.value === "");
+      if (problem !== null || country.value === "") dispatchEvent(new Event("mercury:error"));
+      if (problem !== null) {
+        status.textContent = problem;
+        email.focus();
+        return;
+      }
+      if (country.value === "") {
+        status.textContent = "Pick your country.";
+        country.focus();
         return;
       }
 
@@ -154,16 +343,28 @@ import { site } from "../config/site";
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            email: email.value,
+            email: email.value.trim(),
             country: country.value,
-            ...(field("name").value.trim() ? { name: field("name").value } : {}),
+            ...(name.value.trim() ? { name: name.value.trim() } : {}),
           }),
         });
+        if (res.status === 400) {
+          const body = await res.json().catch(() => null);
+          status.textContent = body?.error?.message ?? "Check your email and country.";
+          mark(email, true);
+          dispatchEvent(new Event("mercury:error"));
+          button.disabled = false;
+          return;
+        }
         if (!res.ok) throw new Error(String(res.status));
+        form.style.minHeight = `${form.offsetHeight}px`;
         form.setAttribute("data-done", "");
+        shimmer(form);
         status.textContent = "You're on the list. We'll email you when Mercury opens.";
+        dispatchEvent(new Event("mercury:success"));
       } catch {
         status.textContent = "That didn't go through. Try again in a moment.";
+        dispatchEvent(new Event("mercury:error"));
         button.disabled = false;
       }
     });

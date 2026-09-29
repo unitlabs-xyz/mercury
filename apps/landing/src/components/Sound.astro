@@ -1,9 +1,10 @@
 ---
 /**
- * A short click for buttons, links and the accordion.
+ * A soft tick for buttons, links and the accordion, a chord swell for
+ * success and a lower double tick for an error.
  *
- * Synthesised rather than loaded: two sine partials through a fast envelope
- * cost nothing to ship and cannot be heard as a sample repeating. The context
+ * Synthesised rather than loaded: filtered noise and four sines cost nothing
+ * to ship. The context
  * is only created on the first real gesture, since browsers refuse to start
  * audio before one, and the whole thing stays off under reduced motion or
  * once someone has muted it.
@@ -27,38 +28,82 @@
 
     const allowed = () => !muted && !quiet.matches;
 
-    /** One soft blip: a fundamental, a quiet fifth above it, and a quick decay. */
-    const blip = (hz: number, gain: number, ms: number) => {
-      if (!allowed()) return;
+    const audio = () => {
       ctx ??= new AudioContext();
       if (ctx.state === "suspended") void ctx.resume();
+      return ctx;
+    };
 
-      const now = ctx.currentTime;
-      const level = ctx.createGain();
-      level.connect(ctx.destination);
-      // Never a hard edge: a 6ms ramp in, an exponential tail out.
-      level.gain.setValueAtTime(0.0001, now);
-      level.gain.exponentialRampToValueAtTime(gain, now + 0.006);
-      level.gain.exponentialRampToValueAtTime(0.0001, now + ms / 1000);
+    /** A gain that rises in `attack` seconds to `peak`, then dies away over `decay`. */
+    const envelope = (c: AudioContext, start: number, peak: number, attack: number, decay: number) => {
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(peak, start + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + attack + decay);
+      return g;
+    };
 
-      for (const [ratio, mix] of [
-        [1, 1],
-        [1.5, 0.28],
-      ] as const) {
-        const tone = ctx.createOscillator();
-        tone.type = "sine";
-        tone.frequency.setValueAtTime(hz * ratio, now);
-        const part = ctx.createGain();
-        part.gain.value = mix;
-        tone.connect(part).connect(level);
-        tone.start(now);
-        tone.stop(now + ms / 1000 + 0.02);
+    let grain: AudioBuffer | null = null;
+
+    /**
+     * The click: ten milliseconds of noise through a band around 5.5kHz. No
+     * pitch at all, so it reads as a tiny physical tick, never a beep.
+     */
+    const tick = (band: number, peak: number, at = 0) => {
+      if (!allowed()) return;
+      const c = audio();
+      if (grain === null) {
+        grain = c.createBuffer(1, Math.ceil(c.sampleRate * 0.03), c.sampleRate);
+        const data = grain.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      }
+      const start = c.currentTime + at;
+      const src = c.createBufferSource();
+      src.buffer = grain;
+      const filter = c.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.value = band;
+      filter.Q.value = 0.9;
+      src.connect(filter).connect(envelope(c, start, peak, 0.001, 0.01)).connect(c.destination);
+      src.start(start);
+      src.stop(start + 0.03);
+    };
+
+    /**
+     * Success: a C major chord (C5 E5 G5 C6) that swells in over 60ms and
+     * fades across most of a second, softened by a lowpass.
+     */
+    const chord = () => {
+      if (!allowed()) return;
+      const c = audio();
+      const start = c.currentTime;
+      const soften = c.createBiquadFilter();
+      soften.type = "lowpass";
+      soften.frequency.value = 2500;
+      soften.connect(c.destination);
+      for (const hz of [523.25, 659.25, 783.99, 1046.5]) {
+        const osc = c.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = hz;
+        osc.connect(envelope(c, start, 0.022, 0.06, 0.9)).connect(soften);
+        osc.start(start);
+        osc.stop(start + 1);
       }
     };
 
-    const press = () => blip(660, 0.035, 90);
-    const openPanel = () => blip(520, 0.03, 110);
-    const shutPanel = () => blip(390, 0.024, 90);
+    const press = () => tick(5500, 0.07);
+    const openPanel = () => tick(6000, 0.065);
+    const shutPanel = () => tick(4800, 0.06);
+    const success = chord;
+    /** An error is the click, twice and lower: noticeable, never alarming. */
+    const failure = () => {
+      tick(2600, 0.07);
+      tick(2200, 0.06, 0.08);
+    };
+
+    // Components announce outcomes; this is the only place that makes them heard.
+    addEventListener("mercury:success", success);
+    addEventListener("mercury:error", failure);
 
     addEventListener(
       "pointerdown",
