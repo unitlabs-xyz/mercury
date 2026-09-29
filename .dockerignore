@@ -1,0 +1,35 @@
+# The build context is the repo root, because the API imports five workspace
+# packages as TypeScript source. Everything the API image does not need is
+# excluded here — the context is otherwise ~1GB of node_modules and git history.
+
+# Never bake secrets into an image. .env is gitignored, so it is only ever a
+# local file, but the build context is the working tree and would carry it in.
+.env
+**/.env
+**/.env.*
+!**/.env.example
+
+node_modules
+**/node_modules
+.git
+.github
+**/dist
+**/build
+.turbo
+**/.turbo
+**/*.tsbuildinfo
+**/.vercel
+coverage
+**/coverage
+
+# Front ends. The Dockerfile copies packages/, services/api and tooling/ only;
+# apps/* would be several hundred MB of context for files never copied.
+apps
+
+# Docs, design and planning material.
+docs
+*.md
+!README.md
+.impeccable
+.superpowers
+.claude

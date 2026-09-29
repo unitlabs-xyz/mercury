@@ -127,6 +127,47 @@ Solana's public RPC will rate-limit this — `position-sync` alone polls it ever
 two seconds, and 429s were routine during testing. Put a Helius or Triton URL in
 `SOLANA_RPC_URL` before spending much time in the app.
 
+### Deploying the API
+
+`services/api/Dockerfile` builds the server for Coolify. **The build context is
+the repo root**, not `services/api` — the API imports five workspace packages
+and every one exports raw `.ts`, so the image carries the workspace and runs it
+through tsx. Nothing in this repo compiles.
+
+In Coolify, on a Dockerfile application:
+
+| Setting             | Value                      |
+| ------------------- | -------------------------- |
+| Build Pack          | `Dockerfile`               |
+| Base Directory      | `/`                        |
+| Dockerfile Location | `/services/api/Dockerfile` |
+| Ports Exposes       | `8787`                     |
+| Health Check Path   | `/health`                  |
+
+Then set `DATABASE_URL`, `PRIVY_APP_ID` and `SOLANA_RPC_URL` as environment
+variables. The server refuses to start without all three. Do not mount a `.env`
+file — the image deliberately has none, and `.dockerignore` keeps the local one
+out of the build context.
+
+Migrations do not run on deploy. Apply them yourself against the deployed
+database before the first boot:
+
+```bash
+DATABASE_URL=<the deployed one> pnpm --filter @mercury/api exec drizzle-kit migrate
+```
+
+**Run one instance.** The background jobs live inside the API process, so a
+second replica is a second writer polling the same wallets — `position-sync`
+every two seconds, `wallet-events` every thirty. Scaling this out needs the
+jobs pulled into their own process first.
+
+To check the image locally before pushing:
+
+```bash
+docker build -f services/api/Dockerfile -t mercury-api .
+docker run --rm -p 8787:8787 -e DATABASE_URL=... -e PRIVY_APP_ID=... -e SOLANA_RPC_URL=... mercury-api
+```
+
 ## State of the build
 
 | Package           | State                                                                                                                                                                                                                                                                                    |
