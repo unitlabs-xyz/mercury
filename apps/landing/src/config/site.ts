@@ -41,10 +41,7 @@ export const footerNav: readonly { heading: string; links: readonly { label: str
   },
   {
     heading: "Company",
-    links: [
-      { label: "About" },
-      { label: "Contact" },
-    ],
+    links: [{ label: "About" }, { label: "Contact" }],
   },
   {
     heading: "Follow",
@@ -52,9 +49,6 @@ export const footerNav: readonly { heading: string; links: readonly { label: str
   },
   {
     heading: "Legal",
-    links: [
-      { label: "Terms" },
-      { label: "Privacy" },
-    ],
+    links: [{ label: "Terms" }, { label: "Privacy" }],
   },
 ];

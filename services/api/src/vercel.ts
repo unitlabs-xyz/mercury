@@ -33,7 +33,9 @@ const cron = (path: string, run: () => Promise<object>) =>
     return c.json({ ok: true, ...(await run()) });
   });
 
-cron("/cron/stocks", () => syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices }));
+cron("/cron/stocks", () =>
+  syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices }),
+);
 cron("/cron/position-sync", () => syncAllPositions(auth.db, buildReconcileDeps(deps)));
 cron("/cron/wallet-events", () => syncAllWalletEvents(auth.db, { history: deps.history }));
 

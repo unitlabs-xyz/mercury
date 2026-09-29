@@ -90,7 +90,10 @@ export function waitlistRoutes(deps: WaitlistDeps) {
       );
     }
     if (!(await deps.acceptsMail(parsed.data.email.split("@")[1]!))) {
-      return c.json({ error: { code: "validation_failed", message: "That email's domain doesn't accept mail." } }, 400);
+      return c.json(
+        { error: { code: "validation_failed", message: "That email's domain doesn't accept mail." } },
+        400,
+      );
     }
     await deps.join(parsed.data);
     return c.json({ ok: true });
