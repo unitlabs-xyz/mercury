@@ -2,7 +2,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useId, useState, type ReactNode } from "react";
 import { EASE } from "../motion/config";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
-import { Chevron, StatusChip } from "../ui/ds";
+import { StatusChip } from "../ui/ds";
+import { ChevronDown } from "../ui/icons";
 import { DepositAddress } from "./Receive";
 
 type Method = {
@@ -17,20 +18,31 @@ type Method = {
   soon?: boolean;
 };
 
-/** Name, description and right-hand figure. The same row whether it can be picked or not. */
+/**
+ * Name, description and right-hand figure. The same row whether it can be
+ * picked or not.
+ *
+ * A row in the list is one line tall and truncates, because it is one of
+ * several being scanned. A row behind the fold wraps instead: it is read
+ * rather than scanned, and "ACH or wire fro…" is not worth opening a fold for.
+ */
 const Row = ({ method, dim }: { method: Method; dim?: boolean }) => (
   <>
     <span className={dim ? "opacity-60" : undefined}>{method.icon}</span>
     <span className={`min-w-0 flex-1 ${dim ? "opacity-60" : ""}`}>
-      <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">
+      <span className={`block text-[14px] leading-[18px] font-medium text-ds-ink ${dim ? "" : "truncate"}`}>
         {method.title}
       </span>
-      <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">{method.sub}</span>
+      <span className={`mt-0.5 block text-[12px] leading-4 text-ds-muted ${dim ? "" : "truncate"}`}>
+        {method.sub}
+      </span>
     </span>
     <span className="shrink-0 text-right">
       {method.soon ? (
+        // The method's own note. "Soon" was a second, shorter way of saying
+        // the same thing, in a chip beside the one that already said it.
         <StatusChip tone="neutral" size="md">
-          Soon
+          {method.note}
         </StatusChip>
       ) : (
         <>
@@ -65,13 +77,9 @@ const OtherMethods = ({ methods }: { methods: readonly Method[] }) => {
         className="flex h-10 w-full items-center gap-2 rounded-md px-3 text-left text-[14px] leading-none font-medium text-ds-muted transition-colors hover:bg-white/60 hover:text-ds-ink"
       >
         Other methods
-        <motion.span
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={{ duration: 0.25, ease: EASE }}
-          className="inline-flex"
-        >
-          <Chevron />
-        </motion.span>
+        <ChevronDown
+          className={`size-3.5 text-ds-chevron transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       <AnimatePresence initial={false}>
@@ -88,7 +96,7 @@ const OtherMethods = ({ methods }: { methods: readonly Method[] }) => {
               // Not buttons and not radios: there is nothing to choose here
               // until they exist, and a disabled control invites the click
               // that does nothing.
-              <li key={m.key} className="flex h-15 items-center gap-3 px-3">
+              <li key={m.key} className="flex min-h-15 items-center gap-3 px-3 py-2.5">
                 <Row method={m} dim />
               </li>
             ))}
