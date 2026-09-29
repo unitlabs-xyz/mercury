@@ -9,15 +9,10 @@ import type {
   TokenBalanceEntry,
   TransactionDetail,
 } from "../ports.js";
-import { defaultFetch } from "../fetch.js";
+import { batchedRpc } from "./batch.js";
 
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 export const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-
-interface RpcEnvelope<T> {
-  readonly result?: T;
-  readonly error?: { readonly code: number; readonly message: string };
-}
 
 interface ParsedTokenAccount {
   readonly account: {
@@ -94,6 +89,12 @@ export interface SolanaRpcConfig {
   readonly rpcUrl: string;
   readonly fetch?: typeof fetch;
   readonly now?: () => number;
+  /** Most calls in one HTTP request. See `batchedRpc`. */
+  readonly maxBatch?: number;
+  /** Attempts for a request that failed as a whole. See `batchedRpc`. */
+  readonly attempts?: number;
+  /** Hold a batch open this long. The default is the current microtask. */
+  readonly windowMs?: number;
 }
 
 /**
@@ -102,25 +103,23 @@ export interface SolanaRpcConfig {
  * already decoded by the node when asked for `jsonParsed`.
  */
 export class SolanaRpc implements ChainReader, ChainHistory {
-  private readonly doFetch: typeof fetch;
   private readonly now: () => number;
+  /**
+   * Every read goes through here, so calls issued together leave together and
+   * a rate limit is retried once for the batch rather than separately by each
+   * reader above. See `batch.ts` for what that is worth and what it costs.
+   */
+  private readonly call: <T>(method: string, params: readonly unknown[]) => Promise<T>;
 
-  constructor(private readonly config: SolanaRpcConfig) {
-    this.doFetch = config.fetch ?? defaultFetch();
+  constructor(config: SolanaRpcConfig) {
     this.now = config.now ?? Date.now;
-  }
-
-  private async call<T>(method: string, params: readonly unknown[]): Promise<T> {
-    const res = await this.doFetch(this.config.rpcUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    this.call = batchedRpc({
+      rpcUrl: config.rpcUrl,
+      ...(config.fetch ? { fetch: config.fetch } : {}),
+      ...(config.maxBatch !== undefined ? { maxBatch: config.maxBatch } : {}),
+      ...(config.attempts !== undefined ? { attempts: config.attempts } : {}),
+      ...(config.windowMs !== undefined ? { windowMs: config.windowMs } : {}),
     });
-    if (!res.ok) throw new Error(`solana ${method} returned ${res.status}`);
-    const body = (await res.json()) as RpcEnvelope<T>;
-    if (body.error !== undefined) throw new Error(`solana ${method}: ${body.error.message}`);
-    if (body.result === undefined) throw new Error(`solana ${method} returned no result`);
-    return body.result;
   }
 
   /**

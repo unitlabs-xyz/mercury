@@ -1,5 +1,6 @@
 import { PrivyProvider } from "@privy-io/react-auth";
 import type { ReactNode } from "react";
+import { IdentityTokenSync } from "./identity";
 
 const APP_ID = import.meta.env["VITE_PRIVY_APP_ID"] as string | undefined;
 
@@ -21,6 +22,8 @@ export const PrivyBoundary = ({ children }: { children: ReactNode }) => {
         },
       }}
     >
+      {/* Mirrors the identity token out to `apiFetch`, which cannot use a hook. */}
+      <IdentityTokenSync />
       {children}
     </PrivyProvider>
   );

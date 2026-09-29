@@ -24,6 +24,17 @@ export interface SyncSummary {
  * wallet whose position stays where it was — stale but right — which is the
  * correct answer when an upstream is down, and better than half a pass.
  */
+/**
+ * Wallets reconciled at once.
+ *
+ * Bounded, not unbounded. Firing every wallet at the node together drops
+ * connections long before it meets a rate limit — a thousand parallel requests
+ * measured on 29 September 2026 lost a third of themselves to ECONNRESET. A
+ * handful in flight is also what gives `batchedRpc` something to collect: one
+ * wallet at a time is one call at a time, and a batch of one is not a batch.
+ */
+const CONCURRENCY = 8;
+
 export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<SyncSummary> {
   const rows = await db
     .select({ userId: users.id, address: wallets.address })
@@ -35,21 +46,30 @@ export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<Syn
   let failed = 0;
   let written = 0;
 
-  for (const row of rows) {
-    try {
-      const held = await loadHeldTokens(db, deps, row.userId, row.address);
-      if (held.length === 0) continue;
-      const plan = planReconciliation(held, new Date());
-      await applyReconciliation(db, row.userId, plan);
-      reconciled += 1;
-      written += plan.lots.length + plan.activity.length;
-    } catch (error: unknown) {
-      failed += 1;
-      // The wallet, never the address: an address in a log is a person's
-      // holdings in a log.
-      console.error(`position-sync: wallet for user ${row.userId} failed`, error);
+  // A shared index rather than a chunked split, so a slow wallet holds up only
+  // itself. Counters are safe to share: this runs on one thread.
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const row = rows[next++];
+      if (row === undefined) return;
+      try {
+        const held = await loadHeldTokens(db, deps, row.userId, row.address);
+        if (held.length === 0) continue;
+        const plan = planReconciliation(held, new Date());
+        await applyReconciliation(db, row.userId, plan);
+        reconciled += 1;
+        written += plan.lots.length + plan.activity.length;
+      } catch (error: unknown) {
+        failed += 1;
+        // The wallet, never the address: an address in a log is a person's
+        // holdings in a log.
+        console.error(`position-sync: wallet for user ${row.userId} failed`, error);
+      }
     }
-  }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rows.length) }, worker));
 
   return { wallets: rows.length, reconciled, failed, written };
 }

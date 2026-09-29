@@ -39,19 +39,39 @@ const mintWith = (scaled: Record<string, unknown>, paused: boolean) => ({
   },
 });
 
+const SPL = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+
+interface RpcRequest {
+  readonly id?: number;
+  readonly params?: readonly unknown[];
+}
+
 /**
  * A node answers each program separately, and a mint belongs to exactly one of
  * them. The fixture holds all three accounts, so the fake splits it the way a
  * real node would rather than serving the whole list to both calls.
+ *
+ * It answers a batch as a real node does: an array in, an array out, each
+ * entry carrying back the id it was asked under. The two programs now arrive
+ * in one request, so a fake that read the whole body for a program name would
+ * hand both calls the same answer.
  */
 const byProgram = (accounts = rpcTokenAccounts.result.value) => {
-  const of = (program: string) => ({
+  const programIn = (req: RpcRequest): string => {
+    const filter = req.params?.[1] as { programId?: string } | undefined;
+    return filter?.programId === TOKEN_2022 ? TOKEN_2022 : SPL;
+  };
+  const of = (id: number, program: string) => ({
     jsonrpc: "2.0",
-    id: 1,
+    id,
     result: { context: { slot: 1 }, value: accounts.filter((a) => a.account.owner === program) },
   });
-  return (body: string) =>
-    body.includes(TOKEN_2022) ? of(TOKEN_2022) : of("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+  return (body: string): unknown => {
+    const parsed: unknown = JSON.parse(body);
+    return Array.isArray(parsed)
+      ? (parsed as RpcRequest[]).map((req, i) => of(req.id ?? i, programIn(req)))
+      : of(1, programIn(parsed as RpcRequest));
+  };
 };
 
 const nodeServing = (accounts?: typeof rpcTokenAccounts.result.value) => {
@@ -72,10 +92,12 @@ describe("SolanaRpc.tokenBalances", () => {
     const node = nodeServing();
     const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
     await rpc.tokenBalances(FIXTURE_OWNER);
-    expect(node.calls.length).toBe(2);
-    expect(node.calls.join()).toContain("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-    expect(node.calls.join()).toContain(TOKEN_2022);
-    expect(node.calls.join()).toContain(FIXTURE_OWNER);
+    // One request, both programs: the two calls are issued together, so they
+    // travel together. Asking twice is what the rate limit used to refuse.
+    expect(node.calls.length).toBe(1);
+    expect(node.calls[0]).toContain(SPL);
+    expect(node.calls[0]).toContain(TOKEN_2022);
+    expect(node.calls[0]).toContain(FIXTURE_OWNER);
   });
 
   it("returns raw amounts as bigint, and never touches uiAmount", async () => {
@@ -121,10 +143,19 @@ describe("SolanaRpc.tokenBalances", () => {
   });
 
   it("throws when the node answers an error, rather than reporting an empty wallet", async () => {
-    const rpc = new SolanaRpc({
-      rpcUrl: RPC,
-      fetch: fakeFetch({ [RPC]: { jsonrpc: "2.0", id: 1, error: { code: -32602, message: "bad params" } } }),
-    });
+    // A node refusing a batch answers every entry, which is what this has to
+    // survive: the failure belongs to the call, not to the request around it.
+    const erroring = ((_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const sent: unknown = JSON.parse(String(init?.body));
+      const error = { code: -32602, message: "bad params" };
+      const body = Array.isArray(sent)
+        ? (sent as { id?: number }[]).map((r, i) => ({ jsonrpc: "2.0", id: r.id ?? i, error }))
+        : { jsonrpc: "2.0", id: 1, error };
+      return Promise.resolve(
+        new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } }),
+      );
+    }) as typeof fetch;
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: erroring });
     await expect(rpc.tokenBalances(FIXTURE_OWNER)).rejects.toThrow("bad params");
   });
 
