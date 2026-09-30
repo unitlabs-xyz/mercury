@@ -55,6 +55,22 @@ describe("validateSponsored", () => {
     expect(v.ok === false && v.message).toContain(other);
   });
 
+  /*
+   * The setting this ships with. Worth a test of its own, so that turning the
+   * list on later is a change someone made rather than a default drifting.
+   */
+  it("sponsors any program when no allowlist is configured", () => {
+    const open: SponsorPolicy = { relayer: RELAYER };
+    const anything = "Dra1n1111111111111111111111111111111111111";
+    expect(validateSponsored(tx({ programs: [anything] }), WALLET, open)).toEqual({ ok: true });
+  });
+
+  it("still refuses a wrong fee payer with no allowlist configured", () => {
+    const open: SponsorPolicy = { relayer: RELAYER };
+    const v = validateSponsored(tx({ feePayer: WALLET, signers: [WALLET] }), WALLET, open);
+    expect(v.ok === false && v.code).toBe("not_sponsored");
+  });
+
   it("refuses a program that is not on the allowlist", () => {
     const drainer = "Dra1n1111111111111111111111111111111111111";
     const v = validateSponsored(tx({ programs: [JUPITER, drainer] }), WALLET, POLICY);

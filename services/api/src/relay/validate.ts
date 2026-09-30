@@ -25,7 +25,16 @@ export interface SponsoredTransaction {
 export interface SponsorPolicy {
   /** The wallet whose key co-signs and whose SOL is spent. */
   readonly relayer: string;
-  readonly allowedPrograms: readonly string[];
+  /**
+   * Which programs may be sponsored. Undefined allows any of them.
+   *
+   * Open is the current setting and a deliberate one, but it is not a safe
+   * resting place: an unrestricted relayer will fund any transaction an
+   * account holder builds, and creating a token account moves rent from the
+   * relayer to them. Either this list or the USDC charge has to exist before
+   * the relayer holds money worth taking.
+   */
+  readonly allowedPrograms?: readonly string[] | undefined;
 }
 
 export type SponsorVerdict =
@@ -73,9 +82,12 @@ export const validateSponsored = (
     return refuse("extra_signer", `The transaction requires a third signature, from ${extra}.`);
   }
 
-  const forbidden = tx.programs.find((p) => !policy.allowedPrograms.includes(p));
-  if (forbidden !== undefined) {
-    return refuse("program_not_allowed", `The transaction calls ${forbidden}, which we do not sponsor.`);
+  if (policy.allowedPrograms !== undefined) {
+    const allowed = policy.allowedPrograms;
+    const forbidden = tx.programs.find((p) => !allowed.includes(p));
+    if (forbidden !== undefined) {
+      return refuse("program_not_allowed", `The transaction calls ${forbidden}, which we do not sponsor.`);
+    }
   }
 
   return { ok: true };

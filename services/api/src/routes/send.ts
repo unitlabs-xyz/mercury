@@ -11,12 +11,37 @@ import {
 } from "@solana/kit";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
+import { decodeSponsored } from "../relay/decode.js";
+import type { RelaySigner } from "../relay/signer.js";
+import { validateSponsored } from "../relay/validate.js";
 
 export interface SendDeps {
   readonly rpcUrl: string;
   /** How long to wait for confirmation before answering "pending". */
   readonly confirmMs?: number;
+  /**
+   * Who pays when the buyer does not. Absent, every transaction must still be
+   * fee-paid by the caller's own wallet, which is the behaviour before any of
+   * this existed.
+   */
+  readonly relay?: RelaySigner | undefined;
+  /** Which programs may be sponsored. Undefined allows any. */
+  readonly allowedPrograms?: readonly string[] | undefined;
 }
+
+/** The transaction id is the fee payer's signature, which is the first one. */
+const feePayerSignature = (wire: string): string | null => {
+  try {
+    const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
+    const message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
+    const payer = message.staticAccounts[0];
+    if (payer === undefined) return null;
+    const sig = tx.signatures[payer as keyof typeof tx.signatures];
+    return sig ? getBase58Decoder().decode(sig) : null;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * The program's own reason, in words someone can act on.
@@ -63,24 +88,41 @@ export function sendRoutes(deps: SendDeps): Hono {
     const parsed = Body.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
-    let payer: string;
-    let signature: string;
-    try {
-      const tx = getTransactionDecoder().decode(getBase64Encoder().encode(parsed.data.transaction));
-      const message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
-      payer = message.staticAccounts[0] ?? "";
-      const sig = tx.signatures[payer as keyof typeof tx.signatures];
-      if (!sig) throw new Error("unsigned");
-      signature = getBase58Decoder().decode(sig);
-    } catch {
+    const decoded = decodeSponsored(parsed.data.transaction);
+    if (!decoded.ok) return c.json(fail("validation_failed", "Not a signed Solana transaction."), 400);
+
+    let wire = parsed.data.transaction;
+
+    if (decoded.tx.feePayer === wallet) {
+      // The buyer pays their own way. Unchanged, and still the path taken when
+      // no relayer is configured.
+      if (!decoded.tx.signedBy.includes(wallet)) {
+        return c.json(fail("validation_failed", "Not a signed Solana transaction."), 400);
+      }
+    } else if (deps.relay !== undefined && decoded.tx.feePayer === deps.relay.address) {
+      /*
+       * We are being asked to pay. The session proves who is calling; it does
+       * not prove the transaction is theirs, so everything about the message
+       * is checked against the wallet Privy signed for before the key is used.
+       */
+      const verdict = validateSponsored(decoded.tx, wallet, {
+        relayer: deps.relay.address,
+        ...(deps.allowedPrograms === undefined ? {} : { allowedPrograms: deps.allowedPrograms }),
+      });
+      if (!verdict.ok) return c.json(fail(verdict.code, verdict.message), 403);
+      wire = await deps.relay.cosign(wire);
+    } else {
+      return c.json(fail("forbidden", "The fee payer is not this account's wallet."), 403);
+    }
+
+    const signature = feePayerSignature(wire);
+    if (signature === null) {
       return c.json(fail("validation_failed", "Not a signed Solana transaction."), 400);
     }
-    if (payer !== wallet)
-      return c.json(fail("forbidden", "The fee payer is not this account's wallet."), 403);
 
     try {
       await rpc
-        .sendTransaction(parsed.data.transaction as Base64EncodedWireTransaction, {
+        .sendTransaction(wire as Base64EncodedWireTransaction, {
           encoding: "base64",
           preflightCommitment: "confirmed",
           maxRetries: 3n,
