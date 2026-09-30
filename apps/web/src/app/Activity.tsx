@@ -8,7 +8,8 @@ import { type Event, type Group } from "./activity-data";
 import { downloadCsv } from "./activity-export";
 import { MONTH_OPTIONS, TYPE_OPTIONS, filterEvents, groupByDay, yearOptions } from "./activity-filters";
 import { useEvents } from "./useEvents";
-import { EVENT_ICON } from "./portfolio/Feed";
+import { ActivityMark } from "./activity-mark";
+import { Skeleton } from "./portfolio/ui";
 import { Select } from "../ui/Select";
 import { useActivityParams } from "./useActivityParams";
 import { AppShell } from "./AppShell";
@@ -32,6 +33,42 @@ const Amount = ({ event }: { event: Event }) => {
  * white under the pointer and opens in place to its details and the
  * transaction behind it.
  */
+/*
+ * The shape of the list, before the list.
+ *
+ * The page used to render "Nothing has happened yet" while the feed was still
+ * in flight, so a loaded account was told it had no history and then watched
+ * that be contradicted. An empty state is a claim about the data, and this
+ * screen was making it before it had any.
+ *
+ * Geometry is copied from Row rather than approximated: the same h-15, the
+ * same px-4 and gap-3, the same 36px icon. A skeleton that does not line up
+ * with what replaces it reads as the page jolting.
+ */
+const LoadingRows = () => (
+  <div aria-hidden>
+    {[0, 1].map((group) => (
+      <div key={group}>
+        <div className="px-4 pt-[10px] pb-[5px]">
+          <Skeleton className="h-3 w-24" />
+        </div>
+        <div className="flex flex-col gap-1">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="flex h-15 w-full items-center gap-3 px-4">
+              <Skeleton className="size-9 shrink-0 rounded-full" />
+              <span className="min-w-0 flex-1">
+                <Skeleton className="h-[14px] w-40 max-w-[60%]" />
+                <Skeleton className="mt-[7px] h-3 w-28 max-w-[40%]" />
+              </span>
+              <Skeleton className="h-[14px] w-16 shrink-0" />
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 const Row = ({ event }: { event: Event }) => {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -44,7 +81,7 @@ const Row = ({ event }: { event: Event }) => {
         onClick={() => setOpen((v) => !v)}
         className="flex h-15 w-full items-center gap-3 px-4 text-left"
       >
-        <span className="shrink-0 [&>svg]:size-9">{EVENT_ICON[event.kind]}</span>
+        <ActivityMark event={event} />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-[5px]">
             <span className="truncate text-[14px] leading-[18px] font-medium text-ds-ink">{event.title}</span>
@@ -148,7 +185,7 @@ const PER_PAGE = 10;
 
 export const Activity = () => {
   const { group, year, month, query, page, write, reset } = useActivityParams();
-  const { events } = useEvents();
+  const { events, loading } = useEvents();
   const total = events.length;
 
   const filtered = useMemo(
@@ -173,15 +210,24 @@ export const Activity = () => {
           <div className="flex min-w-0 items-center gap-2.5">
             <h1 className="text-[20px] leading-none font-medium text-ds-ink">Activity</h1>
             <span className="text-ds-muted">
-              {filtered.length === 0
-                ? narrowed
-                  ? `0 of ${total}`
-                  : ""
-                : pages > 1
-                  ? `${from}–${to} of ${filtered.length}`
-                  : narrowed
-                    ? `${filtered.length} of ${total}`
-                    : `${total} ${total === 1 ? "event" : "events"}`}
+              {/* A count is a fact about data we do not have yet. It stands in
+                  at the width it will take, so the title does not shift when
+                  the real number lands. */}
+              {loading ? (
+                <Skeleton className="h-3 w-14" />
+              ) : filtered.length === 0 ? (
+                narrowed ? (
+                  `0 of ${total}`
+                ) : (
+                  ""
+                )
+              ) : pages > 1 ? (
+                `${from}–${to} of ${filtered.length}`
+              ) : narrowed ? (
+                `${filtered.length} of ${total}`
+              ) : (
+                `${total} ${total === 1 ? "event" : "events"}`
+              )}
             </span>
             <InfoTip label="About this list" align="start">
               Every row links to the transaction on Solana. Nothing here is a number you have to take on
@@ -241,7 +287,9 @@ export const Activity = () => {
         </div>
 
         <div className="mt-3 rounded-lg bg-ds-panel p-1">
-          {total === 0 ? (
+          {loading ? (
+            <LoadingRows />
+          ) : total === 0 ? (
             <Blank
               title="Nothing has happened yet"
               body="Every buy, sell, dividend and transfer will show here, each with the transaction behind it one tap away."

@@ -18,6 +18,8 @@ const row = (id: string, iso: string): ActivityRow => ({
   subtitle: "1 share, cost estimated at today's price",
   amountUsd: "200",
   txSignature: null,
+  mint: null,
+  logoUrl: null,
 });
 
 const appWith = (d: ActivityDeps) => {

@@ -51,5 +51,7 @@ export const toEvent = (i: ActivityItem): Event => {
       (i.amountUsd === null || Number(i.amountUsd) === 0 ? null : Number(i.amountUsd) < 0 ? "out" : "in"),
     details: [],
     ...(i.txSignature ? { signature: i.txSignature } : {}),
+    ...(i.mint ? { mint: i.mint } : {}),
+    ...(i.logoUrl ? { logo: i.logoUrl } : {}),
   };
 };

@@ -1,6 +1,6 @@
 import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { activities } from "../db/schema.js";
+import { activities, instruments, tokens } from "../db/schema.js";
 import type { ActivityRow, Cursor } from "../routes/activity.js";
 
 /**
@@ -31,8 +31,17 @@ export async function readActivity(
       subtitle: activities.subtitle,
       amountUsd: activities.amountUsd,
       txSignature: activities.txSignature,
+      mint: activities.mint,
+      // Two left joins rather than a denormalised copy: the feed is written
+      // once and read constantly, and a logo that changes at the issuer would
+      // be stale in every row already written. Both are on indexed keys and
+      // the page is 100 rows at most. A row whose mint is SOL or USDC matches
+      // no token and comes back null, which is correct — neither is a holding.
+      logoUrl: instruments.logoUrl,
     })
     .from(activities)
+    .leftJoin(tokens, eq(tokens.mint, activities.mint))
+    .leftJoin(instruments, eq(instruments.id, tokens.instrumentId))
     .where(before === undefined ? eq(activities.userId, userId) : and(eq(activities.userId, userId), before))
     .orderBy(desc(activities.occurredAt), desc(activities.id))
     .limit(limit);

@@ -145,15 +145,46 @@ export const SAMPLE_DASHBOARD: Dashboard = {
   ltv: null,
 };
 
+/*
+ * Mints and logos are carried the way the feed now sends them: SOL and USDC
+ * are money and resolve to their own marks, a trade resolves to the stock's,
+ * and interest and a queued order have no asset behind them and keep the kind
+ * icon. One of each, so the Activity row's mark can be seen in every state it
+ * has without an account that has done all six things.
+ */
+const SOL = "So11111111111111111111111111111111111111112";
+const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const xstock = (symbol: string) => `https://xstocks-metadata.backed.fi/logos/tokens/${symbol}.png`;
+
 export const SAMPLE_EVENTS: Event[] = [
-  { date: day(0), kind: "send", title: "Sent USDC", sub: "", amount: "$250.00", flow: "out", details: [] },
   {
     date: day(0),
-    kind: "dividend",
-    title: "Dividend reinvested",
+    kind: "receive",
+    title: "Added cash",
     sub: "",
-    amount: "0.003 shares",
+    amount: "$250.00",
     flow: "in",
+    mint: USDC,
+    details: [],
+  },
+  {
+    date: day(0),
+    kind: "receive",
+    title: "Received SOL",
+    sub: "",
+    amount: "$2.31",
+    flow: "in",
+    mint: SOL,
+    details: [],
+  },
+  {
+    date: day(0),
+    kind: "buy",
+    title: "Bought SpaceX",
+    sub: "0.0335 shares at $149.17",
+    amount: "$5.00",
+    flow: "out",
+    logo: xstock("SPCXx"),
     details: [],
   },
   {
@@ -173,6 +204,17 @@ export const SAMPLE_EVENTS: Event[] = [
     sub: "",
     amount: "$500.00",
     flow: "out",
+    logo: xstock("METAx"),
+    details: [],
+  },
+  {
+    date: day(-1),
+    kind: "send",
+    title: "Sent USDC",
+    sub: "",
+    amount: "$250.00",
+    flow: "out",
+    mint: USDC,
     details: [],
   },
   {
@@ -191,6 +233,7 @@ export const SAMPLE_EVENTS: Event[] = [
     sub: "",
     amount: "$200.00",
     flow: "out",
+    logo: xstock("SPYx"),
     details: [],
   },
 ] as Event[];
