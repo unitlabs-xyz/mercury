@@ -145,6 +145,29 @@ export const EVENT_ICON: Record<Event["kind"], ReactNode> = {
   ),
   queued: UPCOMING_ICON.queued,
   interest: UPCOMING_ICON.interest,
+  // Borrowing reuses the cash marks: dollars arriving and dollars leaving are
+  // drawn the same whoever sent them. Collateral gets the dividend mark's tint,
+  // because it is stock moving rather than money.
+  borrow: (
+    <Glyph bg="var(--color-ds-act-dividend-bg)" ink="var(--color-ds-act-dividend)">
+      <g transform="rotate(180 12 12)">{SEND_UP}</g>
+    </Glyph>
+  ),
+  repay: (
+    <Glyph bg="var(--color-ds-act-send-bg)" ink="var(--color-ds-act-send)">
+      {SEND_UP}
+    </Glyph>
+  ),
+  pledge: (
+    <Glyph bg="var(--color-ds-act-send-bg)" ink="var(--color-ds-act-send)">
+      {BUY_TREND}
+    </Glyph>
+  ),
+  unpledge: (
+    <Glyph bg="var(--color-ds-act-buy-bg)" ink="var(--color-ds-act-buy)">
+      {BUY_TREND}
+    </Glyph>
+  ),
 };
 
 /** "+$12.42", "−$200.00": a true minus, and only ever one sign, whatever the amount arrived as. */

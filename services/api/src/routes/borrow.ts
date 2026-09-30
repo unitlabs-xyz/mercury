@@ -1,10 +1,12 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { D, toWire, ZERO, type Decimal } from "@mercury/core";
-import type { ChainReader } from "@mercury/chain";
+import type { ChainHistory, ChainReader } from "@mercury/chain";
 import { capacity, safeHeadroomAfter, safeLimitAfter, type CapacityInput } from "../lending/capacity.js";
 import { capacityInputFor } from "../lending/input.js";
 import type { LendingIntent, LendingSource } from "../lending/ports.js";
+import { planLoanEvents, type PlannedLoanEvent } from "../lending/events.js";
+import type { RecordInput } from "../lending/record.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 
@@ -12,6 +14,13 @@ export interface BorrowDeps {
   readonly lending: LendingSource;
   readonly chain: ChainReader;
   readonly usdcMint: string;
+  /** For confirming that a signature reached the chain before it is recorded. */
+  readonly history: ChainHistory;
+  /** Writes the loan ledger and the feed row. */
+  readonly record: (
+    planned: readonly PlannedLoanEvent[],
+    input: Omit<RecordInput, "mintFor"> & { readonly mintFor: RecordInput["mintFor"] },
+  ) => Promise<{ written: number }>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -30,6 +39,35 @@ const Request = z.discriminatedUnion("kind", [
     tokensRaw: z.union([RawAmount, z.literal("all")]),
   }),
 ]);
+
+const ConfirmRequest = z.object({ signature: z.string().min(1), action: Request });
+
+/**
+ * A request body as an intent, with no capacity checks.
+ *
+ * The checks on the build path all ask whether something *should* happen. By
+ * the time this runs it already has, and refusing to record a transaction that
+ * is on the chain would leave the books further from the truth, not closer.
+ */
+const intentFrom = (body: z.infer<typeof Request>, canonical: (ticker: string) => string): LendingIntent => {
+  switch (body.kind) {
+    case "deposit_and_borrow":
+      return {
+        kind: "deposit_and_borrow",
+        ticker: canonical(body.ticker),
+        tokensRaw: body.tokensRaw,
+        usd: D(body.usd),
+      };
+    case "deposit":
+      return { kind: "deposit", ticker: canonical(body.ticker), tokensRaw: body.tokensRaw };
+    case "borrow":
+      return { kind: "borrow", usd: D(body.usd) };
+    case "repay":
+      return { kind: "repay", usd: body.usd === "all" ? "all" : D(body.usd) };
+    case "withdraw":
+      return { kind: "withdraw", ticker: canonical(body.ticker), tokensRaw: body.tokensRaw };
+  }
+};
 
 const usd = (d: Decimal) => toWire(d.toDecimalPlaces(2));
 const pct = (d: Decimal | null) => (d === null ? null : toWire(d.toDecimalPlaces(4)));
@@ -235,6 +273,64 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
       firstTime: built.firstTime,
       expiresAt: built.expiresAt.toISOString(),
     });
+  });
+
+  /**
+   * Record what a signed lending transaction did.
+   *
+   * Without this the server never learns a loan happened. Kamino sends borrowed
+   * USDC to the borrower's own wallet, so `wallet-events` sees a dollar balance
+   * rise and writes "Added cash" — a loan and a deposit are the same event to
+   * anything watching only balances. And a `deposit_and_borrow` moves a stock in
+   * the same transaction, which that job treats as a swap and skips entirely, so
+   * the commonest way to borrow produced no row at all.
+   *
+   * The checks here are deliberately shallow: the signature is on chain, and the
+   * position it left behind is read from Kamino rather than taken from the
+   * request. The intent is the client's word, which is worth stating plainly —
+   * it decides only what this person's own history says, never what they owe.
+   * `debt_after_usd` is Kamino's number and it is the one the books use.
+   */
+  app.post("/v1/borrow/confirm", async (c) => {
+    const wallet = c.get("identity").walletAddress;
+    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+
+    const parsed = ConfirmRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+    const { signature, action } = parsed.data;
+
+    // Not yet on chain is a different answer from never: a client can confirm
+    // before the node it asks has caught up, and that is worth retrying.
+    const tx = await deps.history.transaction(signature);
+    if (tx === null) {
+      return c.json(fail("not_found", "That transaction has not reached the chain yet."), 404);
+    }
+    if (!tx.accountKeys.includes(wallet)) {
+      return c.json(fail("validation_failed", "That transaction is not this wallet's."), 422);
+    }
+
+    const [terms, position] = await Promise.all([
+      deps.lending.terms().catch(() => null),
+      deps.lending.position(wallet),
+    ]);
+    const collateralOf = (ticker: string) =>
+      terms?.collateral.find((t) => t.isStock && t.ticker === ticker.toUpperCase());
+
+    const intent = intentFrom(action, (ticker) => collateralOf(ticker)?.ticker ?? ticker.toUpperCase());
+    const planned = planLoanEvents(intent, (ticker) => collateralOf(ticker)?.decimals ?? 0);
+
+    const usdc = deps.usdcMint;
+    const written = await deps.record(planned, {
+      userId: c.get("identity").userId,
+      signature,
+      occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
+      borrowApy: terms?.pool.borrowApy ?? null,
+      debtAfterUsd: position?.debtUsd ?? ZERO,
+      collateralAfterUsd: (position?.deposits ?? []).reduce((s, d) => s.add(d.valueUsd), ZERO),
+      mintFor: (event) => (event.ticker === null ? usdc : (collateralOf(event.ticker)?.mint ?? usdc)),
+    });
+
+    return c.json({ recorded: written.written, events: planned.map((e) => e.kind) });
   });
 
   return app;

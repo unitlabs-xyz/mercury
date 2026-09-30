@@ -228,6 +228,26 @@ export const SAMPLE_EVENTS: Event[] = [
     flow: "in",
     details: [],
   },
+  {
+    date: day(-3),
+    kind: "borrow",
+    title: "Borrowed $2,500.00 against SPYx",
+    sub: "",
+    amount: "$2,500.00",
+    flow: "in",
+    logo: xstock("SPYx"),
+    details: [],
+  },
+  {
+    date: day(-3),
+    kind: "pledge",
+    title: "Pledged 3.85 SPYx",
+    sub: "Held by Kamino as collateral",
+    amount: null,
+    flow: null,
+    logo: xstock("SPYx"),
+    details: [],
+  },
 ] as Event[];
 
 /** The last month of account value, ending at the design's +$547.62. */

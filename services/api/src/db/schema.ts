@@ -344,3 +344,61 @@ export const portfolioSnapshots = pgTable(
   (t) => [primaryKey({ columns: [t.userId, t.capturedAt] })],
 );
 export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
+
+/**
+ * What a loan did, and when.
+ *
+ * Kamino's obligation is current state: what is owed now, what is pledged now.
+ * It has no history to read back, so a loan taken and repaid leaves no trace
+ * anywhere once it is closed. This table is that trace — the same reason
+ * `portfolio_snapshot` exists, for the same kind of number.
+ *
+ * It is not the activity feed. The feed is denormalised on purpose, read
+ * constantly and never joined (docs/05); the rate at the time and the position
+ * either side of the event belong here, where something can join them.
+ */
+export const loanEvents = pgTable(
+  "loan_event",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** borrow, repay, pledge or unpledge. */
+    kind: text("kind").notNull(),
+    /** Dollars borrowed or repaid. Null when the event only moved collateral. */
+    usdAmount: usd("usd_amount"),
+    /** The collateral leg, when there is one. */
+    ticker: text("ticker"),
+    /** In the mint's smallest unit, as every token quantity here is. */
+    tokensRaw: text("tokens_raw"),
+    /**
+     * Kamino's borrow APY at the moment this happened.
+     *
+     * Recorded because it cannot be recovered. What a loan actually cost is the
+     * rate integrated over the balance, and the rate moves with utilisation
+     * every block. Without a reading at each event, a past month's interest can
+     * only ever be guessed at from today's rate.
+     */
+    borrowApy: numeric("borrow_apy", { precision: 38, scale: 18 }),
+    /** The position straight after, as Kamino reported it. */
+    debtAfterUsd: usd("debt_after_usd").notNull(),
+    collateralAfterUsd: usd("collateral_after_usd").notNull(),
+    txSignature: text("tx_signature").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("loan_event_user_occurred_idx").on(t.userId, t.occurredAt),
+    /**
+     * Idempotency, and the reason `kind` is in the key.
+     *
+     * One `deposit_and_borrow` is a single transaction that does two things, so
+     * one signature carries both a pledge and a borrow. Keyed on the signature
+     * alone the second would be rejected as a duplicate of the first; keyed
+     * with the kind, both land and confirming twice still writes nothing new.
+     */
+    uniqueIndex("loan_event_signature_kind_idx").on(t.userId, t.txSignature, t.kind),
+  ],
+);
+export type LoanEvent = typeof loanEvents.$inferSelect;

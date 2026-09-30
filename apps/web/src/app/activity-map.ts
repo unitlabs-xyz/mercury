@@ -18,6 +18,10 @@ const KIND: Record<string, EventKind> = {
   sell: "sell",
   basket: "basket",
   queued: "queued",
+  borrow: "borrow",
+  repay: "repay",
+  pledge: "pledge",
+  unpledge: "unpledge",
 };
 
 /** Which way money moved, for the sign and the colour. */
@@ -29,6 +33,11 @@ const FLOW: Partial<Record<EventKind, "in" | "out">> = {
   send: "out",
   buy: "out",
   basket: "out",
+  // A loan is dollars arriving and a repayment is dollars leaving, the same way
+  // round as a deposit and a withdrawal. Pledging moves stock, not money, so it
+  // has no direction and no sign.
+  borrow: "in",
+  repay: "out",
 };
 
 export const toEvent = (i: ActivityItem): Event => {

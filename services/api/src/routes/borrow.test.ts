@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { D } from "@mercury/core";
 import type { LendingIntent, LendingSource, LendingTerms } from "../lending/ports.js";
+import type { PlannedLoanEvent } from "../lending/events.js";
 import { borrowRoutes, type BorrowDeps } from "./borrow.js";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -73,7 +74,20 @@ const deps = (l: LendingSource, cash = 100_000_000n, spy = 5n * 100_000_000n): B
     mintConfig: async () => null,
   },
   usdcMint: USDC,
+  history: {
+    transaction: async (signature: string) =>
+      signature === "MISSING"
+        ? null
+        : ({ signature, accountKeys: ["WaLLeT"], blockTime: 1_790_000_000 } as never),
+  } as unknown as BorrowDeps["history"],
+  record: async (planned) => {
+    recorded.push(...planned);
+    return { written: planned.length };
+  },
 });
+
+/** What `record` was handed, per test. */
+const recorded: PlannedLoanEvent[] = [];
 
 const app = (d: BorrowDeps, walletAddress: string | null = "WaLLeT") => {
   const a = new Hono();
@@ -211,5 +225,88 @@ describe("POST /v1/borrow/transactions", () => {
   it("rejects a malformed amount", async () => {
     const res = await post(deps(lending()), { kind: "borrow", usd: "-5" });
     expect(res.status).toBe(400);
+  });
+});
+
+/**
+ * Recording what a loan did.
+ *
+ * Nothing recorded it before. Kamino pays a borrower into their own wallet, so
+ * every job watching balances sees a dollar arrive and calls it "Added cash" —
+ * a loan and a deposit are the same event to anything counting money. And a
+ * pledge-and-borrow moves a stock in the same transaction, which the wallet
+ * watcher treats as a swap and drops, so the commonest way to borrow left no
+ * trace at all.
+ */
+describe("POST /v1/borrow/confirm", () => {
+  const confirm = (d: BorrowDeps, body: unknown) =>
+    app(d).request("/v1/borrow/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("records a pledge and a borrow from the one transaction that did both", async () => {
+    recorded.length = 0;
+    const res = await confirm(deps(lending()), {
+      signature: "SIG1",
+      action: { kind: "deposit_and_borrow", ticker: "SPY", tokensRaw: "100000000", usd: "500" },
+    });
+    expect(res.status).toBe(200);
+    expect(recorded.map((e) => e.kind)).toEqual(["pledge", "borrow"]);
+    expect(recorded[1]!.title).toBe("Borrowed $500.00 against SPY");
+  });
+
+  it("refuses a signature the chain has not seen, so the client can retry", async () => {
+    const res = await confirm(deps(lending()), {
+      signature: "MISSING",
+      action: { kind: "borrow", usd: "500" },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses a transaction that is not this wallet's", async () => {
+    const d = deps(lending());
+    const other = {
+      ...d,
+      history: {
+        transaction: async () => ({ signature: "SIG", accountKeys: ["SomeoneElse"], blockTime: 1 }),
+      } as unknown as BorrowDeps["history"],
+    };
+    const res = await confirm(other, { signature: "SIG", action: { kind: "borrow", usd: "500" } });
+    expect(res.status).toBe(422);
+  });
+
+  it("records a repay of everything without inventing the figure", async () => {
+    recorded.length = 0;
+    await confirm(deps(lending()), { signature: "SIG2", action: { kind: "repay", usd: "all" } });
+    expect(recorded[0]!.kind).toBe("repay");
+    expect(recorded[0]!.usdAmount).toBeNull();
+    expect(recorded[0]!.title).toBe("Repaid your loan in full");
+  });
+
+  /*
+   * The build path refuses what should not happen. By the time this runs it
+   * already has, and refusing to record a transaction that is on the chain
+   * would leave the books further from the truth rather than closer.
+   */
+  it("records an action the build path would now refuse, because it already happened", async () => {
+    recorded.length = 0;
+    // No cash in the wallet: a repay built now would be refused for that.
+    const res = await confirm(deps(lending(), 0n), {
+      signature: "SIG3",
+      action: { kind: "repay", usd: "250" },
+    });
+    expect(res.status).toBe(200);
+    expect(recorded[0]!.title).toBe("Repaid $250.00");
+  });
+
+  it("says no wallet rather than recording against nobody", async () => {
+    const res = await app(deps(lending()), null).request("/v1/borrow/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signature: "SIG", action: { kind: "borrow", usd: "1" } }),
+    });
+    expect(res.status).toBe(401);
   });
 });

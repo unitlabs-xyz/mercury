@@ -57,6 +57,13 @@
       "when": 1790778493796,
       "tag": "0007_debt_usd",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790780097241,
+      "tag": "0008_loan_event",
+      "breakpoints": true
     }
   ]
 }

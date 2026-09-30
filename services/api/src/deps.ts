@@ -34,6 +34,7 @@ import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
 import { debtFrom } from "./lending/debt.js";
+import { recordLoanEvents } from "./lending/record.js";
 import { pledgedByMint, withPledged } from "./lending/pledged.js";
 import type { LendingSource } from "./lending/ports.js";
 import type { InstrumentDeps } from "./routes/instruments.js";
@@ -249,7 +250,13 @@ export function buildReadDeps(
       tokenRef: (mint) => tokenRefFor(db, mint),
       settle: (input) => settleOrder(db, input),
     },
-    borrow: { lending: deps.lending, chain: deps.chain, usdcMint: USDC_MINT },
+    borrow: {
+      lending: deps.lending,
+      chain: deps.chain,
+      usdcMint: USDC_MINT,
+      history: deps.history,
+      record: (planned, input) => recordLoanEvents(db, planned, input),
+    },
     send: { rpcUrl: config.solanaRpcUrl, ...(relay === undefined ? {} : { relay }) },
   };
 }

@@ -5,6 +5,7 @@ import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig
 import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
+import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
 
 /**
  * The API as one Vercel function. Same app as `index.ts`, built once per cold
@@ -37,7 +38,9 @@ cron("/cron/stocks", () =>
   syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices }),
 );
 cron("/cron/position-sync", () => syncAllPositions(auth.db, buildReconcileDeps(deps)));
-cron("/cron/wallet-events", () => syncAllWalletEvents(auth.db, { history: deps.history }));
+cron("/cron/wallet-events", () =>
+  syncAllWalletEvents(auth.db, { history: deps.history, lendingProgram: KAMINO_LENDING_PROGRAM }),
+);
 
 app.route(
   "/",

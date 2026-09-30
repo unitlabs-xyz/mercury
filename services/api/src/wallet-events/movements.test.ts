@@ -29,7 +29,8 @@ const tx = (over: Partial<TransactionDetail> = {}): TransactionDetail => ({
   ...over,
 });
 
-const ctx = { wallet: WALLET, now: NOW };
+const KAMINO = "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD";
+const ctx = { wallet: WALLET, now: NOW, lendingProgram: KAMINO };
 
 describe("movementsIn — USDC", () => {
   it("reads a first deposit, where the account was created by this transaction and has no pre entry", () => {
@@ -153,7 +154,7 @@ describe("a swap is not a cash transfer", () => {
         preTokens: [usdc(WALLET, 500_000_000n)],
         postTokens: [usdc(WALLET, 400_000_000n), stock(WALLET, 44_901_800n)],
       }),
-      { wallet: WALLET, now: NOW },
+      { wallet: WALLET, now: NOW, lendingProgram: KAMINO },
     );
     expect(m).toEqual([]);
   });
@@ -164,7 +165,7 @@ describe("a swap is not a cash transfer", () => {
         preTokens: [stock(WALLET, 44_901_800n), usdc(WALLET, 0n)],
         postTokens: [stock(WALLET, 0n), usdc(WALLET, 99_500_000n)],
       }),
-      { wallet: WALLET, now: NOW },
+      { wallet: WALLET, now: NOW, lendingProgram: KAMINO },
     );
     expect(m).toEqual([]);
   });
@@ -173,6 +174,7 @@ describe("a swap is not a cash transfer", () => {
     const m = movementsIn(tx({ preTokens: [], postTokens: [usdc(WALLET, 500_000_000n)] }), {
       wallet: WALLET,
       now: NOW,
+      lendingProgram: KAMINO,
     });
     expect(m.length).toBe(1);
     expect(m[0]!.title).toBe("Added cash");
@@ -184,9 +186,65 @@ describe("a swap is not a cash transfer", () => {
         preTokens: [usdc(WALLET, 500_000_000n), stock(OTHER, 10n)],
         postTokens: [usdc(WALLET, 400_000_000n), stock(OTHER, 20n)],
       }),
-      { wallet: WALLET, now: NOW },
+      { wallet: WALLET, now: NOW, lendingProgram: KAMINO },
     );
     expect(m.length).toBe(1);
     expect(m[0]!.title).toBe("Sent cash");
+  });
+});
+
+/**
+ * A loan is not a deposit, and a repayment is not a withdrawal.
+ *
+ * Kamino pays a borrower into their own wallet, so from here a borrow is
+ * indistinguishable from somebody sending themselves money: dollars arrive and
+ * nothing else in the wallet moves. `POST /v1/borrow/confirm` writes the row
+ * that says what really happened, with the collateral on it; this job must not
+ * write a second one saying "Added cash".
+ */
+describe("movementsIn — a Kamino transaction", () => {
+  it("writes nothing for dollars that arrived as a loan", () => {
+    const m = movementsIn(
+      tx({
+        accountKeys: [WALLET, KAMINO],
+        preTokens: [usdc(WALLET, 0n)],
+        postTokens: [usdc(WALLET, 500_000_000n)],
+      }),
+      ctx,
+    );
+    expect(m).toEqual([]);
+  });
+
+  it("writes nothing for dollars that left as a repayment", () => {
+    const m = movementsIn(
+      tx({
+        accountKeys: [WALLET, KAMINO],
+        preTokens: [usdc(WALLET, 500_000_000n)],
+        postTokens: [usdc(WALLET, 0n)],
+      }),
+      ctx,
+    );
+    expect(m).toEqual([]);
+  });
+
+  it("writes nothing for the SOL a lending transaction spends on rent", () => {
+    const m = movementsIn(
+      tx({
+        accountKeys: [WALLET, KAMINO],
+        preLamports: [1_000_000_000n, 0n],
+        postLamports: [997_000_000n, 0n],
+      }),
+      ctx,
+    );
+    expect(m).toEqual([]);
+  });
+
+  it("still reports a transfer that had nothing to do with Kamino", () => {
+    const m = movementsIn(
+      tx({ accountKeys: [WALLET], preTokens: [], postTokens: [usdc(WALLET, 500_000_000n)] }),
+      ctx,
+    );
+    expect(m).toHaveLength(1);
+    expect(m[0]!.title).toBe("Added cash");
   });
 });
