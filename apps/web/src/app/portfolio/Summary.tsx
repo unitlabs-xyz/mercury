@@ -198,7 +198,14 @@ export const Performance = ({
   const last = history?.[history.length - 1]?.value;
   const change = first !== undefined && last !== undefined ? last - first : null;
   const days = range === "1D" ? 1 : range === "1W" ? 7 : 30;
-  const down = change !== null && change < 0;
+  /*
+   * A move too small to print is not a fall. Below half a cent `usdSigned`
+   * rounds to zero and rendered "−$0.00" in the loss colour — a minus sign in
+   * front of nothing, which reads as a loss the figure itself denies. Flat is
+   * its own state: no sign, and the neutral ink.
+   */
+  const flat = change !== null && Math.abs(change) < 0.005;
+  const down = change !== null && change < 0 && !flat;
   return (
     <section aria-label="Performance" className="flex min-w-0 flex-col rounded-xl bg-white px-6 pt-5 pb-5">
       <header className="flex items-start justify-between gap-3">
@@ -207,13 +214,19 @@ export const Performance = ({
           {change !== null && first !== undefined ? (
             <p className="mt-[11px] flex flex-wrap items-center gap-x-2">
               <span
-                className={`text-[28px] leading-none font-medium ${down ? "text-ds-down" : "text-ds-gain"}`}
+                className={`text-[28px] leading-none font-medium ${
+                  flat ? "text-ds-ink" : down ? "text-ds-down" : "text-ds-gain"
+                }`}
               >
-                {usdSigned(change)}
+                {flat ? usd(0) : usdSigned(change)}
               </span>
               <span
                 className={`inline-flex h-5 translate-y-1 items-center rounded-md px-1.5 text-[12px] leading-none font-medium ${
-                  down ? "bg-ds-fall-chip text-ds-fall" : "bg-ds-up-chip text-ds-up"
+                  flat
+                    ? "bg-ds-panel text-ds-muted"
+                    : down
+                      ? "bg-ds-fall-chip text-ds-fall"
+                      : "bg-ds-up-chip text-ds-up"
                 }`}
               >
                 <span className="opacity-80">{pct((change / first) * 100)}</span>

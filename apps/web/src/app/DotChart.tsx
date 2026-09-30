@@ -15,6 +15,42 @@ export const TINY = { dot: 3, pitch: 4 } as const;
 /** About this many labelled steps up the y axis. */
 const TICKS = 7;
 
+/**
+ * The narrowest the change axis is allowed to be, as a share of what the
+ * account was worth at the start of the range.
+ *
+ * Without a floor the axis fits itself to whatever the data did, so an account
+ * that moved a third of a cent gets an axis labelled in ten-thousandths and a
+ * line that falls off a cliff. The move was 0.02%. Drawing it as a crash is the
+ * chart lying about significance, and it is the reading a chart is worst at
+ * defending against, because the shape is convincing and the labels are small.
+ *
+ * One percent, so this only ever binds when the move is too small to matter: a
+ * portfolio that actually moved leaves the data wider than the floor and the
+ * floor does nothing.
+ */
+const MIN_SPAN_PCT = 0.01;
+
+/**
+ * The change axis's bounds: the data's own range, never narrower than
+ * `MIN_SPAN_PCT` of the opening value, with a little room either side so the
+ * line never sits on the edge. Widened symmetrically, which leaves $0 near the
+ * middle on a flat range rather than pinned to an edge.
+ */
+export const axisBounds = (
+  changes: readonly number[],
+  openingValue: number,
+  floored: boolean,
+): { hi: number; lo: number } => {
+  const rawHi = Math.max(0, ...changes);
+  const rawLo = Math.min(0, ...changes);
+  const range = rawHi - rawLo;
+  const floor = floored ? Math.abs(openingValue) * MIN_SPAN_PCT : 0;
+  const short = Math.max(0, floor - range) / 2;
+  const pad = (range || 1) * 0.04;
+  return { hi: rawHi + pad + short, lo: rawLo - pad - short };
+};
+
 /** The 1-2-2.5-5 step whose tick count comes closest to `TICKS` across the span. */
 const niceStep = (span: number) => {
   const mag = 10 ** Math.floor(Math.log10(span / TICKS || 1));
@@ -213,11 +249,11 @@ export const DotChart = ({
 
   // Rows run from the highest change at the top to the lowest at the bottom, with a
   // little room either side so the line never sits on the edge.
-  const rawHi = Math.max(0, ...cols.map((c) => c.change));
-  const rawLo = Math.min(0, ...cols.map((c) => c.change));
-  const pad = (rawHi - rawLo || 1) * 0.04;
-  const hi = rawHi + pad;
-  const lo = rawLo - pad;
+  const { hi, lo } = axisBounds(
+    cols.map((c) => c.change),
+    series[0]?.value ?? 0,
+    scale === "change",
+  );
   const span = hi - lo;
   const rowOf = (v: number) => Math.min(ROWS - 1, Math.max(0, Math.round(((hi - v) / span) * (ROWS - 1))));
   const valueOfRow = (r: number) => hi - (r / (ROWS - 1)) * span;
@@ -294,11 +330,14 @@ export const DotChart = ({
   }, [line.key]);
 
   const yOf = (v: number) => ((((hi - v) / span) * (ROWS - 1) + 0.5) / ROWS) * 100;
-  const step = niceStep(rawHi - rawLo || 1);
+  // Across the drawn axis, not the data's own range: where the floor has
+  // widened the axis, labelling only the data would leave one tick on an
+  // otherwise empty scale.
+  const step = niceStep(span || 1);
   // Ticks are placed in change space; on a price scale they fall on round prices.
   const base = scale === "price" ? (series[0]?.value ?? 0) : 0;
   const ticks: number[] = [];
-  for (let t = Math.ceil((rawLo + base) / step) * step; t <= rawHi + base + 1e-9; t += step)
+  for (let t = Math.ceil((lo + base) / step) * step; t <= hi + base + 1e-9; t += step)
     ticks.push(Math.round((t - base) * 1e6) / 1e6);
   const axisLabel = (t: number) => (scale === "price" ? price(t + base, step) : tick(t, step));
   // The label column only ever widens: a narrower set of labels on another range
@@ -314,7 +353,16 @@ export const DotChart = ({
     return () => clearTimeout(t);
   }, []);
   if (widestNow.length > widest.length) setWidest(widestNow);
-  const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * (COLS - 1)));
+  /*
+   * Five evenly spaced ticks, minus any whose label repeats the one before it.
+   * The columns are a resampling of the readings, so when there are fewer
+   * readings than ticks several columns carry the same label — two readings an
+   * hour apart printed "03:30 PM, 03:30 PM, 04:30 PM, 04:30 PM, 04:30 PM"
+   * across the axis. A gap says "no new hour here"; a repeat says nothing.
+   */
+  const xTicks = [0, 0.25, 0.5, 0.75, 1]
+    .map((f) => Math.round(f * (COLS - 1)))
+    .filter((i, k, all) => k === 0 || day(cols[i]?.label ?? "") !== day(cols[all[k - 1]!]?.label ?? ""));
 
   return (
     // Charts animate their own dots; their axis and tooltip text follow the pointer.
