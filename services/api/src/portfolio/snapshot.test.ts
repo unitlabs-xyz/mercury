@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asc, eq } from "drizzle-orm";
-import { D } from "@mercury/core";
+import { D, ZERO } from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { TokenPrice } from "@mercury/market";
 import { testDb } from "../db/testing.js";
@@ -47,6 +47,7 @@ const deps = (over: Partial<SnapshotDeps> = {}): SnapshotDeps => ({
   } as ChainReader,
   prices: { pricesFor: async () => new Map([[MINT, price]]) } as unknown as SnapshotDeps["prices"],
   usdcMint: USDC,
+  debt: async () => ZERO,
   ...over,
 });
 
@@ -158,5 +159,42 @@ describe("snapshotAllPortfolios", () => {
       new Date("2026-09-30T12:00:00.000Z"),
     );
     expect(asked).toEqual([[MINT]]);
+  });
+});
+
+describe("snapshotAllPortfolios, against a loan", () => {
+  const at = new Date("2026-09-30T12:00:00.000Z");
+
+  it("records net worth and the debt behind it", async () => {
+    const { db, ids } = await seed(1);
+    await snapshotAllPortfolios(db, deps({ debt: async () => D("300") }), at);
+
+    const [row] = await rowsFor(db, ids[0]!);
+    // One share at $100 plus $14.25 of cash, less $300 owed.
+    expect(Number(row!.stocksUsd)).toBeCloseTo(100, 2);
+    expect(Number(row!.cashUsd)).toBeCloseTo(14.25, 2);
+    expect(Number(row!.debtUsd)).toBeCloseTo(300, 2);
+    expect(Number(row!.totalUsd)).toBeCloseTo(-185.75, 2);
+  });
+
+  /*
+   * A hole in the chart is visibly missing. A gross total sitting in a net
+   * column is not, and it would outlive the outage that wrote it.
+   */
+  it("skips the reading rather than recording a gross one when the loan cannot be read", async () => {
+    const { db, ids } = await seed(1);
+    const summary = await snapshotAllPortfolios(db, deps({ debt: async () => null }), at);
+
+    expect(summary.written).toBe(0);
+    expect(summary.failed).toBe(1);
+    expect(await rowsFor(db, ids[0]!)).toHaveLength(0);
+  });
+
+  it("leaves an account with no loan exactly where it was", async () => {
+    const { db, ids } = await seed(1);
+    await snapshotAllPortfolios(db, deps(), at);
+    const [row] = await rowsFor(db, ids[0]!);
+    expect(Number(row!.debtUsd)).toBe(0);
+    expect(Number(row!.totalUsd)).toBeCloseTo(114.25, 2);
   });
 });
