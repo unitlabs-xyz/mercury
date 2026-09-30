@@ -17,7 +17,7 @@ import { ButtonLink } from "../ui/Button";
 import { BookmarkMark, Chevron, GlideRows, MoveChip, RangeSwitch, StatusChip } from "../ui/ds";
 import { Clock } from "../ui/icons";
 import { AppShell } from "./AppShell";
-import { BuySheet } from "./BuySheet";
+import { OrderSheet } from "./OrderSheet";
 import { DotChart } from "./DotChart";
 import { usd, usdCompact, usdSigned } from "./format";
 import { RailList, Saved } from "./invest/Rail";
@@ -365,7 +365,7 @@ export const Stock = () => {
         </aside>
       </div>
 
-      <BuySheet
+      <OrderSheet
         instrument={instrument}
         prices={prices.data}
         open={buying}

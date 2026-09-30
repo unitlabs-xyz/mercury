@@ -219,7 +219,7 @@ const Line = ({ k, v, sub }: { k: string; v: string; sub?: string }) => (
 
 /* ── the sheet ──────────────────────────────────────────────────────── */
 
-export const BuySheet = ({
+export const OrderSheet = ({
   instrument,
   prices,
   open,

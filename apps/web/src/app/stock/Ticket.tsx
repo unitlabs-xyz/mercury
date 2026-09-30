@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../../ui/Button";
 import { RailHead } from "../../ui/ds";
 import { Alert, Clock } from "../../ui/icons";
-import { REFUSE_COPY } from "../BuySheet";
+import { REFUSE_COPY } from "../OrderSheet";
 import { usd } from "../format";
 import { RailLine } from "./Panels";
 
