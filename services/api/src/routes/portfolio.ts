@@ -75,7 +75,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // chart and the number at the top of this page cannot drift apart. The loop
     // below is only about the per-holding rows.
     const cashUsd = cashFrom(balances, deps.usdcMint);
-    const value = valuePortfolio(rows, board, cashUsd);
+    const value = valuePortfolio(rows, board, cashUsd, ZERO);
     const holdings = [];
 
     for (const row of rows) {

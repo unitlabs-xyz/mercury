@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { toWire } from "@mercury/core";
+import { toWire, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
@@ -59,7 +59,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
           deps.chain.tokenBalances(row.address),
         ]);
         const board = await deps.prices.pricesFor(held.flatMap((h) => h.wrappers.map((w) => w.mint)));
-        const value = valuePortfolio(held, board, cashFrom(balances, deps.usdcMint));
+        const value = valuePortfolio(held, board, cashFrom(balances, deps.usdcMint), ZERO);
 
         await db
           .insert(portfolioSnapshots)
