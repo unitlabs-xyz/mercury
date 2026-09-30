@@ -168,7 +168,15 @@ export function decide(input: DecisionInput): Decision {
     );
   }
   if (priced.length === 0) {
-    return refuse("no_candidates", "No wrapper is registered for this instrument.");
+    /* Two different facts wear the same refusal. A buy has nothing to buy
+       because no wrapper is registered; a sell has nothing to sell because the
+       wallet holds none of the ones that are. */
+    return refuse(
+      "no_candidates",
+      side === "sell"
+        ? "You do not hold this stock in a wallet we can sell from."
+        : "No wrapper is registered for this instrument.",
+    );
   }
 
   // 2. Survivors, ranked.
