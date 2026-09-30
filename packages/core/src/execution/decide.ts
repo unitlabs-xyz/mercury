@@ -137,8 +137,17 @@ export function decide(input: DecisionInput): Decision {
   });
 
   // 1. Guards that do not depend on any quote.
-  const notionalUsd = side === "buy" ? input.amount : input.amount.mul(fair);
-  if (notionalUsd.lt(policy.minOrderUsd)) {
+  /*
+   * The minimum is a rule about committing new money, and it does not survive
+   * being turned around. Applied to a sell it would mean a position worth less
+   * than the floor could never be closed — and dividends keep adding to it, so
+   * the trap fills rather than drains.
+   *
+   * A sell has one floor and it is physics rather than policy: the proceeds
+   * have to cover the network fee. Only the relay knows that fee, so only the
+   * relay can enforce it.
+   */
+  if (side === "buy" && input.amount.lt(policy.minOrderUsd)) {
     return refuse("below_minimum", `Minimum order is $${policy.minOrderUsd.toFixed(2)}.`);
   }
   if (status === "halted") {
@@ -197,17 +206,27 @@ export function decide(input: DecisionInput): Decision {
     return { ...shared, kind: "execute", warning: null };
   }
 
-  // 4. Out of tolerance. While the market is open the gap should close quickly, so we
-  //    warn and let them proceed. While it is shut there is no arbitrage to close it,
-  //    so we offer to wait. See docs/04.
-  if (TRADING_SESSIONS.includes(status)) {
+  /*
+   * 4. Out of tolerance. While the market is open the gap should close quickly,
+   *    so we warn and let them proceed. While it is shut there is no arbitrage
+   *    to close it, so a buy is offered the wait instead. See docs/04.
+   *
+   *    A sell is never offered the wait. Refusing a buy costs someone a
+   *    purchase they can make tomorrow; refusing a sell tells someone they
+   *    cannot have their own money back, and "wait for New York to open" is
+   *    not a remedy available to everyone who needs to sell at 2am.
+   */
+  if (side === "sell" || TRADING_SESSIONS.includes(status)) {
+    const pct = adverse.mul(100).toFixed(2);
     return {
       ...shared,
       kind: "execute",
       warning:
         side === "buy"
-          ? `This is ${adverse.mul(100).toFixed(2)}% above the real share price.`
-          : `This is ${adverse.mul(100).toFixed(2)}% below the real share price.`,
+          ? `This is ${pct}% above the real share price.`
+          : TRADING_SESSIONS.includes(status)
+            ? `This is ${pct}% below the real share price.`
+            : `This is ${pct}% below the real share price, and the US market is shut. The gap usually closes when it opens.`,
     };
   }
 
