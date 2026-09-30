@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig } from "./deps.js";
+import { applyMigrations } from "./db/migrate.js";
 import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
@@ -10,6 +11,16 @@ import { keypairRelaySigner } from "./relay/signer.js";
 
 const config = readConfig();
 const port = Number(process.env.PORT ?? 8787);
+
+/*
+ * Before anything else, and before the server can answer.
+ *
+ * A failure here ends the process rather than serving against a schema the code
+ * does not match. On a rolling deploy that leaves the previous container taking
+ * traffic, which is the right outcome: the old code and the old schema agree.
+ */
+await applyMigrations(config.databaseUrl);
+console.log("migrations: up to date");
 
 const auth = buildAuthDeps(config);
 const deps = buildDeps(config);
