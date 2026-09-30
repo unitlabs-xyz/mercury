@@ -12,23 +12,31 @@ export interface FeeQuoteDeps {
 }
 
 export interface FeeQuoteInput {
-  /** The buyer's wallet. */
+  /** The trader's wallet. */
   readonly owner: string;
-  /** The token the shares will arrive as. */
-  readonly mint: string;
+  /**
+   * The mint whose account may have to be opened: the one the trade delivers
+   * into. The stock on a buy, USDC on a sell.
+   *
+   * This was `mint` and meant "the stock", which is right exactly half the
+   * time. A seller always holds the stock account already — it is the dollars
+   * that might have nowhere to land.
+   */
+  readonly receivingMint: string;
 }
 
 /** Nothing is owed. Sponsorship is off, so the buyer pays their own way. */
 export const NO_FEE: Fee = { usdc: D(0), lamports: 0 };
 
 /**
- * What this particular buy will cost the relayer, for this particular buyer.
+ * What this particular trade will cost the relayer, for this particular trader.
  *
  * Two facts decide it, and both are about them rather than about the order:
- * whether they already hold the token — a second buy of the same stock opens
- * no account and so owes no rent — and what SOL costs right now.
+ * whether they already hold the account the trade delivers into — a second buy
+ * of the same stock opens no account and so owes no rent, and neither does a
+ * sell into a USDC account that is already there — and what SOL costs now.
  *
- * Read together, because they are two round trips and a buyer is waiting on
+ * Read together, because they are two round trips and someone is waiting on
  * both.
  */
 export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promise<Fee> => {
@@ -40,7 +48,7 @@ export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promis
   const sol = prices.get(SOL_MINT)?.usdPricePerToken;
   /*
    * No price, no charge. Guessing would mean either overcharging or asking
-   * the relayer to pay an unknown amount, and the buy itself is fine either
+   * the relayer to pay an unknown amount, and the trade itself is fine either
    * way — it is only the repayment that cannot be priced.
    */
   if (sol === undefined || sol.lte(0)) return NO_FEE;
@@ -50,6 +58,6 @@ export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promis
    * that exists is already rent-exempt. A zero balance still counts: the
    * account is what rent pays for, not the tokens in it.
    */
-  const holds = balances.some((b) => b.mint === input.mint);
+  const holds = balances.some((b) => b.mint === input.receivingMint);
   return networkFee({ needsTokenAccount: !holds, solPriceUsd: sol });
 };

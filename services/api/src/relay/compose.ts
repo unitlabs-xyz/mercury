@@ -13,12 +13,12 @@ import {
 } from "@solana/kit";
 
 /**
- * One transaction that buys the stock and pays us back for the gas.
+ * One transaction that trades the stock and pays us back for the gas.
  *
- * Both halves have to be in the same message. Separately, a buyer could take
+ * Both halves have to be in the same message. Separately, a trader could take
  * the swap and never send the fee, or send the fee for a swap that then fails
  * — either way somebody is out of pocket for something that did not happen.
- * Together they are one atomic thing: the charge lands exactly when the buy
+ * Together they are one atomic thing: the charge lands exactly when the trade
  * does.
  */
 
@@ -51,28 +51,44 @@ export interface ComposeInput {
   readonly relayer: Address;
   readonly blockhash: Blockhash;
   readonly lastValidBlockHeight: bigint;
-  /** Compute budget first, then the charge, then the swap. */
+  /** Always first, whichever side of the swap the charge ends up on. */
   readonly computeBudget: readonly Instruction[];
   readonly charge: Instruction | null;
+  /**
+   * Which side of the swap the charge goes.
+   *
+   * Required rather than defaulted. A default is the wrong one half the time,
+   * and the failure it produces is a transaction that reverts at the relayer
+   * with nothing readable in it.
+   */
+  readonly chargePosition: "before" | "after";
   readonly swap: readonly Instruction[];
   /** Resolved tables. Without them a real route will not fit in 1232 bytes. */
   readonly lookupTables: ReadonlyMap<Address, readonly Address[]>;
 }
 
 /**
- * The charge goes before the swap.
+ * Which side of the swap the charge goes, and why it differs by side.
  *
- * Both land or neither does, so ordering cannot change who ends up paying.
- * It is first because the buyer's USDC is spent by the swap: taking the fee
- * from the balance before it moves means the amount quoted to them and the
+ * Both land or neither does, so ordering cannot change who ends up paying. It
+ * can decide whether the transaction lands at all.
+ *
+ * A buy charges first. The buyer's USDC is spent by the swap, so taking the
+ * fee from the balance before it moves means the amount quoted to them and the
  * amount swapped are the same number, rather than depending on what the swap
  * happened to leave behind.
+ *
+ * A sell charges last, and must. The seller may hold no USDC at all — the
+ * ordinary case, not an edge one — until the swap delivers it. A transfer of
+ * dollars that do not exist yet fails, and takes the swap down with it.
  */
 export const composeSponsored = (input: ComposeInput): { wire: string; messageBytes: Uint8Array } => {
+  const charge = input.charge === null ? [] : [input.charge];
   const instructions = [
     ...input.computeBudget,
-    ...(input.charge === null ? [] : [input.charge]),
+    ...(input.chargePosition === "before" ? charge : []),
     ...input.swap,
+    ...(input.chargePosition === "after" ? charge : []),
   ];
 
   const message = pipe(

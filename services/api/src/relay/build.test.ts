@@ -57,12 +57,14 @@ const read = (wire: string) => {
 };
 
 const TOKEN = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const JUPITER = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
 
 describe("buildSponsored", () => {
   it("names the relayer as payer, so the buyer needs no SOL", async () => {
     const { wire } = await buildSponsored(deps(), {
       quote: { quoteId: "q", raw: {} },
       owner: BUYER,
+      side: "buy" as const,
       feeUsdc: D("0.25"),
     });
     expect(read(wire).message.staticAccounts[0]).toBe(RELAYER);
@@ -72,6 +74,7 @@ describe("buildSponsored", () => {
     const { wire } = await buildSponsored(deps(), {
       quote: { quoteId: "q", raw: {} },
       owner: BUYER,
+      side: "buy" as const,
       feeUsdc: D("0.25"),
     });
     expect(read(wire).programs).toContain(TOKEN);
@@ -82,6 +85,7 @@ describe("buildSponsored", () => {
     const { wire } = await buildSponsored(deps(), {
       quote: { quoteId: "q", raw: {} },
       owner: BUYER,
+      side: "buy" as const,
       feeUsdc: D(0),
     });
     expect(read(wire).programs).not.toContain(TOKEN);
@@ -97,6 +101,7 @@ describe("buildSponsored", () => {
     const { wire } = await buildSponsored(d, {
       quote: { quoteId: "q", raw: {} },
       owner: BUYER,
+      side: "buy" as const,
       feeUsdc: D("0.25"),
     });
     expect(d.relay.builds.recognises(read(wire).bytes)).toBe(true);
@@ -104,10 +109,16 @@ describe("buildSponsored", () => {
 
   it("does not recognise a transaction with the fee altered", async () => {
     const d = deps();
-    await buildSponsored(d, { quote: { quoteId: "q", raw: {} }, owner: BUYER, feeUsdc: D("0.25") });
+    await buildSponsored(d, {
+      quote: { quoteId: "q", raw: {} },
+      owner: BUYER,
+      side: "buy" as const,
+      feeUsdc: D("0.25"),
+    });
     const cheaper = await buildSponsored(deps(), {
       quote: { quoteId: "q", raw: {} },
       owner: BUYER,
+      side: "buy" as const,
       feeUsdc: D("0.01"),
     });
     expect(d.relay.builds.recognises(read(cheaper.wire).bytes)).toBe(false);
@@ -123,6 +134,7 @@ describe("buildSponsored", () => {
       buildSponsored(deps({ lookups: { read: async () => new Map() } }), {
         quote: { quoteId: "q", raw: {} },
         owner: BUYER,
+        side: "buy" as const,
         feeUsdc: D("0.25"),
       }),
     ).rejects.toThrow(/could not be read/);
@@ -133,6 +145,7 @@ describe("buildSponsored", () => {
     const { wire } = await buildSponsored(d, {
       quote: { quoteId: "q", raw: {} },
       owner: BUYER,
+      side: "buy" as const,
       feeUsdc: D("0.25"),
     });
     const { message, programs } = read(wire);
@@ -143,5 +156,37 @@ describe("buildSponsored", () => {
     let n = 0n;
     for (let i = data.length - 1; i >= 1; i--) n = (n << 8n) | BigInt(data[i] ?? 0);
     expect(n).toBe(250_000n);
+  });
+});
+
+/**
+ * The wiring, not the composition. `compose.test.ts` proves the two orderings
+ * exist; this proves the builder picks the right one from the side, which is
+ * the only place that choice is ever made.
+ */
+describe("buildSponsored, by side", () => {
+  const positions = async (side: "buy" | "sell") => {
+    const { wire } = await buildSponsored(deps(), {
+      quote: { quoteId: "q", raw: {} },
+      owner: BUYER,
+      side,
+      feeUsdc: D("0.25"),
+    });
+    /* The zero-fee case above proves the fixture carries no other Token
+       instruction, so this index is the charge and nothing else. */
+    const { programs } = read(wire);
+    return { token: programs.indexOf(TOKEN as Address), jup: programs.indexOf(JUPITER as Address) };
+  };
+
+  it("charges a buy before the swap", async () => {
+    const { token, jup } = await positions("buy");
+    expect(token).toBeGreaterThanOrEqual(0);
+    expect(jup).toBeGreaterThan(token);
+  });
+
+  it("charges a sell after the swap, because the dollars arrive in it", async () => {
+    const { token, jup } = await positions("sell");
+    expect(jup).toBeGreaterThanOrEqual(0);
+    expect(token).toBeGreaterThan(jup);
   });
 });

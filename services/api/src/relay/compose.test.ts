@@ -36,7 +36,7 @@ const charge = transferInstruction({
   amount: 250_000n,
 });
 
-const compose = (withCharge: boolean) =>
+const compose = (withCharge: boolean, chargePosition: "before" | "after" = "before") =>
   composeSponsored({
     relayer: RELAYER,
     blockhash: BLOCKHASH,
@@ -45,7 +45,11 @@ const compose = (withCharge: boolean) =>
     charge: withCharge ? charge : null,
     swap: [toInstruction(jupiter.swapInstruction as JupiterInstruction)],
     lookupTables,
+    chargePosition,
   });
+
+const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
+const JUPITER_PROGRAM = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address;
 
 const read = (wire: string) => {
   const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
@@ -64,20 +68,10 @@ describe("composeSponsored", () => {
     expect(m.staticAccounts.slice(0, 2)).toContain(BUYER);
   });
 
-  /* Charge before swap, so the fee is taken from the balance the swap then spends. */
-  it("orders the charge ahead of the swap", () => {
-    const m = read(compose(true).wire);
-    const programs = m.instructions.map((i) => m.staticAccounts[i.programAddressIndex]);
-    const token = programs.indexOf("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address);
-    const jup = programs.indexOf("JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as Address);
-    expect(token).toBeGreaterThanOrEqual(0);
-    expect(jup).toBeGreaterThan(token);
-  });
-
   it("leaves the charge out when nothing is owed", () => {
     const m = read(compose(false).wire);
     const programs = m.instructions.map((i) => m.staticAccounts[i.programAddressIndex]);
-    expect(programs).not.toContain("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address);
+    expect(programs).not.toContain(TOKEN_PROGRAM);
   });
 
   /*
@@ -119,8 +113,33 @@ describe("composeSponsored", () => {
       }),
       swap: [toInstruction(jupiter.swapInstruction as JupiterInstruction)],
       lookupTables,
+      chargePosition: "before",
     }).messageBytes;
     expect(a).not.toEqual(b);
+  });
+});
+
+/**
+ * Which way round the charge and the swap go, which is the whole of what
+ * separates a sponsored buy from a sponsored sell.
+ */
+describe("where the charge sits", () => {
+  const order = (wire: string) => {
+    const m = read(wire);
+    const programs = m.instructions.map((i) => m.staticAccounts[i.programAddressIndex]);
+    return { token: programs.indexOf(TOKEN_PROGRAM), jup: programs.indexOf(JUPITER_PROGRAM) };
+  };
+
+  it("puts it before the swap for a buy, where the USDC already is", () => {
+    const { token, jup } = order(compose(true, "before").wire);
+    expect(token).toBeGreaterThanOrEqual(0);
+    expect(jup).toBeGreaterThan(token);
+  });
+
+  it("puts it after the swap for a sell, because the USDC does not exist yet", () => {
+    const { token, jup } = order(compose(true, "after").wire);
+    expect(jup).toBeGreaterThanOrEqual(0);
+    expect(token).toBeGreaterThan(jup);
   });
 });
 

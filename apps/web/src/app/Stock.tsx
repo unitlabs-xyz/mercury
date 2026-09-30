@@ -17,7 +17,7 @@ import { ButtonLink } from "../ui/Button";
 import { BookmarkMark, Chevron, GlideRows, MoveChip, RangeSwitch, StatusChip } from "../ui/ds";
 import { Clock } from "../ui/icons";
 import { AppShell } from "./AppShell";
-import { BuySheet } from "./BuySheet";
+import { OrderSheet } from "./OrderSheet";
 import { DotChart } from "./DotChart";
 import { usd, usdCompact, usdSigned } from "./format";
 import { RailList, Saved } from "./invest/Rail";
@@ -73,6 +73,8 @@ export const Stock = () => {
   const { ticker = "" } = useParams();
   const [range, setRange] = useState<Span>("1D");
   const [raw, setRaw] = useState("100");
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [max, setMax] = useState(false);
   const [buying, setBuying] = useState(false);
   const watchlist = useWatchlist();
 
@@ -94,10 +96,18 @@ export const Stock = () => {
     const t = setTimeout(() => setSettled(amount), 350);
     return () => clearTimeout(t);
   }, [amount]);
-  const { decision, isLoading, isFetching, session } = useDecision(
+  /* A new stock is a new question. Landing on the Sell tab of something you
+     do not own would show a tab that should not exist for you. */
+  useEffect(() => {
+    setSide("buy");
+    setMax(false);
+  }, [ticker]);
+
+  const { decision, isLoading, isFetching, session, proceeds } = useDecision(
     instrument,
     Math.max(settled, 1),
     prices.data,
+    { side, max },
   );
 
   // Already anchored server-side onto the live share price, so the line ends
@@ -135,6 +145,18 @@ export const Stock = () => {
   const saved = watchlist.has(t);
   const holding = portfolio.data?.holdings.find((h) => h.ticker === t);
   const cash = portfolio.data ? Number(portfolio.data.cashUsd) : null;
+  const shares = holding ? Number(holding.shares) : null;
+  const pledged = holding?.pledgedShares === undefined ? null : Number(holding.pledgedShares);
+  /* The books count pledged stock as owned, and they are right to. The wallet
+     still cannot spend it, so it is not what can be sold. */
+  const sellableShares = shares === null ? null : shares - (pledged ?? 0);
+  const positionUsd = holding ? Number(holding.valueUsd) : null;
+  /* Value scales with shares, so the sellable value is the sellable share of
+     it. Offering the whole position would promise an exit Kamino is holding. */
+  const sellableUsd =
+    positionUsd === null || shares === null || shares <= 0
+      ? null
+      : Number(((positionUsd * (sellableShares ?? 0)) / shares).toFixed(2));
   const owned = new Set(portfolio.data?.holdings.map((h) => h.ticker));
 
   const similar: Row[] = similarTickers.map((i) => {
@@ -316,6 +338,18 @@ export const Stock = () => {
             quoting={isLoading || settled !== amount}
             fair={priced.fair}
             onReview={() => setBuying(true)}
+            side={side}
+            onSide={setSide}
+            holds={shares !== null && shares > 0}
+            shares={shares}
+            sellableShares={sellableShares}
+            pledgedShares={pledged}
+            positionUsd={positionUsd}
+            sellableUsd={sellableUsd}
+            proceeds={proceeds === null ? null : Number(proceeds.toString())}
+            max={max}
+            onMax={setMax}
+            wrapperCount={holding?.wrapperCount ?? 1}
           />
           {similar.length > 0 && (
             <RailList label="Similar" meta="Today" to="/invest" linkLabel="All stocks">
@@ -331,12 +365,15 @@ export const Stock = () => {
         </aside>
       </div>
 
-      <BuySheet
+      <OrderSheet
         instrument={instrument}
         prices={prices.data}
         open={buying}
         onClose={() => setBuying(false)}
         initial={amount}
+        side={side}
+        max={max}
+        sellableUsd={sellableUsd}
       />
     </AppShell>
   );

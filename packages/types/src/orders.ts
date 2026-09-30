@@ -12,6 +12,8 @@ export const PricedCandidate = z.object({
   pricePerShare: Usd.nullable(),
   /** The bound: the most a buy pays per share, the least a sell receives. */
   worstPricePerShare: Usd.nullable(),
+  /** What this candidate actually trades, in shares. Null when it has no route. */
+  filledShares: Usd.nullable(),
   priceImpact: Ratio.nullable(),
   routeLabels: z.array(z.string()),
   viable: z.boolean(),
@@ -82,7 +84,13 @@ export const Order = z.object({
   filledAt: Iso.nullable(),
 });
 
-export const CreateOrderRequest = z.object({ ticker: Ticker, side: Side, amount: Usd });
+export const CreateOrderRequest = z.object({
+  ticker: Ticker,
+  side: Side,
+  amount: Usd,
+  /* Sell the whole position, in tokens. `amount` is then only a hint for display. */
+  max: z.boolean().optional(),
+});
 export const CreateOrderResponse = z.object({ orderId: z.string().uuid(), decision: Decision });
 export const UnsignedTxResponse = z.object({
   transactions: z.array(z.string()),

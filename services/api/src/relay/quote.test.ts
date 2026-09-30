@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { PriceBoard, TokenPrice } from "@mercury/market";
+import { USDC_MINT } from "@mercury/chain";
 import { quoteFee } from "./quote.js";
 
 const SOL = "So11111111111111111111111111111111111111112";
@@ -29,12 +30,12 @@ const held = (mint: string, raw = 1n): TokenBalance => ({ mint, rawAmount: raw, 
 
 describe("quoteFee", () => {
   it("charges rent on a first buy, when the buyer holds none of the token", async () => {
-    const fee = await quoteFee(deps([], "119.39"), { owner: OWNER, mint: SPCX });
+    const fee = await quoteFee(deps([], "119.39"), { owner: OWNER, receivingMint: SPCX });
     expect(fee.usdc.toString()).toBe("0.25");
   });
 
   it("charges only the signature once the buyer already holds it", async () => {
-    const fee = await quoteFee(deps([held(SPCX)], "119.39"), { owner: OWNER, mint: SPCX });
+    const fee = await quoteFee(deps([held(SPCX)], "119.39"), { owner: OWNER, receivingMint: SPCX });
     expect(fee.usdc.toString()).toBe("0.01");
   });
 
@@ -44,13 +45,13 @@ describe("quoteFee", () => {
    * charging for something that already exists.
    */
   it("treats a zero balance as the account still existing", async () => {
-    const fee = await quoteFee(deps([held(SPCX, 0n)], "119.39"), { owner: OWNER, mint: SPCX });
+    const fee = await quoteFee(deps([held(SPCX, 0n)], "119.39"), { owner: OWNER, receivingMint: SPCX });
     expect(fee.usdc.toString()).toBe("0.01");
   });
 
   it("does not let another token's balance excuse this one's rent", async () => {
     const other = "Xs7ZdzSHLU9GLSSPoSZuMkQ8GHjNKz1F8gUQRA2ZfZ7";
-    const fee = await quoteFee(deps([held(other)], "119.39"), { owner: OWNER, mint: SPCX });
+    const fee = await quoteFee(deps([held(other)], "119.39"), { owner: OWNER, receivingMint: SPCX });
     expect(fee.usdc.toString()).toBe("0.25");
   });
 
@@ -59,13 +60,13 @@ describe("quoteFee", () => {
    * way; it is only the repayment that has no number.
    */
   it("charges nothing when SOL has no price", async () => {
-    const fee = await quoteFee(deps([], null), { owner: OWNER, mint: SPCX });
+    const fee = await quoteFee(deps([], null), { owner: OWNER, receivingMint: SPCX });
     expect(fee.usdc.toString()).toBe("0");
     expect(fee.lamports).toBe(0);
   });
 
   it("charges nothing when SOL prices at zero", async () => {
-    const fee = await quoteFee(deps([], "0"), { owner: OWNER, mint: SPCX });
+    const fee = await quoteFee(deps([], "0"), { owner: OWNER, receivingMint: SPCX });
     expect(fee.usdc.toString()).toBe("0");
   });
 
@@ -84,9 +85,37 @@ describe("quoteFee", () => {
         chain: { tokenBalances: () => slow("balances", [], 20), mintConfig: async () => null } as ChainReader,
         prices: { pricesFor: () => slow("prices", new Map([[SOL, price("100")]]), 5) } as PriceBoard,
       },
-      { owner: OWNER, mint: SPCX },
+      { owner: OWNER, receivingMint: SPCX },
     );
     // Sequential would finish balances first; concurrent lets the faster one land first.
     expect(order).toEqual(["prices", "balances"]);
+  });
+});
+
+/**
+ * Which account the rent is for, which is not the same question on both sides.
+ * A seller always holds the stock account already; it is the dollars that
+ * might have nowhere to land.
+ */
+describe("quoteFee, selling", () => {
+  it("charges rent when the seller has no USDC account yet", async () => {
+    const fee = await quoteFee(deps([held(SPCX)], "119.39"), { owner: OWNER, receivingMint: USDC_MINT });
+    expect(fee.usdc.toString()).toBe("0.25");
+  });
+
+  it("charges only the signature once the USDC account is open", async () => {
+    const balances = [held(SPCX), held(USDC_MINT)];
+    const fee = await quoteFee(deps(balances, "119.39"), { owner: OWNER, receivingMint: USDC_MINT });
+    expect(fee.usdc.toString()).toBe("0.01");
+  });
+
+  /* The trap this replaces: asking about the stock says "already held, no rent"
+     on every sell, including the one where the dollars have nowhere to go. */
+  it("does not let the stock account excuse the USDC account's rent", async () => {
+    const fee = await quoteFee(deps([held(SPCX, 500n)], "119.39"), {
+      owner: OWNER,
+      receivingMint: USDC_MINT,
+    });
+    expect(fee.usdc.toString()).toBe("0.25");
   });
 });

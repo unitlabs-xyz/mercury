@@ -83,3 +83,26 @@ export const buyInput = (over: Partial<DecisionInput> = {}): DecisionInput => ({
   now: NOW,
   ...over,
 });
+
+/**
+ * The same two Nvidia wrappers, sold rather than bought. A sell's `amount` is
+ * shares, and each candidate's quote is for that many shares' worth of its own
+ * tokens — which is why a sell's `inAmount` is a token count where a buy's is
+ * dollars.
+ */
+export const NVDA_SELL_CANDIDATES: Candidate[] = [
+  { ...NVDA_CANDIDATES[0]!, quote: quote(4.49018, 1000, 0.02) },
+  { ...NVDA_CANDIDATES[1]!, quote: quote(4.49018, 985, 0.05, "Manifest") },
+];
+
+export const sellInput = (over: Partial<DecisionInput> = {}): DecisionInput => ({
+  ticker: "NVDA",
+  side: "sell",
+  amount: D("4.5"),
+  candidates: NVDA_SELL_CANDIDATES,
+  reference: reference(222.365),
+  status: "open",
+  policy: DEFAULT_POLICY,
+  now: NOW,
+  ...over,
+});

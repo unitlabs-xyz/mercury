@@ -9,9 +9,9 @@ import { ApiError, apiFetch } from "./client";
  * happening rather than which endpoint is in flight, because these strings are
  * shown to someone watching a button.
  */
-export type BuyStep = "pricing" | "building" | "signing" | "sending" | "recording" | "done";
+export type OrderStep = "pricing" | "building" | "signing" | "sending" | "recording" | "done";
 
-export const STEP_LABEL: Record<BuyStep, string> = {
+export const STEP_LABEL: Record<OrderStep, string> = {
   pricing: "Checking the price…",
   building: "Preparing your order…",
   signing: "Waiting for your approval…",
@@ -20,16 +20,22 @@ export const STEP_LABEL: Record<BuyStep, string> = {
   done: "Done",
 };
 
-export interface BuyIntent {
+export interface OrderIntent {
   readonly ticker: string;
+  readonly side: "buy" | "sell";
+  /** Dollars on both sides. Ignored by the server when `max` is set. */
   readonly usd: number;
+  /** Sell the whole position, in tokens. Never set on a buy. */
+  readonly max?: boolean;
 }
 
-export interface BuyResult {
+export interface OrderResult {
   readonly orderId: string;
   readonly shares: string;
   readonly pricePerShare: string;
   readonly usd: string;
+  /** What the sale made, against average cost. Null on a buy. */
+  readonly realisedPnlUsd: string | null;
 }
 
 /**
@@ -61,21 +67,21 @@ const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeA
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
 /**
- * Everything `placeBuy` needs from the outside world.
+ * Everything `placeOrder` needs from the outside world.
  *
  * Injected rather than imported so the order of the calls — which is the whole
- * of what `placeBuy` decides — can be tested without a browser, a wallet or a
- * server. React supplies these in `useBuyAction`.
+ * of what `placeOrder` decides — can be tested without a browser, a wallet or a
+ * server. React supplies these in `useOrderAction`.
  */
-export interface BuyIo {
+export interface OrderIo {
   post<T>(path: string, body: unknown): Promise<T>;
   /** Takes an unsigned transaction in base64 and gives back a signed one. */
   sign(unsigned: string): Promise<string>;
-  onStep(step: BuyStep): void;
+  onStep(step: OrderStep): void;
 }
 
 /**
- * One buy, end to end.
+ * One order, end to end, whichever way it points.
  *
  * Five calls, in this order, because each depends on the last: the server
  * prices the order and records it, re-decides and builds an unsigned
@@ -83,18 +89,23 @@ export interface BuyIo {
  * confirmation, and the signature goes back so the fill is read off the chain
  * and written into the books.
  *
- * The decision shown on the page is the browser's own, quoted straight from
- * Jupiter. The one that governs the order is the server's, made twice — once
- * when the order is created and again before it is built. That is why this can
- * refuse an order the page thought was fine, and why the refusal is worth
- * showing rather than swallowing.
+ * The decision shown on the page and the one that governs the order are both
+ * the server's now, but they are made at different moments — once when the
+ * order is created and again before it is built. That is why this can refuse
+ * an order the page thought was fine, and why the refusal is worth showing
+ * rather than swallowing.
+ *
+ * Nothing here is side-specific but the side itself. The five calls, their
+ * order and their failure modes are the same selling as buying.
  */
-export async function placeBuy(io: BuyIo, intent: BuyIntent): Promise<BuyResult> {
+export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<OrderResult> {
   io.onStep("pricing");
   const created = await io.post<{ orderId: string; decision: Decision }>("/v1/orders", {
     ticker: intent.ticker,
-    side: "buy",
+    side: intent.side,
     amount: String(intent.usd),
+    /* Omitted rather than false, so a buy's body is what it always was. */
+    ...(intent.max === true ? { max: true } : {}),
   });
   if (created.decision.kind === "refuse") throw new Error(created.decision.detail);
 
@@ -122,27 +133,29 @@ export async function placeBuy(io: BuyIo, intent: BuyIntent): Promise<BuyResult>
   if (sent.status === "failed") throw new Error(sent.error ?? "The transaction failed on chain.");
 
   io.onStep("recording");
-  const filled = await io.post<{ shares: string; pricePerShare: string; usd: string }>(
-    `/v1/orders/${created.orderId}/confirm`,
-    { signature: sent.signature },
-  );
+  const filled = await io.post<{
+    shares: string;
+    pricePerShare: string;
+    usd: string;
+    realisedPnlUsd?: string | null;
+  }>(`/v1/orders/${created.orderId}/confirm`, { signature: sent.signature });
 
   io.onStep("done");
-  return { orderId: created.orderId, ...filled };
+  return { orderId: created.orderId, ...filled, realisedPnlUsd: filled.realisedPnlUsd ?? null };
 }
 
-/** `placeBuy` with this app's plumbing behind it, and a step to render. */
-export const useBuyAction = () => {
+/** `placeOrder` with this app's plumbing behind it, and a step to render. */
+export const useOrderAction = () => {
   const qc = useQueryClient();
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
-  const [step, setStep] = useState<BuyStep | null>(null);
+  const [step, setStep] = useState<OrderStep | null>(null);
 
-  const mutation = useMutation<BuyResult, Error, BuyIntent>({
+  const mutation = useMutation<OrderResult, Error, OrderIntent>({
     mutationFn: async (intent) => {
       const wallet = wallets[0];
       if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
-      return await placeBuy(
+      return await placeOrder(
         {
           post: (path, body) => apiFetch(path, { method: "POST", body: JSON.stringify(body) }),
           sign: async (unsigned) => {

@@ -13,6 +13,8 @@ export const memoryOrderStore = (): OrderStore => {
         id: crypto.randomUUID(),
         decision: order.decision,
         status: order.status,
+        usdAmount: order.usdAmount,
+        max: order.max ?? false,
         createdAt: new Date().toISOString(),
       };
       rows.set(stored.id, { order, stored });

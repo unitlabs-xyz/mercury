@@ -145,3 +145,25 @@ describe("planFill", () => {
     expect(noTime.kind === "filled" && noTime.occurredAt).toEqual(NOW);
   });
 });
+
+/**
+ * A sponsored sell puts the swap and the repayment in one transaction, so the
+ * USDC delta the chain reports is already net of the charge. That is the right
+ * number to keep: it is what reached the wallet, and it is symmetric with a
+ * sponsored buy, whose delta is already gross of the charge for the same reason.
+ */
+describe("a sponsored sell", () => {
+  it("records the proceeds net of the charge, because that is what arrived", () => {
+    const sold = tx({
+      preTokens: [bal(NVDAX, WALLET, 100_000_000n, 8)],
+      // One whole token out; $10 in from the swap, less $0.25 back to the relayer.
+      postTokens: [bal(NVDAX, WALLET, 0n, 8), bal(USDC_MINT, WALLET, 9_750_000n, 6)],
+    });
+    const fill = planFill(sold, ctx({ side: "sell", multiplier: D(1) }));
+    expect(fill.kind).toBe("filled");
+    if (fill.kind !== "filled") return;
+    expect(fill.usd.toFixed(2)).toBe("9.75");
+    expect(fill.shares.toFixed(2)).toBe("1.00");
+    expect(fill.pricePerShare.toFixed(2)).toBe("9.75");
+  });
+});

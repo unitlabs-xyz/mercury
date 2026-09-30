@@ -18,6 +18,7 @@ const candidate = (c: PricedCandidate): WirePricedCandidate => ({
   pricePerToken: c.pricePerToken === null ? null : toWire(c.pricePerToken),
   pricePerShare: c.pricePerShare === null ? null : toWire(c.pricePerShare),
   worstPricePerShare: c.worstPricePerShare === null ? null : toWire(c.worstPricePerShare),
+  filledShares: c.filledShares === null ? null : toWire(c.filledShares),
   priceImpact: c.priceImpact === null ? null : toWire(c.priceImpact),
   routeLabels: [...c.routeLabels],
   viable: c.viable,

@@ -1,0 +1,1 @@
+ALTER TABLE "order" ADD COLUMN "max" boolean DEFAULT false NOT NULL;

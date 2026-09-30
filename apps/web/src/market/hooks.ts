@@ -392,24 +392,36 @@ export const useDecision = (
   instrument: Instrument | undefined,
   usd: number,
   _prices: PriceMap | undefined,
+  opts: { side?: "buy" | "sell"; max?: boolean } = {},
 ) => {
+  const side = opts.side ?? "buy";
+  const max = opts.max === true;
   const session = useSession();
   const signedIn = useSignedIn();
   const amount = Number.isFinite(usd) && usd > 0 ? usd : 0;
 
   const quoted = useQuery({
-    queryKey: ["quote", instrument?.ticker, amount.toFixed(2), signedIn],
-    enabled: !!instrument && amount > 0,
+    /* The side and `max` belong in the key: the same dollar figure means a
+       different order on each tab, and "everything" is not a dollar figure at
+       all. Sharing a cache entry would show a buy's answer on the sell tab. */
+    queryKey: ["quote", instrument?.ticker, amount.toFixed(2), side, max, signedIn],
+    enabled: !!instrument && (amount > 0 || max),
     staleTime: 10_000,
     refetchInterval: 20_000,
     queryFn: () =>
       apiFetch<{
         decision: WireDecision;
         fee: { usdc: string; lamports: number };
-        investable: string;
+        investable: string | null;
+        proceeds: string | null;
       }>("/v1/quote", {
         method: "POST",
-        body: JSON.stringify({ ticker: instrument!.ticker, side: "buy", amount: amount.toFixed(2) }),
+        body: JSON.stringify({
+          ticker: instrument!.ticker,
+          side,
+          amount: amount.toFixed(2),
+          ...(max ? { max: true } : {}),
+        }),
       }),
   });
 
@@ -421,7 +433,9 @@ export const useDecision = (
      * sometimes rather than always.
      */
     fee: quoted.data ? D(quoted.data.fee.usdc) : null,
-    investable: quoted.data ? D(quoted.data.investable) : null,
+    investable: quoted.data?.investable ? D(quoted.data.investable) : null,
+    /** What lands in the wallet once the network is paid. Null on a buy. */
+    proceeds: quoted.data?.proceeds ? D(quoted.data.proceeds) : null,
     isLoading: quoted.isLoading || session.isLoading,
     isFetching: quoted.isFetching,
     error: quoted.error,

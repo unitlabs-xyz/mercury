@@ -3,7 +3,7 @@ import { cors } from "hono/cors";
 import { allocate, D, DEFAULT_POLICY, toWire } from "@mercury/core";
 import { ConfirmOrderRequest, CreateOrderRequest, InvestBasketRequest, type ErrorCode } from "@mercury/types";
 import type { Deps } from "./deps.js";
-import { priceOrder } from "./pricing.js";
+import { priceOrder, type PriceRequest } from "./pricing.js";
 import { gateExecution } from "./orders/gate.js";
 import { planFill } from "./orders/fill.js";
 import { decisionToWire } from "./serialize.js";
@@ -11,6 +11,7 @@ import { NO_FEE, quoteFee } from "./relay/quote.js";
 import { buildSponsored } from "./relay/build.js";
 import { rpcLookupTables } from "./relay/lookups.js";
 import { createSolanaRpc } from "@solana/kit";
+import { USDC_MINT } from "@mercury/chain";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
 import type { ReadDeps } from "./deps.js";
@@ -25,6 +26,24 @@ import { waitlistRoutes } from "./routes/waitlist.js";
 const fail = (code: ErrorCode | "not_implemented", message: string, details?: unknown) => ({
   error: { code, message, ...(details === undefined ? {} : { details }) },
 });
+
+/**
+ * A create request as `priceOrder` wants it.
+ *
+ * Conditional spreads rather than undefined values: `exactOptionalPropertyTypes`
+ * tells an absent property apart from one set to `undefined`, and zod's
+ * `.optional()` produces the second.
+ */
+const toPriceRequest = (body: CreateOrderRequest, wallet: string | null): PriceRequest => ({
+  ticker: body.ticker,
+  side: body.side,
+  amount: body.amount,
+  ...(wallet === null ? {} : { owner: wallet }),
+  ...(body.max === true ? { max: true } : {}),
+});
+
+/** For a refusal that has to name a figure. */
+const asUsd = (d: ReturnType<typeof D>) => `$${d.toFixed(2)}`;
 
 const NOT_READY = fail(
   "not_implemented",
@@ -101,21 +120,62 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
+    const wallet = c.get("identity").walletAddress;
+    const sponsored = read.send.relay !== undefined && wallet !== null;
+    const req = toPriceRequest(parsed.data, wallet);
+
+    /*
+     * A sell prices once.
+     *
+     * The buy path below prices twice because the swap has to be quoted for
+     * what is left after the charge, and which token wins decides whether rent
+     * is owed. Neither holds for a sell: the share count does not move when the
+     * fee does, and the account that might need opening is USDC whichever
+     * wrapper wins. So the fee is quoted beside the price rather than after it.
+     */
+    if (parsed.data.side === "sell") {
+      const [decision, fee] = await Promise.all([
+        priceOrder(market(), req),
+        sponsored
+          ? quoteFee(
+              { chain: market().chain, prices: market().prices },
+              { owner: wallet, receivingMint: USDC_MINT },
+            )
+          : Promise.resolve(NO_FEE),
+      ]);
+      if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
+
+      const wire = decisionToWire(decision);
+      /* What the route expects to pay for the shares it is actually selling —
+         which is not always the shares that were asked for. */
+      const gross =
+        wire.kind === "refuse" || wire.best.pricePerShare === null || wire.best.filledShares === null
+          ? D(0)
+          : D(wire.best.pricePerShare).mul(D(wire.best.filledShares));
+
+      return c.json({
+        decision: wire,
+        fee: { usdc: fee.usdc.toString(), lamports: fee.lamports },
+        investable: null,
+        /* What lands in the wallet, once the network has been paid. */
+        proceeds: gross.sub(fee.usdc).toString(),
+      });
+    }
+
     /*
      * Priced twice, for the same reason the execute path prices twice: the
      * charge depends on which token wins, and the swap has to be quoted for
      * what is left after the charge. The first pass only picks the winner.
      */
-    const probe = await priceOrder(market(), parsed.data);
+    const probe = await priceOrder(market(), req);
     if (probe === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
-    const wallet = c.get("identity").walletAddress;
     const fee =
-      read.send.relay === undefined || wallet === null || probe.kind === "refuse"
+      !sponsored || probe.kind === "refuse"
         ? NO_FEE
         : await quoteFee(
             { chain: market().chain, prices: market().prices },
-            { owner: wallet, mint: probe.best.mint },
+            { owner: wallet, receivingMint: probe.best.mint },
           );
 
     /*
@@ -126,7 +186,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const decision = fee.usdc.lte(0)
       ? probe
       : await priceOrder(market(), {
-          ...parsed.data,
+          ...req,
           amount: D(parsed.data.amount).sub(fee.usdc).toFixed(),
           feeUsdc: fee.usdc.toFixed(),
         });
@@ -137,6 +197,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       fee: { usdc: fee.usdc.toString(), lamports: fee.lamports },
       /* What the swap is actually for, once the network has been paid. */
       investable: D(parsed.data.amount).sub(fee.usdc).toString(),
+      proceeds: null,
     });
   });
 
@@ -144,15 +205,17 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
-    const decision = await priceOrder(market(), parsed.data);
+    const identity = c.get("identity");
+    const decision = await priceOrder(market(), toPriceRequest(parsed.data, identity.walletAddress));
     if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
     const wire = decisionToWire(decision);
     const saved = await read.orders.create({
-      userId: c.get("identity").userId,
+      userId: identity.userId,
       ticker: parsed.data.ticker,
       side: parsed.data.side,
       usdAmount: parsed.data.amount,
+      max: parsed.data.max ?? false,
       decision: wire,
       chosenMint: wire.kind === "refuse" ? null : wire.best.mint,
       referencePrice: wire.fairPricePerShare,
@@ -219,29 +282,61 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * for the net. Which token wins is needed to know whether an account has
      * to be opened, so this prices once to find the winner and once for real.
      */
-    const feeUsdc =
-      read.send.relay === undefined || owner === null
-        ? NO_FEE.usdc
-        : await (async () => {
-            const probe = await priceOrder(market(), {
-              ticker: shown.ticker,
-              side: shown.side,
-              amount: shown.amount,
-            });
-            if (probe === null || probe.kind === "refuse") return NO_FEE.usdc;
-            const f = await quoteFee(
-              { chain: market().chain, prices: market().prices },
-              { owner, mint: probe.best.mint },
-            );
-            return f.usdc;
-          })();
+    const selling = shown.side === "sell";
 
-    const fresh = await priceOrder(market(), {
-      ticker: shown.ticker,
-      side: shown.side,
-      amount: D(shown.amount).sub(feeUsdc).toFixed(),
-      feeUsdc: feeUsdc.toFixed(),
-    });
+    /*
+     * A sell needs neither of those passes. The fee does not change how many
+     * shares are sold, so there is nothing to re-quote for; and the account it
+     * might pay rent for is the USDC one, whichever wrapper wins, so there is
+     * no winner to find first.
+     */
+    const feeUsdc =
+      read.send.relay === undefined
+        ? NO_FEE.usdc
+        : selling
+          ? (
+              await quoteFee(
+                { chain: market().chain, prices: market().prices },
+                { owner, receivingMint: USDC_MINT },
+              )
+            ).usdc
+          : await (async () => {
+              const probe = await priceOrder(market(), {
+                ticker: shown.ticker,
+                side: shown.side,
+                amount: shown.amount,
+              });
+              if (probe === null || probe.kind === "refuse") return NO_FEE.usdc;
+              const f = await quoteFee(
+                { chain: market().chain, prices: market().prices },
+                { owner, receivingMint: probe.best.mint },
+              );
+              return f.usdc;
+            })();
+
+    /*
+     * Re-priced from the row, not from the decision on it. A stored sell's
+     * `amount` is in shares — that is what `decide` reports — and `priceOrder`
+     * takes dollars, so reading one as the other would re-quote a $500 sell as
+     * five dollars' worth.
+     */
+    const fresh = await priceOrder(
+      market(),
+      selling
+        ? {
+            ticker: shown.ticker,
+            side: shown.side,
+            amount: order.usdAmount,
+            owner,
+            ...(order.max ? { max: true } : {}),
+          }
+        : {
+            ticker: shown.ticker,
+            side: shown.side,
+            amount: D(shown.amount).sub(feeUsdc).toFixed(),
+            feeUsdc: feeUsdc.toFixed(),
+          },
+    );
     if (fresh === null) return c.json(fail("not_found", "Unknown instrument."), 404);
     const wire = decisionToWire(fresh);
 
@@ -287,6 +382,33 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       return c.json(fail("internal", "The order could not be built."), 500);
     }
 
+    /*
+     * The one refusal a sell keeps, and it is arithmetic rather than policy.
+     *
+     * The charge is a USDC transfer out of the proceeds. Proceeds that do not
+     * cover it make a transfer that fails and takes the swap with it, so it is
+     * refused here rather than discovered on chain after a signature.
+     *
+     * Deliberately not the minimum-order refusal, which does not apply to
+     * sells at all: that one means "ask for more", and this one means the
+     * position cannot be moved for what moving it costs. Different remedies,
+     * and this one has none.
+     */
+    if (selling && feeUsdc.gt(0) && fresh.best.pricePerShare !== null && fresh.best.filledShares !== null) {
+      const proceeds = fresh.best.pricePerShare.mul(fresh.best.filledShares);
+      if (proceeds.lte(feeUsdc)) {
+        await record("refused");
+        return c.json(
+          fail(
+            "instrument_not_tradable",
+            `This is worth ${asUsd(proceeds)}, which is less than the ${asUsd(feeUsdc)} network fee to sell it.`,
+            { decision: wire },
+          ),
+          409,
+        );
+      }
+    }
+
     const quote = { quoteId: fresh.best.quoteId, raw: fresh.best.quoteRaw };
 
     /*
@@ -314,7 +436,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
                     };
                   },
                 },
-                { quote, owner, feeUsdc },
+                { quote, owner, feeUsdc, side: shown.side },
               )
             ).wire,
           ];
