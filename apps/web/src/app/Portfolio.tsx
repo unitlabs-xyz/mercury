@@ -22,7 +22,14 @@ import { Welcome } from "./Welcome";
  * never disagree.
  */
 export const Portfolio = () => {
-  const [range, setRange] = useState<Range>("1M");
+  /*
+   * A day, not a month. The chart is built from hourly readings we started
+   * taking on 30 September 2026, so the longer ranges are mostly empty and
+   * will be until there is a month of them to show. A day is also the range
+   * the figure beside it answers — "how did I do today" is the question
+   * somebody opens this screen with.
+   */
+  const [range, setRange] = useState<Range>("1D");
   const signedIn = useSignedIn();
   const portfolio = usePortfolio();
   const money = useMoney();
