@@ -15,7 +15,9 @@ import {
   type Blockhash,
 } from "@solana/kit";
 import { sendRoutes } from "./send.js";
-import type { RelaySigner } from "../relay/signer.js";
+import type { SendDeps } from "./send.js";
+import { inMemoryBuilds } from "../relay/builds.js";
+import { getBase64Encoder, getTransactionDecoder } from "@solana/kit";
 
 const lifetime = { blockhash: "11111111111111111111111111111111" as Blockhash, lastValidBlockHeight: 1n };
 
@@ -33,7 +35,7 @@ const txFrom = async (sign: boolean) => {
 };
 
 // No request reaches the network in these tests: every one is refused before sending.
-const app = (walletAddress: string | null, relay?: RelaySigner) => {
+const app = (walletAddress: string | null, relay?: SendDeps["relay"]) => {
   const a = new Hono();
   a.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress });
@@ -43,7 +45,7 @@ const app = (walletAddress: string | null, relay?: RelaySigner) => {
   return a;
 };
 
-const post = (walletAddress: string | null, transaction: string, relay?: RelaySigner) =>
+const post = (walletAddress: string | null, transaction: string, relay?: SendDeps["relay"]) =>
   app(walletAddress, relay).request("/v1/transactions/send", {
     method: "POST",
     body: JSON.stringify({ transaction }),
@@ -82,17 +84,33 @@ const sponsored = async (opts: { buyerSigns: boolean }) => {
   };
 };
 
-/** Records whether the key was used, without needing a real one. */
-const fakeRelay = (address: string): RelaySigner & { used: boolean } => {
-  const r = {
+/**
+ * A relayer that records whether its key was used, without needing a real one.
+ *
+ * `remember` takes the wire the server would have handed the buyer, because
+ * the route co-signs only messages it composed.
+ */
+const fakeRelay = (address: string, remember?: string) => {
+  const builds = inMemoryBuilds();
+  if (remember !== undefined) {
+    const tx = getTransactionDecoder().decode(getBase64Encoder().encode(remember));
+    builds.remember(tx.messageBytes as unknown as Uint8Array);
+  }
+  const signer = {
     address,
     used: false,
     cosign: async (b64: string) => {
-      r.used = true;
+      signer.used = true;
       return b64;
     },
   };
-  return r;
+  return {
+    signer,
+    builds,
+    get used() {
+      return signer.used;
+    },
+  };
 };
 
 describe("POST /v1/transactions/send", () => {
@@ -126,7 +144,7 @@ describe("POST /v1/transactions/send", () => {
    */
   it("co-signs a sponsored transaction the buyer has signed", async () => {
     const { relayerAddress, buyer, wire } = await sponsored({ buyerSigns: true });
-    const relay = fakeRelay(relayerAddress);
+    const relay = fakeRelay(relayerAddress, wire);
     // Reaches the network and fails there, which is past every check.
     const res = await post(buyer, wire, relay);
     expect(relay.used).toBe(true);
@@ -141,7 +159,7 @@ describe("POST /v1/transactions/send", () => {
   it("refuses to pay for a transaction that is not the caller's, and does not touch the key", async () => {
     const { relayerAddress, wire } = await sponsored({ buyerSigns: true });
     const stranger = (await generateKeyPairSigner()).address as string;
-    const relay = fakeRelay(relayerAddress);
+    const relay = fakeRelay(relayerAddress, wire);
     const res = await post(stranger, wire, relay);
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_your_transaction");
@@ -150,7 +168,7 @@ describe("POST /v1/transactions/send", () => {
 
   it("will not sign before the buyer has", async () => {
     const { relayerAddress, buyer, wire } = await sponsored({ buyerSigns: false });
-    const relay = fakeRelay(relayerAddress);
+    const relay = fakeRelay(relayerAddress, wire);
     const res = await post(buyer, wire, relay);
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_signed");
@@ -163,5 +181,19 @@ describe("POST /v1/transactions/send", () => {
     const res = await post(buyer, wire);
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("forbidden");
+  });
+
+  /*
+   * The check that makes the network charge unforgeable. A transaction the
+   * buyer built themselves is refused however well-formed it is, because the
+   * fee lives in bytes this server did not produce.
+   */
+  it("refuses a sponsored transaction it did not compose, and does not touch the key", async () => {
+    const { relayerAddress, buyer, wire } = await sponsored({ buyerSigns: true });
+    const relay = fakeRelay(relayerAddress); // remembers nothing
+    const res = await post(buyer, wire, relay);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("not_our_build");
+    expect(relay.used).toBe(false);
   });
 });

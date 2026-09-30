@@ -12,6 +12,7 @@ import {
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 import { decodeSponsored } from "../relay/decode.js";
+import type { SponsoredBuilds } from "../relay/builds.js";
 import type { RelaySigner } from "../relay/signer.js";
 import { validateSponsored } from "../relay/validate.js";
 
@@ -20,13 +21,21 @@ export interface SendDeps {
   /** How long to wait for confirmation before answering "pending". */
   readonly confirmMs?: number;
   /**
-   * Who pays when the buyer does not. Absent, every transaction must still be
-   * fee-paid by the caller's own wallet, which is the behaviour before any of
-   * this existed.
+   * Sponsorship, or nothing. Absent, every transaction must still be fee-paid
+   * by the caller's own wallet, which is the behaviour before any of this.
+   *
+   * The signer and the record of what we built travel together on purpose: a
+   * key that will pay without a way to know what it is paying for is the one
+   * combination that must not be configurable.
    */
-  readonly relay?: RelaySigner | undefined;
-  /** Which programs may be sponsored. Undefined allows any. */
-  readonly allowedPrograms?: readonly string[] | undefined;
+  readonly relay?:
+    | {
+        readonly signer: RelaySigner;
+        readonly builds: SponsoredBuilds;
+        /** Which programs may be sponsored. Undefined allows any. */
+        readonly allowedPrograms?: readonly string[] | undefined;
+      }
+    | undefined;
 }
 
 /** The transaction id is the fee payer's signature, which is the first one. */
@@ -99,18 +108,30 @@ export function sendRoutes(deps: SendDeps): Hono {
       if (!decoded.tx.signedBy.includes(wallet)) {
         return c.json(fail("validation_failed", "Not a signed Solana transaction."), 400);
       }
-    } else if (deps.relay !== undefined && decoded.tx.feePayer === deps.relay.address) {
+    } else if (deps.relay !== undefined && decoded.tx.feePayer === deps.relay.signer.address) {
       /*
        * We are being asked to pay. The session proves who is calling; it does
        * not prove the transaction is theirs, so everything about the message
        * is checked against the wallet Privy signed for before the key is used.
        */
       const verdict = validateSponsored(decoded.tx, wallet, {
-        relayer: deps.relay.address,
-        ...(deps.allowedPrograms === undefined ? {} : { allowedPrograms: deps.allowedPrograms }),
+        relayer: deps.relay.signer.address,
+        ...(deps.relay.allowedPrograms === undefined ? {} : { allowedPrograms: deps.relay.allowedPrograms }),
       });
       if (!verdict.ok) return c.json(fail(verdict.code, verdict.message), 403);
-      wire = await deps.relay.cosign(wire);
+
+      /*
+       * And it has to be a message we composed. Everything above judges what a
+       * transaction says about itself; this is the only check that knows what
+       * it should have said. The network fee is inside these bytes, so a buyer
+       * who drops it, lowers it or redirects it fails here rather than being
+       * caught by a decoder we would have had to write and keep right.
+       */
+      if (!deps.relay.builds.recognises(decoded.messageBytes)) {
+        return c.json(fail("not_our_build", "This is not a transaction this server composed."), 403);
+      }
+
+      wire = await deps.relay.signer.cosign(wire);
     } else {
       return c.json(fail("forbidden", "The fee payer is not this account's wallet."), 403);
     }

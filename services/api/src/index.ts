@@ -4,6 +4,7 @@ import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { createApp } from "./app.js";
+import { inMemoryBuilds } from "./relay/builds.js";
 import { keypairRelaySigner } from "./relay/signer.js";
 
 const config = readConfig();
@@ -18,11 +19,13 @@ const deps = buildDeps(config);
  * silent relayer that cannot pay looks exactly like one that is switched off.
  */
 const relay =
-  config.relayerSecretKey === undefined ? undefined : await keypairRelaySigner(config.relayerSecretKey);
+  config.relayerSecretKey === undefined
+    ? undefined
+    : { signer: await keypairRelaySigner(config.relayerSecretKey), builds: inMemoryBuilds() };
 console.log(
   relay === undefined
     ? "sponsorship: off (RELAYER_SECRET_KEY unset); buyers pay their own network costs"
-    : `sponsorship: on, paying from ${relay.address}`,
+    : `sponsorship: on, paying from ${relay.signer.address}`,
 );
 
 const read = buildReadDeps(auth.db, deps, config, relay);

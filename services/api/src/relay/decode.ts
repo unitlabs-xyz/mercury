@@ -11,7 +11,7 @@ import type { SponsoredTransaction } from "./validate.js";
 export type DecodeRefusal = "not_a_transaction" | "program_from_lookup";
 
 export type DecodeResult =
-  | { readonly ok: true; readonly tx: SponsoredTransaction }
+  | { readonly ok: true; readonly tx: SponsoredTransaction; readonly messageBytes: Uint8Array }
   | { readonly ok: false; readonly code: DecodeRefusal; readonly message: string };
 
 /**
@@ -42,8 +42,10 @@ export const programsOf = (
 export const decodeSponsored = (base64: string): DecodeResult => {
   let message: ReturnType<ReturnType<typeof getCompiledTransactionMessageDecoder>["decode"]>;
   let signatures: Record<string, Uint8Array | null>;
+  let messageBytes: Uint8Array;
   try {
     const tx = getTransactionDecoder().decode(getBase64Encoder().encode(base64));
+    messageBytes = tx.messageBytes as unknown as Uint8Array;
     message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
     signatures = tx.signatures as Record<string, Uint8Array | null>;
   } catch {
@@ -75,5 +77,5 @@ export const decodeSponsored = (base64: string): DecodeResult => {
     .filter(([, sig]) => sig !== null)
     .map(([address]) => address);
 
-  return { ok: true, tx: { feePayer, signers, signedBy, programs: found.programs } };
+  return { ok: true, messageBytes, tx: { feePayer, signers, signedBy, programs: found.programs } };
 };

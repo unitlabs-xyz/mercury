@@ -30,7 +30,6 @@ import { createPrivyDirectory } from "./auth/identity.js";
 import { createPrivyVerifier } from "./auth/verifier.js";
 import { createDb, type Db } from "./db/client.js";
 import type { ActivityDeps } from "./routes/activity.js";
-import type { RelaySigner } from "./relay/signer.js";
 import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
@@ -220,7 +219,7 @@ export function buildReadDeps(
   deps: Deps,
   config: Pick<Config, "solanaRpcUrl" | "waitlistAdminToken">,
   /** Built at boot, because loading a key is async and this is not. */
-  relay?: RelaySigner,
+  relay?: SendDeps["relay"],
 ): ReadDeps {
   return {
     instruments: {
