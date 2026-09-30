@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHolding } from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
+import { cashFrom, priceFor, valuePortfolio } from "../portfolio/value.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 
@@ -67,27 +68,19 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     const mints = rows.flatMap((r) => r.wrappers.map((w) => w.mint));
     const board = await deps.prices.pricesFor(mints);
 
-    let total = ZERO;
-    let change = ZERO;
+    // The figures are `valuePortfolio`'s, so that the hourly snapshot behind the
+    // chart and the number at the top of this page cannot drift apart. The loop
+    // below is only about the per-holding rows.
+    const cashUsd = cashFrom(balances, deps.usdcMint);
+    const value = valuePortfolio(rows, board, cashUsd);
     const holdings = [];
 
     for (const row of rows) {
       if (row.shares.lte(ZERO)) continue; // a closed holding is not a row
 
-      // Every wrapper of this company prices one share the same way, so the
-      // first that answers is enough. The share count already spans all of them.
-      const priced = row.wrappers.map((w) => board.get(w.mint)).find((p) => p !== undefined);
+      const priced = priceFor(row, board);
       const perShare = priced?.pricePerShare ?? ZERO;
-      const valueUsd = row.shares.mul(perShare);
       const changePct24h = priced?.changePct24h ?? ZERO;
-
-      // value_now = value_yesterday x (1 + pct/100), so today's move is
-      // value_now x pct / (100 + pct). No price history needed for one day.
-      const denominator = D(100).add(changePct24h);
-      const movedUsd = denominator.isZero() ? ZERO : valueUsd.mul(changePct24h).div(denominator);
-
-      total = total.add(valueUsd);
-      change = change.add(movedUsd);
 
       // Pledged tokens are shares too, at the same multiplier as the wallet's.
       const pledgedShares = row.wrappers.reduce((s, w) => {
@@ -101,7 +94,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         ticker: row.ticker,
         name: row.name,
         shares: toWire(row.shares),
-        valueUsd: toWire(valueUsd),
+        valueUsd: toWire(row.shares.mul(perShare)),
         costBasisUsd: toWire(row.costBasisUsd),
         // Measured over the shares a lot covers, not over the holding. Shares
         // that arrived from outside have no cost we can prove, and pretending
@@ -114,18 +107,14 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       });
     }
 
-    const usdc = balances.find((b) => b.mint === deps.usdcMint);
-    const cashUsd = usdc === undefined ? ZERO : D(usdc.rawAmount.toString()).div(D(10).pow(usdc.decimals));
-    const totalWithCash = total.add(cashUsd);
-
     // Cash does not move, so the percentage is of what actually could.
-    const yesterday = total.sub(change);
-    const changePct = yesterday.isZero() ? ZERO : change.div(yesterday).mul(100);
+    const yesterday = value.stocksUsd.sub(value.changeUsd);
+    const changePct = yesterday.isZero() ? ZERO : value.changeUsd.div(yesterday).mul(100);
 
     return c.json({
-      totalValueUsd: toWire(totalWithCash),
-      cashUsd: toWire(cashUsd),
-      changeUsd: toWire(change),
+      totalValueUsd: toWire(value.totalUsd),
+      cashUsd: toWire(value.cashUsd),
+      changeUsd: toWire(value.changeUsd),
       changePct: toWire(changePct),
       holdings,
     });

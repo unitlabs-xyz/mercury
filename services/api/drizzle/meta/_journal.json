@@ -43,6 +43,13 @@
       "when": 1790752548952,
       "tag": "0005_order_max",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790764364582,
+      "tag": "0006_portfolio_snapshot",
+      "breakpoints": true
     }
   ]
 }

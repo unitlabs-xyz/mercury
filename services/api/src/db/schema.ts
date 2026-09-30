@@ -303,3 +303,38 @@ export const waitlist = pgTable(
   (t) => [uniqueIndex("waitlist_email_idx").on(t.email)],
 );
 export type WaitlistEntry = typeof waitlist.$inferSelect;
+
+/**
+ * What an account was worth, once an hour.
+ *
+ * No upstream sells a portfolio's history — Jupiter gives spot, Pyth gives spot
+ * and a calendar — so §6 of the backend design records it ourselves. This is
+ * the only table written on a clock rather than in response to something that
+ * happened, and the only one whose value is that it is old.
+ *
+ * `capturedAt` is the top of the hour, not the moment of the write, and the
+ * unique index below is what makes that matter: a deploy that restarts the
+ * process mid-hour upserts that hour's row instead of adding a second one. The
+ * series is therefore a grid, which is also what lets a range be bucketed by
+ * arithmetic rather than by a window function.
+ *
+ * `baskets_usd` is in the spec's sketch and not here. Nothing computes it —
+ * baskets are not in the portfolio total — and a column that is always "0"
+ * advertises a capability the system does not have.
+ */
+export const portfolioSnapshots = pgTable(
+  "portfolio_snapshot",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The top of the hour this reading belongs to, UTC. */
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+    /** Stocks plus cash, the same figure `GET /v1/portfolio` puts at the top of the page. */
+    totalUsd: usd("total_usd").notNull(),
+    stocksUsd: usd("stocks_usd").notNull(),
+    cashUsd: usd("cash_usd").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.capturedAt] })],
+);
+export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
