@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ButtonLink } from "../../ui/Button";
 import { GlideRows, MoveChip, RailHead, StatusChip } from "../../ui/ds";
@@ -125,70 +126,95 @@ export const Holdings = ({
   m: Model | undefined;
   signedIn: boolean;
   failed: boolean;
-}) => (
-  <section aria-label="Holdings" className="min-w-0 rounded-xl bg-white p-1">
-    <div className="px-5 pt-4">
-      <RailHead
-        title="Holdings"
-        meta={m ? (m.rows.length ? `${m.rows.length} positions, largest first` : "Nothing yet") : undefined}
-        to="/invest"
-        linkLabel="Browse stocks"
-      />
-    </div>
+}) => {
+  const [showAll, setShowAll] = useState(false);
+  const rows = m?.rows ?? [];
+  /*
+   * Three, because the rows are sorted largest first and a portfolio's shape
+   * is in its top few — the twentieth position is 0.4% of the money and a
+   * third of the scroll. The rest are one press away rather than cut: a table
+   * that silently stops listing what someone owns is worse than a long one.
+   */
+  const shown = showAll ? rows : rows.slice(0, 3);
+  const hidden = rows.length - shown.length;
 
-    <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
-      {m && m.rows.length > 0 && (
-        <div className="min-w-[716px]">
-          <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
-            <span>Name</span>
-            <span className="text-right">Value</span>
-            <span className="text-right">Weight</span>
-            {/* Inset by the chip's own padding, so the label sits over the
+  return (
+    <section aria-label="Holdings" className="min-w-0 rounded-xl bg-white p-1">
+      <div className="px-5 pt-4">
+        <RailHead
+          title="Holdings"
+          meta={m ? (rows.length ? `${rows.length} positions, largest first` : "Nothing yet") : undefined}
+          to="/invest"
+          linkLabel="Browse stocks"
+        />
+      </div>
+
+      <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
+        {m && rows.length > 0 && (
+          <div className="min-w-[716px]">
+            <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
+              <span>Name</span>
+              <span className="text-right">Value</span>
+              <span className="text-right">Weight</span>
+              {/* Inset by the chip's own padding, so the label sits over the
                 figure rather than over the pill around it. */}
-            <span className="pr-1.5 text-right">Today</span>
-            <span className="text-right">Return</span>
-          </div>
-          <GlideRows>
-            {m.rows.map((r) => (
-              <Line key={r.ticker} r={r} />
-            ))}
-          </GlideRows>
-        </div>
-      )}
-
-      {!m && !failed && (
-        <div className="flex flex-col gap-3 p-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="size-9 rounded-full" />
-              <Skeleton className="h-4 w-40" />
-              <Skeleton className="ml-auto h-4 w-20" />
+              <span className="pr-1.5 text-right">Today</span>
+              <span className="text-right">Return</span>
             </div>
-          ))}
-        </div>
-      )}
+            <GlideRows>
+              {shown.map((r) => (
+                <Line key={r.ticker} r={r} />
+              ))}
+            </GlideRows>
 
-      {((m && m.rows.length === 0) || failed) && (
-        <div className="px-6 py-10 text-center">
-          <p className="text-[14px] font-medium text-ds-ink">
-            {failed
-              ? "Could not load your holdings"
-              : signedIn
-                ? "You do not hold anything yet"
-                : "Sign in to see your portfolio"}
-          </p>
-          <p className="mx-auto mt-2 max-w-[36ch] text-[12px] text-ds-muted">
-            {failed
-              ? "Your shares are safe in your wallet; we just could not read them. Try again in a moment."
-              : "Anything you buy, or send to your wallet, shows up here."}
-          </p>
-          {signedIn && !failed && (
-            <ButtonLink to="/invest" variant="primary" className="mt-4">
-              Browse stocks
-            </ButtonLink>
-          )}
-        </div>
-      )}
-    </div>
-  </section>
-);
+            {/* Only when there is something behind it. A control that never
+                does anything is furniture. */}
+            {rows.length > 3 && (
+              <button
+                type="button"
+                onClick={() => setShowAll((v) => !v)}
+                className="flex h-11 w-full items-center justify-center rounded-md text-[13px] leading-none font-medium text-ds-muted transition-colors hover:bg-white hover:text-ds-ink"
+              >
+                {showAll ? "Show fewer" : `Show ${hidden} more`}
+              </button>
+            )}
+          </div>
+        )}
+
+        {!m && !failed && (
+          <div className="flex flex-col gap-3 p-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="size-9 rounded-full" />
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="ml-auto h-4 w-20" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {((m && rows.length === 0) || failed) && (
+          <div className="px-6 py-10 text-center">
+            <p className="text-[14px] font-medium text-ds-ink">
+              {failed
+                ? "Could not load your holdings"
+                : signedIn
+                  ? "You do not hold anything yet"
+                  : "Sign in to see your portfolio"}
+            </p>
+            <p className="mx-auto mt-2 max-w-[36ch] text-[12px] text-ds-muted">
+              {failed
+                ? "Your shares are safe in your wallet; we just could not read them. Try again in a moment."
+                : "Anything you buy, or send to your wallet, shows up here."}
+            </p>
+            {signedIn && !failed && (
+              <ButtonLink to="/invest" variant="primary" className="mt-4">
+                Browse stocks
+              </ButtonLink>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
