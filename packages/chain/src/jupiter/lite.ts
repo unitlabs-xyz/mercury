@@ -1,6 +1,12 @@
 import { D, type Decimal } from "@mercury/core";
 import type { Candidate } from "@mercury/core";
-import type { QuoteRequest, QuoteSource, RedeemableQuote } from "../ports.js";
+import type {
+  QuoteRequest,
+  QuoteSource,
+  RedeemableQuote,
+  SwapInstructions,
+  WireInstruction,
+} from "../ports.js";
 import { USDC_DECIMALS, USDC_MINT } from "../usdc.js";
 import { defaultFetch } from "../fetch.js";
 
@@ -111,6 +117,63 @@ export class JupiterLite implements QuoteSource {
    * unread and unmodified — Jupiter prices the route it already chose, so
    * nothing between the check and the fill can re-route the order.
    */
+  /**
+   * The swap as instructions, for a transaction we assemble ourselves.
+   *
+   * `/swap` hands back a finished transaction, and a finished transaction
+   * cannot have anything put beside it. A sponsored buy needs the buyer's
+   * repayment in the same message as the swap, so this asks for the pieces.
+   *
+   * `payer` is the account charged the fee and any account rent. Jupiter
+   * honours it as the message's fee payer, which is what lets the buyer hold
+   * no SOL — verified against a live route on 30 September 2026.
+   */
+  async buildSwapInstructions(
+    quote: RedeemableQuote,
+    owner: string,
+    payer: string,
+  ): Promise<SwapInstructions> {
+    if (quote.raw === null || quote.raw === undefined) {
+      throw new Error("JupiterLite.buildSwapInstructions: the quote carries no payload to redeem.");
+    }
+    const res = await this.doFetch(`${this.base}/swap/v1/swap-instructions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        quoteResponse: quote.raw,
+        userPublicKey: owner,
+        payer,
+        wrapAndUnwrapSol: true,
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(`jupiter instructions failed: ${res.status} ${detail.slice(0, 200)}`);
+    }
+    const body = (await res.json()) as {
+      computeBudgetInstructions?: WireInstruction[];
+      setupInstructions?: WireInstruction[];
+      swapInstruction?: WireInstruction;
+      cleanupInstruction?: WireInstruction | null;
+      addressLookupTableAddresses?: string[];
+      simulationError?: unknown;
+      error?: string;
+    };
+    if (body.simulationError !== null && body.simulationError !== undefined) {
+      throw new Error(`jupiter simulation failed: ${JSON.stringify(body.simulationError).slice(0, 200)}`);
+    }
+    if (body.swapInstruction === undefined) {
+      throw new Error(`jupiter returned no swap instruction${body.error ? `: ${body.error}` : ""}`);
+    }
+    return {
+      computeBudget: body.computeBudgetInstructions ?? [],
+      setup: body.setupInstructions ?? [],
+      swap: body.swapInstruction,
+      cleanup: body.cleanupInstruction ?? null,
+      lookupTables: body.addressLookupTableAddresses ?? [],
+    };
+  }
+
   async buildSwap(quote: RedeemableQuote, owner: string): Promise<readonly string[]> {
     if (quote.raw === null || quote.raw === undefined) {
       throw new Error("JupiterLite.buildSwap: the quote carries no payload to redeem.");

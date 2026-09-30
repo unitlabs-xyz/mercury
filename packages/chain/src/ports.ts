@@ -31,7 +31,15 @@ export interface QuoteRequest {
   readonly slippageBps?: number;
 }
 
-/** See ADR 0008: we never compose, so the aggregator handles landing. */
+/**
+ * ADR 0008 chose the aggregator's own execution path so that landing was not
+ * our problem. That ended when Ultra was removed and pricing and building
+ * became one keyless endpoint; submitting and confirming have been ours since.
+ *
+ * `buildSwapInstructions` takes the next step the ADR left open, and only for
+ * the case that needs it: a sponsored buy has to carry the buyer's repayment
+ * in the same transaction as the swap.
+ */
 export interface QuoteSource {
   quote(req: QuoteRequest): Promise<Candidate["quote"]>;
   /**
@@ -44,6 +52,34 @@ export interface QuoteSource {
    * that produced it keeps the two the same object.
    */
   buildSwap(quote: RedeemableQuote, owner: string): Promise<readonly string[]>;
+  /**
+   * The same swap, in pieces, so a caller can put something beside it.
+   *
+   * `payer` moves the fee and any rent onto another account, which is what
+   * lets a buyer hold no SOL at all. They still sign; they just do not pay.
+   */
+  buildSwapInstructions(quote: RedeemableQuote, owner: string, payer: string): Promise<SwapInstructions>;
+}
+
+/** One instruction as the aggregator serialises it. */
+export interface WireInstruction {
+  readonly programId: string;
+  readonly accounts: readonly {
+    readonly pubkey: string;
+    readonly isSigner: boolean;
+    readonly isWritable: boolean;
+  }[];
+  /** Base64. */
+  readonly data: string;
+}
+
+export interface SwapInstructions {
+  readonly computeBudget: readonly WireInstruction[];
+  readonly setup: readonly WireInstruction[];
+  readonly swap: WireInstruction;
+  readonly cleanup: WireInstruction | null;
+  /** Without these a real route will not fit in a transaction. */
+  readonly lookupTables: readonly string[];
 }
 
 /**

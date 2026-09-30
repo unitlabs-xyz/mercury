@@ -1,6 +1,23 @@
 # ADR 0008 · Jupiter Ultra everywhere, no Router path
 
-**Status:** accepted · 19 September 2026 · decided rather than asked
+**Status:** superseded · 19 September 2026, overtaken 30 September 2026
+
+Ultra is gone. It was the executing half of a pair whose pricing half was the
+keyless endpoint, and the split meant the quote a user was shown and the one
+they filled at came from two different systems — so the premium check ran on a
+number that never executed. The keyless endpoint turned out to build a signable
+transaction from the same quote it priced, and the split had nothing left to buy.
+
+Landing therefore came back to us when Ultra left, not when composition
+arrived: `POST /v1/transactions/send` has been submitting and confirming since.
+
+Composition follows, which this ADR allowed for — "if a future feature
+genuinely needs CPI inside a swap, we add the Router path then." Sponsorship is
+that feature: the buyer's repayment for gas has to share a transaction with the
+swap, or one of them can happen without the other. See
+`docs/superpowers/specs/2026-09-30-server-quoting-and-sponsorship-design.md`.
+
+The reasoning below is kept as written.
 
 ## Context
 
