@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateKeyPairSigner, getBase58Decoder } from "@solana/kit";
+import { getBase58Decoder } from "@solana/kit";
 import { keypairRelaySigner, parseSecretKey } from "./signer.js";
 
 describe("parseSecretKey", () => {
