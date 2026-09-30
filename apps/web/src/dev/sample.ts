@@ -1,7 +1,6 @@
 import type { Money, Portfolio } from "@mercury/types";
 import type { Dashboard } from "../api/dashboard";
 import type { Event } from "../app/activity-data";
-import type { Point } from "../app/DotChart";
 
 /**
  * SAMPLE DATA, FOR LOOKING AT THE DESIGN.
@@ -239,7 +238,7 @@ export const SAMPLE_EVENTS: Event[] = [
 ] as Event[];
 
 /** The last month of account value, ending at the design's +$547.62. */
-const series = (n: number, label: (i: number) => string): Point[] => {
+const series = (n: number, stepMs: number): { at: string; valueUsd: string }[] => {
   let v = 11_932.99;
   return Array.from({ length: n }, (_, i) => {
     const f = i / (n - 1);
@@ -250,27 +249,24 @@ const series = (n: number, label: (i: number) => string): Point[] => {
       520 * Math.sin(Math.PI * Math.min(1, f * 1.8)) * (1 - f) +
       40 * Math.sin(i * 1.7);
     if (i === n - 1) v = 12_480.61;
-    return { label: label(i), value: Math.round(v * 100) / 100 };
+    return {
+      at: new Date(Date.now() - (n - 1 - i) * stepMs).toISOString(),
+      valueUsd: (Math.round(v * 100) / 100).toFixed(2),
+    };
   });
 };
-export const SAMPLE_HISTORY = {
-  "1D": series(48, (i) =>
-    new Date(Date.now() - (47 - i) * 30 * 60_000).toLocaleString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-  ),
-  "1W": series(56, (i) =>
-    new Date(Date.now() - (55 - i) * 3 * 3_600_000).toLocaleString("en-US", {
-      weekday: "short",
-      day: "numeric",
-      hour: "2-digit",
-    }),
-  ),
-  "1M": series(60, (i) => {
-    const d = new Date(Date.now() - (59 - i) * 12 * 3_600_000);
-    return `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })}`;
-  }),
+
+/**
+ * Sample history in the shape the wire uses, not in the shape the chart draws.
+ *
+ * It used to be pre-labelled points handed straight to the chart, which meant
+ * sample mode was the one path that never ran the labelling code — so a broken
+ * formatter looked fine in design review and wrong in production.
+ */
+export const SAMPLE_HISTORY: Record<string, { at: string; valueUsd: string }[]> = {
+  "1D": series(24, 3_600_000),
+  "1W": series(56, 3 * 3_600_000),
+  "1M": series(60, 12 * 3_600_000),
 };
 
 /**
@@ -413,5 +409,9 @@ export const sampleResponse = (path: string): unknown | undefined => {
   if (route === "/v1/borrow") return borrow;
   if (route === "/v1/baskets") return { baskets };
   if (route === "/v1/activity") return { items: [], nextCursor: null };
+  if (route === "/v1/portfolio/history") {
+    const range = new URLSearchParams(path.split("?")[1] ?? "").get("range") ?? "1D";
+    return { range, points: SAMPLE_HISTORY[range] ?? SAMPLE_HISTORY["1D"] };
+  }
   return undefined;
 };

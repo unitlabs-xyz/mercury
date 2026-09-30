@@ -258,6 +258,13 @@ portfolio_snapshot: id, user_id, captured_at, total_usd numeric(38,18),
                     stocks_usd, baskets_usd, cash_usd
 ```
 
+**Built on 30 September 2026.** `portfolio_snapshot` is keyed on (user, hour)
+rather than carrying an id, so a deploy mid-hour upserts that hour instead of
+appending a second reading. `baskets_usd` was dropped from the sketch above:
+nothing computes it, and a column that is always `0` advertises a capability the
+system does not have. The route is `GET /v1/portfolio/history?range=`, and it
+withholds a lone reading — one point is a dot, not a line.
+
 **Consequences, stated plainly rather than designed around:**
 
 - By 12 October there are at most 19 days of history, and a brand-new account has none.

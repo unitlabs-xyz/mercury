@@ -42,7 +42,7 @@ import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import { pgWaitlist, type WaitlistDeps } from "./routes/waitlist.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
-import { readHoldings } from "./portfolio/queries.js";
+import { readHoldings, readSnapshots } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 
@@ -236,6 +236,7 @@ export function buildReadDeps(
       multipliers: deps.multipliers,
       usdcMint: USDC_MINT,
       pledged: (wallet) => pledgedByMint(deps.lending, wallet),
+      snapshots: (userId, from) => readSnapshots(db, userId, from),
     },
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },

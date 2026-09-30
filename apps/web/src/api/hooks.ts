@@ -1,6 +1,6 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
-import type { MarketStatus, Money, Portfolio } from "@mercury/types";
+import type { HistoryRange, MarketStatus, Money, Portfolio, PortfolioHistory } from "@mercury/types";
 import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { apiFetch } from "./client";
 import { LIVE } from "./live";
@@ -35,6 +35,25 @@ export const usePortfolio = () => {
     queryFn: () => apiFetch<Portfolio>("/v1/portfolio"),
     enabled: signedIn,
     ...LIVE,
+  });
+};
+
+/**
+ * The account's recorded value over a range.
+ *
+ * A minute, not the ten seconds the other account reads use. This series gains
+ * a point an hour — the snapshot job's cadence — so polling it at the rate of
+ * the live balance would be three hundred and sixty requests an hour for one
+ * new point. A minute is still well inside the hour it is waiting for.
+ */
+export const usePortfolioHistory = (range: HistoryRange) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "portfolio", "history", range],
+    queryFn: () => apiFetch<PortfolioHistory>(`/v1/portfolio/history?range=${range}`),
+    enabled: signedIn,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 };
 

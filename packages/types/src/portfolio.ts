@@ -22,6 +22,28 @@ export const Portfolio = z.object({
   holdings: z.array(Holding),
 });
 
+/** The ranges the value chart offers. Longer ones wait for there to be data behind them. */
+export const HistoryRange = z.enum(["1D", "1W", "1M"]);
+
+/** One reading of the account's value: when it was taken, and what it was then. */
+export const HistoryPoint = z.object({
+  at: z.string().datetime(),
+  valueUsd: Usd,
+});
+
+/**
+ * The account's value over a range.
+ *
+ * `points` is empty for an account too new to have a line — fewer than two
+ * readings is a dot, not a chart — and the client shows its empty state. The
+ * timestamps are instants, not labels: only the browser knows what timezone to
+ * name an hour in.
+ */
+export const PortfolioHistory = z.object({
+  range: HistoryRange,
+  points: z.array(HistoryPoint),
+});
+
 export const WrapperExposure = z.object({
   mint: Mint,
   symbol: z.string(),
@@ -52,5 +74,7 @@ export const Money = z.object({
 });
 
 export type Portfolio = z.infer<typeof Portfolio>;
+export type PortfolioHistory = z.infer<typeof PortfolioHistory>;
+export type HistoryRange = z.infer<typeof HistoryRange>;
 export type Exposure = z.infer<typeof Exposure>;
 export type Money = z.infer<typeof Money>;
