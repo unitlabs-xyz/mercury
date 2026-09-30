@@ -74,5 +74,7 @@ export const Money = z.object({
 });
 
 export type Portfolio = z.infer<typeof Portfolio>;
+export type PortfolioHistory = z.infer<typeof PortfolioHistory>;
+export type HistoryRange = z.infer<typeof HistoryRange>;
 export type Exposure = z.infer<typeof Exposure>;
 export type Money = z.infer<typeof Money>;
