@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, asc, eq, gte } from "drizzle-orm";
 import { D } from "@mercury/core";
 import type { Db } from "../db/client.js";
-import { instruments, positions, tokens } from "../db/schema.js";
+import { instruments, portfolioSnapshots, positions, tokens } from "../db/schema.js";
 import type { HoldingRow } from "../routes/portfolio.js";
+import type { Reading } from "./history.js";
 
 /**
  * Every instrument the user has a position row for, with the wrappers that
@@ -48,4 +49,20 @@ export async function readHoldings(db: Db, userId: string): Promise<readonly Hol
       .filter((w) => w.instrumentId === row.instrumentId)
       .map((w) => ({ mint: w.mint, symbol: w.symbol, issuer: w.issuer, decimals: w.decimals })),
   }));
+}
+
+/**
+ * The account's hourly readings since `from`, oldest first.
+ *
+ * A month is 720 rows at most, so the range is bounded by the query rather
+ * than by a limit: a cap would silently drop the oldest end of the line, which
+ * is the end a chart is for.
+ */
+export async function readSnapshots(db: Db, userId: string, from: Date): Promise<readonly Reading[]> {
+  const rows = await db
+    .select({ at: portfolioSnapshots.capturedAt, totalUsd: portfolioSnapshots.totalUsd })
+    .from(portfolioSnapshots)
+    .where(and(eq(portfolioSnapshots.userId, userId), gte(portfolioSnapshots.capturedAt, from)))
+    .orderBy(asc(portfolioSnapshots.capturedAt));
+  return rows.map((r) => ({ at: r.at, totalUsd: D(r.totalUsd) }));
 }

@@ -3,6 +3,7 @@ import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHoldi
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import { cashFrom, priceFor, valuePortfolio } from "../portfolio/value.js";
+import { MIN_POINTS, RANGES, bucketSeries, type Range, type Reading } from "../portfolio/history.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 
@@ -33,6 +34,8 @@ export interface PortfolioDeps {
   readonly usdcMint: string;
   /** Stock pledged to Kamino by mint, raw. Still held: it counts in the position. */
   readonly pledged: (walletAddress: string) => Promise<readonly TokenBalance[]>;
+  /** Hourly readings of the account's value, no older than `from`. */
+  readonly snapshots: (userId: string, from: Date) => Promise<readonly Reading[]>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -118,6 +121,33 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       changePct: toWire(changePct),
       holdings,
     });
+  });
+
+  /**
+   * The line under the total on the portfolio page.
+   *
+   * Instants go on the wire, never formatted labels: the hour a reading belongs
+   * to is the reader's local hour, and only their browser knows which that is.
+   */
+  app.get("/v1/portfolio/history", async (c) => {
+    const asked = c.req.query("range") ?? "1D";
+    if (!(asked in RANGES)) {
+      return c.json(fail("bad_range", `No chart for ${asked}. Ranges are 1D, 1W and 1M.`), 400);
+    }
+    const range = asked as Range;
+
+    const identity = c.get("identity");
+    // A session can be valid before Privy finishes provisioning the wallet.
+    // Nothing has been recorded yet, which is an empty chart and not an error.
+    if (identity.walletAddress === null) return c.json({ range, points: [] });
+
+    const now = new Date();
+    const from = new Date(now.getTime() - RANGES[range].spanHours * 3_600_000);
+    const points = bucketSeries(await deps.snapshots(identity.userId, from), range, now);
+
+    // One reading is a dot. Withholding it here keeps "is there a chart?" a
+    // single decision in a single place, rather than one the client repeats.
+    return c.json({ range, points: points.length < MIN_POINTS ? [] : points });
   });
 
   app.get("/v1/portfolio/exposure/:ticker", async (c) => {

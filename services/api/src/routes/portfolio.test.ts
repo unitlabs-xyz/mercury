@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { D, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard, TokenPrice } from "@mercury/market";
-import { Exposure, Portfolio } from "@mercury/types";
+import { Exposure, Portfolio, PortfolioHistory } from "@mercury/types";
 import { portfolioRoutes, type HoldingRow, type PortfolioDeps } from "./portfolio.js";
 
 /**
@@ -13,6 +13,7 @@ import { portfolioRoutes, type HoldingRow, type PortfolioDeps } from "./portfoli
  */
 const portfolioOf = async (res: Response) => Portfolio.parse(await res.json());
 const exposureOf = async (res: Response) => Exposure.parse(await res.json());
+const historyOf = async (res: Response) => PortfolioHistory.parse(await res.json());
 const errorOf = async (res: Response) => (await res.json()) as { error: { code: string; message: string } };
 
 // Real mints, because the wire schema validates them — a four-character
@@ -54,6 +55,7 @@ const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   multipliers: { multiplierFor: async () => D(1), isPaused: async () => false } satisfies MultiplierSource,
   usdcMint: USDC,
   pledged: async () => [],
+  snapshots: async () => [],
   ...over,
 });
 
@@ -258,5 +260,65 @@ describe("GET /v1/portfolio/exposure/:ticker", () => {
     const res = await appWith(deps()).request("/v1/portfolio/exposure/SPY");
     expect(res.status).toBe(404);
     expect((await errorOf(res)).error.code).toBe("not_found");
+  });
+});
+
+/** `h` hours before NOW, worth `value`. */
+const NOW = new Date("2026-09-30T12:00:00.000Z");
+const reading = (h: number, value: string) => ({
+  at: new Date(NOW.getTime() - h * 3_600_000),
+  totalUsd: D(value),
+});
+
+describe("GET /v1/portfolio/history", () => {
+  it("draws the readings it has, oldest first", async () => {
+    const d = deps({ snapshots: async () => [reading(2, "100"), reading(1, "110")] });
+    const body = await historyOf(await appWith(d).request("/v1/portfolio/history?range=1D"));
+    expect(body.range).toBe("1D");
+    expect(body.points.map((p) => p.valueUsd)).toEqual(["100", "110"]);
+  });
+
+  it("defaults to a day when no range is asked for", async () => {
+    const d = deps({ snapshots: async () => [reading(2, "100"), reading(1, "110")] });
+    const body = await historyOf(await appWith(d).request("/v1/portfolio/history"));
+    expect(body.range).toBe("1D");
+  });
+
+  it("refuses a range it does not draw rather than quietly picking one", async () => {
+    const res = await appWith(deps()).request("/v1/portfolio/history?range=5Y");
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).error.code).toBe("bad_range");
+  });
+
+  it("holds back a single reading, because one point is a dot and not a line", async () => {
+    const d = deps({ snapshots: async () => [reading(1, "100")] });
+    const body = await historyOf(await appWith(d).request("/v1/portfolio/history?range=1D"));
+    expect(body.points).toEqual([]);
+  });
+
+  it("is empty for an account with no readings yet", async () => {
+    const body = await historyOf(await appWith(deps()).request("/v1/portfolio/history?range=1M"));
+    expect(body.points).toEqual([]);
+  });
+
+  it("is empty before the wallet exists, which is not an error", async () => {
+    const res = await appWith(deps(), null).request("/v1/portfolio/history?range=1D");
+    expect(res.status).toBe(200);
+    expect((await historyOf(res)).points).toEqual([]);
+  });
+
+  it("asks the store only for the window the range covers", async () => {
+    const since: Date[] = [];
+    const d = deps({
+      snapshots: async (_userId: string, from: Date) => {
+        since.push(from);
+        return [];
+      },
+    });
+    await appWith(d).request("/v1/portfolio/history?range=1W");
+    // A week back, give or take the moment the request was served.
+    const hoursBack = (Date.now() - since[0]!.getTime()) / 3_600_000;
+    expect(hoursBack).toBeGreaterThan(167);
+    expect(hoursBack).toBeLessThan(169);
   });
 });
