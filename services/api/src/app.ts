@@ -115,7 +115,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
         ? NO_FEE
         : await quoteFee(
             { chain: market().chain, prices: market().prices },
-            { owner: wallet, mint: probe.best.mint },
+            { owner: wallet, receivingMint: probe.best.mint },
           );
 
     /*
@@ -231,7 +231,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
             if (probe === null || probe.kind === "refuse") return NO_FEE.usdc;
             const f = await quoteFee(
               { chain: market().chain, prices: market().prices },
-              { owner, mint: probe.best.mint },
+              { owner, receivingMint: probe.best.mint },
             );
             return f.usdc;
           })();
