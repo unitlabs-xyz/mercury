@@ -21,8 +21,8 @@ export interface StocksSummary {
  * write is in `planStocks`; this only reads, calls and writes.
  *
  * Upserts throughout, keyed on the natural keys — a ticker and a mint — so
- * running it twice changes nothing the second time. The worker takes this over
- * in subsystem 4; until then the API calls it on boot.
+ * running it twice changes nothing the second time, which is what lets the
+ * `stocks` job run it on boot and every six hours after.
  */
 export async function syncStocks(db: Db, deps: StocksDeps): Promise<StocksSummary> {
   const live = await deps.supportedStocks.instruments();

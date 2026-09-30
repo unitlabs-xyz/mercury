@@ -176,7 +176,8 @@ created → queued → filled
                  → cancelled  (by the user)
 ```
 
-The worker polls trigger order state every sixty seconds and records fills as ordinary lots.
+A scheduled job polls trigger order state every sixty seconds and records fills as ordinary
+lots. Not built: see [03 Architecture](03-architecture.md).
 
 ## Selling
 

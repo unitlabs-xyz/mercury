@@ -9,7 +9,7 @@ engineer, which buys back the iOS app.
 |       | Weeks 1                                           | Weeks 2 to 3                        | Owns                      |
 | ----- | ------------------------------------------------- | ----------------------------------- | ------------------------- |
 | **A** | Symmetry spike, then the basket integration       | **iOS app in Expo**                 | Baskets, then mobile      |
-| **B** | Token registry, Jupiter, Chainlink, session state | The worker and triggers             | Chain and market data     |
+| **B** | Token registry, Jupiter, Chainlink, session state | The clocked jobs and triggers       | Chain and market data     |
 | **C** | `decide()`, orders, the API                       | Postgres, lots, positions, exposure | The engine and the server |
 | **D** | Privy onboarding, app shell, funding screen       | Every screen                        | The web app               |
 
@@ -45,7 +45,8 @@ sign-in creating a Solana wallet. The funding screen with all three paths from
 **A** Start the Expo app, sharing `sdk` and `types`, using the web app as the reference
 implementation. Privy sign-in, portfolio, stock page.
 
-**B** The worker: price cache, multiplier watch writing dividend events, Jupiter trigger polling.
+**B** The clocked jobs: price cache, multiplier watch writing dividend events, Jupiter trigger
+polling.
 Corporate-action state feeding the halt rule.
 
 **C** Postgres schema and migrations. Lots, positions, exposure queries. Basket preview. Order

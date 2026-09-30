@@ -32,7 +32,7 @@ id, instrument_id, mint, issuer ('backed'|'ondo'), symbol, decimals,
 multiplier numeric(38,18), multiplier_updated_at, is_routable, first_seen_at
 ```
 
-`multiplier` is cached from the issuer feed and refreshed by the worker. Every change is written
+`multiplier` is cached from the issuer feed and refreshed by the `stocks` job. Every change is written
 to `multiplier_event` as well, because it is a dividend and the user should see it.
 
 ### `multiplier_event`

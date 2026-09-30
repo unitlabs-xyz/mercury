@@ -79,9 +79,9 @@ describe("GET /v1/portfolio", () => {
   });
 
   it("answers from the stored books alone, writing nothing", async () => {
-    // The route has no way to write: reconciliation is the worker's, on its
-    // own clock. Two identical reads therefore cannot produce two different
-    // sets of books, which is the whole reason it moved.
+    // The route has no way to write: reconciliation belongs to `position-sync`,
+    // on its own clock. Two identical reads therefore cannot produce two
+    // different sets of books, which is the whole reason it moved.
     const a = await portfolioOf(await appWith(deps()).request("/v1/portfolio"));
     const b = await portfolioOf(await appWith(deps()).request("/v1/portfolio"));
     expect(a).toEqual(b);

@@ -9,8 +9,7 @@ mercury/
 │   ├── web/             Vite + React. The build judges will open.
 │   └── landing/         Next.js. Marketing site.
 ├── services/
-│   ├── api/             Hono on Node. The only thing the apps talk to.
-│   └── worker/          Scheduled work: order watching, price cache.
+│   └── api/             Hono on Node. The only thing the apps talk to, and where the clocked jobs run.
 ├── packages/
 │   ├── core/            Domain logic, no I/O. Pricing, wrapper choice, cost basis, baskets.
 │   ├── chain/           Solana adapters. Jupiter, Symmetry, Kamino, RPC, token registry.
@@ -81,22 +80,26 @@ equivalent, so the degraded state is _live prices, no portfolio_. See
 It **never holds a private key**. For ordinary buys the client signs. For delegated actions the
 user has granted, it asks Privy to sign inside a policy. See [ADR 0003](adr/0003-custody.md).
 
-### `services/worker`
+### Everything on a clock
 
-Everything on a clock:
+There is no worker process. One was planned; the jobs went into the API instead, because the API
+is already long-running and the worker package could not reach the database. They run on
+`services/api/src/index.ts`'s interval loop, which reschedules after a pass finishes rather than
+on a fixed tick, so a slow pass never has a second one starting behind it.
 
-| Job                | Cadence                              | Does                                                                                   |
-| ------------------ | ------------------------------------ | -------------------------------------------------------------------------------------- |
-| `price-cache`      | 15s while market open, 60s otherwise | Reference prices, session state, per-token multipliers                                 |
-| `multiplier-watch` | 5 min                                | Detects multiplier changes and writes a dividend event per holder                      |
-| `queued-orders`    | 60s                                  | Checks the status of Jupiter trigger orders and records fills                          |
-| `position-sync`    | 2s                                   | Reconciles our view of balances against chain                                          |
-| `wallet-events`    | 30s                                  | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers |
+| Job                  | Cadence | Does                                                                                    |
+| -------------------- | ------- | --------------------------------------------------------------------------------------- |
+| `stocks`             | 6h      | Refreshes the instrument and token universe, and writes a `multiplier_event` per change |
+| `position-sync`      | 2s      | Reconciles our view of balances against chain, and recognises dividends                 |
+| `wallet-events`      | 30s     | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers  |
+| `portfolio-snapshot` | 1h      | Records what every account is worth, which is the only history the chart can draw       |
 
 `wallet-events` reads transaction history, not balances, and writes to the activity feed only —
-it never touches `lot` or `position`; that stays `position-sync`'s job. It runs as an interval
-inside `services/api` (the same loop as `position-sync`), not in this package — it is grouped
-with the other clocked jobs here for cadence, not by process.
+it never touches `lot` or `position`; that stays `position-sync`'s job.
+
+**Two the design called for are not built.** A price cache, so prices are read from upstream on
+every call instead. And a poller for Jupiter trigger orders, which is why an order that would
+have queued is refused with "the price moved" rather than joining a queue nobody watches.
 
 ## Request path for a buy
 
@@ -138,7 +141,7 @@ amounts. Budget real money for testing and keep it small.
 
 ## What we are not doing
 
-- **No microservices.** One API, one worker. Split when there is a reason.
+- **No microservices.** One API, with its jobs inside it. Split when there is a reason.
 - **No GraphQL.** The client surface is small and known.
 - **No server-held keys.** Privy's TEE holds them. See ADR 0003.
 - **No shared React component library across web and mobile.** Primitives differ too much.
