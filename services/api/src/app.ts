@@ -8,6 +8,9 @@ import { gateExecution } from "./orders/gate.js";
 import { planFill } from "./orders/fill.js";
 import { decisionToWire } from "./serialize.js";
 import { NO_FEE, quoteFee } from "./relay/quote.js";
+import { buildSponsored } from "./relay/build.js";
+import { rpcLookupTables } from "./relay/lookups.js";
+import { createSolanaRpc } from "@solana/kit";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
 import type { ReadDeps } from "./deps.js";
@@ -35,6 +38,8 @@ const NOT_READY = fail(
  */
 export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
+  /* One client for the routes that talk to the chain directly. */
+  const rpc = createSolanaRpc(read.send.rpcUrl);
   app.use("*", cors());
 
   // Public, so the app can say "dry run" before anyone signs anything.
@@ -241,10 +246,46 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       return c.json(fail("internal", "The order could not be built."), 500);
     }
 
-    const transactions = await market().quotes.buildSwap(
-      { quoteId: fresh.best.quoteId, raw: fresh.best.quoteRaw },
-      owner,
-    );
+    const quote = { quoteId: fresh.best.quoteId, raw: fresh.best.quoteRaw };
+
+    /*
+     * Sponsored when there is a relayer to pay: the buyer signs a transaction
+     * whose fee payer is ours, and repays the network cost in USDC inside the
+     * same message. Priced here rather than taken from the quote the ticket
+     * showed, because it turns on whether the buyer holds the token — which a
+     * moment ago they might not have.
+     */
+    const transactions =
+      read.send.relay === undefined
+        ? await market().quotes.buildSwap(quote, owner)
+        : [
+            (
+              await buildSponsored(
+                {
+                  quotes: market().quotes,
+                  lookups: rpcLookupTables(rpc),
+                  relay: read.send.relay,
+                  blockhash: async () => {
+                    const { value } = await rpc.getLatestBlockhash().send();
+                    return {
+                      blockhash: value.blockhash,
+                      lastValidBlockHeight: value.lastValidBlockHeight,
+                    };
+                  },
+                },
+                {
+                  quote,
+                  owner,
+                  feeUsdc: (
+                    await quoteFee(
+                      { chain: market().chain, prices: market().prices },
+                      { owner, mint: fresh.best.mint },
+                    )
+                  ).usdc,
+                },
+              )
+            ).wire,
+          ];
     await record("executing");
     return c.json({
       transactions,
