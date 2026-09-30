@@ -34,6 +34,47 @@ before finding out was built on a false assumption. Symmetry is twelve days
 overdue for exactly this shape of unknown, and Baskets still dead-ends because
 of it. This one runs first.
 
+### What the spike found, 30 September 2026
+
+Read from the published packages, not from documentation.
+
+**The API exists.** `@privy-io/expo` 0.75.0 ships `useEmbeddedSolanaWallet()`,
+and its provider handles `signMessage`, `signTransaction` and
+`signAndSendTransaction` — the same shape the web app already uses. It also
+ships `useLoginWithEmail` and `useIdentityToken`, so the auth path and
+`resolveIdentity` work unchanged.
+
+**Three findings that change the plan:**
+
+1. **It is typed against `@solana/web3.js` v1.** `Transaction`,
+   `VersionedTransaction` and `Connection` are the legacy client that
+   [03 Architecture](../../03-architecture.md) chose `@solana/kit` to avoid. The
+   server is unaffected — it hands out base64 — but the phone will deserialize,
+   sign and re-serialize with web3.js while the browser does the same with kit.
+   Two clients, two transaction libraries. Acceptable, and written down here so
+   nobody rediscovers it as a bug.
+
+2. **Privy's own types contradict themselves.** The class comment reads
+   "Currently only supports signing messages", directly above overloads for
+   `signTransaction` and `signAndSendTransaction`. One of the two is stale. Only
+   a device answers which, and a device needs the dev client, which needs the
+   Apple account.
+
+3. **Expo 52 is probably too old.** `@privy-io/expo-native-extensions@0.0.12` —
+   a required peer, and native — is built against Expo 56, React Native 0.85 and
+   React 19.2. `apps/mobile` declares Expo 52, RN 0.76 and React 18.3. The peer
+   ranges are `*`, so it installs; native modules compiled against
+   `expo-modules-core` 56 are a different question.
+
+   **So `apps/mobile` moves to Expo 56 before anything is built on it.** It
+   costs nothing: the app is two placeholder files, so there is no code to
+   migrate, and every hour spent on a toolchain mismatch is an hour not spent on
+   screens.
+
+**Still unproven, and unprovable from here:** that a real embedded wallet on a
+real device signs a real transaction our API built. That is the device test, and
+it is the first thing to run once the dev client builds.
+
 ## 1 · `packages/view`
 
 A new package holding what both apps already need and only one of them has.
