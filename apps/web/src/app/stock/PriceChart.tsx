@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Span } from "../../market/hooks";
-import { usd, usdSigned } from "../format";
+import { usd, usdSigned } from "@mercury/view";
 import { resample } from "../Sparkline";
 
 const PITCH = 6;

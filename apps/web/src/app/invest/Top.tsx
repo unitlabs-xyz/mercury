@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useReturns, type Span } from "../../market/hooks";
 import { MoveChip, RangeSwitch } from "../../ui/ds";
 import { DotChart, SMALL } from "../DotChart";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 import { Skeleton } from "../portfolio/ui";
 import { Mark, compact, points, type Row } from "./shared";
 

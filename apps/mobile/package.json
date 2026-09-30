@@ -9,27 +9,30 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@expo-google-fonts/instrument-sans": "^0.4.2",
     "@mercury/core": "workspace:*",
-    "expo": "~52.0.0",
-    "expo-blur": "~14.0.1",
-    "expo-constants": "~17.0.3",
-    "expo-font": "~13.0.2",
-    "expo-linking": "~7.0.3",
-    "expo-router": "~4.0.11",
-    "expo-status-bar": "~2.0.0",
-    "expo-system-ui": "~4.0.6",
-    "react": "18.3.1",
-    "react-native": "0.76.5",
-    "react-native-gesture-handler": "~2.20.2",
-    "react-native-reanimated": "~3.16.1",
-    "react-native-safe-area-context": "4.12.0",
-    "react-native-screens": "~4.1.0",
-    "react-native-svg": "15.8.0"
+    "@mercury/sdk": "workspace:*",
+    "@mercury/types": "workspace:*",
+    "@mercury/view": "workspace:*",
+    "@tanstack/react-query": "^5.62.0",
+    "expo": "~56.0.23",
+    "expo-constants": "~56.0.27",
+    "expo-font": "~56.0.7",
+    "expo-linking": "~56.0.18",
+    "expo-router": "~56.2.21",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
+    "react": "19.2.0",
+    "react-native": "0.85.3",
+    "react-native-gesture-handler": "~3.3.0",
+    "react-native-reanimated": "~4.7.0",
+    "react-native-safe-area-context": "~5.10.1",
+    "react-native-screens": "~4.28.0",
+    "react-native-svg": "~15.15.5"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@types/react": "~18.3.12",
+    "@mercury/tsconfig": "workspace:*",
+    "@types/react": "~19.2.0",
     "typescript": "^5.7.0"
   }
 }

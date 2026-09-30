@@ -1,4 +1,4 @@
-import { KIND_LABEL, type Event } from "./activity-data";
+import { KIND_LABEL, type Event } from "@mercury/view";
 
 /** RFC 4180: quote everything, double any embedded quote. */
 const cell = (v: string) => `"${v.replace(/"/g, '""')}"`;

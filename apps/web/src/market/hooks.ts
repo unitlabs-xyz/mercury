@@ -11,7 +11,7 @@ import {
 import type { Instrument as WireInstrument } from "@mercury/types";
 import { ApiError, apiFetch } from "../api/client";
 import { useSignedIn } from "../api/hooks";
-import { decisionFromWire } from "./decision";
+import { decisionFromWire } from "@mercury/view";
 import type { Decision as WireDecision } from "@mercury/types";
 
 /**

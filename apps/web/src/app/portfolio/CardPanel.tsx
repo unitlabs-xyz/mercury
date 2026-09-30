@@ -3,7 +3,7 @@ import type { CardAccount } from "../../api/dashboard";
 import { CardArt } from "../../cards/CardArt";
 import { Button } from "../../ui/Button";
 import { RailCard, RailFigure, RailHead } from "../../ui/ds";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 import type { Model } from "./model";
 import { Skeleton, relDay, shortDate } from "./ui";
 

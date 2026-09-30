@@ -1,4 +1,4 @@
-import { GROUPS, type Event, type Group } from "./activity-data";
+import { GROUPS, type Event, type Group } from "@mercury/view";
 import type { Option } from "../ui/Select";
 
 /** Real today: the feed is the user's own, so "Today" has to mean it. */

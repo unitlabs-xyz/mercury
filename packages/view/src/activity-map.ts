@@ -1,5 +1,22 @@
-import type { ActivityItem } from "../api/hooks";
-import type { Event, EventKind } from "./activity-data";
+import type { Event, EventKind } from "./activity-data.js";
+
+/**
+ * One row of `GET /v1/activity`, as the feed receives it.
+ *
+ * Declared here rather than in a client, because both clients consume it and
+ * the mapping below is the only thing that reads every field.
+ */
+export interface ActivityItem {
+  readonly id: string;
+  readonly kind: string;
+  readonly occurredAt: string;
+  readonly title: string;
+  readonly subtitle: string | null;
+  readonly amountUsd: string | null;
+  readonly txSignature: string | null;
+  readonly mint: string | null;
+  readonly logoUrl: string | null;
+}
 
 /**
  * An API activity row, as the screen's event model.

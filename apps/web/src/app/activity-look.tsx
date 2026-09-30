@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Alert, ArrowDown, ArrowUp, Clock, Grid, Lock, Plus, Refresh, Trend } from "../ui/icons";
-import type { EventKind } from "./activity-data";
+import type { EventKind } from "@mercury/view";
 
 /** The mark and tint for each kind of event, shared by the feed and the dashboard. */
 export const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
