@@ -23,6 +23,7 @@ const candidate = (c: WireDecision["candidates"][number]): PricedCandidate => ({
   pricePerToken: c.pricePerToken === null ? null : D(c.pricePerToken),
   pricePerShare: c.pricePerShare === null ? null : D(c.pricePerShare),
   worstPricePerShare: c.worstPricePerShare === null ? null : D(c.worstPricePerShare),
+  filledShares: c.filledShares === null ? null : D(c.filledShares),
   priceImpact: c.priceImpact === null ? null : D(c.priceImpact),
   routeLabels: c.routeLabels,
   viable: c.viable,

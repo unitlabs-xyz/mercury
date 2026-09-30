@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { D, asBps, fromPct } from "../money.js";
 import { decide, fairPricePerShare, multiplierChangesTheAnswer } from "./decide.js";
 import { DEFAULT_POLICY, withPolicy } from "./policy.js";
-import { NVDA_CANDIDATES, SPY_CANDIDATES, buyInput, quote, reference } from "./fixtures.js";
+import { NVDA_CANDIDATES, SPY_CANDIDATES, buyInput, quote, reference, sellInput } from "./fixtures.js";
 
 describe("wrapper selection", () => {
   it("picks Backed over Ondo for Nvidia and says why the other was refused", () => {
@@ -272,5 +272,40 @@ describe("the bound the user can be held to", () => {
     const d = decide(buyInput({ candidates: [{ ...NVDA_CANDIDATES[0]!, quote: null }] }));
     expect(d.candidates[0]!.worstPricePerShare).toBeNull();
     expect(d.candidates[0]!.pricePerShare).toBeNull();
+  });
+});
+
+describe("filledShares", () => {
+  it("is what a buy delivers, corrected by the multiplier", () => {
+    const d = decide(buyInput());
+    expect(d.kind).toBe("execute");
+    if (d.kind !== "execute") return;
+
+    // 4.49018 tokens at a 1.0017 multiplier.
+    expect(d.best.filledShares?.toFixed(4)).toBe("4.4978");
+  });
+
+  it("is what a sell consumes, not what it delivers", () => {
+    const d = decide(sellInput());
+    expect(d.kind).toBe("execute");
+    if (d.kind !== "execute") return;
+
+    // The sell's input leg is tokens, so filledShares follows inAmount.
+    expect(d.best.filledShares?.toFixed(4)).toBe("4.4978");
+  });
+
+  it("is null for a candidate with no route, alongside the other nulls", () => {
+    const d = decide(buyInput({ candidates: [{ ...NVDA_CANDIDATES[0]!, quote: null }] }));
+    expect(d.kind).toBe("refuse");
+    const only = d.candidates[0];
+    expect(only?.filledShares).toBeNull();
+    expect(only?.rejection).toBe("no_route");
+  });
+
+  it("survives a candidate refused for impact, because the trade was still priced", () => {
+    const d = decide(buyInput());
+    const ondo = d.candidates.find((c) => c.symbol === "NVDAon");
+    expect(ondo?.viable).toBe(false);
+    expect(ondo?.filledShares).not.toBeNull();
   });
 });

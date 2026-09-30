@@ -31,6 +31,12 @@ const priceCandidate = (candidate: Candidate, side: Side, maxPriceImpact: Decima
     routeLabels: candidate.quote?.routeLabels ?? [],
     quoteId: candidate.quote?.quoteId ?? null,
     quoteRaw: candidate.quote?.raw ?? null,
+    /* The traded leg: tokens out on a buy, tokens in on a sell, either way
+       corrected by the multiplier into shares. */
+    filledShares:
+      candidate.quote === null
+        ? null
+        : (side === "buy" ? candidate.quote.outAmount : candidate.quote.inAmount).mul(candidate.multiplier),
   };
 
   if (candidate.quote === null) {

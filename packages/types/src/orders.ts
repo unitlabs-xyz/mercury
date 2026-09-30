@@ -12,6 +12,8 @@ export const PricedCandidate = z.object({
   pricePerShare: Usd.nullable(),
   /** The bound: the most a buy pays per share, the least a sell receives. */
   worstPricePerShare: Usd.nullable(),
+  /** What this candidate actually trades, in shares. Null when it has no route. */
+  filledShares: Usd.nullable(),
   priceImpact: Ratio.nullable(),
   routeLabels: z.array(z.string()),
   viable: z.boolean(),

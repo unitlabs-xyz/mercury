@@ -113,6 +113,15 @@ export interface PricedCandidate {
    * amount, so it is the number a promise can be made against.
    */
   readonly worstPricePerShare: Decimal | null;
+  /**
+   * What this candidate actually trades, in shares.
+   *
+   * For a buy, the shares the quote delivers. For a sell, the shares it
+   * consumes — which is not always the number asked for, because a sell is
+   * capped at what the wallet holds of that wrapper. The ticket needs the
+   * difference to explain itself rather than quietly under-filling.
+   */
+  readonly filledShares: Decimal | null;
   readonly priceImpact: Decimal | null;
   readonly routeLabels: readonly string[];
   readonly viable: boolean;
