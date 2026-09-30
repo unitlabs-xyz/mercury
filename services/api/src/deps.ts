@@ -78,6 +78,15 @@ export interface Config {
   readonly solanaRpcUrl: string;
   /** Optional. Program scans (Kamino's reserve lookup), if the main RPC plan refuses them. */
   readonly solanaScanRpcUrl?: string;
+  /**
+   * Optional. The key that pays for sponsored transactions.
+   *
+   * Absent, sponsorship is off and buyers pay their own network costs — which
+   * is the behaviour today, not a broken state. The send route falls back to
+   * requiring the buyer to be their own fee payer, so a deployment without a
+   * funded relayer still sells stock.
+   */
+  readonly relayerSecretKey?: string;
   /** Optional. The bearer token for `GET /admin/waitlist`; unset, that route is a 404. */
   readonly waitlistAdminToken?: string;
 }
@@ -95,6 +104,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     privyAppId: required(env, "PRIVY_APP_ID"),
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
+    ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
     ...(env["WAITLIST_ADMIN_TOKEN"] ? { waitlistAdminToken: env["WAITLIST_ADMIN_TOKEN"] } : {}),
@@ -208,6 +218,8 @@ export function buildReadDeps(
   db: Db,
   deps: Deps,
   config: Pick<Config, "solanaRpcUrl" | "waitlistAdminToken">,
+  /** Built at boot, because loading a key is async and this is not. */
+  relay?: SendDeps["relay"],
 ): ReadDeps {
   return {
     instruments: {
@@ -234,6 +246,6 @@ export function buildReadDeps(
       settle: (input) => settleOrder(db, input),
     },
     borrow: { lending: deps.lending, chain: deps.chain, usdcMint: USDC_MINT },
-    send: { rpcUrl: config.solanaRpcUrl },
+    send: { rpcUrl: config.solanaRpcUrl, ...(relay === undefined ? {} : { relay }) },
   };
 }

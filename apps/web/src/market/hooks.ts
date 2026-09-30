@@ -1,15 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  D,
-  DEFAULT_POLICY,
-  ONE,
-  decide,
-  type Candidate,
-  type Decimal,
-  type Decision,
-  type Issuer,
-} from "@mercury/core";
-import { JupiterLite, JupiterRegistry } from "@mercury/chain";
+import { D, ONE, type Decimal, type Issuer } from "@mercury/core";
+import { JupiterRegistry } from "@mercury/chain";
 import {
   JupiterMarket,
   KaminoCredit,
@@ -19,6 +10,9 @@ import {
 } from "@mercury/market";
 import type { Instrument as WireInstrument } from "@mercury/types";
 import { ApiError, apiFetch } from "../api/client";
+import { useSignedIn } from "../api/hooks";
+import { decisionFromWire } from "./decision";
+import type { Decision as WireDecision } from "@mercury/types";
 
 /**
  * The app's view of the market.
@@ -33,7 +27,6 @@ import { ApiError, apiFetch } from "../api/client";
  */
 const registry = new JupiterRegistry();
 const market = new JupiterMarket({ registry });
-const quotes = new JupiterLite();
 const sessions = new PythSessions();
 const credit = new KaminoCredit();
 
@@ -382,63 +375,53 @@ export const multiplierOf = (p: TokenPrice | undefined): Decimal => p?.multiplie
  * engine decides. A wrapper with no route at this size becomes a candidate with
  * a null quote, which is what `decide` expects — not a dropped row.
  */
+/**
+ * What this order would do, decided by the server.
+ *
+ * It used to be decided here: five chain clients in the browser, its own
+ * quotes, its own copy of the policy. Two decisions then existed for every
+ * order — the one on screen and the one that executed — computed by different
+ * code over separately fetched quotes, and `PriceMoved` was catching the gap
+ * between them as often as it caught the market moving.
+ *
+ * `prices` is still taken, and still ignored for the decision itself. The
+ * caller has it for the page around the ticket, and asking for it keeps the
+ * call sites unchanged while the reference price comes from the server.
+ */
 export const useDecision = (
   instrument: Instrument | undefined,
   usd: number,
-  prices: PriceMap | undefined,
+  _prices: PriceMap | undefined,
 ) => {
   const session = useSession();
+  const signedIn = useSignedIn();
   const amount = Number.isFinite(usd) && usd > 0 ? usd : 0;
 
   const quoted = useQuery({
-    queryKey: ["quotes", instrument?.ticker, amount.toFixed(2)],
+    queryKey: ["quote", instrument?.ticker, amount.toFixed(2), signedIn],
     enabled: !!instrument && amount > 0,
     staleTime: 10_000,
     refetchInterval: 20_000,
-    queryFn: async () => {
-      const wrappers = instrument!.wrappers;
-      return Promise.all(
-        wrappers.map(async (w) => ({
-          w,
-          q: await quotes
-            .quote({ side: "buy", mint: w.mint, decimals: w.decimals, amount: D(amount) })
-            .catch(() => null),
-        })),
-      );
-    },
+    queryFn: () =>
+      apiFetch<{
+        decision: WireDecision;
+        fee: { usdc: string; lamports: number };
+        investable: string;
+      }>("/v1/quote", {
+        method: "POST",
+        body: JSON.stringify({ ticker: instrument!.ticker, side: "buy", amount: amount.toFixed(2) }),
+      }),
   });
 
-  const priced = instrument ? priceInstrument(instrument, prices) : null;
-  const fair = priced?.fair ?? null;
-
-  let decision: Decision | null = null;
-  if (instrument && quoted.data && fair !== null && amount > 0) {
-    const candidates: Candidate[] = quoted.data.map(({ w, q }) => ({
-      mint: w.mint,
-      symbol: w.symbol,
-      issuer: w.issuer,
-      multiplier: multiplierOf(prices?.get(w.mint)),
-      quote: q,
-    }));
-    decision = decide({
-      ticker: instrument.ticker,
-      side: "buy",
-      amount: D(amount),
-      candidates,
-      reference: {
-        pricePerShare: D(fair),
-        observedAt: priced?.observedAt ?? new Date(),
-        pendingDividendNet: D(0),
-      },
-      status: session.data?.status ?? "closed",
-      policy: DEFAULT_POLICY,
-      now: new Date(),
-      ...(session.data?.nextOpen ? { marketOpensAt: session.data.nextOpen } : {}),
-    });
-  }
-
   return {
-    decision,
+    decision: quoted.data ? decisionFromWire(quoted.data.decision) : null,
+    /*
+     * What the network costs, and what is left to buy with. Zero unless a
+     * relayer is paying, which is why the ticket shows these lines only
+     * sometimes rather than always.
+     */
+    fee: quoted.data ? D(quoted.data.fee.usdc) : null,
+    investable: quoted.data ? D(quoted.data.investable) : null,
     isLoading: quoted.isLoading || session.isLoading,
     isFetching: quoted.isFetching,
     error: quoted.error,

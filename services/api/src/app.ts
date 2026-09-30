@@ -7,6 +7,10 @@ import { priceOrder } from "./pricing.js";
 import { gateExecution } from "./orders/gate.js";
 import { planFill } from "./orders/fill.js";
 import { decisionToWire } from "./serialize.js";
+import { NO_FEE, quoteFee } from "./relay/quote.js";
+import { buildSponsored } from "./relay/build.js";
+import { rpcLookupTables } from "./relay/lookups.js";
+import { createSolanaRpc } from "@solana/kit";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
 import type { ReadDeps } from "./deps.js";
@@ -34,6 +38,8 @@ const NOT_READY = fail(
  */
 export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
+  /* One client for the routes that talk to the chain directly. */
+  const rpc = createSolanaRpc(read.send.rpcUrl);
   app.use("*", cors());
 
   // Public, so the app can say "dry run" before anyone signs anything.
@@ -75,6 +81,53 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   });
 
   /** Create an order. Nothing happens on chain: this returns the decision to show the user. */
+  /**
+   * What an order would do, without creating one.
+   *
+   * The buy ticket used to work this out in the browser: five chain clients,
+   * its own quotes, its own copy of the policy. Two decisions then existed for
+   * every order — the one shown and the one executed — computed by different
+   * code over separately fetched quotes, which is most of what `PriceMoved`
+   * was catching.
+   *
+   * This is the same `priceOrder` the execute path runs, so the ticket and the
+   * transaction now disagree only about time.
+   *
+   * It also carries the network fee, which the browser could not have worked
+   * out at all: it depends on whether this buyer already holds the token, and
+   * on the SOL price.
+   */
+  app.post("/v1/quote", async (c) => {
+    const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+
+    const decision = await priceOrder(market(), parsed.data);
+    if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
+
+    const wire = decisionToWire(decision);
+    const wallet = c.get("identity").walletAddress;
+
+    /*
+     * No fee unless there is a relayer to owe it to, a wallet to charge, and a
+     * route to charge for. A refused decision has no token to open an account
+     * for, so there is nothing to price.
+     */
+    const fee =
+      read.send.relay === undefined || wallet === null || wire.kind === "refuse"
+        ? NO_FEE
+        : await quoteFee(
+            { chain: market().chain, prices: market().prices },
+            { owner: wallet, mint: wire.best.mint },
+          );
+
+    return c.json({
+      decision: wire,
+      fee: { usdc: fee.usdc.toString(), lamports: fee.lamports },
+      /* What the swap is actually for, once the network has been paid. */
+      investable: D(parsed.data.amount).sub(fee.usdc).toString(),
+    });
+  });
+
   app.post("/v1/orders", async (c) => {
     const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
@@ -193,10 +246,46 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       return c.json(fail("internal", "The order could not be built."), 500);
     }
 
-    const transactions = await market().quotes.buildSwap(
-      { quoteId: fresh.best.quoteId, raw: fresh.best.quoteRaw },
-      owner,
-    );
+    const quote = { quoteId: fresh.best.quoteId, raw: fresh.best.quoteRaw };
+
+    /*
+     * Sponsored when there is a relayer to pay: the buyer signs a transaction
+     * whose fee payer is ours, and repays the network cost in USDC inside the
+     * same message. Priced here rather than taken from the quote the ticket
+     * showed, because it turns on whether the buyer holds the token — which a
+     * moment ago they might not have.
+     */
+    const transactions =
+      read.send.relay === undefined
+        ? await market().quotes.buildSwap(quote, owner)
+        : [
+            (
+              await buildSponsored(
+                {
+                  quotes: market().quotes,
+                  lookups: rpcLookupTables(rpc),
+                  relay: read.send.relay,
+                  blockhash: async () => {
+                    const { value } = await rpc.getLatestBlockhash().send();
+                    return {
+                      blockhash: value.blockhash,
+                      lastValidBlockHeight: value.lastValidBlockHeight,
+                    };
+                  },
+                },
+                {
+                  quote,
+                  owner,
+                  feeUsdc: (
+                    await quoteFee(
+                      { chain: market().chain, prices: market().prices },
+                      { owner, mint: fresh.best.mint },
+                    )
+                  ).usdc,
+                },
+              )
+            ).wire,
+          ];
     await record("executing");
     return c.json({
       transactions,

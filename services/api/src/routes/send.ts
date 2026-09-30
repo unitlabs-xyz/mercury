@@ -11,12 +11,46 @@ import {
 } from "@solana/kit";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
+import { decodeSponsored } from "../relay/decode.js";
+import type { SponsoredBuilds } from "../relay/builds.js";
+import type { RelaySigner } from "../relay/signer.js";
+import { validateSponsored } from "../relay/validate.js";
 
 export interface SendDeps {
   readonly rpcUrl: string;
   /** How long to wait for confirmation before answering "pending". */
   readonly confirmMs?: number;
+  /**
+   * Sponsorship, or nothing. Absent, every transaction must still be fee-paid
+   * by the caller's own wallet, which is the behaviour before any of this.
+   *
+   * The signer and the record of what we built travel together on purpose: a
+   * key that will pay without a way to know what it is paying for is the one
+   * combination that must not be configurable.
+   */
+  readonly relay?:
+    | {
+        readonly signer: RelaySigner;
+        readonly builds: SponsoredBuilds;
+        /** Which programs may be sponsored. Undefined allows any. */
+        readonly allowedPrograms?: readonly string[] | undefined;
+      }
+    | undefined;
 }
+
+/** The transaction id is the fee payer's signature, which is the first one. */
+const feePayerSignature = (wire: string): string | null => {
+  try {
+    const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
+    const message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
+    const payer = message.staticAccounts[0];
+    if (payer === undefined) return null;
+    const sig = tx.signatures[payer as keyof typeof tx.signatures];
+    return sig ? getBase58Decoder().decode(sig) : null;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * The program's own reason, in words someone can act on.
@@ -63,24 +97,53 @@ export function sendRoutes(deps: SendDeps): Hono {
     const parsed = Body.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
-    let payer: string;
-    let signature: string;
-    try {
-      const tx = getTransactionDecoder().decode(getBase64Encoder().encode(parsed.data.transaction));
-      const message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
-      payer = message.staticAccounts[0] ?? "";
-      const sig = tx.signatures[payer as keyof typeof tx.signatures];
-      if (!sig) throw new Error("unsigned");
-      signature = getBase58Decoder().decode(sig);
-    } catch {
+    const decoded = decodeSponsored(parsed.data.transaction);
+    if (!decoded.ok) return c.json(fail("validation_failed", "Not a signed Solana transaction."), 400);
+
+    let wire = parsed.data.transaction;
+
+    if (decoded.tx.feePayer === wallet) {
+      // The buyer pays their own way. Unchanged, and still the path taken when
+      // no relayer is configured.
+      if (!decoded.tx.signedBy.includes(wallet)) {
+        return c.json(fail("validation_failed", "Not a signed Solana transaction."), 400);
+      }
+    } else if (deps.relay !== undefined && decoded.tx.feePayer === deps.relay.signer.address) {
+      /*
+       * We are being asked to pay. The session proves who is calling; it does
+       * not prove the transaction is theirs, so everything about the message
+       * is checked against the wallet Privy signed for before the key is used.
+       */
+      const verdict = validateSponsored(decoded.tx, wallet, {
+        relayer: deps.relay.signer.address,
+        ...(deps.relay.allowedPrograms === undefined ? {} : { allowedPrograms: deps.relay.allowedPrograms }),
+      });
+      if (!verdict.ok) return c.json(fail(verdict.code, verdict.message), 403);
+
+      /*
+       * And it has to be a message we composed. Everything above judges what a
+       * transaction says about itself; this is the only check that knows what
+       * it should have said. The network fee is inside these bytes, so a buyer
+       * who drops it, lowers it or redirects it fails here rather than being
+       * caught by a decoder we would have had to write and keep right.
+       */
+      if (!deps.relay.builds.recognises(decoded.messageBytes)) {
+        return c.json(fail("not_our_build", "This is not a transaction this server composed."), 403);
+      }
+
+      wire = await deps.relay.signer.cosign(wire);
+    } else {
+      return c.json(fail("forbidden", "The fee payer is not this account's wallet."), 403);
+    }
+
+    const signature = feePayerSignature(wire);
+    if (signature === null) {
       return c.json(fail("validation_failed", "Not a signed Solana transaction."), 400);
     }
-    if (payer !== wallet)
-      return c.json(fail("forbidden", "The fee payer is not this account's wallet."), 403);
 
     try {
       await rpc
-        .sendTransaction(parsed.data.transaction as Base64EncodedWireTransaction, {
+        .sendTransaction(wire as Base64EncodedWireTransaction, {
           encoding: "base64",
           preflightCommitment: "confirmed",
           maxRetries: 3n,
