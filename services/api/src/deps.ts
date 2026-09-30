@@ -72,6 +72,9 @@ export interface Config {
   /** Required. Nothing works without these. */
   readonly databaseUrl: string;
   readonly privyAppId: string;
+  /** Resend, for the loan watcher. Unset means it warns nobody and says so. */
+  readonly resendApiKey?: string;
+  readonly notifyFrom: string;
   /**
    * Optional. Privy publishes the public key as a JWKS derived from the app id,
    * so this is only needed to pin a specific key instead of fetching it.
@@ -104,6 +107,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     databaseUrl: required(env, "DATABASE_URL"),
     privyAppId: required(env, "PRIVY_APP_ID"),
+    ...(env["RESEND_API_KEY"] ? { resendApiKey: env["RESEND_API_KEY"] } : {}),
+    notifyFrom: env["NOTIFY_FROM"] ?? "Mercury <alerts@mercury.invalid>",
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
