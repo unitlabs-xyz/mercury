@@ -44,11 +44,26 @@ id, token_id, old_multiplier, new_multiplier, observed_at, kind ('dividend'|'spl
 ### `user` and `wallet`
 
 ```
-user:   id, created_at, display_currency, notification_prefs
+user:   id, privy_user_id, email, created_at, display_currency
 wallet: id, user_id, address, kind ('privy_embedded'|'external'), is_primary
 ```
 
-No name, no email stored by us beyond whatever the wallet provider holds. No identity documents.
+No name, no identity documents.
+
+**Amended 30 September 2026: we store the email.** This said we stored none, and that stopped
+being tenable the moment the product could liquidate somebody's shares. A margin call has to
+reach a person who is not looking at the page, and a background job has no request, no identity
+token and therefore no other way to find them.
+
+Privy signs the address into the identity token on every authenticated request, so `user.email`
+is a copy kept in step rather than something we collect: it is written only when it differs from
+what we hold, and it corrects itself if somebody changes it at Privy. It is nullable and stays
+nullable — a login must never fail over a contact detail.
+
+What this costs is honest: a breach of this database now leaks contact details, where before it
+leaked Privy DIDs and public wallet addresses. That is the price of being able to warn somebody
+before their collateral is sold, and it is worth it. Nothing else about the rule changes — no
+name, no identity documents, and the address is used for account mail, not marketing.
 
 ### `lot`
 

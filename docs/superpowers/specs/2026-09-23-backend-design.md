@@ -136,6 +136,11 @@ v1. When the worker starts sending fill and dividend notices in subsystem 4, the
 answer first is not which email service but whether Mercury stores addresses at all — docs/05
 currently says it does not.
 
+**Settled on 30 September 2026: it does.** `user.email` is copied from the identity token Privy
+already signs on every request, because a margin call has to reach somebody who is not looking at
+the page and a background job has neither a request nor a token. The amendment and what it costs
+are in docs/05. Which email service is still open.
+
 The auth modal's step machine is kept as designed. `useLoginWithEmail` returns
 `sendCode({email})`, `loginWithCode({code})` and a `state` of
 `initial | sending-code | awaiting-code-input | submitting-code | done | error`, which maps

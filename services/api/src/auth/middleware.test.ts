@@ -18,7 +18,7 @@ const deps: AuthDeps = {
   db: {} as AuthDeps["db"],
   verifier,
   directory: {
-    read: async () => ({ privyUserId: "did:privy:abc123", solanaAddress: "So1anaAddr" }),
+    read: async () => ({ privyUserId: "did:privy:abc123", solanaAddress: "So1anaAddr", email: null }),
   },
 };
 
