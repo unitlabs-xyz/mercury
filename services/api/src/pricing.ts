@@ -6,6 +6,16 @@ export interface PriceRequest {
   readonly side: Side;
   /** USD for a buy, shares for a sell. */
   readonly amount: string;
+  /**
+   * Taken off the minimum for this call.
+   *
+   * The network charge comes out of the amount, so a $5 order is quoted as a
+   * $4.75 swap — and the floor is a rule about what the buyer asked for, not
+   * about what is left once we have been paid. Lowering it by the charge
+   * enforces the floor on the amount they typed, which is the one they saw it
+   * against.
+   */
+  readonly feeUsdc?: string;
 }
 
 /**
@@ -56,7 +66,10 @@ export async function priceOrder(deps: Deps, req: PriceRequest): Promise<Decisio
     candidates,
     reference,
     status: anyPaused ? "halted" : session.status,
-    policy: DEFAULT_POLICY,
+    policy:
+      req.feeUsdc === undefined || D(req.feeUsdc).lte(0)
+        ? DEFAULT_POLICY
+        : { ...DEFAULT_POLICY, minOrderUsd: DEFAULT_POLICY.minOrderUsd.sub(D(req.feeUsdc)) },
     now: new Date(),
     ...(session.nextOpenAt !== null ? { marketOpensAt: session.nextOpenAt } : {}),
   });

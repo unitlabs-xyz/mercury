@@ -101,27 +101,39 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
-    const decision = await priceOrder(market(), parsed.data);
-    if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
-
-    const wire = decisionToWire(decision);
-    const wallet = c.get("identity").walletAddress;
-
     /*
-     * No fee unless there is a relayer to owe it to, a wallet to charge, and a
-     * route to charge for. A refused decision has no token to open an account
-     * for, so there is nothing to price.
+     * Priced twice, for the same reason the execute path prices twice: the
+     * charge depends on which token wins, and the swap has to be quoted for
+     * what is left after the charge. The first pass only picks the winner.
      */
+    const probe = await priceOrder(market(), parsed.data);
+    if (probe === null) return c.json(fail("not_found", "Unknown instrument."), 404);
+
+    const wallet = c.get("identity").walletAddress;
     const fee =
-      read.send.relay === undefined || wallet === null || wire.kind === "refuse"
+      read.send.relay === undefined || wallet === null || probe.kind === "refuse"
         ? NO_FEE
         : await quoteFee(
             { chain: market().chain, prices: market().prices },
-            { owner: wallet, mint: wire.best.mint },
+            { owner: wallet, mint: probe.best.mint },
           );
 
+    /*
+     * The decision shown is the one for the swap that will actually happen.
+     * Quoting the gross here and swapping the net would put a share count on
+     * screen that the fill cannot deliver.
+     */
+    const decision = fee.usdc.lte(0)
+      ? probe
+      : await priceOrder(market(), {
+          ...parsed.data,
+          amount: D(parsed.data.amount).sub(fee.usdc).toFixed(),
+          feeUsdc: fee.usdc.toFixed(),
+        });
+    if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
+
     return c.json({
-      decision: wire,
+      decision: decisionToWire(decision),
       fee: { usdc: fee.usdc.toString(), lamports: fee.lamports },
       /* What the swap is actually for, once the network has been paid. */
       investable: D(parsed.data.amount).sub(fee.usdc).toString(),
@@ -196,10 +208,39 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       return c.json(fail("instrument_not_tradable", `This order is already ${order.status}.`), 409);
     }
 
+    /*
+     * The network charge comes out of the amount, so the swap is quoted for
+     * what is left after it — not for the whole amount with the charge added
+     * on top. Getting this the wrong way round means the buyer is debited more
+     * than the figure they agreed to, and the shares they receive are priced
+     * against a number they never authorised.
+     *
+     * Priced before the quote rather than after, because the quote has to be
+     * for the net. Which token wins is needed to know whether an account has
+     * to be opened, so this prices once to find the winner and once for real.
+     */
+    const feeUsdc =
+      read.send.relay === undefined || owner === null
+        ? NO_FEE.usdc
+        : await (async () => {
+            const probe = await priceOrder(market(), {
+              ticker: shown.ticker,
+              side: shown.side,
+              amount: shown.amount,
+            });
+            if (probe === null || probe.kind === "refuse") return NO_FEE.usdc;
+            const f = await quoteFee(
+              { chain: market().chain, prices: market().prices },
+              { owner, mint: probe.best.mint },
+            );
+            return f.usdc;
+          })();
+
     const fresh = await priceOrder(market(), {
       ticker: shown.ticker,
       side: shown.side,
-      amount: shown.amount,
+      amount: D(shown.amount).sub(feeUsdc).toFixed(),
+      feeUsdc: feeUsdc.toFixed(),
     });
     if (fresh === null) return c.json(fail("not_found", "Unknown instrument."), 404);
     const wire = decisionToWire(fresh);
@@ -273,16 +314,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
                     };
                   },
                 },
-                {
-                  quote,
-                  owner,
-                  feeUsdc: (
-                    await quoteFee(
-                      { chain: market().chain, prices: market().prices },
-                      { owner, mint: fresh.best.mint },
-                    )
-                  ).usdc,
-                },
+                { quote, owner, feeUsdc },
               )
             ).wire,
           ];
