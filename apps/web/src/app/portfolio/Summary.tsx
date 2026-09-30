@@ -17,6 +17,32 @@ const RANGES: Range[] = ["1D", "1W", "1M"];
  * 24px in the portfolio header; `size="md"` sets it at 20 for denser grids
  * (the stock page's key stats).
  */
+/**
+ * The line under the Borrowed figure.
+ *
+ * With a loan it is the cushion, not the headroom. How much more could be
+ * borrowed is the interesting number when nothing is owed; once something is,
+ * the fall that would cost somebody their shares is the one that matters, and
+ * it is the number that shrinks every time a loan is used to buy more
+ * collateral. The maths is the server's `safeUntilDrop`.
+ */
+export const borrowedSub = (m: Model): string => {
+  if (m.debtIsStale) return "As of an hour ago — we could not reach Kamino";
+  if (m.borrowed <= 0) {
+    return m.power > 0 ? `${usdCompact(m.available)} more available` : "Nothing to borrow against";
+  }
+  if (m.health === "liquidation") return "Being sold now — repay to stop it";
+  if (m.health === "margin_call") return `Repay ${usdCompact(m.overTarget)} now`;
+  if (m.health === "over_limit") return `Over the limit — repay ${usdCompact(m.overTarget)}`;
+  return m.safeUntilDrop === null
+    ? `${usdCompact(m.available)} more available`
+    : `Safe unless your stocks fall ${pct(m.safeUntilDrop * 100, 0)}`;
+};
+
+/** Red once a fall has taken the loan somewhere the owner has to act on. */
+export const borrowedTone = (m: Model): "down" | undefined =>
+  m.health === "margin_call" || m.health === "liquidation" || m.health === "over_limit" ? "down" : undefined;
+
 export const HeaderFigure = ({
   label,
   value,
@@ -103,9 +129,7 @@ export const AccountHeader = ({
       <div className="shrink-0 p-6 xl:w-[395px]">
         <p className="text-[14px] leading-none font-medium text-ds-ink">Net worth</p>
         {m ? (
-          <p className="mt-[9px] text-[36px] leading-none font-medium text-ds-ink">
-            {usd(m.total - m.borrowed)}
-          </p>
+          <p className="mt-[9px] text-[36px] leading-none font-medium text-ds-ink">{usd(m.total)}</p>
         ) : (
           <Skeleton className="mt-2 h-9 w-48" />
         )}
@@ -151,14 +175,8 @@ export const AccountHeader = ({
         <HeaderFigure
           label="Borrowed"
           value={m ? usd(m.borrowed) : "—"}
-          sub={
-            m
-              ? m.power > 0
-                ? `${usdCompact(m.available)} more available`
-                : "Nothing to borrow against"
-              : undefined
-          }
-          tone={m && (m.health === "margin_call" || m.health === "liquidation") ? "down" : undefined}
+          sub={m ? borrowedSub(m) : undefined}
+          tone={m ? borrowedTone(m) : undefined}
         />
         <HeaderFigure
           label="Card due"
@@ -237,7 +255,7 @@ export const Performance = ({
             </p>
           ) : (
             <p className="mt-2 text-[14px] leading-none text-ds-muted">
-              {m ? `Total value ${usd(m.total)}` : "—"}
+              {m ? `Net worth ${usd(m.total)}` : "—"}
             </p>
           )}
         </div>
@@ -284,11 +302,11 @@ const slicesOf = (m: Model): Slice[] => {
  */
 export const Allocation = ({ m }: { m: Model | undefined }) => (
   <section aria-label="Allocation" className="flex min-w-0 flex-col rounded-xl bg-white px-6 pt-5 pb-[14px]">
-    <RailHead title="Allocation" meta={m && m.total > 0 ? usd(m.total) : undefined} />
+    <RailHead title="Allocation" meta={m && m.assets > 0 ? usd(m.assets) : undefined} />
     <div className="mt-[25px]">
       {!m ? (
         <Skeleton className="h-[208px] w-full" />
-      ) : m.total === 0 ? (
+      ) : m.assets === 0 ? (
         <div className="grid min-h-[200px] place-items-center rounded-lg bg-ds-panel px-6 py-8 text-center">
           <div>
             <p className="text-[14px] leading-none font-medium text-ds-ink">Nothing to show yet</p>
@@ -298,7 +316,7 @@ export const Allocation = ({ m }: { m: Model | undefined }) => (
           </div>
         </div>
       ) : (
-        <HexAllocation slices={slicesOf(m)} total={m.total} />
+        <HexAllocation slices={slicesOf(m)} total={m.assets} />
       )}
     </div>
   </section>
