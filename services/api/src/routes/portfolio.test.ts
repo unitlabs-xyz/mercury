@@ -349,9 +349,9 @@ describe("GET /v1/portfolio, against a loan", () => {
 
   it("serves the last recorded figure when Kamino cannot be read, and says so", async () => {
     const body = await portfolioOf(
-      await appWith(
-        deps({ debt: async () => null, lastKnownDebt: async () => D("450") }),
-      ).request("/v1/portfolio"),
+      await appWith(deps({ debt: async () => null, lastKnownDebt: async () => D("450") })).request(
+        "/v1/portfolio",
+      ),
     );
     expect(body.debtUsd).toBe("450");
     expect(body.debtIsStale).toBe(true);
@@ -359,13 +359,11 @@ describe("GET /v1/portfolio, against a loan", () => {
 
   it("never turns an unreadable loan into no loan", async () => {
     const stale = await portfolioOf(
-      await appWith(
-        deps({ debt: async () => null, lastKnownDebt: async () => D("450") }),
-      ).request("/v1/portfolio"),
+      await appWith(deps({ debt: async () => null, lastKnownDebt: async () => D("450") })).request(
+        "/v1/portfolio",
+      ),
     );
-    const zero = await portfolioOf(
-      await appWith(deps({ debt: async () => ZERO })).request("/v1/portfolio"),
-    );
+    const zero = await portfolioOf(await appWith(deps({ debt: async () => ZERO })).request("/v1/portfolio"));
     expect(Number(stale.totalValueUsd)).toBeLessThan(Number(zero.totalValueUsd));
   });
 

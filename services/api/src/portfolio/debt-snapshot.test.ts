@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { D } from "@mercury/core";
+
 import { testDb } from "../db/testing.js";
 import { users, portfolioSnapshots } from "../db/schema.js";
 import { readLatestDebt } from "./queries.js";
@@ -41,7 +41,11 @@ describe("debt on a snapshot", () => {
   it("reads the newest reading, not the first one it finds", async () => {
     const db = await testDb();
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:d3" }).returning();
-    for (const [hour, debt] of [["10:00", "100"], ["12:00", "300"], ["11:00", "200"]] as const) {
+    for (const [hour, debt] of [
+      ["10:00", "100"],
+      ["12:00", "300"],
+      ["11:00", "200"],
+    ] as const) {
       await db.insert(portfolioSnapshots).values({
         userId: user!.id,
         capturedAt: new Date(`2026-09-30T${hour}:00.000Z`),

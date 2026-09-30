@@ -37,12 +37,12 @@ describe("valuePortfolio", () => {
   const board = new Map([["Xsc9", price("Xsc9", "100", "10")]]);
 
   it("values a holding at shares times the price of one share", () => {
-    const v = valuePortfolio([holding("2.5", ["Xsc9"])], board, ZERO, ZERO)
+    const v = valuePortfolio([holding("2.5", ["Xsc9"])], board, ZERO, ZERO);
     expect(v.stocksUsd.toFixed(2)).toBe("250.00");
   });
 
   it("adds cash to reach the total, because the page's headline figure includes it", () => {
-    const v = valuePortfolio([holding("2.5", ["Xsc9"])], board, D("14.25"), ZERO)
+    const v = valuePortfolio([holding("2.5", ["Xsc9"])], board, D("14.25"), ZERO);
     expect(v.cashUsd.toFixed(2)).toBe("14.25");
     expect(v.totalUsd.toFixed(2)).toBe("264.25");
   });
@@ -55,36 +55,36 @@ describe("valuePortfolio", () => {
 
   it("derives today's move from the 24h percentage rather than from history", () => {
     // 250 now at +10% means 227.27 yesterday, so 22.73 of today's value is the move.
-    const v = valuePortfolio([holding("2.5", ["Xsc9"])], board, ZERO, ZERO)
+    const v = valuePortfolio([holding("2.5", ["Xsc9"])], board, ZERO, ZERO);
     expect(v.changeUsd.toFixed(2)).toBe("22.73");
   });
 
   it("skips a closed holding rather than valuing zero shares", () => {
-    const v = valuePortfolio([holding("0", ["Xsc9"])], board, ZERO, ZERO)
+    const v = valuePortfolio([holding("0", ["Xsc9"])], board, ZERO, ZERO);
     expect(v.stocksUsd).toEqual(ZERO);
   });
 
   it("prices a holding from whichever of its wrappers the board answers for", () => {
-    const v = valuePortfolio([holding("2", ["Unpriced", "Xsc9"])], board, ZERO, ZERO)
+    const v = valuePortfolio([holding("2", ["Unpriced", "Xsc9"])], board, ZERO, ZERO);
     expect(v.stocksUsd.toFixed(2)).toBe("200.00");
   });
 
   it("values a holding no wrapper prices at zero rather than dropping it", () => {
-    const v = valuePortfolio([holding("2", ["Unpriced"])], board, D("5"), ZERO)
+    const v = valuePortfolio([holding("2", ["Unpriced"])], board, D("5"), ZERO);
     expect(v.stocksUsd).toEqual(ZERO);
     expect(v.totalUsd.toFixed(2)).toBe("5.00");
   });
 
   it("treats a missing 24h percentage as no move, not as a crash", () => {
     const flat = new Map([["Xsc9", price("Xsc9", "100", null)]]);
-    const v = valuePortfolio([holding("2", ["Xsc9"])], flat, ZERO, ZERO)
+    const v = valuePortfolio([holding("2", ["Xsc9"])], flat, ZERO, ZERO);
     expect(v.changeUsd).toEqual(ZERO);
     expect(v.stocksUsd.toFixed(2)).toBe("200.00");
   });
 
   it("does not divide by zero when a token has fallen a clean 100%", () => {
     const wiped = new Map([["Xsc9", price("Xsc9", "0", "-100")]]);
-    const v = valuePortfolio([holding("2", ["Xsc9"])], wiped, ZERO, ZERO)
+    const v = valuePortfolio([holding("2", ["Xsc9"])], wiped, ZERO, ZERO);
     expect(v.changeUsd).toEqual(ZERO);
   });
 });

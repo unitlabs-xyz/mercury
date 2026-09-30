@@ -20,11 +20,23 @@ const owing = (usd: string): LendingPosition =>
  */
 describe("debtFrom", () => {
   it("reports what is owed", async () => {
-    expect((await debtFrom(lending(async () => owing("5000.25")), "W"))?.toFixed(2)).toBe("5000.25");
+    expect(
+      (
+        await debtFrom(
+          lending(async () => owing("5000.25")),
+          "W",
+        )
+      )?.toFixed(2),
+    ).toBe("5000.25");
   });
 
   it("reports zero for an account with no obligation, which is knowing, not guessing", async () => {
-    expect(await debtFrom(lending(async () => null), "W")).toEqual(ZERO);
+    expect(
+      await debtFrom(
+        lending(async () => null),
+        "W",
+      ),
+    ).toEqual(ZERO);
   });
 
   it("reports null when Kamino cannot be read, never zero", async () => {
