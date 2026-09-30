@@ -1,13 +1,12 @@
 import type { ReactNode } from "react";
 import type { Upcoming as UpcomingItem } from "../../api/dashboard";
-import { Card, Clock, Plus, Refresh, Repeat, Trend } from "../../ui/icons";
+import { Card, Clock, Plus, Refresh, Trend } from "../../ui/icons";
 import type { Event } from "../activity-data";
 import { RailCard, RailHead, StatusChip } from "../../ui/ds";
 import { usd } from "../format";
 import { Skeleton, relDay, shortDate } from "./ui";
 
 const UPCOMING_LOOK: Record<UpcomingItem["kind"], { icon: ReactNode; tone: string }> = {
-  recurring: { icon: <Repeat />, tone: "bg-brand-tint text-brand" },
   queued: { icon: <Clock />, tone: "bg-warn-tint text-warn" },
   card: { icon: <Card />, tone: "bg-chip text-ink-soft" },
   interest: { icon: <Plus />, tone: "bg-up-tint text-up-deep" },
@@ -31,14 +30,6 @@ const Glyph = ({ bg, ink, children }: { bg: string; ink: string; children: React
 );
 
 const UPCOMING_ICON: Partial<Record<UpcomingItem["kind"], ReactNode>> = {
-  recurring: (
-    <Glyph bg="var(--color-ds-up-recurring-bg)" ink="var(--color-ds-up-recurring)">
-      <path d="M16.7221 8.3887H10.6114C8.5486 8.3887 7.0005 9.8803 7.0005 11.9996" />
-      <path d="M7.2779 15.6113H13.3886C15.4514 15.6113 16.9995 14.1197 16.9995 12.0004" />
-      <path d="M15.6113 7.0005C15.6113 7.0005 17.0001 8.0233 17.0001 8.3893C17.0001 8.7553 15.6113 9.7781 15.6113 9.7781" />
-      <path d="M8.3893 14.2222C8.3893 14.2222 7.0005 15.245 7.0005 15.611C7.0005 15.977 8.3893 16.9998 8.3893 16.9998" />
-    </Glyph>
-  ),
   queued: (
     <Glyph bg="var(--color-ds-up-queued-bg)" ink="var(--color-ds-up-queued)">
       <circle cx="12" cy="12" r="6" />
@@ -115,8 +106,8 @@ const BUY_TREND = (
 );
 
 /**
- * The Recent activity icons, from activity.svg. Queued, interest and recurring
- * are the same glyphs as Coming up; receive and sell turn send and buy around.
+ * The Recent activity icons, from activity.svg. Queued and interest are the same
+ * glyphs as Coming up; receive and sell turn send and buy around.
  */
 export const EVENT_ICON: Record<Event["kind"], ReactNode> = {
   send: (
@@ -154,7 +145,6 @@ export const EVENT_ICON: Record<Event["kind"], ReactNode> = {
   ),
   queued: UPCOMING_ICON.queued,
   interest: UPCOMING_ICON.interest,
-  recurring: UPCOMING_ICON.recurring,
 };
 
 /** "+$12.42", "−$200.00": a true minus, and only ever one sign, whatever the amount arrived as. */

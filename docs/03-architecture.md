@@ -10,7 +10,7 @@ mercury/
 │   └── landing/         Next.js. Marketing site.
 ├── services/
 │   ├── api/             Hono on Node. The only thing the apps talk to.
-│   └── worker/          Scheduled work: recurring buys, order watching, price cache.
+│   └── worker/          Scheduled work: order watching, price cache.
 ├── packages/
 │   ├── core/            Domain logic, no I/O. Pricing, wrapper choice, cost basis, baskets.
 │   ├── chain/           Solana adapters. Jupiter, Symmetry, Kamino, RPC, token registry.
@@ -40,26 +40,26 @@ returns decisions. That is the whole reason the execution engine can be tested w
 
 ## Stack, and why
 
-| Layer         | Choice                                             | Reason                                                                                                                                                        |
-| ------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Monorepo      | pnpm workspaces + Turborepo                        | Standard, fast, good caching. Node 24, pnpm 10                                                                                                                |
-| Language      | TypeScript, strict, `noUncheckedIndexedAccess`     | One language across server, web and mobile                                                                                                                    |
-| API           | Hono on Node                                       | Tiny, excellent type inference, and its RPC mode gives the SDK end-to-end types from the route definitions                                                    |
-| Validation    | Zod                                                | One schema shared by server and client. Parse at the boundary, trust inside                                                                                   |
-| Database      | Postgres + Drizzle                                 | SQL we can read, migrations we control, types generated from the schema                                                                                       |
-| Chain access  | `@solana/kit`                                      | The current Solana client. Tree-shakeable, typed, no legacy `web3.js` baggage                                                                                 |
-| Routing       | Jupiter Swap API and Trigger API                   | Best aggregate liquidity on Solana, and Trigger gives on-chain limit orders that keepers fill without our server                                              |
-| Lending       | Kamino SDK                                         | Already accepts tokenized stocks with an off-hours price band                                                                                                 |
-| Prices        | Chainlink xStocks Data Streams                     | Official oracle for these assets. Pyth reads ~17bp low on them. [ADR 0006](adr/0006-pricing.md)                                                               |
-| Baskets       | Symmetry Protocol, `@symmetry-hq/baskets-sdk`      | Permissionless vaults that already mint a token per basket. We integrate rather than write one. [ADR 0005](adr/0005-basket-vaults.md)                         |
-| Funding       | Privy universal deposit addresses and card onramps | Fixes the empty-wallet cold start without us operating a ramp. [ADR 0007](adr/0007-wallet-funding.md)                                                         |
-| Wallets       | Privy embedded only                                | An email becomes a Solana wallet in seconds. Delegated actions let recurring plans run unattended. No external wallets in v1. [ADR 0003](adr/0003-custody.md) |
-| Web app       | Vite + React + React Router                        | Fast, no server rendering needed. It is an app, not a document                                                                                                |
-| Mobile app    | Expo + React Native, Expo Router                   | One codebase, over-the-air updates, and a build judges can install                                                                                            |
-| Landing       | Next.js                                            | Server rendering and metadata matter for exactly one surface, and this is it                                                                                  |
-| Styling       | Tailwind on web, NativeWind on mobile              | Same token names either side                                                                                                                                  |
-| Data fetching | TanStack Query                                     | Same cache semantics on web and mobile                                                                                                                        |
-| Tests         | Vitest                                             | `core` is where the tests live                                                                                                                                |
+| Layer         | Choice                                             | Reason                                                                                                                                                           |
+| ------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monorepo      | pnpm workspaces + Turborepo                        | Standard, fast, good caching. Node 24, pnpm 10                                                                                                                   |
+| Language      | TypeScript, strict, `noUncheckedIndexedAccess`     | One language across server, web and mobile                                                                                                                       |
+| API           | Hono on Node                                       | Tiny, excellent type inference, and its RPC mode gives the SDK end-to-end types from the route definitions                                                       |
+| Validation    | Zod                                                | One schema shared by server and client. Parse at the boundary, trust inside                                                                                      |
+| Database      | Postgres + Drizzle                                 | SQL we can read, migrations we control, types generated from the schema                                                                                          |
+| Chain access  | `@solana/kit`                                      | The current Solana client. Tree-shakeable, typed, no legacy `web3.js` baggage                                                                                    |
+| Routing       | Jupiter Swap API and Trigger API                   | Best aggregate liquidity on Solana, and Trigger gives on-chain limit orders that keepers fill without our server                                                 |
+| Lending       | Kamino SDK                                         | Already accepts tokenized stocks with an off-hours price band                                                                                                    |
+| Prices        | Chainlink xStocks Data Streams                     | Official oracle for these assets. Pyth reads ~17bp low on them. [ADR 0006](adr/0006-pricing.md)                                                                  |
+| Baskets       | Symmetry Protocol, `@symmetry-hq/baskets-sdk`      | Permissionless vaults that already mint a token per basket. We integrate rather than write one. [ADR 0005](adr/0005-basket-vaults.md)                            |
+| Funding       | Privy universal deposit addresses and card onramps | Fixes the empty-wallet cold start without us operating a ramp. [ADR 0007](adr/0007-wallet-funding.md)                                                            |
+| Wallets       | Privy embedded only                                | An email becomes a Solana wallet in seconds. Delegated actions let basket rebalancing run unattended. No external wallets in v1. [ADR 0003](adr/0003-custody.md) |
+| Web app       | Vite + React + React Router                        | Fast, no server rendering needed. It is an app, not a document                                                                                                   |
+| Mobile app    | Expo + React Native, Expo Router                   | One codebase, over-the-air updates, and a build judges can install                                                                                               |
+| Landing       | Next.js                                            | Server rendering and metadata matter for exactly one surface, and this is it                                                                                     |
+| Styling       | Tailwind on web, NativeWind on mobile              | Same token names either side                                                                                                                                     |
+| Data fetching | TanStack Query                                     | Same cache semantics on web and mobile                                                                                                                           |
+| Tests         | Vitest                                             | `core` is where the tests live                                                                                                                                   |
 
 ## Services
 
@@ -76,7 +76,7 @@ equivalent, so the degraded state is _live prices, no portfolio_. See
 - Build unsigned transactions and hand them back for the client to sign
 - Record fills, positions, lots and activity
 - Serve the portfolio, exposure and activity views
-- Own baskets and recurring plans
+- Own baskets
 
 It **never holds a private key**. For ordinary buys the client signs. For delegated actions the
 user has granted, it asks Privy to sign inside a policy. See [ADR 0003](adr/0003-custody.md).
@@ -90,7 +90,6 @@ Everything on a clock:
 | `price-cache`      | 15s while market open, 60s otherwise | Reference prices, session state, per-token multipliers                                 |
 | `multiplier-watch` | 5 min                                | Detects multiplier changes and writes a dividend event per holder                      |
 | `queued-orders`    | 60s                                  | Checks the status of Jupiter trigger orders and records fills                          |
-| `recurring`        | hourly                               | Finds plans due, creates orders, notifies the user to approve or uses the session key  |
 | `position-sync`    | 2s                                   | Reconciles our view of balances against chain                                          |
 | `wallet-events`    | 30s                                  | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers |
 

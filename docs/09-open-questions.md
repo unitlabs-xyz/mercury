@@ -4,7 +4,7 @@
 
 | Question                           | Answer                                                                                                                     |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Custody                            | **Privy embedded wallets only.** Recurring uses delegated actions. [ADR 0003](adr/0003-custody.md)                         |
+| Custody                            | **Privy embedded wallets only.** [ADR 0003](adr/0003-custody.md)                                                           |
 | Baskets                            | **Real tokens, on Symmetry Protocol.** [ADR 0005](adr/0005-basket-vaults.md)                                               |
 | Funding an empty wallet            | **Every path Privy already offers.** We build none. [ADR 0007](adr/0007-wallet-funding.md)                                 |
 | Positioning                        | **Investing, not trading.** No perps, no margin, no options, no order books. [ADR 0009](adr/0009-investing-not-trading.md) |

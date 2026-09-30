@@ -13,7 +13,6 @@ export interface Job {
  * | price-cache      | 15s open, 60s closed  | Reference prices, session state, multipliers      |
  * | multiplier-watch | 5 min                 | Detects dividends and writes an event per holder  |
  * | queued-orders    | 60s                   | Polls Jupiter trigger orders, records fills       |
- * | recurring        | hourly                | Runs due plans through Privy delegated actions    |
  * | position-sync    | 5 min                 | LIVE, but in services/api: an interval in index.ts |
  * |                  |                       | It needs the database, which this package cannot   |
  * |                  |                       | reach.                                              |
@@ -22,6 +21,5 @@ export const JOB_PLAN = [
   { name: "price-cache", everyMs: 15_000 },
   { name: "multiplier-watch", everyMs: 300_000 },
   { name: "queued-orders", everyMs: 60_000 },
-  { name: "recurring", everyMs: 3_600_000 },
   { name: "position-sync", everyMs: 300_000 },
 ] as const;

@@ -1,5 +1,4 @@
-export type EventKind =
-  "buy" | "sell" | "basket" | "recurring" | "dividend" | "receive" | "send" | "interest" | "queued";
+export type EventKind = "buy" | "sell" | "basket" | "dividend" | "receive" | "send" | "interest" | "queued";
 
 export type Detail = { label: string; value: string; tone?: "up" | "down" | "muted" };
 
@@ -23,12 +22,12 @@ export type Event = {
 
 export type Day = { date: string; events: Event[] };
 
-/** Coarse groups, because nine individual kinds is more chips than anyone reads. */
+/** Coarse groups, because eight individual kinds is more chips than anyone reads. */
 export type Group = "all" | "trades" | "transfers" | "income" | "pending";
 
 export const GROUPS: { key: Group; label: string; kinds: EventKind[] }[] = [
   { key: "all", label: "Everything", kinds: [] },
-  { key: "trades", label: "Trades", kinds: ["buy", "sell", "basket", "recurring"] },
+  { key: "trades", label: "Trades", kinds: ["buy", "sell", "basket"] },
   { key: "transfers", label: "Transfers", kinds: ["receive", "send"] },
   { key: "income", label: "Income", kinds: ["dividend", "interest"] },
   { key: "pending", label: "Pending", kinds: ["queued"] },
@@ -38,7 +37,6 @@ export const KIND_LABEL: Record<EventKind, string> = {
   buy: "Buy",
   sell: "Sell",
   basket: "Basket",
-  recurring: "Recurring",
   dividend: "Dividend",
   receive: "Receive",
   send: "Send",

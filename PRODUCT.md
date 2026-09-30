@@ -25,8 +25,7 @@ current work should assume it.
 An investment account that lives in a crypto wallet.
 
 You arrive with stablecoins, buy shares of real US companies and funds, put money into ready-made
-baskets, set a fixed amount to invest on a schedule, and watch one portfolio holding stocks and
-crypto together. Later you borrow against those holdings instead of selling them.
+baskets, and watch one portfolio holding stocks and crypto together. Later you borrow against those holdings instead of selling them.
 
 It is closer to a brokerage account than a trading terminal, and the person using it should never
 need to know which blockchain it runs on.

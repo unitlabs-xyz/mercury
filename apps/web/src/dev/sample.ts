@@ -136,7 +136,6 @@ export const SAMPLE_DASHBOARD: Dashboard = {
     transactions: [],
   },
   upcoming: [
-    { date: day(2), kind: "recurring", title: "Recurring buy", detail: "", amountUsd: 50 },
     { date: day(3), kind: "queued", title: "Queued order · Apple", detail: "", amountUsd: 100 },
     { date: day(5), kind: "interest", title: "Interest payout", detail: "", amountUsd: 15.49 },
     { date: day(9), kind: "card", title: "Card statement due", detail: "", amountUsd: 986.4 },
@@ -223,16 +222,6 @@ export const SAMPLE_EVENTS: Event[] = [
     sub: "",
     amount: "$12.42",
     flow: "in",
-    details: [],
-  },
-  {
-    date: day(-2),
-    kind: "recurring",
-    title: "Recurring run · $200 into S&P 500",
-    sub: "",
-    amount: "$200.00",
-    flow: "out",
-    logo: xstock("SPYx"),
     details: [],
   },
 ] as Event[];

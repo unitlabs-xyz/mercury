@@ -64,8 +64,7 @@ export const PrivyBoundary = ({ children }: { children: ReactNode }) => {
            * in this page can sign with their key unseen. It is off because a
            * brokerage that asks permission twice for one press does not feel
            * like a brokerage, and it stays off only until delegated signing
-           * with a policy replaces it — which is where ADR 0003 was already
-           * headed for recurring investing.
+           * with a policy replaces it — the path ADR 0003 already describes.
            */
           showWalletUIs: false,
         },

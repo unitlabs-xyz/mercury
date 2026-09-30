@@ -44,8 +44,8 @@ bounded by what is in those wallets.
 
 It stops being acceptable the moment someone who is not us holds a balance here worth taking. The
 replacement is not the sheet coming back — it is delegated signing constrained by policy, which
-[ADR 0003](0003-custody.md) already names for recurring investing and basket rebalancing: a key
-that may call Jupiter and the token program for this user's own accounts and can do nothing else.
+[ADR 0003](0003-custody.md) already names for basket rebalancing: a key that may call Jupiter and
+the token program for this user's own accounts and can do nothing else.
 That is a boundary an XSS cannot talk its way past, and it is silent, which the sheet never was.
 
 **This ADR is the marker for that work.** Shipping to real users with neither the sheet nor a

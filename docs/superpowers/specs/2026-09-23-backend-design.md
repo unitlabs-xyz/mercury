@@ -190,7 +190,7 @@ client-supplied price.
 ### 4 · Worker
 
 The five jobs in `services/worker/src/jobs/index.ts` — `price-cache`, `multiplier-watch`,
-`queued-orders`, `recurring`, `position-sync` — plus `portfolio-snapshot` from §6. A plain
+`queued-orders`, `position-sync` — plus `portfolio-snapshot` from §6. A plain
 interval loop with a lock, not a queue; [03 Architecture](../../03-architecture.md) already chose
 this and it is right at this scale.
 

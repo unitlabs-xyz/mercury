@@ -5,7 +5,7 @@ Four tabs. Everything else is a screen inside one of them.
 | Tab          | Contains                                                                           |
 | ------------ | ---------------------------------------------------------------------------------- |
 | **Home**     | Portfolio value, holdings, profit and loss, true exposure per company              |
-| **Invest**   | Search and browse, stock pages, buy and sell, baskets, recurring plans             |
+| **Invest**   | Search and browse, stock pages, buy and sell, baskets                              |
 | **Money**    | Stablecoin balance earning interest, send and receive. Later: borrowing and a card |
 | **Activity** | Every action taken, with the on-chain record one tap away. Settings live here      |
 
@@ -101,22 +101,6 @@ The user's basket holding is **one real token**, backed by the constituents held
 can be sent to somebody, and in version two pledged as a single collateral position. The design
 is in [10 Baskets](10-baskets.md) and the decision in [ADR 0005](adr/0005-basket-vaults.md).
 
-### Recurring
-
-A fixed amount on a weekly or monthly cadence, split across stocks and baskets by percentage.
-It draws from the stablecoin balance, so there is no bank connection to fail.
-
-```
-$200 monthly, next on 1 October
-  60% Semiconductors basket
-  40% S&P 500
-```
-
-Each run is an ordinary purchase and obeys the same execution rules. A run that cannot execute
-is skipped with a reason, never forced.
-
----
-
 ## Money
 
 - **Balance.** Stablecoins available to invest, with the rate they are currently earning and the
@@ -133,8 +117,8 @@ decision, recorded in [ADR 0001](adr/0001-crypto-native.md).
 
 ## Activity
 
-One reverse-chronological list: buys, sells, basket investments, recurring runs, dividends
-recognised, sends and receives. Each row expands to the amounts, the issuer chosen and the
+One reverse-chronological list: buys, sells, basket investments, dividends recognised, sends
+and receives. Each row expands to the amounts, the issuer chosen and the
 transaction signature. Settings sit behind a button in the corner: wallet, notifications,
 currency display, and a data export.
 

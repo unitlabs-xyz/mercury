@@ -100,8 +100,8 @@ the whole book back a position while it keeps earning. Their explore tab filters
 **So the claim that stocks and crypto in one portfolio is novel is not available to us.** They
 shipped it.
 
-**What they do not have**, from these screens: baskets, recurring investing, any comparison
-between issuers of the same stock, exposure deduplication, or any awareness that the US market
+**What they do not have**, from these screens: baskets, any comparison between issuers of the
+same stock, exposure deduplication, or any awareness that the US market
 is shut. And they are unmistakably a **trading** product. Perps, margin, advanced charts, order
 types, subaccounts.
 

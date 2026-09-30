@@ -9,7 +9,7 @@ engineer, which buys back the iOS app.
 |       | Weeks 1                                           | Weeks 2 to 3                        | Owns                      |
 | ----- | ------------------------------------------------- | ----------------------------------- | ------------------------- |
 | **A** | Symmetry spike, then the basket integration       | **iOS app in Expo**                 | Baskets, then mobile      |
-| **B** | Token registry, Jupiter, Chainlink, session state | The worker, recurring, triggers     | Chain and market data     |
+| **B** | Token registry, Jupiter, Chainlink, session state | The worker and triggers             | Chain and market data     |
 | **C** | `decide()`, orders, the API                       | Postgres, lots, positions, exposure | The engine and the server |
 | **D** | Privy onboarding, app shell, funding screen       | Every screen                        | The web app               |
 
@@ -61,9 +61,7 @@ queued, refused. Market-closed banner. Portfolio and holdings.
 
 **A** Expo app to parity on the core flows: portfolio, buy, baskets. On a device, not a simulator.
 
-**B** Recurring runs through Privy delegated actions, with policy scope and caps.
-
-**C** Recurring plans, activity feed, CSV export, dividend recognition from multiplier changes.
+**C** Activity feed, CSV export, dividend recognition from multiplier changes.
 
 **D** Baskets, exposure sheet with the multiplier breakdown and concentration warnings, Money
 tab, Activity.
@@ -83,10 +81,12 @@ business plan section. Deploy web and API and confirm both stay up through judgi
 
 1. **The iOS app.** It exists because Symmetry freed an engineer. If anything slips, it is the
    first thing to go and the video is shot on the web build. Nobody should feel bad about this.
-2. Recurring investing.
-3. The Money tab's yield, leaving a plain balance.
-4. Two of the three baskets, shipping one.
-5. CSV export.
+2. The Money tab's yield, leaving a plain balance.
+3. Two of the three baskets, shipping one.
+4. CSV export.
+
+**Already cut, 30 September: recurring investing.** Not deferred — taken out of the product, the
+docs and the app, so nothing in the tree offers a thing that does not exist.
 
 Never cut: the issuer comparison, the premium gate, the exposure sheet. Those three are the
 submission.
@@ -95,7 +95,7 @@ submission.
 
 **1.1, October to December.** Basket rebalancing through Symmetry's keepers, which needs its own
 record. Gifting a holding by link, which baskets being real tokens now makes trivial. More
-baskets. The auto-invest-from-gains hook.
+baskets.
 
 **2.0, Q1.** Borrowing against holdings through Kamino, with a risk screen showing both the fall
 the portfolio can take today and the gap it could take on a Monday. Then a card, which needs a
