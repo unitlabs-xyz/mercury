@@ -18,7 +18,7 @@ const num = (d: { toString(): string } | null | undefined) => (d ? Number(d.toSt
 
 /* ── the three outcomes ─────────────────────────────────────────────── */
 
-const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
+const Execute = ({ d, amount, fee }: { d: ExecuteDecision; amount: number; fee: number }) => {
   const price = num(d.best.pricePerShare) ?? 0;
   const premium = (num(d.premium) ?? 0) * 100;
   /*
@@ -29,6 +29,12 @@ const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
    * of the premium we promise to protect, so it gets a number.
    */
   const worst = num(d.best.worstPricePerShare);
+  /*
+   * What the swap is actually for. The network charge comes out of the amount
+   * rather than being added to it, so a buyer holding exactly $5 can still
+   * spend all of it — adding on top would put their own balance out of reach.
+   */
+  const invested = amount - fee;
   return (
     <>
       {/*
@@ -40,7 +46,16 @@ const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
        * them — which issuer won, and what this costs against a real share.
        */}
       <dl className="space-y-2.5 text-[14px]">
+        {/* `You pay` is the amount that leaves the wallet, which is why the
+            charge is shown under it rather than beside the total. Both lines
+            appear only when something is owed, which is once per stock. */}
         <Line k="You pay" v={usd(amount)} />
+        {fee > 0 && (
+          <>
+            <Line k="Network fee" v={`−${usd(fee)}`} sub="Covers opening your account for this stock" />
+            <Line k="Invested" v={usd(invested)} />
+          </>
+        )}
         <Line
           k="Price per share"
           v={usd(price)}
@@ -50,11 +65,13 @@ const Execute = ({ d, amount }: { d: ExecuteDecision; amount: number }) => {
               : `${Math.abs(premium).toFixed(2)}% ${premium > 0 ? "above" : "below"} the real share price`
           }
         />
+        {/* Shares follow what is invested, not what is paid. Dividing by the
+            gross would print a figure the order cannot deliver. */}
         <Line
           k="Shares"
-          v={(amount / price).toFixed(4)}
+          v={(invested / price).toFixed(4)}
           {...(worst && worst > price
-            ? { sub: `At least ${(amount / worst).toFixed(4)} if the price moves before it lands` }
+            ? { sub: `At least ${(invested / worst).toFixed(4)} if the price moves before it lands` }
             : {})}
         />
         {/* Not monospace: "Raydium CLMM" is the name of a venue, not a
@@ -202,7 +219,9 @@ export const BuySheet = ({
     return () => clearTimeout(t);
   }, [amount]);
 
-  const { decision, isLoading } = useDecision(open ? instrument : undefined, settled, prices);
+  const { decision, isLoading, fee } = useDecision(open ? instrument : undefined, settled, prices);
+  /* Zero unless a relayer is paying the network on this buyer's behalf. */
+  const feeUsd = fee === null ? 0 : Number(fee.toString());
 
   const typing = settled !== amount;
   const overBalance = amount > available;
@@ -342,7 +361,7 @@ export const BuySheet = ({
                 </div>
               ) : (
                 <>
-                  {decision.kind === "execute" && <Execute d={decision} amount={settled} />}
+                  {decision.kind === "execute" && <Execute d={decision} amount={settled} fee={feeUsd} />}
                   {decision.kind === "offer_queue" && <Queue d={decision} amount={settled} />}
                   {decision.kind === "refuse" && <Refuse d={decision} />}
                 </>
