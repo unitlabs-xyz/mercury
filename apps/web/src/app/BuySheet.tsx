@@ -3,7 +3,7 @@ import type { OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@mercu
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
 import { useMoney } from "../api/hooks";
-import { PriceMoved, STEP_LABEL, useBuyAction } from "../api/orders";
+import { PriceMoved, STEP_LABEL, useOrderAction } from "../api/orders";
 import { ISSUER_NAME } from "./IssuerCompare";
 import { Button } from "../ui/Button";
 import { useDecision } from "../market/hooks";
@@ -202,7 +202,7 @@ export const BuySheet = ({
 }) => {
   const available = Number(useMoney().data?.balanceUsd ?? 0);
   const [raw, setRaw] = useState("100");
-  const buy = useBuyAction();
+  const buy = useOrderAction();
   const placed = buy.data ?? null;
 
   const amount = Number(raw) || 0;
@@ -380,7 +380,7 @@ export const BuySheet = ({
               size="lg"
               variant="primary"
               disabled={blocked}
-              onClick={() => buy.mutate({ ticker: instrument.ticker, usd: settled })}
+              onClick={() => buy.mutate({ ticker: instrument.ticker, side: "buy", usd: settled })}
               className="flex-[1.6]"
             >
               {cta}
