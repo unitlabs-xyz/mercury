@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { ButtonLink } from "../../ui/Button";
 import { GlideRows, MoveChip, RailHead, StatusChip } from "../../ui/ds";
-import { shares as fmtShares, usd } from "../format";
+import { usd } from "../format";
 import type { Model, Row } from "./model";
 import { Skeleton } from "./ui";
 
@@ -43,7 +43,6 @@ const Logo = ({ row }: { row: Row }) =>
  */
 const Line = ({ r }: { r: Row }) => {
   const pledged = Number(r.pledgedShares ?? 0);
-  const price = Number(r.shares) > 0 ? usd(r.value / Number(r.shares)) : "—";
   const today = r.changePct24h === null || r.changePct24h === undefined ? null : Number(r.changePct24h);
   return (
     <Link
@@ -78,12 +77,13 @@ const Line = ({ r }: { r: Row }) => {
         </div>
       </div>
 
-      <div className="text-right">
-        <p className="font-medium text-ds-ink">{usd(r.value)}</p>
-        <p className="mt-[6px] text-[12px] whitespace-nowrap text-ds-muted">
-          {fmtShares(r.shares)} x {price}
-        </p>
-      </div>
+      {/*
+       * The value, and not the multiplication behind it. "0.007 x $743.30" was
+       * the same number shown twice — its product is the line above it — and a
+       * fractional share count is the least useful way to say how much of
+       * something you hold. The position's own page carries both.
+       */}
+      <span className="text-right font-medium text-ds-ink">{usd(r.value)}</span>
 
       <span className="text-right text-ds-muted">{(r.weight * 100).toFixed(1)}%</span>
 
