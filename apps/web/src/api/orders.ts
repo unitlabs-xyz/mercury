@@ -1,24 +1,18 @@
 import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import type { Decision } from "@mercury/types";
 import { ApiError, apiFetch } from "./client";
 
 /**
- * Where an order has got to, in the order it gets there. Named for what is
- * happening rather than which endpoint is in flight, because these strings are
- * shown to someone watching a button.
+ * Where an order has got to.
+ *
+ * Reported, not displayed. These were labels on the button once, and the button
+ * now shows one spinner for the whole of it — see `OrderSheet`. They stay
+ * because they are how `placeOrder` says which of its five calls it is on,
+ * which is what `orders.test.ts` asserts the order of, and what a failure
+ * report would want to name.
  */
 export type OrderStep = "pricing" | "building" | "signing" | "sending" | "recording" | "done";
-
-export const STEP_LABEL: Record<OrderStep, string> = {
-  pricing: "Checking the price…",
-  building: "Preparing your order…",
-  signing: "Waiting for your approval…",
-  sending: "Sending to Solana…",
-  recording: "Recording it…",
-  done: "Done",
-};
 
 export interface OrderIntent {
   readonly ticker: string;
@@ -149,7 +143,6 @@ export const useOrderAction = () => {
   const qc = useQueryClient();
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
-  const [step, setStep] = useState<OrderStep | null>(null);
 
   const mutation = useMutation<OrderResult, Error, OrderIntent>({
     mutationFn: async (intent) => {
@@ -165,7 +158,13 @@ export const useOrderAction = () => {
             });
             return toBase64(signedTransaction);
           },
-          onStep: setStep,
+          /*
+           * Nowhere to put it. The button shows one spinner for the whole
+           * order, so holding each step in React state only re-rendered this
+           * dialog five times on the way to the same picture. `placeOrder`
+           * still reports them; nothing on screen is waiting to hear.
+           */
+          onStep: () => undefined,
         },
         intent,
       );
@@ -174,7 +173,6 @@ export const useOrderAction = () => {
       void qc.invalidateQueries({ queryKey: ["api"] });
       void qc.invalidateQueries({ queryKey: ["quotes"] });
     },
-    onError: () => setStep(null),
   });
 
   /*
@@ -186,5 +184,5 @@ export const useOrderAction = () => {
    */
   const walletReady = wallets[0] !== undefined;
 
-  return { ...mutation, step, walletReady, reset: () => (mutation.reset(), setStep(null)) };
+  return { ...mutation, walletReady, reset: () => mutation.reset() };
 };
