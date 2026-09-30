@@ -7,6 +7,8 @@ import { walkStream } from "./walk.js";
 
 export interface WalletEventsDeps {
   readonly history: ChainHistory;
+  /** Kamino's lending program, so a loan is not written here as a cash transfer. */
+  readonly lendingProgram: string;
 }
 
 export interface EventsSummary {
@@ -120,7 +122,7 @@ async function syncWallet(
     // Stopping costs a retry. Skipping would advance a cursor past a movement
     // and lose it permanently.
     if (tx === null) throw new Error(`transaction ${sig.signature} could not be read`);
-    moved.push(...movementsIn(tx, { wallet: address, now }));
+    moved.push(...movementsIn(tx, { wallet: address, now, lendingProgram: deps.lendingProgram }));
   }
 
   return db.transaction(async (tx) => {

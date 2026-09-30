@@ -72,6 +72,16 @@ export interface KaminoLendingConfig {
  * we never hold a key (ADR 0003). The SDK's amounts are raw base units and its
  * values are USD at Kamino's own oracle price, which is what Kamino enforces.
  */
+/**
+ * Kamino's lending program, as the SDK gives it.
+ *
+ * The wallet watcher needs it to tell a loan from a cash transfer. Taken from
+ * the SDK rather than written out here, because an address typed by hand is one
+ * that nothing verifies, and being wrong about this one means every borrow gets
+ * a second row saying "Added cash".
+ */
+export const KAMINO_LENDING_PROGRAM: string = String(PROGRAM_ID);
+
 export class KaminoLending implements LendingSource {
   private readonly rpc: ReturnType<typeof createLendingRpc>;
   private readonly ttlMs: number;

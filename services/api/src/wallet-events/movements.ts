@@ -28,6 +28,11 @@ export interface MovementContext {
   readonly wallet: string;
   /** Used only when the node reports no block time for the slot. */
   readonly now: Date;
+  /**
+   * Kamino's lending program. A transaction that touched it is a loan action,
+   * and `POST /v1/borrow/confirm` writes the row for it.
+   */
+  readonly lendingProgram: string;
 }
 
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
@@ -83,6 +88,21 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
       sumOwned(tx.postTokens, ctx.wallet, mint) !== sumOwned(tx.preTokens, ctx.wallet, mint),
   );
   if (usdc !== 0n && tradedAnotherToken) return moved;
+
+  /*
+   * A loan is not a deposit, and a repayment is not a withdrawal.
+   *
+   * Kamino pays a borrower into their own wallet, so a borrow looks from here
+   * exactly like somebody sending themselves money: dollars arrive, nothing
+   * else in the wallet moves, and this would write "Added cash". The row that
+   * belongs in the feed says what actually happened, names the collateral, and
+   * has a `loan_event` behind it with the rate and the resulting position — and
+   * it is written by `POST /v1/borrow/confirm`, not from a balance.
+   *
+   * Same reasoning as the swap rule above: when a transaction did something
+   * larger, its cash movement is part of that thing and not an event of its own.
+   */
+  if (tx.accountKeys.includes(ctx.lendingProgram)) return moved;
 
   if (usdc !== 0n) {
     moved.push({

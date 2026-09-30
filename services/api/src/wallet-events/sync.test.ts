@@ -6,6 +6,8 @@ import { testDb } from "../db/testing.js";
 import { activities, users, walletStreams, wallets } from "../db/schema.js";
 import { syncAllWalletEvents } from "./sync.js";
 
+const KAMINO = "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD";
+
 const WALLET = "6Yg9nNQEqCQBMcYHLrrfj6qGjcR6hvhdhHQZPjtDqLRT";
 const USDC_ACCOUNT = "EDG4dRdPj7jsM9eCMHt5nRoFoXshXhWk7wUYcE5ibt2C";
 const SIG = "5f121XsT7YRkYk5SoDMSMAtCmKKwm58NhWumjUNCtR4o6qPBgwCT2upBB3uUizLsykU51RSvLt1Z8Cwt5RXFcbAW";
@@ -46,6 +48,7 @@ describe("syncAllWalletEvents", () => {
   it("records where each stream is on first sight, and writes nothing", async () => {
     const { db } = await seed();
     const summary = await syncAllWalletEvents(db, {
+      lendingProgram: KAMINO,
       history: node({ [WALLET]: [ref], [USDC_ACCOUNT]: [ref] }),
     });
 
@@ -82,7 +85,7 @@ describe("syncAllWalletEvents", () => {
     // Pass one: nothing on chain yet. The wallet's own stream is created and
     // baselines on empty history, same as any brand-new wallet — its cursor
     // stays null because there is nothing yet to advance it past.
-    const first = await syncAllWalletEvents(db, { history });
+    const first = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
     expect(first.written).toBe(0);
     const ownAfterFirst = await db.select().from(walletStreams).where(eq(walletStreams.address, WALLET));
     expect(ownAfterFirst[0]!.cursor).toBeNull();
@@ -91,7 +94,7 @@ describe("syncAllWalletEvents", () => {
     // up under both streams — it is "the transaction that creates the USDC
     // account" per spec §4 — and the ATA must be backfilled, not baselined.
     ataExists = true;
-    const second = await syncAllWalletEvents(db, { history });
+    const second = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
     expect(second.written).toBe(1);
 
     const rows = await db.select().from(activities).where(eq(activities.userId, userId));
@@ -114,7 +117,7 @@ describe("syncAllWalletEvents", () => {
       transaction: () => Promise.resolve(deposit),
     };
 
-    const first = await syncAllWalletEvents(db, { history });
+    const first = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
     expect(first.written).toBe(1);
 
     const rows = await db.select().from(activities).where(eq(activities.userId, userId));
@@ -129,7 +132,7 @@ describe("syncAllWalletEvents", () => {
 
     // Replay the same window: the unique index must absorb it.
     await db.update(walletStreams).set({ cursor: "older" });
-    const second = await syncAllWalletEvents(db, { history });
+    const second = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
     expect(second.written).toBe(0);
     expect(await db.select().from(activities).where(eq(activities.userId, userId))).toHaveLength(1);
   });
@@ -181,7 +184,7 @@ describe("syncAllWalletEvents", () => {
       transaction: (sig) => Promise.resolve(sig === SIG_T ? txT : sig === SIG_U ? txU : null),
     };
 
-    const summary = await syncAllWalletEvents(db, { history });
+    const summary = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
     expect(summary.written).toBe(2);
 
     const rows = await db.select().from(activities).where(eq(activities.userId, userId));
@@ -247,7 +250,7 @@ describe("syncAllWalletEvents", () => {
 
     // Pass one: the ATA is discovered and its stream row committed, but the
     // transaction read fails, so the pass throws and nothing else is written.
-    const first = await syncAllWalletEvents(db, { history });
+    const first = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
     expect(first.failed).toBe(1);
     expect(first.written).toBe(0);
 
@@ -262,7 +265,7 @@ describe("syncAllWalletEvents", () => {
     // this pass never re-runs discovery — it has to recognise the backfill
     // from that null cursor sitting next to the wallet's own already-advanced
     // one, not from any memory of pass one.
-    const second = await syncAllWalletEvents(db, { history });
+    const second = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
     expect(second.failed).toBe(0);
     expect(second.written).toBe(2);
 
@@ -287,6 +290,7 @@ describe("syncAllWalletEvents", () => {
         signatures: (address) => Promise.resolve(address === WALLET ? [ref] : []),
         transaction: () => Promise.resolve(null),
       },
+      lendingProgram: KAMINO,
     });
 
     expect(summary.failed).toBe(1);

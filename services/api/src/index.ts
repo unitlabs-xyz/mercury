@@ -4,6 +4,7 @@ import { applyMigrations } from "./db/migrate.js";
 import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
+import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
 import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
@@ -118,7 +119,10 @@ every("position-sync", 2_000, async () => {
  * cash — so a quiet pass is four calls a minute per wallet and says nothing.
  */
 every("wallet-events", 30_000, async () => {
-  const s = await syncAllWalletEvents(auth.db, { history: deps.history });
+  const s = await syncAllWalletEvents(auth.db, {
+    history: deps.history,
+    lendingProgram: KAMINO_LENDING_PROGRAM,
+  });
   if (s.written === 0 && s.failed === 0) return null;
   return (
     `${s.written} rows across ${s.checked}/${s.wallets} wallets` +
