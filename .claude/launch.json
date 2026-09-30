@@ -12,6 +12,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@mercury/web", "dev"],
       "port": 5173
+    },
+    {
+      "name": "web-sample",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@mercury/web", "dev:sample", "--port", "5174"],
+      "port": 5174
     }
   ]
 }

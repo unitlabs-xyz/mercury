@@ -33,7 +33,7 @@ describe("borrowedSub", () => {
 
   it("switches to the cushion once there is a loan, because that is the number at stake", () => {
     const sub = borrowedSub(model({ borrowed: 2500, available: 3000, power: 5500, safeUntilDrop: 0.22 }));
-    expect(sub).toBe("Safe unless your stocks fall 22%");
+    expect(sub).toBe("Safe unless your shares fall 22%");
   });
 
   it("shows a thinner cushion as it thins, which is what looping does to it", () => {

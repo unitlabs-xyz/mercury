@@ -36,7 +36,7 @@ export const borrowedSub = (m: Model): string => {
   if (m.health === "over_limit") return `Over the limit — repay ${usdCompact(m.overTarget)}`;
   return m.safeUntilDrop === null
     ? `${usdCompact(m.available)} more available`
-    : `Safe unless your stocks fall ${pct(m.safeUntilDrop * 100, 0)}`;
+    : `Safe unless your shares fall ${pct(m.safeUntilDrop * 100, 0)}`;
 };
 
 /** Red once a fall has taken the loan somewhere the owner has to act on. */
