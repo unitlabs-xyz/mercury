@@ -124,4 +124,4 @@ the hackathon build.
 
 Per wallet: 120 requests a minute, 10 order creations a minute. The quote endpoints behind
 `/instruments/:ticker` are cached for fifteen seconds while the market is open and sixty seconds
-when it is shut, which is also what the worker refreshes at.
+when it is shut.

@@ -154,9 +154,11 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
 }
 
 /**
- * Read, plan, write. Called on every portfolio read: it is idempotent, and it is
- * how the portfolio follows the chain before the worker exists. Subsystem 4's
- * `position-sync` job takes it over, at which point the read stops writing.
+ * Read, plan, write. This was how the portfolio followed the chain while the
+ * read did the writing; the `position-sync` job took it over, and the read
+ * stopped writing, exactly as planned.
+ *
+ * Nothing calls it now.
  */
 export async function reconcile(
   db: Db,

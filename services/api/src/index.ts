@@ -54,13 +54,27 @@ const every = (name: string, ms: number, run: () => Promise<string | null>) => {
 };
 
 /**
- * The background half of the system. This is the only thing that writes a
- * stock row or a position: no request does, so the same read twice cannot
- * produce two different answers.
+ * The background half of the system, and the whole of it. This is the only
+ * thing that writes a stock row or a position: no request does, so the same
+ * read twice cannot produce two different answers.
  *
- * It runs here because the API is a long-running server. There is no separate
- * worker process — `services/worker` cannot reach the database — and no
- * serverless cron, because this is not deployed as functions.
+ * It runs inside the API because the API is a long-running server. There is no
+ * worker process — one was planned and never built, and the package that held
+ * its job plan was deleted rather than left to describe a system that does not
+ * exist — and no serverless cron, because this is not deployed as functions.
+ *
+ * | Job                  | Cadence | Writes                                               |
+ * | -------------------- | ------- | ---------------------------------------------------- |
+ * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`            |
+ * | `position-sync`      | 2s      | `lot`, `position`, `activity` — including dividends  |
+ * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers               |
+ * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                 |
+ *
+ * Two jobs the design called for are not here. A price cache: prices are read
+ * from upstream per call instead, which every portfolio read and every
+ * snapshot pass pays for. And a poller for Jupiter trigger orders: trigger
+ * orders are not built, and `gateExecution` turns the decision that would
+ * create one into a refusal rather than a queue nobody watches.
  */
 every("stocks", 6 * 60 * 60 * 1000, async () => {
   const s = await syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices });

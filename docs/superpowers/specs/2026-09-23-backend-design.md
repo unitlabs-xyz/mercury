@@ -197,6 +197,20 @@ this and it is right at this scale.
 `price-cache` and `portfolio-snapshot` ship together: pricing every user's holdings per snapshot
 by calling upstream would be wasteful.
 
+**Settled on 30 September 2026.** There is no worker process and `services/worker` is deleted.
+The package it held could not reach the database, so every job it listed either went into
+`services/api`'s interval loop or was never built, and a job plan nothing runs is a worse
+description of the system than no job plan at all.
+
+Running, in `services/api/src/index.ts`: `stocks` (6h), `position-sync` (2s), `wallet-events`
+(30s) and `portfolio-snapshot` (1h). `multiplier-watch` is not one of them and does not need to
+be — `position-sync` recognises dividends itself, from the multiplier implied by the lots a
+wallet holds rather than from a gap between chain and records, which is the stronger rule.
+
+Not built: `price-cache`, so the wasteful thing the paragraph above warns about is what happens
+on every snapshot pass; and `queued-orders`, which is why `gateExecution` refuses rather than
+queues. `recurring` was cut from the product on 30 September.
+
 ### 5 · Baskets
 
 **Blocked, and first to be cut.** `SymmetryVenue`'s four methods all throw. The block is three
@@ -238,8 +252,7 @@ rather than a pixel.
 - Idempotent confirm: the same signature submitted twice writes one lot.
 - One live smoke test per upstream, run by hand, never in CI.
 
-**Deployment.** Web on Vercel. API and worker as two processes of one Fly.io app. Postgres on
-Neon. Secrets in the platform, never in the repo; `.env.example` stays value-free.
+**Deployment.** Web on Vercel. The API as one process, jobs included. Postgres on Neon. Secrets in the platform, never in the repo; `.env.example` stays value-free.
 
 ---
 
@@ -249,8 +262,8 @@ Neon. Secrets in the platform, never in the repo; `.env.example` stays value-fre
 series, and 30-day buyer counts need our own order table. The buyer count is solved by subsystem 2. The series is not, because no provider we use serves one — Jupiter gives spot, Pyth gives spot
 and a calendar, Kamino gives rates.
 
-**Decision: record it ourselves.** A `portfolio_snapshot` table, written hourly per user by the
-worker, valued as positions × cached reference price. 168 points covers `1W`, ~720 covers `1M` —
+**Decision: record it ourselves.** A `portfolio_snapshot` table, written hourly per user by a
+clocked job, valued as positions × cached reference price. 168 points covers `1W`, ~720 covers `1M` —
 more than the chart can draw.
 
 ```
