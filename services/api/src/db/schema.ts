@@ -330,10 +330,16 @@ export const portfolioSnapshots = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     /** The top of the hour this reading belongs to, UTC. */
     capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
-    /** Stocks plus cash, the same figure `GET /v1/portfolio` puts at the top of the page. */
+    /** Stocks plus cash less debt: net worth, the figure at the top of the page. */
     totalUsd: usd("total_usd").notNull(),
     stocksUsd: usd("stocks_usd").notNull(),
     cashUsd: usd("cash_usd").notNull(),
+    /**
+     * Owed to Kamino at this hour. Defaulted rather than backfilled: rows
+     * written before this column measured a gross total, and inventing a debt
+     * for them would be inventing a reading nobody took.
+     */
+    debtUsd: usd("debt_usd").notNull().default("0"),
   },
   (t) => [primaryKey({ columns: [t.userId, t.capturedAt] })],
 );

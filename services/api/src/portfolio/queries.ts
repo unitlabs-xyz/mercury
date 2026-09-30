@@ -1,5 +1,5 @@
-import { and, asc, eq, gte } from "drizzle-orm";
-import { D } from "@mercury/core";
+import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { D, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { instruments, portfolioSnapshots, positions, tokens } from "../db/schema.js";
 import type { HoldingRow } from "../routes/portfolio.js";
@@ -58,6 +58,23 @@ export async function readHoldings(db: Db, userId: string): Promise<readonly Hol
  * than by a limit: a cap would silently drop the oldest end of the line, which
  * is the end a chart is for.
  */
+/**
+ * What this account last owed, from the newest reading there is.
+ *
+ * Read only when Kamino cannot be reached — which is exactly when nobody is
+ * watching a loan — so an hour-old figure is served in place of a zero that
+ * would make a borrower look solvent.
+ */
+export async function readLatestDebt(db: Db, userId: string): Promise<Decimal | null> {
+  const [row] = await db
+    .select({ debtUsd: portfolioSnapshots.debtUsd })
+    .from(portfolioSnapshots)
+    .where(eq(portfolioSnapshots.userId, userId))
+    .orderBy(desc(portfolioSnapshots.capturedAt))
+    .limit(1);
+  return row === undefined ? null : D(row.debtUsd);
+}
+
 export async function readSnapshots(db: Db, userId: string, from: Date): Promise<readonly Reading[]> {
   const rows = await db
     .select({ at: portfolioSnapshots.capturedAt, totalUsd: portfolioSnapshots.totalUsd })
