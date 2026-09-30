@@ -9,19 +9,32 @@ const token: VerifiedToken = {
   expiresAt: new Date("2030-01-01T00:00:00Z"),
 };
 
-const directory = (address: string | null, privyUserId = token.privyUserId): UserDirectory => ({
-  read: async () => ({ privyUserId, solanaAddress: address }),
+const directory = (
+  address: string | null,
+  privyUserId = token.privyUserId,
+  email: string | null = null,
+): UserDirectory => ({
+  read: async () => ({ privyUserId, solanaAddress: address, email }),
 });
 
 /**
  * A stand-in for Drizzle that records what it was asked to do. We are testing
  * the decision — insert or reuse — not Postgres.
  */
-const fakeDb = (existing: { id: string; privyUserId: string } | null) => {
+const fakeDb = (existing: { id: string; privyUserId: string; email?: string | null } | null) => {
   const inserted: string[] = [];
+  const updated: Record<string, unknown>[] = [];
   return {
     inserted,
+    updated,
     db: {
+      update: () => ({
+        set: (v: Record<string, unknown>) => ({
+          where: async () => {
+            updated.push(v);
+          },
+        }),
+      }),
       query: {
         users: { findFirst: async () => existing ?? undefined },
         wallets: { findFirst: async () => undefined },
@@ -60,6 +73,7 @@ describe("resolveIdentity", () => {
       read: vi.fn(async () => ({
         privyUserId: token.privyUserId,
         solanaAddress: "FromPrivy" as string | null,
+        email: null as string | null,
       })),
     };
     const { db } = fakeDb({ id: "user-1", privyUserId: token.privyUserId });
@@ -86,5 +100,71 @@ describe("resolveIdentity", () => {
     const { db } = fakeDb({ id: "user-1", privyUserId: token.privyUserId });
     const id = await resolveIdentity(db as never, directory(null), token, "id_tok");
     expect(id.walletAddress).toBeNull();
+  });
+});
+
+/**
+ * The address a margin call would be sent to.
+ *
+ * Privy signs it into the identity token on every request, so this is a copy
+ * kept in step rather than a fact we own. Stale is the dangerous state: mail to
+ * an address somebody abandoned looks delivered and warns nobody.
+ */
+describe("resolveIdentity, the email", () => {
+  it("records the address Privy signed for a new user", async () => {
+    const { db, updated } = fakeDb(null);
+    await resolveIdentity(db as never, directory("So1anaAddr", undefined, "a@example.com"), token, "id_tok");
+    expect(updated).toEqual([{ email: "a@example.com" }]);
+  });
+
+  it("updates it when somebody changes their address at Privy", async () => {
+    const { db, updated } = fakeDb({
+      id: "user-1",
+      privyUserId: token.privyUserId,
+      email: "old@example.com",
+    });
+    await resolveIdentity(
+      db as never,
+      directory("So1anaAddr", undefined, "new@example.com"),
+      token,
+      "id_tok",
+    );
+    expect(updated).toEqual([{ email: "new@example.com" }]);
+  });
+
+  /*
+   * Not an optimisation. Every authenticated request runs this, and the
+   * portfolio page alone makes several a minute; writing each time would be a
+   * write per request forever, for a value that almost never changes.
+   */
+  it("writes nothing when the address has not moved", async () => {
+    const { db, updated } = fakeDb({ id: "user-1", privyUserId: token.privyUserId, email: "a@example.com" });
+    await resolveIdentity(db as never, directory("So1anaAddr", undefined, "a@example.com"), token, "id_tok");
+    expect(updated).toEqual([]);
+  });
+
+  it("leaves what it has alone when Privy names no address", async () => {
+    const { db, updated } = fakeDb({ id: "user-1", privyUserId: token.privyUserId, email: "a@example.com" });
+    await resolveIdentity(db as never, directory("So1anaAddr", undefined, null), token, "id_tok");
+    expect(updated).toEqual([]);
+  });
+
+  /*
+   * A directory that omits the field entirely hands back undefined, and
+   * `set({ email: undefined })` is an empty update that Drizzle refuses — which
+   * took out eleven unrelated tests before the guard treated absent and null
+   * as the same answer.
+   */
+  it("treats a missing field the same as no address, not as a value to write", async () => {
+    const { db, updated } = fakeDb({ id: "user-1", privyUserId: token.privyUserId, email: "a@example.com" });
+    const bare = { read: async () => ({ privyUserId: token.privyUserId, solanaAddress: "So1" }) };
+    await resolveIdentity(db as never, bare as never, token, "id_tok");
+    expect(updated).toEqual([]);
+  });
+
+  it("asks Privy for nothing when there is no identity token to read", async () => {
+    const { db, updated } = fakeDb({ id: "user-1", privyUserId: token.privyUserId, email: null });
+    await resolveIdentity(db as never, directory("So1anaAddr", undefined, "a@example.com"), token, null);
+    expect(updated).toEqual([]);
   });
 });

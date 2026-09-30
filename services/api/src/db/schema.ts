@@ -22,7 +22,9 @@ import {
  *     count; they differ by the multiplier, and the multiplier moves. Deriving
  *     one from the other at read time would rewrite history.
  *
- * We store no email. Privy holds it, and docs/05 says we do not copy it.
+ * We store the email Privy already hands us on every authenticated request,
+ * so that a margin call can reach somebody who is not looking at the page. The
+ * original rule was to copy nothing; see the amendment in docs/05.
  */
 export const users = pgTable(
   "user",
@@ -30,6 +32,15 @@ export const users = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     /** Privy's DID for this user, e.g. "did:privy:clxxxx". Our join key to them. */
     privyUserId: text("privy_user_id").notNull(),
+    /**
+     * Where to reach this person, copied from Privy's identity token.
+     *
+     * Nullable, and it stays nullable. A session can be valid before the
+     * identity token reaches us, and a user could in principle link something
+     * other than an email; a column that insisted otherwise would reject a
+     * login over a contact detail. Anything sending mail has to handle null.
+     */
+    email: text("email"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     displayCurrency: text("display_currency").notNull().default("USD"),
   },

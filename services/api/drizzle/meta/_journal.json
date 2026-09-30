@@ -64,6 +64,13 @@
       "when": 1790780097241,
       "tag": "0008_loan_event",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790784085430,
+      "tag": "0009_user_email",
+      "breakpoints": true
     }
   ]
 }

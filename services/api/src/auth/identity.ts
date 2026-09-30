@@ -16,6 +16,8 @@ export interface Identity {
 export interface PrivyUser {
   readonly privyUserId: string;
   readonly solanaAddress: string | null;
+  /** Null when this account has no linked email — a social login, say. */
+  readonly email: string | null;
 }
 
 /**
@@ -49,9 +51,14 @@ export const createPrivyDirectory = (opts: {
         "connector_type" in a &&
         a.connector_type === "embedded",
     );
+    // The same signed list the wallet came from. Email is the only login method
+    // this app offers, so in practice it is always here; the null case is a
+    // Privy account linked some other way, and it costs nothing to allow.
+    const email = user.linked_accounts.find((a) => a.type === "email");
     return {
       privyUserId: user.id,
       solanaAddress: wallet && "address" in wallet ? wallet.address : null,
+      email: email && "address" in email ? email.address : null,
     };
   },
 });
@@ -82,6 +89,27 @@ export const resolveIdentity = async (
       throw new Error("identity token does not match the access token");
     }
     address = claimed.solanaAddress;
+
+    /*
+     * Keep the address we hold in step with Privy's.
+     *
+     * Written on every request rather than only at signup, because signup is the
+     * one moment it might be missing — a session can be valid before the
+     * identity token arrives — and because somebody who changes their email in
+     * Privy would otherwise keep an address here that no longer reaches them. An
+     * alert sent to a stale address is worse than one not sent: it looks
+     * delivered.
+     *
+     * The guard is not an optimisation. Without it every authenticated request
+     * writes to `user`, and the portfolio page alone makes several a minute.
+     */
+    // `?? null` rather than a bare null check: a directory that omits the field
+    // hands back undefined, and Drizzle rejects an empty `set` rather than
+    // writing nothing. Absent and null both mean "Privy named no address".
+    const email = claimed.email ?? null;
+    if (email !== null && email !== user.email) {
+      await db.update(users).set({ email }).where(eq(users.id, user.id));
+    }
   }
 
   if (address) {
