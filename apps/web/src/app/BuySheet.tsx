@@ -14,11 +14,28 @@ const usd = (v: number) =>
 
 const PRESETS = [50, 100, 250, 500];
 
+/* Fractions of the position when selling, for the reason the ticket has them:
+   a $50 chip does nothing on a $30 holding. See stock/Ticket.tsx. */
+const SELL_PRESETS = [0.25, 0.5, 0.75, 1] as const;
+
 const num = (d: { toString(): string } | null | undefined) => (d ? Number(d.toString()) : null);
 
 /* ── the three outcomes ─────────────────────────────────────────────── */
 
-const Execute = ({ d, amount, fee }: { d: ExecuteDecision; amount: number; fee: number }) => {
+const Execute = ({
+  d,
+  amount,
+  fee,
+  proceeds,
+}: {
+  d: ExecuteDecision;
+  amount: number;
+  fee: number;
+  /** What a sale lands, net of the charge. Null on a buy. */
+  proceeds: number | null;
+}) => {
+  const selling = d.side === "sell";
+  const sold = num(d.best.filledShares);
   const price = num(d.best.pricePerShare) ?? 0;
   const premium = (num(d.premium) ?? 0) * 100;
   /*
@@ -49,11 +66,23 @@ const Execute = ({ d, amount, fee }: { d: ExecuteDecision; amount: number; fee: 
         {/* `You pay` is the amount that leaves the wallet, which is why the
             charge is shown under it rather than beside the total. Both lines
             appear only when something is owed, which is once per stock. */}
-        <Line k="You pay" v={usd(amount)} />
-        {fee > 0 && (
+        {selling ? (
           <>
-            <Line k="Network fee" v={`−${usd(fee)}`} sub="Covers opening your account for this stock" />
-            <Line k="Invested" v={usd(invested)} />
+            <Line k="You sell" v={`${(sold ?? 0).toFixed(4)} shares`} />
+            {fee > 0 && (
+              <Line k="Network fee" v={`−${usd(fee)}`} sub="Covers sending the dollars to your wallet" />
+            )}
+            <Line k="You get" v={usd(proceeds ?? 0)} />
+          </>
+        ) : (
+          <>
+            <Line k="You pay" v={usd(amount)} />
+            {fee > 0 && (
+              <>
+                <Line k="Network fee" v={`−${usd(fee)}`} sub="Covers opening your account for this stock" />
+                <Line k="Invested" v={usd(invested)} />
+              </>
+            )}
           </>
         )}
         <Line
@@ -66,13 +95,17 @@ const Execute = ({ d, amount, fee }: { d: ExecuteDecision; amount: number; fee: 
           }
         />
         {/* Shares follow what is invested, not what is paid. Dividing by the
-            gross would print a figure the order cannot deliver. */}
+            gross would print a figure the order cannot deliver. A sale's share
+            count is not derived at all — it is the quantity being sold, and it
+            is already on the first line. */}
         <Line
-          k="Shares"
-          v={(invested / price).toFixed(4)}
-          {...(worst && worst > price
+          k={selling ? "Worth" : "Shares"}
+          v={selling ? usd((sold ?? 0) * price) : (invested / price).toFixed(4)}
+          {...(!selling && worst && worst > price
             ? { sub: `At least ${(invested / worst).toFixed(4)} if the price moves before it lands` }
-            : {})}
+            : selling && worst && worst < price
+              ? { sub: `At least ${usd((sold ?? 0) * worst)} if the price moves before it lands` }
+              : {})}
         />
         {/* Not monospace: "Raydium CLMM" is the name of a venue, not a
             measurement. Mono here was a costume for "technical". */}
@@ -192,6 +225,9 @@ export const BuySheet = ({
   open,
   onClose,
   initial,
+  side = "buy",
+  max = false,
+  sellableUsd = null,
 }: {
   instrument: Instrument;
   prices: PriceMap | undefined;
@@ -199,7 +235,13 @@ export const BuySheet = ({
   onClose: () => void;
   /** The amount already typed on the page, so confirming never means typing it twice. */
   initial?: number | undefined;
+  side?: "buy" | "sell";
+  /** Sell the whole position, in tokens. The amount is then only a display figure. */
+  max?: boolean;
+  /** What the sellable part of the position is worth. The fractions are of this. */
+  sellableUsd?: number | null;
 }) => {
+  const selling = side === "sell";
   const available = Number(useMoney().data?.balanceUsd ?? 0);
   const [raw, setRaw] = useState("100");
   const buy = useOrderAction();
@@ -219,12 +261,17 @@ export const BuySheet = ({
     return () => clearTimeout(t);
   }, [amount]);
 
-  const { decision, isLoading, fee } = useDecision(open ? instrument : undefined, settled, prices);
+  const { decision, isLoading, fee, proceeds } = useDecision(open ? instrument : undefined, settled, prices, {
+    side,
+    max,
+  });
+  const proceedsUsd = proceeds === null ? null : Number(proceeds.toString());
   /* Zero unless a relayer is paying the network on this buyer's behalf. */
   const feeUsd = fee === null ? 0 : Number(fee.toString());
 
   const typing = settled !== amount;
-  const overBalance = amount > available;
+  /* A sale is not spending, so the cash balance has nothing to say about it. */
+  const overBalance = !selling && amount > available;
   const working = buy.isPending;
   /*
    * `offer_queue` blocks the button. The decision means the market is shut and
@@ -280,14 +327,26 @@ export const BuySheet = ({
               <Check className="size-6" />
             </span>
             <h2 id="buy-title" className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">
-              Bought
+              {selling ? "Sold" : "Bought"}
             </h2>
             {/* The numbers read off the chain, not the ones we quoted. What
-                someone wants after buying is what they actually got. */}
+                someone wants after a trade is what they actually got. */}
             <p className="mx-auto mt-2 max-w-[38ch] text-[14px] leading-[1.55] text-muted">
               {Number(placed.shares).toFixed(4)} shares of {instrument.name} at{" "}
               {usd(Number(placed.pricePerShare))} a share.
             </p>
+            {/* A sale is the one moment in this product where a gain stops
+                being a number on a screen and becomes money. Worth saying. */}
+            {placed.realisedPnlUsd !== null && (
+              <p className="mt-1.5 text-[14px] text-muted">
+                {Number(placed.realisedPnlUsd) < 0 ? "Realised loss" : "Realised gain"}{" "}
+                <span
+                  className={`font-medium ${Number(placed.realisedPnlUsd) < 0 ? "text-down" : "text-up-deep"}`}
+                >
+                  {usd(Math.abs(Number(placed.realisedPnlUsd)))}
+                </span>
+              </p>
+            )}
             <button
               type="button"
               onClick={close}
@@ -301,9 +360,9 @@ export const BuySheet = ({
         <>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-5 sm:px-7">
             <h2 id="buy-title" className="text-[22px] font-semibold tracking-[-0.02em]">
-              Buy {instrument.name}
+              {selling ? "Sell" : "Buy"} {instrument.name}
             </h2>
-            <p className="mt-1 text-[14px] text-muted">{usd(available)} available</p>
+            {!selling && <p className="mt-1 text-[14px] text-muted">{usd(available)} available</p>}
 
             <label className="mt-5 flex items-center gap-1 rounded-xl border border-cardline bg-shell px-4 py-3.5 focus-within:border-brand">
               <span className="text-[26px] font-semibold text-faint">$</span>
@@ -317,16 +376,28 @@ export const BuySheet = ({
             </label>
 
             <div className="mt-2.5 flex gap-2">
-              {PRESETS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setRaw(String(p))}
-                  className="h-8 flex-1 rounded-lg border border-cardline text-[13px] font-medium text-ink-soft transition-colors hover:border-brand hover:text-brand"
-                >
-                  ${p}
-                </button>
-              ))}
+              {selling
+                ? SELL_PRESETS.map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      disabled={sellableUsd === null}
+                      onClick={() => setRaw(sellableUsd === null ? "" : (sellableUsd * f).toFixed(2))}
+                      className="h-8 flex-1 rounded-lg border border-cardline text-[13px] font-medium text-ink-soft transition-colors hover:border-brand hover:text-brand disabled:opacity-40"
+                    >
+                      {f === 1 ? "All" : `${f * 100}%`}
+                    </button>
+                  ))
+                : PRESETS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setRaw(String(p))}
+                      className="h-8 flex-1 rounded-lg border border-cardline text-[13px] font-medium text-ink-soft transition-colors hover:border-brand hover:text-brand"
+                    >
+                      ${p}
+                    </button>
+                  ))}
             </div>
 
             {overBalance && (
@@ -361,7 +432,9 @@ export const BuySheet = ({
                 </div>
               ) : (
                 <>
-                  {decision.kind === "execute" && <Execute d={decision} amount={settled} fee={feeUsd} />}
+                  {decision.kind === "execute" && (
+                    <Execute d={decision} amount={settled} fee={feeUsd} proceeds={proceedsUsd} />
+                  )}
                   {decision.kind === "offer_queue" && <Queue d={decision} amount={settled} />}
                   {decision.kind === "refuse" && <Refuse d={decision} />}
                 </>
@@ -380,7 +453,14 @@ export const BuySheet = ({
               size="lg"
               variant="primary"
               disabled={blocked}
-              onClick={() => buy.mutate({ ticker: instrument.ticker, side: "buy", usd: settled })}
+              onClick={() =>
+                buy.mutate({
+                  ticker: instrument.ticker,
+                  side,
+                  usd: settled,
+                  ...(max ? { max: true } : {}),
+                })
+              }
               className="flex-[1.6]"
             >
               {cta}

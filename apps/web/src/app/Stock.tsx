@@ -371,6 +371,9 @@ export const Stock = () => {
         open={buying}
         onClose={() => setBuying(false)}
         initial={amount}
+        side={side}
+        max={max}
+        sellableUsd={sellableUsd}
       />
     </AppShell>
   );
