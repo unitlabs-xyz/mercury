@@ -70,8 +70,8 @@ export const ValueChart = ({ range, onZoom }: { range: Range; onZoom?: (dir: 1 |
         <Clock className="mx-auto size-4 text-ds-muted" />
         <p className="mt-3 text-[14px] leading-none font-medium text-ds-ink">Not enough history yet</p>
         <p className="mx-auto mt-2.5 max-w-[40ch] text-[12px] leading-[1.45] text-ds-muted">
-          We record your balance every hour from the day you open the account. The chart appears once
-          there are a couple of readings behind it.
+          We record your balance every hour from the day you open the account. The chart appears once there
+          are a couple of readings behind it.
         </p>
       </div>
     </div>

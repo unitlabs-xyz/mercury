@@ -35,11 +35,7 @@ const CONCURRENCY = 8;
  * the day someone's first deposit lands is the line they want to see; one that
  * starts at their first deposit's value has no beginning to measure from.
  */
-export async function snapshotAllPortfolios(
-  db: Db,
-  deps: SnapshotDeps,
-  now: Date,
-): Promise<SnapshotSummary> {
+export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Date): Promise<SnapshotSummary> {
   const rows = await db
     .select({ userId: users.id, address: wallets.address })
     .from(wallets)

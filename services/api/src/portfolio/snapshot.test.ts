@@ -43,9 +43,7 @@ const deps = (over: Partial<SnapshotDeps> = {}): SnapshotDeps => ({
   holdings: async () => [{ shares: D("1"), wrappers: [{ mint: MINT }] }],
   chain: {
     mintConfig: async () => null,
-    tokenBalances: async (): Promise<TokenBalance[]> => [
-      { mint: USDC, rawAmount: 14_250_000n, decimals: 6 },
-    ],
+    tokenBalances: async (): Promise<TokenBalance[]> => [{ mint: USDC, rawAmount: 14_250_000n, decimals: 6 }],
   } as ChainReader,
   prices: { pricesFor: async () => new Map([[MINT, price]]) } as unknown as SnapshotDeps["prices"],
   usdcMint: USDC,
@@ -103,7 +101,10 @@ describe("snapshotAllPortfolios", () => {
 
   it("records an empty account as zero rather than skipping it, so its line starts at zero", async () => {
     const { db, ids } = await seed(1);
-    const empty = deps({ holdings: async () => [], chain: { mintConfig: async () => null, tokenBalances: async () => [] } as ChainReader });
+    const empty = deps({
+      holdings: async () => [],
+      chain: { mintConfig: async () => null, tokenBalances: async () => [] } as ChainReader,
+    });
 
     await snapshotAllPortfolios(db, empty, new Date("2026-09-30T12:00:00.000Z"));
 
