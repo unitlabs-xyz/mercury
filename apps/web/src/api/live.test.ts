@@ -19,8 +19,8 @@ describe("the account polling policy", () => {
     expect(LIVE.refetchInterval).toBeGreaterThan(0);
   });
 
-  it("refreshes every five seconds", () => {
-    expect(LIVE.refetchInterval).toBe(5_000);
+  it("refreshes every ten seconds", () => {
+    expect(LIVE.refetchInterval).toBe(10_000);
   });
 
   /* Two policies about one piece of data. A page remounting inside the stale

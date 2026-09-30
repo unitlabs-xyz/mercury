@@ -26,7 +26,7 @@
  * quota all day on nobody.
  */
 export const LIVE = {
-  staleTime: 5_000,
-  refetchInterval: 5_000,
+  staleTime: 10_000,
+  refetchInterval: 10_000,
   refetchOnWindowFocus: true,
 } as const;
