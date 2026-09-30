@@ -84,7 +84,13 @@ export const Order = z.object({
   filledAt: Iso.nullable(),
 });
 
-export const CreateOrderRequest = z.object({ ticker: Ticker, side: Side, amount: Usd });
+export const CreateOrderRequest = z.object({
+  ticker: Ticker,
+  side: Side,
+  amount: Usd,
+  /* Sell the whole position, in tokens. `amount` is then only a hint for display. */
+  max: z.boolean().optional(),
+});
 export const CreateOrderResponse = z.object({ orderId: z.string().uuid(), decision: Decision });
 export const UnsignedTxResponse = z.object({
   transactions: z.array(z.string()),

@@ -14,6 +14,8 @@ export interface NewOrder {
   readonly ticker: string;
   readonly side: "buy" | "sell";
   readonly usdAmount: string;
+  /** Sell the whole position, in tokens. See `orders.max`. */
+  readonly max?: boolean;
   /** The Decision from `@mercury/core`, already serialised. Kept verbatim. */
   readonly decision: unknown;
   readonly chosenMint: string | null;
@@ -35,6 +37,15 @@ export interface StoredOrder {
   readonly id: string;
   readonly decision: unknown;
   readonly status: OrderStatus;
+  /**
+   * What was asked for, in dollars, on both sides.
+   *
+   * Needed because a stored sell decision's `amount` is in shares — that is
+   * what `decide` reports — and re-pricing wants the dollars the user actually
+   * typed. Reading the shares as dollars would re-quote a $500 sell as five.
+   */
+  readonly usdAmount: string;
+  readonly max: boolean;
   readonly createdAt: string;
 }
 
@@ -82,6 +93,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         instrumentId: instrument.id,
         side: order.side,
         usdAmount: order.usdAmount,
+        max: order.max ?? false,
         decision: order.decision,
         chosenTokenId,
         referencePrice: order.referencePrice,
@@ -92,6 +104,8 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         id: orders.id,
         decision: orders.decision,
         status: orders.status,
+        usdAmount: orders.usdAmount,
+        max: orders.max,
         createdAt: orders.createdAt,
       });
     if (saved === undefined) throw new Error("order insert returned nothing");
@@ -100,6 +114,8 @@ export const pgOrderStore = (db: Db): OrderStore => ({
       id: saved.id,
       decision: saved.decision,
       status: saved.status,
+      usdAmount: saved.usdAmount,
+      max: saved.max,
       createdAt: saved.createdAt.toISOString(),
     };
   },
@@ -110,6 +126,8 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         id: orders.id,
         decision: orders.decision,
         status: orders.status,
+        usdAmount: orders.usdAmount,
+        max: orders.max,
         createdAt: orders.createdAt,
       })
       .from(orders)
@@ -120,7 +138,14 @@ export const pgOrderStore = (db: Db): OrderStore => ({
       .limit(1);
     return row === undefined
       ? null
-      : { id: row.id, decision: row.decision, status: row.status, createdAt: row.createdAt.toISOString() };
+      : {
+          id: row.id,
+          decision: row.decision,
+          status: row.status,
+          usdAmount: row.usdAmount,
+          max: row.max,
+          createdAt: row.createdAt.toISOString(),
+        };
   },
 
   async setStatus(userId, id, status) {

@@ -205,6 +205,12 @@ export const orders = pgTable(
       .references(() => instruments.id),
     side: text("side", { enum: ["buy", "sell"] }).notNull(),
     usdAmount: usd("usd_amount").notNull(),
+    /*
+     * Sell the whole position, in tokens rather than dollars. Stored because
+     * `/execute` re-prices from this row, and a dollar figure re-quoted at a
+     * moved price leaves dust that is then too small to ever sweep.
+     */
+    max: boolean("max").notNull().default(false),
     /**
      * The full Decision from @mercury/core, kept verbatim. When a user asks why
      * they were sold one wrapper and not the other, the answer is a row.
