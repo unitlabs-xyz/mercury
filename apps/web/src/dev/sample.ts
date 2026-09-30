@@ -48,11 +48,15 @@ const holdings = [
   holding("META", "Meta", "0.520", 380.36, 350, "2.35"),
 ];
 const cash = 4534.73;
+/* A loan, so sample mode exercises the borrowed line and the cushion rather than the empty case. */
+const debt = 2500;
 const stocks = holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
 
 const portfolio: Portfolio = {
-  totalValueUsd: (stocks + cash).toFixed(2),
+  totalValueUsd: (stocks + cash - debt).toFixed(2),
   cashUsd: cash.toFixed(2),
+  debtUsd: debt.toFixed(2),
+  debtIsStale: false,
   changeUsd: "39.32",
   changePct: "0.32",
   holdings,

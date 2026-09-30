@@ -55,6 +55,8 @@ const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   multipliers: { multiplierFor: async () => D(1), isPaused: async () => false } satisfies MultiplierSource,
   usdcMint: USDC,
   pledged: async () => [],
+  debt: async () => ZERO,
+  lastKnownDebt: async () => null,
   snapshots: async () => [],
   ...over,
 });
@@ -168,6 +170,8 @@ describe("GET /v1/portfolio", () => {
     expect(body).toEqual({
       totalValueUsd: "0",
       cashUsd: "0",
+      debtUsd: "0",
+      debtIsStale: false,
       changeUsd: "0",
       changePct: "0",
       holdings: [],
@@ -320,5 +324,64 @@ describe("GET /v1/portfolio/history", () => {
     const hoursBack = (Date.now() - since[0]!.getTime()) / 3_600_000;
     expect(hoursBack).toBeGreaterThan(167);
     expect(hoursBack).toBeLessThan(169);
+  });
+});
+
+/**
+ * Debt, and the difference between owing nothing and not knowing.
+ *
+ * The fallback matters because the moment Kamino is unreadable is the moment
+ * nobody is watching a loan. Reporting zero then would tell a borrower they are
+ * solvent and have room to borrow more.
+ */
+describe("GET /v1/portfolio, against a loan", () => {
+  it("nets the loan out of the headline, and leaves the holdings gross", async () => {
+    const body = await portfolioOf(
+      await appWith(deps({ debt: async () => D("300") })).request("/v1/portfolio"),
+    );
+    // $400 of stock and no cash, less $300 owed, is $100 of net worth.
+    expect(body.holdings[0]!.valueUsd).toBe("400");
+    expect(body.cashUsd).toBe("0");
+    expect(body.debtUsd).toBe("300");
+    expect(body.totalValueUsd).toBe("100");
+    expect(body.debtIsStale).toBe(false);
+  });
+
+  it("serves the last recorded figure when Kamino cannot be read, and says so", async () => {
+    const body = await portfolioOf(
+      await appWith(
+        deps({ debt: async () => null, lastKnownDebt: async () => D("450") }),
+      ).request("/v1/portfolio"),
+    );
+    expect(body.debtUsd).toBe("450");
+    expect(body.debtIsStale).toBe(true);
+  });
+
+  it("never turns an unreadable loan into no loan", async () => {
+    const stale = await portfolioOf(
+      await appWith(
+        deps({ debt: async () => null, lastKnownDebt: async () => D("450") }),
+      ).request("/v1/portfolio"),
+    );
+    const zero = await portfolioOf(
+      await appWith(deps({ debt: async () => ZERO })).request("/v1/portfolio"),
+    );
+    expect(Number(stale.totalValueUsd)).toBeLessThan(Number(zero.totalValueUsd));
+  });
+
+  it("falls back to zero only for an account with nothing recorded, which has no loan to hide", async () => {
+    const body = await portfolioOf(
+      await appWith(deps({ debt: async () => null, lastKnownDebt: async () => null })).request(
+        "/v1/portfolio",
+      ),
+    );
+    expect(body.debtUsd).toBe("0");
+    expect(body.debtIsStale).toBe(true);
+  });
+
+  it("reports no loan as no loan, not as stale", async () => {
+    const body = await portfolioOf(await appWith(deps()).request("/v1/portfolio"));
+    expect(body.debtUsd).toBe("0");
+    expect(body.debtIsStale).toBe(false);
   });
 });

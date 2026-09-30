@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { D } from "@mercury/core";
+import { D, ZERO } from "@mercury/core";
 import { PortfolioHistory } from "@mercury/types";
 import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard, TokenPrice } from "@mercury/market";
@@ -71,6 +71,8 @@ describe("snapshot to chart, over a real database", () => {
         multipliers: { multiplierFor: async () => D(1), isPaused: async () => false } as MultiplierSource,
         usdcMint: USDC,
         pledged: async () => [],
+        debt: async () => ZERO,
+        lastKnownDebt: async () => null,
         snapshots: (userId, from) => readSnapshots(db, userId, from),
       }),
     );
