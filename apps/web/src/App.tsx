@@ -22,7 +22,14 @@ const Cards = lazy(() => import("./cards/Cards").then((m) => ({ default: m.Cards
 /** The side panels (Add cash, Send, Borrow), drawn over any page; see app/Panels. */
 const GlobalPanels = lazy(() => import("./app/Panels").then((m) => ({ default: m.GlobalPanels })));
 
-/** Live market data is polled, so a refetch on every window focus would be noise. */
+/**
+ * Market data is polled, so a refetch on every window focus would be noise.
+ *
+ * This is a default, not a rule. The account reads in `api/hooks.ts` set it
+ * back on for themselves: coming back to the tab is exactly when somebody has
+ * just done something in a wallet popup, and is the moment their balances are
+ * most likely to be wrong.
+ */
 const queryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
 });

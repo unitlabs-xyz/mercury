@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { MarketStatus, Money, Portfolio } from "@mercury/types";
 import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { apiFetch } from "./client";
+import { LIVE } from "./live";
 
 /**
  * The app's reads from our own API.
@@ -15,7 +16,10 @@ import { apiFetch } from "./client";
  * Market data does *not* come through here. It is read straight from the
  * upstreams in `../market/hooks`, which is the fallback path ADR 0011
  * describes — the one thing that still works when this API does not.
+ *
+ * All three account reads share one polling policy, in ./live.
  */
+
 export const useSignedIn = (): boolean => {
   const { ready, authenticated } = usePrivy();
   // Dev-only sample data counts as signed in; always false in a build.
@@ -30,8 +34,7 @@ export const usePortfolio = () => {
     queryKey: ["api", "portfolio"],
     queryFn: () => apiFetch<Portfolio>("/v1/portfolio"),
     enabled: signedIn,
-    staleTime: 15_000,
-    refetchInterval: 30_000,
+    ...LIVE,
   });
 };
 
@@ -41,8 +44,7 @@ export const useMoney = () => {
     queryKey: ["api", "money"],
     queryFn: () => apiFetch<Money>("/v1/money"),
     enabled: signedIn,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    ...LIVE,
   });
 };
 
@@ -64,7 +66,7 @@ export const useActivityFeed = () => {
     queryKey: ["api", "activity"],
     queryFn: () => apiFetch<{ items: ActivityItem[]; nextCursor: string | null }>("/v1/activity?limit=100"),
     enabled: signedIn,
-    staleTime: 30_000,
+    ...LIVE,
   });
 };
 
