@@ -197,8 +197,39 @@ export const REFUSE_COPY: Record<RefuseDecision["reason"], { title: string; body
   no_candidates: { title: "Not available", body: "We don't offer this stock yet." },
 };
 
+/**
+ * The refusals that read differently when the order points the other way.
+ *
+ * Four of the seven above are written for a buyer and are reachable on a sell,
+ * and `no_candidates` is not merely awkward but wrong: "we don't offer this
+ * stock yet" is a fact about us, when what happened is the wallet holds none of
+ * it. `below_minimum` has no sell wording because the minimum is a buy-side
+ * rule — see `decide`.
+ */
+const SELL_COPY: Partial<Record<RefuseDecision["reason"], { title: string; body: string }>> = {
+  no_route: {
+    title: "Can't sell this right now",
+    body: "There isn't enough being traded at the moment to take this size. Try again shortly.",
+  },
+  impact_too_high: {
+    title: "This order would move the price",
+    body: "At this size, selling would push the price down against you. Try a smaller amount, or wait until the US market opens.",
+  },
+  corp_action_pending: {
+    title: "Dividend being applied",
+    body: "Your share count is about to change. Selling reopens as soon as it has.",
+  },
+  no_candidates: {
+    title: "Nothing to sell",
+    body: "You don't hold this stock in a wallet we can sell from.",
+  },
+};
+
+export const refuseCopy = (reason: RefuseDecision["reason"], side: "buy" | "sell") =>
+  (side === "sell" ? SELL_COPY[reason] : undefined) ?? REFUSE_COPY[reason];
+
 const Refuse = ({ d }: { d: RefuseDecision }) => {
-  const copy = REFUSE_COPY[d.reason];
+  const copy = refuseCopy(d.reason, d.side);
   return (
     <div className="rounded-xl border border-down-line bg-down-tint px-4 py-3.5">
       <p className="text-[14px] font-semibold text-down-deep">{copy.title}</p>
@@ -297,7 +328,7 @@ export const OrderSheet = ({
   const cta = working
     ? STEP_LABEL[buy.step ?? "pricing"]
     : moved
-      ? "Buy at the new price"
+      ? `${selling ? "Sell" : "Buy"} at the new price`
       : !buy.walletReady
         ? "Preparing your wallet\u2026"
         : !decision
@@ -306,7 +337,9 @@ export const OrderSheet = ({
             ? "Not placing this now"
             : decision.kind === "refuse"
               ? "Unavailable"
-              : "Buy now";
+              : selling
+                ? "Sell now"
+                : "Buy now";
 
   const close = () => {
     buy.reset();
@@ -317,7 +350,7 @@ export const OrderSheet = ({
     <Dialog
       open={open}
       onClose={close}
-      labelledBy="buy-title"
+      labelledBy="order-title"
       className="flex max-h-[min(86vh,780px)] max-w-[520px] flex-col"
     >
       {placed ? (
@@ -326,7 +359,7 @@ export const OrderSheet = ({
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-up-tint text-up-deep">
               <Check className="size-6" />
             </span>
-            <h2 id="buy-title" className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">
+            <h2 id="order-title" className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">
               {selling ? "Sold" : "Bought"}
             </h2>
             {/* The numbers read off the chain, not the ones we quoted. What
@@ -359,7 +392,7 @@ export const OrderSheet = ({
       ) : (
         <>
           <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-5 sm:px-7">
-            <h2 id="buy-title" className="text-[22px] font-semibold tracking-[-0.02em]">
+            <h2 id="order-title" className="text-[22px] font-semibold tracking-[-0.02em]">
               {selling ? "Sell" : "Buy"} {instrument.name}
             </h2>
             {!selling && <p className="mt-1 text-[14px] text-muted">{usd(available)} available</p>}
