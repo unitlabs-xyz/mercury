@@ -168,6 +168,14 @@ export const EVENT_ICON: Record<Event["kind"], ReactNode> = {
       {BUY_TREND}
     </Glyph>
   ),
+  // The queued mark's amber, because this is the other row that is waiting on
+  // the person reading it.
+  loan_alert: (
+    <Glyph bg="var(--color-ds-up-queued-bg)" ink="var(--color-ds-up-queued)">
+      <path d="M12 7.5V13" />
+      <path d="M12 16.2V16.3" />
+    </Glyph>
+  ),
 };
 
 /** "+$12.42", "−$200.00": a true minus, and only ever one sign, whatever the amount arrived as. */

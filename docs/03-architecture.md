@@ -93,6 +93,7 @@ on a fixed tick, so a slow pass never has a second one starting behind it.
 | `position-sync`      | 2s      | Reconciles our view of balances against chain, and recognises dividends                 |
 | `wallet-events`      | 30s     | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers  |
 | `portfolio-snapshot` | 1h      | Records what every account is worth, which is the only history the chart can draw       |
+| `loan-watch`         | 5m      | Checks every open loan and warns its owner when it crosses a line they must act on      |
 
 `wallet-events` reads transaction history, not balances, and writes to the activity feed only —
 it never touches `lot` or `position`; that stays `position-sync`'s job.

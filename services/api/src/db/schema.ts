@@ -413,3 +413,26 @@ export const loanEvents = pgTable(
   ],
 );
 export type LoanEvent = typeof loanEvents.$inferSelect;
+
+/**
+ * What each borrower was last warned about.
+ *
+ * One row per account, overwritten. Its only job is to stop the watcher saying
+ * the same thing every time it runs: a loan sitting at 86% of the way to
+ * liquidation stays there for hours, and a job on a five-minute clock would
+ * otherwise send that warning a hundred times before lunch. Somebody warned
+ * constantly stops reading, which is the failure this feature exists to prevent.
+ *
+ * It holds the worst state we have *told them about*, not the worst they have
+ * reached. Those differ when a notice could not be delivered, and the
+ * difference is the point: undelivered is untold, so it is tried again.
+ */
+export const loanAlerts = pgTable("loan_alert", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** healthy, over_limit, margin_call or liquidation. See lending/capacity.ts. */
+  health: text("health").notNull(),
+  notifiedAt: timestamp("notified_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export type LoanAlert = typeof loanAlerts.$inferSelect;

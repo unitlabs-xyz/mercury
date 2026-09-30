@@ -6,6 +6,8 @@ import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
 import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
+import { watchAllLoans } from "./lending/watch-loans.js";
+import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
 import { keypairRelaySigner } from "./relay/signer.js";
@@ -39,6 +41,21 @@ console.log(
   relay === undefined
     ? "sponsorship: off (RELAYER_SECRET_KEY unset); buyers pay their own network costs"
     : `sponsorship: on, paying from ${relay.signer.address}`,
+);
+
+/*
+ * The same shape as the relayer above, and for the same reason: a capability
+ * that is off should say so at boot. A deployment that believes it is warning
+ * borrowers and is not is worse than one that never claimed to.
+ */
+const notifier =
+  config.resendApiKey === undefined
+    ? loggingNotifier()
+    : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom });
+console.log(
+  config.resendApiKey === undefined
+    ? "loan alerts: in-app only (RESEND_API_KEY unset); nothing is emailed"
+    : `loan alerts: emailed from ${config.notifyFrom}`,
 );
 
 const read = buildReadDeps(auth.db, deps, config, relay);
@@ -81,6 +98,7 @@ const every = (name: string, ms: number, run: () => Promise<string | null>) => {
  * | `position-sync`      | 2s      | `lot`, `position`, `activity` — including dividends  |
  * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers               |
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                 |
+ * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email               |
  *
  * Two jobs the design called for are not here. A price cache: prices are read
  * from upstream per call instead, which every portfolio read and every
@@ -146,6 +164,28 @@ every("portfolio-snapshot", 60 * 60 * 1000, async () => {
   const s = await snapshotAllPortfolios(auth.db, read.portfolio, new Date());
   if (s.wallets === 0) return null;
   return `${s.written}/${s.wallets} accounts` + (s.failed > 0 ? `, ${s.failed} failed` : "");
+});
+
+/**
+ * Five minutes, because a loan is the only thing here that can cost somebody
+ * money while they are not looking.
+ *
+ * Slower than the other per-wallet jobs because each pass is an RPC round trip
+ * per borrower, and faster than it needs to be for an ordinary market: our
+ * alarm sits about 15% of collateral value short of Kamino's line, which no
+ * ordinary move closes in five minutes. A move that does would have outrun any
+ * cadence worth paying for.
+ *
+ * A quiet pass says nothing. Someone whose loan is fine does not need a line in
+ * the log every five minutes, and a log that scrolls is a log nobody reads.
+ */
+every("loan-watch", 5 * 60 * 1000, async () => {
+  const s = await watchAllLoans(auth.db, { ...read.borrow, notifier }, new Date());
+  if (s.alerted === 0 && s.failed === 0) return null;
+  return (
+    `${s.alerted} alerts across ${s.loans} loans, ${s.delivered} delivered` +
+    (s.failed > 0 ? `, ${s.failed} failed` : "")
+  );
 });
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {

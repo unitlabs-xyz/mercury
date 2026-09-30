@@ -22,6 +22,7 @@ const KIND: Record<string, EventKind> = {
   repay: "repay",
   pledge: "pledge",
   unpledge: "unpledge",
+  loan_alert: "loan_alert",
 };
 
 /** Which way money moved, for the sign and the colour. */

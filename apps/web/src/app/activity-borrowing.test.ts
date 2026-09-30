@@ -43,9 +43,9 @@ describe("a loan in the feed", () => {
     expect(toEvent(row({ kind: "unpledge", title: "Withdrew 2.4 SPYx", amountUsd: null })).flow).toBeNull();
   });
 
-  it("files all four under one chip, so the loan reads as one story", () => {
+  it("files everything about the loan under one chip, warnings included", () => {
     const borrowing = GROUPS.find((g) => g.key === "borrowing");
-    expect(borrowing?.kinds).toEqual(["borrow", "repay", "pledge", "unpledge"]);
+    expect(borrowing?.kinds).toEqual(["borrow", "repay", "pledge", "unpledge", "loan_alert"]);
   });
 
   it("keeps them out of Trades, which is about buying and selling", () => {

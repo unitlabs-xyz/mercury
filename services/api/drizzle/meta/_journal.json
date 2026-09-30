@@ -71,6 +71,13 @@
       "when": 1790784085430,
       "tag": "0009_user_email",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790784534907,
+      "tag": "0010_loan_alert",
+      "breakpoints": true
     }
   ]
 }

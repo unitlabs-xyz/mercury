@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, Clock, Grid, Lock, Plus, Refresh, Trend } from "../ui/icons";
+import { Alert, ArrowDown, ArrowUp, Clock, Grid, Lock, Plus, Refresh, Trend } from "../ui/icons";
 import type { EventKind } from "./activity-data";
 
 /** The mark and tint for each kind of event, shared by the feed and the dashboard. */
@@ -19,4 +19,6 @@ export const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
   // Collateral, not money: a lock going on and coming off.
   pledge: { icon: <Lock className="size-4" />, tone: "bg-chip text-ink-soft" },
   unpledge: { icon: <Lock className="size-4" />, tone: "bg-up-tint text-up-deep" },
+  // The only row in the feed that is asking for something to be done.
+  loan_alert: { icon: <Alert className="size-4" />, tone: "bg-warn-tint text-warn" },
 };
