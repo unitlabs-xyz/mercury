@@ -1,5 +1,4 @@
-import { usePortfolio, usePortfolioHistory } from "../api/hooks";
-import { SAMPLE, SAMPLE_HISTORY } from "../dev/sample";
+import { usePortfolioHistory } from "../api/hooks";
 import type { Point } from "./DotChart";
 import { Clock } from "../ui/icons";
 import { DotChart } from "./DotChart";
@@ -34,27 +33,27 @@ export const LABEL: Record<Range, (at: Date) => string> = {
  * that job had run twice for an account there was nothing here but an empty
  * state, and for a new account there still is.
  *
- * The live total is appended as the final point. The recorded series ends at
- * the top of the last hour, which can be fifty-nine minutes ago, and a chart
- * whose last point disagrees with the figure printed directly above it reads as
- * a bug in both. Whether there is a chart at all stays the server's call: it
- * withholds a lone reading, so this never draws a line half of which is live.
+ * Sample mode goes through the same fetch, because `sampleResponse` answers
+ * this route too: one path through here, and the labelling below runs in design
+ * review rather than only in production.
+ *
+ * Only recorded readings are drawn. Appending the live total to close the gap
+ * to the current hour was tried and reverted: the two are read separately, and
+ * the moment they disagree — a snapshot taken before a deposit, a price read a
+ * minute apart — the line ends in a vertical cliff. In sample mode it was a
+ * $3,896 drop straight down. An hour of lag is a smaller lie than that, and the
+ * empty state already tells the reader this is recorded hourly.
+ *
+ * Whether there is a chart at all stays the server's call: it withholds a lone
+ * reading, so this never has to decide what one point means.
  */
 export const useHistory = (range: Range): readonly Point[] | null => {
   const recorded = usePortfolioHistory(range);
-  const live = usePortfolio();
-
-  if (SAMPLE) return SAMPLE_HISTORY[range];
 
   const points = recorded.data?.points ?? [];
   if (points.length === 0) return null;
 
-  const series = points.map((p) => ({
-    label: LABEL[range](new Date(p.at)),
-    value: Number(p.valueUsd),
-  }));
-  if (live.data === undefined) return series;
-  return [...series, { label: LABEL[range](new Date()), value: Number(live.data.totalValueUsd) }];
+  return points.map((p) => ({ label: LABEL[range](new Date(p.at)), value: Number(p.valueUsd) }));
 };
 
 export const ValueChart = ({ range, onZoom }: { range: Range; onZoom?: (dir: 1 | -1) => void }) => {
