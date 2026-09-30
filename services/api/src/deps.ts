@@ -33,6 +33,7 @@ import type { ActivityDeps } from "./routes/activity.js";
 import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
+import { debtFrom } from "./lending/debt.js";
 import { pledgedByMint, withPledged } from "./lending/pledged.js";
 import type { LendingSource } from "./lending/ports.js";
 import type { InstrumentDeps } from "./routes/instruments.js";
@@ -42,7 +43,7 @@ import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import { pgWaitlist, type WaitlistDeps } from "./routes/waitlist.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
-import { readHoldings, readSnapshots } from "./portfolio/queries.js";
+import { readHoldings, readLatestDebt, readSnapshots } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 
@@ -236,6 +237,8 @@ export function buildReadDeps(
       multipliers: deps.multipliers,
       usdcMint: USDC_MINT,
       pledged: (wallet) => pledgedByMint(deps.lending, wallet),
+      debt: (wallet) => debtFrom(deps.lending, wallet),
+      lastKnownDebt: (userId) => readLatestDebt(db, userId),
       snapshots: (userId, from) => readSnapshots(db, userId, from),
     },
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },

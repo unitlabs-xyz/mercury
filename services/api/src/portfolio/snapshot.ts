@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { toWire } from "@mercury/core";
+import { toWire, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
@@ -9,6 +9,8 @@ import { cashFrom, valuePortfolio, type ValuableHolding } from "./value.js";
 
 export interface SnapshotDeps {
   readonly holdings: (userId: string) => Promise<readonly ValuableHolding[]>;
+  /** Owed to Kamino. Null when Kamino could not be read, which costs this account its reading. */
+  readonly debt: (walletAddress: string) => Promise<Decimal | null>;
   readonly prices: PriceBoard;
   readonly chain: ChainReader;
   readonly usdcMint: string;
@@ -54,12 +56,23 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
       const row = rows[next++];
       if (row === undefined) return;
       try {
-        const [held, balances] = await Promise.all([
+        const [held, balances, debtUsd] = await Promise.all([
           deps.holdings(row.userId),
           deps.chain.tokenBalances(row.address),
+          deps.debt(row.address),
         ]);
+        /*
+         * A reading with unknown debt is not a reading. Every other job can
+         * catch up after an outage; this one cannot, because an hour not
+         * recorded is a hole in the chart forever. But a gross total written
+         * into a net column is worse than a hole: the hole is visibly missing
+         * and the wrong number is not, and it would sit in the history being
+         * quietly wrong long after Kamino came back.
+         */
+        if (debtUsd === null) throw new Error("debt unreadable; skipping this reading");
+
         const board = await deps.prices.pricesFor(held.flatMap((h) => h.wrappers.map((w) => w.mint)));
-        const value = valuePortfolio(held, board, cashFrom(balances, deps.usdcMint));
+        const value = valuePortfolio(held, board, cashFrom(balances, deps.usdcMint), debtUsd);
 
         await db
           .insert(portfolioSnapshots)
@@ -69,6 +82,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
             totalUsd: toWire(value.totalUsd),
             stocksUsd: toWire(value.stocksUsd),
             cashUsd: toWire(value.cashUsd),
+            debtUsd: toWire(value.debtUsd),
           })
           // A deploy mid-hour re-reads the same hour. The later reading is the
           // better one — it is closer to the top of the next hour — so it wins.
@@ -78,6 +92,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
               totalUsd: toWire(value.totalUsd),
               stocksUsd: toWire(value.stocksUsd),
               cashUsd: toWire(value.cashUsd),
+              debtUsd: toWire(value.debtUsd),
             },
           });
         written += 1;

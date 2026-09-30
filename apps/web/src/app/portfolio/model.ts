@@ -17,9 +17,16 @@ export type Row = Portfolio["holdings"][number] & {
 };
 
 export type Model = {
+  /** Net worth: stocks plus cash less debt. The figure at the top of the page. */
   readonly total: number;
+  /** Stocks plus cash, before the loan. What the weights are shares of. */
+  readonly assets: number;
   readonly stocks: number;
   readonly cash: number;
+  /** Owed to Kamino, from the portfolio itself so it always agrees with `total`. */
+  readonly debt: number;
+  /** True when Kamino could not be read and `debt` is the last hour recorded. */
+  readonly debtIsStale: boolean;
   readonly changeUsd: number;
   readonly changePct: number;
   readonly costBasis: number;
@@ -67,7 +74,14 @@ export const useModel = (
     if (!p) return undefined;
     const total = Number(p.totalValueUsd);
     const cash = Number(p.cashUsd);
-    const stocks = total - cash;
+    const debt = Number(p.debtUsd);
+    // Summed from the rows rather than backed out of the total. `total` is net
+    // of the loan now, so the old `total - cash` would quietly subtract the debt
+    // from the stocks as well and understate every holding's weight.
+    const stocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
+    // Weights are shares of what is held, not of what is owned outright: a
+    // levered account would otherwise show holdings adding up to well past 100%.
+    const assets = stocks + cash;
     // Kamino's live terms from our API first; its public rates list if that is not in yet.
     const target = borrow?.safetyTarget ?? 0.8;
     const ltvOf = (ticker: string) =>
@@ -84,7 +98,7 @@ export const useModel = (
       return {
         ...h,
         value,
-        weight: total > 0 ? value / total : 0,
+        weight: assets > 0 ? value / assets : 0,
         returnUsd: value - cost,
         returnPct: cost > 0 ? ((value - cost) / cost) * 100 : 0,
         ltv,
@@ -114,7 +128,9 @@ export const useModel = (
       }))
       .sort((a, b) => b.value - a.value);
 
-    const borrowed = borrow?.debtUsd ?? 0;
+    // The portfolio's own figure first: it is the one `total` was computed from,
+    // and a panel disagreeing with the headline above it is the bug this file exists to stop.
+    const borrowed = debt || (borrow?.debtUsd ?? 0);
     const available = borrow?.borrowableUsd ?? rows.reduce((s, r) => s + r.borrowable, 0);
     const power = available + borrowed;
     const pledged = borrow?.collateralUsd ?? 0;
@@ -124,8 +140,11 @@ export const useModel = (
 
     return {
       total,
+      assets,
       stocks,
       cash,
+      debt,
+      debtIsStale: p.debtIsStale,
       changeUsd: Number(p.changeUsd),
       changePct: Number(p.changePct),
       costBasis,

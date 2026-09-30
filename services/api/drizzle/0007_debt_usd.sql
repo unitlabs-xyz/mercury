@@ -1,0 +1,1 @@
+ALTER TABLE "portfolio_snapshot" ADD COLUMN "debt_usd" numeric(38, 18) DEFAULT '0' NOT NULL;

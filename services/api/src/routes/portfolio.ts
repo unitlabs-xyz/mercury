@@ -34,6 +34,10 @@ export interface PortfolioDeps {
   readonly usdcMint: string;
   /** Stock pledged to Kamino by mint, raw. Still held: it counts in the position. */
   readonly pledged: (walletAddress: string) => Promise<readonly TokenBalance[]>;
+  /** Owed to Kamino now. Null when Kamino could not be read — never zero. */
+  readonly debt: (walletAddress: string) => Promise<Decimal | null>;
+  /** The newest recorded debt for this account, for when `debt` answers null. */
+  readonly lastKnownDebt: (userId: string) => Promise<Decimal | null>;
   /** Hourly readings of the account's value, no older than `from`. */
   readonly snapshots: (userId: string, from: Date) => Promise<readonly Reading[]>;
 }
@@ -43,6 +47,8 @@ const fail = (code: string, message: string) => ({ error: { code, message } });
 const EMPTY = {
   totalValueUsd: "0",
   cashUsd: "0",
+  debtUsd: "0",
+  debtIsStale: false,
   changeUsd: "0",
   changePct: "0",
   holdings: [] as const,
@@ -61,11 +67,24 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // records in line with the chain is position-sync's job, on its own
     // clock. See services/api/src/index.ts: position-sync.
 
-    const [rows, balances, pledged] = await Promise.all([
+    const [rows, balances, pledged, liveDebt] = await Promise.all([
       deps.holdings(identity.userId),
       deps.chain.tokenBalances(identity.walletAddress),
       deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
+      deps.debt(identity.walletAddress),
     ]);
+
+    /*
+     * An unreadable Kamino falls back to the last hour that was readable.
+     *
+     * Zero would be the easy answer and it is the wrong one: it would report a
+     * borrower as owing nothing, which overstates their net worth and tells
+     * them they have room they do not have. An hour-old figure is close, and a
+     * flag says it is old. An account that has never borrowed has zero in every
+     * reading, so an outage changes nothing for the people it should not.
+     */
+    const debtUsd = liveDebt ?? (await deps.lastKnownDebt(identity.userId)) ?? ZERO;
+    const debtIsStale = liveDebt === null;
     const pledgedByMint = new Map(pledged.map((p) => [p.mint, p]));
 
     const mints = rows.flatMap((r) => r.wrappers.map((w) => w.mint));
@@ -75,7 +94,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // chart and the number at the top of this page cannot drift apart. The loop
     // below is only about the per-holding rows.
     const cashUsd = cashFrom(balances, deps.usdcMint);
-    const value = valuePortfolio(rows, board, cashUsd);
+    const value = valuePortfolio(rows, board, cashUsd, debtUsd);
     const holdings = [];
 
     for (const row of rows) {
@@ -117,6 +136,8 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     return c.json({
       totalValueUsd: toWire(value.totalUsd),
       cashUsd: toWire(value.cashUsd),
+      debtUsd: toWire(value.debtUsd),
+      debtIsStale,
       changeUsd: toWire(value.changeUsd),
       changePct: toWire(changePct),
       holdings,

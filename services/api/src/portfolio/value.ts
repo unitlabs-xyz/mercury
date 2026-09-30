@@ -11,7 +11,15 @@ export interface ValuableHolding {
 export interface PortfolioValue {
   readonly stocksUsd: Decimal;
   readonly cashUsd: Decimal;
-  /** Stocks plus cash: the figure at the top of the portfolio page. */
+  /** Owed to Kamino. Borrowed cash is counted in `cashUsd`; this is the other side of it. */
+  readonly debtUsd: Decimal;
+  /**
+   * Net worth: stocks plus cash less debt, the figure at the top of the page.
+   *
+   * Negative when a fall has taken the collateral below the loan. That is a
+   * real state and it is reported, not clamped — a floor at zero would hide
+   * the one number the person most needs.
+   */
   readonly totalUsd: Decimal;
   /** How much of today's value arrived today. Cash does not move, so this is stocks only. */
   readonly changeUsd: Decimal;
@@ -46,6 +54,7 @@ export const valuePortfolio = (
   rows: readonly ValuableHolding[],
   board: ReadonlyMap<string, TokenPrice>,
   cashUsd: Decimal,
+  debtUsd: Decimal,
 ): PortfolioValue => {
   let stocksUsd = ZERO;
   let changeUsd = ZERO;
@@ -67,5 +76,8 @@ export const valuePortfolio = (
     changeUsd = changeUsd.add(movedUsd);
   }
 
-  return { stocksUsd, cashUsd, totalUsd: stocksUsd.add(cashUsd), changeUsd };
+  // Borrowing is total-neutral: the cash arrives and the debt arrives with it.
+  // What leverage changes is `stocksUsd` and how far `changeUsd` swings, which
+  // is the thing somebody who levers up actually bought.
+  return { stocksUsd, cashUsd, debtUsd, totalUsd: stocksUsd.add(cashUsd).sub(debtUsd), changeUsd };
 };

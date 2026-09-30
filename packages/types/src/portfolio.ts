@@ -15,8 +15,13 @@ export const Holding = z.object({
 });
 
 export const Portfolio = z.object({
+  /** Net worth: stocks plus cash less debt. */
   totalValueUsd: Usd,
   cashUsd: Usd,
+  /** Owed to Kamino. Borrowed cash is inside `cashUsd`; this is the other side of it. */
+  debtUsd: Usd,
+  /** True when Kamino could not be read and `debtUsd` is the last hour we recorded. */
+  debtIsStale: z.boolean(),
   changeUsd: Usd,
   changePct: Ratio,
   holdings: z.array(Holding),

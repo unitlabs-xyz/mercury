@@ -1,6 +1,9 @@
 # ADR 0009 · An investing product, not a trading product
 
 **Status:** accepted · 19 September 2026
+**Amended 30 September 2026:** the borrowed-funds restriction below is withdrawn. It is
+unenforceable in a self-custodial product and is replaced by disclosure — see
+[Amendment](#amendment-30-september-2026). Everything else stands.
 
 ## Context
 
@@ -34,7 +37,7 @@ ship it. If it leaves exposure unchanged and produces cash, it is a Lombard loan
 version two.
 
 One consequence: borrowed funds cannot be used to buy stocks inside the app. That restriction
-should be enforced in code, not stated in terms.
+should be enforced in code, not stated in terms. _(Withdrawn — see the amendment below.)_
 
 ## What this does to the interface
 
@@ -58,3 +61,32 @@ holding two asset types in one list.
 
 **Bad.** Users will ask for perps. Crypto-native judges may read the absence as a gap rather than
 a position, so the submission has to say it out loud rather than leave it to be noticed.
+
+---
+
+## Amendment, 30 September 2026
+
+**The borrowed-funds restriction is withdrawn.** It was never implemented, and implementing it
+would have been theatre.
+
+This is a self-custodial product. `POST /v1/money/send` ships, wallet export ships and is
+advertised as a feature — leaving is trivial and we say so. Anybody refused at our buy button
+borrows, sends the USDC one hop, and buys there instead, or exports the wallet and uses Jupiter.
+A rule that stops nobody costs an honest user a confusing error and costs a determined one
+thirty seconds.
+
+**So looping is legal.** Borrow against a holding, buy more of it, pledge that, borrow again.
+Somebody who wants leverage can have it, on their own wallet, with their own money.
+
+**What carries the weight instead is the accounting, and it now tells the truth.** Net worth is
+stocks plus cash less debt, so borrowing moves the headline figure by nothing and leverage shows
+up where it is real: in the holdings, which grow, and in the day's move, which swings further.
+The fall that would cost somebody their collateral sits under the Borrowed figure and shrinks
+every time the loop goes round. See
+[the design](../superpowers/specs/2026-09-30-debt-in-the-books-design.md).
+
+**The test in this record is unchanged and still correct.** Borrowing to buy more of the same
+thing is margin, and multiplying exposure is what it does. What changed is the answer to what we
+do about it: we do not pretend to prevent it, we make it impossible to do by accident. Mercury
+still ships no perpetuals, no order books, no portfolio margin, and no leverage of its own —
+Kamino is the lender, and the user's wallet is the account.

@@ -107,8 +107,10 @@ is in [10 Baskets](10-baskets.md) and the decision in [ADR 0005](adr/0005-basket
   interest earned so far this year.
 - **Receive.** The wallet address and a QR code.
 - **Send.** Move stablecoins out. No confirmation theatre beyond the usual.
-- **Borrowing.** Visible from day one, switched off. It shows the borrowing power the current
-  portfolio would support so the roadmap is legible, with the mechanism explained.
+- **Borrowing.** Live, against xStocks on Kamino, to 80% of Kamino's own limit. Borrowed USDC
+  lands in the wallet as ordinary cash and can be spent on anything, including more stock — see
+  the amendment to [ADR 0009](adr/0009-investing-not-trading.md). The headline figure is net of
+  the loan, and the fall that would reach liquidation is on the page.
 
 There are no bank transfers, no card top-ups and no cash withdrawals. That is the crypto-native
 decision, recorded in [ADR 0001](adr/0001-crypto-native.md).
