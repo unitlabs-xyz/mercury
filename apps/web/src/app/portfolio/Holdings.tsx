@@ -1,16 +1,22 @@
 import { Link } from "react-router-dom";
 import { ButtonLink } from "../../ui/Button";
 import { GlideRows, MoveChip, RailHead, StatusChip } from "../../ui/ds";
-import { shares as fmtShares, usd, usdCompact } from "../format";
+import { shares as fmtShares, usd } from "../format";
 import type { Model, Row } from "./model";
 import { Skeleton } from "./ui";
 
 /**
  * Built to holdings.svg. The name takes what is left; the figures sit in fixed
  * columns on the right, right-aligned: value ends 411 from the card's left in
- * the 992 design, then weight 120 on, today 125, return 168, borrow 144.
+ * the 992 design, then weight 120 on, today 125, return 168.
+ *
+ * Borrow was the sixth. It answered a question nobody had while reading their
+ * holdings — what a position would lend against — and answered it for every
+ * row at once, including the ones Kamino does not take, where it printed "Not
+ * accepted" against a stock the reader had not asked to borrow against. The
+ * stock page's borrow card asks and answers it in one place.
  */
-const COLS = "grid-cols-[minmax(0,1fr)_130px_120px_125px_168px_144px]";
+const COLS = "grid-cols-[minmax(0,1fr)_130px_120px_125px_168px]";
 
 /** A hyphen, as the design draws it, for a fall. */
 const signed = (n: number, text: string) => `${n < 0 ? "-" : "+"}${text}`;
@@ -81,7 +87,17 @@ const Line = ({ r }: { r: Row }) => {
 
       <span className="text-right text-ds-muted">{(r.weight * 100).toFixed(1)}%</span>
 
-      <span className="flex -translate-y-px justify-end">
+      {/*
+       * The chip is built to a 56px minimum and centres what it holds, which
+       * is right for a lone figure and wrong in a column: the pill lines up
+       * with the column's edge while the number inside floats somewhere in the
+       * middle of it, by a distance that changes with the number's own width.
+       * Every other column here sets its text flush to the edge.
+       *
+       * Letting it hug its contents leaves a constant 6px of the chip's own
+       * padding, which the header then matches.
+       */}
+      <span className="flex -translate-y-px justify-end [&>span]:min-w-0">
         <MoveChip value={today} />
       </span>
 
@@ -92,17 +108,6 @@ const Line = ({ r }: { r: Row }) => {
         <span className="text-[12px] text-ds-muted">
           {signed(r.returnUsd, `${Math.abs(r.returnPct).toFixed(1)}%`)}
         </span>
-      </span>
-
-      <span className="flex items-baseline justify-end gap-[5px] whitespace-nowrap">
-        {r.ltv > 0 ? (
-          <>
-            <span className="font-medium text-ds-ink">{usdCompact(r.borrowable)}</span>
-            <span className="text-[12px] text-ds-muted">{Math.round(r.ltv * 100)}%</span>
-          </>
-        ) : (
-          <span className="text-ds-muted">Not accepted</span>
-        )}
       </span>
     </Link>
   );
@@ -133,14 +138,15 @@ export const Holdings = ({
 
     <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
       {m && m.rows.length > 0 && (
-        <div className="min-w-[860px]">
+        <div className="min-w-[716px]">
           <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
             <span>Name</span>
             <span className="text-right">Value</span>
             <span className="text-right">Weight</span>
-            <span className="text-right">Today</span>
+            {/* Inset by the chip's own padding, so the label sits over the
+                figure rather than over the pill around it. */}
+            <span className="pr-1.5 text-right">Today</span>
             <span className="text-right">Return</span>
-            <span className="text-right">Borrow up to</span>
           </div>
           <GlideRows>
             {m.rows.map((r) => (
