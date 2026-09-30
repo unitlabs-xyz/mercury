@@ -314,7 +314,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
                     };
                   },
                 },
-                { quote, owner, feeUsdc },
+                { quote, owner, feeUsdc, side: shown.side },
               )
             ).wire,
           ];

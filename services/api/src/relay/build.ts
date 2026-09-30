@@ -9,7 +9,7 @@ import type { RelaySigner } from "./signer.js";
 import { associatedTokenAddress, transferInstruction } from "./usdc.js";
 
 /**
- * A buy the buyer can make with no SOL at all.
+ * A trade the account holder can make with no SOL at all.
  *
  * Every piece exists already; this is where they meet. The swap arrives as
  * instructions rather than a transaction so the repayment can sit beside it,
@@ -27,8 +27,14 @@ export interface SponsoredBuildDeps {
 export interface SponsoredBuildInput {
   readonly quote: RedeemableQuote;
   readonly owner: string;
-  /** What the buyer repays, in USDC. Zero skips the transfer entirely. */
+  /** What the trader repays, in USDC. Zero skips the transfer entirely. */
   readonly feeUsdc: Decimal;
+  /**
+   * Decides which side of the swap the charge goes: a buy is charged from USDC
+   * it already holds, a sell from USDC the swap has yet to deliver. See
+   * `ComposeInput.chargePosition`.
+   */
+  readonly side: "buy" | "sell";
 }
 
 /** USDC has six decimals, so $0.25 is 250000 of them. */
@@ -75,6 +81,7 @@ export const buildSponsored = async (
     lastValidBlockHeight: lifetime.lastValidBlockHeight,
     computeBudget: instructions.computeBudget.map(toInstruction),
     charge,
+    chargePosition: input.side === "buy" ? "before" : "after",
     // Setup opens the account the shares arrive in, and is paid for by the
     // relayer like everything else here.
     swap: [...instructions.setup.map(toInstruction), toInstruction(instructions.swap)].concat(
