@@ -26,4 +26,14 @@ describe("readConfig", () => {
       "https://scan.example",
     );
   });
+
+  /*
+   * Absent means sponsorship is off, not that the server is misconfigured. A
+   * deployment without a funded relayer still sells stock; buyers just pay
+   * their own network costs, which is the behaviour before any of this.
+   */
+  it("treats a missing relayer key as sponsorship being off", () => {
+    expect("relayerSecretKey" in readConfig(base)).toBe(false);
+    expect(readConfig({ ...base, RELAYER_SECRET_KEY: "[1,2,3]" }).relayerSecretKey).toBe("[1,2,3]");
+  });
 });
