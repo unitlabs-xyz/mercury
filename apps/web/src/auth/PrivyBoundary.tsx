@@ -56,6 +56,18 @@ export const PrivyBoundary = ({ children }: { children: ReactNode }) => {
         embeddedWallets: {
           solana: { createOnLogin: "users-without-wallets" },
           ethereum: { createOnLogin: "off" },
+          /*
+           * No confirmation sheet before a signature. See ADR 0012.
+           *
+           * This is a real trade-off and not a tidy-up. That sheet is the last
+           * point at which a user can refuse, and without it anything running
+           * in this page can sign with their key unseen. It is off because a
+           * brokerage that asks permission twice for one press does not feel
+           * like a brokerage, and it stays off only until delegated signing
+           * with a policy replaces it — which is where ADR 0003 was already
+           * headed for recurring investing.
+           */
+          showWalletUIs: false,
         },
         solana: SOLANA,
       }}
