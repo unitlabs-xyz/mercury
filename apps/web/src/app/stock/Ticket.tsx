@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Button } from "../../ui/Button";
 import { RailHead } from "../../ui/ds";
 import { Alert, Clock } from "../../ui/icons";
-import { REFUSE_COPY } from "../OrderSheet";
+import { REFUSE_COPY, refuseCopy } from "../OrderSheet";
 import { usd } from "../format";
 import { RailLine } from "./Panels";
 
@@ -399,8 +399,8 @@ export const Ticket = ({
       )}
       {decision?.kind === "refuse" && !tooSmall && (
         <Note tone="down" icon={<Alert />}>
-          <span className="font-medium">{REFUSE_COPY[decision.reason].title}.</span>{" "}
-          {REFUSE_COPY[decision.reason].body}
+          <span className="font-medium">{refuseCopy(decision.reason, decision.side).title}.</span>{" "}
+          {refuseCopy(decision.reason, decision.side).body}
         </Note>
       )}
       <div className="px-5 pt-5 pb-5">
