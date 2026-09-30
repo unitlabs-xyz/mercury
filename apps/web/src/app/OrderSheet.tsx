@@ -3,7 +3,7 @@ import type { OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@mercu
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
 import { useMoney } from "../api/hooks";
-import { PriceMoved, STEP_LABEL, useOrderAction } from "../api/orders";
+import { PriceMoved, useOrderAction } from "../api/orders";
 import { ISSUER_NAME } from "./IssuerCompare";
 import { Button } from "../ui/Button";
 import { useDecision } from "../market/hooks";
@@ -325,21 +325,26 @@ export const OrderSheet = ({
   const moved = buy.error instanceof PriceMoved ? buy.error : null;
   const failed = buy.error !== null && moved === null ? buy.error : null;
 
-  const cta = working
-    ? STEP_LABEL[buy.step ?? "pricing"]
-    : moved
-      ? `${selling ? "Sell" : "Buy"} at the new price`
-      : !buy.walletReady
-        ? "Preparing your wallet\u2026"
-        : !decision
-          ? "Getting a quote\u2026"
-          : decision.kind === "offer_queue"
-            ? "Not placing this now"
-            : decision.kind === "refuse"
-              ? "Unavailable"
-              : selling
-                ? "Sell now"
-                : "Buy now";
+  /*
+   * Two labels, and a spinner for everything in between.
+   *
+   * This read out five more: the wallet hydrating, the quote arriving, and then
+   * each internal step of the order — pricing, building, signing, sending,
+   * recording. They named things that are not decisions anybody makes, and the
+   * naming was upside down: those five churned across the parts that take a few
+   * hundred milliseconds each and then held still on the send, which waits on
+   * confirmation for as long as it takes. Motion where nothing waited, stillness
+   * where everything did.
+   *
+   * Two of them were saying the body's job over again — `offer_queue` and
+   * `refuse` each render a panel directly above this button explaining exactly
+   * what is wrong. And one was simply false: "Waiting for your approval" named
+   * the Privy sheet, which ADR 0012 removed.
+   *
+   * A moved price stays, because it is not a status. It is a different offer,
+   * and pressing it means agreeing to a number that changed.
+   */
+  const cta = moved ? `${selling ? "Sell" : "Buy"} at the new price` : selling ? "Sell now" : "Buy now";
 
   const close = () => {
     buy.reset();
@@ -486,6 +491,7 @@ export const OrderSheet = ({
               size="lg"
               variant="primary"
               disabled={blocked}
+              loading={working}
               onClick={() =>
                 buy.mutate({
                   ticker: instrument.ticker,

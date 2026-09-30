@@ -16,6 +16,19 @@ import { Link } from "react-router-dom";
  */
 export type ButtonVariant = "primary" | "secondary";
 
+/**
+ * The one loading state, for a button that has been pressed and is waiting.
+ *
+ * Drawn from `currentColor` so it inherits whichever variant it sits in, and at
+ * the stroke width the surrounding button already imposes on every glyph.
+ */
+const Spinner = () => (
+  <svg viewBox="0 0 16 16" className="animate-spin" role="presentation">
+    <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" opacity="0.3" />
+    <path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="currentColor" strokeLinecap="round" />
+  </svg>
+);
+
 type Common = {
   variant?: ButtonVariant;
   size?: "md" | "lg";
@@ -23,26 +36,64 @@ type Common = {
   iconSize?: "sm" | "md";
   /** A glyph before the label, 18px unless `iconSize` says otherwise. */
   icon?: ReactNode;
+  /**
+   * Pressed, and waiting.
+   *
+   * The label and icon give way to one spinner — not to a sequence of them
+   * naming each internal step, which is what the order sheet used to do. Those
+   * names churned across the parts that took no time and then held still on the
+   * part that did. Also disables the button: a second press on an order already
+   * in flight is never what anyone meant.
+   */
+  loading?: boolean;
   children: ReactNode;
   className?: string;
 };
 
-const classes = (variant: ButtonVariant, size: "md" | "lg", iconSize: "sm" | "md", className = "") =>
-  `button-${variant} inline-flex ${size === "lg" ? "h-10" : "h-8 max-sm:h-10"} shrink-0 items-center justify-center gap-1 rounded-full px-6 text-[14px] font-medium whitespace-nowrap select-none disabled:cursor-not-allowed disabled:opacity-50 ${iconSize === "md" ? "[&_svg]:size-4" : "[&_svg]:size-[18px]"} [&_svg]:[stroke-width:1] [&_svg_*]:[vector-effect:non-scaling-stroke] ${className}`;
+/*
+ * A loading button keeps its full strength, and is the one disabled button that
+ * does. Everywhere else the half-tint means "not available to you"; here it
+ * would mean "working", and the spinner is the only thing left saying so — a
+ * faded spinner reads as a stalled one. Written as an omission rather than an
+ * override because two `disabled:opacity-*` utilities have equal specificity,
+ * and which of them won would be decided by Tailwind's own output order.
+ */
+const classes = (
+  variant: ButtonVariant,
+  size: "md" | "lg",
+  iconSize: "sm" | "md",
+  className = "",
+  loading = false,
+) =>
+  `button-${variant} inline-flex ${size === "lg" ? "h-10" : "h-8 max-sm:h-10"} shrink-0 items-center justify-center gap-1 rounded-full px-6 text-[14px] font-medium whitespace-nowrap select-none ${loading ? "cursor-wait" : "disabled:cursor-not-allowed disabled:opacity-50"} ${iconSize === "md" ? "[&_svg]:size-4" : "[&_svg]:size-[18px]"} [&_svg]:[stroke-width:1] [&_svg_*]:[vector-effect:non-scaling-stroke] ${className}`;
 
 export const Button = ({
   variant = "secondary",
   size = "md",
   iconSize = "sm",
   icon,
+  loading = false,
   children,
   className,
   type = "button",
+  disabled,
   ...rest
 }: Common & ButtonHTMLAttributes<HTMLButtonElement>) => (
-  <button type={type} className={classes(variant, size, iconSize, className)} {...rest}>
-    {icon}
-    {children}
+  <button
+    type={type}
+    className={classes(variant, size, iconSize, className, loading)}
+    disabled={disabled === true || loading}
+    aria-busy={loading || undefined}
+    {...rest}
+  >
+    {loading ? (
+      <Spinner />
+    ) : (
+      <>
+        {icon}
+        {children}
+      </>
+    )}
   </button>
 );
 
