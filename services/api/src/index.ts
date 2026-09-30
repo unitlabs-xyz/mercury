@@ -3,6 +3,7 @@ import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig
 import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
+import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
 import { keypairRelaySigner } from "./relay/signer.js";
@@ -98,6 +99,24 @@ every("wallet-events", 30_000, async () => {
     `${s.written} rows across ${s.checked}/${s.wallets} wallets` +
     (s.failed > 0 ? `, ${s.failed} failed` : "")
   );
+});
+
+/**
+ * An hour, because this is the only record of what an account used to be worth
+ * and nothing can reconstruct a reading that was never taken. Everything else
+ * here can catch up after an outage; this cannot.
+ *
+ * `every` runs a job as soon as the process starts, so a deploy takes the
+ * current hour's reading immediately rather than waiting up to an hour for its
+ * first one. The primary key on (user, hour) is what makes that safe.
+ *
+ * `read.portfolio` is the same dependency set GET /v1/portfolio reads through,
+ * so the chart and the page's headline figure cannot come from different books.
+ */
+every("portfolio-snapshot", 60 * 60 * 1000, async () => {
+  const s = await snapshotAllPortfolios(auth.db, read.portfolio, new Date());
+  if (s.wallets === 0) return null;
+  return `${s.written}/${s.wallets} accounts` + (s.failed > 0 ? `, ${s.failed} failed` : "");
 });
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {

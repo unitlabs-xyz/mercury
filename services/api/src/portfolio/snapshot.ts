@@ -1,0 +1,100 @@
+import { eq } from "drizzle-orm";
+import { toWire } from "@mercury/core";
+import type { ChainReader } from "@mercury/chain";
+import type { PriceBoard } from "@mercury/market";
+import type { Db } from "../db/client.js";
+import { portfolioSnapshots, users, wallets } from "../db/schema.js";
+import { hourOf } from "./history.js";
+import { cashFrom, valuePortfolio, type ValuableHolding } from "./value.js";
+
+export interface SnapshotDeps {
+  readonly holdings: (userId: string) => Promise<readonly ValuableHolding[]>;
+  readonly prices: PriceBoard;
+  readonly chain: ChainReader;
+  readonly usdcMint: string;
+}
+
+export interface SnapshotSummary {
+  readonly wallets: number;
+  readonly written: number;
+  readonly failed: number;
+}
+
+/** As position-sync: enough in flight to batch, few enough that the node keeps the connections. */
+const CONCURRENCY = 8;
+
+/**
+ * What every account is worth, written once an hour.
+ *
+ * This is the only table in the system whose value is that it is old. Nothing
+ * else records history — a position is overwritten as the chain moves, and a
+ * price board is spot — so a reading missed is a gap in the chart forever,
+ * which is why an account that cannot be read costs only its own row.
+ *
+ * An empty account is recorded as zero rather than skipped. A line that starts
+ * the day someone's first deposit lands is the line they want to see; one that
+ * starts at their first deposit's value has no beginning to measure from.
+ */
+export async function snapshotAllPortfolios(
+  db: Db,
+  deps: SnapshotDeps,
+  now: Date,
+): Promise<SnapshotSummary> {
+  const rows = await db
+    .select({ userId: users.id, address: wallets.address })
+    .from(wallets)
+    .innerJoin(users, eq(users.id, wallets.userId))
+    .where(eq(wallets.isPrimary, true));
+
+  const capturedAt = hourOf(now);
+  let written = 0;
+  let failed = 0;
+
+  // A shared index rather than a chunked split, so a slow wallet holds up only
+  // itself. Counters are safe to share: this runs on one thread.
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const row = rows[next++];
+      if (row === undefined) return;
+      try {
+        const [held, balances] = await Promise.all([
+          deps.holdings(row.userId),
+          deps.chain.tokenBalances(row.address),
+        ]);
+        const board = await deps.prices.pricesFor(held.flatMap((h) => h.wrappers.map((w) => w.mint)));
+        const value = valuePortfolio(held, board, cashFrom(balances, deps.usdcMint));
+
+        await db
+          .insert(portfolioSnapshots)
+          .values({
+            userId: row.userId,
+            capturedAt,
+            totalUsd: toWire(value.totalUsd),
+            stocksUsd: toWire(value.stocksUsd),
+            cashUsd: toWire(value.cashUsd),
+          })
+          // A deploy mid-hour re-reads the same hour. The later reading is the
+          // better one — it is closer to the top of the next hour — so it wins.
+          .onConflictDoUpdate({
+            target: [portfolioSnapshots.userId, portfolioSnapshots.capturedAt],
+            set: {
+              totalUsd: toWire(value.totalUsd),
+              stocksUsd: toWire(value.stocksUsd),
+              cashUsd: toWire(value.cashUsd),
+            },
+          });
+        written += 1;
+      } catch (error: unknown) {
+        failed += 1;
+        // The wallet, never the address: an address in a log is a person's
+        // holdings in a log.
+        console.error(`portfolio-snapshot: wallet for user ${row.userId} failed`, error);
+      }
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rows.length) }, worker));
+
+  return { wallets: rows.length, written, failed };
+}
