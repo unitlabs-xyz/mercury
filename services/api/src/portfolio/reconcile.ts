@@ -60,6 +60,21 @@ export interface Reconciliation {
 }
 
 /** Smallest units to whole tokens. Exact: a Decimal divide, never a float. */
+/**
+ * Below this, a rise in the multiplier is arithmetic rather than a dividend.
+ *
+ * Shares are stored to eighteen decimal places, and the multiplier is read
+ * fresh from the mint on every pass. So the recorded multiplier is a rounded
+ * quotient chasing an unrounded one, and it can miss by the last few bits
+ * forever — which it did: one "paid a dividend" row every two seconds, each
+ * adding nothing, because the gap the write was meant to close survived the
+ * rounding that wrote it.
+ *
+ * A billionth of a share is far below any dividend a holder could receive and
+ * far above what that rounding can produce, so it separates the two cleanly.
+ */
+const DIVIDEND_FLOOR = D("0.000000001");
+
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
 
 /**
@@ -106,8 +121,8 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     const recordedQty = scaled(token.recordedRawAmount, token.decimals);
     if (recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
       const recordedMultiplier = recordedShares.div(recordedQty);
-      if (token.multiplier.gt(recordedMultiplier)) {
-        const gained = recordedQty.mul(token.multiplier.sub(recordedMultiplier));
+      const gained = recordedQty.mul(token.multiplier.sub(recordedMultiplier));
+      if (gained.gte(DIVIDEND_FLOOR)) {
         lots.push({
           tokenId: token.tokenId,
           instrumentId: token.instrumentId,

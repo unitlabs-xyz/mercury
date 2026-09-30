@@ -118,6 +118,64 @@ describe("planReconciliation: a dividend", () => {
     expect(planReconciliation([after], NOW).lots).toEqual([]);
   });
 
+  /*
+   * The loop that reached production. `apply` stores shares through
+   * `toFixed(18)` and reads the multiplier fresh from the mint, so the
+   * recorded multiplier is a rounded quotient chasing an unrounded one. With a
+   * holding that does not divide evenly it missed by the last few bits every
+   * time, and wrote a "paid a dividend" row every two seconds, each adding
+   * nothing.
+   *
+   * This runs the real feedback path: plan, round the way the database does,
+   * feed it back. The second pass must be silent.
+   */
+  it("settles after one pass even when the shares do not divide evenly", () => {
+    // 0.006778 tokens, as a real $5 buy of META produced.
+    const raw = 678n;
+    const decimals = 5;
+    const multiplier = D("1.000000000000000007");
+
+    const first = planReconciliation(
+      [
+        held({
+          chainRawAmount: raw,
+          recordedRawAmount: raw,
+          decimals,
+          multiplier,
+          recordedShares: D("0.00678"),
+        }),
+      ],
+      NOW,
+    );
+    const gained = first.lots.reduce((t, l) => t.add(l.shares), D(0));
+
+    // Stored the way apply.ts stores it, and read back.
+    const stored = D(D("0.00678").add(gained).toFixed(18));
+    const second = planReconciliation(
+      [held({ chainRawAmount: raw, recordedRawAmount: raw, decimals, multiplier, recordedShares: stored })],
+      NOW,
+    );
+    expect(second.lots).toEqual([]);
+    expect(second.activity).toEqual([]);
+  });
+
+  /* A row saying "0 shares added, at no cost" is not a dividend. */
+  it("never writes a dividend that adds nothing", () => {
+    const plan = planReconciliation(
+      [
+        held({
+          chainRawAmount: 678n,
+          recordedRawAmount: 678n,
+          decimals: 5,
+          multiplier: D("1.0000000000000000001"),
+          recordedShares: D("0.00678"),
+        }),
+      ],
+      NOW,
+    );
+    expect(plan.activity).toEqual([]);
+  });
+
   it("writes nothing at all when nothing moved", () => {
     const plan = planReconciliation([withLot()], NOW);
     expect(plan.lots).toEqual([]);
