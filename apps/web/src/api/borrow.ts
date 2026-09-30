@@ -177,6 +177,30 @@ export const useBorrowAction = () => {
         if (sent.status === "failed") throw new Error(sent.error ?? "The transaction failed on chain.");
         signatures.push(sent.signature);
       }
+
+      /*
+       * Tell the server what just happened.
+       *
+       * Nothing else can. Kamino pays into this wallet, so every job watching
+       * balances sees a loan as cash arriving; only the client knows it asked
+       * to borrow $500 against SPYx rather than receive $500 from a friend.
+       *
+       * The last signature is the action's own — an earlier one is the one-time
+       * obligation setup, which moved nothing and has nothing to record.
+       *
+       * Deliberately not awaited into the result, and deliberately swallowed:
+       * the money has already moved. A confirm that fails costs a row in the
+       * feed, and throwing here would tell somebody their borrow failed when it
+       * did not.
+       */
+      const signature = signatures.at(-1);
+      if (signature !== undefined) {
+        await apiFetch("/v1/borrow/confirm", {
+          method: "POST",
+          body: JSON.stringify({ signature, action: intent }),
+        }).catch(() => undefined);
+      }
+
       setStep("done");
       return { signatures };
     },

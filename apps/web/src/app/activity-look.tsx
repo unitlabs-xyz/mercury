@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowDown, ArrowUp, Clock, Grid, Plus, Refresh, Trend } from "../ui/icons";
+import { ArrowDown, ArrowUp, Clock, Grid, Lock, Plus, Refresh, Trend } from "../ui/icons";
 import type { EventKind } from "./activity-data";
 
 /** The mark and tint for each kind of event, shared by the feed and the dashboard. */
@@ -12,4 +12,11 @@ export const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
   send: { icon: <ArrowUp className="size-4" />, tone: "bg-chip text-ink-soft" },
   interest: { icon: <Plus className="size-4" />, tone: "bg-up-tint text-up-deep" },
   queued: { icon: <Clock className="size-4" />, tone: "bg-warn-tint text-warn" },
+  // Money, so the same arrows cash uses. Borrowing is not a gain, so it takes
+  // the neutral chip rather than the green one a dividend gets.
+  borrow: { icon: <ArrowDown className="size-4" />, tone: "bg-chip text-ink-soft" },
+  repay: { icon: <ArrowUp className="size-4" />, tone: "bg-chip text-ink-soft" },
+  // Collateral, not money: a lock going on and coming off.
+  pledge: { icon: <Lock className="size-4" />, tone: "bg-chip text-ink-soft" },
+  unpledge: { icon: <Lock className="size-4" />, tone: "bg-up-tint text-up-deep" },
 };
