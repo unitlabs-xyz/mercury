@@ -54,6 +54,8 @@ export interface ActivityItem {
   readonly subtitle: string | null;
   readonly amountUsd: string | null;
   readonly txSignature: string | null;
+  readonly mint: string | null;
+  readonly logoUrl: string | null;
 }
 
 export const useActivityFeed = () => {

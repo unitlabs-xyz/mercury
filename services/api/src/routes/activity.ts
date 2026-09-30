@@ -10,6 +10,10 @@ export interface ActivityRow {
   readonly subtitle: string | null;
   readonly amountUsd: string | null;
   readonly txSignature: string | null;
+  /** Wrapped SOL for native SOL, the USDC mint for cash, else the stock token. */
+  readonly mint: string | null;
+  /** The instrument behind the mint, when the mint is a stock we list. */
+  readonly logoUrl: string | null;
 }
 
 export interface Cursor {
@@ -71,6 +75,8 @@ export function activityRoutes(deps: ActivityDeps): Hono {
         occurredAt: i.occurredAt.toISOString(),
         title: i.title,
         subtitle: i.subtitle,
+        mint: i.mint,
+        logoUrl: i.logoUrl,
         amountUsd: i.amountUsd,
         txSignature: i.txSignature,
       })),

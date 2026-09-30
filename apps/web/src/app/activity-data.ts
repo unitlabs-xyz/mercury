@@ -15,6 +15,10 @@ export type Event = {
   pending?: boolean;
   details: Detail[];
   signature?: string;
+  /** Wrapped SOL for native SOL, the USDC mint for cash, else a stock token. */
+  mint?: string;
+  /** The stock's mark, when the mint is one we list. */
+  logo?: string;
 };
 
 export type Day = { date: string; events: Event[] };

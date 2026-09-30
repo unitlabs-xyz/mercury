@@ -8,7 +8,7 @@ import { type Event, type Group } from "./activity-data";
 import { downloadCsv } from "./activity-export";
 import { MONTH_OPTIONS, TYPE_OPTIONS, filterEvents, groupByDay, yearOptions } from "./activity-filters";
 import { useEvents } from "./useEvents";
-import { EVENT_ICON } from "./portfolio/Feed";
+import { ActivityMark } from "./activity-mark";
 import { Skeleton } from "./portfolio/ui";
 import { Select } from "../ui/Select";
 import { useActivityParams } from "./useActivityParams";
@@ -81,7 +81,7 @@ const Row = ({ event }: { event: Event }) => {
         onClick={() => setOpen((v) => !v)}
         className="flex h-15 w-full items-center gap-3 px-4 text-left"
       >
-        <span className="shrink-0 [&>svg]:size-9">{EVENT_ICON[event.kind]}</span>
+        <ActivityMark event={event} />
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-[5px]">
             <span className="truncate text-[14px] leading-[18px] font-medium text-ds-ink">{event.title}</span>
