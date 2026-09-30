@@ -93,17 +93,6 @@ POST /v1/baskets/:slug/invest
 `preview` runs the full decision on every leg without executing, which is what makes the
 all-or-nothing rule in [04](04-execution-engine.md) visible to the user before they commit.
 
-## Recurring
-
-```
-GET  /v1/plans
-POST /v1/plans
-     { usdAmount, cadence, allocations: [{ targetKind, targetId, weightBps }] }
-POST /v1/plans/:id/pause
-POST /v1/plans/:id/resume
-DELETE /v1/plans/:id
-```
-
 ## Money
 
 ```

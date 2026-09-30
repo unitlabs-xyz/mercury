@@ -138,17 +138,7 @@ Semiconductors                         +18.4% past 12 months
 Basket page: name, performance, fee, minimum, constituents with weight bars, one amount input.
 A line under the button reading _"Buys all six. Held afterwards as one position."_
 
-### 3.7 Recurring
-
-A fixed amount weekly or monthly, split across stocks and baskets by percentage.
-
-```
-$200 monthly, next on 1 October
-  60% Semiconductors basket
-  40% S&P 500
-```
-
-### 3.8 Money
+### 3.7 Money
 
 - **Balance** — stablecoins available to invest, the rate they earn, interest earned this year
 - **Receive** — wallet address and QR code
@@ -157,13 +147,13 @@ $200 monthly, next on 1 October
 
 No bank transfers, no card top-ups, no cash withdrawals.
 
-### 3.9 Activity
+### 3.8 Activity
 
-Reverse-chronological, grouped by day. Buys, sells, basket investments, recurring runs,
-dividends recognised, sends, receives. Each row: icon, title, subtitle, amount. Expanding shows
+Reverse-chronological, grouped by day. Buys, sells, basket investments, dividends recognised,
+sends, receives. Each row: icon, title, subtitle, amount. Expanding shows
 the detail and the transaction signature. Settings live behind a button in the corner.
 
-### 3.10 Market-closed banner
+### 3.9 Market-closed banner
 
 Persistent across Invest while the US market is shut. Shows the session, when it reopens, and a
 line saying prices can drift while it is closed. **Amber, not red — it is a fact, not an error.**
@@ -236,7 +226,7 @@ All links verified working.
 | App           | What to take                                                                             | Link                                                                                              |
 | ------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | **M1**        | Portfolio home — one value, then holdings. Also the cash screen and the borrowing screen | https://m1.com · https://apps.apple.com/us/app/m1-invest-bank-smarter/id1071915644                |
-| **smallcase** | Baskets: publisher, past return, minimum, risk badge. And the recurring-plan screen      | https://www.smallcase.com · https://apps.apple.com/us/app/smallcase-save-invest/id1345309437      |
+| **smallcase** | Baskets: publisher, past return, minimum, risk badge                                     | https://www.smallcase.com · https://apps.apple.com/us/app/smallcase-save-invest/id1345309437      |
 | **Backpack**  | The closest live competitor — stocks and crypto in one portfolio on Solana               | https://backpack.exchange · https://apps.apple.com/us/app/backpack-trade-invest-earn/id6445964121 |
 | **Public**    | Clean investing UI, good empty and education states                                      | https://public.com · https://apps.apple.com/us/app/public-invest-trade/id1204112719               |
 | **Jupiter**   | Swap/quote UI on Solana — what a route and a price impact look like                      | https://jup.ag                                                                                    |

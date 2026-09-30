@@ -10,15 +10,14 @@ window (to 23 Oct), and what comes after. Landing CTA switches from Login to **J
 **One line:** Your investment account, in your own wallet, open every hour of the week.
 
 **Plain version:** Hold stablecoins, buy real US stocks and ETFs, put money into ready-made
-baskets, invest on a schedule. Later: borrow against what you own, and spend with a card
-without selling.
+baskets. Later: borrow against what you own, and spend with a card without selling.
 
 **Message ladder** (reveal in this order; each phase adds one rung):
 
 | Rung           | Message                                                                                                          | Proof we can show                              |
 | -------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | 1. The problem | Tokenized stocks are real, but the same share can cost you 7x through the wrong token, and nothing warns you     | `docs/01-evidence.md`, Finding 2               |
-| 2. The product | An investment account in your wallet: stocks, baskets, recurring, one portfolio                                  | The web app                                    |
+| 2. The product | An investment account in your wallet: stocks, baskets, one portfolio                                             | The web app                                    |
 | 3. The edge    | We check both issuers on every order; we wait rather than fill at a weekend premium; we count shares, not tokens | Issuer comparison, queue state, exposure sheet |
 | 4. The trust   | Your wallet, your keys. Leaving is trivial and we say so                                                         | Custody section, send flow                     |
 | 5. The future  | Borrow without selling. Spend without selling. Creator baskets                                                   | Roadmap only, labelled "coming"                |

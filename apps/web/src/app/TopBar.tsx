@@ -4,16 +4,15 @@ import { useSession } from "../market/hooks";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderChrome } from "./HeaderChrome";
 
-export type NavKey = "portfolio" | "invest" | "baskets" | "recurring" | "money" | "activity";
+export type NavKey = "portfolio" | "invest" | "baskets" | "money" | "activity";
 
-type Item = { key: NavKey; label: string; to?: string };
+type Item = { key: NavKey; label: string; to: string };
 
 /** Text only, as in the design: the current section is ink, the rest muted. */
 const NAV: Item[] = [
   { key: "portfolio", label: "Portfolio", to: "/portfolio" },
   { key: "invest", label: "Invest", to: "/invest" },
   { key: "baskets", label: "Baskets", to: "/baskets" },
-  { key: "recurring", label: "Recurring" },
   { key: "money", label: "Money", to: "/money" },
   { key: "activity", label: "Activity", to: "/activity" },
 ];
@@ -59,19 +58,11 @@ const style = (current: boolean) =>
     current ? "text-ds-ink" : "text-ds-muted hover:text-ds-ink"
   }`;
 
-/** Items without a route are inert until their screen exists. */
-const NavItem = ({ item, current }: { item: Item; current: boolean }) => {
-  const body = item.label;
-  return item.to ? (
-    <Link to={item.to} aria-current={current ? "page" : undefined} className={style(current)}>
-      {body}
-    </Link>
-  ) : (
-    <button type="button" aria-disabled className={style(false)}>
-      {body}
-    </button>
-  );
-};
+const NavItem = ({ item, current }: { item: Item; current: boolean }) => (
+  <Link to={item.to} aria-current={current ? "page" : undefined} className={style(current)}>
+    {item.label}
+  </Link>
+);
 
 const Nav = ({ current, className }: { current: NavKey; className: string }) => (
   <nav aria-label="Main" className={className}>

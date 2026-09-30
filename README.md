@@ -19,8 +19,8 @@
 ---
 
 Mercury brings the simplicity of a modern financial account to the onchain world. Hold
-stablecoins, invest in stocks, ETFs, and curated portfolios, automate your investments, and spend
-everyday with the Mercury Card — while keeping your wealth in one place.
+stablecoins, invest in stocks, ETFs, and curated portfolios, and spend everyday with the Mercury
+Card — while keeping your wealth in one place.
 
 Built on Solana for Colosseum's Crypto World's Fair. Submissions close **12 October 2026**.
 
@@ -53,7 +53,7 @@ apps/
   landing/    Astro on bun. Marketing site. Outside the pnpm workspace.
 services/
   api/        Hono on Node. The only thing the apps talk to.
-  worker/     Scheduled work: recurring buys, order watching, price cache.
+  worker/     Scheduled work: order watching, price cache.
 packages/
   core/       Domain logic with no I/O. Pricing, wrapper choice, cost basis, baskets.
   chain/      Solana adapters. Jupiter, Symmetry, Kamino, RPC, token registry.

@@ -17,7 +17,6 @@ const KIND: Record<string, EventKind> = {
   buy: "buy",
   sell: "sell",
   basket: "basket",
-  recurring: "recurring",
   queued: "queued",
 };
 
@@ -30,7 +29,6 @@ const FLOW: Partial<Record<EventKind, "in" | "out">> = {
   send: "out",
   buy: "out",
   basket: "out",
-  recurring: "out",
 };
 
 export const toEvent = (i: ActivityItem): Event => {

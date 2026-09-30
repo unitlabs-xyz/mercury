@@ -1,6 +1,11 @@
 # ADR 0003 · Privy embedded wallets only
 
 **Status:** accepted · 19 September 2026 · supersedes the provisional version
+**Amended 30 September 2026:** recurring investing was cut from the product. It appears below as
+one of the reasons for this decision, and that reasoning is left as written because it is what
+was argued at the time. The decision itself is unchanged: basket rebalancing and the delegated
+signing [ADR 0012](0012-silent-signing.md) requires both still need offline signing, which only
+an embedded wallet can do.
 
 ## Context
 

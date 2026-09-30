@@ -155,26 +155,7 @@ AMD 18, TSMC 14, ASML 10, Micron 6.
 
 ---
 
-### 2.6 Recurring — list and create
-
-**List:** each plan shows the amount, the cadence, the next date, and the split.
-
-```
-$200 monthly, next on 1 October
-  60% Semiconductors basket
-  40% S&P 500
-```
-
-**Create:** amount, cadence (weekly or monthly), then a split across stocks and baskets by
-percentage that must total 100. It draws from the stablecoin balance, so there is no bank
-connection to fail.
-
-**States:** a run that was skipped and why; a run that queued because the market was shut; not
-enough cash for the next run; paused.
-
----
-
-### 2.7 Money
+### 2.6 Money
 
 Four things:
 
@@ -189,10 +170,10 @@ No bank transfers, no card top-ups, no cash withdrawals. That is a decision, not
 
 ---
 
-### 2.8 Activity
+### 2.7 Activity
 
-One reverse-chronological list grouped by day: buys, sells, basket investments, recurring runs,
-dividends recognised, sends, receives. Each row has an icon, a title, a subtitle and an amount.
+One reverse-chronological list grouped by day: buys, sells, basket investments, dividends
+recognised, sends, receives. Each row has an icon, a title, a subtitle and an amount.
 
 Expanding a row shows the amounts, the issuer chosen, and the transaction signature with a link
 to the explorer.
@@ -201,12 +182,11 @@ to the explorer.
 
 ---
 
-### 2.9 Settings
+### 2.8 Settings
 
 Wallet — including **export your wallet**, which matters because leaving is trivial and we say
-so. Notifications. Currency display. Data export as a spreadsheet. Delegation controls:
-recurring investing asks the user to delegate, scoped and revocable in one tap, and this is where
-they revoke it.
+so. Notifications. Currency display. Data export as a spreadsheet. Delegation controls: any
+delegation granted to us is scoped, shown here, and revocable in one tap.
 
 ---
 
@@ -243,7 +223,7 @@ If only some get designed, this order:
 2. **Buy sheet, all three endings** — the queued and refused states are the product's character
 3. **Invest browse** — nothing else is reachable without it
 4. **Exposure sheet** — the screen no competitor can build
-5. Baskets, Recurring, Money, Activity, Settings
+5. Baskets, Money, Activity, Settings
 
 ---
 

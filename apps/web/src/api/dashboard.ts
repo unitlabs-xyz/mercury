@@ -54,7 +54,7 @@ export type CardAccount = {
 
 export type Upcoming = {
   readonly date: string;
-  readonly kind: "recurring" | "queued" | "card" | "interest" | "dividend" | "loan";
+  readonly kind: "queued" | "card" | "interest" | "dividend" | "loan";
   readonly title: string;
   readonly detail: string;
   readonly amountUsd: number | null;
