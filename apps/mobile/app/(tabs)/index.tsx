@@ -11,7 +11,9 @@ import {
   Icon,
   Mark,
   MovePill,
+  MoveChip,
   PressableScale,
+  StockLogo,
   Text,
   type Action,
   type IconName,
@@ -42,24 +44,37 @@ const ACCOUNT = {
 interface Holding {
   readonly ticker: string;
   readonly name: string;
-  readonly shares: number;
   readonly valueUsd: number;
-  readonly changePct: number;
+  readonly changePct: number | null;
 }
 
 const HOLDINGS: readonly Holding[] = [
-  { ticker: "NVDA", name: "NVIDIA", shares: 8.4, valueUsd: 1_742.2, changePct: 1.84 },
-  { ticker: "TSLA", name: "Tesla", shares: 3.1, valueUsd: 1_308.55, changePct: -0.62 },
-  { ticker: "AAPL", name: "Apple", shares: 5.2, valueUsd: 1_194.4, changePct: 0.31 },
-  { ticker: "MSFT", name: "Microsoft", shares: 2.0, valueUsd: 988.1, changePct: 0.77 },
-  { ticker: "SPCX", name: "SpaceX", shares: 4.0, valueUsd: 805.13, changePct: 0 },
+  { ticker: "NVDA", name: "NVIDIA", valueUsd: 1_742.2, changePct: 1.84 },
+  { ticker: "TSLA", name: "Tesla", valueUsd: 1_308.55, changePct: -0.62 },
+  { ticker: "AAPL", name: "Apple", valueUsd: 1_194.4, changePct: 0.31 },
+  { ticker: "MSFT", name: "Microsoft", valueUsd: 988.1, changePct: 0.77 },
+  { ticker: "SPCX", name: "SpaceX", valueUsd: 805.13, changePct: null },
 ];
 
 type EventKind = "buy" | "dividend" | "send" | "borrow";
 
+/**
+ * USDC's mark, as the web's `activity-mark.tsx` picks it: the Solana token
+ * list's own asset, which is the file every wallet on this chain already shows
+ * for this mint, rather than a mark of ours that would only half-match what
+ * people recognise. Cash is not a holding, so it never resolves to an
+ * instrument and cannot come from the API's logo column.
+ */
+const USDC_LOGO =
+  "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png";
+
 interface Event {
   readonly id: string;
   readonly kind: EventKind;
+  /** The instrument whose art leads the row; null when no asset explains it. */
+  readonly ticker: string | null;
+  /** Overrides the ticker's art — money, which has no instrument. */
+  readonly uri?: string;
   readonly title: string;
   readonly detail: string;
   readonly amountUsd: number;
@@ -67,11 +82,20 @@ interface Event {
 }
 
 const EVENTS: readonly Event[] = [
-  { id: "1", kind: "buy", title: "Bought NVDA", detail: "0.42 shares", amountUsd: -84.2, when: "Today" },
+  {
+    id: "1",
+    kind: "buy",
+    ticker: "NVDA",
+    title: "Bought NVIDIA",
+    detail: "0.42 shares at $200.48",
+    amountUsd: -84.2,
+    when: "Today",
+  },
   {
     id: "2",
     kind: "dividend",
-    title: "Dividend from AAPL",
+    ticker: "AAPL",
+    title: "Dividend from Apple",
     detail: "5.2 shares",
     amountUsd: 1.3,
     when: "Today",
@@ -79,35 +103,46 @@ const EVENTS: readonly Event[] = [
   {
     id: "3",
     kind: "borrow",
+    ticker: "SPCX",
     title: "Borrowed against SpaceX",
     detail: "USDC into your account",
     amountUsd: 500,
     when: "Yesterday",
   },
-  { id: "4", kind: "buy", title: "Bought TSLA", detail: "1.10 shares", amountUsd: -312.4, when: "Yesterday" },
-  { id: "5", kind: "send", title: "Sent USDC", detail: "To 7xKq…9mPt", amountUsd: -120, when: "Mon" },
+  {
+    id: "4",
+    kind: "buy",
+    ticker: "TSLA",
+    title: "Bought Tesla",
+    detail: "1.10 shares at $284.00",
+    amountUsd: -312.4,
+    when: "Yesterday",
+  },
+  {
+    id: "5",
+    kind: "send",
+    ticker: "USDC",
+    uri: USDC_LOGO,
+    title: "Sent USDC",
+    detail: "To 7xKq…9mPt",
+    amountUsd: -120,
+    when: "Mon",
+  },
 ];
 
 /* The web's activity look: a tinted circle, then the stroke, per kind. */
 const LOOK: Record<EventKind, { bg: string; fg: string; icon: IconName }> = {
-  buy: { bg: "#E5F4F5", fg: "#007682", icon: "trend" },
-  dividend: { bg: "#E4F3EC", fg: "#007242", icon: "plus" },
-  send: { bg: "#F4F2EC", fg: "#393830", icon: "arrowUp" },
-  borrow: { bg: "#FDF3D9", fg: "#925A0A", icon: "wallet" },
+  buy: { bg: color.actBuyTint, fg: color.actBuy, icon: "trend" },
+  dividend: { bg: color.actIncomeTint, fg: color.actIncome, icon: "plus" },
+  send: { bg: color.actSendTint, fg: color.actSend, icon: "arrowUp" },
+  borrow: { bg: color.warnTint, fg: color.warn, icon: "wallet" },
 };
 
 type Filter = "all" | "buys" | "income";
 
-/**
- * `pct` from `@mercury/view` is deliberately absolute — on the web an arrow or
- * a tinted chip beside it carries the sign. A rail card has neither, and a red
- * "0.62%" does not say which way it went, so the sign is put back here rather
- * than changed in the shared formatter the web depends on.
- */
-const signedPct = (v: number): string => `${v < 0 ? "\u2212" : "+"}${pct(v)}`;
-
-/** A share count without `shares`' three fixed places: 8.4, not 8.400. */
-const sh = (v: number): string => String(Number(v.toFixed(3)));
+/** The logo's diameter wherever one leads a row. One number, so the rail, the
+ *  loan row and the feed all indent their text to the same place. */
+const MARK = 36;
 
 export default function Portfolio() {
   const insets = useSafeAreaInsets();
@@ -201,13 +236,15 @@ export default function Portfolio() {
           <PressableScale haptic={false} activeScale={1} onPress={() => undefined} style={s.sectionHead}>
             <Text variant="headline">Recent activity</Text>
             <View style={s.viewAll}>
-              <Text variant="small" tone="muted">
-                View all
-              </Text>
-              <Icon name="chevronRight" size={13} color={color.muted} />
+              {/* The web's rail heads put this link in `--color-ds-link`, not in
+                  the muted grey. It is the only tappable thing on the row. */}
+              <RNText style={s.viewAllLabel}>View all</RNText>
+              <Icon name="chevronRight" size={13} color={color.link} />
             </View>
           </PressableScale>
 
+          {/* Inset by the chip's own padding, so a chip LABEL starts on the
+              same 20 as the heading above it rather than its pill's edge. */}
           <View style={s.chips}>
             {(["all", "buys", "income"] as const).map((k) => (
               <Chip
@@ -238,9 +275,10 @@ export default function Portfolio() {
 /**
  * The holdings rail: one card per position, scrolling sideways.
  *
- * Which three totals an account splits into is a question nobody opens an
- * investing app to ask. What they own is, and the rail answers it in the first
- * screenful — the full list is one tap past the end of it.
+ * No share count, following the web's holdings table and for its reason: the
+ * value above it is that count times the price, so printing both is the same
+ * number twice, and a fractional share count is the least useful way to say how
+ * much of something somebody holds.
  */
 const HoldingsRail = ({ holdings, masked }: { holdings: readonly Holding[]; masked: boolean }) => {
   if (holdings.length === 0) {
@@ -267,33 +305,20 @@ const HoldingsRail = ({ holdings, masked }: { holdings: readonly Holding[]; mask
       style={s.rail}
       contentContainerStyle={s.railRow}
     >
-      {holdings.map((h) => {
-        const moving = h.changePct !== 0;
-        return (
-          <PressableScale key={h.ticker} style={s.holdCard} onPress={() => undefined}>
-            <View style={s.logo}>
-              <RNText style={s.logoText}>{h.ticker.slice(0, 1)}</RNText>
-            </View>
-            <View style={s.holdText}>
-              <RNText style={s.holdTicker} numberOfLines={1}>
-                {h.ticker}
-              </RNText>
-              <RNText style={s.holdValue} numberOfLines={1}>
-                {masked ? "••••" : usd(h.valueUsd)}
-              </RNText>
-              <RNText
-                style={[
-                  s.holdChange,
-                  { color: !moving ? color.muted : h.changePct >= 0 ? color.up : color.down },
-                ]}
-                numberOfLines={1}
-              >
-                {masked ? "••••" : `${sh(h.shares)} sh · ${moving ? signedPct(h.changePct) : pct(0)}`}
-              </RNText>
-            </View>
-          </PressableScale>
-        );
-      })}
+      {holdings.map((h) => (
+        <PressableScale key={h.ticker} style={s.holdCard} onPress={() => undefined}>
+          <StockLogo ticker={h.ticker} size={MARK} />
+          <View style={s.holdText}>
+            <RNText style={s.holdName} numberOfLines={1}>
+              {h.name}
+            </RNText>
+            <RNText style={s.holdValue} numberOfLines={1}>
+              {masked ? "••••" : usd(h.valueUsd)}
+            </RNText>
+          </View>
+          {masked ? <View style={s.chipGhost} /> : <MoveChip value={h.changePct} />}
+        </PressableScale>
+      ))}
 
       {/* At the END of the rail, so it is what scrolling reaches rather than a
           control competing with the first card. */}
@@ -330,14 +355,14 @@ const Pot = ({
 /**
  * What is owed, and the fall that would cost somebody their shares.
  *
- * The line under the figure is the web's `borrowedSub`: once something is
+ * The line under the label is the web's `borrowedSub`: once something is
  * borrowed, the cushion is the number that matters, not the headroom — and it
  * is the one that shrinks every time a loan buys more collateral.
  */
 const Borrowed = ({ masked }: { masked: boolean }) => (
   <PressableScale activeScale={0.99} style={s.borrowed} onPress={() => undefined}>
-    <View style={s.borrowedDot}>
-      <Icon name="wallet" size={15} color={color.warn} />
+    <View style={s.borrowedMark}>
+      <Icon name="wallet" size={16} color={color.warn} />
     </View>
     <View style={s.borrowedMid}>
       <RNText style={s.potLabel}>BORROWED</RNText>
@@ -347,7 +372,7 @@ const Borrowed = ({ masked }: { masked: boolean }) => (
     </View>
     {/* `usd(v, 0)`, not `usdCompact`: Hermes' Intl ignores `notation: "compact"`
         and silently returns the long form with one stray decimal — $2,500.0. */}
-    <RNText style={s.borrowedFigure}>{masked ? "••••" : `\u2212${usd(ACCOUNT.debtUsd, 0)}`}</RNText>
+    <RNText style={s.borrowedFigure}>{masked ? "••••" : `−${usd(ACCOUNT.debtUsd, 0)}`}</RNText>
     <Icon name="chevronRight" size={14} color={color.faint} />
   </PressableScale>
 );
@@ -357,9 +382,20 @@ const EventRow = ({ event, masked }: { event: Event; masked: boolean }) => {
   const credit = event.amountUsd >= 0;
   return (
     <PressableScale haptic={false} activeScale={0.99} style={s.row} onPress={() => undefined}>
-      <View style={[s.rowArt, { backgroundColor: look.bg }]}>
-        <Icon name={look.icon} size={16} color={look.fg} />
-      </View>
+      {/* The stock's own logo where there is one, as the web's activity feed
+          does; the tinted kind mark is for what no instrument explains. */}
+      {event.ticker === null ? (
+        <View style={[s.rowArt, { backgroundColor: look.bg }]}>
+          <Icon name={look.icon} size={16} color={look.fg} />
+        </View>
+      ) : (
+        <View>
+          <StockLogo ticker={event.ticker} uri={event.uri} size={MARK} />
+          <View style={[s.rowBadge, { backgroundColor: look.bg }]}>
+            <Icon name={look.icon} size={9} color={look.fg} strokeWidth={2.4} />
+          </View>
+        </View>
+      )}
       <View style={s.rowMid}>
         <RNText style={s.rowTitle} numberOfLines={1}>
           {event.title}
@@ -396,7 +432,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: space.screen,
+    paddingBottom: 18,
   },
   brand: { flexDirection: "row", alignItems: "center", gap: 8 },
   wordmark: { fontFamily: font.bold, fontSize: 19, letterSpacing: -0.5, color: color.ink },
@@ -413,32 +449,32 @@ const s = StyleSheet.create({
      padding instead of stopping short of both edges. */
   rail: { marginTop: 18, marginHorizontal: -space.screen },
   railRow: { flexDirection: "row", gap: 10, paddingHorizontal: space.screen },
-  holdCard: { width: 136, gap: 12, padding: 13, borderRadius: radius.xl, backgroundColor: color.tile },
-  logo: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: color.surface,
-    alignItems: "center",
-    justifyContent: "center",
+  holdCard: {
+    width: 146,
+    gap: 12,
+    padding: 13,
+    borderRadius: radius.xl,
+    backgroundColor: color.tile,
+    alignItems: "flex-start",
   },
-  logoText: { fontFamily: font.bold, fontSize: 15, letterSpacing: -0.3, color: color.ink },
-  holdText: { gap: 2 },
-  holdTicker: { fontFamily: font.medium, fontSize: 11, letterSpacing: 0.3, color: color.muted },
+  holdText: { gap: 3, alignSelf: "stretch" },
+  holdName: { fontFamily: font.medium, fontSize: 13, letterSpacing: -0.26, color: color.muted },
   holdValue: { fontFamily: font.medium, fontSize: 19, letterSpacing: -0.5, color: color.ink },
-  holdChange: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.15 },
+  /* Holds the row's height while the figures are hidden, so masking does not
+     make every card jump shorter. */
+  chipGhost: { height: 20 },
 
   allCard: {
-    width: 100,
+    width: 104,
     padding: 13,
     borderRadius: radius.xl,
     backgroundColor: color.tile,
     justifyContent: "space-between",
   },
   allMark: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: MARK,
+    height: MARK,
+    borderRadius: MARK / 2,
     backgroundColor: color.ink,
     alignItems: "center",
     justifyContent: "center",
@@ -455,8 +491,8 @@ const s = StyleSheet.create({
     backgroundColor: color.tile,
   },
   railEmptyTile: {
-    width: 36,
-    height: 36,
+    width: MARK,
+    height: MARK,
     borderRadius: radius.md,
     backgroundColor: color.surface,
     alignItems: "center",
@@ -466,16 +502,16 @@ const s = StyleSheet.create({
 
   pots: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     gap: 14,
-    marginTop: 10,
-    paddingVertical: 12,
+    marginTop: 12,
+    paddingVertical: 13,
     paddingHorizontal: 14,
     borderRadius: radius.lg,
     backgroundColor: color.tile,
   },
-  pot: { flex: 1, gap: 3 },
-  potSplit: { width: 1, alignSelf: "stretch", backgroundColor: color.divider },
+  pot: { flex: 1, gap: 4 },
+  potSplit: { width: 1, backgroundColor: color.divider },
   potLabel: { fontFamily: font.medium, fontSize: 10, letterSpacing: 0.6, color: color.muted },
   potFigure: { fontFamily: font.medium, fontSize: 20, letterSpacing: -0.4, color: color.ink },
   potNote: { fontFamily: font.regular, fontSize: 11.5, letterSpacing: -0.1, color: color.muted },
@@ -483,30 +519,24 @@ const s = StyleSheet.create({
   borrowed: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 11,
+    gap: 12,
     marginTop: 8,
-    paddingVertical: 11,
+    paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: radius.lg,
     backgroundColor: color.warnTint,
   },
-  borrowedDot: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.7)",
+  borrowedMark: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.72)",
     alignItems: "center",
     justifyContent: "center",
   },
-  borrowedMid: { flex: 1, gap: 3 },
-  borrowedNote: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.1, color: "#6B4A14" },
-  borrowedFigure: {
-    fontFamily: font.medium,
-    fontSize: 17,
-    letterSpacing: -0.34,
-    color: color.warn,
-    marginRight: 2,
-  },
+  borrowedMid: { flex: 1, gap: 4 },
+  borrowedNote: { fontFamily: font.regular, fontSize: 11.5, letterSpacing: -0.1, color: "#6B4A14" },
+  borrowedFigure: { fontFamily: font.medium, fontSize: 17, letterSpacing: -0.34, color: color.warn },
 
   bottomCard: {
     zIndex: 1,
@@ -514,7 +544,7 @@ const s = StyleSheet.create({
     backgroundColor: color.surface,
     borderTopLeftRadius: CARD_RADIUS,
     borderTopRightRadius: CARD_RADIUS,
-    /* Clears the tab bar. */
+    /* Clears the floating tab bar. */
     paddingBottom: 108,
   },
   grabber: {
@@ -530,11 +560,12 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: space.screen,
-    paddingTop: 14,
+    paddingTop: 16,
     paddingBottom: 10,
   },
-  viewAll: { flexDirection: "row", alignItems: "center", gap: 2 },
-  chips: { flexDirection: "row", gap: 4, paddingHorizontal: space.md, paddingBottom: 4 },
+  viewAll: { flexDirection: "row", alignItems: "center", gap: 3 },
+  viewAllLabel: { fontFamily: font.medium, fontSize: 13, letterSpacing: -0.26, color: color.link },
+  chips: { flexDirection: "row", gap: 4, paddingHorizontal: space.screen - 13, paddingBottom: 6 },
 
   empty: { paddingHorizontal: space.screen, paddingTop: 10, gap: 4 },
 
@@ -545,11 +576,31 @@ const s = StyleSheet.create({
     paddingHorizontal: space.screen,
     paddingVertical: 11,
   },
-  rowArt: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  rowMid: { flex: 1, gap: 2 },
-  rowTitle: { fontFamily: font.medium, fontSize: 14.5, letterSpacing: -0.29, color: color.ink },
-  rowDetail: { fontFamily: font.regular, fontSize: 12.5, letterSpacing: -0.15, color: color.muted },
-  rowEnd: { alignItems: "flex-end", gap: 2 },
-  rowAmount: { fontFamily: font.medium, fontSize: 14.5, letterSpacing: -0.29, color: color.ink },
-  rowWhen: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.1, color: color.muted },
+  rowArt: {
+    width: MARK,
+    height: MARK,
+    borderRadius: MARK / 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  /* The kind, on the logo. A ring of the card's own white cuts it out of the
+     art rather than letting the two marks touch. */
+  rowBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    width: 17,
+    height: 17,
+    borderRadius: 8.5,
+    borderWidth: 2,
+    borderColor: color.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowMid: { flex: 1, gap: 3 },
+  rowTitle: { fontFamily: font.medium, fontSize: 14, letterSpacing: -0.28, color: color.ink },
+  rowDetail: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.12, color: color.muted },
+  rowEnd: { alignItems: "flex-end", gap: 3 },
+  rowAmount: { fontFamily: font.medium, fontSize: 14, letterSpacing: -0.28, color: color.ink },
+  rowWhen: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.12, color: color.muted },
 });

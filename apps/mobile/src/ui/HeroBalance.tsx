@@ -75,8 +75,8 @@ export const MovePill = ({ pctText, usdText, up }: { pctText: string; usdText: s
 const m = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: space.sm },
   pill: { height: 24, paddingHorizontal: 9, justifyContent: "center", borderRadius: 7 },
-  upTint: { backgroundColor: color.upTint },
-  downTint: { backgroundColor: color.downTint },
+  upTint: { backgroundColor: color.upChip },
+  downTint: { backgroundColor: color.downChip },
   pct: { fontFamily: font.medium, fontSize: 12.5, letterSpacing: -0.2 },
   usd: { fontFamily: font.medium, fontSize: 12.5, letterSpacing: -0.2 },
   today: { fontFamily: font.regular, fontSize: 12.5, letterSpacing: -0.2, color: color.muted },

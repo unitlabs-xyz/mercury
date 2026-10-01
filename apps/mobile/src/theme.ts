@@ -19,17 +19,35 @@ export const color = {
   faint: "#9A9A9A",
   divider: "#E6E6E6",
   panel: "#F7F7F7",
+  tray: "#F7F7F7",
   tile: "#F3F3F3",
+  /* The ground a logo falls back to, `--color-ds-avatar`. */
+  avatar: "#D9D9D9",
+  cardline: "#E4E0D7",
   chevron: "#5C5C5C",
   link: "#007681",
 
-  /* movement. The chip tints are the web's `--color-ds-*-chip`. */
+  /* movement */
   up: "#1D7D1F",
-  upTint: "#E2F4E9",
   down: "#C0442F",
-  downTint: "#FBECE9",
+  /* The move chip, exactly as `--color-ds-up-chip` / `--color-ds-fall-chip`.
+     A fall uses `fall`, which is NOT `down`: the web draws a falling chip in
+     the hotter #D42919 and keeps #C0442F for body text. */
+  upChip: "rgba(89,200,87,0.14)",
+  /* The headline's own move chip, `--color-ds-down-chip`. Cooler than
+     `fallChip`, which the holdings rows use. */
+  downChip: "rgba(192,68,47,0.12)",
+  fall: "#D42919",
+  fallChip: "rgba(227,119,119,0.14)",
   warn: "#925A0A",
   warnTint: "#FDF3D9",
+  /* The activity marks, from `--color-ds-act-*`. */
+  actBuy: "#007682",
+  actBuyTint: "#E5F4F5",
+  actIncome: "#007242",
+  actIncomeTint: "#E4F3EC",
+  actSend: "#393830",
+  actSendTint: "#F4F2EC",
 
   /* brand */
   brand: "#0F7480",
