@@ -97,3 +97,87 @@ export const useBorrow = () => {
     refetchInterval: 60_000,
   });
 };
+
+/**
+ * One instrument on the shelf, as `GET /v1/instruments` returns it.
+ *
+ * Market data reaches this app through our own API, where the web reads it
+ * straight from the upstreams. That is a deliberate difference, not an
+ * oversight: the web's direct path is ADR 0011's fallback — the thing that
+ * still works when our API does not — and it exists because a browser can talk
+ * to Jupiter and Pyth as cheaply as we can. Repeating it here would mean a
+ * second copy of the pricing, anchoring and multiplier logic on a client that
+ * ships through review, which is a worse trade than the dependency.
+ */
+export interface Instrument {
+  readonly ticker: string;
+  readonly name: string;
+  readonly sector: string | null;
+  readonly logoUrl: string | null;
+  readonly pricePerShare: string;
+  readonly changePct24h: string;
+  /** The exchange calendar: "open", "closed", "pre", "post". */
+  readonly status: string;
+  /** Pool deep enough for a normal order. The rest carry their own cap. */
+  readonly featured: boolean;
+  readonly maxOrderUsd: string;
+  readonly holders: number;
+}
+
+export type Shelf = "featured" | "movers" | "popular";
+
+/**
+ * The shelf, or a search. Public: these routes answer without a session, so the
+ * list fills before anyone signs in rather than after.
+ *
+ * Fifteen seconds, matching the server's own price cache — polling faster than
+ * the thing being polled only costs round trips.
+ */
+export const useInstruments = (shelf: Shelf, query: string) => {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["api", "instruments", shelf, q],
+    queryFn: () =>
+      apiFetch<{ instruments: Instrument[] }>(
+        q.length > 0
+          ? `/v1/instruments?q=${encodeURIComponent(q)}`
+          : shelf === "featured"
+            ? "/v1/instruments"
+            : `/v1/instruments?shelf=${shelf}`,
+      ),
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+    /* A search's previous answer stays on screen while the next one loads, so
+       typing does not blank the list between keystrokes. */
+    placeholderData: (prev) => prev,
+  });
+};
+
+/** `[unix seconds, price]`, as the wire carries a point. */
+export type HistoryPoint = readonly [number, string];
+
+export interface Series {
+  readonly changePct: string;
+  readonly points: readonly HistoryPoint[];
+}
+
+/**
+ * Sparklines for a shelf: one span across many tickers, in one round trip.
+ *
+ * A minute, where the list refreshes every fifteen seconds. A sparkline is
+ * drawn to about fifty pixels wide; a point arriving sooner changes nothing a
+ * reader could see.
+ */
+export const useHistories = (tickers: readonly string[], span = "1D") => {
+  const key = [...tickers].sort().join(",");
+  return useQuery({
+    queryKey: ["api", "histories", span, key],
+    queryFn: () =>
+      apiFetch<{ span: string; series: Record<string, Series | null> }>(
+        `/v1/instruments/history?tickers=${encodeURIComponent(key)}&span=${span}`,
+      ),
+    enabled: tickers.length > 0,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+};

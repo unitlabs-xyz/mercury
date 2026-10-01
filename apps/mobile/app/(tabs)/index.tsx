@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from "re
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import type { Portfolio as PortfolioData } from "@mercury/types";
-import { GROUPS, toEvent, usd, usdSigned, type Event, type EventKind } from "@mercury/view";
+import { GROUPS, toEvent, usd, usdCompact, usdSigned, type Event, type EventKind } from "@mercury/view";
 import {
   ActionStrip,
   CARD_RADIUS,
@@ -435,8 +435,8 @@ const borrowedLine = (
   if (stale) return "As of an hour ago — we could not reach Kamino";
   if (b === undefined) return "Against your shares";
   if (b.health === "liquidation") return "Being sold now — repay to stop it";
-  if (b.health === "margin_call") return `Repay ${usd(b.overTargetUsd, 0)} now`;
-  if (b.health === "over_limit") return `Over the limit — repay ${usd(b.overTargetUsd, 0)}`;
+  if (b.health === "margin_call") return `Repay ${usdCompact(b.overTargetUsd)} now`;
+  if (b.health === "over_limit") return `Over the limit — repay ${usdCompact(b.overTargetUsd)}`;
   return b.safeUntilDrop === null
     ? "Against your shares"
     : `Safe unless your shares fall ${(b.safeUntilDrop * 100).toFixed(0)}%`;
@@ -463,8 +463,8 @@ const Borrowed = ({
         {borrowedLine(stale, borrow)}
       </RNText>
     </View>
-    {/* `usd(v, 0)`, not `usdCompact`: Hermes' Intl ignores `notation: "compact"`
-        and silently returns the long form with one stray decimal — $2,500.0. */}
+    {/* The whole figure, not a compact one: this is what is owed, and "$2.5K"
+        is the wrong precision for a number somebody repays. */}
     <RNText style={s.borrowedFigure}>{masked ? "••••" : `−${usd(debtUsd, 0)}`}</RNText>
     <Icon name="chevronRight" size={14} color={color.faint} />
   </PressableScale>
