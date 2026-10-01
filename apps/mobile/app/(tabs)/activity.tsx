@@ -1,5 +1,5 @@
-import { Screen } from "../../src/Screen";
+import { Screen } from "../../src/ui";
 
 export default function Activity() {
-  return <Screen title="Activity" />;
+  return <Screen title="Activity" subtitle="Not built yet." />;
 }

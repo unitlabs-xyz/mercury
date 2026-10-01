@@ -1,5 +1,5 @@
-import { Screen } from "../../src/Screen";
+import { Screen } from "../../src/ui";
 
 export default function Money() {
-  return <Screen title="Money" />;
+  return <Screen title="Money" subtitle="Not built yet." />;
 }

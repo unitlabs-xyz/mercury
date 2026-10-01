@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { Text, type ColorValue } from "react-native";
-import { c, t } from "../../src/tokens";
+import { color, type } from "../../src/theme";
 
 /**
  * Four tabs, as the design brief asked for.
@@ -14,11 +14,11 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: c.ink,
-        tabBarInactiveTintColor: c.muted,
-        tabBarStyle: { backgroundColor: c.white, borderTopColor: c.divider },
-        tabBarLabelStyle: { fontSize: t.tiny, fontWeight: "500" },
-        sceneStyle: { backgroundColor: c.page },
+        tabBarActiveTintColor: color.ink,
+        tabBarInactiveTintColor: color.muted,
+        tabBarStyle: { backgroundColor: color.surface, borderTopColor: color.divider },
+        tabBarLabelStyle: { fontSize: type.tiny.fontSize, fontWeight: "500" },
+        sceneStyle: { backgroundColor: color.page },
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Portfolio", tabBarIcon: mark("◴") }} />

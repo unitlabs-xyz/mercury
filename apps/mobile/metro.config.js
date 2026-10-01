@@ -32,6 +32,18 @@ config.resolver.nodeModulesPaths = [
 config.resolver.unstable_enableSymlinks = true;
 
 /*
+ * Read packages' `exports` maps, and ask for the React Native build first.
+ *
+ * Without this Metro falls back to `main`, and `jose` — which @privy-io/expo
+ * pulls in for JWT work — resolves to its Node build. That one opens with
+ * `import { createDecipheriv } from 'crypto'`, so the bundle fails on a module
+ * React Native does not have. jose ships a browser build that uses WebCrypto;
+ * the condition order below is what reaches it.
+ */
+config.resolver.unstable_enablePackageExports = true;
+config.resolver.unstable_conditionNames = ["react-native", "browser", "require", "import"];
+
+/*
  * `./format.js` means `./format.ts` in this repository.
  *
  * Every shared package writes its own imports with a `.js` extension —
