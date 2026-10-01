@@ -181,3 +181,57 @@ export const useHistories = (tickers: readonly string[], span = "1D") => {
     refetchInterval: 60_000,
   });
 };
+
+/** One wrapper token: the same stock, issued by someone. */
+export interface Wrapper {
+  readonly mint: string;
+  readonly symbol: string;
+  readonly issuer: "backed" | "ondo";
+  readonly decimals: number;
+  readonly multiplier: string;
+  readonly isRoutable: boolean;
+  readonly icon: string | null;
+  readonly liquidityUsd: string;
+  readonly holders: number;
+  readonly volume24hUsd: string;
+}
+
+export interface InstrumentDetail extends Instrument {
+  readonly description: string | null;
+  readonly liquidityUsd: string;
+  readonly volume24hUsd: string;
+  readonly wrappers: readonly Wrapper[];
+}
+
+export interface StockPage {
+  readonly instrument: InstrumentDetail;
+  readonly buyers30d: number;
+  readonly returns: { m1: string; m6: string; y1: string; cagr5y: string };
+}
+
+export const useInstrument = (ticker: string) =>
+  useQuery({
+    queryKey: ["api", "instrument", ticker],
+    queryFn: () => apiFetch<StockPage>(`/v1/instruments/${encodeURIComponent(ticker)}`),
+    enabled: ticker.length > 0,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+  });
+
+/** The ranges a stock's chart offers, as `@mercury/market` defines them. */
+export const SPANS = ["1D", "1W", "1M", "6M", "1Y", "5Y"] as const;
+export type Span = (typeof SPANS)[number];
+
+export const useInstrumentHistory = (ticker: string, span: Span) =>
+  useQuery({
+    queryKey: ["api", "instrument", ticker, "history", span],
+    queryFn: () =>
+      apiFetch<{ span: Span; changePct: string; points: readonly HistoryPoint[] }>(
+        `/v1/instruments/${encodeURIComponent(ticker)}/history?span=${span}`,
+      ),
+    enabled: ticker.length > 0,
+    staleTime: 60_000,
+    /* The previous range stays drawn while the next loads, so switching ranges
+       moves the line rather than blanking the card. */
+    placeholderData: (prev) => prev,
+  });

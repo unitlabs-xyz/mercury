@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text as RNText, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
@@ -26,6 +27,7 @@ const SESSION: Record<string, string> = {
 
 export default function Invest() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [shelf, setShelf] = useState<Shelf>("featured");
   const [query, setQuery] = useState("");
 
@@ -124,6 +126,7 @@ export default function Invest() {
                 instrument={i}
                 owned={owned.has(i.ticker)}
                 points={histories.data?.series[i.ticker]?.points}
+                onPress={() => router.push({ pathname: "/stock/[ticker]", params: { ticker: i.ticker } })}
               />
             ))
           )}
@@ -146,7 +149,9 @@ const Line = ({
   instrument: i,
   owned,
   points,
+  onPress,
 }: {
+  onPress: () => void;
   instrument: Instrument;
   owned: boolean;
   points: readonly (readonly [number, string])[] | undefined;
@@ -155,7 +160,7 @@ const Line = ({
   const values = useMemo(() => (points ?? []).map(([, p]) => Number(p)), [points]);
 
   return (
-    <PressableScale haptic={false} activeScale={0.99} style={s.row} onPress={() => undefined}>
+    <PressableScale haptic={false} activeScale={0.99} style={s.row} onPress={onPress}>
       <StockLogo ticker={i.ticker} uri={i.logoUrl ?? undefined} size={MARK} />
 
       <View style={s.mid}>

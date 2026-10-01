@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import type { Portfolio as PortfolioData } from "@mercury/types";
 import { GROUPS, toEvent, usd, usdCompact, usdSigned, type Event, type EventKind } from "@mercury/view";
@@ -83,6 +84,7 @@ const whenLabel = (isoDate: string): string => {
 
 export default function Portfolio() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [hidden, setHidden] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
@@ -114,7 +116,7 @@ export default function Portfolio() {
   const failed = portfolio.isError;
 
   const actions: readonly Action[] = [
-    { key: "invest", label: "Invest", icon: "trend", onPress: () => undefined },
+    { key: "invest", label: "Invest", icon: "trend", onPress: () => router.push("/invest") },
     { key: "cash", label: "Add cash", icon: "plus", onPress: () => undefined },
     { key: "send", label: "Send", icon: "arrowUp", tone: "brand", onPress: () => undefined },
     { key: "card", label: "Card", icon: "card", tone: "warm", onPress: () => undefined },
@@ -322,6 +324,7 @@ const HoldingsRail = ({
   masked: boolean;
   loading: boolean;
 }) => {
+  const router = useRouter();
   if (loading) {
     return (
       <View style={s.railLoading}>
@@ -341,7 +344,7 @@ const HoldingsRail = ({
 
   if (holdings.length === 0) {
     return (
-      <PressableScale style={s.railEmpty} onPress={() => undefined}>
+      <PressableScale style={s.railEmpty} onPress={() => router.push("/invest")}>
         <View style={s.railEmptyTile}>
           <Icon name="plus" size={17} color={color.ink} />
         </View>
@@ -364,7 +367,11 @@ const HoldingsRail = ({
       contentContainerStyle={s.railRow}
     >
       {holdings.map((h) => (
-        <PressableScale key={h.ticker} style={s.holdCard} onPress={() => undefined}>
+        <PressableScale
+          key={h.ticker}
+          style={s.holdCard}
+          onPress={() => router.push({ pathname: "/stock/[ticker]", params: { ticker: h.ticker } })}
+        >
           <StockLogo ticker={h.ticker} size={MARK} />
           <View style={s.holdText}>
             <RNText style={s.holdName} numberOfLines={1}>
@@ -384,7 +391,7 @@ const HoldingsRail = ({
 
       {/* At the END of the rail, so it is what scrolling reaches rather than a
           control competing with the first card. */}
-      <PressableScale style={s.allCard} onPress={() => undefined}>
+      <PressableScale style={s.allCard} onPress={() => router.push("/invest")}>
         <View style={s.allMark}>
           <Icon name="chevronRight" size={15} color={color.surface} />
         </View>

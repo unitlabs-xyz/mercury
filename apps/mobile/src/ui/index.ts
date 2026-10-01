@@ -13,3 +13,4 @@ export * from "./MoveChip.js";
 export * from "./StockLogo.js";
 export * from "./Skeleton.js";
 export * from "./Sparkline.js";
+export * from "./DotChart.js";

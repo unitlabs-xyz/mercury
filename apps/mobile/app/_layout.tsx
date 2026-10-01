@@ -58,9 +58,16 @@ const Gate = () => {
 
   useEffect(() => {
     if (!isReady) return;
-    const inApp = segments[0] === "(tabs)";
-    if (user === null && inApp) router.replace("/welcome" as never);
-    if (user !== null && !inApp) router.replace("/");
+    /*
+     * Named, not inferred. `segments[0] !== "(tabs)"` was the test, which read
+     * as "anywhere outside the tabs is the door" — so every pushed screen, a
+     * stock page included, bounced a signed-in person straight back to the
+     * portfolio.
+     */
+    const DOOR = ["welcome", "sign-in"];
+    const atDoor = DOOR.includes(segments[0] ?? "");
+    if (user === null && !atDoor) router.replace("/welcome" as never);
+    if (user !== null && atDoor) router.replace("/");
   }, [isReady, user, segments, router]);
 
   if (!isReady) return <Waiting />;

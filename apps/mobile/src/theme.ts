@@ -21,6 +21,10 @@ export const color = {
   panel: "#F7F7F7",
   tray: "#F7F7F7",
   tile: "#F3F3F3",
+  /* The dot grid: an unlit dot, and the one marking where the range opened. */
+  hair: "#F0EDE6",
+  dash: "#CFCBC2",
+
   /* The ground a logo falls back to, `--color-ds-avatar`. */
   avatar: "#D9D9D9",
   cardline: "#E4E0D7",
