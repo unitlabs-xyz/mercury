@@ -11,7 +11,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "works.hashira.mercury",
+      "bundleIdentifier": "com.trymercury.app",
       "icon": {
         "light": "./assets/icon.png",
         "dark": "./assets/icon-dark.png"
