@@ -5,16 +5,18 @@ type Variant = keyof typeof type;
 
 export interface TextProps extends RNTextProps {
   variant?: Variant;
-  tone?: "ink" | "muted" | "up" | "down" | "brand" | "warn";
+  tone?: keyof typeof TONE;
 }
 
 const TONE = {
   ink: color.ink,
   muted: color.muted,
+  faint: color.faint,
   up: color.up,
   down: color.down,
   brand: color.brand,
   warn: color.warn,
+  onBand: color.onBand,
 } as const;
 
 /**

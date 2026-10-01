@@ -13,9 +13,5 @@ export const Card = ({ children, style, ...rest }: ViewProps & { children: React
 );
 
 const s = StyleSheet.create({
-  box: {
-    backgroundColor: color.surface,
-    borderRadius: radius.md,
-    padding: space.screen,
-  },
+  box: { backgroundColor: color.surface, borderRadius: radius.lg, padding: space.screen },
 });

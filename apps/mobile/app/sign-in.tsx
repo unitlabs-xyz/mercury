@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
-import { Button, Card, Screen, Text } from "../src/ui";
+import { StyleSheet, View } from "react-native";
+import { useRouter } from "expo-router";
+import { Button, CodeInput, Field, Screen, Text } from "../src/ui";
 import { useEmailLogin } from "../src/auth/useEmailLogin";
-import { color, space, type } from "../src/theme";
+import { space } from "../src/theme";
+
+const LOOKS_LIKE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /**
- * The way in.
+ * Email, then the code.
  *
  * Two steps, and the second replaces the first rather than sitting beside it —
  * the web's modal does the same. A screen that keeps the email field visible
@@ -13,101 +16,91 @@ import { color, space, type } from "../src/theme";
  * already sent to.
  */
 export default function SignIn() {
+  const router = useRouter();
   const { send, submit, pending, rejected } = useEmailLogin();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
 
   const busy = pending !== null;
-  const canSend = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+  const canSend = LOOKS_LIKE_EMAIL.test(email.trim());
+
+  const sendTo = () => {
+    void send(email.trim()).then((ok) => ok && setSent(true));
+  };
+
+  if (!sent) {
+    return (
+      <Screen
+        onBack={() => router.back()}
+        title="What's your email?"
+        subtitle="We'll send a six-digit code. There's no password to choose and none to forget."
+        footer={<Button label="Send code" busy={busy} disabled={!canSend} onPress={sendTo} />}
+      >
+        <Field
+          label="EMAIL"
+          value={email}
+          onChangeText={setEmail}
+          problem={rejected}
+          placeholder="you@email.com"
+          keyboardType="email-address"
+          textContentType="emailAddress"
+          autoComplete="email"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoFocus
+          editable={!busy}
+          returnKeyType="go"
+          onSubmitEditing={() => canSend && sendTo()}
+        />
+      </Screen>
+    );
+  }
 
   return (
     <Screen
-      title={sent ? "Check your email" : "Your wealth. Onchain."}
-      subtitle={
-        sent
-          ? `We sent a six-digit code to ${email.trim()}.`
-          : "Sign in with an email. No seed phrase to write down, and you can export the wallet whenever you like."
-      }
+      onBack={() => {
+        setSent(false);
+        setCode("");
+      }}
+      title="Enter the code"
+      subtitle={`Sent to ${email.trim()}.`}
       footer={
-        sent ? (
-          <Button
-            label={pending === "creating" ? "Making your wallet" : "Continue"}
-            busy={busy}
-            disabled={code.trim().length < 6}
-            onPress={() => void submit(code.trim())}
-          />
-        ) : (
-          <Button
-            label="Get code"
-            busy={busy}
-            disabled={!canSend}
-            onPress={() => {
-              void send(email.trim()).then((ok) => ok && setSent(true));
-            }}
-          />
-        )
+        <Button
+          /* Named for what is happening. Making the wallet is the slow step and
+             the one that looks like nothing, so it says so. */
+          label={pending === "creating" ? "Setting up your wallet" : "Continue"}
+          busy={busy}
+          disabled={code.length < 6}
+          onPress={() => void submit(code)}
+        />
       }
     >
-      <Card>
-        {sent ? (
-          <TextInput
-            style={s.code}
-            value={code}
-            onChangeText={setCode}
-            placeholder="000000"
-            placeholderTextColor={color.divider}
-            keyboardType="number-pad"
-            textContentType="oneTimeCode"
-            autoComplete="one-time-code"
-            maxLength={6}
-            autoFocus
-            editable={!busy}
-          />
-        ) : (
-          <TextInput
-            style={s.field}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@email.com"
-            placeholderTextColor={color.muted}
-            keyboardType="email-address"
-            textContentType="emailAddress"
-            autoComplete="email"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus
-            editable={!busy}
-          />
-        )}
-      </Card>
-
-      {rejected !== null && (
-        <View style={s.problem}>
-          <Text variant="small" tone="down">
+      <View style={s.code}>
+        <CodeInput
+          value={code}
+          onChange={setCode}
+          editable={!busy}
+          /* Submits itself on the sixth digit: having typed the whole code,
+             reaching for a button is a step that buys nothing. */
+          onFilled={(full) => void submit(full)}
+        />
+        {rejected !== null && (
+          <Text variant="small" tone="down" style={s.problem}>
             {rejected}
           </Text>
-        </View>
-      )}
+        )}
+      </View>
 
-      {sent && (
-        <Text variant="small" tone="muted" style={s.again} onPress={() => void send(email.trim())}>
-          Send another code
-        </Text>
-      )}
+      <Text variant="small" tone="brand" style={s.again} onPress={() => void send(email.trim())}>
+        Send another code
+      </Text>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  field: { ...type.headline, color: color.ink, paddingVertical: space.sm },
-  code: {
-    ...type.hero,
-    color: color.ink,
-    textAlign: "center",
-    letterSpacing: 8,
-    paddingVertical: space.sm,
-  },
+  code: { gap: space.sm },
   problem: { paddingHorizontal: space.xs },
-  again: { textAlign: "center", paddingVertical: space.sm, textDecorationLine: "underline" },
+  again: { textAlign: "center", paddingVertical: space.xs },
 });
