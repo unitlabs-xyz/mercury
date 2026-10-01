@@ -5,10 +5,11 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
-    "ios": "expo start --ios",
+    "ios": "expo run:ios",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~56.0.21",
     "@mercury/core": "workspace:*",
     "@mercury/sdk": "workspace:*",
     "@mercury/types": "workspace:*",
@@ -16,18 +17,20 @@
     "@tanstack/react-query": "^5.62.0",
     "expo": "~56.0.23",
     "expo-constants": "~56.0.27",
+    "expo-dev-client": "~56.0.27",
     "expo-font": "~56.0.7",
     "expo-linking": "~56.0.18",
     "expo-router": "~56.2.21",
-    "expo-status-bar": "~57.0.1",
-    "expo-system-ui": "~57.0.4",
-    "react": "19.2.0",
+    "expo-status-bar": "~56.0.4",
+    "expo-system-ui": "~56.0.5",
+    "react": "19.2.3",
     "react-native": "0.85.3",
-    "react-native-gesture-handler": "~3.3.0",
-    "react-native-reanimated": "~4.7.0",
-    "react-native-safe-area-context": "~5.10.1",
-    "react-native-screens": "~4.28.0",
-    "react-native-svg": "~15.15.5"
+    "react-native-gesture-handler": "~2.31.1",
+    "react-native-reanimated": "4.3.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "react-native-worklets": "0.8.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
