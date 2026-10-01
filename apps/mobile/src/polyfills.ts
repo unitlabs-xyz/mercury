@@ -8,3 +8,14 @@
  */
 import "react-native-get-random-values";
 import "fast-text-encoding";
+import { Buffer } from "buffer";
+
+/*
+ * `@solana/web3.js` is written for Node and the browser, and reaches for
+ * `Buffer` to serialise a transaction. Hermes has no such global. Assigned
+ * rather than imported at each call site because web3.js reads the global from
+ * inside its own modules, where our imports cannot reach.
+ */
+if (typeof globalThis.Buffer === "undefined") {
+  (globalThis as { Buffer?: typeof Buffer }).Buffer = Buffer;
+}

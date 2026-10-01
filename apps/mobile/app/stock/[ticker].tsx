@@ -23,6 +23,7 @@ import {
   type Span,
   type Wrapper,
 } from "../../src/api";
+import { BuySheet } from "../../src/order/BuySheet";
 import { color, font, radius, space } from "../../src/theme";
 
 /** The web's own words for each range, so the line under the figure reads. */
@@ -42,6 +43,7 @@ export default function Stock() {
   const t = (ticker ?? "").toUpperCase();
   const router = useRouter();
   const [span, setSpan] = useState<Span>("1M");
+  const [buying, setBuying] = useState(false);
 
   const page = useInstrument(t);
   const history = useInstrumentHistory(t, span);
@@ -217,9 +219,19 @@ export default function Stock() {
           <Button
             label={held === undefined ? "Buy" : "Buy more"}
             disabled={i === undefined}
-            onPress={() => undefined}
+            onPress={() => setBuying(true)}
           />
         </View>
+
+        {i !== undefined && (
+          <BuySheet
+            visible={buying}
+            onClose={() => setBuying(false)}
+            ticker={t}
+            name={i.name}
+            logoUrl={i.logoUrl ?? undefined}
+          />
+        )}
       </SafeAreaView>
     </View>
   );
