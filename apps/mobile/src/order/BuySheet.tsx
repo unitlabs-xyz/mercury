@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { pct, shares as fmtShares, usd } from "@mercury/view";
-import { PriceMoved, useOrderAction, useQuote, type Quote } from "../api";
+import { PriceMoved, useMoney, useOrderAction, useQuote, type Quote } from "../api";
 import { Button, Chip, Icon, PressableScale, Skeleton, StockLogo, Text } from "../ui";
 import { color, font, radius, space } from "../theme";
 
@@ -52,6 +52,15 @@ export const BuySheet = ({ visible, onClose, ticker, name, logoUrl }: BuySheetPr
   const amount = Number(text.replace(/[^0-9.]/g, "")) || 0;
   const order = useOrderAction();
   const quote = useQuote(ticker, debounced);
+  /*
+   * What there is to spend. Checked here, not left to the chain: without it the
+   * only thing standing between an empty wallet and a failed order is a
+   * preflight rejection, which arrives after the signing prompt and reads like
+   * a fault in the app rather than an empty account. The web's sheet has
+   * guarded on this all along; this one did not, and the first real buy came
+   * back as a wall of base64.
+   */
+  const available = Number(useMoney().data?.balanceUsd ?? 0);
 
   // One request per figure somebody settles on, not one per keystroke.
   useEffect(() => {
@@ -71,7 +80,16 @@ export const BuySheet = ({ visible, onClose, ticker, name, logoUrl }: BuySheetPr
 
   const placed = order.data;
   const decision = moved?.decision ?? quote.data?.decision;
-  const canPlace = amount > 0 && decision?.kind === "execute" && order.walletReady && !order.isPending;
+  /* A figure still being typed is not a figure to quote against. */
+  const typing = debounced !== amount;
+  const overBalance = amount > available;
+  const canPlace =
+    amount > 0 &&
+    !overBalance &&
+    !typing &&
+    decision?.kind === "execute" &&
+    order.walletReady &&
+    !order.isPending;
 
   const buy = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -147,7 +165,14 @@ export const BuySheet = ({ visible, onClose, ticker, name, logoUrl }: BuySheetPr
               </View>
 
               <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
-                {amount <= 0 ? (
+                {overBalance ? (
+                  <View style={s.refused}>
+                    <Icon name="alert" size={15} color={color.warn} />
+                    <Text variant="small" style={s.refusedText}>
+                      That is more than your {usd(available)} cash. Add money first.
+                    </Text>
+                  </View>
+                ) : amount <= 0 ? (
                   <Text variant="small" tone="muted" style={s.hint}>
                     Enter an amount to see what it buys.
                   </Text>
@@ -169,7 +194,10 @@ export const BuySheet = ({ visible, onClose, ticker, name, logoUrl }: BuySheetPr
                 {order.isError && moved === null && (
                   <View style={s.failed}>
                     <Icon name="alert" size={15} color={color.down} />
-                    <Text variant="small" style={s.failedText}>
+                    {/* Capped. The server should never send a wall of text and
+                        now does not, but a sheet that can be pushed off screen
+                        by one bad string is a sheet with no floor under it. */}
+                    <Text variant="small" style={s.failedText} numberOfLines={4}>
                       {order.error.message}
                     </Text>
                   </View>
@@ -179,16 +207,18 @@ export const BuySheet = ({ visible, onClose, ticker, name, logoUrl }: BuySheetPr
               <View style={s.footer}>
                 <Button
                   label={
-                    !order.walletReady
-                      ? "Getting your wallet ready"
-                      : moved !== null
-                        ? "Buy at the new price"
-                        : decision?.kind === "offer_queue"
-                          ? "Place for the open"
-                          : "Buy"
+                    overBalance
+                      ? "Not enough cash"
+                      : !order.walletReady
+                        ? "Getting your wallet ready"
+                        : moved !== null
+                          ? "Buy at the new price"
+                          : decision?.kind === "offer_queue"
+                            ? "Place for the open"
+                            : "Buy"
                   }
                   busy={order.isPending}
-                  disabled={!canPlace && decision?.kind !== "offer_queue"}
+                  disabled={overBalance || (!canPlace && decision?.kind !== "offer_queue")}
                   onPress={buy}
                 />
               </View>
