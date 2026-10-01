@@ -41,6 +41,18 @@ export const color = {
   fallChip: "rgba(227,119,119,0.14)",
   warn: "#925A0A",
   warnTint: "#FDF3D9",
+  /* The feed's per-kind tones, from the web's `activity-look.tsx`. These are
+     the app palette's own `--color-*`, not the `--color-ds-*` set the
+     dashboard panels use; the two coexist on the web and both are copied
+     rather than reconciled here, because reconciling them is a change to the
+     web's design, not to this port. */
+  inkSoft: "#3A372F",
+  chipTint: "#F4F2EC",
+  upTint: "#E7F3EC",
+  upDeep: "#177544",
+  downTint: "#FAEBE8",
+  downDeep: "#B33D29",
+
   /* The activity marks, from `--color-ds-act-*`. */
   actBuy: "#007682",
   actBuyTint: "#E5F4F5",
@@ -52,7 +64,7 @@ export const color = {
   /* brand */
   brand: "#0F7480",
   brandDeep: "#0B5C66",
-  brandTint: "#E5F4F5",
+  brandTint: "#E8F4F5",
 
   /* the dark band between the two home cards, and anything that sits on it */
   band: "#171717",

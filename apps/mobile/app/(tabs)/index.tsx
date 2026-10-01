@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { pct, usd, usdSigned } from "@mercury/view";
+import type { Portfolio as PortfolioData } from "@mercury/types";
+import { GROUPS, toEvent, usd, usdSigned, type Event, type EventKind } from "@mercury/view";
 import {
   ActionStrip,
   CARD_RADIUS,
@@ -10,53 +11,17 @@ import {
   HeroBalance,
   Icon,
   Mark,
-  MovePill,
   MoveChip,
+  MovePill,
   PressableScale,
+  Skeleton,
   StockLogo,
   Text,
   type Action,
   type IconName,
 } from "../../src/ui";
+import { useActivityFeed, useBorrow, useMoney, usePortfolio } from "../../src/api";
 import { color, font, radius, space } from "../../src/theme";
-
-/*
- * The figures are still fixed; the shapes are not.
- *
- * Every one of them is named and typed the way `GET /v1/portfolio` and
- * `GET /v1/events` return it, and every number on screen goes through `usd`,
- * `pct` and `usdSigned` from `@mercury/view` — the same functions the web
- * header calls. When this reads from the API the two clients will already round
- * and sign money identically rather than nearly so.
- */
-const ACCOUNT = {
-  totalUsd: 8073.11,
-  stocksUsd: 6038.38,
-  cashUsd: 4534.73,
-  debtUsd: 2500,
-  changeUsd: 39.32,
-  changePct: 0.49,
-  /** The server's `safeUntilDrop`, as a fraction. */
-  safeUntilDrop: 0.32,
-  yieldApr: 4.1,
-};
-
-interface Holding {
-  readonly ticker: string;
-  readonly name: string;
-  readonly valueUsd: number;
-  readonly changePct: number | null;
-}
-
-const HOLDINGS: readonly Holding[] = [
-  { ticker: "NVDA", name: "NVIDIA", valueUsd: 1_742.2, changePct: 1.84 },
-  { ticker: "TSLA", name: "Tesla", valueUsd: 1_308.55, changePct: -0.62 },
-  { ticker: "AAPL", name: "Apple", valueUsd: 1_194.4, changePct: 0.31 },
-  { ticker: "MSFT", name: "Microsoft", valueUsd: 988.1, changePct: 0.77 },
-  { ticker: "SPCX", name: "SpaceX", valueUsd: 805.13, changePct: null },
-];
-
-type EventKind = "buy" | "dividend" | "send" | "borrow";
 
 /**
  * USDC's mark, as the web's `activity-mark.tsx` picks it: the Solana token
@@ -65,84 +30,56 @@ type EventKind = "buy" | "dividend" | "send" | "borrow";
  * people recognise. Cash is not a holding, so it never resolves to an
  * instrument and cannot come from the API's logo column.
  */
-const USDC_LOGO =
-  "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png";
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDC_LOGO = `https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/${USDC_MINT}/logo.png`;
 
-interface Event {
-  readonly id: string;
-  readonly kind: EventKind;
-  /** The instrument whose art leads the row; null when no asset explains it. */
-  readonly ticker: string | null;
-  /** Overrides the ticker's art — money, which has no instrument. */
-  readonly uri?: string;
-  readonly title: string;
-  readonly detail: string;
-  readonly amountUsd: number;
-  readonly when: string;
-}
-
-const EVENTS: readonly Event[] = [
-  {
-    id: "1",
-    kind: "buy",
-    ticker: "NVDA",
-    title: "Bought NVIDIA",
-    detail: "0.42 shares at $200.48",
-    amountUsd: -84.2,
-    when: "Today",
-  },
-  {
-    id: "2",
-    kind: "dividend",
-    ticker: "AAPL",
-    title: "Dividend from Apple",
-    detail: "5.2 shares",
-    amountUsd: 1.3,
-    when: "Today",
-  },
-  {
-    id: "3",
-    kind: "borrow",
-    ticker: "SPCX",
-    title: "Borrowed against SpaceX",
-    detail: "USDC into your account",
-    amountUsd: 500,
-    when: "Yesterday",
-  },
-  {
-    id: "4",
-    kind: "buy",
-    ticker: "TSLA",
-    title: "Bought Tesla",
-    detail: "1.10 shares at $284.00",
-    amountUsd: -312.4,
-    when: "Yesterday",
-  },
-  {
-    id: "5",
-    kind: "send",
-    ticker: "USDC",
-    uri: USDC_LOGO,
-    title: "Sent USDC",
-    detail: "To 7xKq…9mPt",
-    amountUsd: -120,
-    when: "Mon",
-  },
-];
-
-/* The web's activity look: a tinted circle, then the stroke, per kind. */
+/** The web's `activity-look.tsx`, tone for tone. */
 const LOOK: Record<EventKind, { bg: string; fg: string; icon: IconName }> = {
-  buy: { bg: color.actBuyTint, fg: color.actBuy, icon: "trend" },
-  dividend: { bg: color.actIncomeTint, fg: color.actIncome, icon: "plus" },
-  send: { bg: color.actSendTint, fg: color.actSend, icon: "arrowUp" },
-  borrow: { bg: color.warnTint, fg: color.warn, icon: "wallet" },
+  buy: { bg: color.brandTint, fg: color.brand, icon: "trend" },
+  sell: { bg: color.chipTint, fg: color.inkSoft, icon: "arrowDown" },
+  basket: { bg: color.brandTint, fg: color.brand, icon: "grid" },
+  dividend: { bg: color.upTint, fg: color.upDeep, icon: "refresh" },
+  receive: { bg: color.upTint, fg: color.upDeep, icon: "arrowDown" },
+  send: { bg: color.chipTint, fg: color.inkSoft, icon: "arrowUp" },
+  interest: { bg: color.upTint, fg: color.upDeep, icon: "plus" },
+  queued: { bg: color.warnTint, fg: color.warn, icon: "clock" },
+  // Money, so the same arrows cash uses. Borrowing is not a gain, so it takes
+  // the neutral chip rather than the green one a dividend gets.
+  borrow: { bg: color.chipTint, fg: color.inkSoft, icon: "arrowDown" },
+  repay: { bg: color.chipTint, fg: color.inkSoft, icon: "arrowUp" },
+  // Collateral, not money: a lock going on and coming off.
+  pledge: { bg: color.chipTint, fg: color.inkSoft, icon: "lock" },
+  unpledge: { bg: color.upTint, fg: color.upDeep, icon: "lock" },
+  // The only row in the feed that is asking for something to be done.
+  loan_alert: { bg: color.warnTint, fg: color.warn, icon: "alert" },
 };
 
-type Filter = "all" | "buys" | "income";
+/** The three the home screen offers, out of the shared six. */
+const FILTERS = ["all", "trades", "income"] as const;
+type Filter = (typeof FILTERS)[number];
+
+const KINDS_OF = (f: Filter): readonly EventKind[] => GROUPS.find((g) => g.key === f)?.kinds ?? [];
 
 /** The logo's diameter wherever one leads a row. One number, so the rail, the
  *  loan row and the feed all indent their text to the same place. */
 const MARK = 36;
+
+/** Five, because the card below the fold is a summary and `/activity` is the list. */
+const FEED_ROWS = 5;
+
+const num = (v: string | number | null | undefined): number => Number(v ?? 0);
+
+/** "Today", "Yesterday", else "27 Sep" — the web's `relDay`, said shorter. */
+const whenLabel = (isoDate: string): string => {
+  const today = Date.parse(new Date().toISOString().slice(0, 10));
+  const days = Math.round((Date.parse(isoDate) - today) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === -1) return "Yesterday";
+  return new Date(`${isoDate}T12:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+  });
+};
 
 export default function Portfolio() {
   const insets = useSafeAreaInsets();
@@ -150,7 +87,31 @@ export default function Portfolio() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
 
-  const up = ACCOUNT.changeUsd >= 0;
+  const portfolio = usePortfolio();
+  const money = useMoney();
+  const borrow = useBorrow();
+  const activity = useActivityFeed();
+
+  const p = portfolio.data;
+  const holdings = p?.holdings ?? [];
+  /*
+   * Summed from the positions rather than derived as `total - cash`. The two
+   * agree only when nothing is borrowed: the server's total is already net of
+   * debt, so the subtraction quietly understates the stocks by the size of the
+   * loan. That was a real defect on the web.
+   */
+  const stocksUsd = holdings.reduce((t, h) => t + num(h.valueUsd), 0);
+  const debtUsd = num(p?.debtUsd);
+
+  const events = useMemo(() => (activity.data?.items ?? []).map(toEvent), [activity.data]);
+  const kinds = KINDS_OF(filter);
+  const shown = (kinds.length === 0 ? events : events.filter((e) => kinds.includes(e.kind))).slice(
+    0,
+    FEED_ROWS,
+  );
+
+  const waiting = portfolio.isPending && portfolio.data === undefined;
+  const failed = portfolio.isError;
 
   const actions: readonly Action[] = [
     { key: "invest", label: "Invest", icon: "trend", onPress: () => undefined },
@@ -159,9 +120,11 @@ export default function Portfolio() {
     { key: "card", label: "Card", icon: "card", tone: "warm", onPress: () => undefined },
   ];
 
-  const shown = EVENTS.filter((e) =>
-    filter === "all" ? true : filter === "buys" ? e.kind === "buy" : e.kind === "dividend",
-  );
+  const refreshAll = async (): Promise<void> => {
+    setRefreshing(true);
+    await Promise.all([portfolio.refetch(), money.refetch(), borrow.refetch(), activity.refetch()]);
+    setRefreshing(false);
+  };
 
   return (
     <View style={s.root}>
@@ -172,10 +135,7 @@ export default function Portfolio() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              setTimeout(() => setRefreshing(false), 700);
-            }}
+            onRefresh={() => void refreshAll()}
             tintColor={color.faint}
           />
         }
@@ -197,12 +157,29 @@ export default function Portfolio() {
             </PressableScale>
           </View>
 
-          <HeroBalance amount={ACCOUNT.totalUsd} label="Net worth" masked={hidden} />
-          {!hidden && (
-            <MovePill pctText={pct(ACCOUNT.changePct)} usdText={usdSigned(ACCOUNT.changeUsd)} up={up} />
+          {/*
+           * Missing is not zero. An account that could not be read shows the
+           * banner and a dash; writing $0.00 there would be a figure somebody
+           * could act on, and it would be wrong.
+           */}
+          {failed ? (
+            <Unreachable onRetry={() => void portfolio.refetch()} />
+          ) : waiting ? (
+            <HeroSkeleton />
+          ) : (
+            <>
+              <HeroBalance amount={num(p?.totalValueUsd)} label="Net worth" masked={hidden} />
+              {!hidden && (
+                <MovePill
+                  pctText={`${Math.abs(num(p?.changePct)).toFixed(2)}%`}
+                  usdText={usdSigned(num(p?.changeUsd))}
+                  up={num(p?.changeUsd) >= 0}
+                />
+              )}
+            </>
           )}
 
-          <HoldingsRail holdings={HOLDINGS} masked={hidden} />
+          <HoldingsRail holdings={holdings} masked={hidden} loading={waiting} />
 
           {/* Two halves of one number, split by a hairline rather than a gap:
               what is invested and what is not are not two unrelated things
@@ -210,20 +187,33 @@ export default function Portfolio() {
           <View style={s.pots}>
             <Pot
               label="INVESTED"
-              value={ACCOUNT.stocksUsd}
-              note={`${HOLDINGS.length} positions`}
+              value={stocksUsd}
+              note={holdings.length === 1 ? "1 position" : `${holdings.length} positions`}
               masked={hidden}
+              loading={waiting}
             />
             <View style={s.potSplit} />
             <Pot
               label="CASH"
-              value={ACCOUNT.cashUsd}
-              note={`Earning ${ACCOUNT.yieldApr}% a year`}
+              value={num(p?.cashUsd)}
+              note={
+                money.data === undefined
+                  ? "In your account"
+                  : `Earning ${(num(money.data.yieldApr) * 100).toFixed(1)}% a year`
+              }
               masked={hidden}
+              loading={waiting}
             />
           </View>
 
-          {ACCOUNT.debtUsd > 0 && <Borrowed masked={hidden} />}
+          {debtUsd > 0 && (
+            <Borrowed
+              debtUsd={debtUsd}
+              stale={p?.debtIsStale === true}
+              borrow={borrow.data}
+              masked={hidden}
+            />
+          )}
         </View>
 
         {/* ── The band: the dark ground between the two cards ───────────── */}
@@ -246,31 +236,74 @@ export default function Portfolio() {
           {/* Inset by the chip's own padding, so a chip LABEL starts on the
               same 20 as the heading above it rather than its pill's edge. */}
           <View style={s.chips}>
-            {(["all", "buys", "income"] as const).map((k) => (
+            {FILTERS.map((k) => (
               <Chip
                 key={k}
-                label={k === "all" ? "All" : k === "buys" ? "Buys" : "Income"}
+                label={k === "all" ? "All" : k === "trades" ? "Trades" : "Income"}
                 selected={filter === k}
                 onPress={() => setFilter(k)}
               />
             ))}
           </View>
 
-          {shown.length === 0 ? (
+          {activity.isPending && activity.data === undefined ? (
+            <FeedSkeleton />
+          ) : shown.length === 0 ? (
             <View style={s.empty}>
-              <Text variant="label">Nothing for this filter</Text>
+              <Text variant="label">
+                {events.length === 0 ? "Nothing here yet" : "Nothing for this filter"}
+              </Text>
               <Text variant="small" tone="muted">
                 Your buys, dividends and transfers all land here.
               </Text>
             </View>
           ) : (
-            shown.map((e) => <EventRow key={e.id} event={e} masked={hidden} />)
+            shown.map((e, i) => <EventRow key={`${e.date}-${e.title}-${i}`} event={e} masked={hidden} />)
           )}
         </View>
       </ScrollView>
     </View>
   );
 }
+
+/** The web's own words, which say the one thing that matters about a failed read. */
+const Unreachable = ({ onRetry }: { onRetry: () => void }) => (
+  <View style={s.unreachable}>
+    <Icon name="alert" size={16} color={color.down} />
+    <Text variant="small" style={s.unreachableText}>
+      We could not reach your account. The figures below are missing, not zero.
+    </Text>
+    <PressableScale onPress={onRetry} style={s.retry} activeScale={0.94}>
+      <RNText style={s.retryLabel}>Retry</RNText>
+    </PressableScale>
+  </View>
+);
+
+const HeroSkeleton = () => (
+  <View style={s.heroSkeleton}>
+    <Skeleton width={78} height={13} />
+    <Skeleton width={236} height={40} />
+    <Skeleton width={150} height={16} />
+  </View>
+);
+
+const FeedSkeleton = () => (
+  <View>
+    {[0, 1, 2].map((i) => (
+      <View key={i} style={s.row}>
+        <Skeleton width={MARK} height={MARK} style={s.roundSkeleton} />
+        <View style={s.rowMid}>
+          <Skeleton width="62%" height={13} />
+          <Skeleton width="38%" height={11} />
+        </View>
+        <View style={s.rowEnd}>
+          <Skeleton width={62} height={13} />
+          <Skeleton width={40} height={11} />
+        </View>
+      </View>
+    ))}
+  </View>
+);
 
 /**
  * The holdings rail: one card per position, scrolling sideways.
@@ -280,7 +313,32 @@ export default function Portfolio() {
  * number twice, and a fractional share count is the least useful way to say how
  * much of something somebody holds.
  */
-const HoldingsRail = ({ holdings, masked }: { holdings: readonly Holding[]; masked: boolean }) => {
+const HoldingsRail = ({
+  holdings,
+  masked,
+  loading,
+}: {
+  holdings: PortfolioData["holdings"];
+  masked: boolean;
+  loading: boolean;
+}) => {
+  if (loading) {
+    return (
+      <View style={s.railLoading}>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={s.holdCard}>
+            <Skeleton width={MARK} height={MARK} style={s.roundSkeleton} />
+            <View style={s.holdText}>
+              <Skeleton width="70%" height={12} />
+              <Skeleton width="90%" height={18} />
+            </View>
+            <Skeleton width={56} height={20} />
+          </View>
+        ))}
+      </View>
+    );
+  }
+
   if (holdings.length === 0) {
     return (
       <PressableScale style={s.railEmpty} onPress={() => undefined}>
@@ -316,7 +374,11 @@ const HoldingsRail = ({ holdings, masked }: { holdings: readonly Holding[]; mask
               {masked ? "••••" : usd(h.valueUsd)}
             </RNText>
           </View>
-          {masked ? <View style={s.chipGhost} /> : <MoveChip value={h.changePct} />}
+          {masked ? (
+            <View style={s.chipGhost} />
+          ) : (
+            <MoveChip value={h.changePct24h === null ? null : num(h.changePct24h)} />
+          )}
         </PressableScale>
       ))}
 
@@ -337,15 +399,21 @@ const Pot = ({
   value,
   note,
   masked,
+  loading,
 }: {
   label: string;
   value: number;
   note: string;
   masked: boolean;
+  loading: boolean;
 }) => (
   <View style={s.pot}>
     <RNText style={s.potLabel}>{label}</RNText>
-    <RNText style={s.potFigure}>{masked ? "••••" : usd(value)}</RNText>
+    {loading ? (
+      <Skeleton width="80%" height={20} style={s.potSkeleton} />
+    ) : (
+      <RNText style={s.potFigure}>{masked ? "••••" : usd(value)}</RNText>
+    )}
     <RNText style={s.potNote} numberOfLines={1}>
       {note}
     </RNText>
@@ -355,11 +423,36 @@ const Pot = ({
 /**
  * What is owed, and the fall that would cost somebody their shares.
  *
- * The line under the label is the web's `borrowedSub`: once something is
- * borrowed, the cushion is the number that matters, not the headroom — and it
- * is the one that shrinks every time a loan buys more collateral.
+ * The line is the web's `borrowedSub`: once something is borrowed, the cushion
+ * is the number that matters, not the headroom — it is the one that shrinks
+ * every time a loan buys more collateral — and a reading we could not take is
+ * said out loud rather than shown as a stale figure wearing a fresh one's face.
  */
-const Borrowed = ({ masked }: { masked: boolean }) => (
+const borrowedLine = (
+  stale: boolean,
+  b: { health: string; overTargetUsd: number; safeUntilDrop: number | null } | undefined,
+): string => {
+  if (stale) return "As of an hour ago — we could not reach Kamino";
+  if (b === undefined) return "Against your shares";
+  if (b.health === "liquidation") return "Being sold now — repay to stop it";
+  if (b.health === "margin_call") return `Repay ${usd(b.overTargetUsd, 0)} now`;
+  if (b.health === "over_limit") return `Over the limit — repay ${usd(b.overTargetUsd, 0)}`;
+  return b.safeUntilDrop === null
+    ? "Against your shares"
+    : `Safe unless your shares fall ${(b.safeUntilDrop * 100).toFixed(0)}%`;
+};
+
+const Borrowed = ({
+  debtUsd,
+  stale,
+  borrow,
+  masked,
+}: {
+  debtUsd: number;
+  stale: boolean;
+  borrow: { health: string; overTargetUsd: number; safeUntilDrop: number | null } | undefined;
+  masked: boolean;
+}) => (
   <PressableScale activeScale={0.99} style={s.borrowed} onPress={() => undefined}>
     <View style={s.borrowedMark}>
       <Icon name="wallet" size={16} color={color.warn} />
@@ -367,30 +460,38 @@ const Borrowed = ({ masked }: { masked: boolean }) => (
     <View style={s.borrowedMid}>
       <RNText style={s.potLabel}>BORROWED</RNText>
       <RNText style={s.borrowedNote} numberOfLines={1}>
-        Safe unless your shares fall {pct(ACCOUNT.safeUntilDrop * 100, 0)}
+        {borrowedLine(stale, borrow)}
       </RNText>
     </View>
     {/* `usd(v, 0)`, not `usdCompact`: Hermes' Intl ignores `notation: "compact"`
         and silently returns the long form with one stray decimal — $2,500.0. */}
-    <RNText style={s.borrowedFigure}>{masked ? "••••" : `−${usd(ACCOUNT.debtUsd, 0)}`}</RNText>
+    <RNText style={s.borrowedFigure}>{masked ? "••••" : `−${usd(debtUsd, 0)}`}</RNText>
     <Icon name="chevronRight" size={14} color={color.faint} />
   </PressableScale>
 );
 
 const EventRow = ({ event, masked }: { event: Event; masked: boolean }) => {
   const look = LOOK[event.kind];
-  const credit = event.amountUsd >= 0;
+  const credit = event.flow === "in";
+  /* A stock's own art wins; cash falls back to the token's mark; a row with no
+     asset behind it — a queued order, an alert — shows the kind alone. */
+  const uri = event.logo ?? (event.mint === USDC_MINT ? USDC_LOGO : undefined);
+  const amount =
+    event.amount === null
+      ? null
+      : event.flow === null
+        ? event.amount
+        : `${credit ? "+" : "−"}${event.amount}`;
+
   return (
     <PressableScale haptic={false} activeScale={0.99} style={s.row} onPress={() => undefined}>
-      {/* The stock's own logo where there is one, as the web's activity feed
-          does; the tinted kind mark is for what no instrument explains. */}
-      {event.ticker === null ? (
+      {uri === undefined ? (
         <View style={[s.rowArt, { backgroundColor: look.bg }]}>
           <Icon name={look.icon} size={16} color={look.fg} />
         </View>
       ) : (
         <View>
-          <StockLogo ticker={event.ticker} uri={event.uri} size={MARK} />
+          <StockLogo ticker={event.title.slice(0, 1)} uri={uri} size={MARK} />
           <View style={[s.rowBadge, { backgroundColor: look.bg }]}>
             <Icon name={look.icon} size={9} color={look.fg} strokeWidth={2.4} />
           </View>
@@ -400,15 +501,17 @@ const EventRow = ({ event, masked }: { event: Event; masked: boolean }) => {
         <RNText style={s.rowTitle} numberOfLines={1}>
           {event.title}
         </RNText>
-        <RNText style={s.rowDetail} numberOfLines={1}>
-          {event.detail}
-        </RNText>
+        {event.sub !== "" && (
+          <RNText style={s.rowDetail} numberOfLines={1}>
+            {event.sub}
+          </RNText>
+        )}
       </View>
       <View style={s.rowEnd}>
-        <RNText style={[s.rowAmount, credit && { color: color.up }]}>
-          {masked ? "••••" : usdSigned(event.amountUsd)}
-        </RNText>
-        <RNText style={s.rowWhen}>{event.when}</RNText>
+        {amount !== null && (
+          <RNText style={[s.rowAmount, credit && s.rowCredit]}>{masked ? "••••" : amount}</RNText>
+        )}
+        <RNText style={s.rowWhen}>{whenLabel(event.date)}</RNText>
       </View>
     </PressableScale>
   );
@@ -445,10 +548,32 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
 
+  unreachable: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: radius.lg,
+    backgroundColor: color.downTint,
+  },
+  unreachableText: { flex: 1, color: color.downDeep },
+  retry: {
+    paddingHorizontal: 12,
+    height: 30,
+    justifyContent: "center",
+    borderRadius: radius.sm,
+    backgroundColor: color.surface,
+  },
+  retryLabel: { fontFamily: font.medium, fontSize: 12.5, color: color.downDeep },
+
+  heroSkeleton: { gap: 10, paddingTop: 4, paddingBottom: 6 },
+
   /* Negative margins so the rail scrolls edge to edge through the card's own
      padding instead of stopping short of both edges. */
   rail: { marginTop: 18, marginHorizontal: -space.screen },
   railRow: { flexDirection: "row", gap: 10, paddingHorizontal: space.screen },
+  railLoading: { flexDirection: "row", gap: 10, marginTop: 18, overflow: "hidden" },
   holdCard: {
     width: 146,
     gap: 12,
@@ -463,6 +588,7 @@ const s = StyleSheet.create({
   /* Holds the row's height while the figures are hidden, so masking does not
      make every card jump shorter. */
   chipGhost: { height: 20 },
+  roundSkeleton: { borderRadius: MARK / 2 },
 
   allCard: {
     width: 104,
@@ -514,6 +640,7 @@ const s = StyleSheet.create({
   potSplit: { width: 1, backgroundColor: color.divider },
   potLabel: { fontFamily: font.medium, fontSize: 10, letterSpacing: 0.6, color: color.muted },
   potFigure: { fontFamily: font.medium, fontSize: 20, letterSpacing: -0.4, color: color.ink },
+  potSkeleton: { marginVertical: 3 },
   potNote: { fontFamily: font.regular, fontSize: 11.5, letterSpacing: -0.1, color: color.muted },
 
   borrowed: {
@@ -602,5 +729,6 @@ const s = StyleSheet.create({
   rowDetail: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.12, color: color.muted },
   rowEnd: { alignItems: "flex-end", gap: 3 },
   rowAmount: { fontFamily: font.medium, fontSize: 14, letterSpacing: -0.28, color: color.ink },
+  rowCredit: { color: color.up },
   rowWhen: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.12, color: color.muted },
 });

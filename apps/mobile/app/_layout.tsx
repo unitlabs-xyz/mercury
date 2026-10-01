@@ -1,20 +1,41 @@
 // Before every other import: see the file for why.
 import "../src/polyfills";
 import { useEffect } from "react";
-import { ActivityIndicator, View, StyleSheet } from "react-native";
+import { ActivityIndicator, AppState, View, StyleSheet, type AppStateStatus } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useFonts } from "expo-font";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/expo";
 import { PrivyBoundary } from "../src/auth/PrivyBoundary";
+import { TokenSync } from "../src/api";
 import DiatypeBold from "../assets/fonts/ABCDiatype-Bold.ttf";
 import DiatypeMedium from "../assets/fonts/ABCDiatype-Medium.ttf";
 import DiatypeRegular from "../assets/fonts/ABCDiatype-Regular.ttf";
 import { color } from "../src/theme";
 
-/* Same defaults as the web's App.tsx: one retry, and no refetch on focus. */
+/* Same defaults as the web's App.tsx: one retry, and no refetch on focus. The
+   account reads opt back in, in `src/api/hooks.ts`. */
 const queries = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+});
+
+/**
+ * What "focused" means on a phone.
+ *
+ * React Query's `refetchOnWindowFocus` listens for a browser event that does
+ * not exist here, so without this the account reads would only ever refresh on
+ * their timer. The moment that matters is the app coming back to the
+ * foreground: the thing somebody does between looking at their balance and
+ * looking at it again is approve something somewhere else.
+ *
+ * Registered once at module scope rather than in an effect — Fast Refresh
+ * remounts components, and a listener added per mount accumulates.
+ */
+focusManager.setEventListener((handleFocus) => {
+  const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
+    handleFocus(state === "active");
+  });
+  return () => sub.remove();
 });
 
 const Waiting = () => (
@@ -77,6 +98,9 @@ export default function RootLayout() {
   return (
     <PrivyBoundary>
       <QueryClientProvider client={queries}>
+        {/* Inside the Privy provider, so it can read the token getters; above
+            the routes, so every screen's queries carry them. */}
+        <TokenSync />
         <Gate />
       </QueryClientProvider>
     </PrivyBoundary>
