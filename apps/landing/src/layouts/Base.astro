@@ -6,6 +6,7 @@ import Footer from "../components/Footer.astro";
 import SmoothScroll from "../components/SmoothScroll.astro";
 import Reveal from "../components/Reveal.astro";
 import Sound from "../components/Sound.astro";
+import Analytics from "@vercel/analytics/astro";
 
 // Preloaded because the hero is set in both of these: without it the browser only
 // discovers them after the stylesheet parses, and the title reflows.
@@ -69,6 +70,7 @@ const baseSchema: Record<string, unknown>[] = [
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="sitemap" href="/sitemap-index.xml" />
+    <Analytics />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={site.name} />
