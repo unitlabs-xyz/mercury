@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { StyleSheet, Text as RNText, View } from "react-native";
 import type { Tabs } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { Haptics } from "../haptics";
 import Animated, {
   interpolate,
   useAnimatedStyle,

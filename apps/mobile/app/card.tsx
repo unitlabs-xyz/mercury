@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Icon, IconButton, Mark, Segmented, StatusChip, Text } from "../src/ui";
+import { Button, Icon, IconButton, Mark, Segmented, StatusChip, Text, Visa } from "../src/ui";
 import { color, font, radius, space } from "../src/theme";
 
 type Finish = "basic" | "silver" | "gold" | "platinum";
@@ -215,7 +215,7 @@ const CardArt = ({ finish, tier }: { finish: Finish; tier: string }) => {
         <View style={s.artBottom}>
           <RNText style={[s.chipLabel, { color: ink }]}>•••• 4821</RNText>
           <View style={s.visaBlock}>
-            <RNText style={[s.visa, { color: ink }]}>VISA</RNText>
+            <Visa width={78} color={ink} />
             <RNText style={[s.tier, { color: ink }]}>{tier.toUpperCase()}</RNText>
           </View>
         </View>
@@ -243,15 +243,7 @@ const s = StyleSheet.create({
   artBottom: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   chipLabel: { fontFamily: "Menlo", fontSize: 13, opacity: 0.7, letterSpacing: 1 },
   visaBlock: { alignItems: "flex-end" },
-  /* Diatype has no italic, so the wordmark's slant is drawn rather than asked for. */
-  visa: {
-    fontFamily: font.bold,
-    fontSize: 30,
-    letterSpacing: -0.9,
-    lineHeight: 32,
-    transform: [{ skewX: "-12deg" }],
-  },
-  tier: { fontFamily: font.medium, fontSize: 9, letterSpacing: 1.5, opacity: 0.7, marginTop: 2 },
+  tier: { fontFamily: font.medium, fontSize: 9, letterSpacing: 1.5, opacity: 0.7, marginTop: 6 },
   tiers: {},
   intro: { paddingHorizontal: space.screen, paddingTop: space.sm, gap: space.sm },
   headline: { marginTop: 4 },

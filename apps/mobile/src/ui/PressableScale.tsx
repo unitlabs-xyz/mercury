@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Pressable, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
-import * as Haptics from "expo-haptics";
+import { Haptics } from "../haptics";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);

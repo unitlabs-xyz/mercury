@@ -1,5 +1,5 @@
 import { StyleSheet, Text as RNText, View } from "react-native";
-import * as Haptics from "expo-haptics";
+import { Haptics } from "../haptics";
 import { button, color, font, radius } from "../theme";
 import { Surface } from "./Button";
 import { PressableScale } from "./PressableScale";

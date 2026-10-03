@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -21,6 +21,7 @@ import {
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio } from "../../src/api";
 import { SmartBand } from "../../src/home/SmartBand";
+import { usePrefs } from "../../src/prefs";
 import { EventRow, EventRowSkeleton, MARK } from "../../src/activity/EventRow";
 import { color, font, radius, space } from "../../src/theme";
 
@@ -37,7 +38,11 @@ const num = (v: string | number | null | undefined): number => Number(v ?? 0);
 
 export default function Portfolio() {
   const insets = useSafeAreaInsets();
-  const [hidden, setHidden] = useState(false);
+  /* Starts as Settings says, and follows it if it changes; the eye still flips it for now. */
+  const router = useRouter();
+  const prefs = usePrefs();
+  const [hidden, setHidden] = useState(prefs.hideBalances);
+  useEffect(() => setHidden(prefs.hideBalances), [prefs.hideBalances]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -94,11 +99,14 @@ export default function Portfolio() {
               <Mark size={19} color={color.ink} />
               <RNText style={s.wordmark}>Mercury</RNText>
             </View>
-            <IconButton
-              icon={hidden ? "eyeOff" : "eye"}
-              label={hidden ? "Show figures" : "Hide figures"}
-              onPress={() => setHidden((v) => !v)}
-            />
+            <View style={s.headButtons}>
+              <IconButton
+                icon={hidden ? "eyeOff" : "eye"}
+                label={hidden ? "Show figures" : "Hide figures"}
+                onPress={() => setHidden((v) => !v)}
+              />
+              <IconButton icon="cog" label="Settings" onPress={() => router.push("/settings")} />
+            </View>
           </View>
 
           {/*
@@ -415,6 +423,7 @@ const s = StyleSheet.create({
     paddingHorizontal: space.screen,
     paddingBottom: space.screen,
   },
+  headButtons: { flexDirection: "row", gap: space.sm },
   brandRow: {
     flexDirection: "row",
     alignItems: "center",

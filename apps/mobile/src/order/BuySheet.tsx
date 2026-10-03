@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import * as Haptics from "expo-haptics";
+import { Haptics } from "../haptics";
 import { pct, shares as fmtShares, usd } from "@mercury/view";
 import { PriceMoved, useMoney, useOrderAction, useQuote, type Quote } from "../api";
 import { Button, Chip, Icon, IconButton, Note, Skeleton, StockLogo, Text, useBottomGap } from "../ui";

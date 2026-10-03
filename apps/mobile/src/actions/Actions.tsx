@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text as RNText, View } from "react-native";
 import { BlurView } from "expo-blur";
-import * as Haptics from "expo-haptics";
+import { Haptics } from "../haptics";
 import { useRouter } from "expo-router";
 import Animated, {
   Easing,

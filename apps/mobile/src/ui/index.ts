@@ -19,3 +19,4 @@ export * from "./Note.js";
 export * from "./QrBlock.js";
 export * from "./TabBar.js";
 export * from "./Segmented.js";
+export * from "./Visa.js";

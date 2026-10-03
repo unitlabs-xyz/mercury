@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { Share, StyleSheet, Text as RNText, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import * as Haptics from "expo-haptics";
+import { Haptics } from "../src/haptics";
 import { useRouter } from "expo-router";
 import { useMoney } from "../src/api";
 import { Button, Note, PanelHeader, QrBlock } from "../src/ui";
