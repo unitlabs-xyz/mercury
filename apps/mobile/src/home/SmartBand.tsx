@@ -43,7 +43,7 @@ export const SmartBand = ({ masked }: { masked: boolean }) => {
   return <YourDay portfolio={p} masked={masked} />;
 };
 
-const LoadingBand = () => (
+export const LoadingBand = () => (
   <Band id="loading">
     <View style={s.pad}>
       <Skeleton dark width={150} height={12} />
@@ -63,7 +63,7 @@ const LOAN: Record<Exclude<Borrow["health"], "healthy">, { title: string; tone: 
   liquidation: { title: "Kamino is selling collateral", tone: ON_BAND.down },
 };
 
-const LoanBand = ({ borrow }: { borrow: Borrow }) => {
+export const LoanBand = ({ borrow }: { borrow: Borrow }) => {
   const router = useRouter();
   const look = LOAN[borrow.health as Exclude<Borrow["health"], "healthy">];
   const drop = borrow.safeUntilDrop;
@@ -98,7 +98,7 @@ const LoanBand = ({ borrow }: { borrow: Borrow }) => {
 };
 
 /** Nothing held yet: the one step that gets there. */
-const NextStep = ({ cash }: { cash: number }) => {
+export const NextStep = ({ cash }: { cash: number }) => {
   const router = useRouter();
   const openActions = useActions();
   const funded = cash >= MIN_ORDER;
@@ -145,8 +145,33 @@ const todayUsd = (valueUsd: number, changePct: number) => valueUsd - valueUsd / 
  * latest — a share count that grew by itself, which no broker shows.
  */
 const YourDay = ({ portfolio, masked }: { portfolio: Portfolio; masked: boolean }) => {
-  const router = useRouter();
   const feed = useActivityFeed(25);
+  const dividend = useMemo(() => {
+    const month = new Date().toISOString().slice(0, 7);
+    const events = (feed.data?.items ?? []).map(toEvent).filter((e) => e.kind === "dividend");
+    const recent = events.filter((e) => e.date.startsWith(month));
+    return recent.length > 0 ? { title: recent[0]!.title, sub: recent[0]!.sub, count: recent.length } : null;
+  }, [feed.data]);
+  return <YourDayView portfolio={portfolio} masked={masked} dividend={dividend} />;
+};
+
+/** This month's dividends, as the band mentions them: the latest, and how many. */
+export interface DividendNote {
+  readonly title: string;
+  readonly sub: string;
+  readonly count: number;
+}
+
+export const YourDayView = ({
+  portfolio,
+  masked,
+  dividend,
+}: {
+  portfolio: Portfolio;
+  masked: boolean;
+  dividend: DividendNote | null;
+}) => {
+  const router = useRouter();
   const change = num(portfolio.changeUsd);
   const up = change >= 0;
 
@@ -158,18 +183,12 @@ const YourDay = ({ portfolio, masked }: { portfolio: Portfolio; masked: boolean 
     [portfolio.holdings],
   );
 
-  const dividend = useMemo(() => {
-    const month = new Date().toISOString().slice(0, 7);
-    const events = (feed.data?.items ?? []).map(toEvent).filter((e) => e.kind === "dividend");
-    const recent = events.filter((e) => e.date.startsWith(month));
-    return recent.length > 0 ? { latest: recent[0]!, count: recent.length } : null;
-  }, [feed.data]);
-
   return (
     <Band id="day">
       <View style={[s.pad, s.head]}>
         <RNText style={s.kicker}>Your day</RNText>
-        <RNText style={[s.headFigure, { color: up ? ON_BAND.up : ON_BAND.down }]}>
+        {/* Hidden means hidden: the colour alone would say which way the day went. */}
+        <RNText style={[s.headFigure, { color: masked ? ON_BAND.muted : up ? ON_BAND.up : ON_BAND.down }]}>
           {masked ? "••••" : `${usdSigned(change)} · ${up ? "+" : "−"}${pct(num(portfolio.changePct))}`}
         </RNText>
       </View>
@@ -189,7 +208,9 @@ const YourDay = ({ portfolio, masked }: { portfolio: Portfolio; masked: boolean 
               <StockLogo ticker={h.ticker} size={26} />
               <View>
                 <RNText style={s.ticker}>{h.ticker}</RNText>
-                <RNText style={[s.move, { color: gain ? ON_BAND.up : ON_BAND.down }]}>
+                <RNText
+                  style={[s.move, { color: masked ? ON_BAND.muted : gain ? ON_BAND.up : ON_BAND.down }]}
+                >
                   {masked ? "••••" : usdSigned(move)}
                 </RNText>
               </View>
@@ -207,8 +228,8 @@ const YourDay = ({ portfolio, masked }: { portfolio: Portfolio; masked: boolean 
           <Icon name="refresh" size={14} color={ON_BAND.up} strokeWidth={1.8} />
           <RNText style={s.dividendText} numberOfLines={1}>
             {dividend.count > 1
-              ? `Dividends added shares ${dividend.count} times this month · latest ${dividend.latest.title}`
-              : `${dividend.latest.title}${dividend.latest.sub ? ` · ${dividend.latest.sub}` : ""}`}
+              ? `${dividend.count} dividends added shares this month`
+              : `${dividend.title}${dividend.sub ? ` · ${dividend.sub}` : ""}`}
           </RNText>
           <Icon name="chevronRight" size={12} color={ON_BAND.muted} />
         </PressableScale>
