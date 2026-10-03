@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { VersionedTransaction } from "@solana/web3.js";
+import { Buffer } from "buffer";
 import type { Decision } from "@mercury/types";
 import { placeOrder, type OrderIntent, type OrderResult } from "@mercury/view";
 import { apiFetch } from "./client.js";
@@ -15,7 +16,15 @@ export {
   type OrderStep,
 } from "@mercury/view";
 
-/** Base64 without `atob`/`btoa`, which Hermes does not define. */
+/**
+ * Base64 without `atob`/`btoa`, which Hermes does not define.
+ *
+ * `Buffer` is imported rather than taken off the global the polyfill installs.
+ * The global is what `@solana/web3.js` needs at runtime, from inside its own
+ * modules; a type for it here would mean depending on @types/node in a React
+ * Native app, which only ever resolved because a stale node_modules happened
+ * to hoist one.
+ */
 const toBytes = (b64: string): Uint8Array => Uint8Array.from(Buffer.from(b64, "base64"));
 const toBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
 

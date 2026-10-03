@@ -16,6 +16,5 @@ import { Buffer } from "buffer";
  * rather than imported at each call site because web3.js reads the global from
  * inside its own modules, where our imports cannot reach.
  */
-if (typeof globalThis.Buffer === "undefined") {
-  (globalThis as { Buffer?: typeof Buffer }).Buffer = Buffer;
-}
+const withBuffer = globalThis as { Buffer?: typeof Buffer };
+if (withBuffer.Buffer === undefined) withBuffer.Buffer = Buffer;
