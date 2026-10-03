@@ -6,9 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import type { Portfolio as PortfolioData } from "@mercury/types";
 import { GROUPS, toEvent, usd, usdCompact, usdSigned, type EventKind } from "@mercury/view";
 import {
-  ActionStrip,
   Button,
-  CARD_RADIUS,
   Chip,
   HeroBalance,
   Icon,
@@ -20,10 +18,9 @@ import {
   Skeleton,
   StockLogo,
   Text,
-  type Action,
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio } from "../../src/api";
-import { useActions } from "../../src/actions/Actions";
+import { MarketPulse } from "../../src/home/MarketPulse";
 import { EventRow, EventRowSkeleton, MARK } from "../../src/activity/EventRow";
 import { color, font, radius, space } from "../../src/theme";
 
@@ -40,7 +37,6 @@ const num = (v: string | number | null | undefined): number => Number(v ?? 0);
 
 export default function Portfolio() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const [hidden, setHidden] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
@@ -70,22 +66,6 @@ export default function Portfolio() {
 
   const waiting = portfolio.isPending && portfolio.data === undefined;
   const failed = portfolio.isError;
-
-  const openActions = useActions();
-  const actions: readonly Action[] = [
-    { key: "invest", label: "Invest", icon: "trend", onPress: () => router.push("/invest") },
-    { key: "cash", label: "Add cash", icon: "plus", onPress: () => openActions("addCash") },
-    /* To the menu, where Send says it is coming: the web's panel does not send yet either. */
-    {
-      key: "send",
-      label: "Send",
-      icon: "arrowUp",
-      tone: "brand",
-      rotate: "45deg",
-      onPress: () => openActions(),
-    },
-    { key: "card", label: "Card", icon: "card", tone: "warm", onPress: () => undefined },
-  ];
 
   const refreshAll = async (): Promise<void> => {
     setRefreshing(true);
@@ -181,7 +161,7 @@ export default function Portfolio() {
         </View>
 
         {/* ── The band: the dark ground between the two cards ───────────── */}
-        <ActionStrip actions={actions} />
+        <MarketPulse />
 
         {/* ── Card two: what has happened ───────────────────────────────── */}
         <View style={s.bottomCard}>
@@ -430,8 +410,8 @@ const s = StyleSheet.create({
   topCard: {
     zIndex: 1,
     backgroundColor: color.surface,
-    borderBottomLeftRadius: CARD_RADIUS,
-    borderBottomRightRadius: CARD_RADIUS,
+    borderBottomLeftRadius: radius.card,
+    borderBottomRightRadius: radius.card,
     paddingHorizontal: space.screen,
     paddingBottom: space.screen,
   },
@@ -557,8 +537,8 @@ const s = StyleSheet.create({
     zIndex: 1,
     flexGrow: 1,
     backgroundColor: color.surface,
-    borderTopLeftRadius: CARD_RADIUS,
-    borderTopRightRadius: CARD_RADIUS,
+    borderTopLeftRadius: radius.card,
+    borderTopRightRadius: radius.card,
     /* Clears the floating tab bar. */
     paddingBottom: 108,
   },

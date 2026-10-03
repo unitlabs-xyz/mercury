@@ -239,3 +239,21 @@ export const useInstrumentHistory = (ticker: string, span: Span) =>
        moves the line rather than blanking the card. */
     placeholderData: (prev) => prev,
   });
+
+/** The exchange session, from `GET /v1/market/status`. */
+export interface MarketStatus {
+  readonly status: string;
+  readonly isOpen: boolean;
+  readonly nextOpenAt: string | null;
+  readonly nextCloseAt: string | null;
+  readonly isWeekend: boolean;
+}
+
+/** A minute: the line it feeds counts down in minutes, and re-reads the clock itself in between. */
+export const useMarketStatus = () =>
+  useQuery({
+    queryKey: ["api", "market", "status"],
+    queryFn: () => apiFetch<MarketStatus>("/v1/market/status"),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });

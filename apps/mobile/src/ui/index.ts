@@ -7,7 +7,6 @@ export * from "./PressableScale.js";
 export * from "./Chip.js";
 export * from "./Field.js";
 export * from "./HeroBalance.js";
-export * from "./ActionStrip.js";
 export * from "./CodeInput.js";
 export * from "./MoveChip.js";
 export * from "./StockLogo.js";
