@@ -1,27 +1,7 @@
-import { KIND_LABEL, type Event } from "@mercury/view";
+import { toCsv, type Event } from "@mercury/view";
 
-/** RFC 4180: quote everything, double any embedded quote. */
-const cell = (v: string) => `"${v.replace(/"/g, '""')}"`;
-
-const HEADERS = ["Date", "Type", "Event", "Detail", "Amount", "Direction", "Signature"];
-
-export const toCsv = (events: Event[]): string =>
-  [
-    HEADERS.map(cell).join(","),
-    ...events.map((e) =>
-      [
-        e.date,
-        KIND_LABEL[e.kind],
-        e.title,
-        e.sub,
-        e.amount ?? "",
-        e.flow === "in" ? "In" : e.flow === "out" ? "Out" : "No cash movement",
-        e.signature ?? "",
-      ]
-        .map(cell)
-        .join(","),
-    ),
-  ].join("\r\n");
+/* The CSV itself is built in `@mercury/view`, so the phone exports the same file. */
+export { toCsv };
 
 export const downloadCsv = (events: Event[]) => {
   const blob = new Blob([toCsv(events)], { type: "text/csv;charset=utf-8" });
