@@ -20,7 +20,7 @@ import {
   Text,
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio } from "../../src/api";
-import { MarketPulse } from "../../src/home/MarketPulse";
+import { SmartBand } from "../../src/home/SmartBand";
 import { EventRow, EventRowSkeleton, MARK } from "../../src/activity/EventRow";
 import { color, font, radius, space } from "../../src/theme";
 
@@ -161,7 +161,7 @@ export default function Portfolio() {
         </View>
 
         {/* ── The band: the dark ground between the two cards ───────────── */}
-        <MarketPulse />
+        <SmartBand masked={hidden} />
 
         {/* ── Card two: what has happened ───────────────────────────────── */}
         <View style={s.bottomCard}>

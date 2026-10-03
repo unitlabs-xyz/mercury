@@ -4,9 +4,7 @@ import { useRouter } from "expo-router";
 import { useInstruments, useMarketStatus, type MarketStatus } from "../api";
 import { color, font, radius, space } from "../theme";
 import { Icon, PressableScale, Skeleton, StockLogo } from "../ui";
-
-/** The home cards' corner: the band bleeds under it by this much. */
-const CARD_RADIUS = radius.card;
+import { Band, ON_BAND } from "./band";
 
 /** "2h 14m", "38m", "3d 4h": the time to the next bell, said as short as it can be. */
 const until = (iso: string | null, now: number): string | null => {
@@ -60,7 +58,7 @@ export const MarketPulse = () => {
   const loading = movers.isPending && movers.data === undefined;
 
   return (
-    <View style={s.band}>
+    <Band id="pulse">
       <View style={s.head}>
         <View style={s.session}>
           <View style={[s.dot, status.data?.isOpen === true && s.live]} />
@@ -104,24 +102,15 @@ export const MarketPulse = () => {
               );
             })}
       </ScrollView>
-    </View>
+    </Band>
   );
 };
 
-/* On the ink: the web's gain and fall, lifted so they hold their colour on black. */
-const UP = "#5AB35C";
-const DOWN = "#E3776F";
-const MUTED = "rgba(255,255,255,0.55)";
+const UP = ON_BAND.up;
+const DOWN = ON_BAND.down;
+const MUTED = ON_BAND.muted;
 
 const s = StyleSheet.create({
-  band: {
-    backgroundColor: color.band,
-    marginTop: -CARD_RADIUS,
-    paddingTop: 16 + CARD_RADIUS,
-    marginBottom: -CARD_RADIUS,
-    paddingBottom: 16 + CARD_RADIUS,
-    gap: space.md,
-  },
   head: {
     flexDirection: "row",
     alignItems: "center",
