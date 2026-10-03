@@ -66,7 +66,6 @@ export default function Welcome() {
         </RNText>
         <View style={s.actions}>
           <Button label="Continue with email" onPress={() => router.push("/sign-in")} />
-          <RNText style={s.fine}>No seed phrase to write down. Export the wallet whenever you like.</RNText>
         </View>
       </View>
     </View>
@@ -92,5 +91,4 @@ const s = StyleSheet.create({
   },
   lead: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: color.muted, marginTop: space.md },
   actions: { marginTop: space.xl, gap: space.md },
-  fine: { fontFamily: font.regular, fontSize: 12, lineHeight: 17, color: color.muted, textAlign: "center" },
 });
