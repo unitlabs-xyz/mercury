@@ -269,3 +269,36 @@ export const useMarketStatus = () =>
     staleTime: 60_000,
     refetchInterval: 60_000,
   });
+
+/** One company across every token of it you hold, as `GET /v1/portfolio/exposure/:ticker` returns it. */
+export interface Exposure {
+  readonly ticker: string;
+  readonly shares: string;
+  readonly valueUsd: string;
+  readonly wrappers: readonly {
+    readonly mint: string;
+    readonly symbol: string;
+    readonly issuer: "backed" | "ondo";
+    readonly tokenQty: string;
+    readonly multiplier: string;
+    readonly shares: string;
+    readonly valueUsd: string;
+    /** Of this company's value, the share in this token, 0–100. */
+    readonly sharePct: string;
+  }[];
+  readonly warnings: readonly {
+    readonly code: string;
+    readonly issuer: string;
+    readonly sharePct: string;
+    readonly message: string;
+  }[];
+}
+
+/** Only asked for when something is held: the route answers 404 for a position of nothing. */
+export const useExposure = (ticker: string, held: boolean) =>
+  useQuery({
+    queryKey: ["api", "exposure", ticker],
+    queryFn: () => apiFetch<Exposure>(`/v1/portfolio/exposure/${encodeURIComponent(ticker)}`),
+    enabled: held && ticker.length > 0,
+    staleTime: 30_000,
+  });

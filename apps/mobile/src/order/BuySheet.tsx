@@ -9,7 +9,8 @@ import {
   View,
 } from "react-native";
 import { Haptics } from "../haptics";
-import { pct, shares as fmtShares, usd } from "@mercury/view";
+import { pct, refuseCopy, shares as fmtShares, usd } from "@mercury/view";
+import { useRouter } from "expo-router";
 import { PriceMoved, useMoney, useOrderAction, useQuote, type Quote } from "../api";
 import { Button, Chip, Icon, IconButton, Note, Skeleton, StockLogo, Text, useBottomGap } from "../ui";
 import { color, font, radius, space } from "../theme";
@@ -101,7 +102,14 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={[s.sheet, { paddingBottom: bottom }]}>
         {placed !== undefined ? (
-          <Filled result={placed} name={name} ticker={ticker} logoUrl={logoUrl} onDone={onClose} />
+          <Filled
+            result={placed}
+            name={name}
+            ticker={ticker}
+            logoUrl={logoUrl}
+            amount={amount}
+            onDone={onClose}
+          />
         ) : (
           <>
             <View style={s.head}>
@@ -157,21 +165,25 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
                   We could not price that just now.
                 </Text>
               ) : decision.kind === "refuse" ? (
-                <Refused detail={decision.detail} />
+                <Refused reason={decision.reason} side={decision.side} />
+              ) : decision.kind === "offer_queue" ? (
+                <Queued decision={decision} amount={amount} />
               ) : (
                 <Preview decision={decision} quote={quote.data} amount={amount} moved={moved !== null} />
               )}
 
               {order.isError && moved === null && (
-                <View style={s.failed}>
+                <View style={[s.result, s.resultDown, s.failed]}>
+                  <RNText style={[s.resultTitle, s.downInk]}>Your order didn&apos;t go through</RNText>
                   {/* Capped. The server should never send a wall of text and
                       now does not, but a sheet that can be pushed off screen
                       by one bad string is a sheet with no floor under it. */}
-                  <Note tone="down">
+                  <RNText style={[s.resultBody, s.downInk]}>
                     {order.error.message.length > 240
                       ? `${order.error.message.slice(0, 240)}…`
                       : order.error.message}
-                  </Note>
+                  </RNText>
+                  <RNText style={[s.resultBody, s.downInk]}>Check Activity before trying again.</RNText>
                 </View>
               )}
             </View>
@@ -186,11 +198,18 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
                       : moved !== null
                         ? "Buy at the new price"
                         : decision?.kind === "offer_queue"
-                          ? "Place for the open"
-                          : "Buy"
+                          ? "Wait for the open"
+                          : decision?.kind === "refuse"
+                            ? "Can't buy right now"
+                            : order.isError
+                              ? "Try again"
+                              : "Buy"
                 }
                 busy={order.isPending}
-                disabled={overBalance || (!canPlace && decision?.kind !== "offer_queue")}
+                /* A queued decision blocks, as the web's does: the market is shut and
+                   orders that wait for the open are not built yet, so the server
+                   would refuse it after the signing prompt. */
+                disabled={overBalance || !canPlace}
                 onPress={buy}
               />
             </View>
@@ -213,7 +232,8 @@ const Preview = ({
   amount: number;
   moved: boolean;
 }) => {
-  if (decision.kind === "refuse") return <Refused detail={decision.detail} />;
+  if (decision.kind === "refuse") return <Refused reason={decision.reason} side={decision.side} />;
+  if (decision.kind === "offer_queue") return <Queued decision={decision} amount={amount} />;
 
   const price = num(decision.best.pricePerShare) ?? 0;
   const got = num(decision.best.filledShares);
@@ -230,15 +250,6 @@ const Preview = ({
           <Icon name="alert" size={14} color={color.warn} />
           <Text variant="small" style={s.noteText}>
             The price moved while we were building your order. This is the new one.
-          </Text>
-        </View>
-      )}
-
-      {decision.kind === "offer_queue" && (
-        <View style={s.note}>
-          <Icon name="clock" size={14} color={color.warn} />
-          <Text variant="small" style={s.noteText}>
-            The market is closed. We'll run this at the open and tell you what it filled at.
           </Text>
         </View>
       )}
@@ -270,45 +281,122 @@ const Preview = ({
 };
 
 /**
- * A refusal, printed.
- *
- * The server declines on terms rather than failing, and the reason it gives is
- * already written for a reader — "below the minimum", "no route deep enough".
- * Rewriting it here would be a second, worse copy that drifts.
+ * A refusal, in the reader's words: what happened and, where there is one, the
+ * way out. The copy is the web's, from `@mercury/view`, so both clients say the
+ * same sentence for the same reason.
  */
-const Refused = ({ detail }: { detail: string }) => <Note tone="warn">{detail}</Note>;
+const Refused = ({ reason, side }: { reason: Parameters<typeof refuseCopy>[0]; side: "buy" | "sell" }) => {
+  const copy = refuseCopy(reason, side);
+  return (
+    <View style={[s.result, s.resultDown]}>
+      <RNText style={[s.resultTitle, s.downInk]}>{copy.title}</RNText>
+      <RNText style={[s.resultBody, s.downInk]}>{copy.body}</RNText>
+    </View>
+  );
+};
 
+type QueueDecision = Extract<NonNullable<Quote["decision"]>, { kind: "offer_queue" }>;
+
+/** "Monday at 9:30 AM ET": when the US market opens, in its own timezone. */
+const opensAt = (iso: string | null) => {
+  if (iso === null) return "When the US market opens";
+  const d = new Date(iso);
+  const day = d.toLocaleString("en-US", { weekday: "long", timeZone: "America/New_York" });
+  const time = d.toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  });
+  return `${day} at ${time} ET`;
+};
+
+/**
+ * Worth waiting: the market is shut and this costs more than a real share
+ * should. The web's advice, as the web gives it — not an offer to hold the
+ * order, which is a trigger order and not built yet.
+ */
+const Queued = ({ decision, amount }: { decision: QueueDecision; amount: number }) => {
+  const price = Number(decision.best.pricePerShare);
+  const premium = Number(decision.premium) * 100;
+  const fair = Number(decision.suggestedTriggerPricePerShare);
+  return (
+    <View style={s.lines}>
+      <View style={[s.result, s.resultWarn]}>
+        <View style={s.resultHead}>
+          <Icon name="clock" size={15} color={color.warn} />
+          <RNText style={[s.resultTitle, s.warnInk]}>Worth waiting</RNText>
+        </View>
+        <RNText style={[s.resultBody, s.warnInk]}>
+          {`The US market is shut, and this is trading ${premium.toFixed(2)}% above the real share price, more than we think you should pay. The gap usually closes once the market opens.`}
+        </RNText>
+      </View>
+      <Line label="You'd pay now" value={`${usd(price)} a share`} />
+      <Line label="Worth paying" value={`${usd(fair)} a share`} muted />
+      <Line label="Your amount" value={usd(amount)} muted />
+      <Line label="Market opens" value={opensAt(decision.marketOpensAt)} muted />
+      <Text variant="small" tone="muted">
+        Your cash stays yours in the meantime, and keeps earning.
+      </Text>
+    </View>
+  );
+};
+
+/**
+ * The order, filled: what came back, read off the chain rather than the quote,
+ * and what it cost. Done closes the sheet; Activity shows the row it made.
+ */
 const Filled = ({
   result,
   name,
   ticker,
   logoUrl,
+  amount,
   onDone,
 }: {
-  result: { shares: string; pricePerShare: string; usd: string };
+  result: { shares: string; pricePerShare: string; usd: string; realisedPnlUsd?: string | null };
   name: string;
   ticker: string;
   logoUrl?: string | undefined;
+  amount: number;
   onDone: () => void;
-}) => (
-  <View style={s.done}>
-    <View style={s.doneMark}>
-      <StockLogo ticker={ticker} uri={logoUrl} size={52} />
-      <View style={s.doneTick}>
-        <Icon name="check" size={13} color={color.surface} strokeWidth={3} />
+}) => {
+  const router = useRouter();
+  const pnl = result.realisedPnlUsd == null ? null : Number(result.realisedPnlUsd);
+  return (
+    <View style={s.done}>
+      <View style={s.doneMark}>
+        <StockLogo ticker={ticker} uri={logoUrl} size={56} />
+        <View style={s.doneTick}>
+          <Icon name="check" size={13} color={color.surface} strokeWidth={3} />
+        </View>
+      </View>
+      <RNText style={s.doneKicker}>Bought</RNText>
+      <RNText style={s.doneTitle}>{`${fmtShares(result.shares)} shares of ${name}`}</RNText>
+      <RNText style={s.doneSub}>{`at ${usd(result.pricePerShare)} a share`}</RNText>
+
+      <View style={s.receipt}>
+        <Line label="You paid" value={usd(amount)} />
+        <Line label="Went into shares" value={usd(result.usd)} muted />
+        <Line label="Price a share" value={usd(result.pricePerShare)} muted />
+        {pnl !== null && (
+          <Line label={pnl < 0 ? "Realised loss" : "Realised gain"} value={usd(Math.abs(pnl))} muted />
+        )}
+      </View>
+
+      <View style={s.doneActions}>
+        <Button label="Done" onPress={onDone} />
+        <Button
+          label="See it in Activity"
+          variant="secondary"
+          onPress={() => {
+            onDone();
+            router.navigate("/activity");
+          }}
+        />
       </View>
     </View>
-    <RNText style={s.doneTitle}>
-      {fmtShares(result.shares)} shares of {name}
-    </RNText>
-    <RNText style={s.doneSub}>
-      {usd(result.usd)} at {usd(result.pricePerShare)} a share
-    </RNText>
-    <View style={s.doneAction}>
-      <Button label="Done" onPress={onDone} />
-    </View>
-  </View>
-);
+  );
+};
 
 const Line = ({
   label,
@@ -372,11 +460,29 @@ const s = StyleSheet.create({
   noteText: { flex: 1, color: color.warn, lineHeight: 18 },
 
   failed: { marginTop: space.md },
+  result: { borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 12, gap: 4 },
+  resultDown: { backgroundColor: color.downChip },
+  resultWarn: { backgroundColor: color.warnChip },
+  resultHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  resultTitle: { fontFamily: font.medium, fontSize: 14, lineHeight: 19 },
+  resultBody: { fontFamily: font.regular, fontSize: 13, lineHeight: 19 },
+  downInk: { color: color.chipDown },
+  warnInk: { color: color.chipWarn },
+  doneKicker: { fontFamily: font.medium, fontSize: 13, color: color.up, marginTop: space.md },
+  receipt: {
+    alignSelf: "stretch",
+    borderRadius: radius.md,
+    backgroundColor: color.tile,
+    padding: space.md,
+    gap: 10,
+    marginTop: space.lg,
+  },
+  doneActions: { alignSelf: "stretch", gap: space.sm, marginTop: space.lg },
 
   footer: { paddingHorizontal: space.screen, paddingTop: space.md },
 
   done: { alignItems: "center", paddingHorizontal: space.screen, paddingTop: 30 },
-  doneMark: { marginBottom: 18 },
+  doneMark: {},
   doneTick: {
     position: "absolute",
     right: -4,
@@ -398,5 +504,4 @@ const s = StyleSheet.create({
     textAlign: "center",
   },
   doneSub: { fontFamily: font.regular, fontSize: 14, letterSpacing: -0.14, color: color.muted, marginTop: 7 },
-  doneAction: { alignSelf: "stretch", marginTop: 26 },
 });

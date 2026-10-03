@@ -18,12 +18,14 @@ import {
 } from "../../src/ui";
 import {
   SPANS,
+  useExposure,
   useInstrument,
   useInstrumentHistory,
   usePortfolio,
   type Span,
   type Wrapper,
 } from "../../src/api";
+import { ExposureCard } from "../../src/stock/ExposureCard";
 import { color, font, radius, space } from "../../src/theme";
 
 /** The web's own words for each range, so the line under the figure reads. */
@@ -51,6 +53,7 @@ export default function Stock() {
 
   const i = page.data?.instrument;
   const held = (portfolio.data?.holdings ?? []).find((h) => h.ticker === t);
+  const exposure = useExposure(t, held !== undefined);
 
   const points = history.data?.points ?? [];
   const values = points.map(([, p]) => Number(p));
@@ -165,6 +168,11 @@ export default function Stock() {
                 />
               </View>
             </View>
+          )}
+
+          {/* ── What you hold of it, across every token ─────────────────── */}
+          {held !== undefined && (
+            <ExposureCard name={i?.name ?? t} exposure={exposure.data} loading={exposure.isPending} />
           )}
 
           {/* ── Where an order goes ─────────────────────────────────────── */}
