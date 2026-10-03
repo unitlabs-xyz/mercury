@@ -105,10 +105,11 @@ const Menu = ({
 
       <View style={[s.stack, { right: side, bottom: bottom + height + 14 }]} pointerEvents="box-none">
         {/* The web's other doors, nearest the button the ones that work here
-            today. Borrow and Card are on the web and not yet on the phone, and
-            Send is on neither (the web's panel stops short of sending), so they
-            show as coming rather than opening a screen that is not there. */}
-        <Pill t={t} order={5} icon="card" title="Card" soon />
+            today; Card opens its preview page. Borrow is on the web and not yet on
+            the phone, and Send is on neither (the web's panel stops short of
+            sending), so they show as coming rather than opening a screen that is
+            not there. */}
+        <Pill t={t} order={5} icon="card" title="Card" onPress={() => onPick(() => router.push("/card"))} />
         <Pill t={t} order={4} icon="arrowUp" tilt title="Send" soon />
         <Pill t={t} order={3} icon="key" title="Borrow" soon />
         <Pill

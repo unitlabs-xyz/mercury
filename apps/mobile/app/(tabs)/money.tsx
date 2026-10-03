@@ -49,6 +49,9 @@ export default function Money() {
       >
         <View style={s.head}>
           <Text variant="title">Money</Text>
+          <RNText style={s.lede}>
+            Your cash earns while it waits. Invest it, or borrow against your stocks.
+          </RNText>
         </View>
 
         {/* Cash */}
@@ -201,7 +204,9 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.page },
   /* Clears the floating tab bar. */
   scroll: { paddingBottom: 116, gap: space.md },
-  head: { paddingHorizontal: space.screen },
+  head: { paddingHorizontal: space.screen, gap: 4 },
+  /* One line under the title saying what the page is for, on every tab. */
+  lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted },
   /* The web's card: white, a 12 corner, and a grey panel set 4 in from its edge. */
   card: {
     marginHorizontal: space.screen,

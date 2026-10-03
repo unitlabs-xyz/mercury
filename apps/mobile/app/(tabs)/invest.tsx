@@ -4,14 +4,39 @@ import { ScrollView, StyleSheet, Text as RNText, TextInput, View } from "react-n
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { usd, usdCompact } from "@mercury/view";
-import { Chip, Icon, MoveChip, PressableScale, Skeleton, Sparkline, StockLogo, Text } from "../../src/ui";
-import { useHistories, useInstruments, usePortfolio, type Instrument, type Shelf } from "../../src/api";
+import {
+  Chip,
+  Icon,
+  MoveChip,
+  PressableScale,
+  Segmented,
+  Skeleton,
+  Sparkline,
+  StockLogo,
+  Text,
+} from "../../src/ui";
+import {
+  useHistories,
+  useInstruments,
+  usePortfolio,
+  type Instrument,
+  type Shelf,
+  type Span,
+} from "../../src/api";
 import { color, font, radius, space } from "../../src/theme";
 
 const SHELVES: readonly { key: Shelf; label: string }[] = [
   { key: "featured", label: "Featured" },
   { key: "movers", label: "Movers" },
   { key: "popular", label: "Popular" },
+];
+
+/** The ranges the list's charts and moves follow, as the web's screener offers them. */
+const RANGES: readonly { key: Span; label: string }[] = [
+  { key: "1D", label: "1D" },
+  { key: "1W", label: "1W" },
+  { key: "1M", label: "1M" },
+  { key: "1Y", label: "1Y" },
 ];
 
 /** The logo's diameter, as everywhere else a row is led by one. */
@@ -29,6 +54,8 @@ export default function Invest() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [shelf, setShelf] = useState<Shelf>("featured");
+  const [range, setRange] = useState<Span>("1D");
+  const [sector, setSector] = useState<string>("all");
   const [query, setQuery] = useState("");
 
   // Search the server once typing settles, not on every keystroke — the web
@@ -51,7 +78,17 @@ export default function Invest() {
   /* One round trip for every line on screen. Capped: the server takes sixty
      tickers and a phone shows far fewer before anyone scrolls. */
   const tickers = useMemo(() => instruments.slice(0, 40).map((i) => i.ticker), [instruments]);
-  const histories = useHistories(tickers);
+  const histories = useHistories(tickers, range);
+
+  /* The sectors this shelf actually holds, so no chip promises an empty list. */
+  const sectors = useMemo(
+    () => [...new Set(instruments.map((i) => i.sector).filter((x): x is string => x !== null))].sort(),
+    [instruments],
+  );
+  const shown = useMemo(
+    () => (sector === "all" ? instruments : instruments.filter((i) => i.sector === sector)),
+    [instruments, sector],
+  );
 
   const searching = term.length > 0;
   const waiting = list.isPending && list.data === undefined;
@@ -67,7 +104,10 @@ export default function Invest() {
         keyboardDismissMode="on-drag"
       >
         <View style={s.head}>
-          <Text variant="title">Invest</Text>
+          <View style={s.titleBlock}>
+            <Text variant="title">Invest</Text>
+            <RNText style={s.lede}>Real US stocks and ETFs, from $5, any hour of the week.</RNText>
+          </View>
           {session !== undefined && (
             <View style={s.session}>
               <View style={[s.dot, session === "open" && s.dotLive]} />
@@ -95,22 +135,48 @@ export default function Invest() {
         {/* The shelves are what a search replaces, so they go when one starts
             rather than sitting there describing a list they no longer order. */}
         {!searching && (
-          <View style={s.chips}>
-            {SHELVES.map((sh) => (
-              <Chip
-                key={sh.key}
-                label={sh.label}
-                selected={shelf === sh.key}
-                onPress={() => setShelf(sh.key)}
-              />
-            ))}
+          <View style={s.shelves}>
+            <Segmented
+              options={SHELVES}
+              value={shelf}
+              onChange={(k) => {
+                setShelf(k);
+                setSector("all");
+              }}
+              fill
+              onPage
+            />
           </View>
         )}
 
+        {/* Sectors, from what the shelf holds: a filter over the list, not a
+            different list, so it stays put while the range changes. */}
+        {sectors.length > 1 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.sectorRow}
+            contentContainerStyle={s.sectors}
+          >
+            <Chip label="All sectors" selected={sector === "all"} onPress={() => setSector("all")} />
+            {sectors.map((x) => (
+              <Chip key={x} label={x} selected={sector === x} onPress={() => setSector(x)} />
+            ))}
+          </ScrollView>
+        )}
+
         <View style={s.list}>
+          {/* The list's own heading, as the web's screener sets it: how many,
+              and the range every chart and move below it is drawn over. */}
+          <View style={s.listHead}>
+            <RNText style={s.count}>
+              {waiting ? "" : `${shown.length} ${shown.length === 1 ? "stock" : "stocks"}`}
+            </RNText>
+            <Segmented options={RANGES} value={range} onChange={setRange} />
+          </View>
           {waiting ? (
             [0, 1, 2, 3, 4, 5].map((i) => <RowSkeleton key={i} />)
-          ) : instruments.length === 0 ? (
+          ) : shown.length === 0 ? (
             <View style={s.empty}>
               <Text variant="label">{searching ? `Nothing matching "${term}"` : "No stocks to show"}</Text>
               <Text variant="small" tone="muted">
@@ -120,12 +186,19 @@ export default function Invest() {
               </Text>
             </View>
           ) : (
-            instruments.map((i) => (
+            shown.map((i) => (
               <Line
                 key={i.ticker}
                 instrument={i}
                 owned={owned.has(i.ticker)}
                 points={histories.data?.series[i.ticker]?.points}
+                change={
+                  range === "1D"
+                    ? Number(i.changePct24h)
+                    : histories.data?.series[i.ticker]
+                      ? Number(histories.data.series[i.ticker]!.changePct)
+                      : null
+                }
                 onPress={() => router.push({ pathname: "/stock/[ticker]", params: { ticker: i.ticker } })}
               />
             ))
@@ -149,14 +222,17 @@ const Line = ({
   instrument: i,
   owned,
   points,
+  change,
   onPress,
 }: {
   onPress: () => void;
   instrument: Instrument;
   owned: boolean;
   points: readonly (readonly [number, string])[] | undefined;
+  /** Over the chosen range: the live 24h move for 1D, the series' own for the rest. */
+  change: number | null;
 }) => {
-  const move = Number(i.changePct24h);
+  const move = change ?? 0;
   const values = useMemo(() => (points ?? []).map(([, p]) => Number(p)), [points]);
 
   return (
@@ -193,7 +269,7 @@ const Line = ({
 
       <View style={s.end}>
         <RNText style={s.price}>{usd(i.pricePerShare)}</RNText>
-        <MoveChip value={move} />
+        <MoveChip value={change} />
       </View>
     </PressableScale>
   );
@@ -220,12 +296,12 @@ const s = StyleSheet.create({
 
   head: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: space.screen,
     paddingBottom: space.md,
   },
-  session: { flexDirection: "row", alignItems: "center", gap: 6 },
+  session: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
   dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: color.faint },
   dotLive: { backgroundColor: color.up },
   sessionLabel: { fontFamily: font.medium, fontSize: 12.5, letterSpacing: -0.2, color: color.muted },
@@ -249,7 +325,21 @@ const s = StyleSheet.create({
     padding: 0,
   },
 
-  chips: { flexDirection: "row", gap: 4, paddingHorizontal: space.screen - 13, paddingTop: space.md },
+  titleBlock: { flex: 1, minWidth: 0, gap: 4 },
+  /* One line under the title saying what the page is for, on every tab. */
+  lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted },
+  shelves: { paddingHorizontal: space.screen, paddingTop: space.md },
+  sectorRow: { flexGrow: 0, marginTop: space.md },
+  sectors: { gap: 6, paddingHorizontal: space.screen },
+  listHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.xs,
+  },
+  count: { fontFamily: font.medium, fontSize: 14, color: color.ink },
 
   /* One white panel holding every row, as the web's screener does, rather than
      a card per row: a list of cards is a list of edges, and the eye follows the

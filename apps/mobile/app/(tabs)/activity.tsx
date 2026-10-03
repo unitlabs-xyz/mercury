@@ -70,9 +70,14 @@ export default function Activity() {
         refreshControl={<RefreshControl refreshing={pulling} onRefresh={pull} />}
       >
         <View style={s.head}>
-          <View style={s.titleRow}>
-            <Text variant="title">Activity</Text>
-            <RNText style={s.count}>{count}</RNText>
+          <View style={s.titleBlock}>
+            <View style={s.titleRow}>
+              <Text variant="title">Activity</Text>
+              <RNText style={s.count}>{count}</RNText>
+            </View>
+            <RNText style={s.lede}>
+              Every buy, sale, dividend and transfer, each with its proof on Solana.
+            </RNText>
           </View>
           <IconButton icon="download" label="Share as CSV" onPress={exportCsv} />
         </View>
@@ -185,7 +190,10 @@ const s = StyleSheet.create({
     paddingHorizontal: space.screen,
     paddingBottom: space.md,
   },
+  titleBlock: { flex: 1, minWidth: 0, gap: 4 },
   titleRow: { flexDirection: "row", alignItems: "baseline", gap: 10 },
+  /* One line under the title saying what the page is for, on every tab. */
+  lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted },
   count: { fontFamily: font.regular, fontSize: 14, color: color.muted },
   search: {
     flexDirection: "row",
