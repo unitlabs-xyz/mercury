@@ -1,18 +1,18 @@
 import { StyleSheet, View } from "react-native";
-import { color, font, radius, space } from "../theme";
+import { button, color, font, radius, space } from "../theme";
+import { Surface } from "./Button";
 import { Icon, type IconName } from "./Icon";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 
 /**
- * Tones for the circular buttons. Each is a pale ground with a deep glyph from
- * the same hue, so they read as a set rather than three unrelated colours. The
- * brand tint is the web's `--color-ds-act-buy-bg`; the warm one is its
- * `--color-ds-up-card-bg`.
+ * The glyph colour of each circular button. The face is the web's secondary
+ * button for all of them, so the strip reads as one row of the same control;
+ * the tone is carried by the glyph alone, as the web's dashboard buttons do.
  */
 const TONES = {
-  brand: { bg: color.brandTint, fg: color.brand },
-  warm: { bg: "#F4F3EB", fg: "#393830" },
+  brand: color.brand,
+  warm: color.cardInk,
 } as const;
 
 export interface Action {
@@ -23,6 +23,8 @@ export interface Action {
   onPress: () => void;
   /** Draws a circular, icon-only button in this tone instead of a labelled pill. */
   tone?: keyof typeof TONES;
+  /** Turns the glyph: Send is the web's up arrow at 45 degrees. */
+  rotate?: string;
 }
 
 /**
@@ -41,8 +43,9 @@ export const ActionStrip = ({ actions }: { actions: readonly Action[] }) => (
     <View style={s.row}>
       {actions.map((a) =>
         a.tone === undefined ? (
-          <PressableScale key={a.key} onPress={a.onPress} style={s.pill}>
-            <Icon name={a.icon} size={17} color={color.ink} />
+          <PressableScale key={a.key} onPress={a.onPress} style={s.pill} accessibilityRole="button">
+            <Surface />
+            <Icon name={a.icon} size={18} color={color.ink} strokeWidth={1.6} />
             <Text style={s.label}>{a.label}</Text>
           </PressableScale>
         ) : (
@@ -50,9 +53,17 @@ export const ActionStrip = ({ actions }: { actions: readonly Action[] }) => (
             key={a.key}
             onPress={a.onPress}
             accessibilityLabel={a.label}
-            style={[s.circle, { backgroundColor: TONES[a.tone].bg }]}
+            accessibilityRole="button"
+            style={s.circle}
           >
-            <Icon name={a.icon} size={20} color={TONES[a.tone].fg} />
+            <Surface />
+            <Icon
+              name={a.icon}
+              size={19}
+              color={TONES[a.tone]}
+              strokeWidth={1.8}
+              style={a.rotate === undefined ? undefined : { transform: [{ rotate: a.rotate }] }}
+            />
           </PressableScale>
         ),
       )}
@@ -60,7 +71,8 @@ export const ActionStrip = ({ actions }: { actions: readonly Action[] }) => (
   </View>
 );
 
-const SIZE = 50;
+/* 48, the web's large button. */
+const SIZE = 48;
 /** Must match the home cards' radius, so the bleed covers exactly their notches. */
 export const CARD_RADIUS = 28;
 
@@ -83,15 +95,20 @@ const s = StyleSheet.create({
     height: SIZE,
     paddingHorizontal: 12,
     borderRadius: radius.pill,
-    backgroundColor: color.surface,
+    borderWidth: 1,
+    borderColor: button.secondary.edge,
+    overflow: "hidden",
   },
-  label: { fontFamily: font.medium, fontSize: 15, letterSpacing: -0.3, color: color.ink },
+  label: { fontFamily: font.medium, fontSize: 14, letterSpacing: -0.28, color: color.ink },
   circle: {
     flexGrow: 0,
     flexShrink: 0,
     width: SIZE,
     height: SIZE,
     borderRadius: SIZE / 2,
+    borderWidth: 1,
+    borderColor: button.secondary.edge,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },

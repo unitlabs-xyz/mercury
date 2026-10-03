@@ -1,5 +1,5 @@
 /**
- * Loaded before anything else, from the root layout.
+ * Loaded before anything else, from `index.ts`, the app's entry.
  *
  * Hermes has no `crypto.getRandomValues` and no `TextEncoder`, and Privy's key
  * handling reaches for both the moment it initialises. Importing these late —

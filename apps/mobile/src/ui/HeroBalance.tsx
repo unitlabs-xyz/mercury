@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { StyleSheet, Text as RNText, View } from "react-native";
 import { usd } from "@mercury/view";
-import { color, font, space } from "../theme";
+import { color, font, radius, space } from "../theme";
 import { Text } from "./Text";
 
 export interface HeroBalanceProps {
@@ -53,12 +53,14 @@ const s = StyleSheet.create({
   labelRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   figure: {
     fontFamily: font.medium,
-    fontSize: 46,
-    lineHeight: 54,
-    letterSpacing: -1.8,
+    /* 36, the web's hero figure (`Summary.tsx`). The cents stay in ink as the
+       web sets them: a lighter tail read as a different number. */
+    fontSize: 36,
+    lineHeight: 42,
+    letterSpacing: -1.1,
     color: color.ink,
   },
-  cents: { color: color.faint },
+  cents: { color: color.ink },
 });
 
 /** The day's move: a tinted percentage pill, then the dollars. */
@@ -74,10 +76,11 @@ export const MovePill = ({ pctText, usdText, up }: { pctText: string; usdText: s
 
 const m = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: space.sm },
-  pill: { height: 24, paddingHorizontal: 9, justifyContent: "center", borderRadius: 7 },
+  /* The web's hero move chip: 20 high, a 6 corner, 12 type, and "today" in ink at 80%. */
+  pill: { height: 20, paddingHorizontal: 8, justifyContent: "center", borderRadius: radius.sm },
   upTint: { backgroundColor: color.upChip },
   downTint: { backgroundColor: color.downChip },
-  pct: { fontFamily: font.medium, fontSize: 12.5, letterSpacing: -0.2 },
-  usd: { fontFamily: font.medium, fontSize: 12.5, letterSpacing: -0.2 },
-  today: { fontFamily: font.regular, fontSize: 12.5, letterSpacing: -0.2, color: color.muted },
+  pct: { fontFamily: font.medium, fontSize: 12, letterSpacing: -0.2 },
+  usd: { fontFamily: font.medium, fontSize: 12, letterSpacing: -0.2 },
+  today: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.2, color: color.ink, opacity: 0.8 },
 });

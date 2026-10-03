@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { color, radius, space } from "../theme";
-import { Icon } from "./Icon";
-import { PressableScale } from "./PressableScale";
+import { color, space } from "../theme";
+import { IconButton } from "./Button";
 import { Text } from "./Text";
+import { useBottomGap } from "./useBottomGap";
 
 export interface ScreenProps {
   title?: string;
@@ -28,6 +28,7 @@ export interface ScreenProps {
  * use this — it runs its own card under the status bar.
  */
 export const Screen = ({ title, subtitle, onBack, scroll = true, footer, children }: ScreenProps) => {
+  const bottom = useBottomGap();
   const body = scroll ? (
     <ScrollView
       contentContainerStyle={s.body}
@@ -48,9 +49,7 @@ export const Screen = ({ title, subtitle, onBack, scroll = true, footer, childre
       <KeyboardAvoidingView style={s.fill} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         {onBack !== undefined && (
           <View style={s.backRow}>
-            <PressableScale onPress={onBack} accessibilityLabel="Back" style={s.back} activeScale={0.9}>
-              <Icon name="chevronRight" size={18} color={color.ink} style={s.flip} />
-            </PressableScale>
+            <IconButton icon="chevronRight" rotate="180deg" label="Back" onPress={onBack} />
           </View>
         )}
         {title !== undefined && (
@@ -64,7 +63,7 @@ export const Screen = ({ title, subtitle, onBack, scroll = true, footer, childre
           </View>
         )}
         {body}
-        {footer !== undefined && <View style={s.footer}>{footer}</View>}
+        {footer !== undefined && <View style={[s.footer, { paddingBottom: bottom }]}>{footer}</View>}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -74,17 +73,9 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.page },
   fill: { flex: 1 },
   backRow: { paddingHorizontal: space.screen, paddingTop: space.sm, paddingBottom: space.md },
-  back: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: color.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   flip: { transform: [{ rotate: "180deg" }] },
   heading: { paddingHorizontal: space.screen, paddingTop: space.xs, paddingBottom: space.lg },
   subtitle: { marginTop: 6 },
   body: { paddingHorizontal: space.screen, paddingBottom: space.xl, gap: space.lg },
-  footer: { paddingHorizontal: space.screen, paddingTop: space.md, paddingBottom: space.md },
+  footer: { paddingHorizontal: space.screen, paddingTop: space.md },
 });

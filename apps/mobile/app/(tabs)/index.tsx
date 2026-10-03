@@ -7,10 +7,12 @@ import type { Portfolio as PortfolioData } from "@mercury/types";
 import { GROUPS, toEvent, usd, usdCompact, usdSigned, type Event, type EventKind } from "@mercury/view";
 import {
   ActionStrip,
+  Button,
   CARD_RADIUS,
   Chip,
   HeroBalance,
   Icon,
+  IconButton,
   Mark,
   MoveChip,
   MovePill,
@@ -22,6 +24,7 @@ import {
   type IconName,
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio } from "../../src/api";
+import { useActions } from "../../src/actions/Actions";
 import { color, font, radius, space } from "../../src/theme";
 
 /**
@@ -115,10 +118,19 @@ export default function Portfolio() {
   const waiting = portfolio.isPending && portfolio.data === undefined;
   const failed = portfolio.isError;
 
+  const openActions = useActions();
   const actions: readonly Action[] = [
     { key: "invest", label: "Invest", icon: "trend", onPress: () => router.push("/invest") },
-    { key: "cash", label: "Add cash", icon: "plus", onPress: () => undefined },
-    { key: "send", label: "Send", icon: "arrowUp", tone: "brand", onPress: () => undefined },
+    { key: "cash", label: "Add cash", icon: "plus", onPress: () => openActions("addCash") },
+    /* To the menu, where Send says it is coming: the web's panel does not send yet either. */
+    {
+      key: "send",
+      label: "Send",
+      icon: "arrowUp",
+      tone: "brand",
+      rotate: "45deg",
+      onPress: () => openActions(),
+    },
     { key: "card", label: "Card", icon: "card", tone: "warm", onPress: () => undefined },
   ];
 
@@ -149,14 +161,11 @@ export default function Portfolio() {
               <Mark size={19} color={color.ink} />
               <RNText style={s.wordmark}>Mercury</RNText>
             </View>
-            <PressableScale
+            <IconButton
+              icon={hidden ? "eyeOff" : "eye"}
+              label={hidden ? "Show figures" : "Hide figures"}
               onPress={() => setHidden((v) => !v)}
-              accessibilityLabel={hidden ? "Show figures" : "Hide figures"}
-              activeScale={0.9}
-              style={s.iconBtn}
-            >
-              <Icon name={hidden ? "eyeOff" : "eye"} size={18} color={color.ink} />
-            </PressableScale>
+            />
           </View>
 
           {/*
@@ -275,9 +284,7 @@ const Unreachable = ({ onRetry }: { onRetry: () => void }) => (
     <Text variant="small" style={s.unreachableText}>
       We could not reach your account. The figures below are missing, not zero.
     </Text>
-    <PressableScale onPress={onRetry} style={s.retry} activeScale={0.94}>
-      <RNText style={s.retryLabel}>Retry</RNText>
-    </PressableScale>
+    <Button label="Retry" size="md" variant="secondary" onPress={onRetry} />
   </View>
 );
 
@@ -546,14 +553,6 @@ const s = StyleSheet.create({
   },
   brand: { flexDirection: "row", alignItems: "center", gap: 8 },
   wordmark: { fontFamily: font.bold, fontSize: 19, letterSpacing: -0.5, color: color.ink },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.pill,
-    backgroundColor: color.tile,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
   unreachable: {
     flexDirection: "row",
@@ -565,14 +564,6 @@ const s = StyleSheet.create({
     backgroundColor: color.downTint,
   },
   unreachableText: { flex: 1, color: color.downDeep },
-  retry: {
-    paddingHorizontal: 12,
-    height: 30,
-    justifyContent: "center",
-    borderRadius: radius.sm,
-    backgroundColor: color.surface,
-  },
-  retryLabel: { fontFamily: font.medium, fontSize: 12.5, color: color.downDeep },
 
   heroSkeleton: { gap: 10, paddingTop: 4, paddingBottom: 6 },
 
@@ -585,7 +576,7 @@ const s = StyleSheet.create({
     width: 146,
     gap: 12,
     padding: 13,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     backgroundColor: color.tile,
     alignItems: "flex-start",
   },
@@ -600,7 +591,7 @@ const s = StyleSheet.create({
   allCard: {
     width: 104,
     padding: 13,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     backgroundColor: color.tile,
     justifyContent: "space-between",
   },
@@ -620,7 +611,7 @@ const s = StyleSheet.create({
     gap: 12,
     marginTop: 18,
     padding: 13,
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     backgroundColor: color.tile,
   },
   railEmptyTile: {

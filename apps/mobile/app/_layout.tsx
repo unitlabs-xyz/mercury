@@ -1,5 +1,3 @@
-// Before every other import: see the file for why.
-import "../src/polyfills";
 import { useEffect } from "react";
 import { ActivityIndicator, AppState, View, StyleSheet, type AppStateStatus } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
@@ -83,6 +81,30 @@ const Gate = () => {
       }}
     >
       <Stack.Screen name="welcome" options={{ animation: "fade" }} />
+      {/* iOS's own sheet, sized to what it holds: the grabber, the spring and
+          the swipe down are the system's, not an imitation of them. */}
+      {/* Buying, in the same sheet. Sized to its content so the amount, the
+          preview and the button sit together, and resized as the preview fills. */}
+      <Stack.Screen
+        name="buy"
+        options={{
+          presentation: "formSheet",
+          sheetAllowedDetents: "fitToContents",
+          sheetGrabberVisible: true,
+          sheetCornerRadius: 24,
+          contentStyle: { backgroundColor: color.surface },
+        }}
+      />
+      <Stack.Screen
+        name="add-cash"
+        options={{
+          presentation: "formSheet",
+          sheetAllowedDetents: "fitToContents",
+          sheetGrabberVisible: true,
+          sheetCornerRadius: 24,
+          contentStyle: { backgroundColor: color.surface },
+        }}
+      />
     </Stack>
   );
 };

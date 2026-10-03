@@ -2,7 +2,7 @@
   "name": "@mercury/mobile",
   "version": "0.0.0",
   "private": true,
-  "main": "expo-router/entry",
+  "main": "./index.ts",
   "scripts": {
     "start": "expo start",
     "ios": "expo run:ios",
@@ -21,6 +21,7 @@
     "buffer": "^6.0.3",
     "expo": "~56.0.23",
     "expo-application": "~56.0.3",
+    "expo-blur": "~56.0.4",
     "expo-clipboard": "~56.0.4",
     "expo-constants": "~56.0.27",
     "expo-crypto": "~56.0.5",

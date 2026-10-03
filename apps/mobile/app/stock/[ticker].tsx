@@ -9,11 +9,12 @@ import {
   Chip,
   DotChart,
   Icon,
+  IconButton,
   MoveChip,
-  PressableScale,
   Skeleton,
   StockLogo,
   Text,
+  useBottomGap,
 } from "../../src/ui";
 import {
   SPANS,
@@ -23,7 +24,6 @@ import {
   type Span,
   type Wrapper,
 } from "../../src/api";
-import { BuySheet } from "../../src/order/BuySheet";
 import { color, font, radius, space } from "../../src/theme";
 
 /** The web's own words for each range, so the line under the figure reads. */
@@ -43,7 +43,7 @@ export default function Stock() {
   const t = (ticker ?? "").toUpperCase();
   const router = useRouter();
   const [span, setSpan] = useState<Span>("1M");
-  const [buying, setBuying] = useState(false);
+  const bottom = useBottomGap();
 
   const page = useInstrument(t);
   const history = useInstrumentHistory(t, span);
@@ -74,14 +74,7 @@ export default function Stock() {
       <StatusBar style="dark" />
       <SafeAreaView edges={["top"]} style={s.fill}>
         <View style={s.nav}>
-          <PressableScale
-            onPress={() => router.back()}
-            accessibilityLabel="Back"
-            activeScale={0.9}
-            style={s.back}
-          >
-            <Icon name="chevronRight" size={18} color={color.ink} style={s.flip} />
-          </PressableScale>
+          <IconButton icon="chevronRight" rotate="180deg" label="Back" onPress={() => router.back()} />
           {i !== undefined && (
             <RNText style={s.navTitle} numberOfLines={1}>
               {i.name}
@@ -215,23 +208,19 @@ export default function Stock() {
           )}
         </ScrollView>
 
-        <View style={s.footer}>
+        <View style={[s.footer, { paddingBottom: bottom }]}>
           <Button
             label={held === undefined ? "Buy" : "Buy more"}
             disabled={i === undefined}
-            onPress={() => setBuying(true)}
+            onPress={() =>
+              i !== undefined &&
+              router.push({
+                pathname: "/buy",
+                params: { ticker: t, name: i.name, ...(i.logoUrl ? { logoUrl: i.logoUrl } : {}) },
+              })
+            }
           />
         </View>
-
-        {i !== undefined && (
-          <BuySheet
-            visible={buying}
-            onClose={() => setBuying(false)}
-            ticker={t}
-            name={i.name}
-            logoUrl={i.logoUrl ?? undefined}
-          />
-        )}
       </SafeAreaView>
     </View>
   );
@@ -259,14 +248,6 @@ const s = StyleSheet.create({
     paddingHorizontal: space.screen,
     paddingTop: space.sm,
     paddingBottom: space.md,
-  },
-  back: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    backgroundColor: color.surface,
-    alignItems: "center",
-    justifyContent: "center",
   },
   flip: { transform: [{ rotate: "180deg" }] },
   navTitle: { flex: 1, fontFamily: font.medium, fontSize: 16, letterSpacing: -0.32, color: color.ink },
@@ -348,7 +329,6 @@ const s = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: space.screen,
     paddingTop: space.md,
-    paddingBottom: 30,
     backgroundColor: color.page,
     borderTopWidth: 1,
     borderTopColor: color.divider,

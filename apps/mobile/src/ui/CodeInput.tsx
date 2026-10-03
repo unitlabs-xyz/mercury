@@ -79,7 +79,8 @@ const s = StyleSheet.create({
   },
   filled: { borderColor: color.ink },
   active: { borderColor: color.brand },
-  digit: { fontFamily: font.medium, fontSize: 26, letterSpacing: -0.6, color: color.ink },
+  /* Its own lineHeight: `Text` defaults to the body variant, whose 21 clips a 26px glyph. */
+  digit: { fontFamily: font.medium, fontSize: 26, lineHeight: 32, letterSpacing: -0.6, color: color.ink },
   /* Present and focusable, but never seen: the cells above are the field. */
   hidden: { position: "absolute", opacity: 0, width: 1, height: 1 },
 });

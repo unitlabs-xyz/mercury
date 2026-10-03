@@ -20,7 +20,9 @@ export const color = {
   divider: "#E6E6E6",
   panel: "#F7F7F7",
   tray: "#F7F7F7",
-  tile: "#F3F3F3",
+  /* `--color-ds-panel`: the grey well inside a white card. Was #F3F3F3, the
+     page colour, which made a tile read as a hole rather than a panel. */
+  tile: "#F7F7F7",
   /* The dot grid: an unlit dot, and the one marking where the range opened. */
   hair: "#F0EDE6",
   dash: "#CFCBC2",
@@ -45,6 +47,18 @@ export const color = {
   fallChip: "rgba(227,119,119,0.14)",
   warn: "#925A0A",
   warnTint: "#FDF3D9",
+  /* The web's notes and status chips, `--color-ds-*-chip` / `--color-ds-chip-*`:
+     a tint behind, the ink at 80% over it. */
+  warnChip: "rgba(203,180,137,0.22)",
+  chipWarn: "#8A6A2A",
+  chipDown: "#B33D29",
+  chipUp: "#318B33",
+  loss: "#C94D42",
+  /* `ds-up-card` and its ground: the card's own warm grey. */
+  cardTint: "#F4F3EB",
+  cardInk: "#393830",
+  /* Behind a sheet: `bg-ink/45`, as the web's Dialog sets it. */
+  scrim: "rgba(23,23,23,0.45)",
   /* The feed's per-kind tones, from the web's `activity-look.tsx`. These are
      the app palette's own `--color-*`, not the `--color-ds-*` set the
      dashboard panels use; the two coexist on the web and both are copied
@@ -77,7 +91,21 @@ export const color = {
 
 export const space = { xs: 4, sm: 8, md: 12, screen: 20, lg: 24, xl: 32, xxl: 48 } as const;
 
-export const radius = { sm: 8, md: 12, lg: 16, xl: 20, card: 28, pill: 999 } as const;
+/**
+ * The web's four corners: a row (6), a grey panel (8), a white card (12) and a
+ * dialog or sheet (20). `card` is the home screen's full-bleed card, which has
+ * no web counterpart: it runs to the phone's edges.
+ */
+export const radius = { sm: 6, md: 8, lg: 12, xl: 20, card: 28, pill: 999 } as const;
+
+/**
+ * The web's buttons, layered as `tokens.css` layers them: the edge is a border,
+ * the fall a gradient, the inner line an inset ring.
+ */
+export const button = {
+  primary: { from: "#2E2E2E", to: "#0F0F0F", edge: "#000000", ring: "rgba(255,255,255,0.2)", ink: "#FFFFFF" },
+  secondary: { from: "#FFFFFF", to: "#EEEEEE", edge: "#E9E9E5", ring: "rgba(0,0,0,0.05)", ink: "#171717" },
+} as const;
 
 /**
  * ABC Diatype, the brand face, the same outlines the web serves — converted
@@ -105,11 +133,14 @@ export const type = {
   /** The onboarding headline. Three stacked lines, flush left. */
   display: { fontFamily: font.bold, fontSize: 44, lineHeight: 48, letterSpacing: -1.5 },
   /** The balance. `HeroBalance` overrides the size to fit the width. */
-  hero: { fontFamily: font.medium, fontSize: 44, lineHeight: 50, letterSpacing: -1.4 },
+  hero: { fontFamily: font.medium, fontSize: 36, lineHeight: 42, letterSpacing: -1.1 },
   title: { fontFamily: font.medium, fontSize: 24, lineHeight: 29, letterSpacing: -0.5 },
+  /** A sheet's title, the web `PanelHeader`'s 20. */
+  panel: { fontFamily: font.medium, fontSize: 20, lineHeight: 24, letterSpacing: -0.4 },
   figure: { fontFamily: font.medium, fontSize: 20, lineHeight: 24, letterSpacing: -0.4 },
   headline: { fontFamily: font.medium, fontSize: 16, lineHeight: 20, letterSpacing: -0.32 },
-  body: { fontFamily: font.regular, fontSize: 15, lineHeight: 21, letterSpacing: -0.3 },
+  /* 14, as the web dashboard sets everything it reads. */
+  body: { fontFamily: font.regular, fontSize: 14, lineHeight: 20, letterSpacing: -0.28 },
   label: { fontFamily: font.medium, fontSize: 14, lineHeight: 18, letterSpacing: -0.28 },
   small: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, letterSpacing: -0.26 },
   tiny: { fontFamily: font.medium, fontSize: 12, lineHeight: 15, letterSpacing: -0.2 },

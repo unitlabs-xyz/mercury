@@ -2,8 +2,7 @@ import { Dimensions, StyleSheet, Text as RNText, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Button, Mark, Text } from "../src/ui";
+import { Button, Mark, Text, useBottomGap } from "../src/ui";
 import { color, font, space } from "../src/theme";
 
 const { width } = Dimensions.get("screen");
@@ -22,7 +21,7 @@ const { width } = Dimensions.get("screen");
  */
 export default function Welcome() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const bottom = useBottomGap();
 
   return (
     <View style={s.root}>
@@ -46,15 +45,23 @@ export default function Welcome() {
 
       {/* Reaches the page colour well before the headline starts. The gradient
           runs right through where the type sits, and a light wash was not
-          enough — the type wins here, and the art keeps the top half. */}
+          enough — the type wins here, and the art keeps the top half. The art
+          runs the full height underneath, so the wash has no edge to reveal,
+          and the first stop eases in rather than starting a visible band. */}
       <LinearGradient
-        colors={["rgba(243,243,243,0)", "rgba(243,243,243,0.86)", "rgba(243,243,243,0.99)", color.page]}
-        locations={[0, 0.3, 0.52, 1]}
+        colors={[
+          "rgba(243,243,243,0)",
+          "rgba(243,243,243,0.4)",
+          "rgba(243,243,243,0.86)",
+          "rgba(243,243,243,0.99)",
+          color.page,
+        ]}
+        locations={[0, 0.12, 0.3, 0.52, 1]}
         style={s.scrim}
         pointerEvents="none"
       />
 
-      <View style={[s.content, { paddingBottom: Math.max(insets.bottom, 18) + 16 }]}>
+      <View style={[s.content, { paddingBottom: bottom }]}>
         {/* Two lines, flush left, so the headline reads as a block against the
             art rather than as a caption under it. */}
         <RNText style={s.heading}>Your wealth.{"\n"}Onchain.</RNText>
@@ -76,7 +83,7 @@ export default function Welcome() {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.page },
-  art: { position: "absolute", top: 0, left: 0, right: 0, height: "66%", overflow: "hidden" },
+  art: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, overflow: "hidden" },
   markSlot: { position: "absolute", right: -width * 0.42, top: "6%" },
   scrim: { position: "absolute", left: 0, right: 0, bottom: 0, height: "62%" },
 

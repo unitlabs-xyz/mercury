@@ -1,60 +1,70 @@
-import { Platform, type ColorValue } from "react-native";
+import { Easing } from "react-native";
 import { Tabs } from "expo-router";
-import { Icon, type IconName } from "../../src/ui";
-import { color, font, radius } from "../../src/theme";
+import { ActionsProvider, useActions } from "../../src/actions/Actions";
+import { TabBar, type IconName } from "../../src/ui";
+import { color } from "../../src/theme";
 
 /**
- * Four tabs, floating over the content.
+ * Four tabs, under a bar that floats over the content.
  *
  * The web carries five sections; Baskets is absent here because Symmetry
- * blocks it on both clients, and four is what fits a phone's bottom bar
- * without the labels truncating.
- *
- * The bar floats rather than sitting in a docked strip, which is why the home
- * screen's lower card pads itself past it: the two cards there run to the
- * screen's edges, and a docked bar would cut the bottom one off square.
+ * blocks it on both clients. The bar floats rather than docking, which is why
+ * the home screen's lower card pads itself past it.
  */
+const ICONS: Record<string, IconName> = {
+  index: "pieChart",
+  invest: "trend",
+  money: "wallet",
+  activity: "clock",
+};
+
+/* How far a page travels on its way in or out. Enough to say which way, not a slide. */
+const SHIFT = 28;
+
 export default function TabsLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: color.ink,
-        tabBarInactiveTintColor: color.muted,
-        tabBarStyle: {
-          position: "absolute",
-          left: 16,
-          right: 16,
-          bottom: Platform.OS === "ios" ? 26 : 16,
-          height: 62,
-          paddingTop: 8,
-          paddingBottom: 8,
-          borderRadius: radius.pill,
-          borderTopWidth: 0,
-          backgroundColor: color.surface,
-          /* A soft lift, not a drop shadow: the bar sits ON the page, and a
-             hard edge under it reads as a second card. */
-          shadowColor: "#000",
-          shadowOpacity: 0.1,
-          shadowRadius: 20,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 10,
-        },
-        tabBarItemStyle: { paddingTop: 2 },
-        tabBarLabelStyle: { fontFamily: font.medium, fontSize: 11, letterSpacing: -0.1 },
-        sceneStyle: { backgroundColor: color.page },
-      }}
-    >
-      <Tabs.Screen name="index" options={{ title: "Portfolio", tabBarIcon: mark("pieChart") }} />
-      <Tabs.Screen name="invest" options={{ title: "Invest", tabBarIcon: mark("trend") }} />
-      <Tabs.Screen name="money" options={{ title: "Money", tabBarIcon: mark("wallet") }} />
-      <Tabs.Screen name="activity" options={{ title: "Activity", tabBarIcon: mark("clock") }} />
-    </Tabs>
+    <ActionsProvider>
+      <Bar />
+    </ActionsProvider>
   );
 }
 
-/* A touch lighter than the icon's own weight: at 21px on a bar, the set's
-   stroke reads as heavier than it does at panel size. */
-const mark =
-  (name: IconName) =>
-  ({ color: tint }: { color: ColorValue }) => <Icon name={name} size={21} color={tint} strokeWidth={1.7} />;
+/* Inside the provider, so the bar's + can open the actions sheet. */
+const Bar = () => {
+  const actions = useActions();
+  return (
+    <Tabs
+      tabBar={(props) => <TabBar {...props} icons={ICONS} onPlus={() => actions()} />}
+      screenOptions={{
+        headerShown: false,
+        sceneStyle: { backgroundColor: color.page },
+        /* Every tab mounted up front. A tab mounted on its first visit starts its
+           transition at the far end and never runs it, so it stayed at zero
+           opacity: a blank page under a bar that said Invest. */
+        lazy: false,
+        /* In and out, toward the tab you chose: the old page drifts away and
+           fades as the new one settles in from the side it lives on. Short and
+           eased out, so a tap feels answered rather than animated at. */
+        transitionSpec: { animation: "timing", config: { duration: 260, easing: Easing.out(Easing.cubic) } },
+        sceneStyleInterpolator: ({ current }) => ({
+          sceneStyle: {
+            opacity: current.progress.interpolate({ inputRange: [-1, 0, 1], outputRange: [0, 1, 0] }),
+            transform: [
+              {
+                translateX: current.progress.interpolate({
+                  inputRange: [-1, 0, 1],
+                  outputRange: [-SHIFT, 0, SHIFT],
+                }),
+              },
+            ],
+          },
+        }),
+      }}
+    >
+      <Tabs.Screen name="index" options={{ title: "Portfolio" }} />
+      <Tabs.Screen name="invest" options={{ title: "Invest" }} />
+      <Tabs.Screen name="money" options={{ title: "Money" }} />
+      <Tabs.Screen name="activity" options={{ title: "Activity" }} />
+    </Tabs>
+  );
+};

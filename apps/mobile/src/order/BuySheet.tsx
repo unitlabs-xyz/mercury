@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text as RNText,
   TextInput,
@@ -13,7 +11,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { pct, shares as fmtShares, usd } from "@mercury/view";
 import { PriceMoved, useMoney, useOrderAction, useQuote, type Quote } from "../api";
-import { Button, Chip, Icon, PressableScale, Skeleton, StockLogo, Text } from "../ui";
+import { Button, Chip, Icon, IconButton, Note, Skeleton, StockLogo, Text, useBottomGap } from "../ui";
 import { color, font, radius, space } from "../theme";
 
 /** The four a first-time buyer actually reaches for. */
@@ -23,7 +21,6 @@ const num = (v: string | null | undefined): number | null =>
   v === null || v === undefined ? null : Number(v);
 
 export interface BuySheetProps {
-  visible: boolean;
   onClose: () => void;
   ticker: string;
   name: string;
@@ -31,7 +28,8 @@ export interface BuySheetProps {
 }
 
 /**
- * Buying, in a sheet.
+ * Buying, in the system's sheet: the `buy` route presents this as an iOS form
+ * sheet, so the grabber, the spring and the swipe to dismiss are the system's.
  *
  * The amount leads and everything under it answers for that amount: a quote is
  * a price and a price is only true for a moment, so it is refetched rather than
@@ -43,7 +41,8 @@ export interface BuySheetProps {
  * not an error: it is the system declining to trade on terms it does not like,
  * and the only useful thing to do with it is print it.
  */
-export const BuySheet = ({ visible, onClose, ticker, name, logoUrl }: BuySheetProps) => {
+export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
+  const bottom = useBottomGap();
   const [text, setText] = useState("100");
   const [debounced, setDebounced] = useState(100);
   const [moved, setMoved] = useState<PriceMoved | null>(null);
@@ -67,16 +66,6 @@ export const BuySheet = ({ visible, onClose, ticker, name, logoUrl }: BuySheetPr
     const t = setTimeout(() => setDebounced(amount), 350);
     return () => clearTimeout(t);
   }, [amount]);
-
-  // A sheet reopened is a fresh order; the last one's result is not this one's.
-  useEffect(() => {
-    if (visible) {
-      order.reset();
-      setMoved(null);
-    }
-    // `order` is a new object every render; resetting on its identity would loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
 
   const placed = order.data;
   const decision = moved?.decision ?? quote.data?.decision;
@@ -109,124 +98,106 @@ export const BuySheet = ({ visible, onClose, ticker, name, logoUrl }: BuySheetPr
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.scrim} onPress={onClose} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={s.lift}
-        pointerEvents="box-none"
-      >
-        <View style={s.sheet}>
-          <View style={s.grabber} />
-
-          {placed !== undefined ? (
-            <Filled result={placed} name={name} ticker={ticker} logoUrl={logoUrl} onDone={onClose} />
-          ) : (
-            <>
-              <View style={s.head}>
-                <StockLogo ticker={ticker} uri={logoUrl} size={34} />
-                <View style={s.fill}>
-                  <RNText style={s.title} numberOfLines={1}>
-                    Buy {name}
-                  </RNText>
-                  <RNText style={s.sub}>{ticker}</RNText>
-                </View>
-                <PressableScale
-                  onPress={onClose}
-                  accessibilityLabel="Close"
-                  activeScale={0.9}
-                  style={s.close}
-                >
-                  <Icon name="close" size={16} color={color.ink} />
-                </PressableScale>
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={[s.sheet, { paddingBottom: bottom }]}>
+        {placed !== undefined ? (
+          <Filled result={placed} name={name} ticker={ticker} logoUrl={logoUrl} onDone={onClose} />
+        ) : (
+          <>
+            <View style={s.head}>
+              <StockLogo ticker={ticker} uri={logoUrl} size={34} />
+              <View style={s.fill}>
+                <RNText style={s.title} numberOfLines={1}>
+                  Buy {name}
+                </RNText>
+                <RNText style={s.sub}>{ticker}</RNText>
               </View>
+              <IconButton icon="close" label="Close" size={36} onPress={onClose} />
+            </View>
 
-              {/* The figure is the control. Tapping anywhere on it opens the pad,
+            {/* The figure is the control. Tapping anywhere on it opens the pad,
                   which is why the real field is hidden behind it rather than
                   drawn as a box somebody has to find. */}
-              <Pressable style={s.amountRow} onPress={() => input.current?.focus()}>
-                <RNText style={s.currency}>$</RNText>
-                <RNText style={s.amount}>{text === "" ? "0" : text}</RNText>
-                <TextInput
-                  ref={input}
-                  style={s.hidden}
-                  value={text}
-                  onChangeText={(raw) => setText(raw.replace(/[^0-9.]/g, "").slice(0, 9))}
-                  keyboardType="decimal-pad"
-                  autoFocus
-                  caretHidden
-                />
-              </Pressable>
+            <Pressable style={s.amountRow} onPress={() => input.current?.focus()}>
+              <RNText style={s.currency}>$</RNText>
+              <RNText style={s.amount}>{text === "" ? "0" : text}</RNText>
+              <TextInput
+                ref={input}
+                style={s.hidden}
+                value={text}
+                onChangeText={(raw) => setText(raw.replace(/[^0-9.]/g, "").slice(0, 9))}
+                keyboardType="decimal-pad"
+                autoFocus
+                caretHidden
+              />
+            </Pressable>
 
-              <View style={s.presets}>
-                {PRESETS.map((p) => (
-                  <Chip key={p} label={`$${p}`} selected={amount === p} onPress={() => setText(String(p))} />
-                ))}
-              </View>
+            <View style={s.presets}>
+              {PRESETS.map((p) => (
+                <Chip key={p} label={`$${p}`} selected={amount === p} onPress={() => setText(String(p))} />
+              ))}
+            </View>
 
-              <ScrollView style={s.body} keyboardShouldPersistTaps="handled">
-                {overBalance ? (
-                  <View style={s.refused}>
-                    <Icon name="alert" size={15} color={color.warn} />
-                    <Text variant="small" style={s.refusedText}>
-                      That is more than your {usd(available)} cash. Add money first.
-                    </Text>
-                  </View>
-                ) : amount <= 0 ? (
-                  <Text variant="small" tone="muted" style={s.hint}>
-                    Enter an amount to see what it buys.
-                  </Text>
-                ) : quote.data === undefined && quote.isPending ? (
-                  <View style={s.lines}>
-                    <Skeleton width="100%" height={16} />
-                    <Skeleton width="72%" height={16} />
-                  </View>
-                ) : decision === undefined ? (
-                  <Text variant="small" tone="down" style={s.hint}>
-                    We could not price that just now.
-                  </Text>
-                ) : decision.kind === "refuse" ? (
-                  <Refused detail={decision.detail} />
-                ) : (
-                  <Preview decision={decision} quote={quote.data} amount={amount} moved={moved !== null} />
-                )}
+            {/* A plain view, not a scroll view: the sheet is sized to what it holds,
+                and a scroll view has no height of its own to offer it. */}
+            <View style={s.body}>
+              {overBalance ? (
+                <Note tone="warn">That is more than your {usd(available)} cash. Add money first.</Note>
+              ) : amount <= 0 ? (
+                <Text variant="small" tone="muted" style={s.hint}>
+                  Enter an amount to see what it buys.
+                </Text>
+              ) : quote.data === undefined && quote.isPending ? (
+                <View style={s.lines}>
+                  <Skeleton width="100%" height={16} />
+                  <Skeleton width="72%" height={16} />
+                </View>
+              ) : decision === undefined ? (
+                <Text variant="small" tone="down" style={s.hint}>
+                  We could not price that just now.
+                </Text>
+              ) : decision.kind === "refuse" ? (
+                <Refused detail={decision.detail} />
+              ) : (
+                <Preview decision={decision} quote={quote.data} amount={amount} moved={moved !== null} />
+              )}
 
-                {order.isError && moved === null && (
-                  <View style={s.failed}>
-                    <Icon name="alert" size={15} color={color.down} />
-                    {/* Capped. The server should never send a wall of text and
-                        now does not, but a sheet that can be pushed off screen
-                        by one bad string is a sheet with no floor under it. */}
-                    <Text variant="small" style={s.failedText} numberOfLines={4}>
-                      {order.error.message}
-                    </Text>
-                  </View>
-                )}
-              </ScrollView>
+              {order.isError && moved === null && (
+                <View style={s.failed}>
+                  {/* Capped. The server should never send a wall of text and
+                      now does not, but a sheet that can be pushed off screen
+                      by one bad string is a sheet with no floor under it. */}
+                  <Note tone="down">
+                    {order.error.message.length > 240
+                      ? `${order.error.message.slice(0, 240)}…`
+                      : order.error.message}
+                  </Note>
+                </View>
+              )}
+            </View>
 
-              <View style={s.footer}>
-                <Button
-                  label={
-                    overBalance
-                      ? "Not enough cash"
-                      : !order.walletReady
-                        ? "Getting your wallet ready"
-                        : moved !== null
-                          ? "Buy at the new price"
-                          : decision?.kind === "offer_queue"
-                            ? "Place for the open"
-                            : "Buy"
-                  }
-                  busy={order.isPending}
-                  disabled={overBalance || (!canPlace && decision?.kind !== "offer_queue")}
-                  onPress={buy}
-                />
-              </View>
-            </>
-          )}
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+            <View style={s.footer}>
+              <Button
+                label={
+                  overBalance
+                    ? "Not enough cash"
+                    : !order.walletReady
+                      ? "Getting your wallet ready"
+                      : moved !== null
+                        ? "Buy at the new price"
+                        : decision?.kind === "offer_queue"
+                          ? "Place for the open"
+                          : "Buy"
+                }
+                busy={order.isPending}
+                disabled={overBalance || (!canPlace && decision?.kind !== "offer_queue")}
+                onPress={buy}
+              />
+            </View>
+          </>
+        )}
+      </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -305,14 +276,7 @@ const Preview = ({
  * already written for a reader — "below the minimum", "no route deep enough".
  * Rewriting it here would be a second, worse copy that drifts.
  */
-const Refused = ({ detail }: { detail: string }) => (
-  <View style={s.refused}>
-    <Icon name="alert" size={15} color={color.warn} />
-    <Text variant="small" style={s.refusedText}>
-      {detail}
-    </Text>
-  </View>
-);
+const Refused = ({ detail }: { detail: string }) => <Note tone="warn">{detail}</Note>;
 
 const Filled = ({
   result,
@@ -366,24 +330,9 @@ const Line = ({
 );
 
 const s = StyleSheet.create({
-  scrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.35)" },
-  lift: { flex: 1, justifyContent: "flex-end" },
   fill: { flex: 1 },
-  sheet: {
-    backgroundColor: color.page,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingBottom: 14,
-    maxHeight: "92%",
-  },
-  grabber: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: color.divider,
-    alignSelf: "center",
-    marginTop: 9,
-  },
+  /* White, as the web's dialogs are; the system draws the corners and the grabber. */
+  sheet: { backgroundColor: color.surface, paddingTop: space.md },
 
   head: {
     flexDirection: "row",
@@ -394,14 +343,6 @@ const s = StyleSheet.create({
   },
   title: { fontFamily: font.medium, fontSize: 16, letterSpacing: -0.32, color: color.ink },
   sub: { fontFamily: font.regular, fontSize: 12.5, letterSpacing: -0.12, color: color.muted, marginTop: 3 },
-  close: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.pill,
-    backgroundColor: color.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
   amountRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", paddingTop: 26 },
   currency: { fontFamily: font.medium, fontSize: 24, color: color.muted, marginTop: 8 },
@@ -430,24 +371,7 @@ const s = StyleSheet.create({
   note: { flexDirection: "row", gap: 8, paddingBottom: 2 },
   noteText: { flex: 1, color: color.warn, lineHeight: 18 },
 
-  refused: {
-    flexDirection: "row",
-    gap: 9,
-    padding: 14,
-    borderRadius: radius.lg,
-    backgroundColor: color.warnTint,
-  },
-  refusedText: { flex: 1, color: color.warn, lineHeight: 18 },
-
-  failed: {
-    flexDirection: "row",
-    gap: 9,
-    marginTop: space.md,
-    padding: 14,
-    borderRadius: radius.lg,
-    backgroundColor: color.downTint,
-  },
-  failedText: { flex: 1, color: color.downDeep, lineHeight: 18 },
+  failed: { marginTop: space.md },
 
   footer: { paddingHorizontal: space.screen, paddingTop: space.md },
 
