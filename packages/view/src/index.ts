@@ -16,3 +16,4 @@ export * from "./activity-data.js";
 export * from "./activity-map.js";
 export * from "./decision.js";
 export * from "./order.js";
+export * from "./qr.js";

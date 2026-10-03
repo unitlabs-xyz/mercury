@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@mercury/core": "workspace:*",
-    "@mercury/types": "workspace:*"
+    "@mercury/types": "workspace:*",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@mercury/tsconfig": "workspace:*",

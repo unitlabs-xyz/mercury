@@ -1,9 +1,15 @@
 import { AnimatePresence, motion } from "motion/react";
-import qrcode from "qrcode-generator";
 import { useMemo, useState, type ReactNode } from "react";
+import { qrPath } from "@mercury/view";
 import { useMoney } from "../api/hooks";
 import { Button } from "../ui/Button";
 import { Alert, Check, Copy } from "../ui/icons";
+
+/*
+ * The encoder lives in `@mercury/view`, so the phone draws the same code. Re-exported
+ * here because this is where the web and its test have always found it.
+ */
+export { QUIET, qrPath } from "@mercury/view";
 
 /**
  * The address, as a code a phone can actually read.
@@ -21,28 +27,6 @@ import { Alert, Check, Copy } from "../ui/icons";
  * Error correction level Q recovers a quarter of the code. For this address
  * length that is the same 33 modules as level M, so the tolerance is free.
  */
-export const QUIET = 4;
-
-/**
- * The code as one SVG path, offset by its quiet zone. Separated from the
- * component so it can be tested: a QR code that renders beautifully and
- * decodes to nothing looks exactly like one that works.
- */
-export const qrPath = (value: string): { d: string; extent: number } | null => {
-  if (value.length === 0) return null;
-  const qr = qrcode(0, "Q");
-  qr.addData(value, "Byte");
-  qr.make();
-  const count = qr.getModuleCount();
-  let d = "";
-  for (let row = 0; row < count; row++) {
-    for (let col = 0; col < count; col++) {
-      if (qr.isDark(row, col)) d += `M${col + QUIET} ${row + QUIET}h1v1h-1z`;
-    }
-  }
-  return { d, extent: count + QUIET * 2 };
-};
-
 export const QrBlock = ({ value, size = 112 }: { value?: string | undefined; size?: number }) => {
   const path = useMemo(() => (value ? qrPath(value) : null), [value]);
 
