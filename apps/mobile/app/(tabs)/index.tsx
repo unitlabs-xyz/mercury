@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import type { Portfolio as PortfolioData } from "@mercury/types";
-import { GROUPS, toEvent, usd, usdCompact, usdSigned, type Event, type EventKind } from "@mercury/view";
+import { GROUPS, toEvent, usd, usdCompact, usdSigned, type EventKind } from "@mercury/view";
 import {
   ActionStrip,
   Button,
@@ -21,42 +21,11 @@ import {
   StockLogo,
   Text,
   type Action,
-  type IconName,
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio } from "../../src/api";
 import { useActions } from "../../src/actions/Actions";
+import { EventRow, EventRowSkeleton, MARK } from "../../src/activity/EventRow";
 import { color, font, radius, space } from "../../src/theme";
-
-/**
- * USDC's mark, as the web's `activity-mark.tsx` picks it: the Solana token
- * list's own asset, which is the file every wallet on this chain already shows
- * for this mint, rather than a mark of ours that would only half-match what
- * people recognise. Cash is not a holding, so it never resolves to an
- * instrument and cannot come from the API's logo column.
- */
-const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-const USDC_LOGO = `https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/${USDC_MINT}/logo.png`;
-
-/** The web's `activity-look.tsx`, tone for tone. */
-const LOOK: Record<EventKind, { bg: string; fg: string; icon: IconName }> = {
-  buy: { bg: color.brandTint, fg: color.brand, icon: "trend" },
-  sell: { bg: color.chipTint, fg: color.inkSoft, icon: "arrowDown" },
-  basket: { bg: color.brandTint, fg: color.brand, icon: "grid" },
-  dividend: { bg: color.upTint, fg: color.upDeep, icon: "refresh" },
-  receive: { bg: color.upTint, fg: color.upDeep, icon: "arrowDown" },
-  send: { bg: color.chipTint, fg: color.inkSoft, icon: "arrowUp" },
-  interest: { bg: color.upTint, fg: color.upDeep, icon: "plus" },
-  queued: { bg: color.warnTint, fg: color.warn, icon: "clock" },
-  // Money, so the same arrows cash uses. Borrowing is not a gain, so it takes
-  // the neutral chip rather than the green one a dividend gets.
-  borrow: { bg: color.chipTint, fg: color.inkSoft, icon: "arrowDown" },
-  repay: { bg: color.chipTint, fg: color.inkSoft, icon: "arrowUp" },
-  // Collateral, not money: a lock going on and coming off.
-  pledge: { bg: color.chipTint, fg: color.inkSoft, icon: "lock" },
-  unpledge: { bg: color.upTint, fg: color.upDeep, icon: "lock" },
-  // The only row in the feed that is asking for something to be done.
-  loan_alert: { bg: color.warnTint, fg: color.warn, icon: "alert" },
-};
 
 /** The three the home screen offers, out of the shared six. */
 const FILTERS = ["all", "trades", "income"] as const;
@@ -64,26 +33,10 @@ type Filter = (typeof FILTERS)[number];
 
 const KINDS_OF = (f: Filter): readonly EventKind[] => GROUPS.find((g) => g.key === f)?.kinds ?? [];
 
-/** The logo's diameter wherever one leads a row. One number, so the rail, the
- *  loan row and the feed all indent their text to the same place. */
-const MARK = 36;
-
 /** Five, because the card below the fold is a summary and `/activity` is the list. */
 const FEED_ROWS = 5;
 
 const num = (v: string | number | null | undefined): number => Number(v ?? 0);
-
-/** "Today", "Yesterday", else "27 Sep" — the web's `relDay`, said shorter. */
-const whenLabel = (isoDate: string): string => {
-  const today = Date.parse(new Date().toISOString().slice(0, 10));
-  const days = Math.round((Date.parse(isoDate) - today) / 86_400_000);
-  if (days === 0) return "Today";
-  if (days === -1) return "Yesterday";
-  return new Date(`${isoDate}T12:00:00Z`).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-  });
-};
 
 export default function Portfolio() {
   const insets = useSafeAreaInsets();
@@ -258,7 +211,7 @@ export default function Portfolio() {
           </View>
 
           {activity.isPending && activity.data === undefined ? (
-            <FeedSkeleton />
+            <EventRowSkeleton />
           ) : shown.length === 0 ? (
             <View style={s.empty}>
               <Text variant="label">
@@ -269,7 +222,9 @@ export default function Portfolio() {
               </Text>
             </View>
           ) : (
-            shown.map((e, i) => <EventRow key={`${e.date}-${e.title}-${i}`} event={e} masked={hidden} />)
+            shown.map((e, i) => (
+              <EventRow key={e.signature ?? `${e.date}-${e.title}-${i}`} event={e} masked={hidden} when />
+            ))
           )}
         </View>
       </ScrollView>
@@ -293,24 +248,6 @@ const HeroSkeleton = () => (
     <Skeleton width={78} height={13} />
     <Skeleton width={236} height={40} />
     <Skeleton width={150} height={16} />
-  </View>
-);
-
-const FeedSkeleton = () => (
-  <View>
-    {[0, 1, 2].map((i) => (
-      <View key={i} style={s.row}>
-        <Skeleton width={MARK} height={MARK} style={s.roundSkeleton} />
-        <View style={s.rowMid}>
-          <Skeleton width="62%" height={13} />
-          <Skeleton width="38%" height={11} />
-        </View>
-        <View style={s.rowEnd}>
-          <Skeleton width={62} height={13} />
-          <Skeleton width={40} height={11} />
-        </View>
-      </View>
-    ))}
   </View>
 );
 
@@ -484,53 +421,6 @@ const Borrowed = ({
   </PressableScale>
 );
 
-const EventRow = ({ event, masked }: { event: Event; masked: boolean }) => {
-  const look = LOOK[event.kind];
-  const credit = event.flow === "in";
-  /* A stock's own art wins; cash falls back to the token's mark; a row with no
-     asset behind it — a queued order, an alert — shows the kind alone. */
-  const uri = event.logo ?? (event.mint === USDC_MINT ? USDC_LOGO : undefined);
-  const amount =
-    event.amount === null
-      ? null
-      : event.flow === null
-        ? event.amount
-        : `${credit ? "+" : "−"}${event.amount}`;
-
-  return (
-    <PressableScale haptic={false} activeScale={0.99} style={s.row} onPress={() => undefined}>
-      {uri === undefined ? (
-        <View style={[s.rowArt, { backgroundColor: look.bg }]}>
-          <Icon name={look.icon} size={16} color={look.fg} />
-        </View>
-      ) : (
-        <View>
-          <StockLogo ticker={event.title.slice(0, 1)} uri={uri} size={MARK} />
-          <View style={[s.rowBadge, { backgroundColor: look.bg }]}>
-            <Icon name={look.icon} size={9} color={look.fg} strokeWidth={2.4} />
-          </View>
-        </View>
-      )}
-      <View style={s.rowMid}>
-        <RNText style={s.rowTitle} numberOfLines={1}>
-          {event.title}
-        </RNText>
-        {event.sub !== "" && (
-          <RNText style={s.rowDetail} numberOfLines={1}>
-            {event.sub}
-          </RNText>
-        )}
-      </View>
-      <View style={s.rowEnd}>
-        {amount !== null && (
-          <RNText style={[s.rowAmount, credit && s.rowCredit]}>{masked ? "••••" : amount}</RNText>
-        )}
-        <RNText style={s.rowWhen}>{whenLabel(event.date)}</RNText>
-      </View>
-    </PressableScale>
-  );
-};
-
 const s = StyleSheet.create({
   /* The page is the CARD colour, not the band colour. Both ends of the content
      are a white card, and a dark page makes the overscroll bounce flash black. */
@@ -693,40 +583,4 @@ const s = StyleSheet.create({
   chips: { flexDirection: "row", gap: 4, paddingHorizontal: space.screen - 13, paddingBottom: 6 },
 
   empty: { paddingHorizontal: space.screen, paddingTop: 10, gap: 4 },
-
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: space.screen,
-    paddingVertical: 11,
-  },
-  rowArt: {
-    width: MARK,
-    height: MARK,
-    borderRadius: MARK / 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  /* The kind, on the logo. A ring of the card's own white cuts it out of the
-     art rather than letting the two marks touch. */
-  rowBadge: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 17,
-    height: 17,
-    borderRadius: 8.5,
-    borderWidth: 2,
-    borderColor: color.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowMid: { flex: 1, gap: 3 },
-  rowTitle: { fontFamily: font.medium, fontSize: 14, letterSpacing: -0.28, color: color.ink },
-  rowDetail: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.12, color: color.muted },
-  rowEnd: { alignItems: "flex-end", gap: 3 },
-  rowAmount: { fontFamily: font.medium, fontSize: 14, letterSpacing: -0.28, color: color.ink },
-  rowCredit: { color: color.up },
-  rowWhen: { fontFamily: font.regular, fontSize: 12, letterSpacing: -0.12, color: color.muted },
 });

@@ -76,6 +76,10 @@ export const useActivityFeed = (limit = 25) => {
 export interface Borrow {
   readonly debtUsd: number;
   readonly borrowableUsd: number;
+  /** Cash plus what could still be borrowed: the most an order could spend. */
+  readonly spendableUsd: number;
+  /** What is pledged as collateral, at today's prices. */
+  readonly collateralUsd: number;
   readonly overTargetUsd: number;
   readonly health: "healthy" | "over_limit" | "margin_call" | "liquidation";
   /** The fall that would reach liquidation, 0–1. Null when nothing is owed. */
