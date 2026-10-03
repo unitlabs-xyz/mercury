@@ -95,6 +95,17 @@ const Gate = () => {
           contentStyle: { backgroundColor: color.surface },
         }}
       />
+      {/* Filter and sort for Invest, sized to its options. */}
+      <Stack.Screen
+        name="invest-filters"
+        options={{
+          presentation: "formSheet",
+          sheetAllowedDetents: "fitToContents",
+          sheetGrabberVisible: true,
+          sheetCornerRadius: 24,
+          contentStyle: { backgroundColor: color.surface },
+        }}
+      />
       <Stack.Screen
         name="add-cash"
         options={{

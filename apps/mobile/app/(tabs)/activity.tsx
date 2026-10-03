@@ -69,17 +69,19 @@ export default function Activity() {
         keyboardDismissMode="on-drag"
         refreshControl={<RefreshControl refreshing={pulling} onRefresh={pull} />}
       >
+        {/* The title, its count and the export share one line; the description
+            takes the full width under them rather than wrapping beside the button. */}
         <View style={s.head}>
-          <View style={s.titleBlock}>
+          <View style={s.titleLine}>
             <View style={s.titleRow}>
               <Text variant="title">Activity</Text>
               <RNText style={s.count}>{count}</RNText>
             </View>
-            <RNText style={s.lede}>
-              Every buy, sale, dividend and transfer, each with its proof on Solana.
-            </RNText>
+            <IconButton icon="download" label="Share as CSV" onPress={exportCsv} />
           </View>
-          <IconButton icon="download" label="Share as CSV" onPress={exportCsv} />
+          <RNText style={s.lede}>
+            Every buy, sale, dividend and transfer, each with its proof on Solana.
+          </RNText>
         </View>
 
         <View style={s.search}>
@@ -183,17 +185,11 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.page },
   /* Clears the floating tab bar. */
   scroll: { paddingBottom: 116 },
-  head: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: space.screen,
-    paddingBottom: space.md,
-  },
-  titleBlock: { flex: 1, minWidth: 0, gap: 4 },
+  head: { paddingHorizontal: space.screen, paddingBottom: space.md },
+  titleLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   titleRow: { flexDirection: "row", alignItems: "baseline", gap: 10 },
   /* One line under the title saying what the page is for, on every tab. */
-  lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted },
+  lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted, marginTop: 4 },
   count: { fontFamily: font.regular, fontSize: 14, color: color.muted },
   search: {
     flexDirection: "row",

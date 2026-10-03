@@ -5,38 +5,33 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { usd, usdCompact } from "@mercury/view";
 import {
-  Chip,
   Icon,
   MoveChip,
   PressableScale,
   Segmented,
+  Surface,
   Skeleton,
   Sparkline,
   StockLogo,
   Text,
 } from "../../src/ui";
+import { useHistories, useInstruments, usePortfolio, type Instrument, type Shelf } from "../../src/api";
 import {
-  useHistories,
-  useInstruments,
-  usePortfolio,
-  type Instrument,
-  type Shelf,
-  type Span,
-} from "../../src/api";
+  DEFAULT_FILTERS,
+  SORTS,
+  activeCount,
+  resetFilters,
+  setFilters,
+  setListMeta,
+  useFilters,
+  type Sort,
+} from "../../src/invest/filters";
 import { color, font, radius, space } from "../../src/theme";
 
 const SHELVES: readonly { key: Shelf; label: string }[] = [
   { key: "featured", label: "Featured" },
   { key: "movers", label: "Movers" },
   { key: "popular", label: "Popular" },
-];
-
-/** The ranges the list's charts and moves follow, as the web's screener offers them. */
-const RANGES: readonly { key: Span; label: string }[] = [
-  { key: "1D", label: "1D" },
-  { key: "1W", label: "1W" },
-  { key: "1M", label: "1M" },
-  { key: "1Y", label: "1Y" },
 ];
 
 /** The logo's diameter, as everywhere else a row is led by one. */
@@ -54,9 +49,11 @@ export default function Invest() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [shelf, setShelf] = useState<Shelf>("featured");
-  const [range, setRange] = useState<Span>("1D");
-  const [sector, setSector] = useState<string>("all");
   const [query, setQuery] = useState("");
+  /* Range, sector, order and "owned only" live in the filter sheet, a separate
+     route, so they are kept in a store both can reach. */
+  const filters = useFilters();
+  const { range, sector, sort } = filters;
 
   // Search the server once typing settles, not on every keystroke — the web
   // waits the same 250ms for the same reason.
@@ -85,10 +82,36 @@ export default function Invest() {
     () => [...new Set(instruments.map((i) => i.sector).filter((x): x is string => x !== null))].sort(),
     [instruments],
   );
-  const shown = useMemo(
-    () => (sector === "all" ? instruments : instruments.filter((i) => i.sector === sector)),
-    [instruments, sector],
+  /** A row's move over the chosen range: the live 24h move for 1D, the series' own for the rest. */
+  const changeOf = useMemo(
+    () => (i: Instrument) => {
+      if (range === "1D") return Number(i.changePct24h);
+      const series = histories.data?.series[i.ticker];
+      return series ? Number(series.changePct) : null;
+    },
+    [range, histories.data],
   );
+
+  const shown = useMemo(() => {
+    const kept = instruments.filter(
+      (i) => (sector === "all" || i.sector === sector) && (!filters.owned || owned.has(i.ticker)),
+    );
+    return sortBy(kept, sort, changeOf);
+  }, [instruments, sector, filters.owned, owned, sort, changeOf]);
+
+  /* Tell the sheet what it needs to draw: this shelf's sectors, and how many rows its filters leave. */
+  useEffect(() => {
+    setListMeta({ sectors, count: shown.length });
+  }, [sectors, shown.length]);
+
+  /* A sector chosen on one shelf may not exist on the next. */
+  const pickShelf = (next: Shelf) => {
+    setShelf(next);
+    if (sector !== "all") setFilters({ sector: "all" });
+  };
+
+  const active = activeCount(filters);
+  const anything = active > 0 || range !== DEFAULT_FILTERS.range;
 
   const searching = term.length > 0;
   const waiting = list.isPending && list.data === undefined;
@@ -103,17 +126,19 @@ export default function Invest() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
+        {/* The title and its companion share one line; the description takes
+            the full width under them, rather than wrapping beside the label. */}
         <View style={s.head}>
-          <View style={s.titleBlock}>
+          <View style={s.titleRow}>
             <Text variant="title">Invest</Text>
-            <RNText style={s.lede}>Real US stocks and ETFs, from $5, any hour of the week.</RNText>
+            {session !== undefined && (
+              <View style={s.session}>
+                <View style={[s.dot, session === "open" && s.dotLive]} />
+                <RNText style={s.sessionLabel}>{SESSION[session] ?? session}</RNText>
+              </View>
+            )}
           </View>
-          {session !== undefined && (
-            <View style={s.session}>
-              <View style={[s.dot, session === "open" && s.dotLive]} />
-              <RNText style={s.sessionLabel}>{SESSION[session] ?? session}</RNText>
-            </View>
-          )}
+          <RNText style={s.lede}>Real US stocks and ETFs, from $5, any hour of the week.</RNText>
         </View>
 
         <View style={s.search}>
@@ -136,53 +161,63 @@ export default function Invest() {
             rather than sitting there describing a list they no longer order. */}
         {!searching && (
           <View style={s.shelves}>
-            <Segmented
-              options={SHELVES}
-              value={shelf}
-              onChange={(k) => {
-                setShelf(k);
-                setSector("all");
-              }}
-              fill
-              onPage
-            />
+            <Segmented options={SHELVES} value={shelf} onChange={pickShelf} fill onPage />
           </View>
         )}
 
-        {/* Sectors, from what the shelf holds: a filter over the list, not a
-            different list, so it stays put while the range changes. */}
-        {sectors.length > 1 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={s.sectorRow}
-            contentContainerStyle={s.sectors}
+        {/* What the list is showing, and the one way to change it: the count
+            and the settings in force on the left, Filter and sort on the right,
+            and Clear beside it once anything is set. */}
+        <View style={s.bar}>
+          <View style={s.barText}>
+            <RNText style={s.count}>
+              {waiting ? " " : `${shown.length} ${shown.length === 1 ? "stock" : "stocks"}`}
+            </RNText>
+            <RNText style={s.summary} numberOfLines={1}>
+              {summary(range, sector, sort, filters.owned)}
+            </RNText>
+          </View>
+          {anything && (
+            <PressableScale onPress={resetFilters} haptic={false} style={s.clear} accessibilityRole="button">
+              <RNText style={s.clearText}>Clear</RNText>
+            </PressableScale>
+          )}
+          <PressableScale
+            onPress={() => router.push("/invest-filters")}
+            activeScale={0.96}
+            style={s.filterButton}
+            accessibilityRole="button"
+            accessibilityLabel={active > 0 ? `Filter and sort, ${active} on` : "Filter and sort"}
           >
-            <Chip label="All sectors" selected={sector === "all"} onPress={() => setSector("all")} />
-            {sectors.map((x) => (
-              <Chip key={x} label={x} selected={sector === x} onPress={() => setSector(x)} />
-            ))}
-          </ScrollView>
-        )}
+            <Surface />
+            <Icon name="sliders" size={16} color={color.ink} strokeWidth={1.7} />
+            <RNText style={s.filterText}>Filter</RNText>
+            {active > 0 && (
+              <View style={s.badge}>
+                <RNText style={s.badgeText}>{active}</RNText>
+              </View>
+            )}
+          </PressableScale>
+        </View>
 
         <View style={s.list}>
-          {/* The list's own heading, as the web's screener sets it: how many,
-              and the range every chart and move below it is drawn over. */}
-          <View style={s.listHead}>
-            <RNText style={s.count}>
-              {waiting ? "" : `${shown.length} ${shown.length === 1 ? "stock" : "stocks"}`}
-            </RNText>
-            <Segmented options={RANGES} value={range} onChange={setRange} />
-          </View>
           {waiting ? (
             [0, 1, 2, 3, 4, 5].map((i) => <RowSkeleton key={i} />)
           ) : shown.length === 0 ? (
             <View style={s.empty}>
-              <Text variant="label">{searching ? `Nothing matching "${term}"` : "No stocks to show"}</Text>
+              <Text variant="label">
+                {searching
+                  ? `Nothing matching "${term}"`
+                  : instruments.length > 0
+                    ? "Nothing matches these filters"
+                    : "No stocks to show"}
+              </Text>
               <Text variant="small" tone="muted">
                 {searching
                   ? "Try a ticker, or part of a company's name."
-                  : "This usually means we could not reach the market."}
+                  : instruments.length > 0
+                    ? "Clear them, or choose a different sector."
+                    : "This usually means we could not reach the market."}
               </Text>
             </View>
           ) : (
@@ -192,13 +227,7 @@ export default function Invest() {
                 instrument={i}
                 owned={owned.has(i.ticker)}
                 points={histories.data?.series[i.ticker]?.points}
-                change={
-                  range === "1D"
-                    ? Number(i.changePct24h)
-                    : histories.data?.series[i.ticker]
-                      ? Number(histories.data.series[i.ticker]!.changePct)
-                      : null
-                }
+                change={changeOf(i)}
                 onPress={() => router.push({ pathname: "/stock/[ticker]", params: { ticker: i.ticker } })}
               />
             ))
@@ -217,6 +246,31 @@ export default function Invest() {
     </View>
   );
 }
+
+/** The list in the chosen order. Unpriced moves sink to the bottom rather than reading as zero. */
+const sortBy = (list: readonly Instrument[], sort: Sort, changeOf: (i: Instrument) => number | null) => {
+  if (sort === "default") return list;
+  const move = (i: Instrument) => changeOf(i);
+  const by: Record<Exclude<Sort, "default">, (a: Instrument, b: Instrument) => number> = {
+    gainers: (a, b) => (move(b) ?? -Infinity) - (move(a) ?? -Infinity),
+    losers: (a, b) => (move(a) ?? Infinity) - (move(b) ?? Infinity),
+    priceHigh: (a, b) => Number(b.pricePerShare) - Number(a.pricePerShare),
+    priceLow: (a, b) => Number(a.pricePerShare) - Number(b.pricePerShare),
+    name: (a, b) => a.name.localeCompare(b.name),
+  };
+  return [...list].sort(by[sort]);
+};
+
+/** "1M · Technology · Biggest gainers": the settings in force, in a line. */
+const summary = (range: string, sector: string, sort: Sort, owned: boolean) =>
+  [
+    `${range} change`,
+    sector === "all" ? null : sector,
+    sort === "default" ? null : SORTS.find((x) => x.key === sort)?.label,
+    owned ? "Owned" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
 const Line = ({
   instrument: i,
@@ -295,13 +349,10 @@ const s = StyleSheet.create({
   scroll: { paddingBottom: 108 },
 
   head: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
     paddingHorizontal: space.screen,
     paddingBottom: space.md,
   },
-  session: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
+  session: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: color.faint },
   dotLive: { backgroundColor: color.up },
   sessionLabel: { fontFamily: font.medium, fontSize: 12.5, letterSpacing: -0.2, color: color.muted },
@@ -325,21 +376,44 @@ const s = StyleSheet.create({
     padding: 0,
   },
 
-  titleBlock: { flex: 1, minWidth: 0, gap: 4 },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   /* One line under the title saying what the page is for, on every tab. */
-  lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted },
+  lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted, marginTop: 4 },
   shelves: { paddingHorizontal: space.screen, paddingTop: space.md },
-  sectorRow: { flexGrow: 0, marginTop: space.md },
-  sectors: { gap: 6, paddingHorizontal: space.screen },
-  listHead: {
+  bar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: space.md,
+    gap: space.sm,
+    paddingHorizontal: space.screen,
     paddingTop: space.md,
-    paddingBottom: space.xs,
   },
-  count: { fontFamily: font.medium, fontSize: 14, color: color.ink },
+  barText: { flex: 1, minWidth: 0 },
+  count: { fontFamily: font.medium, fontSize: 14, lineHeight: 18, color: color.ink },
+  summary: { fontFamily: font.regular, fontSize: 12, lineHeight: 16, color: color.muted, marginTop: 1 },
+  clear: { height: 36, paddingHorizontal: 10, justifyContent: "center" },
+  clearText: { fontFamily: font.medium, fontSize: 13, color: color.link },
+  filterButton: {
+    height: 36,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: "#E9E9E5",
+    overflow: "hidden",
+  },
+  filterText: { fontFamily: font.medium, fontSize: 13, color: color.ink },
+  badge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    backgroundColor: color.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: { fontFamily: font.medium, fontSize: 11, color: color.onBand },
 
   /* One white panel holding every row, as the web's screener does, rather than
      a card per row: a list of cards is a list of edges, and the eye follows the
