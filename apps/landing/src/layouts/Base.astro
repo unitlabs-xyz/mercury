@@ -23,7 +23,8 @@ interface Props {
 const { title, description = site.description, schema = [] } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname.replace(/\/$/, "") || "/", site.url).href;
-const ogImage = new URL("/og-image.png", site.url).href;
+// A new banner gets a new filename: X and LinkedIn cache previews by URL.
+const ogImage = new URL("/og-mercury-v2.png", site.url).href;
 const isHome = Astro.url.pathname === "/";
 
 const baseSchema: Record<string, unknown>[] = [
@@ -86,6 +87,7 @@ const baseSchema: Record<string, unknown>[] = [
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content="Mercury — the financial account built for the on-chain world." />
 
     {
       [...baseSchema, ...schema].map((block) => (

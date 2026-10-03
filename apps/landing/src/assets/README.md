@@ -26,7 +26,7 @@ optimisation, no hashing, no dead-file pruning.
 | Our own mark, in-page illustrations          | `src/assets/brand/`       | Import an SVG and render it as a component: `import Logo from "…/Logo.svg"` then `<Logo />`. It inlines, so it costs no request and can take `currentColor` |
 | Web fonts (`.woff2`)                         | `src/assets/fonts/`       | Declared in `styles/global.css`; hashed by the build                                                                                                        |
 | Partner and issuer logos                     | `public/logos/`           | SVG. Backed, Ondo, xStocks, Solana and Privy are already here                                                                                               |
-| Favicons, `og-image.png`, `site.webmanifest` | `public/`                 | Fixed names, referenced in `Base.astro`                                                                                                                     |
+| Favicons, `og-mercury-v2.png`, `site.webmanifest` | `public/`                 | Fixed names, referenced in `Base.astro`                                                                                                                     |
 
 ## Using one
 
