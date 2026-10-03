@@ -86,6 +86,17 @@ const PATHS = {
   layers: { w: 1.8, parts: ["M12 3v18", "M4 8h16", "M4 16h16"] },
   clock: { w: 1.8, parts: [{ circle: [12, 12, 9] }, "M12 7v5l3 2"] },
   plus: { w: STROKE, parts: ["M12 6v12", "M6 12h12"] },
+  /* Four corners and a line across: point a camera at a code. */
+  scan: {
+    w: 1.8,
+    parts: [
+      "M4 8V5a1 1 0 0 1 1-1h3",
+      "M16 4h3a1 1 0 0 1 1 1v3",
+      "M20 16v3a1 1 0 0 1-1 1h-3",
+      "M8 20H5a1 1 0 0 1-1-1v-3",
+      "M7 12h10",
+    ],
+  },
   cog: {
     w: 1.8,
     parts: [

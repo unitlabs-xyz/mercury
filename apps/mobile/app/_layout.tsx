@@ -106,6 +106,11 @@ const Gate = () => {
           contentStyle: { backgroundColor: color.surface },
         }}
       />
+      {/* The camera, edge to edge, sliding up over Send. */}
+      <Stack.Screen
+        name="scan"
+        options={{ presentation: "fullScreenModal", animation: "slide_from_bottom" }}
+      />
       <Stack.Screen
         name="add-cash"
         options={{

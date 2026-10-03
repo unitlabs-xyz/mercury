@@ -17,7 +17,19 @@
         "dark": "./assets/icon-dark.png"
       }
     },
-    "plugins": ["expo-router", "expo-secure-store", "expo-web-browser"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Mercury uses the camera to scan a wallet's QR code when you send USDC.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true
     }

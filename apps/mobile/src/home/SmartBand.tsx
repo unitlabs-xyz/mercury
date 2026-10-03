@@ -106,7 +106,7 @@ export const NextStep = ({ cash }: { cash: number }) => {
     <Band id={funded ? "first-buy" : "add-cash"}>
       <View style={[s.pad, s.card, s.stepCard]}>
         <View style={s.fill}>
-          <RNText style={s.kicker}>{funded ? "Next step" : "Get started"}</RNText>
+          {funded && <RNText style={s.kicker}>Next step</RNText>}
           <RNText style={s.big}>{funded ? `${usd(cash)} ready to invest` : "Add cash to start"}</RNText>
           <RNText style={s.sub}>
             {funded

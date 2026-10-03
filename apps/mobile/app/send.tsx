@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,11 +13,9 @@ import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { usd } from "@mercury/view";
 import { useMoney } from "../src/api";
-import { AmountWell, Button, IconButton, Note, PressableScale, Text, useBottomGap } from "../src/ui";
+import { SOLANA_ADDRESS, setScanned, useScanned } from "../src/scan";
+import { AmountWell, Button, Icon, IconButton, Note, PressableScale, Text, useBottomGap } from "../src/ui";
 import { color, font, radius, space } from "../src/theme";
-
-/** A Solana address: base58, 32 to 44 characters. The same check the web's panel makes. */
-const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /**
  * Sending USDC, set as the web's Send panel: the amount in a white well with
@@ -40,6 +38,14 @@ export default function Send() {
   const badAddress = to.trim().length > 0 && !SOLANA_ADDRESS.test(to.trim());
 
   const paste = async () => setTo((await Clipboard.getStringAsync()).trim());
+
+  /* An address the scanner found: take it once, then clear it so it cannot refill a later send. */
+  const scanned = useScanned();
+  useEffect(() => {
+    if (scanned === null) return;
+    setTo(scanned);
+    setScanned(null);
+  }, [scanned]);
 
   return (
     <View style={s.root}>
@@ -64,7 +70,7 @@ export default function Send() {
                 label="Amount"
                 value={text}
                 onChange={setText}
-                max={available > 0 ? available : undefined}
+                max={available}
                 note={`${usd(available)} available to send`}
                 invalid={overdrawn}
               />
@@ -90,6 +96,14 @@ export default function Send() {
                       <RNText style={s.pasteText}>Paste</RNText>
                     </PressableScale>
                   )}
+                  <PressableScale
+                    onPress={() => router.push("/scan")}
+                    style={s.scan}
+                    accessibilityRole="button"
+                    accessibilityLabel="Scan a QR code"
+                  >
+                    <Icon name="scan" size={18} color={color.ink} />
+                  </PressableScale>
                 </View>
                 <RNText style={s.hint}>A wallet on Solana that accepts USDC</RNText>
               </View>
@@ -147,6 +161,16 @@ const s = StyleSheet.create({
   invalid: { borderColor: color.down },
   address: { flex: 1, fontFamily: "Menlo", fontSize: 13, color: color.ink, padding: 0 },
   paste: { paddingLeft: space.sm, paddingVertical: 6 },
+  scan: {
+    width: 34,
+    height: 34,
+    marginLeft: space.sm,
+    marginRight: -8,
+    borderRadius: radius.sm,
+    backgroundColor: color.tile,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   pasteText: { fontFamily: font.medium, fontSize: 13, color: color.link },
   hint: {
     fontFamily: font.regular,
