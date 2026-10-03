@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useBorrow, type Borrow } from "../api/borrow";
 import { Alert } from "../ui/icons";
-import { usd } from "./format";
+import { usd } from "@mercury/view";
 
 /** A fall this small to a margin call is worth saying before it happens. */
 const EARLY_WARNING = 0.1;

@@ -4,7 +4,7 @@ import type { Instrument, Priced } from "../../market/hooks";
 import { useHistory, useReturns } from "../../market/hooks";
 import { InfoTip, MoveChip, RailFigure, RailHead } from "../../ui/ds";
 import { ISSUER_NAME } from "../IssuerCompare";
-import { usd, usdCompact, usdSigned } from "../format";
+import { usd, usdCompact, usdSigned } from "@mercury/view";
 import { compact } from "../invest/shared";
 import { HeaderFigure } from "../portfolio/Summary";
 

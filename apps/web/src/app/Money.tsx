@@ -4,7 +4,7 @@ import { Button, ButtonLink } from "../ui/Button";
 import { ArrowUp, Plus } from "../ui/icons";
 import { AppShell } from "./AppShell";
 import { usePanels } from "./Panels";
-import { pct, usd } from "./format";
+import { pct, usd } from "@mercury/view";
 import { BorrowSection } from "./money/BorrowSection";
 import { HeaderFigure } from "./portfolio/Summary";
 import { Skeleton } from "./portfolio/ui";

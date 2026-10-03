@@ -3,7 +3,7 @@ import { useMoney } from "../api/hooks";
 import { Button } from "../ui/Button";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { Alert } from "../ui/icons";
-import { usd } from "./format";
+import { usd } from "@mercury/view";
 
 /** A soft note under a field: amber for a caution, red for something to fix. */
 const Note = ({ tone, children }: { tone: "warn" | "down"; children: ReactNode }) => (

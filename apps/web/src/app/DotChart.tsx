@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { usd, usdSigned } from "./format";
+import { usd, usdSigned } from "@mercury/view";
 
 /** One reading of the account's value: a display label and the value then. */
 export type Point = { label: string; value: number };

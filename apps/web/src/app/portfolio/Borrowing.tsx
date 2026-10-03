@@ -1,6 +1,6 @@
 import { ButtonLink } from "../../ui/Button";
 import { RailCard, RailFigure, RailHead, SegmentMeter, StatusChip, type Tone } from "../../ui/ds";
-import { pct, usd, usdCompact } from "../format";
+import { pct, usd, usdCompact } from "@mercury/view";
 import type { Model } from "./model";
 import { Skeleton } from "./ui";
 

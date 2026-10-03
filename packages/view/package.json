@@ -1,0 +1,23 @@
+{
+  "name": "@mercury/view",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mercury/core": "workspace:*",
+    "@mercury/types": "workspace:*",
+    "qrcode-generator": "^2.0.4"
+  },
+  "devDependencies": {
+    "@mercury/tsconfig": "workspace:*",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

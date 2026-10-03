@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { GROUPS, type Group } from "./activity-data";
+import { GROUPS, type Group } from "@mercury/view";
 import { MONTH_OPTIONS } from "./activity-filters";
 
 export type ActivityState = {

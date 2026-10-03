@@ -53,18 +53,78 @@ const feePayerSignature = (wire: string): string | null => {
 };
 
 /**
+ * `@solana/kit` does not put the failure in the message.
+ *
+ * A preflight rejection arrives as `Solana error #-32002; Decode this error by
+ * running \`npx @solana/errors decode -- -32002 '<base64>'\`` — and that base64
+ * is a URL-encoded query string holding `accounts`, `fee`, `unitsConsumed` and,
+ * the only part worth reading, `logs`. Unpacked here rather than left for the
+ * operator to decode by hand, because the sentence a buyer needs is inside it.
+ */
+const KIT_CONTEXT = /decode\s+--\s+-?\d+\s+'([A-Za-z0-9+/=]+)'/;
+
+export const logsFrom = (raw: string): readonly string[] => {
+  const encoded = KIT_CONTEXT.exec(raw)?.[1];
+  if (encoded === undefined) return [];
+  try {
+    const logs = new URLSearchParams(Buffer.from(encoded, "base64").toString("utf8")).get("logs");
+    return logs === null || logs === "null" || logs === "" ? [] : logs.split(",");
+  } catch {
+    // A context we cannot read is one more reason to fall through to the
+    // general sentence, not a reason to fail reporting the failure.
+    return [];
+  }
+};
+
+/**
+ * What to say, by what the chain said. Ordered: the first match wins, so the
+ * specific causes sit above the general ones.
+ */
+const SENTENCES: readonly { readonly when: RegExp; readonly say: string }[] = [
+  {
+    when: /AccountNotFound|InsufficientFundsForFee|insufficient lamports/i,
+    say: "the wallet has no SOL to pay the network fee. Add a little SOL (0.01 is plenty) and try again.",
+  },
+  {
+    /* Token program error 1 is InsufficientFunds, and the System program says
+       it in words. Either way the wallet is short of what it is spending. */
+    when: /insufficient funds|custom program error: 0x1\b/i,
+    say: "there was not enough in the wallet to cover this. Check your cash and try again.",
+  },
+  {
+    when: /slippage|SlippageToleranceExceeded|0x1771/i,
+    say: "the price moved further than the order allowed while it was being sent. Try again.",
+  },
+  {
+    when: /BlockhashNotFound|blockhash not found/i,
+    say: "the order took too long to reach the network. Try again.",
+  },
+];
+
+/**
  * The program's own reason, in words someone can act on.
  *
- * Preflight rejections arrive as a wall of JSON with the useful sentence
- * buried in the logs. This used to live in a dry-run branch, where it was only
- * ever read by whoever was testing; it belongs on the path real orders take.
+ * Never the raw string. It used to be returned as a fallback, which was fine
+ * while failures carried an Anchor sentence and became a wall of base64 the
+ * moment the RPC client started packing its context — a buyer was shown four
+ * hundred characters of encoded log in place of "you have no cash". Whatever
+ * cannot be turned into a sentence is logged for us and summarised for them.
  */
-const reasonFrom = (raw: string): string => {
-  if (raw.includes("AccountNotFound") || raw.includes("InsufficientFundsForFee")) {
-    return "the wallet has no SOL to pay the network fee. Add a little SOL (0.01 is plenty) and try again.";
-  }
-  const line = raw.split("\n").find((l) => /Error Message:/.test(l));
-  return line === undefined ? raw : line.replace(/^.*Error Message:\s*/, "");
+export const reasonFrom = (raw: string): string => {
+  const logs = logsFrom(raw);
+  const haystack = [raw, ...logs].join("\n");
+
+  for (const { when, say } of SENTENCES) if (when.test(haystack)) return say;
+
+  // Anchor writes its own, already meant for a reader.
+  const anchor = haystack.split("\n").find((l) => /Error Message:/.test(l));
+  if (anchor !== undefined) return anchor.replace(/^.*Error Message:\s*/, "").trim();
+
+  const logged = logs.find((l) => /Program log: Error: /.test(l));
+  if (logged !== undefined) return logged.replace(/^.*Program log: Error:\s*/, "").trim();
+
+  console.error("send: preflight failed with no reason we could name", raw);
+  return "the network rejected this order and did not say why. Nothing has been charged.";
 };
 
 const fail = (code: string, message: string) => ({ error: { code, message } });

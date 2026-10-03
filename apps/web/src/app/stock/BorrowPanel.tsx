@@ -2,7 +2,7 @@ import { useBorrow } from "../../api/borrow";
 import { useSignedIn } from "../../api/hooks";
 import { ButtonLink } from "../../ui/Button";
 import { RailCard, RailFigure, RailHead } from "../../ui/ds";
-import { pct, usd } from "../format";
+import { pct, usd } from "@mercury/view";
 import { HeaderFigure } from "../portfolio/Summary";
 import { Fact, FigureCard } from "./Panels";
 

@@ -7,6 +7,7 @@ import type { MultiplierSource, PriceBoard, TokenPrice } from "@mercury/market";
 import { testDb } from "../db/testing.js";
 import { users, wallets } from "../db/schema.js";
 import { portfolioRoutes } from "../routes/portfolio.js";
+import { hourOf } from "./history.js";
 import { readSnapshots } from "./queries.js";
 import { snapshotAllPortfolios, type SnapshotDeps } from "./snapshot.js";
 
@@ -21,6 +22,17 @@ import { snapshotAllPortfolios, type SnapshotDeps } from "./snapshot.js";
 const MINT = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const ADDRESS = "Wa11et00000000000000000000000000000000";
+
+/**
+ * The top of the current hour.
+ *
+ * Anchored to the real clock, not to a fixed instant. `/v1/portfolio/history`
+ * builds its window from `new Date()` — that is the behaviour under test — so
+ * readings written at a hard-coded date fall out of a one-day range as soon as
+ * the wall clock passes them. These tests were written on 30 September and
+ * quietly began failing a day later, one reading at a time as the window slid.
+ */
+const topOfHour = (): Date => hourOf(new Date());
 
 const priceAt = (perShare: string): TokenPrice => ({
   mint: MINT,
@@ -42,7 +54,7 @@ describe("snapshot to chart, over a real database", () => {
 
     // Six hourly readings of one share, at a price that moves every hour.
     const prices = ["100.01", "101.02", "102.03", "103.04", "104.05", "105.06"];
-    const now = new Date("2026-09-30T12:00:00.000Z");
+    const now = topOfHour();
     for (const [i, perShare] of prices.entries()) {
       const deps: SnapshotDeps = {
         holdings: async () => [{ shares: D("1"), wrappers: [{ mint: MINT }] }],
@@ -110,7 +122,7 @@ describe("a loan, over a real database", () => {
       .insert(wallets)
       .values({ userId: user!.id, address: ADDRESS, kind: "privy_embedded", isPrimary: true });
 
-    const now = new Date("2026-09-30T12:00:00.000Z");
+    const now = topOfHour();
     // Four hours at a flat price. In the third the account borrows $500, which
     // arrives as cash: the wallet holds 500 more USDC and owes 500 more.
     const hours = [

@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import type { Upcoming as UpcomingItem } from "../../api/dashboard";
 import { Card, Clock, Plus, Refresh, Trend } from "../../ui/icons";
-import type { Event } from "../activity-data";
+import type { Event } from "@mercury/view";
 import { RailCard, RailHead, StatusChip } from "../../ui/ds";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 import { Skeleton, relDay, shortDate } from "./ui";
 
 const UPCOMING_LOOK: Record<UpcomingItem["kind"], { icon: ReactNode; tone: string }> = {

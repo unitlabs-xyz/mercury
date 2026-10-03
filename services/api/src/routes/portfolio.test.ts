@@ -267,8 +267,17 @@ describe("GET /v1/portfolio/exposure/:ticker", () => {
   });
 });
 
-/** `h` hours before NOW, worth `value`. */
-const NOW = new Date("2026-09-30T12:00:00.000Z");
+/**
+ * `h` hours before now, worth `value`.
+ *
+ * Anchored to the real clock, not to a fixed instant. The route builds its
+ * window from `new Date()` — that is the behaviour under test — so readings
+ * written at a hard-coded date fall out of a one-day range as soon as the wall
+ * clock passes them. This was a fixed 2026-09-30 and returned nothing three
+ * days later. Its twin in `portfolio/history.roundtrip.test.ts` had the same
+ * bug and the same fix.
+ */
+const NOW = new Date();
 const reading = (h: number, value: string) => ({
   at: new Date(NOW.getTime() - h * 3_600_000),
   totalUsd: D(value),
