@@ -141,6 +141,7 @@ const Borrowing = ({
   loading: boolean;
   failed: boolean;
 }) => {
+  const router = useRouter();
   const debt = num(borrow?.debtUsd);
   const owes = debt > 0;
   const health = borrow ? HEALTH[borrow.health] : undefined;
@@ -190,9 +191,17 @@ const Borrowing = ({
               </Note>
             ) : (
               <RNText style={s.muted}>
-                Borrowing, repaying and pledging are in the web app for now; they come to the phone next.
+                See what you could borrow, and how a loan would change your account.
               </RNText>
             )}
+            <View style={s.openBorrow}>
+              <Button
+                size="md"
+                variant="secondary"
+                label="Open borrowing"
+                onPress={() => router.push("/borrow")}
+              />
+            </View>
           </View>
         </>
       )}
@@ -251,6 +260,7 @@ const s = StyleSheet.create({
     paddingTop: space.md,
     paddingBottom: space.md,
   },
+  openBorrow: { marginTop: space.md },
   noteWrap: { paddingHorizontal: space.md, paddingTop: space.md, paddingBottom: space.sm },
   muted: { fontFamily: font.regular, fontSize: 12, lineHeight: 17, color: color.muted },
 });

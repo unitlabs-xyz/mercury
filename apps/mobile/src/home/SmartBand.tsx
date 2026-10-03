@@ -69,7 +69,7 @@ export const LoanBand = ({ borrow }: { borrow: Borrow }) => {
   const drop = borrow.safeUntilDrop;
   return (
     <Band id="loan">
-      <PressableScale onPress={() => router.navigate("/money")} activeScale={0.98} style={[s.pad, s.card]}>
+      <PressableScale onPress={() => router.push("/borrow")} activeScale={0.98} style={[s.pad, s.card]}>
         <View style={[s.glyph, { backgroundColor: ON_BAND.faint }]}>
           <Icon name="alert" size={18} color={look.tone} strokeWidth={1.8} />
         </View>

@@ -104,14 +104,24 @@ const Menu = ({
       </Animated.View>
 
       <View style={[s.stack, { right: side, bottom: bottom + height + 14 }]} pointerEvents="box-none">
-        {/* The web's other doors, nearest the button the ones that work here
-            today; Card opens its preview page. Borrow is on the web and not yet on
-            the phone, and Send is on neither (the web's panel stops short of
-            sending), so they show as coming rather than opening a screen that is
-            not there. */}
+        {/* Every door the web has. Borrow and Send open their screens, which say
+            plainly that the phone cannot complete them yet. */}
         <Pill t={t} order={5} icon="card" title="Card" onPress={() => onPick(() => router.push("/card"))} />
-        <Pill t={t} order={4} icon="arrowUp" tilt title="Send" soon />
-        <Pill t={t} order={3} icon="key" title="Borrow" soon />
+        <Pill
+          t={t}
+          order={4}
+          icon="arrowUp"
+          tilt
+          title="Send"
+          onPress={() => onPick(() => router.push("/send"))}
+        />
+        <Pill
+          t={t}
+          order={3}
+          icon="key"
+          title="Borrow"
+          onPress={() => onPick(() => router.push("/borrow"))}
+        />
         <Pill
           t={t}
           order={2}

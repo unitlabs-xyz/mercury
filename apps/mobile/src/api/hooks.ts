@@ -80,6 +80,18 @@ export interface Borrow {
   readonly spendableUsd: number;
   /** What is pledged as collateral, at today's prices. */
   readonly collateralUsd: number;
+  /** Cash in the wallet, which repayments come out of. */
+  readonly cashUsd?: number;
+  /** The yearly rate on what is borrowed, 0–1. */
+  readonly borrowApy?: number;
+  /** Each stock Kamino accepts: what is pledged and what could be. Numbers may arrive as strings. */
+  readonly collateral?: readonly {
+    readonly ticker: string;
+    readonly isStock: boolean;
+    readonly depositedUsd: number | string;
+    readonly depositableUsd: number | string;
+    readonly borrowableUsd: number | string;
+  }[];
   readonly overTargetUsd: number;
   readonly health: "healthy" | "over_limit" | "margin_call" | "liquidation";
   /** The fall that would reach liquidation, 0–1. Null when nothing is owed. */
