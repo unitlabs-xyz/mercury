@@ -1,5 +1,12 @@
 import { serve } from "@hono/node-server";
-import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig } from "./deps.js";
+import {
+  buildAuthDeps,
+  buildDeps,
+  buildReadDeps,
+  buildReconcileDeps,
+  readConfig,
+  syncConfiguredCatalog,
+} from "./deps.js";
 import { applyMigrations } from "./db/migrate.js";
 import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
@@ -24,6 +31,8 @@ const port = Number(process.env.PORT ?? 8787);
  */
 await applyMigrations(config.databaseUrl);
 console.log("migrations: up to date");
+
+await syncConfiguredCatalog(config);
 
 const auth = buildAuthDeps(config);
 const deps = buildDeps(config);

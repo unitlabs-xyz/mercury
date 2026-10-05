@@ -2,7 +2,14 @@ import { getRequestListener } from "@hono/node-server";
 import { Hono } from "hono";
 import { createApp } from "./app.js";
 import { applyMigrations } from "./db/migrate.js";
-import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig } from "./deps.js";
+import {
+  buildAuthDeps,
+  buildDeps,
+  buildReadDeps,
+  buildReconcileDeps,
+  readConfig,
+  syncConfiguredCatalog,
+} from "./deps.js";
 import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
@@ -27,6 +34,7 @@ const config = readConfig();
  * here, so the function errors instead of serving against the wrong schema.
  */
 await applyMigrations(config.databaseUrl);
+await syncConfiguredCatalog(config);
 const auth = buildAuthDeps(config);
 const deps = buildDeps(config);
 const read = buildReadDeps(auth.db, deps, config);

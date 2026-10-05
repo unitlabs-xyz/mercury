@@ -1,0 +1,1476 @@
+{
+  "version": 1,
+  "mints": {
+    "AAPL": "123mYEnRLM2LLYsJW3K6oyYh8uP1fngj732iG638ondo",
+    "ABBV": "MFerpBVGKZh2jXN7cbJdXRXQTp6j6pbSnSZrfWrondo",
+    "ABT": "129gRoHKhVg7CvPMrqVsEB4uYZo6zV4yDZX6NBg9ondo",
+    "ACHR": "KcCVQxG9LhFYP5o9DWFKTFgFShPPQkDEemVbiFyondo",
+    "AG": "hrZ5vs6c6v1iWyvEXjGSHs3sQuuj58VzXikNyRWondo",
+    "ALB": "B5KufqHkskgGYwMXtL8FSHgREAkMQvE3ykhH5Kmondo",
+    "AMAT": "7eRX747PSbVtGVx3qD5UFdkNM2BfTy86ikUiCMhondo",
+    "AMD": "14diAn5z8kjrKwSC8WLqvBqqe5YmihJhjxRxd8Z6ondo",
+    "AMZN": "14Tqdo8V1FhzKsE3W2pFsZCzYPQxxupXRcqw9jv6ondo",
+    "ANET": "Cq6QtvHpXbJWtFaiMhUDtHy8YVZ95gcD1oZ1cohondo",
+    "APLD": "B6WqvLGXdGqpw7qgxeb5EGiRZEYo2apWpQybjYuondo",
+    "ARM": "15SsCZqCsM9fZGhTmP4rdJTPT9WGZKazDSsgeQ8ondo",
+    "ARQQ": "crakmaGKTuVRYqSBsFsuqio5CmpEQnpibDrVLbDondo",
+    "ASML": "1eLZPRsn8bAKmoxsqDMH9Q2m2k7GMNp6RLSQGm8ondo",
+    "ASTS": "B6ry9goGNvVbhq7gWHzs3p6emJ1gLaMhu4By9TTondo",
+    "AUR": "eGbh3V9R5ujWYwKJZAyM4Eg3sfzLhwKyr4bGbTsondo",
+    "AVGO": "1FWZtdWN7y38BSXGzbs8D6Shk88oL9atDNgbVz9ondo",
+    "AXP": "1WxT6NdK7uqpfXuKpALxL2n3f7Rq61XXeHA8UM4ondo",
+    "BA": "1YVZ4LGpq8CAhpdpm3mgy7GgPb83gJczCpxLUQ3ondo",
+    "BAC": "Wk8gC6iTNp8dqd4ghkJ3h1giiUnyhykwHh7tYWjondo",
+    "BBAI": "YXE7mph6XhsgnyezkMEcTuohSuWhbLWfwx2Hh6mondo",
+    "BE": "bBMTGF7atoCizHMT3KCeqJzqR2gXFSUXr53AEDgondo",
+    "BTDR": "kBUAHgGHFthfnwarWxqYxHqVDnqqieJkXb6kvroondo",
+    "CCJ": "fVPj4hHHVEeUrzVnad5fvxFEPGAXD5X6wkw1Xjdondo",
+    "CEG": "7NWHifsBnn9DimUeNnsHdEXkTZhXmJTiXxcCngBondo",
+    "CIFR": "WNZBSkNBNP3Ct1pcFn6Fu4sZQFhnu48EsM9voCEondo",
+    "CLF": "fTuoE9pWbVK7EUpUEENBn8Vu226T7kF3YJBTRLPondo",
+    "CMG": "5owVsVFSHACQuippFYdLp3qWRobp2EGcwxMmsr6ondo",
+    "COIN": "5u6KDiNJXxX4rGMfYT4BApZQC5CuDNrG6MHkwp1ondo",
+    "COP": "X68p9qTpEMkR1TLpXUP2ZJo8PG4Qge2Y2ZLdjA2ondo",
+    "CORZ": "f4ucqqnktrkdDAnwqcAAiA9Lggz6NAHJ3zFwipnondo",
+    "COST": "6btaz134wjHkR8sqhAYrtSM6tavftfxnRvnyMd8ondo",
+    "CRCL": "6xHEyem9hmkGtVq6XGCiQUGpPsHBaoYuYdFNZa5ondo",
+    "CRWD": "cdKfoNjbXgnSuxvoajhtH3uixfZhq1YXhQsS1Rwondo",
+    "CRWV": "BfPGpgNyxe6rjAru1EJarjSBAcCABuMF5L32v7nondo",
+    "CSCO": "7DWcZE1uVc8m2mf9pV8KNov28ET7HsvHkhrhgr9ondo",
+    "CVX": "7tgKziACteG26VjV5xKufojKxwTgCFyTwmWUmz5ondo",
+    "DIS": "mJf1xT3suXtkXBCfZcE9oUUuyxkvSgqYBWiX7v1ondo",
+    "DNN": "12J2LD3tuLfdiVKnWZMHRMrbnXDY9rM4yqVLUa5yondo",
+    "ENPH": "Bp26APthMuM46gMFTo5KYpo7b92GN2xSCor7f9oondo",
+    "EQT": "bWrYATfytuRwGoDbpxy16aQbMbCZDv8DURuLCAhondo",
+    "ETN": "BpYiU1dBXU1fdB64jbR93wHEw3Y47QeRLZvUyLQondo",
+    "F": "5hT2o25X9tGXipwhLckaUdgnxrZ6Y8eiUwdhpLeondo",
+    "FCX": "CY8ttw5rYCT6fFBJwqXofefqa7Ji9E8zfLmhRLmondo",
+    "FLNC": "bzoe1epsQLx65zmez4pWfBumYzpaFwRTvnmCjZVondo",
+    "GD": "hESwwvKsJH4p7Xib5rrM921Ng19cwcQGtxyrgSJondo",
+    "GE": "aTBfDuLRqYHBiG82bHA7DzwjSDTFre2dRtGH3S5ondo",
+    "GEV": "CgZSv89BL58ybWfWobANKEU8nV9jYfFw23G2DZEondo",
+    "GLD": "hWfiw4mcxT8rnNFkk6fsCQSxoxgZ9yVhB6tyeVcondo",
+    "GOOGL": "bbahNA5vT9WJeYft8tALrH1LXWffjwqVoUbqYa1ondo",
+    "HAL": "iFcwEB2LfeYLWKgZ2vogEzC5dP7s7xbhVX81XFwondo",
+    "HD": "MtEXKVN3Pcggy8MPA3eJr15H6SK3RXheScqj9qtondo",
+    "HIVE": "kTMQKHhnWPTvZsfiZfcdeHdG6dMgZV27wXSiC3Yondo",
+    "HOOD": "BVdXGvmgi6A9oAiwWvBvP76fyTqcCNRJMM7zMN6ondo",
+    "IBIT": "6JLG8iUkAuqiBhL3j2ckDMDf5oWAa6awmyaWezKondo",
+    "IBM": "C8bZkgSxXkyT1RgxByp2teJ24hgimPLoyEYoNa9ondo",
+    "INTC": "cJpUMp5R7rZ6fGeLHbHhrRuJzK9mkyKDjZqNpT3ondo",
+    "IONQ": "DDZQijTbaSd3Kas1r1bgCnHPayk8vTP8SfZWp5Tondo",
+    "IRDM": "go6DXMdM5zHTC9G16BwAYA8rKwGRhy9M5uudNdBondo",
+    "IREN": "13QHuepdhtJ3urNsV9i1hdL8nQoca2G7ZaLzb5FYondo",
+    "ISRG": "1MGRpPrkhEsCm2GCWD3rsvEU77xTTLAzfKXeFgFondo",
+    "KEEL": "kSbeWEe64qpoVb1ZSVxgRnekZ1PwGNJkLyL5gJWondo",
+    "KO": "e6G4pfFcrdKxJuZ4YXixRFfMbpMvgXG2Mjcus71ondo",
+    "LI": "v12TwfofSbvVqQ5N5KGG4d3J8rtEi4BjGfn2apyondo",
+    "LLY": "eGGxZwNSfuNKRqQLKaz2hc4QkA2mau7skyxPdj7ondo",
+    "LMT": "EoReHwUnGGekbXFHLj5rbCVKiwWqu32GrETMfw4ondo",
+    "LUNR": "DiDWPZ7vQXfpaeQ8BX68XuDYeiQLv7diDxdeUpaondo",
+    "MA": "EsVHcyRxXFJCLMiuYLWhoDygrNe1BJGpYeZ17X7ondo",
+    "MBLY": "eCSPcjdpdKL1546PU3RM6BXkebuKn8iH4iuMcTBondo",
+    "MCD": "EUbJjmDt8JA222M91bVLZs211siZ2jzbFArH9N3ondo",
+    "META": "fDxs5y12E7x7jBwCKBXGqt71uJmCWsAQ3Srkte6ondo",
+    "MP": "XwFm5GiKPVTvPiEbQpdc6vJbFEpsUXRMf6TcSxnondo",
+    "MRK": "bn1fb8dwzafGePqNPrM8m8cbAKQiFqeEPuZkPySondo",
+    "MRVL": "FovBwhoV5KQjZCdhoM6jgXYwXLX3F8vgAfvmLH7ondo",
+    "MSFT": "FRmH6iRkMr33DLG6zVLR7EM4LojBFAuq6NtFzG6ondo",
+    "MTZ": "R3ywbVQ5t8LNmjQsn2Ngv43dSqyZscQwNag9G3Eondo",
+    "MU": "Fz9edBpaURPPzpKVRR1A8PENYDEgHqwx5D5th28ondo",
+    "NBIS": "DiRshqNDE68bWbGdLHm1GwQ76MvWQG3af6w1NdQondo",
+    "NEE": "t7eN6cGwRMFaZvsNW2SmVwkedmHtDdrxA4ycNE5ondo",
+    "NEM": "Dig28Tf1ufhCBAsjTmFkXCgcNgMqDMYj5A2rDQmondo",
+    "NET": "ZtAY65FCh3YB9H1wkbjRxxY5nXt9VfuTTz3Mzbuondo",
+    "NFLX": "g4KnPrxPLeeKkwvDmZFMtYQPM64eHeShbD55vK6ondo",
+    "NIO": "yQ37dFiGAbzrb2FRAEhGNzRy5zFfoYGWYhAepFEondo",
+    "NKE": "g646pcdG2Rt5DH9WZzL7VVnVDWCCMTTrnktwE74ondo",
+    "NNE": "bz2iUTXWkutnfwG32ziABcTzXoM91sdcgdiJJJdondo",
+    "NOC": "Dm6FpQ76SsbVmAZ4NvD2mjZP7cxbw1CASr4WwCiondo",
+    "NVDA": "gEGtLTPNQ7jcg25zTetkbmF7teoDLcrfTnQfmn2ondo",
+    "NVO": "GeV7S8vjP8qdYZpdGv2Xi6e7MUMCk8NAAp2z7g5ondo",
+    "OKLO": "m6oDLvJT7rY7M1TxuLWP3pWmAPg2cCWDQR1NKiEondo",
+    "ORCL": "GmDADFpfwjfzZq9MfCafMDTS69MgVjtzD7Fd9a4ondo",
+    "OXY": "1GNFMryQ6c9ZpMhgNimmsbtgYM21qnBJgRAFoNiondo",
+    "PANW": "M7hVQomhw4Q2D2op3HvBrZjHu9SryjNvD5haEZ1ondo",
+    "PEP": "gud6b3fYekjhMG5F818BALwbg2vt4JKoow59Md9ondo",
+    "PFE": "Gwh9fPsX1qWATXy63vNaJnAFfwebWQtZaVmPko6ondo",
+    "PL": "aq2zXUHqx7Zk6HSJH2GYsNajQJZj9f3dV7gAzfuondo",
+    "PLTR": "HfsnTS5qtdStwec9DfBrunRqnAMYMMz1kjv9Hu9ondo",
+    "PPLT": "DwRtkbsaQMGAS3oMeEGYh6M5vH4X9WECsQgqHjAondo",
+    "PWR": "f1yQz2fo7S24NqrsfaWDkmQ8xoa8yU72c9rEEBdondo",
+    "PYPL": "hM7B3UQTTR81mS27SxDDPzBbjejmo8fnpFjzgv9ondo",
+    "QBTS": "hqJXutLF6f7DxStrWCrnZDfXzbNTZmvi3KheVi6ondo",
+    "QCOM": "hrmX7MV5hifoaBVjnrdpz698yABxrbBNAcWtWo9ondo",
+    "QUBT": "E4YowrHx5wm4RtSjfuvTqtNH3Wf7NEj5tYZGD9Bondo",
+    "RDW": "E6KSaqjvqe2HiUpbEweRxLK4RimQddigm95H9Jaondo",
+    "REGN": "E86mX2yb3HLbJM6gRtZQ6dCYmLh6MSDZadu9SCPondo",
+    "RGTI": "dwEPNKQab3iwRmjGvZPXhAmws1W5NsQGwuXwi8oondo",
+    "RIOT": "i6f3DvZBuLpnGSqS8x6WPeStJ7jNe5KewD6afD5ondo",
+    "RIVN": "AXRsYFt7TXNQ3DcY6BkvRgPV6VsYMURyDtaeudjondo",
+    "RKLB": "E9VQY3VnrpVSekFByzRmfeK1kxgM3UiKCoVVbdUondo",
+    "RTX": "12BvLZtzjdssAycxPeBQUjukhmgQpULAvy6SroYdondo",
+    "SBUX": "iPFqjcZQTNMNXA4kbShbMhfAVD8yr8Uq9UtXMV6ondo",
+    "SCCO": "EANjzFjj3nPXHdzN5CE3Z8LLVn69Ce77FE8X4cvondo",
+    "SCHW": "cnc6M1zXLdrGR5LAQVcaJDfgezMiVWNtGQsVy1Kondo",
+    "SHOP": "ivdDracs2s7jCP698dJXKSEQdVrNj9hasJL1Uq1ondo",
+    "SLB": "i7ZS13SF6BCKbzvLujp2UqLNMgM1XVnZ7A7wC6tondo",
+    "SLV": "iy11ytbSGcUnrjE6Lfv78TFqxKyUESfku1FugS9ondo",
+    "SMCI": "jLca79XzcewRuBZyaJxVxuKpUHcEix1X4CP1RP9ondo",
+    "SMR": "bGy2covWNf5qyzoNdV1pWXuLmFi6Dq927o7JXzWondo",
+    "SNDK": "EJmUVvDqAdfH5zEohkdS4234bi3c6iunqEMobjmondo",
+    "SO": "aKzjn2ZdWySSGPSSDTY2HUpcSCmemSahTXihrpyondo",
+    "SOFI": "mqL8yXQpeSvc7NgrAtLLPtRvUiWyLoG5RWLv16iondo",
+    "SPCX": "wzAyQTorWyoVXuJKj2x8EqKEGJpS13z6EWE9z5Aondo",
+    "STM": "bM2VSRfbYPt29YRD9F2wTCSCSQaHtNCuz1znNDCondo",
+    "TER": "ahvtJqt6pkzjnYTMaCKrvjPQszSKyWraiXKvuWKondo",
+    "TLN": "RTb54gpqAx6RpLAHRGnqQ3ciQ845CHqhg21ZzEJondo",
+    "TM": "kbmF7ERJWMaaDswMprrH9gHSLya5D2RMBNgKqg3ondo",
+    "TSLA": "KeGv7bsfR4MheC1CkmnAVceoApjrkvBhHYjWb67ondo",
+    "TSM": "keybg184d4vyXeQdFqs4o99YsMg7xBthxTJ6Ky3ondo",
+    "UBER": "KJNeFW3kk3ycPjXpC6cbuyckjeYHacc2ekhtAi5ondo",
+    "UEC": "EYo8D3cLdF1CDeGms5M5VHyU52HJYinkMZ1cqvYondo",
+    "UNH": "kPBGL8vAwKN3UGmr9cjkM2dU79SC3nzTC9yu7F8ondo",
+    "USAR": "aA1dRckexLmQyppFoWmjKDFjrNFUsZeGzZ7L5xpondo",
+    "UUUU": "ey16y4Bk92zmPSvbRznuv3RioAXbVreBkQxrKGDondo",
+    "V": "kxEW4oJL75K37VeXaZF1ynbHQATQwhECQKN1374ondo",
+    "VRSN": "ja4bMvHL3Hw9Ey33VGWyDeXvrHvQWyBnK4GSmCUondo",
+    "VRT": "MkN2TZSYTFBdMRLf9EVcfhstTwnazH8knd9hpepondo",
+    "VRTX": "FL7QzUq58pvkDxkftJm7RqRWgqYEFZwXuvAMsUnondo",
+    "VST": "h6MW8GFpfzxFa1JNn6hZNnBF3t4fj9SHAXKy6LXondo",
+    "WMB": "bvjmEwQBqbMr6rnx5a74boBz6nmA1DNThujPnNAondo",
+    "WMT": "LZddqAqKqJW9oMZSjTxCUmbmzBRQtv9gMkD9hZ3ondo",
+    "WULF": "exYfSJt6Fgfhfnp3bAD4roYy97hLF9npjYaLyEXondo",
+    "WYFI": "jtnRMv1U3bJHQCsi47E6Lf8Nzkaqsisef7SkHBgondo",
+    "XOM": "qCYD74QnXzd9pzv6pGHQKJVwoibL6sNcPQDnpDiondo",
+    "XYZ": "BWxe2FVciUbwrCUZQPUKiREBh5LmVa5AiUqNLAkondo"
+  },
+  "strategies": [
+    {
+      "slug": "magnificent-seven",
+      "gliderStrategyId": "01M465MY1C2KBER654KJDCYYK9",
+      "name": "Mercury Solana - Magnificent Seven",
+      "description": "A Solana Ondo-token adaptation of the public Magnificent Seven allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KV68M2Y685X59DWAEVX5D5X3",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "NVDA",
+          "sourceAssetId": "eip155:56/erc20:0xa9ee28c80f960b889dfbd1902055218cba016f75",
+          "weightBps": 1428
+        },
+        {
+          "ticker": "TSLA",
+          "sourceAssetId": "eip155:56/erc20:0x2494b603319d4d9f9715c9f4496d9e0364b59d93",
+          "weightBps": 1428
+        },
+        {
+          "ticker": "MSFT",
+          "sourceAssetId": "eip155:56/erc20:0x6bfe75d1ad432050ea973c3a3dcd88f02e2444c3",
+          "weightBps": 1428
+        },
+        {
+          "ticker": "AAPL",
+          "sourceAssetId": "eip155:56/erc20:0x390a684ef9cade28a7ad0dfa61ab1eb3842618c4",
+          "weightBps": 1428
+        },
+        {
+          "ticker": "AMZN",
+          "sourceAssetId": "eip155:56/erc20:0x4553cfe1c09f37f38b12dc509f676964e392f8fc",
+          "weightBps": 1428
+        },
+        {
+          "ticker": "GOOGL",
+          "sourceAssetId": "eip155:56/erc20:0x091fc7778e6932d4009b087b191d1ee3bac5729a",
+          "weightBps": 1428
+        },
+        {
+          "ticker": "META",
+          "sourceAssetId": "eip155:56/erc20:0xd7df5863a3e742f0c767768cdfcb63f09e0422f6",
+          "weightBps": 1432
+        }
+      ]
+    },
+    {
+      "slug": "nancy-pelosi-tracker",
+      "gliderStrategyId": "01M4664BEJSY687YFFQT6AXS22",
+      "name": "Mercury Solana - Nancy Pelosi Tracker (Daily Variant)",
+      "description": "A Solana Ondo-token adaptation of the public Nancy Pelosi Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KWJ0Q9GXP1HBN2Z53RCHCHQW",
+      "status": "candidate",
+      "schedule": { "type": "interval", "frequency": "daily" },
+      "allocations": [
+        {
+          "ticker": "PANW",
+          "sourceAssetId": "eip155:56/erc20:0x0eaa1a75bd682a5669ab2371a559fbd039c6b9eb",
+          "weightBps": 1459
+        },
+        {
+          "ticker": "INTC",
+          "sourceAssetId": "eip155:56/erc20:0xa528caaa2f96090e379d43f90834c75df54d6e74",
+          "weightBps": 1390
+        },
+        {
+          "ticker": "AVGO",
+          "sourceAssetId": "eip155:56/erc20:0x0ed2e3180edf393e6bf8db124bd15ddd54de150a",
+          "weightBps": 974
+        },
+        {
+          "ticker": "GOOGL",
+          "sourceAssetId": "eip155:56/erc20:0x091fc7778e6932d4009b087b191d1ee3bac5729a",
+          "weightBps": 1004
+        },
+        {
+          "ticker": "CRWD",
+          "sourceAssetId": "eip155:56/erc20:0xe6837794fbc6dd024733a1a31f86061296fa2752",
+          "weightBps": 1301
+        },
+        {
+          "ticker": "UBER",
+          "sourceAssetId": "eip155:56/erc20:0xde9d6036fca870f7efc5a82722ae694c371ac909",
+          "weightBps": 790
+        },
+        {
+          "ticker": "AMZN",
+          "sourceAssetId": "eip155:56/erc20:0x4553cfe1c09f37f38b12dc509f676964e392f8fc",
+          "weightBps": 799
+        },
+        {
+          "ticker": "VST",
+          "sourceAssetId": "eip155:56/erc20:0xf2c24c47805f4f72d3919c8674bfdd401505794b",
+          "weightBps": 793
+        },
+        {
+          "ticker": "NVDA",
+          "sourceAssetId": "eip155:56/erc20:0xa9ee28c80f960b889dfbd1902055218cba016f75",
+          "weightBps": 602
+        },
+        {
+          "ticker": "MSFT",
+          "sourceAssetId": "eip155:56/erc20:0x6bfe75d1ad432050ea973c3a3dcd88f02e2444c3",
+          "weightBps": 493
+        },
+        {
+          "ticker": "AAPL",
+          "sourceAssetId": "eip155:56/erc20:0x390a684ef9cade28a7ad0dfa61ab1eb3842618c4",
+          "weightBps": 395
+        }
+      ]
+    },
+    {
+      "slug": "warren-buffett-tracker",
+      "gliderStrategyId": "01M4664CYACMZCGRXZA8VXN621",
+      "name": "Mercury Solana - Warren Buffett Tracker (Daily Variant)",
+      "description": "A Solana Ondo-token adaptation of the public Warren Buffett Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KWJ0QAV0P64JAETT29AS1MAH",
+      "status": "candidate",
+      "schedule": { "type": "interval", "frequency": "daily" },
+      "allocations": [
+        {
+          "ticker": "AAPL",
+          "sourceAssetId": "eip155:56/erc20:0x390a684ef9cade28a7ad0dfa61ab1eb3842618c4",
+          "weightBps": 3726
+        },
+        {
+          "ticker": "AXP",
+          "sourceAssetId": "eip155:56/erc20:0xd803f8777187d6dee1ea57854aeb957043fb1675",
+          "weightBps": 1562
+        },
+        {
+          "ticker": "BAC",
+          "sourceAssetId": "eip155:56/erc20:0xd615468088b19fb9d4f03cb3ce9e33876ff3db99",
+          "weightBps": 1249
+        },
+        {
+          "ticker": "KO",
+          "sourceAssetId": "eip155:56/erc20:0x405f38b90bebf1259062cf29da299f3398662bcb",
+          "weightBps": 1159
+        },
+        {
+          "ticker": "GOOGL",
+          "sourceAssetId": "eip155:56/erc20:0x091fc7778e6932d4009b087b191d1ee3bac5729a",
+          "weightBps": 811
+        },
+        {
+          "ticker": "CVX",
+          "sourceAssetId": "eip155:56/erc20:0xd3113a0ad20a46f6a662c63fe8e637f7713e59c7",
+          "weightBps": 775
+        },
+        {
+          "ticker": "OXY",
+          "sourceAssetId": "eip155:56/erc20:0x01b5a4ac600be98448dbefbb78bcdf38262552cc",
+          "weightBps": 617
+        },
+        {
+          "ticker": "VRSN",
+          "sourceAssetId": "eip155:56/erc20:0x37ff203ac221313b620d047eddd7bd6f68d656a6",
+          "weightBps": 101
+        }
+      ]
+    },
+    {
+      "slug": "leopold-aschenbrenner-tracker",
+      "gliderStrategyId": "01M4664EEHNRCCM2S6TCEYVDVA",
+      "name": "Mercury Solana - Leopold Aschenbrenner Tracker (Daily Variant)",
+      "description": "A Solana Ondo-token adaptation of the public Leopold Aschenbrenner Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KWJ0QA4N1DYBNWTQXJ0XQ7S8",
+      "status": "candidate",
+      "schedule": { "type": "interval", "frequency": "daily" },
+      "allocations": [
+        {
+          "ticker": "MU",
+          "sourceAssetId": "eip155:56/erc20:0x8b6acf6041a81567f012ff6a4c6d96d5818d74bf",
+          "weightBps": 2354
+        },
+        {
+          "ticker": "SNDK",
+          "sourceAssetId": "eip155:56/erc20:0x4fd67cb8cfedc718bac984b5936abe3330d0a2a4",
+          "weightBps": 2243
+        },
+        {
+          "ticker": "BE",
+          "sourceAssetId": "eip155:56/erc20:0x17d03ae104a9d12e9e5794efb109b817dd7f3404",
+          "weightBps": 1424
+        },
+        {
+          "ticker": "TSM",
+          "sourceAssetId": "eip155:56/erc20:0xc37042a7a4fa510d8884a433762ab87257b91965",
+          "weightBps": 700
+        },
+        {
+          "ticker": "NBIS",
+          "sourceAssetId": "eip155:56/erc20:0xee268780473e7a0e47bac41547c6e01512555a16",
+          "weightBps": 648
+        },
+        {
+          "ticker": "CRWV",
+          "sourceAssetId": "eip155:56/erc20:0x76e39171cb665a35981e744e2ceb7012f76caeac",
+          "weightBps": 361
+        },
+        {
+          "ticker": "KEEL",
+          "sourceAssetId": "eip155:56/erc20:0x5e3ca19c533c8c0381eac5319624596557c279ed",
+          "weightBps": 373
+        },
+        {
+          "ticker": "CORZ",
+          "sourceAssetId": "eip155:56/erc20:0x25ed86472cf3012607dc6576c58e6432968255c2",
+          "weightBps": 292
+        },
+        {
+          "ticker": "WYFI",
+          "sourceAssetId": "eip155:56/erc20:0xce128edcf46b281b7df8880867b74e11b055e8e7",
+          "weightBps": 268
+        },
+        {
+          "ticker": "BTDR",
+          "sourceAssetId": "eip155:56/erc20:0x3a562836afb1026f5d7a6b6da1125d27fdfee372",
+          "weightBps": 295
+        },
+        {
+          "ticker": "HIVE",
+          "sourceAssetId": "eip155:56/erc20:0x3f19a16a401a6af05150479ccb76ef2fb57b0df3",
+          "weightBps": 288
+        },
+        {
+          "ticker": "STM",
+          "sourceAssetId": "eip155:56/erc20:0x8b46599e0e80a34f37e97df58e741ca904cdfabd",
+          "weightBps": 314
+        },
+        {
+          "ticker": "APLD",
+          "sourceAssetId": "eip155:56/erc20:0x18de24acb876c0b8392d9c55583bb21c0355980b",
+          "weightBps": 212
+        },
+        {
+          "ticker": "RIOT",
+          "sourceAssetId": "eip155:56/erc20:0xc4a88a72b848255fd24da3c1ad6755d980535fb1",
+          "weightBps": 228
+        }
+      ]
+    },
+    {
+      "slug": "cathie-wood-tracker",
+      "gliderStrategyId": "01M4664G02RJZKJ375Y3PQYCT6",
+      "name": "Mercury Solana - Cathie Wood Tracker (Daily Variant)",
+      "description": "A Solana Ondo-token adaptation of the public Cathie Wood Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KWJ0QBBM4RCD3MG33JB3JKDQ",
+      "status": "candidate",
+      "schedule": { "type": "interval", "frequency": "daily" },
+      "allocations": [
+        {
+          "ticker": "TSLA",
+          "sourceAssetId": "eip155:56/erc20:0x2494b603319d4d9f9715c9f4496d9e0364b59d93",
+          "weightBps": 1418
+        },
+        {
+          "ticker": "AMD",
+          "sourceAssetId": "eip155:56/erc20:0x9f16e46c73b43bdb70861247d537bee4ea18f639",
+          "weightBps": 1278
+        },
+        {
+          "ticker": "SPCX",
+          "sourceAssetId": "eip155:56/erc20:0xd0a58bc9d88d3ff48c0294cb7e45937d0e41a928",
+          "weightBps": 1039
+        },
+        {
+          "ticker": "HOOD",
+          "sourceAssetId": "eip155:56/erc20:0x19601179a60f55ff6636f5d1a8b6671053bd60a8",
+          "weightBps": 830
+        },
+        {
+          "ticker": "SHOP",
+          "sourceAssetId": "eip155:56/erc20:0x43d0b380c33cd004a6a69abd61843881a2de4113",
+          "weightBps": 778
+        },
+        {
+          "ticker": "PLTR",
+          "sourceAssetId": "eip155:56/erc20:0x9351abd19f42101dd36025e495b98e910b255d78",
+          "weightBps": 762
+        },
+        {
+          "ticker": "COIN",
+          "sourceAssetId": "eip155:56/erc20:0xf8589b526fdd65f7f301c605a6e04f0f1b4b3620",
+          "weightBps": 678
+        },
+        {
+          "ticker": "CRCL",
+          "sourceAssetId": "eip155:56/erc20:0x992879cd8ce0c312d98648875b5a8d6d042cbf34",
+          "weightBps": 607
+        },
+        {
+          "ticker": "AMZN",
+          "sourceAssetId": "eip155:56/erc20:0x4553cfe1c09f37f38b12dc509f676964e392f8fc",
+          "weightBps": 536
+        },
+        {
+          "ticker": "GOOGL",
+          "sourceAssetId": "eip155:56/erc20:0x091fc7778e6932d4009b087b191d1ee3bac5729a",
+          "weightBps": 514
+        },
+        {
+          "ticker": "NVDA",
+          "sourceAssetId": "eip155:56/erc20:0xa9ee28c80f960b889dfbd1902055218cba016f75",
+          "weightBps": 524
+        },
+        {
+          "ticker": "RKLB",
+          "sourceAssetId": "eip155:56/erc20:0xb4d695569236273745b4cd54b539b1b9cc1513af",
+          "weightBps": 438
+        },
+        {
+          "ticker": "TER",
+          "sourceAssetId": "eip155:56/erc20:0x6f040fc3061374304bddbfdae9d688d7c868c785",
+          "weightBps": 424
+        },
+        {
+          "ticker": "ACHR",
+          "sourceAssetId": "eip155:56/erc20:0x91c62325f901ee29da8e521cfe68980332a4ca06",
+          "weightBps": 174
+        }
+      ]
+    },
+    {
+      "slug": "hard-money",
+      "gliderStrategyId": "01M465SR9JKM9EHNFKQRHCVH7G",
+      "name": "Mercury Solana - Hard Money",
+      "description": "A Solana Ondo-token adaptation of the public Hard Money allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXG24D6NDH1GBX0FCS68M9B",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "GLD",
+          "sourceAssetId": "eip155:56/erc20:0xfa9a1e901085e269f6d428f79cd5252d8b919344",
+          "weightBps": 3600
+        },
+        {
+          "ticker": "NEM",
+          "sourceAssetId": "eip155:56/erc20:0x5e63232993789601ce362e0240a299c1dfcbfbec",
+          "weightBps": 1600
+        },
+        {
+          "ticker": "SLV",
+          "sourceAssetId": "eip155:56/erc20:0x8b872732b07be325a8803cdb480d9d20b6f8d11b",
+          "weightBps": 1600
+        },
+        {
+          "ticker": "IBIT",
+          "sourceAssetId": "eip155:56/erc20:0x68b07cef227cea1b2b6683921c8c825cd5c69ec7",
+          "weightBps": 1600
+        },
+        {
+          "ticker": "AG",
+          "sourceAssetId": "eip155:56/erc20:0xa2a97e3d6140e8ccd058f3b84230f3e1a349b1a3",
+          "weightBps": 800
+        },
+        {
+          "ticker": "PPLT",
+          "sourceAssetId": "eip155:56/erc20:0x3ec23f52f6573fc0587a0631dd8c3b107f6bcb35",
+          "weightBps": 800
+        }
+      ]
+    },
+    {
+      "slug": "quantum",
+      "gliderStrategyId": "01M465SSR1NQ1PMWVP8GY1GFMJ",
+      "name": "Mercury Solana - Quantum",
+      "description": "A Solana Ondo-token adaptation of the public Quantum allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXHMSPVYT832EHC76QVJJ39",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "IBM",
+          "sourceAssetId": "eip155:56/erc20:0xe8ff70859ce4cbd72e4352b4fb45f5bf39d07464",
+          "weightBps": 1900
+        },
+        {
+          "ticker": "NVDA",
+          "sourceAssetId": "eip155:56/erc20:0xa9ee28c80f960b889dfbd1902055218cba016f75",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "GOOGL",
+          "sourceAssetId": "eip155:56/erc20:0x091fc7778e6932d4009b087b191d1ee3bac5729a",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "IONQ",
+          "sourceAssetId": "eip155:56/erc20:0x40d8e1fbaf69173c47fa493feb50a84eec6b57ee",
+          "weightBps": 1300
+        },
+        {
+          "ticker": "RGTI",
+          "sourceAssetId": "eip155:56/erc20:0xed2a500eb2b66679e0bbd76e51a60049ae5f3271",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "QBTS",
+          "sourceAssetId": "eip155:56/erc20:0x8c7bf0ed6bc778bde1489de1592c1aad3e66371d",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "QUBT",
+          "sourceAssetId": "eip155:56/erc20:0x82e07c1017032cfd889b1ca81ebe722c4d4de825",
+          "weightBps": 900
+        },
+        {
+          "ticker": "ARQQ",
+          "sourceAssetId": "eip155:56/erc20:0x1161989389a991532dce453d04d6346c2581c907",
+          "weightBps": 700
+        }
+      ]
+    },
+    {
+      "slug": "energy-infrastructure",
+      "gliderStrategyId": "01M465SV8EJG5FSENGRC1BSRKF",
+      "name": "Mercury Solana - Energy Infrastructure",
+      "description": "A Solana Ondo-token adaptation of the public Energy Infrastructure allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXHVT8Q8QF8SAQJRPYF2XAA",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "NEE",
+          "sourceAssetId": "eip155:56/erc20:0xe9d43f7e6b2237e8873a7003b3f43c6b03160be5",
+          "weightBps": 2200
+        },
+        {
+          "ticker": "GEV",
+          "sourceAssetId": "eip155:56/erc20:0x2aea1d415d45ccf3eabe565d45dcaf4ea2035b9c",
+          "weightBps": 1800
+        },
+        {
+          "ticker": "ETN",
+          "sourceAssetId": "eip155:56/erc20:0x4697b2a050f7b5a8e1ebc27c325f9d78d094f041",
+          "weightBps": 1300
+        },
+        {
+          "ticker": "FLNC",
+          "sourceAssetId": "eip155:56/erc20:0xf1a96d4b591e446445600789d60c73dd636b357c",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "ENPH",
+          "sourceAssetId": "eip155:56/erc20:0x30938154e2697694f41592c2e48459287debe4bf",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "SO",
+          "sourceAssetId": "eip155:56/erc20:0xd7a6353a23ed2c4fcac29a63cbbe3f65ffef41f5",
+          "weightBps": 900
+        },
+        {
+          "ticker": "PWR",
+          "sourceAssetId": "eip155:56/erc20:0x2418c2e1ae3b8d767594b3974d32610743f88155",
+          "weightBps": 900
+        },
+        {
+          "ticker": "MTZ",
+          "sourceAssetId": "eip155:56/erc20:0xf49046aae76eaeb7ffd3ef116ce0f7cd0f52d93e",
+          "weightBps": 800
+        }
+      ]
+    },
+    {
+      "slug": "pure-silicon",
+      "gliderStrategyId": "01M465SWNTQWHRCZ8YKVGK7H86",
+      "name": "Mercury Solana - Pure Silicon",
+      "description": "A Solana Ondo-token adaptation of the public Pure Silicon allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXH3N3ZJH0RF8JS9TRQ7BV7",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "NVDA",
+          "sourceAssetId": "eip155:56/erc20:0xa9ee28c80f960b889dfbd1902055218cba016f75",
+          "weightBps": 2000
+        },
+        {
+          "ticker": "TSM",
+          "sourceAssetId": "eip155:56/erc20:0xc37042a7a4fa510d8884a433762ab87257b91965",
+          "weightBps": 1300
+        },
+        {
+          "ticker": "MU",
+          "sourceAssetId": "eip155:56/erc20:0x8b6acf6041a81567f012ff6a4c6d96d5818d74bf",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "AVGO",
+          "sourceAssetId": "eip155:56/erc20:0x0ed2e3180edf393e6bf8db124bd15ddd54de150a",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "AMD",
+          "sourceAssetId": "eip155:56/erc20:0x9f16e46c73b43bdb70861247d537bee4ea18f639",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "ASML",
+          "sourceAssetId": "eip155:56/erc20:0xb034f6cb52b7f2fd5a7eeeffca6b9adcd6b9a6f6",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "QCOM",
+          "sourceAssetId": "eip155:56/erc20:0xfbd4d681c92ead6af0e49950c8b2e47eeacbb2db",
+          "weightBps": 700
+        },
+        {
+          "ticker": "MRVL",
+          "sourceAssetId": "eip155:56/erc20:0x1501ec83ffef405b4331cc4f73277a40fb0c627d",
+          "weightBps": 600
+        },
+        {
+          "ticker": "ARM",
+          "sourceAssetId": "eip155:56/erc20:0x527c6436e1eaa4f2065cde4090f798cb5d031dd6",
+          "weightBps": 600
+        },
+        {
+          "ticker": "AMAT",
+          "sourceAssetId": "eip155:56/erc20:0x5ecc352c4640f1d26bd231dbbd171f40f7d0eec6",
+          "weightBps": 700
+        }
+      ]
+    },
+    {
+      "slug": "neo-finance",
+      "gliderStrategyId": "01M465SY4J9A20QQ1FAP64T2DH",
+      "name": "Mercury Solana - Neo Finance",
+      "description": "A Solana Ondo-token adaptation of the public Neo Finance allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXGBHHGE4YECQ6MT3BMKGX4",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "COIN",
+          "sourceAssetId": "eip155:56/erc20:0xf8589b526fdd65f7f301c605a6e04f0f1b4b3620",
+          "weightBps": 1400
+        },
+        {
+          "ticker": "HOOD",
+          "sourceAssetId": "eip155:56/erc20:0x19601179a60f55ff6636f5d1a8b6671053bd60a8",
+          "weightBps": 1200
+        },
+        {
+          "ticker": "V",
+          "sourceAssetId": "eip155:56/erc20:0x1cde419fae0ef7f7931ae3e29e5f411c8c5e5fa1",
+          "weightBps": 1200
+        },
+        {
+          "ticker": "SOFI",
+          "sourceAssetId": "eip155:56/erc20:0x71507068e98049cba81e9bbc8d901e4a2f4222eb",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "MA",
+          "sourceAssetId": "eip155:56/erc20:0x25ffda07f585c39848db6573e533d7585679c52d",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "XYZ",
+          "sourceAssetId": "eip155:56/erc20:0xe778a2e5d953c82eb9475cf3b87654226a867344",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "PYPL",
+          "sourceAssetId": "eip155:56/erc20:0x374d03a6c0d5bd4be0a5117ebe1b49d52ac8a53f",
+          "weightBps": 800
+        },
+        {
+          "ticker": "AXP",
+          "sourceAssetId": "eip155:56/erc20:0xd803f8777187d6dee1ea57854aeb957043fb1675",
+          "weightBps": 700
+        },
+        {
+          "ticker": "SCHW",
+          "sourceAssetId": "eip155:56/erc20:0xe5ba472c98b7e4695bd856290de66bdedaffc123",
+          "weightBps": 700
+        },
+        {
+          "ticker": "CRCL",
+          "sourceAssetId": "eip155:56/erc20:0x992879cd8ce0c312d98648875b5a8d6d042cbf34",
+          "weightBps": 800
+        }
+      ]
+    },
+    {
+      "slug": "compute-grab",
+      "gliderStrategyId": "01M465SZKK6MKPJ948HBNMSJF2",
+      "name": "Mercury Solana - Compute Grab",
+      "description": "A Solana Ondo-token adaptation of the public Compute Grab allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXHE56MX6KR8WW1R0PMN51J",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "KEEL",
+          "sourceAssetId": "eip155:56/erc20:0x5e3ca19c533c8c0381eac5319624596557c279ed",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "IREN",
+          "sourceAssetId": "eip155:56/erc20:0x8fd70ee385f470c8d6fda2d93a4e49c849bac6a6",
+          "weightBps": 1400
+        },
+        {
+          "ticker": "CORZ",
+          "sourceAssetId": "eip155:56/erc20:0x25ed86472cf3012607dc6576c58e6432968255c2",
+          "weightBps": 1200
+        },
+        {
+          "ticker": "CRWV",
+          "sourceAssetId": "eip155:56/erc20:0x76e39171cb665a35981e744e2ceb7012f76caeac",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "APLD",
+          "sourceAssetId": "eip155:56/erc20:0x18de24acb876c0b8392d9c55583bb21c0355980b",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "CEG",
+          "sourceAssetId": "eip155:56/erc20:0x65d84f0990b7394209d591380c2952c83d778aa3",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "CIFR",
+          "sourceAssetId": "eip155:56/erc20:0xdad07d0ca26ed4109bc00893dbee3ed4ce8ce2a4",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "WULF",
+          "sourceAssetId": "eip155:56/erc20:0xad56701d9e57957e28e546db7db508a16d4f86cc",
+          "weightBps": 900
+        },
+        {
+          "ticker": "NBIS",
+          "sourceAssetId": "eip155:56/erc20:0xee268780473e7a0e47bac41547c6e01512555a16",
+          "weightBps": 900
+        }
+      ]
+    },
+    {
+      "slug": "ai-full-stack",
+      "gliderStrategyId": "01M465T1YNCGT98DQAC76M3HP4",
+      "name": "Mercury Solana - AI Full Stack",
+      "description": "A Solana Ondo-token adaptation of the public AI Full Stack allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXGPDTP3FWTVPEXH6A5XPA4",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "NVDA",
+          "sourceAssetId": "eip155:56/erc20:0xa9ee28c80f960b889dfbd1902055218cba016f75",
+          "weightBps": 1400
+        },
+        {
+          "ticker": "TSM",
+          "sourceAssetId": "eip155:56/erc20:0xc37042a7a4fa510d8884a433762ab87257b91965",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "AVGO",
+          "sourceAssetId": "eip155:56/erc20:0x0ed2e3180edf393e6bf8db124bd15ddd54de150a",
+          "weightBps": 900
+        },
+        {
+          "ticker": "CEG",
+          "sourceAssetId": "eip155:56/erc20:0x65d84f0990b7394209d591380c2952c83d778aa3",
+          "weightBps": 700
+        },
+        {
+          "ticker": "GEV",
+          "sourceAssetId": "eip155:56/erc20:0x2aea1d415d45ccf3eabe565d45dcaf4ea2035b9c",
+          "weightBps": 700
+        },
+        {
+          "ticker": "NBIS",
+          "sourceAssetId": "eip155:56/erc20:0xee268780473e7a0e47bac41547c6e01512555a16",
+          "weightBps": 600
+        },
+        {
+          "ticker": "VRT",
+          "sourceAssetId": "eip155:56/erc20:0x9cea8a7be1ab0320b709d368ad60d8500f55995f",
+          "weightBps": 700
+        },
+        {
+          "ticker": "PLTR",
+          "sourceAssetId": "eip155:56/erc20:0x9351abd19f42101dd36025e495b98e910b255d78",
+          "weightBps": 800
+        },
+        {
+          "ticker": "SMCI",
+          "sourceAssetId": "eip155:56/erc20:0xc142ba8ccd36d80c3a001342fb83e4c3d218a873",
+          "weightBps": 600
+        },
+        {
+          "ticker": "ANET",
+          "sourceAssetId": "eip155:56/erc20:0x538e2838f9ebc9b891399df4a8dcc42890d9dc20",
+          "weightBps": 700
+        },
+        {
+          "ticker": "ORCL",
+          "sourceAssetId": "eip155:56/erc20:0x03e4bd1ea53f1da84513da0319d1f03dd1bbcf93",
+          "weightBps": 700
+        },
+        {
+          "ticker": "CRWV",
+          "sourceAssetId": "eip155:56/erc20:0x76e39171cb665a35981e744e2ceb7012f76caeac",
+          "weightBps": 600
+        },
+        {
+          "ticker": "VST",
+          "sourceAssetId": "eip155:56/erc20:0xf2c24c47805f4f72d3919c8674bfdd401505794b",
+          "weightBps": 600
+        }
+      ]
+    },
+    {
+      "slug": "the-arsenal",
+      "gliderStrategyId": "01M465T3HY08FYV7WB10G1JCWM",
+      "name": "Mercury Solana - The Arsenal",
+      "description": "A Solana Ondo-token adaptation of the public The Arsenal allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXKFXVKWCZEEX5C2Q9YW283",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "RTX",
+          "sourceAssetId": "eip155:56/erc20:0x44fde2c6bc2c2b54962c69fcef57a2a50121dbd7",
+          "weightBps": 1700
+        },
+        {
+          "ticker": "LMT",
+          "sourceAssetId": "eip155:56/erc20:0xd09f7b75b9659b864c6f82bb00ff096f9d277998",
+          "weightBps": 1300
+        },
+        {
+          "ticker": "PLTR",
+          "sourceAssetId": "eip155:56/erc20:0x9351abd19f42101dd36025e495b98e910b255d78",
+          "weightBps": 1200
+        },
+        {
+          "ticker": "GD",
+          "sourceAssetId": "eip155:56/erc20:0x5d1a9d8aa362a6424b65fcb601e52fefce5b4efa",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "NOC",
+          "sourceAssetId": "eip155:56/erc20:0x4d3442d884202584f1729bca20db05472b886b52",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "BA",
+          "sourceAssetId": "eip155:56/erc20:0xf21132a811ad1a878e21af60f64d4e690c9daa42",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "GE",
+          "sourceAssetId": "eip155:56/erc20:0x5151a22421ed4277f1e4ca4785a07b035d548a36",
+          "weightBps": 900
+        },
+        {
+          "ticker": "BBAI",
+          "sourceAssetId": "eip155:56/erc20:0x7ba995f1662a01f3be0dc299ce94bb7e9c7075f5",
+          "weightBps": 900
+        },
+        {
+          "ticker": "RKLB",
+          "sourceAssetId": "eip155:56/erc20:0xb4d695569236273745b4cd54b539b1b9cc1513af",
+          "weightBps": 800
+        }
+      ]
+    },
+    {
+      "slug": "digital-fortress",
+      "gliderStrategyId": "01M465T51Q1HTKY5C1WM63M2DY",
+      "name": "Mercury Solana - Digital Fortress",
+      "description": "A Solana Ondo-token adaptation of the public Digital Fortress allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXKP9GZ6QXS7D7AMD4696EY",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "CRWD",
+          "sourceAssetId": "eip155:56/erc20:0xe6837794fbc6dd024733a1a31f86061296fa2752",
+          "weightBps": 2300
+        },
+        {
+          "ticker": "PANW",
+          "sourceAssetId": "eip155:56/erc20:0x0eaa1a75bd682a5669ab2371a559fbd039c6b9eb",
+          "weightBps": 2100
+        },
+        {
+          "ticker": "NET",
+          "sourceAssetId": "eip155:56/erc20:0xfeb0793eea97585eb3a541f3fd53450d225b2b87",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "MSFT",
+          "sourceAssetId": "eip155:56/erc20:0x6bfe75d1ad432050ea973c3a3dcd88f02e2444c3",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "CSCO",
+          "sourceAssetId": "eip155:56/erc20:0x34304f2f7cc487eb4186e6d69f5905a613474aa2",
+          "weightBps": 1400
+        },
+        {
+          "ticker": "VRSN",
+          "sourceAssetId": "eip155:56/erc20:0x37ff203ac221313b620d047eddd7bd6f68d656a6",
+          "weightBps": 1200
+        }
+      ]
+    },
+    {
+      "slug": "black-gold",
+      "gliderStrategyId": "01M465T6HWWS8SRTW8W9RFWHJ8",
+      "name": "Mercury Solana - Black Gold",
+      "description": "A Solana Ondo-token adaptation of the public Black Gold allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXJWCW6ZNGX1A5XH0VVK9PB",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "XOM",
+          "sourceAssetId": "eip155:56/erc20:0x4d209d275e3492ac08497a7a42915899c4dd5e86",
+          "weightBps": 2300
+        },
+        {
+          "ticker": "CVX",
+          "sourceAssetId": "eip155:56/erc20:0xd3113a0ad20a46f6a662c63fe8e637f7713e59c7",
+          "weightBps": 1700
+        },
+        {
+          "ticker": "COP",
+          "sourceAssetId": "eip155:56/erc20:0x0d586b51a90dc999f9bb6a0506da7f034a1d3a2e",
+          "weightBps": 1400
+        },
+        {
+          "ticker": "OXY",
+          "sourceAssetId": "eip155:56/erc20:0x01b5a4ac600be98448dbefbb78bcdf38262552cc",
+          "weightBps": 1200
+        },
+        {
+          "ticker": "SLB",
+          "sourceAssetId": "eip155:56/erc20:0xfadde620010736a5074a4269894cb52b0a9a91de",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "WMB",
+          "sourceAssetId": "eip155:56/erc20:0x7b7abd762a400c9768cdeeef3c01dae39e0b8427",
+          "weightBps": 900
+        },
+        {
+          "ticker": "EQT",
+          "sourceAssetId": "eip155:56/erc20:0x9a1c88ac479906a7f03e76605b15b72df10d8e51",
+          "weightBps": 800
+        },
+        {
+          "ticker": "HAL",
+          "sourceAssetId": "eip155:56/erc20:0x7a18bb5fd6ba6343180afdcf6dc406ef17f7fc04",
+          "weightBps": 700
+        }
+      ]
+    },
+    {
+      "slug": "escape-velocity",
+      "gliderStrategyId": "01M465T82SZQDR3PHAPXMB4X2H",
+      "name": "Mercury Solana - Escape Velocity",
+      "description": "A Solana Ondo-token adaptation of the public Escape Velocity allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXKAZA1JH8HEXETJX8VJVHY",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "RKLB",
+          "sourceAssetId": "eip155:56/erc20:0xb4d695569236273745b4cd54b539b1b9cc1513af",
+          "weightBps": 1900
+        },
+        {
+          "ticker": "SPCX",
+          "sourceAssetId": "eip155:56/erc20:0xd0a58bc9d88d3ff48c0294cb7e45937d0e41a928",
+          "weightBps": 1600
+        },
+        {
+          "ticker": "ASTS",
+          "sourceAssetId": "eip155:56/erc20:0x45abf29515bc23f8c0ed2a06584444ce473a75fb",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "RDW",
+          "sourceAssetId": "eip155:56/erc20:0x23e39d94807a8bb7e3f8294b4911d04ee26dce39",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "LUNR",
+          "sourceAssetId": "eip155:56/erc20:0xa3b7b7cfeb023a6c4f444f5ca9a3fc85809ece15",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "IRDM",
+          "sourceAssetId": "eip155:56/erc20:0x3ce678692a60fb5f31963b05cb158f0ce0ff1736",
+          "weightBps": 800
+        },
+        {
+          "ticker": "PL",
+          "sourceAssetId": "eip155:56/erc20:0xf9015e0b3ab4ddd216f522d6150db826c9be83f8",
+          "weightBps": 800
+        },
+        {
+          "ticker": "BA",
+          "sourceAssetId": "eip155:56/erc20:0xf21132a811ad1a878e21af60f64d4e690c9daa42",
+          "weightBps": 700
+        },
+        {
+          "ticker": "NOC",
+          "sourceAssetId": "eip155:56/erc20:0x4d3442d884202584f1729bca20db05472b886b52",
+          "weightBps": 600
+        }
+      ]
+    },
+    {
+      "slug": "mine-the-future",
+      "gliderStrategyId": "01M465T9FP3ZZVJJSQT7XTMEWA",
+      "name": "Mercury Solana - Mine the Future",
+      "description": "A Solana Ondo-token adaptation of the public Mine the Future allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXK3V75W15CAF584JTK311E",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "MP",
+          "sourceAssetId": "eip155:56/erc20:0x4baf4dc56cf6a525a0874e25cc6372a6a8915135",
+          "weightBps": 2000
+        },
+        {
+          "ticker": "FCX",
+          "sourceAssetId": "eip155:56/erc20:0xe3b17e6d290a0f28bd32af4064637057627004d5",
+          "weightBps": 1700
+        },
+        {
+          "ticker": "USAR",
+          "sourceAssetId": "eip155:56/erc20:0x2206e07410a8fe9ef595e7184b2e9d160fdb7211",
+          "weightBps": 1300
+        },
+        {
+          "ticker": "ALB",
+          "sourceAssetId": "eip155:56/erc20:0x0b790abd6594918de1022233b7cc79badb84d92a",
+          "weightBps": 1200
+        },
+        {
+          "ticker": "NEM",
+          "sourceAssetId": "eip155:56/erc20:0x5e63232993789601ce362e0240a299c1dfcbfbec",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "SCCO",
+          "sourceAssetId": "eip155:56/erc20:0xf15b8f7465b92799f6ee440f86b3cab5a4dbc65a",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "CLF",
+          "sourceAssetId": "eip155:56/erc20:0xac38a6608868e2f487d7993ea7339c69e5ab077b",
+          "weightBps": 900
+        },
+        {
+          "ticker": "UEC",
+          "sourceAssetId": "eip155:56/erc20:0xe7ddf606841ee278a30e5c90486681e68ddd8cbf",
+          "weightBps": 900
+        }
+      ]
+    },
+    {
+      "slug": "going-nuclear",
+      "gliderStrategyId": "01M465TAZHRZ08V0C46M9N4QHX",
+      "name": "Mercury Solana - Going Nuclear",
+      "description": "A Solana Ondo-token adaptation of the public Going Nuclear allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXJQ7N3Q55WEZRXV1F99BMJ",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "CEG",
+          "sourceAssetId": "eip155:56/erc20:0x65d84f0990b7394209d591380c2952c83d778aa3",
+          "weightBps": 1600
+        },
+        {
+          "ticker": "CCJ",
+          "sourceAssetId": "eip155:56/erc20:0xa75f08b9a91439daac9cc7072857cc0a98cf527a",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "SMR",
+          "sourceAssetId": "eip155:56/erc20:0xf4b674d4e33c36f8db4b928a5eec4e1f87b386e3",
+          "weightBps": 1200
+        },
+        {
+          "ticker": "OKLO",
+          "sourceAssetId": "eip155:56/erc20:0xaf6c03acf72355ce98d0741302b78870b376428c",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "VST",
+          "sourceAssetId": "eip155:56/erc20:0xf2c24c47805f4f72d3919c8674bfdd401505794b",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "TLN",
+          "sourceAssetId": "eip155:56/erc20:0xbbe4dfe7a349fb72aec6f52d5cd9bdd78ae8f313",
+          "weightBps": 900
+        },
+        {
+          "ticker": "UEC",
+          "sourceAssetId": "eip155:56/erc20:0xe7ddf606841ee278a30e5c90486681e68ddd8cbf",
+          "weightBps": 800
+        },
+        {
+          "ticker": "NNE",
+          "sourceAssetId": "eip155:56/erc20:0x3c276dd9f9eab5510f9eafd3a6ea54879b27ca3d",
+          "weightBps": 700
+        },
+        {
+          "ticker": "DNN",
+          "sourceAssetId": "eip155:56/erc20:0x70bd780076e25d087ed9c35f4e4a540522abe8cf",
+          "weightBps": 600
+        },
+        {
+          "ticker": "UUUU",
+          "sourceAssetId": "eip155:56/erc20:0xd2c06fef2ca2375a9c7ceb4abca9dbc2ab6af981",
+          "weightBps": 600
+        }
+      ]
+    },
+    {
+      "slug": "consumer-brands",
+      "gliderStrategyId": "01M465TCDXFTSGBS820GK5RVW8",
+      "name": "Mercury Solana - Consumer Brands",
+      "description": "A Solana Ondo-token adaptation of the public Consumer Brands allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXM9W3M121FE4409QD70VKW",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "NFLX",
+          "sourceAssetId": "eip155:56/erc20:0x7048f5227b032326cc8dbc53cf3fddd947a2c757",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "WMT",
+          "sourceAssetId": "eip155:56/erc20:0xa7d1e886acf66ec0656df2decb4b7c893a3bab4c",
+          "weightBps": 1300
+        },
+        {
+          "ticker": "COST",
+          "sourceAssetId": "eip155:56/erc20:0x34375f826fd3dd4e15f883d4f4786bb45eb705ac",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "MCD",
+          "sourceAssetId": "eip155:56/erc20:0x995add4ba29a628a57930a8a185c62ca044ec090",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "KO",
+          "sourceAssetId": "eip155:56/erc20:0x405f38b90bebf1259062cf29da299f3398662bcb",
+          "weightBps": 900
+        },
+        {
+          "ticker": "NKE",
+          "sourceAssetId": "eip155:56/erc20:0x04b5e199f2ec84f78b111035f57b16bee448db6f",
+          "weightBps": 800
+        },
+        {
+          "ticker": "DIS",
+          "sourceAssetId": "eip155:56/erc20:0xeee9eee593cb8f7946260b4066cba7907f40acfa",
+          "weightBps": 800
+        },
+        {
+          "ticker": "PEP",
+          "sourceAssetId": "eip155:56/erc20:0xf99f8f3a95257d82006183bd524efa7aacc9ef7a",
+          "weightBps": 800
+        },
+        {
+          "ticker": "SBUX",
+          "sourceAssetId": "eip155:56/erc20:0x94d7754541b829a87321d56121bc544167ac490d",
+          "weightBps": 700
+        },
+        {
+          "ticker": "HD",
+          "sourceAssetId": "eip155:56/erc20:0x31dabf49e4bc1af1456c1819cb6a2562154e92f3",
+          "weightBps": 600
+        },
+        {
+          "ticker": "CMG",
+          "sourceAssetId": "eip155:56/erc20:0xaed5985afc12aa09d87f55b4b1e6bc3b8f7b0208",
+          "weightBps": 500
+        }
+      ]
+    },
+    {
+      "slug": "healthcare-trade",
+      "gliderStrategyId": "01M465TDXHZB8TW2PAVCM8D9QM",
+      "name": "Mercury Solana - Healthcare Trade",
+      "description": "A Solana Ondo-token adaptation of the public Healthcare Trade allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXM1ZF8GSR20SN3N5GAR3EN",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "LLY",
+          "sourceAssetId": "eip155:56/erc20:0x341d31b2be1fee9c00e395a62ba41837f4322eed",
+          "weightBps": 2400
+        },
+        {
+          "ticker": "NVO",
+          "sourceAssetId": "eip155:56/erc20:0x08a513779f46ffb7a34f16094a94016d010128a8",
+          "weightBps": 1200
+        },
+        {
+          "ticker": "ABBV",
+          "sourceAssetId": "eip155:56/erc20:0x8677abad7b458bf16a0fb2676dfc7d3f55ac202a",
+          "weightBps": 1100
+        },
+        {
+          "ticker": "MRK",
+          "sourceAssetId": "eip155:56/erc20:0x869027261075c3c239d6a26842579b93802606f4",
+          "weightBps": 900
+        },
+        {
+          "ticker": "PFE",
+          "sourceAssetId": "eip155:56/erc20:0x8a83c31d6751833b4940b6e871c48d9a15a07b46",
+          "weightBps": 800
+        },
+        {
+          "ticker": "ABT",
+          "sourceAssetId": "eip155:56/erc20:0x5a20886b575058dd7299785f0ea9b1172942a3e0",
+          "weightBps": 800
+        },
+        {
+          "ticker": "ISRG",
+          "sourceAssetId": "eip155:56/erc20:0x784584933c2192caa062e90d8140d94768ce62d8",
+          "weightBps": 700
+        },
+        {
+          "ticker": "REGN",
+          "sourceAssetId": "eip155:56/erc20:0x30bd85fd4286c5c9857679f5b188f737b4a7b8c0",
+          "weightBps": 700
+        },
+        {
+          "ticker": "VRTX",
+          "sourceAssetId": "eip155:56/erc20:0x8c9979dc208f74a5602c38691aa920f121e2f863",
+          "weightBps": 700
+        },
+        {
+          "ticker": "UNH",
+          "sourceAssetId": "eip155:56/erc20:0x3385cb29cca0ac66f5d2354d13ef977b49a2510f",
+          "weightBps": 700
+        }
+      ]
+    },
+    {
+      "slug": "road-warriors",
+      "gliderStrategyId": "01M465TFCGBK7VC8K9VYGP8PM8",
+      "name": "Mercury Solana - Road Warriors",
+      "description": "A Solana Ondo-token adaptation of the public Road Warriors allocation. Source-chain performance does not transfer.",
+      "sourceStrategyId": "01KVXKWV9PDJ15R16VYJTD4KYG",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "TSLA",
+          "sourceAssetId": "eip155:56/erc20:0x2494b603319d4d9f9715c9f4496d9e0364b59d93",
+          "weightBps": 2400
+        },
+        {
+          "ticker": "UBER",
+          "sourceAssetId": "eip155:56/erc20:0xde9d6036fca870f7efc5a82722ae694c371ac909",
+          "weightBps": 1500
+        },
+        {
+          "ticker": "RIVN",
+          "sourceAssetId": "eip155:56/erc20:0x277e1fa8704c5511fed7e30bc691f922aa30101b",
+          "weightBps": 1300
+        },
+        {
+          "ticker": "F",
+          "sourceAssetId": "eip155:56/erc20:0xb1aba049c42b6fe811766eba61f51f11c57acc4b",
+          "weightBps": 1000
+        },
+        {
+          "ticker": "NIO",
+          "sourceAssetId": "eip155:56/erc20:0xc6f9edbee6042a237d72493bbda3ee2c3c62f708",
+          "weightBps": 900
+        },
+        {
+          "ticker": "AUR",
+          "sourceAssetId": "eip155:56/erc20:0x66a1409fe303d00209202933e3d31ee43aaab39d",
+          "weightBps": 800
+        },
+        {
+          "ticker": "TM",
+          "sourceAssetId": "eip155:56/erc20:0xecc1299f183b6a720a6f4729bf24f82cd8d50828",
+          "weightBps": 700
+        },
+        {
+          "ticker": "LI",
+          "sourceAssetId": "eip155:56/erc20:0x9810beac9af3c30d14cfb61cdd557e160f60fd50",
+          "weightBps": 700
+        },
+        {
+          "ticker": "MBLY",
+          "sourceAssetId": "eip155:56/erc20:0xcc977b493f52b4b6b6a0c3594530f2baee565e96",
+          "weightBps": 700
+        }
+      ]
+    },
+    {
+      "slug": "technology-eight",
+      "gliderStrategyId": "01M465TGW4MZQT4RM4M0X1W4V6",
+      "name": "Mercury Solana - Technology Eight",
+      "description": "A Solana Ondo-token technology portfolio. This is a same-theme variant, not the source strategy or its historical performance.",
+      "sourceStrategyId": "01KZY1G56YFYWKS8AH0PR1YMQX",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "AAPL",
+          "sourceAssetId": "eip155:8453/erc20:0xb200000000000000000000c2e324d24d7eecd1fb",
+          "weightBps": 1250
+        },
+        {
+          "ticker": "GOOGL",
+          "sourceAssetId": "eip155:8453/erc20:0xb2000000000000000000002d0ba3164cc74f58b7",
+          "weightBps": 1250
+        },
+        {
+          "ticker": "META",
+          "sourceAssetId": "eip155:8453/erc20:0xb2000000000000000000008bc8786b856e61707c",
+          "weightBps": 1250
+        },
+        {
+          "ticker": "NVDA",
+          "sourceAssetId": "eip155:8453/erc20:0xb20000000000000000000078ee7ce2fe4908108c",
+          "weightBps": 1250
+        },
+        {
+          "ticker": "AMZN",
+          "sourceAssetId": "eip155:8453/erc20:0xb200000000000000000000d9192b6b456483c2e8",
+          "weightBps": 1250
+        },
+        {
+          "ticker": "TSLA",
+          "sourceAssetId": "eip155:8453/erc20:0xb2000000000000000000001e800a7f5189430cd0",
+          "weightBps": 1250
+        },
+        {
+          "ticker": "SPCX",
+          "sourceAssetId": "eip155:8453/erc20:0xb2000000000000000000007b9fcbd005511acbd5",
+          "weightBps": 1250
+        },
+        {
+          "ticker": "MSFT",
+          "sourceAssetId": "eip155:8453/erc20:0xb200000000000000000000ab99cfa739e253872b",
+          "weightBps": 1250
+        }
+      ]
+    }
+  ]
+}

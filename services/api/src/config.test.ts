@@ -36,4 +36,9 @@ describe("readConfig", () => {
     expect("relayerSecretKey" in readConfig(base)).toBe(false);
     expect(readConfig({ ...base, RELAYER_SECRET_KEY: "[1,2,3]" }).relayerSecretKey).toBe("[1,2,3]");
   });
+
+  it("only enables Glider catalog sync when its API key is configured", () => {
+    expect(readConfig(base).gliderApiKey).toBeUndefined();
+    expect(readConfig({ ...base, GLIDER_API_KEY: "test-key" }).gliderApiKey).toBe("test-key");
+  });
 });
