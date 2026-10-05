@@ -22,6 +22,7 @@ import { instrumentRoutes } from "./routes/instruments.js";
 import { moneyRoutes } from "./routes/money.js";
 import { portfolioRoutes } from "./routes/portfolio.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
+import { basketTemplateRoutes } from "./routes/basket-templates.js";
 
 const fail = (code: ErrorCode | "not_implemented", message: string, details?: unknown) => ({
   error: { code, message, ...(details === undefined ? {} : { details }) },
@@ -68,6 +69,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   // and a visitor browsing before signing in should see prices. Registered ahead
   // of the auth middleware, which only guards the routes after it.
   app.route("/", instrumentRoutes(read.instruments));
+  app.route("/", basketTemplateRoutes(read.basketTemplates));
 
   // The landing page's signup form. Public to write, token-guarded to read.
   app.route("/", waitlistRoutes(read.waitlist));

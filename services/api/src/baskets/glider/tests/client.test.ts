@@ -12,6 +12,25 @@ const remote = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 describe("GliderClient", () => {
+  it("reads modeled performance for our Solana strategy", async () => {
+    const fetcher: typeof fetch = async () =>
+      json({
+        success: true,
+        data: {
+          strategyId: "remote-1",
+          meta: { method: "TWR", asOf: "2026-10-05T16:16:11.358Z" },
+          points: [{ date: "2025-10-05", percentChange: "0.0000" }],
+          summary: { windows: [{ window: "12m", percentChange: "18.1627", since: "2025-10-05" }] },
+        },
+      });
+
+    expect(await new GliderClient("test-key", fetcher).strategyPerformance("remote-1")).toEqual({
+      asOf: "2026-10-05T16:16:11.358Z",
+      points: [{ date: "2025-10-05", percentChange: "0.0000" }],
+      windows: [{ window: "12m", percentChange: "18.1627", since: "2025-10-05" }],
+    });
+  });
+
   it("accepts decimal provider weights despite binary floating-point multiplication", async () => {
     const fetcher: typeof fetch = async () =>
       json({
@@ -26,7 +45,7 @@ describe("GliderClient", () => {
   it("lists every page and converts provider percentages to basis points", async () => {
     const paths: string[] = [];
     const fetcher: typeof fetch = async (input) => {
-      const url = new URL(String(input));
+      const url = new URL((input as Request).url);
       paths.push(url.pathname + url.search);
       return url.searchParams.has("cursor")
         ? json({ success: true, data: { strategies: [remote] }, nextCursor: null })
@@ -47,11 +66,13 @@ describe("GliderClient", () => {
 
   it("validates and creates with percent strings, then reads back the provider record", async () => {
     const calls: { path: string; body: unknown }[] = [];
-    const fetcher: typeof fetch = async (input, init) => {
-      const path = new URL(String(input)).pathname;
-      calls.push({ path, body: init?.body ? JSON.parse(String(init.body)) : null });
+    const fetcher: typeof fetch = async (input) => {
+      const request = input as Request;
+      const path = new URL(request.url).pathname;
+      const body = request.method === "POST" ? JSON.parse(await request.text()) : null;
+      calls.push({ path, body });
       if (path.endsWith("/validate")) return json({ success: true, data: { valid: true } });
-      if (init?.method === "POST") return json({ success: true, data: { strategyId: "remote-1" } }, 201);
+      if (request.method === "POST") return json({ success: true, data: { strategyId: "remote-1" } }, 201);
       return json({ success: true, data: remote });
     };
     const client = new GliderClient("test-key", fetcher);
@@ -76,6 +97,7 @@ describe("GliderClient", () => {
           description: remote.description,
           allocation: { assets: [{ assetId: NVDA_ID, weight: "100.00" }] },
           schedule: remote.schedule,
+          isPublic: false,
         },
       },
       {
@@ -85,6 +107,7 @@ describe("GliderClient", () => {
           description: remote.description,
           allocation: { assets: [{ assetId: NVDA_ID, weight: "100.00" }] },
           schedule: remote.schedule,
+          isPublic: false,
         },
       },
       { path: "/v2/strategies/remote-1", body: null },

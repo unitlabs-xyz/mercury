@@ -9,6 +9,7 @@ describe("JsonBasketStore", () => {
     expect(baskets.flatMap((basket) => basket.assets)).toHaveLength(206);
     const magnificentSeven = baskets.find((basket) => basket.slug === "magnificent-seven");
     expect(magnificentSeven?.assets).toContainEqual({
+      ticker: "NVDA",
       assetId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:gEGtLTPNQ7jcg25zTetkbmF7teoDLcrfTnQfmn2ondo",
       weightBps: 1428,
     });

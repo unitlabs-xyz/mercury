@@ -28,6 +28,42 @@ export const BasketPreview = z.object({
   refusedLegs: z.array(Ticker),
 });
 
+/** A Glider template creates a user-owned portfolio; it is not a pooled token. */
+export const ManagedBasketTemplate = z.object({
+  slug: z.string(),
+  kind: z.literal("managed_portfolio"),
+  provider: z.literal("glider"),
+  status: z.enum(["candidate", "disabled", "enabled"]),
+  canEnroll: z.boolean(),
+  name: z.string(),
+  description: z.string(),
+  strategyId: z.string().nullable(),
+  sourceStrategyId: z.string(),
+  schedule: z.object({ type: z.literal("interval"), frequency: z.literal("daily") }),
+  allocations: z.array(
+    z.object({
+      ticker: z.string(),
+      mint: z.string(),
+      assetId: z.string(),
+      weightBps: z.number().int().min(1).max(10_000),
+    }),
+  ),
+  performance: z
+    .object({
+      basis: z.literal("modeled_strategy_twr"),
+      asOf: z.string(),
+      points: z.array(z.object({ date: z.string(), percentChange: z.string() })),
+      windows: z.array(
+        z.object({
+          window: z.enum(["1d", "1w", "1m", "3m", "6m", "12m", "all"]),
+          percentChange: z.string(),
+          since: z.string(),
+        }),
+      ),
+    })
+    .nullable(),
+});
+
 export const InvestBasketRequest = z.object({ usdAmount: Usd, acceptQueued: z.boolean().default(false) });
 
 export const PlanCadence = z.enum(["weekly", "monthly"]);
@@ -46,5 +82,6 @@ export const Plan = z.object({
 });
 
 export type Basket = z.infer<typeof Basket>;
+export type ManagedBasketTemplate = z.infer<typeof ManagedBasketTemplate>;
 export type BasketPreview = z.infer<typeof BasketPreview>;
 export type Plan = z.infer<typeof Plan>;

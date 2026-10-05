@@ -4,7 +4,7 @@ import postgres from "postgres";
 import { z } from "zod";
 import catalogJson from "../../../catalog.json" with { type: "json" };
 import type { BasketStore } from "../core/deps.js";
-import type { BasketDefinition } from "../core/primitives.js";
+import type { BasketTemplate } from "../core/primitives.js";
 
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const LOCK_KEY = 4_919_208;
@@ -20,7 +20,7 @@ const strategy = z.object({
   description: z.string().min(1),
   sourceStrategyId: z.string().min(1),
   gliderStrategyId: z.string().min(1).optional(),
-  status: z.literal("candidate"),
+  status: z.enum(["candidate", "disabled", "enabled"]),
   schedule,
   allocations: z.array(allocation).min(1),
 });
@@ -37,7 +37,7 @@ export class JsonBasketStore implements BasketStore {
     private readonly source: unknown = catalogJson,
   ) {}
 
-  async load(): Promise<readonly BasketDefinition[]> {
+  async load(): Promise<readonly BasketTemplate[]> {
     const catalog = schema.parse(this.source);
     const slugs = new Set<string>();
     const sourceIds = new Set<string>();
@@ -62,7 +62,7 @@ export class JsonBasketStore implements BasketStore {
         if (mints.has(mint)) throw new Error(`${entry.slug}: duplicate Solana asset ${ticker}`);
         mints.add(mint);
         totalBps += weightBps;
-        return { assetId: `${SOLANA}/spl:${mint}`, weightBps };
+        return { ticker, assetId: `${SOLANA}/spl:${mint}`, weightBps };
       });
       if (totalBps !== 10_000)
         throw new Error(`${entry.slug}: weights must total 10,000 bps, got ${totalBps}`);
@@ -71,6 +71,8 @@ export class JsonBasketStore implements BasketStore {
         ...(entry.gliderStrategyId === undefined ? {} : { providerId: entry.gliderStrategyId }),
         name: entry.name,
         description: entry.description,
+        sourceStrategyId: entry.sourceStrategyId,
+        status: entry.status,
         assets,
         schedule: entry.schedule,
       };

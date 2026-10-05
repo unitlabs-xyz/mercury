@@ -9,6 +9,7 @@
     "dev:waitlist:mail": "WAITLIST_SEND_MAIL=1 tsx --env-file=.env scripts/waitlist-local.ts",
     "start": "tsx --env-file=.env src/index.ts",
     "typecheck": "tsc --noEmit",
+    "generate:glider-types": "openapi-typescript https://api.glider.fi/v2/openapi.json -o src/baskets/glider/generated.d.ts",
     "test": "vitest run",
     "vercel-build": "node scripts/build-vercel.mjs"
   },
@@ -27,6 +28,7 @@
     "drizzle-orm": "^0.45.3",
     "hono": "^4.6.0",
     "jose": "^6.2.12",
+    "openapi-fetch": "^0.17.0",
     "postgres": "^3.4.9",
     "satori": "^0.35.0",
     "zod": "^3.24.0"
@@ -38,6 +40,7 @@
     "@types/node": "^22.10.0",
     "drizzle-kit": "^0.31.11",
     "esbuild": "^0.25.12",
+    "openapi-typescript": "^7.13.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"

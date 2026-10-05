@@ -48,7 +48,7 @@ import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings, readLatestDebt, readSnapshots } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
-import { BasketSync } from "./baskets/core/sync.js";
+import { BasketService } from "./baskets/core/service.js";
 import { GliderClient } from "./baskets/glider/client.js";
 import { JsonBasketStore } from "./baskets/glider/store.js";
 
@@ -136,7 +136,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
 export async function syncConfiguredCatalog(config: Config): Promise<void> {
   if (config.gliderApiKey === undefined) return;
   try {
-    const service = new BasketSync({
+    const service = new BasketService({
       provider: new GliderClient(config.gliderApiKey),
       store: new JsonBasketStore(config.databaseUrl),
     });
@@ -224,6 +224,7 @@ class JupiterTriggersNotYet implements TriggerSource {
 }
 
 export interface ReadDeps {
+  readonly basketTemplates: BasketService;
   readonly instruments: InstrumentDeps;
   readonly portfolio: PortfolioDeps;
   readonly money: MoneyDeps;
@@ -257,12 +258,22 @@ export function buildReadDeps(
   deps: Deps,
   config: Pick<
     Config,
-    "solanaRpcUrl" | "waitlistAdminToken" | "waitlistPublicUrl" | "resendApiKey" | "notifyFrom"
+    | "databaseUrl"
+    | "gliderApiKey"
+    | "solanaRpcUrl"
+    | "waitlistAdminToken"
+    | "waitlistPublicUrl"
+    | "resendApiKey"
+    | "notifyFrom"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
 ): ReadDeps {
   return {
+    basketTemplates: new BasketService({
+      store: new JsonBasketStore(config.databaseUrl),
+      ...(config.gliderApiKey === undefined ? {} : { provider: new GliderClient(config.gliderApiKey) }),
+    }),
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),
