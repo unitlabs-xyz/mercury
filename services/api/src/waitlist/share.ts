@@ -62,7 +62,7 @@ export function cardPage(card: CardView, slug: string, preview = false): string 
   const title = card.founding
     ? `Spot #${card.position} of ${FOUNDING_SEATS} · Mercury`
     : `Spot #${card.position} · Mercury`;
-  const description = "Here before money changed shape. Join the Mercury waitlist.";
+  const description = "Money that stays invested and spendable. Join the Mercury waitlist.";
   const onward = `${SITE}/?ref=${encodeURIComponent(slug)}`;
   return `<!doctype html>
 <html lang="en">
