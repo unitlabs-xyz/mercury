@@ -50,6 +50,11 @@ export interface WaitlistDeps {
   /** Writes once per email. `created` is false for a repeat, and `card` is theirs either way. */
   readonly join: (entry: JoinWaitlist) => Promise<{ created: boolean; card: CardRow }>;
   readonly card: (slug: string) => Promise<CardRow | null>;
+  /**
+   * One signup by email, for the admin send. With `handle`, fills it in when
+   * they never gave one; a handle they gave is never replaced.
+   */
+  readonly byEmail: (email: string, handle?: string) => Promise<CardRow | null>;
   readonly list: () => Promise<readonly WaitlistRow[]>;
   /** False only when the domain certainly cannot receive mail. */
   readonly acceptsMail: (domain: string) => Promise<boolean>;
@@ -110,6 +115,10 @@ export const pgWaitlist = (
 ): WaitlistDeps => ({
   acceptsMail,
   join: async (entry) => {
+    // Looked up first, because an insert that loses to the unique index still
+    // spends a number from the sequence, which left a gap in the line (#8).
+    const [already] = await db.select().from(waitlist).where(eq(waitlist.email, entry.email));
+    if (already) return { created: false, card: toCard(already) };
     // A missing folder is not a reason to lose a signup: null draws one by position.
     // The last signup's photo, so this one is different.
     const [last] = await db
@@ -137,6 +146,16 @@ export const pgWaitlist = (
   card: async (slug) => {
     const [row] = await db.select().from(waitlist).where(eq(waitlist.slug, slug));
     return row ? toCard(row) : null;
+  },
+  byEmail: async (email, handle) => {
+    const [row] = await db.select().from(waitlist).where(eq(waitlist.email, email));
+    if (!row) return null;
+    // Only fills a handle that is missing; one they gave themselves stays.
+    if (handle && !row.handle) {
+      const [updated] = await db.update(waitlist).set({ handle }).where(eq(waitlist.id, row.id)).returning();
+      return toCard(updated!);
+    }
+    return toCard(row);
   },
   list: async () => {
     const rows = await db.select().from(waitlist).orderBy(desc(waitlist.createdAt));
@@ -243,6 +262,41 @@ export function waitlistRoutes(deps: WaitlistDeps) {
     // unfurl; without it a person is sent straight on to the site.
     const preview = c.req.query("preview") !== undefined;
     return c.html(cardPage(cardView(card, originOf(c, deps.publicBase)), slug, preview));
+  });
+
+  /*
+   * Sends one person their welcome email, by hand. For signups from before the
+   * card existed, who never got one. Nothing calls this on its own.
+   *
+   *   POST /admin/waitlist/welcome  { "email": "...", "handle": "optional" }
+   *
+   * Answers with the card it sent, or 404 when the email is not on the list.
+   */
+  app.post("/admin/waitlist/welcome", async (c) => {
+    const token = deps.adminToken;
+    if (token === undefined || c.req.header("authorization") !== `Bearer ${token}`) {
+      return c.json({ error: { code: "not_found", message: "No such route." } }, 404);
+    }
+    const parsed = z
+      .object({ email: JoinWaitlistRequest.shape.email, handle: JoinWaitlistRequest.shape.handle })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json(
+        { error: { code: "validation_failed", message: "Send an email, and a valid handle if any." } },
+        400,
+      );
+    }
+    const card = await deps.byEmail(parsed.data.email, parsed.data.handle);
+    if (!card)
+      return c.json({ error: { code: "not_found", message: "That email is not on the list." } }, 404);
+    if (!deps.notifier) {
+      return c.json({ error: { code: "unavailable", message: "No mail provider is configured." } }, 503);
+    }
+    const view = cardView(card, originOf(c, deps.publicBase));
+    const [png, wordmark] = await Promise.all([deps.render(card), deps.wordmark()]);
+    const sent = await deps.notifier.send(welcomeNotice(parsed.data.email, view, png, wordmark));
+    if (!sent) return c.json({ error: { code: "not_sent", message: "The mail provider refused it." } }, 502);
+    return c.json({ ok: true, sent: parsed.data.email, card: view });
   });
 
   app.get("/admin/waitlist", async (c) => {
