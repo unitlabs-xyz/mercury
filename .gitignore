@@ -17,3 +17,6 @@ android/
 
 # Vercel build output and project links
 .vercel
+
+# Emails the local waitlist server (pnpm --filter @mercury/api dev:waitlist) would have sent
+.waitlist-mail

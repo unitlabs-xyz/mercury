@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -9,7 +10,14 @@ import postgres from "postgres";
  * working directory — the container runs from `/app/services/api` and a test
  * runs from anywhere.
  */
-export const MIGRATIONS_FOLDER = fileURLToPath(new URL("../../drizzle", import.meta.url));
+export const MIGRATIONS_FOLDER =
+  [
+    // Beside the bundle, where the Vercel build copies it.
+    new URL("./drizzle", import.meta.url),
+    new URL("../../drizzle", import.meta.url),
+  ]
+    .map((u) => fileURLToPath(u))
+    .find((dir) => existsSync(dir)) ?? fileURLToPath(new URL("../../drizzle", import.meta.url));
 
 /**
  * A key for `pg_advisory_lock`, so two containers booting together cannot both

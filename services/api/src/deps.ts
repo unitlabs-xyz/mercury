@@ -42,6 +42,7 @@ import type { MoneyDeps } from "./routes/money.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import { pgWaitlist, type WaitlistDeps } from "./routes/waitlist.js";
+import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings, readLatestDebt, readSnapshots } from "./portfolio/queries.js";
@@ -94,6 +95,12 @@ export interface Config {
   readonly relayerSecretKey?: string;
   /** Optional. The bearer token for `GET /admin/waitlist`; unset, that route is a 404. */
   readonly waitlistAdminToken?: string;
+  /**
+   * Optional. The origin founding-card links are built on, once the landing
+   * domain proxies `/f/*` and `/waitlist/cards/*` here. Unset, each link uses
+   * the address the request came in on.
+   */
+  readonly waitlistPublicUrl?: string;
 }
 
 const required = (env: NodeJS.ProcessEnv, key: string): string => {
@@ -115,6 +122,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
     ...(env["WAITLIST_ADMIN_TOKEN"] ? { waitlistAdminToken: env["WAITLIST_ADMIN_TOKEN"] } : {}),
+    ...(env["WAITLIST_PUBLIC_URL"] ? { waitlistPublicUrl: env["WAITLIST_PUBLIC_URL"] } : {}),
   };
 }
 
@@ -224,7 +232,10 @@ export function buildReconcileDeps(deps: Deps): ReconcileDeps {
 export function buildReadDeps(
   db: Db,
   deps: Deps,
-  config: Pick<Config, "solanaRpcUrl" | "waitlistAdminToken">,
+  config: Pick<
+    Config,
+    "solanaRpcUrl" | "waitlistAdminToken" | "waitlistPublicUrl" | "resendApiKey" | "notifyFrom"
+  >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
 ): ReadDeps {
@@ -250,7 +261,15 @@ export function buildReadDeps(
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
-    waitlist: pgWaitlist(db, config.waitlistAdminToken),
+    waitlist: pgWaitlist(db, config.waitlistAdminToken, undefined, {
+      // The welcome email, through the same provider as loan alerts. Without a
+      // key it is logged and not sent; the card still shows on the page.
+      notifier:
+        config.resendApiKey === undefined
+          ? loggingNotifier()
+          : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom }),
+      ...(config.waitlistPublicUrl ? { publicBase: config.waitlistPublicUrl } : {}),
+    }),
     fills: {
       tokenRef: (mint) => tokenRefFor(db, mint),
       settle: (input) => settleOrder(db, input),
