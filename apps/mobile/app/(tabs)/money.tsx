@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from "re
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { TabScene } from "../../src/ui/TabScene";
 import { pct, usd } from "@mercury/view";
 import { useBorrow, useMoney, useSignedIn, type Borrow } from "../../src/api";
 import { useActions } from "../../src/actions/Actions";
@@ -20,7 +21,7 @@ const num = (v: string | number | null | undefined): number => Number(v ?? 0);
  * which is what someone checks on a phone — and acted on in the borrow screen
  * this card opens.
  */
-export default function Money() {
+function MoneyScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const openActions = useActions();
@@ -261,3 +262,11 @@ const s = StyleSheet.create({
   noteWrap: { paddingHorizontal: space.md, paddingTop: space.md, paddingBottom: space.sm },
   muted: { fontFamily: font.regular, fontSize: 12, lineHeight: 17, color: color.muted },
 });
+
+export default function Money() {
+  return (
+    <TabScene index={2}>
+      <MoneyScreen />
+    </TabScene>
+  );
+}

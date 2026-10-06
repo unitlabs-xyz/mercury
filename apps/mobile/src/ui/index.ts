@@ -21,3 +21,4 @@ export * from "./TabBar.js";
 export * from "./Segmented.js";
 export * from "./Visa.js";
 export * from "./AmountWell.js";
+export * from "./TabScene";
