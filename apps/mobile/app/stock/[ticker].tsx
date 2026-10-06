@@ -72,6 +72,13 @@ export default function Stock() {
         : Number(history.data.changePct);
   const moveUsd = first === undefined || last === undefined ? null : last - first;
 
+  const order = (side: "buy" | "sell") =>
+    i !== undefined &&
+    router.push({
+      pathname: "/buy",
+      params: { ticker: t, name: i.name, side, ...(i.logoUrl ? { logoUrl: i.logoUrl } : {}) },
+    });
+
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
@@ -217,17 +224,27 @@ export default function Stock() {
         </ScrollView>
 
         <View style={[s.footer, { paddingBottom: bottom }]}>
-          <Button
-            label={held === undefined ? "Buy" : "Buy more"}
-            disabled={i === undefined}
-            onPress={() =>
-              i !== undefined &&
-              router.push({
-                pathname: "/buy",
-                params: { ticker: t, name: i.name, ...(i.logoUrl ? { logoUrl: i.logoUrl } : {}) },
-              })
-            }
-          />
+          {/* Selling sits beside buying once there is something to sell, the
+              lesser of the two: a position is held more often than it is left. */}
+          <View style={s.actions}>
+            {held !== undefined && (
+              <View style={s.fill}>
+                <Button
+                  label="Sell"
+                  variant="secondary"
+                  disabled={i === undefined}
+                  onPress={() => i !== undefined && order("sell")}
+                />
+              </View>
+            )}
+            <View style={s.fill}>
+              <Button
+                label={held === undefined ? "Buy" : "Buy more"}
+                disabled={i === undefined}
+                onPress={() => i !== undefined && order("buy")}
+              />
+            </View>
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -330,6 +347,7 @@ const s = StyleSheet.create({
 
   about: { marginTop: 8, lineHeight: 21 },
 
+  actions: { flexDirection: "row", gap: space.sm },
   footer: {
     position: "absolute",
     left: 0,

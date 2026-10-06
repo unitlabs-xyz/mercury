@@ -18,6 +18,10 @@ import { color, font, radius, space } from "../theme";
 /** The four a first-time buyer actually reaches for. */
 const PRESETS = [50, 100, 250, 500];
 
+/* Fractions of the position when selling: a $50 chip does nothing on a $30
+   holding. The web's ticket has the same four. */
+const SELL_PRESETS = [0.25, 0.5, 0.75, 1] as const;
+
 const num = (v: string | null | undefined): number | null =>
   v === null || v === undefined ? null : Number(v);
 
@@ -26,6 +30,10 @@ export interface BuySheetProps {
   ticker: string;
   name: string;
   logoUrl?: string | undefined;
+  side?: "buy" | "sell";
+  /** What the sellable part of the position is worth: owned, less what is
+   *  pledged to a loan. The sell fractions are of this. */
+  sellableUsd?: number | null;
 }
 
 /**
@@ -42,16 +50,27 @@ export interface BuySheetProps {
  * not an error: it is the system declining to trade on terms it does not like,
  * and the only useful thing to do with it is print it.
  */
-export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
+export const BuySheet = ({
+  onClose,
+  ticker,
+  name,
+  logoUrl,
+  side = "buy",
+  sellableUsd = null,
+}: BuySheetProps) => {
+  const selling = side === "sell";
   const bottom = useBottomGap();
-  const [text, setText] = useState("100");
-  const [debounced, setDebounced] = useState(100);
+  const [text, setText] = useState(selling ? "" : "100");
+  const [debounced, setDebounced] = useState(selling ? 0 : 100);
+  /* "All": sell the whole sellable position in tokens, so dust is not left
+     behind by a dollar figure that rounded. The amount is then only a label. */
+  const [max, setMax] = useState(false);
   const [moved, setMoved] = useState<PriceMoved | null>(null);
   const input = useRef<TextInput>(null);
 
   const amount = Number(text.replace(/[^0-9.]/g, "")) || 0;
   const order = useOrderAction();
-  const quote = useQuote(ticker, debounced);
+  const quote = useQuote(ticker, debounced, side, max);
   /*
    * What there is to spend. Checked here, not left to the chain: without it the
    * only thing standing between an empty wallet and a failed order is a
@@ -72,7 +91,11 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
   const decision = moved?.decision ?? quote.data?.decision;
   /* A figure still being typed is not a figure to quote against. */
   const typing = debounced !== amount;
-  const overBalance = amount > available;
+  /* A sale is not spending, so the cash balance has nothing to say about it;
+     what bounds it is the part of the position that is not pledged. */
+  const overBalance = selling
+    ? !max && sellableUsd !== null && amount > sellableUsd + 0.005
+    : amount > available;
   const canPlace =
     amount > 0 &&
     !overBalance &&
@@ -85,7 +108,7 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setMoved(null);
     order.mutate(
-      { ticker, side: "buy", usd: amount },
+      { ticker, side, usd: amount, ...(max ? { max: true } : {}) },
       {
         onSuccess: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
         onError: (e) => {
@@ -108,6 +131,7 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
             ticker={ticker}
             logoUrl={logoUrl}
             amount={amount}
+            selling={selling}
             onDone={onClose}
           />
         ) : (
@@ -116,9 +140,15 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
               <StockLogo ticker={ticker} uri={logoUrl} size={34} />
               <View style={s.fill}>
                 <RNText style={s.title} numberOfLines={1}>
-                  Buy {name}
+                  {selling ? "Sell" : "Buy"} {name}
                 </RNText>
-                <RNText style={s.sub}>{ticker}</RNText>
+                <RNText style={s.sub}>
+                  {selling
+                    ? sellableUsd === null
+                      ? ticker
+                      : `${ticker} · ${usd(sellableUsd)} you can sell`
+                    : `${ticker} · ${usd(available)} cash`}
+                </RNText>
               </View>
               <IconButton icon="close" label="Close" size={36} onPress={onClose} />
             </View>
@@ -133,7 +163,10 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
                 ref={input}
                 style={s.hidden}
                 value={text}
-                onChangeText={(raw) => setText(raw.replace(/[^0-9.]/g, "").slice(0, 9))}
+                onChangeText={(raw) => {
+                  setMax(false);
+                  setText(raw.replace(/[^0-9.]/g, "").slice(0, 9));
+                }}
                 keyboardType="decimal-pad"
                 autoFocus
                 caretHidden
@@ -141,19 +174,50 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
             </Pressable>
 
             <View style={s.presets}>
-              {PRESETS.map((p) => (
-                <Chip key={p} label={`$${p}`} selected={amount === p} onPress={() => setText(String(p))} />
-              ))}
+              {selling
+                ? SELL_PRESETS.map((f) => {
+                    const value = sellableUsd === null ? "" : (sellableUsd * f).toFixed(2);
+                    return (
+                      <Chip
+                        key={f}
+                        label={f === 1 ? "All" : `${f * 100}%`}
+                        selected={f === 1 ? max : !max && value !== "" && text === value}
+                        onPress={() => {
+                          if (value === "") return;
+                          setMax(f === 1);
+                          setText(value);
+                        }}
+                      />
+                    );
+                  })
+                : PRESETS.map((p) => (
+                    <Chip
+                      key={p}
+                      label={`$${p}`}
+                      selected={amount === p}
+                      onPress={() => setText(String(p))}
+                    />
+                  ))}
             </View>
 
             {/* A plain view, not a scroll view: the sheet is sized to what it holds,
                 and a scroll view has no height of its own to offer it. */}
             <View style={s.body}>
               {overBalance ? (
-                <Note tone="warn">That is more than your {usd(available)} cash. Add money first.</Note>
+                <Note tone="warn">
+                  {selling
+                    ? `More than you can sell. The most is ${usd(sellableUsd ?? 0)}.`
+                    : `That is more than your ${usd(available)} cash. Add money first.`}
+                </Note>
+              ) : selling && sellableUsd !== null && sellableUsd <= 0 ? (
+                <Note tone="warn">
+                  All of this position is pledged to your loan. Repay some of it to sell.
+                </Note>
               ) : amount <= 0 ? (
                 <Text variant="small" tone="muted" style={s.hint}>
-                  Enter an amount to see what it buys.
+                  {selling
+                    ? "Enter an amount, or pick a share of the position."
+                    : "Enter an amount to see what it buys."}
                 </Text>
               ) : quote.data === undefined && quote.isPending ? (
                 <View style={s.lines}>
@@ -169,7 +233,13 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
               ) : decision.kind === "offer_queue" ? (
                 <Queued decision={decision} amount={amount} />
               ) : (
-                <Preview decision={decision} quote={quote.data} amount={amount} moved={moved !== null} />
+                <Preview
+                  decision={decision}
+                  quote={quote.data}
+                  amount={amount}
+                  moved={moved !== null}
+                  selling={selling}
+                />
               )}
 
               {order.isError && moved === null && (
@@ -192,18 +262,24 @@ export const BuySheet = ({ onClose, ticker, name, logoUrl }: BuySheetProps) => {
               <Button
                 label={
                   overBalance
-                    ? "Not enough cash"
+                    ? selling
+                      ? "More than you hold"
+                      : "Not enough cash"
                     : !order.walletReady
                       ? "Getting your wallet ready"
                       : moved !== null
-                        ? "Buy at the new price"
+                        ? `${selling ? "Sell" : "Buy"} at the new price`
                         : decision?.kind === "offer_queue"
                           ? "Wait for the open"
                           : decision?.kind === "refuse"
-                            ? "Can't buy right now"
+                            ? `Can't ${selling ? "sell" : "buy"} right now`
                             : order.isError
                               ? "Try again"
-                              : "Buy"
+                              : selling
+                                ? max
+                                  ? "Sell all"
+                                  : "Sell"
+                                : "Buy"
                 }
                 busy={order.isPending}
                 /* A queued decision blocks, as the web's does: the market is shut and
@@ -226,11 +302,13 @@ const Preview = ({
   quote,
   amount,
   moved,
+  selling,
 }: {
   decision: NonNullable<Quote["decision"]>;
   quote: Quote | undefined;
   amount: number;
   moved: boolean;
+  selling: boolean;
 }) => {
   if (decision.kind === "refuse") return <Refused reason={decision.reason} side={decision.side} />;
   if (decision.kind === "offer_queue") return <Queued decision={decision} amount={amount} />;
@@ -254,13 +332,29 @@ const Preview = ({
         </View>
       )}
 
-      <Line label="You get" value={got === null ? "—" : `${fmtShares(got)} shares`} strong />
-      <Line label="Price a share" value={usd(price)} />
-      {worst !== null && worst !== price && <Line label="Most you'd pay" value={usd(worst)} muted />}
-      {fee > 0 && (
+      {selling ? (
         <>
-          <Line label="Network charge" value={usd(fee)} muted />
-          <Line label="Invested" value={usd(invested)} muted />
+          {/* A sale's share count is not derived: it is the quantity being
+              sold. What it lands, net of the charge, is the figure that matters. */}
+          <Line label="You get" value={usd(num(quote?.proceeds) ?? (got ?? 0) * price)} strong />
+          <Line label="You sell" value={got === null ? "—" : `${fmtShares(got)} shares`} />
+          <Line label="Price a share" value={usd(price)} />
+          {worst !== null && worst < price && got !== null && (
+            <Line label="Least you'd get" value={usd(got * worst - fee)} muted />
+          )}
+          {fee > 0 && <Line label="Network charge" value={`−${usd(fee)}`} muted />}
+        </>
+      ) : (
+        <>
+          <Line label="You get" value={got === null ? "—" : `${fmtShares(got)} shares`} strong />
+          <Line label="Price a share" value={usd(price)} />
+          {worst !== null && worst !== price && <Line label="Most you'd pay" value={usd(worst)} muted />}
+          {fee > 0 && (
+            <>
+              <Line label="Network charge" value={usd(fee)} muted />
+              <Line label="Invested" value={usd(invested)} muted />
+            </>
+          )}
         </>
       )}
       <Line label="Issued by" value={decision.best.issuer === "backed" ? "Backed" : "Ondo"} muted />
@@ -351,6 +445,7 @@ const Filled = ({
   ticker,
   logoUrl,
   amount,
+  selling,
   onDone,
 }: {
   result: { shares: string; pricePerShare: string; usd: string; realisedPnlUsd?: string | null };
@@ -358,6 +453,7 @@ const Filled = ({
   ticker: string;
   logoUrl?: string | undefined;
   amount: number;
+  selling: boolean;
   onDone: () => void;
 }) => {
   const router = useRouter();
@@ -370,16 +466,28 @@ const Filled = ({
           <Icon name="check" size={13} color={color.surface} strokeWidth={3} />
         </View>
       </View>
-      <RNText style={s.doneKicker}>Bought</RNText>
+      <RNText style={s.doneKicker}>{selling ? "Sold" : "Bought"}</RNText>
       <RNText style={s.doneTitle}>{`${fmtShares(result.shares)} shares of ${name}`}</RNText>
       <RNText style={s.doneSub}>{`at ${usd(result.pricePerShare)} a share`}</RNText>
 
       <View style={s.receipt}>
-        <Line label="You paid" value={usd(amount)} />
-        <Line label="Went into shares" value={usd(result.usd)} muted />
+        {selling ? (
+          <Line label="Came to" value={usd(result.usd)} />
+        ) : (
+          <>
+            <Line label="You paid" value={usd(amount)} />
+            <Line label="Went into shares" value={usd(result.usd)} muted />
+          </>
+        )}
         <Line label="Price a share" value={usd(result.pricePerShare)} muted />
+        {/* A sale is the one moment a gain stops being a number on a screen
+            and becomes money. Worth saying, in its colour. */}
         {pnl !== null && (
-          <Line label={pnl < 0 ? "Realised loss" : "Realised gain"} value={usd(Math.abs(pnl))} muted />
+          <Line
+            label={pnl < 0 ? "Realised loss" : "Realised gain"}
+            value={usd(Math.abs(pnl))}
+            tone={pnl < 0 ? "down" : "up"}
+          />
         )}
       </View>
 
@@ -403,15 +511,24 @@ const Line = ({
   value,
   strong,
   muted,
+  tone,
 }: {
   label: string;
   value: string;
   strong?: boolean;
   muted?: boolean;
+  tone?: "up" | "down";
 }) => (
   <View style={s.line}>
     <RNText style={[s.lineLabel, muted === true && s.lineLabelMuted]}>{label}</RNText>
-    <RNText style={[s.lineValue, strong === true && s.lineValueStrong, muted === true && s.lineValueMuted]}>
+    <RNText
+      style={[
+        s.lineValue,
+        strong === true && s.lineValueStrong,
+        muted === true && s.lineValueMuted,
+        tone !== undefined && { color: tone === "up" ? color.up : color.down },
+      ]}
+    >
       {value}
     </RNText>
   </View>
