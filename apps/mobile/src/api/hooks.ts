@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/expo";
-import type { Money, Portfolio } from "@mercury/types";
+import type { HistoryRange, Money, Portfolio, PortfolioHistory } from "@mercury/types";
 import type { ActivityItem } from "@mercury/view";
 import { apiFetch } from "./client.js";
 
@@ -43,6 +43,22 @@ export const usePortfolio = () => {
     queryFn: () => apiFetch<Portfolio>("/v1/portfolio"),
     enabled: signedIn,
     ...LIVE,
+  });
+};
+
+/**
+ * The account's recorded value over a range, as the web's home chart reads it.
+ * A minute between reads: the series gains a point an hour, so polling it at
+ * the live balance's rate would be hundreds of requests for one new point.
+ */
+export const usePortfolioHistory = (range: HistoryRange) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "portfolio", "history", range],
+    queryFn: () => apiFetch<PortfolioHistory>(`/v1/portfolio/history?range=${range}`),
+    enabled: signedIn,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 };
 

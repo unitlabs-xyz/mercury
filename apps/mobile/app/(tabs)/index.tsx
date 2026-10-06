@@ -20,6 +20,7 @@ import {
   Text,
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio } from "../../src/api";
+import { ValueChart } from "../../src/home/ValueChart";
 import { SmartBand } from "../../src/home/SmartBand";
 import { usePrefs } from "../../src/prefs";
 import { EventRow, EventRowSkeleton, MARK } from "../../src/activity/EventRow";
@@ -128,6 +129,8 @@ export default function Portfolio() {
                   up={num(p?.changeUsd) >= 0}
                 />
               )}
+              {/* A line of figures nobody is meant to read is still a figure. */}
+              {!hidden && holdings.length + num(p?.cashUsd) > 0 && <ValueChart />}
             </>
           )}
 
