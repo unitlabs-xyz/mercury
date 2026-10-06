@@ -10,7 +10,7 @@ const routes = basketRoutes(
 );
 
 describe("basket template routes", () => {
-  it("lists candidate Solana templates without requiring a wallet", async () => {
+  it("lists enabled Solana templates without requiring a wallet", async () => {
     const response = await routes.request("/v1/basket-templates");
     const body = (await response.json()) as { templates: unknown };
     const templates = ManagedBasketTemplate.array().parse(body.templates);
@@ -18,7 +18,7 @@ describe("basket template routes", () => {
     expect(response.status).toBe(200);
     expect(templates).toHaveLength(22);
     expect(templates[0]).toEqual(
-      expect.objectContaining({ kind: "managed_portfolio", status: "candidate", canEnroll: true }),
+      expect.objectContaining({ kind: "managed_portfolio", status: "enabled", canEnroll: true }),
     );
     expect(
       templates.every((template) => {
@@ -57,7 +57,10 @@ describe("authenticated basket enrollment", () => {
   it("scopes the landing list to the verified wallet, not a request parameter", async () => {
     let observed: unknown;
     const service = {
-      ownedPortfolios: async (...args: unknown[]) => { observed = args; return []; },
+      ownedPortfolios: async (...args: unknown[]) => {
+        observed = args;
+        return [];
+      },
     } as unknown as BasketService;
     const app = basketRoutes(service, async (c, next) => {
       c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
@@ -138,7 +141,11 @@ it("submits rebalance for the verified wallet without accepting a client portfol
     body: JSON.stringify({ portfolioId: "attacker-portfolio" }),
   });
   expect(response.status).toBe(202);
-  expect(observed).toEqual(["magnificent-seven", "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet", "user-1"]);
+  expect(observed).toEqual([
+    "magnificent-seven",
+    "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet",
+    "user-1",
+  ]);
 });
 
 it("prepares withdrawal for the session wallet, never a client-supplied recipient", async () => {
@@ -148,13 +155,17 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
     prepareExit: async (...args: unknown[]) => {
       observed = args;
       return {
-        mode: "in_kind", portfolioId: "p-1", recipientAccountId: owner,
+        mode: "in_kind",
+        portfolioId: "p-1",
+        recipientAccountId: owner,
         expiresAt: "2026-10-07T00:00:00Z",
         authorization: { kind: "solana-message", text: "Sign exit" },
         message: {
-          portfolioId: "p-1", recipientAccountId: owner,
+          portfolioId: "p-1",
+          recipientAccountId: owner,
           assets: [{ assetId: "solana:asset", amountRaw: "1" }],
-          nonce: `0x${"a".repeat(64)}`, expiresAt: 9999999999,
+          nonce: `0x${"a".repeat(64)}`,
+          expiresAt: 9999999999,
         },
       };
     },
@@ -163,9 +174,12 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
     await next();
   });
-  const response = await app.request("/v1/basket-templates/magnificent-seven/exit/in_kind/prepare?recipientAccountId=AttackerWallet", {
-    method: "POST",
-  });
+  const response = await app.request(
+    "/v1/basket-templates/magnificent-seven/exit/in_kind/prepare?recipientAccountId=AttackerWallet",
+    {
+      method: "POST",
+    },
+  );
   expect(response.status).toBe(200);
   expect(observed).toEqual(["magnificent-seven", owner, "in_kind"]);
 });

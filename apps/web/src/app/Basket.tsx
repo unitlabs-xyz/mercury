@@ -245,7 +245,9 @@ const IconCluster = ({
 const DetailLoading = ({ assetCount }: { assetCount: number }) => (
   <AppShell current="baskets" title="Basket" quiet>
     <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-2 text-[14px] text-ds-muted md:mb-6">
-      <Link to="/baskets" className="hover:text-ds-ink">Baskets</Link>
+      <Link to="/baskets" className="hover:text-ds-ink">
+        Baskets
+      </Link>
       <Chevron />
       <Skeleton className="h-4 w-36" />
     </nav>
@@ -258,7 +260,9 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
               <Skeleton className="mt-3 h-4 w-32" />
             </div>
             <div className="flex gap-1">
-              {[0, 1, 2].map((item) => <Skeleton key={item} className="size-10 rounded-full" />)}
+              {[0, 1, 2].map((item) => (
+                <Skeleton key={item} className="size-10 rounded-full" />
+              ))}
             </div>
           </div>
           <Skeleton className="mt-6 h-4 w-4/5" />
@@ -272,7 +276,9 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
             <Skeleton className="mt-2 h-4 w-64 max-w-full" />
           </div>
           <div className="space-y-1 rounded-lg bg-ds-panel p-1">
-            {Array.from({ length: assetCount }, (_, item) => <Skeleton key={item} className="h-[60px] w-full rounded-md" />)}
+            {Array.from({ length: assetCount }, (_, item) => (
+              <Skeleton key={item} className="h-[60px] w-full rounded-md" />
+            ))}
           </div>
         </section>
       </div>
@@ -310,7 +316,9 @@ export const Basket = () => {
   const [exitOpen, setExitOpen] = useState(false);
   const [exitMode, setExitMode] = useState<BasketExitMode>("in_kind");
   const [exitOperation, setExitOperation] = useState<{
-    portfolioId: string; operationId: string; mode: BasketExitMode;
+    portfolioId: string;
+    operationId: string;
+    mode: BasketExitMode;
   } | null>(null);
   const [rebalanceOperation, setRebalanceOperation] = useState<{
     portfolioId: string;
@@ -361,7 +369,8 @@ export const Basket = () => {
   const operationId =
     accountId && accountId === rebalanceOperation?.portfolioId ? rebalanceOperation.operationId : null;
   const rebalanceStatus = useBasketOperation(slug, operationId, enrolled);
-  const exitOperationId = accountId && accountId === exitOperation?.portfolioId ? exitOperation.operationId : null;
+  const exitOperationId =
+    accountId && accountId === exitOperation?.portfolioId ? exitOperation.operationId : null;
   const exitStatus = useBasketOperation(slug, exitOperationId, enrolled);
   useEffect(() => {
     if (!accountId) {
@@ -382,7 +391,9 @@ export const Basket = () => {
       const parsed = JSON.parse(saved) as { operationId?: string; mode?: string };
       if (parsed.operationId && (parsed.mode === "in_kind" || parsed.mode === "liquidate_usdc"))
         setExitOperation({ portfolioId: accountId, operationId: parsed.operationId, mode: parsed.mode });
-    } catch { /* An invalid local receipt is not an operation. */ }
+    } catch {
+      /* An invalid local receipt is not an operation. */
+    }
   }, [accountId]);
   useEffect(() => {
     if (rebalanceStatus.data?.state === "completed") {
@@ -392,7 +403,14 @@ export const Basket = () => {
   }, [queryClient, rebalanceStatus.data?.state, slug]);
   useEffect(() => {
     if (exitStatus.data?.state === "completed") {
-      for (const key of ["basket-portfolio", "basket-portfolios", "basket-activity", "portfolio", "money", "activity"])
+      for (const key of [
+        "basket-portfolio",
+        "basket-portfolios",
+        "basket-activity",
+        "portfolio",
+        "money",
+        "activity",
+      ])
         void queryClient.invalidateQueries({ queryKey: ["api", key] });
     }
   }, [exitStatus.data?.state, queryClient]);
@@ -517,7 +535,8 @@ export const Basket = () => {
     Boolean(operationId) &&
     (!operationState || ["accepted", "running", "retrying", "awaiting_user"].includes(operationState));
   const exitState = exitStatus.data?.state;
-  const exitActive = Boolean(exitOperationId) &&
+  const exitActive =
+    Boolean(exitOperationId) &&
     (!exitState || ["accepted", "running", "retrying", "awaiting_user"].includes(exitState));
   const usdcBalance = account?.assets
     .filter((asset) => asset.assetId === USDC_ASSET_ID)
@@ -526,14 +545,21 @@ export const Basket = () => {
     .filter((asset) => Number(asset.balance) > 0)
     .sort((a, b) => Number(b.valueUsd) - Number(a.valueUsd));
   const walletMissing = signedIn && !enrollAction.walletReady;
-  const accountLoading = sessionChecking || (signedIn && !walletMissing && (enrollment.isPending || (enrolled && portfolio.isPending)));
+  const accountLoading =
+    sessionChecking ||
+    (signedIn && !walletMissing && (enrollment.isPending || (enrolled && portfolio.isPending)));
   const ownershipUnknown = signedIn && !walletMissing && enrollment.isError && !enrollment.data;
   const marketReads = [
-    instruments.dataUpdatedAt, prices.dataUpdatedAt, dayHistory.dataUpdatedAt, weekHistory.dataUpdatedAt,
+    instruments.dataUpdatedAt,
+    prices.dataUpdatedAt,
+    dayHistory.dataUpdatedAt,
+    weekHistory.dataUpdatedAt,
   ];
   const marketUpdatedAt = marketReads.every((at) => at > 0) ? Math.min(...marketReads) : 0;
-  const marketFetching = instruments.isFetching || prices.isFetching || dayHistory.isFetching || weekHistory.isFetching;
-  const marketRefreshFailed = instruments.isError || prices.isError || dayHistory.isError || weekHistory.isError;
+  const marketFetching =
+    instruments.isFetching || prices.isFetching || dayHistory.isFetching || weekHistory.isFetching;
+  const marketRefreshFailed =
+    instruments.isError || prices.isError || dayHistory.isError || weekHistory.isError;
 
   return (
     <AppShell current="baskets" title={name} quiet>
@@ -602,9 +628,8 @@ export const Basket = () => {
             </div>
             <div className="rounded-lg bg-ds-panel px-5 py-3 text-[12px] leading-relaxed text-ds-muted">
               Glider model{performance ? ` · as of ${new Date(performance.asOf).toLocaleDateString()}` : ""}
-              {result.isFetching ? " · updating" : ""}.
-              This is target-allocation history, not a live portfolio return. Past modeled performance does
-              not predict future results.
+              {result.isFetching ? " · updating" : ""}. This is target-allocation history, not a live
+              portfolio return. Past modeled performance does not predict future results.
             </div>
           </section>
 
@@ -620,9 +645,12 @@ export const Basket = () => {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                {marketUpdatedAt > 0 && (marketRefreshFailed
-                  ? <span className="text-[11px] text-ds-muted">Last available</span>
-                  : <LiveStatusChip fetching={marketFetching} at={marketUpdatedAt} />)}
+                {marketUpdatedAt > 0 &&
+                  (marketRefreshFailed ? (
+                    <span className="text-[11px] text-ds-muted">Last available</span>
+                  ) : (
+                    <LiveStatusChip fetching={marketFetching} at={marketUpdatedAt} />
+                  ))}
                 <span className="text-[12px] text-ds-muted">{allocations.length} target assets</span>
               </div>
             </div>
@@ -665,24 +693,36 @@ export const Basket = () => {
                       </span>
                       <span className="text-right font-medium text-ds-ink">{weight(asset.weightBps)}</span>
                       <span className="text-right text-ds-ink">
-                        {sharePrice == null && instruments.isPending
-                          ? <Skeleton className="ml-auto h-4 w-14" />
-                          : sharePrice == null ? "—" : usd(sharePrice)}
+                        {sharePrice == null && instruments.isPending ? (
+                          <Skeleton className="ml-auto h-4 w-14" />
+                        ) : sharePrice == null ? (
+                          "—"
+                        ) : (
+                          usd(sharePrice)
+                        )}
                       </span>
                       <span className="text-right text-ds-muted">
-                        {companyCap == null && prices.isPending
-                          ? <Skeleton className="ml-auto h-4 w-14" />
-                          : companyCap == null ? "—" : usdCompact(companyCap.toNumber())}
+                        {companyCap == null && prices.isPending ? (
+                          <Skeleton className="ml-auto h-4 w-14" />
+                        ) : companyCap == null ? (
+                          "—"
+                        ) : (
+                          usdCompact(companyCap.toNumber())
+                        )}
                       </span>
                       <span className="flex justify-end">
-                        {dayHistory.isPending
-                          ? <Skeleton className="h-5 w-14" />
-                          : <MoveChip value={dayHistory.data?.get(asset.ticker)?.changePct ?? null} light />}
+                        {dayHistory.isPending ? (
+                          <Skeleton className="h-5 w-14" />
+                        ) : (
+                          <MoveChip value={dayHistory.data?.get(asset.ticker)?.changePct ?? null} light />
+                        )}
                       </span>
                       <span className="flex justify-end">
-                        {weekHistory.isPending
-                          ? <Skeleton className="h-5 w-14" />
-                          : <MoveChip value={weekHistory.data?.get(asset.ticker)?.changePct ?? null} light />}
+                        {weekHistory.isPending ? (
+                          <Skeleton className="h-5 w-14" />
+                        ) : (
+                          <MoveChip value={weekHistory.data?.get(asset.ticker)?.changePct ?? null} light />
+                        )}
                       </span>
                     </li>
                   );
@@ -830,11 +870,13 @@ export const Basket = () => {
               <div>
                 <p className="text-ds-muted">Integrator swap fee</p>
                 <p className="mt-1 font-medium text-ds-ink">
-                  {insights.isPending
-                    ? <Skeleton className="h-4 w-20" />
-                    : insights.data?.integratorSwapFeeBps == null
-                      ? "Not available"
-                      : `${(insights.data.integratorSwapFeeBps / 100).toFixed(2)}%`}
+                  {insights.isPending ? (
+                    <Skeleton className="h-4 w-20" />
+                  ) : insights.data?.integratorSwapFeeBps == null ? (
+                    "Not available"
+                  ) : (
+                    `${(insights.data.integratorSwapFeeBps / 100).toFixed(2)}%`
+                  )}
                 </p>
               </div>
             </div>
@@ -866,9 +908,11 @@ export const Basket = () => {
             lookupFailed={signedIn && enrollment.isError && !enrollment.data}
             blocked={template.status === "disabled"}
             busy={enrollmentBusy}
-            error={enrollment.isError && enrollment.data
-              ? "Portfolio status could not refresh. Showing your last available enrollment."
-              : enrollment.error?.message}
+            error={
+              enrollment.isError && enrollment.data
+                ? "Portfolio status could not refresh. Showing your last available enrollment."
+                : enrollment.error?.message
+            }
             onRetry={() => void enrollment.refetch()}
             onReview={() => {
               if (enrolled) {
@@ -884,11 +928,15 @@ export const Basket = () => {
           <RailCard label="Your position">
             <RailHead
               title="Your position"
-              meta={account
-                ? portfolio.isError
-                  ? "Last available"
-                  : <LiveStatusChip fetching={portfolio.isFetching} at={portfolio.dataUpdatedAt} />
-                : undefined}
+              meta={
+                account ? (
+                  portfolio.isError ? (
+                    "Last available"
+                  ) : (
+                    <LiveStatusChip fetching={portfolio.isFetching} at={portfolio.dataUpdatedAt} />
+                  )
+                ) : undefined
+              }
             />
             {account ? (
               <div className="mt-5">
@@ -919,30 +967,49 @@ export const Basket = () => {
                   <p className="mt-3 text-[12px] text-ds-muted">Partial read; value may be incomplete.</p>
                 )}
                 {portfolio.isError && (
-                  <button type="button" onClick={() => void portfolio.refetch()} className="mt-3 text-[12px] font-medium text-ds-link hover:underline">
+                  <button
+                    type="button"
+                    onClick={() => void portfolio.refetch()}
+                    className="mt-3 text-[12px] font-medium text-ds-link hover:underline"
+                  >
                     Balance refresh failed · Retry
                   </button>
                 )}
                 {exitOperationId && (
                   <div className="mt-4 flex items-center justify-between gap-3 border-t border-ds-divider pt-4 text-[12px]">
-                    <span className="text-ds-muted">{exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}</span>
-                    <span className="font-medium capitalize text-ds-ink">{exitState?.replaceAll("_", " ") ?? (exitStatus.isError ? "Status unavailable" : "Checking…")}</span>
+                    <span className="text-ds-muted">
+                      {exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
+                    </span>
+                    <span className="font-medium capitalize text-ds-ink">
+                      {exitState?.replaceAll("_", " ") ??
+                        (exitStatus.isError ? "Status unavailable" : "Checking…")}
+                    </span>
                   </div>
                 )}
-                {exitStatus.data?.error && <p className="mt-2 text-[12px] text-ds-chip-warn">{exitStatus.data.error}</p>}
+                {exitStatus.data?.error && (
+                  <p className="mt-2 text-[12px] text-ds-chip-warn">{exitStatus.data.error}</p>
+                )}
                 {exitStatus.isError && exitOperationId && (
-                  <button type="button" onClick={() => void exitStatus.refetch()} className="mt-2 text-[12px] font-medium text-ds-link hover:underline">
+                  <button
+                    type="button"
+                    onClick={() => void exitStatus.refetch()}
+                    className="mt-2 text-[12px] font-medium text-ds-link hover:underline"
+                  >
                     Check withdrawal status again
                   </button>
                 )}
                 {heldAssets.length > 0 && (
-                  <Button size="lg" className="mt-5 w-full" disabled={portfolio.isError || exitActive || operationActive}
+                  <Button
+                    size="lg"
+                    className="mt-5 w-full"
+                    disabled={portfolio.isError || exitActive || operationActive}
                     onClick={() => {
                       setExitMode("in_kind");
                       exitAction.prepare.reset();
                       exitAction.submit.reset();
                       setExitOpen(true);
-                    }}>
+                    }}
+                  >
                     Withdraw assets
                   </Button>
                 )}
@@ -974,9 +1041,7 @@ export const Basket = () => {
               />
             ) : (
               <div className="-mx-5 -mb-4 mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
-                <p className="text-[13px] font-medium text-ds-ink">
-                  No connected portfolio
-                </p>
+                <p className="text-[13px] font-medium text-ds-ink">No connected portfolio</p>
                 <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
                   Enroll to connect your own Glider smart account.
                 </p>
@@ -998,7 +1063,9 @@ export const Basket = () => {
             >
               {!account && portfolio.isPending ? (
                 <div className="space-y-2 p-3" aria-label="Loading account balances">
-                  {[0, 1, 2].map((item) => <Skeleton key={item} className="h-[52px] w-full rounded-md" />)}
+                  {[0, 1, 2].map((item) => (
+                    <Skeleton key={item} className="h-[52px] w-full rounded-md" />
+                  ))}
                 </div>
               ) : !account && portfolio.isError ? (
                 <PriceError
@@ -1008,9 +1075,18 @@ export const Basket = () => {
               ) : (
                 <>
                   {portfolio.isError && (
-                    <div role="alert" className="mx-2 mb-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted">
+                    <div
+                      role="alert"
+                      className="mx-2 mb-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
+                    >
                       <span>Refresh failed · showing last balances</span>
-                      <button type="button" onClick={() => void portfolio.refetch()} className="shrink-0 font-medium text-ds-link hover:underline">Retry</button>
+                      <button
+                        type="button"
+                        onClick={() => void portfolio.refetch()}
+                        className="shrink-0 font-medium text-ds-link hover:underline"
+                      >
+                        Retry
+                      </button>
                     </div>
                   )}
                   {heldAssets.length === 0 ? (
@@ -1019,76 +1095,78 @@ export const Basket = () => {
                     </p>
                   ) : (
                     <>
-                    <GlideRows as="ul">
-                    {(showAllAssets ? heldAssets : heldAssets.slice(0, 5)).map((asset) => {
-                      const allocation = template.allocations.find((item) => item.assetId === asset.assetId);
-                      const history = allocation ? dayHistory.data?.get(allocation.ticker) : null;
-                      return (
-                        <li
-                          key={`${asset.smartAccountId}:${asset.assetId}`}
-                          data-row
-                          className="relative grid h-[52px] grid-cols-[minmax(0,1fr)_84px_56px] items-center gap-x-3 rounded-md px-3"
+                      <GlideRows as="ul">
+                        {(showAllAssets ? heldAssets : heldAssets.slice(0, 5)).map((asset) => {
+                          const allocation = template.allocations.find(
+                            (item) => item.assetId === asset.assetId,
+                          );
+                          const history = allocation ? dayHistory.data?.get(allocation.ticker) : null;
+                          return (
+                            <li
+                              key={`${asset.smartAccountId}:${asset.assetId}`}
+                              data-row
+                              className="relative grid h-[52px] grid-cols-[minmax(0,1fr)_84px_56px] items-center gap-x-3 rounded-md px-3"
+                            >
+                              <span className="flex min-w-0 items-center gap-3">
+                                {allocation ? (
+                                  <AssetIcon
+                                    asset={allocation}
+                                    source={byTicker.get(allocation.ticker)}
+                                    className="size-8 shrink-0 rounded-full bg-white object-contain"
+                                  />
+                                ) : asset.assetId.endsWith(`/spl:${USDC_MINT}`) ? (
+                                  <UsdcMark size={32} />
+                                ) : (
+                                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[10px] font-medium text-ds-ink">
+                                    {asset.symbol.slice(0, 3)}
+                                  </span>
+                                )}
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">
+                                    {allocation
+                                      ? (byTicker.get(allocation.ticker)?.name ?? asset.symbol)
+                                      : asset.symbol}
+                                  </span>
+                                  <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">
+                                    {assetBalance(asset.balance)} {asset.symbol}
+                                  </span>
+                                </span>
+                              </span>
+                              <span className="block h-7 w-full">
+                                {history && history.points.length > 1 && (
+                                  <DotChart
+                                    scale="price"
+                                    series={history.points.map((point) => ({
+                                      label: point.at.toLocaleTimeString(),
+                                      value: point.price,
+                                    }))}
+                                    label="underlying share today"
+                                    axes={false}
+                                    interactive={false}
+                                    rest={LIST_DOT}
+                                    {...TINY}
+                                  />
+                                )}
+                              </span>
+                              <span className="flex flex-col items-end">
+                                <span className="text-[14px] leading-[18px] font-medium whitespace-nowrap text-ds-ink">
+                                  {usd(asset.valueUsd)}
+                                </span>
+                                {allocation && <MoveChip value={history?.changePct ?? null} light />}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </GlideRows>
+                      {heldAssets.length > 5 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllAssets((value) => !value)}
+                          className="w-full px-3 py-2 text-left text-[12px] font-medium text-ds-link hover:underline"
                         >
-                          <span className="flex min-w-0 items-center gap-3">
-                            {allocation ? (
-                              <AssetIcon
-                                asset={allocation}
-                                source={byTicker.get(allocation.ticker)}
-                                className="size-8 shrink-0 rounded-full bg-white object-contain"
-                              />
-                            ) : asset.assetId.endsWith(`/spl:${USDC_MINT}`) ? (
-                              <UsdcMark size={32} />
-                            ) : (
-                              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[10px] font-medium text-ds-ink">
-                                {asset.symbol.slice(0, 3)}
-                              </span>
-                            )}
-                            <span className="min-w-0">
-                              <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">
-                                {allocation
-                                  ? (byTicker.get(allocation.ticker)?.name ?? asset.symbol)
-                                  : asset.symbol}
-                              </span>
-                              <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">
-                                {assetBalance(asset.balance)} {asset.symbol}
-                              </span>
-                            </span>
-                          </span>
-                          <span className="block h-7 w-full">
-                            {history && history.points.length > 1 && (
-                              <DotChart
-                                scale="price"
-                                series={history.points.map((point) => ({
-                                  label: point.at.toLocaleTimeString(),
-                                  value: point.price,
-                                }))}
-                                label="underlying share today"
-                                axes={false}
-                                interactive={false}
-                                rest={LIST_DOT}
-                                {...TINY}
-                              />
-                            )}
-                          </span>
-                          <span className="flex flex-col items-end">
-                            <span className="text-[14px] leading-[18px] font-medium whitespace-nowrap text-ds-ink">
-                              {usd(asset.valueUsd)}
-                            </span>
-                            {allocation && <MoveChip value={history?.changePct ?? null} light />}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </GlideRows>
-                  {heldAssets.length > 5 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllAssets((value) => !value)}
-                      className="w-full px-3 py-2 text-left text-[12px] font-medium text-ds-link hover:underline"
-                    >
-                      {showAllAssets ? "Show fewer assets" : `Show all ${heldAssets.length} assets`}
-                    </button>
-                  )}
+                          {showAllAssets ? "Show fewer assets" : `Show all ${heldAssets.length} assets`}
+                        </button>
+                      )}
                     </>
                   )}
                 </>
@@ -1120,7 +1198,11 @@ export const Basket = () => {
               ) : ownershipUnknown ? (
                 <div className="min-h-[160px] text-[12px] text-ds-muted">
                   <p>Rebalance schedule is unavailable until portfolio status is known.</p>
-                  <button type="button" onClick={() => void enrollment.refetch()} className="mt-2 font-medium text-ds-link hover:underline">
+                  <button
+                    type="button"
+                    onClick={() => void enrollment.refetch()}
+                    className="mt-2 font-medium text-ds-link hover:underline"
+                  >
                     Retry portfolio check
                   </button>
                 </div>
@@ -1128,7 +1210,11 @@ export const Basket = () => {
                 <div className="min-h-[160px] text-[12px] text-ds-muted">
                   <p>Schedule unavailable while account balances cannot be read.</p>
                   {portfolio.isError && (
-                    <button type="button" onClick={() => void portfolio.refetch()} className="mt-2 font-medium text-ds-link hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => void portfolio.refetch()}
+                      className="mt-2 font-medium text-ds-link hover:underline"
+                    >
                       Retry account read
                     </button>
                   )}
@@ -1141,7 +1227,8 @@ export const Basket = () => {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-ds-muted">Manual rebalance</span>
                     <span className="font-medium capitalize text-ds-ink">
-                      {operationState?.replaceAll("_", " ") ?? (rebalanceStatus.isError ? "Status unavailable" : "Checking…")}
+                      {operationState?.replaceAll("_", " ") ??
+                        (rebalanceStatus.isError ? "Status unavailable" : "Checking…")}
                     </span>
                   </div>
                   {rebalanceStatus.data?.error && (
@@ -1162,7 +1249,11 @@ export const Basket = () => {
                 size="lg"
                 className="mt-5 w-full"
                 disabled={
-                  !account || template.status === "disabled" || operationActive || exitActive || rebalanceAction.isPending
+                  !account ||
+                  template.status === "disabled" ||
+                  operationActive ||
+                  exitActive ||
+                  rebalanceAction.isPending
                 }
                 onClick={() => {
                   rebalanceAction.reset();
@@ -1177,22 +1268,40 @@ export const Basket = () => {
             {activity.data?.length ? (
               <>
                 {activity.isError && (
-                  <div role="alert" className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted">
+                  <div
+                    role="alert"
+                    className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
+                  >
                     <span>Refresh failed · showing last activity</span>
-                    <button type="button" onClick={() => void activity.refetch()} className="shrink-0 font-medium text-ds-link hover:underline">Retry</button>
+                    <button
+                      type="button"
+                      onClick={() => void activity.refetch()}
+                      className="shrink-0 font-medium text-ds-link hover:underline"
+                    >
+                      Retry
+                    </button>
                   </div>
                 )}
                 <ul className="space-y-3 px-4 py-4">
                   {activity.data.slice(0, 5).map((item) => (
-                    <EventRow key={item.id} showSubtitle e={toEvent({
-                      ...item, subtitle: item.subtitle, mint: null, logoUrl: null,
-                    })} />
+                    <EventRow
+                      key={item.id}
+                      showSubtitle
+                      e={toEvent({
+                        ...item,
+                        subtitle: item.subtitle,
+                        mint: null,
+                        logoUrl: null,
+                      })}
+                    />
                   ))}
                 </ul>
               </>
             ) : (sessionChecking || enrolled) && activity.isPending ? (
               <div className="space-y-3 px-4 py-4" aria-label="Loading recent activity">
-                {[0, 1].map((item) => <Skeleton key={item} className="h-[48px] w-full" />)}
+                {[0, 1].map((item) => (
+                  <Skeleton key={item} className="h-[48px] w-full" />
+                ))}
               </div>
             ) : ownershipUnknown ? (
               <PriceError
@@ -1204,15 +1313,10 @@ export const Basket = () => {
                 Connect a Solana wallet to view basket activity.
               </div>
             ) : activity.isError ? (
-              <PriceError
-                message="Recent activity is unavailable."
-                onRetry={() => void activity.refetch()}
-              />
+              <PriceError message="Recent activity is unavailable." onRetry={() => void activity.refetch()} />
             ) : (
               <div className="px-4 py-5 text-center">
-                <p className="text-[13px] font-medium text-ds-ink">
-                  No activity to show
-                </p>
+                <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
                 <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
                   Enrollment, confirmed funding, rebalances and withdrawals appear here.
                 </p>

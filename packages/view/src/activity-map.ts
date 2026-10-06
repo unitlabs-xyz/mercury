@@ -76,9 +76,15 @@ export const toEvent = (i: ActivityItem): Event => {
       i.amountUsd === null
         ? null
         : Math.abs(Number(i.amountUsd)).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-    flow: i.kind === "basket_funding" || i.kind === "withdraw_in_kind" || i.kind === "liquidate_to_usdc" ? null :
-      FLOW[kind] ??
-      (i.amountUsd === null || Number(i.amountUsd) === 0 ? null : Number(i.amountUsd) < 0 ? "out" : "in"),
+    flow:
+      i.kind === "basket_funding" || i.kind === "withdraw_in_kind" || i.kind === "liquidate_to_usdc"
+        ? null
+        : (FLOW[kind] ??
+          (i.amountUsd === null || Number(i.amountUsd) === 0
+            ? null
+            : Number(i.amountUsd) < 0
+              ? "out"
+              : "in")),
     details: [],
     ...(i.txSignature ? { signature: i.txSignature } : {}),
     ...(i.mint ? { mint: i.mint } : {}),

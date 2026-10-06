@@ -68,7 +68,9 @@ export const basketActions = pgTable(
   "basket_action",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     slug: text("slug").notNull(),
     kind: text("kind").notNull(),
     ownerAccountId: text("owner_account_id").notNull(),

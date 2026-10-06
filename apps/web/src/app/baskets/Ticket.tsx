@@ -1,4 +1,10 @@
-import type { BasketExitMode, ManagedBasketPortfolio, ManagedBasketPortfolioSnapshot, PreparedBasketExit, SubmittedBasketExit } from "@mercury/types";
+import type {
+  BasketExitMode,
+  ManagedBasketPortfolio,
+  ManagedBasketPortfolioSnapshot,
+  PreparedBasketExit,
+  SubmittedBasketExit,
+} from "@mercury/types";
 import { usd } from "@mercury/view";
 import { Link } from "react-router-dom";
 import { Button } from "../../ui/Button";
@@ -64,9 +70,9 @@ export const EnrollmentRail = ({
                   ? "Your Glider portfolio is ready"
                   : walletMissing
                     ? "Solana wallet required"
-                  : signedIn
-                    ? "Your own portfolio, not a basket token"
-                    : "Sign in to enroll"}
+                    : signedIn
+                      ? "Your own portfolio, not a basket token"
+                      : "Sign in to enroll"}
               </p>
               {address && (
                 <a
@@ -86,9 +92,9 @@ export const EnrollmentRail = ({
                   ? "Fund it with USDC on Solana. Your assets stay in your own smart account."
                   : walletMissing
                     ? "Connect a Solana wallet to access this strategy."
-                  : signedIn
-                    ? "Sign to create your own Glider smart account. No USDC is invested during enrollment; network fees may apply."
-                    : "Connect your Solana wallet to create a Glider portfolio for this strategy.")}
+                    : signedIn
+                      ? "Sign to create your own Glider smart account. No USDC is invested during enrollment; network fees may apply."
+                      : "Connect your Solana wallet to create a Glider portfolio for this strategy.")}
             </p>
           </>
         )}
@@ -116,15 +122,15 @@ export const EnrollmentRail = ({
             ? "Retry portfolio check"
             : walletMissing
               ? "Solana wallet required"
-            : enrolled
-              ? "Fund with USDC"
-              : blocked
-                ? "Portfolio unavailable"
-                : busy
-                  ? "Preparing enrollment…"
-                  : !signedIn
-                    ? "Sign in to enroll"
-                    : "Review enrollment"}
+              : enrolled
+                ? "Fund with USDC"
+                : blocked
+                  ? "Portfolio unavailable"
+                  : busy
+                    ? "Preparing enrollment…"
+                    : !signedIn
+                      ? "Sign in to enroll"
+                      : "Review enrollment"}
       </Button>
     </RailCard>
   );
@@ -477,8 +483,20 @@ interface ExitSheetProps {
 
 /** Both full exits share one review surface; the signed Glider terms are displayed before wallet approval. */
 export const ExitSheet = ({
-  open, name, mode, onMode, account, prepared, submitted, busy, walletReady,
-  error, onPrepare, onSubmit, onBack, onClose,
+  open,
+  name,
+  mode,
+  onMode,
+  account,
+  prepared,
+  submitted,
+  busy,
+  walletReady,
+  error,
+  onPrepare,
+  onSubmit,
+  onBack,
+  onClose,
 }: ExitSheetProps) => {
   const byAsset = new Map(account.assets.map((asset) => [asset.assetId, asset]));
   const count = account.assets.filter((asset) => /^[1-9]\d*$/.test(asset.balanceRaw)).length;
@@ -487,12 +505,19 @@ export const ExitSheet = ({
     <Dialog open={open} onClose={onClose} labelledBy="basket-exit-title" className="max-w-[520px]">
       {submitted ? (
         <div className="px-6 py-10 text-center">
-          <span className="mx-auto grid size-11 place-items-center rounded-full bg-ds-up-chip text-ds-up"><Check className="size-5" /></span>
-          <h2 id="basket-exit-title" className="mt-4 text-[20px] font-medium text-ds-ink">Exit submitted</h2>
+          <span className="mx-auto grid size-11 place-items-center rounded-full bg-ds-up-chip text-ds-up">
+            <Check className="size-5" />
+          </span>
+          <h2 id="basket-exit-title" className="mt-4 text-[20px] font-medium text-ds-ink">
+            Exit submitted
+          </h2>
           <p className="mx-auto mt-3 max-w-[40ch] text-[14px] leading-[1.45] text-ds-muted">
-            This is not settled yet. Track the operation under Your position; your wallet and basket balances will update after confirmation.
+            This is not settled yet. Track the operation under Your position; your wallet and basket balances
+            will update after confirmation.
           </p>
-          <Button variant="primary" size="lg" onClick={onClose} className="mt-6 w-full">Done</Button>
+          <Button variant="primary" size="lg" onClick={onClose} className="mt-6 w-full">
+            Done
+          </Button>
         </div>
       ) : (
         <>
@@ -501,30 +526,51 @@ export const ExitSheet = ({
               {prepared ? "Review withdrawal" : `Withdraw ${name}`}
             </h2>
             <p className="mt-3 text-[14px] leading-[1.45] text-ds-muted">
-              {prepared ? "Check the exact authorization before your wallet signs it." : "Choose how to move your portfolio back to your Solana wallet."}
+              {prepared
+                ? "Check the exact authorization before your wallet signs it."
+                : "Choose how to move your portfolio back to your Solana wallet."}
             </p>
             {!prepared && (
               <div className="mt-6 grid grid-cols-2 gap-1 rounded-lg bg-ds-panel p-1 text-[13px]">
                 {(["in_kind", "liquidate_usdc"] as const).map((choice) => (
-                  <button key={choice} type="button" onClick={() => onMode(choice)}
-                    className={`rounded-md px-2 py-2.5 font-medium ${mode === choice ? "bg-white text-ds-ink shadow-sm" : "text-ds-muted hover:text-ds-ink"}`}>
+                  <button
+                    key={choice}
+                    type="button"
+                    onClick={() => onMode(choice)}
+                    className={`rounded-md px-2 py-2.5 font-medium ${mode === choice ? "bg-white text-ds-ink shadow-sm" : "text-ds-muted hover:text-ds-ink"}`}
+                  >
                     {choice === "in_kind" ? "Assets in kind" : "Convert to USDC"}
                   </button>
                 ))}
               </div>
             )}
             <dl className="mt-5 space-y-3 rounded-lg bg-ds-panel px-4 py-4 text-[13px]">
-              <div className="flex justify-between gap-4"><dt className="text-ds-muted">Current portfolio value</dt><dd className="font-medium text-ds-ink">{usd(account.totalValueUsd)}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-ds-muted">Assets in account</dt><dd className="font-medium text-ds-ink">{count}</dd></div>
-              <div><dt className="text-ds-muted">Destination · your Solana wallet</dt><dd className="mt-1 break-all font-mono text-[12px] text-ds-ink">{destination}</dd></div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-ds-muted">Current portfolio value</dt>
+                <dd className="font-medium text-ds-ink">{usd(account.totalValueUsd)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-ds-muted">Assets in account</dt>
+                <dd className="font-medium text-ds-ink">{count}</dd>
+              </div>
+              <div>
+                <dt className="text-ds-muted">Destination · your Solana wallet</dt>
+                <dd className="mt-1 break-all font-mono text-[12px] text-ds-ink">{destination}</dd>
+              </div>
               {prepared && (
                 <div className="border-t border-ds-divider pt-3">
-                  <dt className="text-ds-muted">{mode === "in_kind" ? "Assets to receive" : "Assets Glider will attempt to convert"}</dt>
+                  <dt className="text-ds-muted">
+                    {mode === "in_kind" ? "Assets to receive" : "Assets Glider will attempt to convert"}
+                  </dt>
                   <dd className="mt-2 max-h-36 space-y-1.5 overflow-y-auto">
                     {prepared.message.assets.map((asset) => (
                       <div key={asset.assetId} className="flex justify-between gap-3 text-ds-ink">
-                        <span className="truncate">{byAsset.get(asset.assetId)?.symbol ?? asset.assetId}</span>
-                        <span className="shrink-0">{byAsset.get(asset.assetId)?.balance ?? asset.amountRaw}</span>
+                        <span className="truncate">
+                          {byAsset.get(asset.assetId)?.symbol ?? asset.assetId}
+                        </span>
+                        <span className="shrink-0">
+                          {byAsset.get(asset.assetId)?.balance ?? asset.amountRaw}
+                        </span>
                       </div>
                     ))}
                   </dd>
@@ -536,13 +582,35 @@ export const ExitSheet = ({
                 ? "The listed tokens move to your wallet without a sale. Their value may change during settlement."
                 : "Glider swaps eligible assets into Solana USDC and sends the proceeds to your wallet. Prices can change and small or illiquid balances may remain in the smart account."}
             </p>
-            {!walletReady && <p className="mt-3 text-[12px] text-ds-muted">Waiting for your Solana wallet.</p>}
-            {error && <p role="alert" className="mt-4 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn"><Alert className="mt-px size-3.5 shrink-0" /><span>{error} {prepared && "If submission is uncertain, retry this same authorization; do not start a new withdrawal."}</span></p>}
+            {!walletReady && (
+              <p className="mt-3 text-[12px] text-ds-muted">Waiting for your Solana wallet.</p>
+            )}
+            {error && (
+              <p
+                role="alert"
+                className="mt-4 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn"
+              >
+                <Alert className="mt-px size-3.5 shrink-0" />
+                <span>
+                  {error}{" "}
+                  {prepared &&
+                    "If submission is uncertain, retry this same authorization; do not start a new withdrawal."}
+                </span>
+              </p>
+            )}
           </div>
           <div className="flex gap-2.5 border-t border-ds-divider px-6 py-4">
-            <Button size="lg" onClick={prepared ? onBack : onClose} disabled={busy} className="flex-1">{prepared ? "Back" : "Cancel"}</Button>
-            <Button variant="primary" size="lg" loading={busy} disabled={!walletReady || (prepared !== null && Date.parse(prepared.expiresAt) <= Date.now())}
-              onClick={prepared ? onSubmit : onPrepare} className="flex-[1.6]">
+            <Button size="lg" onClick={prepared ? onBack : onClose} disabled={busy} className="flex-1">
+              {prepared ? "Back" : "Cancel"}
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              loading={busy}
+              disabled={!walletReady || (prepared !== null && Date.parse(prepared.expiresAt) <= Date.now())}
+              onClick={prepared ? onSubmit : onPrepare}
+              className="flex-[1.6]"
+            >
               {prepared ? "Sign and submit exit" : "Review withdrawal"}
             </Button>
           </div>

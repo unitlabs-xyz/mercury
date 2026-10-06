@@ -28,7 +28,14 @@ const MONEY: Record<string, { src: string; bare: boolean }> = {
 /** The same Solana USDC coin in activity and balance lists. */
 export const UsdcMark = ({ size = 36, src = MONEY[USDC_MINT]!.src }: { size?: 32 | 36; src?: string }) => (
   <span className="relative shrink-0">
-    <img src={src} alt="" width={size} height={size} loading="lazy" className={`${size === 32 ? "size-8" : "size-9"} rounded-full bg-page object-cover`} />
+    <img
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      className={`${size === 32 ? "size-8" : "size-9"} rounded-full bg-page object-cover`}
+    />
     <img
       src="/logos/solana.svg"
       alt=""

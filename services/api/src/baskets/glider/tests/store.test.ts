@@ -12,11 +12,24 @@ describe("JsonBasketStore", () => {
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:pilot" }).returning();
     const store = new JsonBasketStore("postgres://unused", catalogJson, db);
     const id = await store.saveEnrollmentIntent({
-      userId: user!.id, slug: "magnificent-seven", ownerAccountId: "solana:owner",
-      strategyId: "strategy-1", expiresAt: new Date(Date.now() + 60_000),
-      challenge: { flowId: "flow-1", accountIndex: "0", agentAccountId: "solana:agent", message: { kind: "solana-message", text: "Sign me" } },
+      userId: user!.id,
+      slug: "magnificent-seven",
+      ownerAccountId: "solana:owner",
+      strategyId: "strategy-1",
+      expiresAt: new Date(Date.now() + 60_000),
+      challenge: {
+        flowId: "flow-1",
+        accountIndex: "0",
+        agentAccountId: "solana:agent",
+        message: { kind: "solana-message", text: "Sign me" },
+      },
     });
-    expect(await store.enrollmentIntent(id)).toMatchObject({ userId: user!.id, slug: "magnificent-seven", portfolioId: null, challenge: { flowId: "flow-1" } });
+    expect(await store.enrollmentIntent(id)).toMatchObject({
+      userId: user!.id,
+      slug: "magnificent-seven",
+      portfolioId: null,
+      challenge: { flowId: "flow-1" },
+    });
     await store.completeEnrollmentIntent(id, "portfolio-1");
     expect(await store.enrollmentIntent(id)).toMatchObject({ portfolioId: "portfolio-1" });
   });
@@ -26,22 +39,39 @@ describe("JsonBasketStore", () => {
     const store = new JsonBasketStore("postgres://unused", catalogJson, db);
     const signature = "5".repeat(88);
     await db.insert(activities).values({
-      userId: user!.id, kind: "transfer_out", title: "Sent cash", amountUsd: "5",
-      txSignature: signature, mint: USDC_MINT,
+      userId: user!.id,
+      kind: "transfer_out",
+      title: "Sent cash",
+      amountUsd: "5",
+      txSignature: signature,
+      mint: USDC_MINT,
     });
     const funding = {
-      userId: user!.id, slug: "magnificent-seven", portfolioId: "portfolio-1",
-      title: "Funded Magnificent Seven", signature, mint: USDC_MINT,
-      amountRaw: 5_000_000n, occurredAt: new Date(),
+      userId: user!.id,
+      slug: "magnificent-seven",
+      portfolioId: "portfolio-1",
+      title: "Funded Magnificent Seven",
+      signature,
+      mint: USDC_MINT,
+      amountRaw: 5_000_000n,
+      occurredAt: new Date(),
     };
     await store.confirmFunding(funding);
     await store.confirmFunding(funding);
     const rows = await db.select().from(activities).where(eq(activities.userId, user!.id));
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ kind: "basket_funding", basketPortfolioId: "portfolio-1", title: funding.title });
+    expect(rows[0]).toMatchObject({
+      kind: "basket_funding",
+      basketPortfolioId: "portfolio-1",
+      title: funding.title,
+    });
     await store.saveRebalance({
-      userId: user!.id, slug: funding.slug, ownerAccountId: "solana:owner",
-      strategyId: "strategy-1", portfolioId: "portfolio-1", operationId: "op-1",
+      userId: user!.id,
+      slug: funding.slug,
+      ownerAccountId: "solana:owner",
+      strategyId: "strategy-1",
+      portfolioId: "portfolio-1",
+      operationId: "op-1",
       submittedAt: "2026-10-06T00:00:00Z",
     });
     expect(await store.recentActions(user!.id, "portfolio-1")).toMatchObject([

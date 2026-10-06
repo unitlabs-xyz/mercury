@@ -29,7 +29,15 @@ type RailProps = {
 };
 
 const BasketList = ({
-  onExplore, onSignIn, onRetry, signedIn, loading, error, portfolios, templates, instruments,
+  onExplore,
+  onSignIn,
+  onRetry,
+  signedIn,
+  loading,
+  error,
+  portfolios,
+  templates,
+  instruments,
 }: RailProps) => {
   const [expanded, setExpanded] = useState(false);
   const byUsdcBalance = [...portfolios].sort((a, b) => {
@@ -42,8 +50,13 @@ const BasketList = ({
 
   if (loading && (!signedIn || portfolios.length === 0)) {
     return (
-      <div className="flex min-h-[182px] flex-col justify-center gap-3 px-3" aria-label="Loading your baskets">
-        {[0, 1, 2].map((index) => <Skeleton key={index} className="h-[44px] w-full" />)}
+      <div
+        className="flex min-h-[182px] flex-col justify-center gap-3 px-3"
+        aria-label="Loading your baskets"
+      >
+        {[0, 1, 2].map((index) => (
+          <Skeleton key={index} className="h-[44px] w-full" />
+        ))}
       </div>
     );
   }
@@ -51,10 +64,13 @@ const BasketList = ({
   if (!signedIn || portfolios.length === 0) {
     const title = !signedIn
       ? "Sign in to see your baskets"
-      : error ? "Your baskets are unavailable" : "No baskets yet";
+      : error
+        ? "Your baskets are unavailable"
+        : "No baskets yet";
     const detail = !signedIn
       ? "Your Glider portfolios will appear here after you sign in."
-      : error ? "We couldn't load your Glider portfolios. Your assets remain in your smart account."
+      : error
+        ? "We couldn't load your Glider portfolios. Your assets remain in your smart account."
         : "Explore a strategy to create your first Glider portfolio.";
     return (
       <div className="flex min-h-[182px] flex-col items-center justify-center px-6 py-5 text-center">
@@ -74,9 +90,16 @@ const BasketList = ({
   return (
     <div className="min-h-[182px]">
       {error && (
-        <div role="alert" className="mx-2 mb-1 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted">
+        <div
+          role="alert"
+          className="mx-2 mb-1 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
+        >
           <span>Refresh failed · showing last balances</span>
-          <button type="button" onClick={onRetry} className="shrink-0 font-medium text-ds-link hover:underline">
+          <button
+            type="button"
+            onClick={onRetry}
+            className="shrink-0 font-medium text-ds-link hover:underline"
+          >
             Retry
           </button>
         </div>
@@ -84,7 +107,9 @@ const BasketList = ({
       <GlideRows as="ul">
         {visible.map((portfolio) => {
           const template = templateBySlug.get(portfolio.slug);
-          const assets = [...(template?.allocations ?? [])].sort((a, b) => b.weightBps - a.weightBps).slice(0, 2);
+          const assets = [...(template?.allocations ?? [])]
+            .sort((a, b) => b.weightBps - a.weightBps)
+            .slice(0, 2);
           return (
             <li key={portfolio.portfolioId}>
               <Link
@@ -95,7 +120,11 @@ const BasketList = ({
                 <span className="flex min-w-0 items-center gap-3">
                   <span className="flex w-[44px] shrink-0 items-center -space-x-2" aria-hidden="true">
                     {assets.map((asset, index) => (
-                      <span key={asset.ticker} className="relative shrink-0" style={{ zIndex: assets.length - index }}>
+                      <span
+                        key={asset.ticker}
+                        className="relative shrink-0"
+                        style={{ zIndex: assets.length - index }}
+                      >
                         <AssetIcon
                           asset={asset}
                           source={instruments.get(asset.ticker)}

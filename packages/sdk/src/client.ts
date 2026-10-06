@@ -188,10 +188,13 @@ export class MercuryClient {
 
   confirmBasketFunding = (slug: string, signature: string) =>
     this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`, ConfirmedBasketFunding, {
-      method: "POST", body: JSON.stringify(ConfirmBasketFunding.parse({ signature })),
+      method: "POST",
+      body: JSON.stringify(ConfirmBasketFunding.parse({ signature })),
     });
 
   basketActivity = (slug: string) =>
-    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/activity`,
-      z.object({ activity: ManagedBasketActivity.array() }));
+    this.call(
+      `/v1/basket-templates/${encodeURIComponent(slug)}/activity`,
+      z.object({ activity: ManagedBasketActivity.array() }),
+    );
 }

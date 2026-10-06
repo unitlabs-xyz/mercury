@@ -56,7 +56,10 @@ const DiscoveryLoading = () => (
       <Skeleton className="mt-2 h-4 w-64 max-w-full !bg-white" />
       <div className="mt-4 flex gap-3 overflow-hidden">
         {[0, 1, 2, 3].map((item) => (
-          <div key={item} className="w-[calc(50%-6px)] min-w-[210px] shrink-0 rounded-lg bg-white p-1 lg:w-[calc(25%-9px)]">
+          <div
+            key={item}
+            className="w-[calc(50%-6px)] min-w-[210px] shrink-0 rounded-lg bg-white p-1 lg:w-[calc(25%-9px)]"
+          >
             <Skeleton className="h-[137px] w-full rounded-md" />
           </div>
         ))}
@@ -79,7 +82,9 @@ const DiscoveryLoading = () => (
         <Skeleton className="mt-2 h-4 w-64 max-w-full" />
       </div>
       <div className="space-y-1 rounded-lg bg-ds-panel p-1">
-        {[0, 1, 2, 3, 4, 5].map((item) => <Skeleton key={item} className="h-[64px] w-full rounded-md" />)}
+        {[0, 1, 2, 3, 4, 5].map((item) => (
+          <Skeleton key={item} className="h-[64px] w-full rounded-md" />
+        ))}
       </div>
     </section>
   </div>
@@ -281,9 +286,12 @@ const StrategyTable = ({
           <p className="mt-1 text-[12px] text-ds-muted">Explore curated Glider strategies on Solana.</p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          {updatedAt > 0 && (refreshFailed
-            ? <span className="text-[11px] text-ds-muted">Last available</span>
-            : <LiveStatusChip fetching={fetching} at={updatedAt} />)}
+          {updatedAt > 0 &&
+            (refreshFailed ? (
+              <span className="text-[11px] text-ds-muted">Last available</span>
+            ) : (
+              <LiveStatusChip fetching={fetching} at={updatedAt} />
+            ))}
           <TextAction
             onClick={() => {
               if (selected) {
@@ -333,7 +341,11 @@ const StrategyTable = ({
                   <span className="text-right text-ds-muted">{template.allocations.length}</span>
                   <span className="text-right text-ds-muted">Daily</span>
                   <span className="text-right text-ds-muted">
-                    {template.status === "enabled" ? "Available" : template.status === "candidate" ? "Enrollment pilot" : "Preview"}
+                    {template.status === "enabled"
+                      ? "Available"
+                      : template.status === "candidate"
+                        ? "Enrollment pilot"
+                        : "Preview"}
                   </span>
                   <Arrow />
                 </Link>
@@ -363,7 +375,8 @@ export const Baskets = () => {
   const tickers = useMemo(() => {
     const discovery = discoveryLogoTickers(templates, selected, showAll);
     const ownedSlugs = new Set((owned.data ?? []).map((portfolio) => portfolio.slug));
-    const ownedLogos = templates.filter((template) => ownedSlugs.has(template.slug))
+    const ownedLogos = templates
+      .filter((template) => ownedSlugs.has(template.slug))
       .flatMap((template) => [...template.allocations].sort((a, b) => b.weightBps - a.weightBps).slice(0, 2))
       .map((asset) => asset.ticker);
     return [...new Set([...discovery, ...ownedLogos])];

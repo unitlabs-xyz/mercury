@@ -57,10 +57,18 @@ export class JsonBasketStore implements BasketStore {
   }
 
   async saveEnrollmentIntent(intent: Omit<EnrollmentIntent, "id" | "portfolioId">): Promise<string> {
-    const [saved] = await this.actionsDb().insert(basketActions).values({
-      userId: intent.userId, slug: intent.slug, kind: "enroll", ownerAccountId: intent.ownerAccountId,
-      strategyId: intent.strategyId, payload: intent.challenge, expiresAt: intent.expiresAt,
-    }).returning({ id: basketActions.id });
+    const [saved] = await this.actionsDb()
+      .insert(basketActions)
+      .values({
+        userId: intent.userId,
+        slug: intent.slug,
+        kind: "enroll",
+        ownerAccountId: intent.ownerAccountId,
+        strategyId: intent.strategyId,
+        payload: intent.challenge,
+        expiresAt: intent.expiresAt,
+      })
+      .returning({ id: basketActions.id });
     if (!saved) throw new Error("Could not save enrollment authorization");
     return saved.id;
   }
@@ -69,9 +77,14 @@ export class JsonBasketStore implements BasketStore {
     const row = await this.actionsDb().query.basketActions.findFirst({ where: eq(basketActions.id, id) });
     if (!row || row.kind !== "enroll") return null;
     return {
-      id: row.id, userId: row.userId, slug: row.slug, ownerAccountId: row.ownerAccountId,
-      strategyId: row.strategyId, challenge: row.payload as EnrollmentChallenge,
-      expiresAt: row.expiresAt!, portfolioId: row.portfolioId,
+      id: row.id,
+      userId: row.userId,
+      slug: row.slug,
+      ownerAccountId: row.ownerAccountId,
+      strategyId: row.strategyId,
+      challenge: row.payload as EnrollmentChallenge,
+      expiresAt: row.expiresAt!,
+      portfolioId: row.portfolioId,
     };
   }
 
@@ -80,83 +93,151 @@ export class JsonBasketStore implements BasketStore {
   }
 
   async saveRebalance(action: {
-    userId: string; slug: string; ownerAccountId: string; strategyId: string;
-    portfolioId: string; operationId: string; submittedAt: string;
+    userId: string;
+    slug: string;
+    ownerAccountId: string;
+    strategyId: string;
+    portfolioId: string;
+    operationId: string;
+    submittedAt: string;
   }): Promise<void> {
-    await this.actionsDb().insert(basketActions).values({
-      userId: action.userId, slug: action.slug, kind: "rebalance",
-      ownerAccountId: action.ownerAccountId, strategyId: action.strategyId,
-      portfolioId: action.portfolioId, operationId: action.operationId,
-      payload: { submittedAt: action.submittedAt },
-    }).onConflictDoNothing({ target: [basketActions.userId, basketActions.operationId] });
+    await this.actionsDb()
+      .insert(basketActions)
+      .values({
+        userId: action.userId,
+        slug: action.slug,
+        kind: "rebalance",
+        ownerAccountId: action.ownerAccountId,
+        strategyId: action.strategyId,
+        portfolioId: action.portfolioId,
+        operationId: action.operationId,
+        payload: { submittedAt: action.submittedAt },
+      })
+      .onConflictDoNothing({ target: [basketActions.userId, basketActions.operationId] });
   }
 
   async saveExit(action: {
-    userId: string; slug: string; ownerAccountId: string; strategyId: string;
-    portfolioId: string; operationId: string; submittedAt: string; mode: "in_kind" | "liquidate_usdc";
+    userId: string;
+    slug: string;
+    ownerAccountId: string;
+    strategyId: string;
+    portfolioId: string;
+    operationId: string;
+    submittedAt: string;
+    mode: "in_kind" | "liquidate_usdc";
   }): Promise<void> {
-    await this.actionsDb().insert(basketActions).values({
-      userId: action.userId, slug: action.slug,
-      kind: action.mode === "in_kind" ? "withdraw_in_kind" : "liquidate_to_usdc",
-      ownerAccountId: action.ownerAccountId, strategyId: action.strategyId,
-      portfolioId: action.portfolioId, operationId: action.operationId,
-      payload: { submittedAt: action.submittedAt },
-    }).onConflictDoNothing({ target: [basketActions.userId, basketActions.operationId] });
+    await this.actionsDb()
+      .insert(basketActions)
+      .values({
+        userId: action.userId,
+        slug: action.slug,
+        kind: action.mode === "in_kind" ? "withdraw_in_kind" : "liquidate_to_usdc",
+        ownerAccountId: action.ownerAccountId,
+        strategyId: action.strategyId,
+        portfolioId: action.portfolioId,
+        operationId: action.operationId,
+        payload: { submittedAt: action.submittedAt },
+      })
+      .onConflictDoNothing({ target: [basketActions.userId, basketActions.operationId] });
   }
 
   async recentActions(userId: string, portfolioId: string) {
-    return this.actionsDb().select({
-      id: basketActions.id, kind: basketActions.kind,
-      createdAt: basketActions.createdAt, operationId: basketActions.operationId,
-    }).from(basketActions).where(and(
-      eq(basketActions.userId, userId), eq(basketActions.portfolioId, portfolioId),
-    )).orderBy(desc(basketActions.createdAt)).limit(20);
+    return this.actionsDb()
+      .select({
+        id: basketActions.id,
+        kind: basketActions.kind,
+        createdAt: basketActions.createdAt,
+        operationId: basketActions.operationId,
+      })
+      .from(basketActions)
+      .where(and(eq(basketActions.userId, userId), eq(basketActions.portfolioId, portfolioId)))
+      .orderBy(desc(basketActions.createdAt))
+      .limit(20);
   }
 
   async completedEnrollments(userId: string, ownerAccountId: string) {
-    const rows = await this.actionsDb().select({
-      portfolioId: basketActions.portfolioId,
-      strategyId: basketActions.strategyId,
-      createdAt: basketActions.createdAt,
-    }).from(basketActions).where(and(
-      eq(basketActions.userId, userId),
-      eq(basketActions.ownerAccountId, ownerAccountId),
-      eq(basketActions.kind, "enroll"),
-      isNotNull(basketActions.portfolioId),
-    )).orderBy(desc(basketActions.createdAt));
-    return rows.flatMap((row) => row.portfolioId === null ? [] : [{ ...row, portfolioId: row.portfolioId }]);
+    const rows = await this.actionsDb()
+      .select({
+        portfolioId: basketActions.portfolioId,
+        strategyId: basketActions.strategyId,
+        createdAt: basketActions.createdAt,
+      })
+      .from(basketActions)
+      .where(
+        and(
+          eq(basketActions.userId, userId),
+          eq(basketActions.ownerAccountId, ownerAccountId),
+          eq(basketActions.kind, "enroll"),
+          isNotNull(basketActions.portfolioId),
+        ),
+      )
+      .orderBy(desc(basketActions.createdAt));
+    return rows.flatMap((row) =>
+      row.portfolioId === null ? [] : [{ ...row, portfolioId: row.portfolioId }],
+    );
   }
 
   async confirmFunding(input: {
-    userId: string; slug: string; portfolioId: string; title: string;
-    signature: string; mint: string; amountRaw: bigint; occurredAt: Date;
+    userId: string;
+    slug: string;
+    portfolioId: string;
+    title: string;
+    signature: string;
+    mint: string;
+    amountRaw: bigint;
+    occurredAt: Date;
   }): Promise<void> {
     const amountUsd = `${input.amountRaw / 1_000_000n}.${String(input.amountRaw % 1_000_000n).padStart(6, "0")}`;
-    const saved = await this.actionsDb().insert(activities).values({
-      userId: input.userId, kind: "basket_funding", occurredAt: input.occurredAt,
-      title: input.title, subtitle: "Transfer to your Glider smart account",
-      amountUsd, txSignature: input.signature, mint: input.mint,
-      basketSlug: input.slug, basketPortfolioId: input.portfolioId,
-    }).onConflictDoUpdate({
-      target: [activities.userId, activities.txSignature, activities.mint],
-      set: {
-        kind: "basket_funding", occurredAt: input.occurredAt, title: input.title,
-        subtitle: "Transfer to your Glider smart account", amountUsd,
-        basketSlug: input.slug, basketPortfolioId: input.portfolioId,
-      },
-      setWhere: sql`${activities.kind} = 'transfer_out' OR (${activities.kind} = 'basket_funding' AND ${activities.basketPortfolioId} = ${input.portfolioId})`,
-    }).returning({ id: activities.id });
+    const saved = await this.actionsDb()
+      .insert(activities)
+      .values({
+        userId: input.userId,
+        kind: "basket_funding",
+        occurredAt: input.occurredAt,
+        title: input.title,
+        subtitle: "Transfer to your Glider smart account",
+        amountUsd,
+        txSignature: input.signature,
+        mint: input.mint,
+        basketSlug: input.slug,
+        basketPortfolioId: input.portfolioId,
+      })
+      .onConflictDoUpdate({
+        target: [activities.userId, activities.txSignature, activities.mint],
+        set: {
+          kind: "basket_funding",
+          occurredAt: input.occurredAt,
+          title: input.title,
+          subtitle: "Transfer to your Glider smart account",
+          amountUsd,
+          basketSlug: input.slug,
+          basketPortfolioId: input.portfolioId,
+        },
+        setWhere: sql`${activities.kind} = 'transfer_out' OR (${activities.kind} = 'basket_funding' AND ${activities.basketPortfolioId} = ${input.portfolioId})`,
+      })
+      .returning({ id: activities.id });
     if (saved.length === 0) throw new Error("Funding signature belongs to another activity");
   }
 
   async recentFunding(userId: string, portfolioId: string) {
-    return this.actionsDb().select({
-      id: activities.id, occurredAt: activities.occurredAt, title: activities.title,
-      amountUsd: activities.amountUsd, txSignature: activities.txSignature,
-    }).from(activities).where(and(
-      eq(activities.userId, userId), eq(activities.basketPortfolioId, portfolioId),
-      eq(activities.kind, "basket_funding"),
-    )).orderBy(desc(activities.occurredAt)).limit(20);
+    return this.actionsDb()
+      .select({
+        id: activities.id,
+        occurredAt: activities.occurredAt,
+        title: activities.title,
+        amountUsd: activities.amountUsd,
+        txSignature: activities.txSignature,
+      })
+      .from(activities)
+      .where(
+        and(
+          eq(activities.userId, userId),
+          eq(activities.basketPortfolioId, portfolioId),
+          eq(activities.kind, "basket_funding"),
+        ),
+      )
+      .orderBy(desc(activities.occurredAt))
+      .limit(20);
   }
 
   async load(): Promise<readonly BasketTemplate[]> {

@@ -59,27 +59,46 @@ it("credits only a settled equal USDC debit and smart-account credit", () => {
   const sender = owner.split(":").at(-1)!;
   const destination = portfolio.smartAccounts[0]!.accountId.split(":").at(-1)!;
   const entry = (who: string, rawAmount: bigint) => ({
-    owner: who, mint: USDC_MINT, rawAmount, decimals: 6,
+    owner: who,
+    mint: USDC_MINT,
+    rawAmount,
+    decimals: 6,
   });
   const tx = {
-    signature: "5".repeat(88), blockTime: null, succeeded: true,
-    accountKeys: [sender, destination], feeLamports: 0n,
-    preLamports: [], postLamports: [],
+    signature: "5".repeat(88),
+    blockTime: null,
+    succeeded: true,
+    accountKeys: [sender, destination],
+    feeLamports: 0n,
+    preLamports: [],
+    postLamports: [],
     preTokens: [entry(sender, 7_000_000n), entry(destination, 0n)],
     postTokens: [entry(sender, 2_000_000n), entry(destination, 5_000_000n)],
   };
   expect(verifiedBasketFunding(tx, sender, destination)).toBe(5_000_000n);
   expect(verifiedBasketFunding({ ...tx, succeeded: false }, sender, destination)).toBeNull();
-  expect(verifiedBasketFunding({ ...tx, postTokens: [entry(sender, 2_000_000n), entry(destination, 4_000_000n)] }, sender, destination)).toBeNull();
+  expect(
+    verifiedBasketFunding(
+      { ...tx, postTokens: [entry(sender, 2_000_000n), entry(destination, 4_000_000n)] },
+      sender,
+      destination,
+    ),
+  ).toBeNull();
   expect(verifiedBasketFunding(tx, sender, "another-account")).toBeNull();
 });
 
 describe("basket enrollment", () => {
   it("lists only the verified owner's curated portfolios and leaves failed balances unavailable", async () => {
     const service = new BasketService({
-      store: store({ completedEnrollments: async () => [{
-        portfolioId: "portfolio-1", strategyId: "strategy-1", createdAt: new Date("2026-10-06T00:00:00Z"),
-      }] }),
+      store: store({
+        completedEnrollments: async () => [
+          {
+            portfolioId: "portfolio-1",
+            strategyId: "strategy-1",
+            createdAt: new Date("2026-10-06T00:00:00Z"),
+          },
+        ],
+      }),
       provider: provider({
         portfoliosForOwner: async () => [
           portfolio,
@@ -90,13 +109,23 @@ describe("basket enrollment", () => {
         positions: async (id: string) => {
           if (id === "unavailable") throw new Error("temporary provider failure");
           return {
-            portfolioId: id, totalValueUsd: "42.00", inTransitUsd: "0",
-            fetchedAt: "2026-10-06T00:00:00Z", warnings: [],
-            assets: [{
-              assetId: `solana:mainnet/spl:${USDC_MINT}`, smartAccountId: "smart-1",
-              symbol: "USDC", decimals: 6, balance: "12.00", balanceRaw: "12000000",
-              priceUsd: "1", valueUsd: "12.00",
-            }],
+            portfolioId: id,
+            totalValueUsd: "42.00",
+            inTransitUsd: "0",
+            fetchedAt: "2026-10-06T00:00:00Z",
+            warnings: [],
+            assets: [
+              {
+                assetId: `solana:mainnet/spl:${USDC_MINT}`,
+                smartAccountId: "smart-1",
+                symbol: "USDC",
+                decimals: 6,
+                balance: "12.00",
+                balanceRaw: "12000000",
+                priceUsd: "1",
+                valueUsd: "12.00",
+              },
+            ],
           };
         },
       }),
@@ -105,11 +134,17 @@ describe("basket enrollment", () => {
     const result = await service.ownedPortfolios("user-1", owner);
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
-      portfolioId: "portfolio-1", slug: "magnificent-seven",
-      totalValueUsd: "42.00", usdcBalance: "12.00", partial: false,
+      portfolioId: "portfolio-1",
+      slug: "magnificent-seven",
+      totalValueUsd: "42.00",
+      usdcBalance: "12.00",
+      partial: false,
     });
     expect(result[1]).toMatchObject({
-      portfolioId: "unavailable", totalValueUsd: null, usdcBalance: null, partial: true,
+      portfolioId: "unavailable",
+      totalValueUsd: null,
+      usdcBalance: null,
+      partial: true,
     });
   });
 
@@ -180,7 +215,11 @@ it("rebalance submits only a portfolio verified against the signed-in owner and 
   const triggered: string[] = [];
   const recorded: unknown[] = [];
   const service = new BasketService({
-    store: store({ saveRebalance: async (action: unknown) => { recorded.push(action); } }),
+    store: store({
+      saveRebalance: async (action: unknown) => {
+        recorded.push(action);
+      },
+    }),
     provider: provider({
       portfolios: async () => [portfolio],
       portfolio: async () => ({ ...portfolio, schedule: null }),
@@ -190,7 +229,9 @@ it("rebalance submits only a portfolio verified against the signed-in owner and 
       },
     }),
   });
-  expect(await service.rebalance("magnificent-seven", owner, "user-1")).toMatchObject({ operationId: "op-1" });
+  expect(await service.rebalance("magnificent-seven", owner, "user-1")).toMatchObject({
+    operationId: "op-1",
+  });
   expect(triggered).toEqual(["portfolio-1"]);
   expect(recorded).toMatchObject([{ userId: "user-1", portfolioId: "portfolio-1", operationId: "op-1" }]);
   await expect(service.rebalance("magnificent-seven", `${owner}-other`)).rejects.toMatchObject({
@@ -206,23 +247,35 @@ it("confirms funding only for the signed-in wallet and this portfolio's destinat
   const entry = (who: string, rawAmount: bigint) => ({ owner: who, mint: USDC_MINT, rawAmount, decimals: 6 });
   const recorded: unknown[] = [];
   const service = new BasketService({
-    store: store({ confirmFunding: async (input: unknown) => { recorded.push(input); } }),
+    store: store({
+      confirmFunding: async (input: unknown) => {
+        recorded.push(input);
+      },
+    }),
     provider: provider({ portfolios: async () => [portfolio] }),
     history: {
-      tokenAccountsFor: async () => [], signatures: async () => [],
+      tokenAccountsFor: async () => [],
+      signatures: async () => [],
       transaction: async () => ({
-        signature, blockTime: 1_791_270_000, succeeded: true,
-        accountKeys: [sender, destination], feeLamports: 0n, preLamports: [], postLamports: [],
+        signature,
+        blockTime: 1_791_270_000,
+        succeeded: true,
+        accountKeys: [sender, destination],
+        feeLamports: 0n,
+        preLamports: [],
+        postLamports: [],
         preTokens: [entry(sender, 6_000_000n), entry(destination, 0n)],
         postTokens: [entry(sender, 1_000_000n), entry(destination, 5_000_000n)],
       }),
     },
   });
   expect(await service.confirmFunding("magnificent-seven", "user-1", owner, signature)).toMatchObject({
-    portfolioId: "portfolio-1", amountRaw: "5000000",
+    portfolioId: "portfolio-1",
+    amountRaw: "5000000",
   });
   expect(recorded).toMatchObject([{ userId: "user-1", portfolioId: "portfolio-1", amountRaw: 5_000_000n }]);
-  await expect(service.confirmFunding("magnificent-seven", "user-2", `${owner}-other`, signature))
-    .rejects.toMatchObject({ code: "portfolio_unavailable" });
+  await expect(
+    service.confirmFunding("magnificent-seven", "user-2", `${owner}-other`, signature),
+  ).rejects.toMatchObject({ code: "portfolio_unavailable" });
   expect(recorded).toHaveLength(1);
 });

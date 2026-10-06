@@ -200,7 +200,9 @@ export const PreparedBasketFunding = z.object({
 export type PreparedBasketFunding = z.infer<typeof PreparedBasketFunding>;
 export const ConfirmBasketFunding = z.object({ signature: z.string().min(80).max(90) });
 export const ConfirmedBasketFunding = z.object({
-  portfolioId: z.string(), signature: z.string(), amountRaw: z.string(),
+  portfolioId: z.string(),
+  signature: z.string(),
+  amountRaw: z.string(),
 });
 export const BasketExitMode = z.enum(["in_kind", "liquidate_usdc"]);
 export type BasketExitMode = z.infer<typeof BasketExitMode>;
@@ -230,8 +232,13 @@ export const SubmitBasketExit = z.object({
 export const SubmittedBasketExit = TriggeredBasketRebalance.extend({ mode: BasketExitMode });
 export type SubmittedBasketExit = z.infer<typeof SubmittedBasketExit>;
 export const ManagedBasketActivity = z.object({
-  id: z.string(), kind: z.string(), occurredAt: z.string(), title: z.string(),
-  subtitle: z.string(), amountUsd: z.string().nullable(), txSignature: z.string().nullable(),
+  id: z.string(),
+  kind: z.string(),
+  occurredAt: z.string(),
+  title: z.string(),
+  subtitle: z.string(),
+  amountUsd: z.string().nullable(),
+  txSignature: z.string().nullable(),
 });
 export type ManagedBasketActivity = z.infer<typeof ManagedBasketActivity>;
 
