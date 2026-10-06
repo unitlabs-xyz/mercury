@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
-import { MONTH_OPTIONS } from "@mercury/view";
+import { MONTH_OPTIONS, TYPE_OPTIONS, type Group } from "@mercury/view";
 import {
   ACTIVITY_SORTS,
   activeActivityCount,
@@ -10,12 +10,13 @@ import {
   useActivityFilters,
   useActivityMeta,
 } from "../src/activity/filters";
-import { Button, Chip, PanelHeader } from "../src/ui";
-import { color, font, space } from "../src/theme";
+import { Button, Chip, PanelHeader, SelectRow } from "../src/ui";
+import { color, font, radius, space } from "../src/theme";
 
 /**
- * Filter and sort the feed, in the system's sheet, as Invest's is: the order,
- * then the year and month the web's page offers as dropdowns. Every change
+ * Filter and sort the feed, in the system's sheet, as Invest's is: the order
+ * as chips, then what to show — type, year, month, the web page's three
+ * dropdowns — as rows that open the system's pull-down menu. Every change
  * applies at once behind the sheet, and the button says how many events are
  * left, so there is no apply step.
  */
@@ -42,36 +43,27 @@ export default function ActivityFilters() {
           </View>
         </Section>
 
-        {years.length > 0 && (
-          <Section title="Year">
-            <View style={s.wrap}>
-              <Chip
-                label="All years"
-                selected={f.year === "all"}
-                onPress={() => setActivityFilters({ year: "all" })}
-              />
-              {years.map((y) => (
-                <Chip
-                  key={y}
-                  label={y}
-                  selected={f.year === y}
-                  onPress={() => setActivityFilters({ year: y })}
-                />
-              ))}
-            </View>
-          </Section>
-        )}
-
-        <Section title="Month">
-          <View style={s.wrap}>
-            {MONTH_OPTIONS.map((m) => (
-              <Chip
-                key={m.value}
-                label={m.value === "all" ? m.label : m.label.slice(0, 3)}
-                selected={f.month === m.value}
-                onPress={() => setActivityFilters({ month: m.value })}
-              />
-            ))}
+        <Section title="Show">
+          <View style={s.panel}>
+            <SelectRow
+              label="Type"
+              value={f.group}
+              options={TYPE_OPTIONS}
+              onChange={(group) => setActivityFilters({ group: group as Group })}
+            />
+            <SelectRow
+              label="Year"
+              value={f.year}
+              options={[{ value: "all", label: "All years" }, ...years.map((y) => ({ value: y, label: y }))]}
+              onChange={(year) => setActivityFilters({ year })}
+            />
+            <SelectRow
+              label="Month"
+              value={f.month}
+              options={MONTH_OPTIONS}
+              onChange={(month) => setActivityFilters({ month })}
+              last
+            />
           </View>
         </Section>
       </View>
@@ -111,6 +103,8 @@ const s = StyleSheet.create({
   section: { gap: space.sm },
   sectionTitle: { fontFamily: font.medium, fontSize: 13, color: color.muted },
   wrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  /* One grey group of rows, as a Settings list is grouped. */
+  panel: { borderRadius: radius.md, backgroundColor: color.tile },
   footer: {
     flexDirection: "row",
     gap: space.sm,

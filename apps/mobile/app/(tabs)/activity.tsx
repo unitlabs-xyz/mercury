@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, Share, StyleSheet, Text as RNText, TextInpu
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { TabScene } from "../../src/ui/TabScene";
-import { GROUPS, filterEvents, groupByDay, toCsv, toEvent, type Group } from "@mercury/view";
+import { filterEvents, groupByDay, toCsv, toEvent } from "@mercury/view";
 import { useRouter } from "expo-router";
 import { useActivityFeed } from "../../src/api";
 import { useActions } from "../../src/actions/Actions";
@@ -15,7 +15,7 @@ import {
   sortEvents,
   useActivityFilters,
 } from "../../src/activity/filters";
-import { Button, Chip, Icon, IconButton, PressableScale, Surface, Text } from "../../src/ui";
+import { Button, Icon, IconButton, PressableScale, Surface, Text } from "../../src/ui";
 import { color, font, radius, space } from "../../src/theme";
 
 /** The web reads a hundred; so does this, and filters them on the phone. */
@@ -28,9 +28,9 @@ const PAGE = 30;
  * inside it, the days as small headings and the events as 60-high rows that
  * open in place to their details and the transaction behind them.
  *
- * The filters are the web's, phone-shaped: the type is a row of chips, search
- * sits above it beside a Filter button, and the year, month and order live in
- * a sheet behind that, as Invest's do.
+ * The filters are the web's, phone-shaped: search on the page, and beside it
+ * a Filter button for the rest — type, year, month and the order — in a
+ * sheet, as Invest's are.
  */
 function ActivityScreen() {
   const insets = useSafeAreaInsets();
@@ -38,7 +38,6 @@ function ActivityScreen() {
   const router = useRouter();
   const more = useActivityFilters();
   const feed = useActivityFeed(FEED);
-  const [group, setGroup] = useState<Group>("all");
   const [query, setQuery] = useState("");
   const [shown, setShown] = useState(PAGE);
   /* Only a pull shows the spinner. The feed refetches itself every few seconds,
@@ -51,8 +50,8 @@ function ActivityScreen() {
 
   const events = useMemo(() => (feed.data?.items ?? []).map(toEvent), [feed.data]);
   const filtered = useMemo(
-    () => sortEvents(filterEvents(events, group, more.year, more.month, query), more.sort),
-    [events, group, more, query],
+    () => sortEvents(filterEvents(events, more.group, more.year, more.month, query), more.sort),
+    [events, more, query],
   );
   /* By amount, days stop meaning anything: one list, under one heading. */
   const days = useMemo(
@@ -73,7 +72,6 @@ function ActivityScreen() {
   const active = activeActivityCount(more);
 
   const reset = () => {
-    setGroup("all");
     setQuery("");
     resetActivityFilters();
   };
@@ -137,25 +135,6 @@ function ActivityScreen() {
             )}
           </PressableScale>
         </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.chips}
-          style={s.chipRow}
-        >
-          {GROUPS.map((g) => (
-            <Chip
-              key={g.key}
-              label={g.label}
-              selected={group === g.key}
-              onPress={() => {
-                setGroup(g.key);
-                setShown(PAGE);
-              }}
-            />
-          ))}
-        </ScrollView>
 
         <View style={s.card}>
           <View style={s.panel}>
@@ -225,7 +204,12 @@ const s = StyleSheet.create({
   titleLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   /* One line under the title saying what the page is for, on every tab. */
   lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted, marginTop: 4 },
-  searchRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.screen },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginHorizontal: space.screen,
+  },
   search: {
     flex: 1,
     flexDirection: "row",
@@ -261,8 +245,6 @@ const s = StyleSheet.create({
   },
   badgeText: { fontFamily: font.medium, fontSize: 10, color: color.onBand },
   searchInput: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.ink, padding: 0 },
-  chipRow: { flexGrow: 0, marginTop: space.md },
-  chips: { gap: 6, paddingHorizontal: space.screen },
   /* The web's list: a white card, a grey panel inside it, the rows on the panel. */
   card: {
     marginTop: space.md,

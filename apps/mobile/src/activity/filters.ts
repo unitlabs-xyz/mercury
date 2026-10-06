@@ -1,16 +1,17 @@
 import { useSyncExternalStore } from "react";
-import type { Event } from "@mercury/view";
+import type { Event, Group } from "@mercury/view";
 
 /** How the feed is ordered. Newest is the feed's own order. */
 export type ActivitySort = "newest" | "oldest" | "largest";
 
 export interface ActivityFilters {
+  readonly group: Group;
   readonly year: string;
   readonly month: string;
   readonly sort: ActivitySort;
 }
 
-export const DEFAULT_ACTIVITY: ActivityFilters = { year: "all", month: "all", sort: "newest" };
+export const DEFAULT_ACTIVITY: ActivityFilters = { group: "all", year: "all", month: "all", sort: "newest" };
 
 export const ACTIVITY_SORTS: readonly { key: ActivitySort; label: string }[] = [
   { key: "newest", label: "Newest first" },
@@ -57,7 +58,10 @@ export const setActivityMeta = (next: ActivityMeta) => {
 };
 
 export const activeActivityCount = (f: ActivityFilters) =>
-  (f.year !== "all" ? 1 : 0) + (f.month !== "all" ? 1 : 0) + (f.sort !== "newest" ? 1 : 0);
+  (f.group !== "all" ? 1 : 0) +
+  (f.year !== "all" ? 1 : 0) +
+  (f.month !== "all" ? 1 : 0) +
+  (f.sort !== "newest" ? 1 : 0);
 
 /** "$1,234.50" or "12.5 USDC" → 1234.5. A row with no money in it sorts last. */
 const size = (e: Event) => (e.amount === null ? -1 : Number(e.amount.replace(/[^0-9.]/g, "")) || 0);
