@@ -68,6 +68,8 @@ export const useBasketTemplates = () =>
     queryFn: async () =>
       (await apiFetch<{ templates: ManagedBasketTemplate[] }>("/v1/basket-templates")).templates,
     staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
   });
 
 export const useBasketTemplate = (slug: string) =>
@@ -81,7 +83,10 @@ export const useBasketTemplate = (slug: string) =>
       ).template,
     enabled: slug.length > 0,
     retry: false,
-    staleTime: 60_000,
+    // Glider's modeled-performance response is cached by our API for five minutes.
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
   });
 
 export const useBasketInsights = (slug: string) =>
@@ -96,6 +101,8 @@ export const useBasketInsights = (slug: string) =>
     enabled: slug.length > 0,
     retry: false,
     staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
   });
 
 const enrollmentPath = (slug: string) => `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`;
@@ -118,6 +125,8 @@ export const useBasketEnrollment = (slug: string) => {
       slug.length > 0,
     retry: false,
     staleTime: 15_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 };
 
@@ -140,6 +149,7 @@ export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
     retry: false,
     staleTime: 15_000,
     refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 };
 
@@ -161,6 +171,7 @@ export const useBasketOperation = (slug: string, operationId: string | null, enr
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
       Boolean(wallets[0]?.address),
     retry: false,
+    refetchOnWindowFocus: true,
     refetchInterval: (query) => {
       const state = query.state.data?.state;
       return state && ["completed", "failed", "cancelled"].includes(state) ? false : 4_000;

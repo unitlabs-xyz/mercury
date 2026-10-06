@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
-import type { ManagedBasketTemplate } from "@mercury/types";
+import type { ManagedBasketPortfolioSnapshot, ManagedBasketTemplate } from "@mercury/types";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
 import { useMoney } from "../api/hooks";
@@ -23,6 +24,7 @@ import {
   GlideTable,
   MoveChip,
   RailCard,
+  RailFigure,
   RailHead,
   RangeSwitch,
   StatusChip,
@@ -65,6 +67,136 @@ const USDC_ASSET_ID =
 const assetBalance = (value: string) => {
   const amount = Number(value);
   return Number.isFinite(amount) ? amount.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—";
+};
+const countdownText = (remainingMs: number | null, paused: boolean) => {
+  if (paused) return "Paused";
+  if (remainingMs === null) return "—";
+  if (remainingMs === 0) return "Due now";
+  const minutes = Math.floor(Math.ceil(remainingMs / 1_000) / 60);
+  const days = Math.floor(minutes / 1_440);
+  const hours = Math.floor((minutes % 1_440) / 60);
+  return days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+};
+
+const RebalanceTimer = ({
+  schedule,
+  hasAccount,
+}: {
+  schedule: ManagedBasketPortfolioSnapshot["schedule"] | undefined;
+  hasAccount: boolean;
+}) => {
+  const [clock, setClock] = useState(() => Date.now());
+  const reducedMotion = useReducedMotion();
+  useEffect(() => {
+    const refreshClock = () => {
+      if (!document.hidden) setClock(Date.now());
+    };
+    const timer = window.setInterval(refreshClock, 1_000);
+    document.addEventListener("visibilitychange", refreshClock);
+    window.addEventListener("focus", refreshClock);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshClock);
+      window.removeEventListener("focus", refreshClock);
+    };
+  }, []);
+
+  const nextDue = schedule?.nextDueAt ? Date.parse(schedule.nextDueAt) : NaN;
+  const remainingMs = Number.isFinite(nextDue) ? Math.max(0, nextDue - clock) : null;
+  const intervalMs = schedule?.intervalMs ?? null;
+  const progress =
+    schedule?.status === "active" && remainingMs !== null && intervalMs && intervalMs > 0
+      ? Math.max(0, Math.min(100, 100 * (1 - remainingMs / intervalMs)))
+      : 0;
+  const countdown = countdownText(remainingMs, schedule?.status === "paused");
+  const seconds =
+    remainingMs !== null && remainingMs > 0 && schedule?.status === "active"
+      ? Math.ceil(remainingMs / 1_000) % 60
+      : null;
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 text-[12px] text-ds-muted">
+        <span>Time to next run</span>
+        <span>{schedule?.status === "active" ? "Automatic" : "Schedule"}</span>
+      </div>
+      <div
+        role="timer"
+        aria-label={`Time to next rebalance: ${countdown}${seconds === null ? "" : ` ${seconds} seconds`}`}
+        className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1"
+      >
+        <span aria-hidden="true">
+          <RailFigure value={<span className="tabular-nums">{countdown}</span>} />
+        </span>
+        {seconds !== null && (
+          <span
+            aria-hidden="true"
+            className="relative inline-block h-[1em] w-[3ch] text-right text-[14px] tabular-nums text-ds-ink"
+          >
+            <AnimatePresence initial={false}>
+              <motion.span
+                key={seconds}
+                initial={reducedMotion ? false : { opacity: 0, y: 1 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reducedMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -1 }}
+                transition={{ duration: reducedMotion ? 0 : 0.5, ease: "easeInOut" }}
+                className="absolute top-0 right-0"
+              >
+                {String(seconds).padStart(2, "0")}s
+              </motion.span>
+            </AnimatePresence>
+          </span>
+        )}
+        {remainingMs !== null && schedule?.status === "active" && (
+          <span aria-hidden="true" className="text-[12px] text-ds-muted">
+            remaining
+          </span>
+        )}
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3 text-[12px]">
+        <div>
+          <p className="text-ds-muted">Next scheduled</p>
+          <p className="mt-0.5 font-medium text-ds-ink">
+            {schedule?.status === "paused"
+              ? "Paused"
+              : Number.isFinite(nextDue)
+                ? new Date(nextDue).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+                : hasAccount
+                  ? "Not scheduled"
+                  : "Enroll to view"}
+          </p>
+        </div>
+        <div>
+          <p className="text-ds-muted">Last completed</p>
+          <p className="mt-0.5 font-medium text-ds-ink">
+            {schedule?.lastRebalanceAt
+              ? new Date(schedule.lastRebalanceAt).toLocaleDateString(undefined, { dateStyle: "medium" })
+              : "—"}
+          </p>
+        </div>
+      </div>
+      <div
+        role="progressbar"
+        aria-label="Scheduled rebalance cycle elapsed"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress)}
+        aria-valuetext={
+          schedule?.status === "paused"
+            ? "Schedule paused"
+            : schedule?.status === "active"
+              ? `${countdown} until next run`
+              : "Schedule unavailable"
+        }
+        className="mt-4 h-2.5 overflow-hidden rounded-full bg-white"
+      >
+        <div
+          className="h-full rounded-full bg-[#d1e7db] transition-[width] duration-1000 ease-linear motion-reduce:transition-none"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </>
+  );
 };
 
 const IconCluster = ({
@@ -116,7 +248,6 @@ export const Basket = () => {
     portfolioId: string;
     operationId: string;
   } | null>(null);
-  const [clock, setClock] = useState(() => Date.now());
   const enrollmentRequestActive = useRef(false);
   const fundingRequestActive = useRef(false);
   const rebalanceRequestActive = useRef(false);
@@ -145,10 +276,6 @@ export const Basket = () => {
     const operationId = sessionStorage.getItem(`basket-rebalance:${accountId}`);
     setRebalanceOperation(operationId ? { portfolioId: accountId, operationId } : null);
   }, [accountId]);
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
   useEffect(() => {
     if (rebalanceStatus.data?.state === "completed")
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
@@ -244,33 +371,6 @@ export const Basket = () => {
   const year = performance?.windows.find((item) => item.window === "12m");
   const account = signedIn ? portfolio.data : null;
   const schedule = account?.schedule;
-  const nextDue = schedule?.nextDueAt ? Date.parse(schedule.nextDueAt) : NaN;
-  const remainingMs = Number.isFinite(nextDue) ? Math.max(0, nextDue - clock) : null;
-  const intervalMs = schedule?.intervalMs ?? null;
-  const ringProgress =
-    schedule?.status !== "paused" && remainingMs !== null && intervalMs && intervalMs > 0
-      ? Math.round(100 * (1 - Math.min(1, remainingMs / intervalMs)))
-      : 0;
-  const countdown =
-    schedule?.status === "paused"
-      ? "Paused"
-      : remainingMs === null
-        ? "—"
-        : remainingMs === 0
-          ? "Due"
-          : remainingMs >= 86_400_000
-            ? String(Math.ceil(remainingMs / 86_400_000))
-            : remainingMs >= 3_600_000
-              ? String(Math.ceil(remainingMs / 3_600_000))
-              : String(Math.ceil(remainingMs / 60_000));
-  const countdownUnit =
-    schedule?.status === "paused" || remainingMs === null || remainingMs === 0
-      ? ""
-      : remainingMs >= 86_400_000
-        ? "days left"
-        : remainingMs >= 3_600_000
-          ? "hours left"
-          : "min left";
   const operationState = rebalanceStatus.data?.state;
   const operationActive =
     Boolean(operationId) &&
@@ -349,9 +449,9 @@ export const Basket = () => {
 
           <section
             aria-label="Strategy composition"
-            className="overflow-hidden rounded-xl bg-white p-5 sm:p-6"
+            className="min-w-0 overflow-hidden rounded-xl bg-white p-1"
           >
-            <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-4">
               <div>
                 <h2 className="text-[17px] font-medium text-ds-ink">Strategy composition</h2>
                 <p className="mt-1 text-[12px] text-ds-muted">
@@ -360,7 +460,7 @@ export const Basket = () => {
               </div>
               <span className="text-[12px] text-ds-muted">{allocations.length} target assets</span>
             </div>
-            <div className="mt-5 overflow-x-auto rounded-lg bg-ds-panel p-1">
+            <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
               <GlideTable
                 columns="grid-cols-[minmax(180px,1fr)_75px_95px_95px_75px_75px] gap-x-3"
                 minWidth="min-w-[680px]"
@@ -415,7 +515,7 @@ export const Basket = () => {
                 })}
               </GlideTable>
             </div>
-            <p className="mt-3 text-[11px] text-ds-muted">
+            <p className="mt-3 px-5 pb-4 text-[11px] text-ds-muted">
               Share price, company cap and 1D/1W moves describe the underlying companies, not the Solana
               tokens held by this strategy. Unavailable data is shown as —.
             </p>
@@ -644,7 +744,18 @@ export const Basket = () => {
             )}
           </RailCard>
           {enrolled && (
-            <RailList label="Your assets" meta="Value · share 1D">
+            <RailList
+              label="Your assets"
+              meta="Value · share 1D"
+              footer={
+                account && (
+                  <p className="text-[11px] leading-relaxed text-ds-muted">
+                    Value and balance are for your Solana tokens. Charts and 1D moves show underlying shares.
+                    Updated {new Date(account.fetchedAt).toLocaleString()}.
+                  </p>
+                )
+              }
+            >
               {portfolio.isPending ? (
                 <p className="px-3 py-5 text-[13px] text-ds-muted">Loading account balances…</p>
               ) : portfolio.isError ? (
@@ -725,91 +836,59 @@ export const Basket = () => {
                   )}
                 </>
               )}
-              {account && (
-                <p className="px-3 pt-2 pb-1 text-[11px] leading-relaxed text-ds-muted">
-                  Value and balance are for your Solana tokens. Charts and 1D moves show underlying shares.
-                  Updated {new Date(account.fetchedAt).toLocaleString()}.
-                </p>
-              )}
             </RailList>
           )}
-          <RailCard label="Rebalancing">
-            <RailHead title="Rebalancing" meta={schedule?.status === "paused" ? "Paused" : undefined} />
-            <div className="mt-5 flex items-center gap-5">
-              <div
-                role="img"
-                aria-label={
-                  countdownUnit
-                    ? `${countdown} ${countdownUnit} until scheduled rebalance`
-                    : `Scheduled rebalance: ${countdown}`
-                }
-                className="grid size-[104px] shrink-0 place-items-center rounded-full p-[6px] transition-[background] duration-700 motion-reduce:transition-none"
-                style={{ background: `conic-gradient(#85dca7 ${ringProgress}%, #e5e7e9 ${ringProgress}%)` }}
-              >
-                <div className="flex size-full flex-col items-center justify-center rounded-full bg-white text-center">
-                  <span className="text-[25px] leading-none font-medium text-ds-ink">{countdown}</span>
-                  {countdownUnit && <span className="mt-1 text-[11px] text-ds-muted">{countdownUnit}</span>}
-                </div>
-              </div>
-              <div className="min-w-0 text-[12px]">
-                <p className="text-ds-muted">Next rebalance</p>
-                <p className="mt-1 font-medium text-ds-ink">
-                  {schedule?.status === "paused"
-                    ? "Paused"
-                    : Number.isFinite(nextDue)
-                      ? new Date(nextDue).toLocaleString(undefined, {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })
-                      : "Not scheduled yet"}
-                </p>
-                <p className="mt-1 text-ds-muted">
-                  {schedule?.frequency ? `Rebalances ${schedule.frequency}` : "Schedule unavailable"}
-                </p>
-              </div>
+          <section aria-label="Rebalancing" className="min-w-0 rounded-xl bg-white p-1">
+            <div className="px-5 pt-4">
+              <RailHead
+                title="Rebalancing"
+                meta={schedule?.status === "paused" ? "Paused" : (schedule?.frequency ?? undefined)}
+              />
             </div>
-            {operationId && (
-              <div className="mt-5 rounded-lg bg-ds-panel px-3 py-2.5 text-[12px]">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-ds-muted">Manual rebalance</span>
-                  <span className="font-medium capitalize text-ds-ink">
-                    {rebalanceStatus.isError
-                      ? "Status unavailable"
-                      : (operationState?.replaceAll("_", " ") ?? "Checking…")}
-                  </span>
+            <div className="mt-[11px] rounded-lg bg-ds-panel px-5 pt-4 pb-4">
+              <RebalanceTimer schedule={schedule} hasAccount={Boolean(account)} />
+              {operationId && (
+                <div className="mt-5 border-t border-ds-divider pt-4 text-[12px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ds-muted">Manual rebalance</span>
+                    <span className="font-medium capitalize text-ds-ink">
+                      {rebalanceStatus.isError
+                        ? "Status unavailable"
+                        : (operationState?.replaceAll("_", " ") ?? "Checking…")}
+                    </span>
+                  </div>
+                  {rebalanceStatus.data?.error && (
+                    <p className="mt-2 text-ds-chip-warn">{rebalanceStatus.data.error}</p>
+                  )}
+                  {rebalanceStatus.isError && (
+                    <button
+                      type="button"
+                      onClick={() => void rebalanceStatus.refetch()}
+                      className="mt-2 font-medium text-ds-link hover:underline"
+                    >
+                      Check status again
+                    </button>
+                  )}
                 </div>
-                {rebalanceStatus.data?.error && (
-                  <p className="mt-2 text-ds-chip-warn">{rebalanceStatus.data.error}</p>
-                )}
-                {rebalanceStatus.isError && (
-                  <button
-                    type="button"
-                    onClick={() => void rebalanceStatus.refetch()}
-                    className="mt-2 font-medium text-ds-link hover:underline"
-                  >
-                    Check status again
-                  </button>
-                )}
-              </div>
-            )}
-            <Button
-              size="lg"
-              className="mt-5 w-full"
-              disabled={
-                !account || template.status === "disabled" || operationActive || rebalanceAction.isPending
-              }
-              onClick={() => {
-                rebalanceAction.reset();
-                setRebalanceOpen(true);
-              }}
-            >
-              {operationActive ? "Rebalance in progress" : "Rebalance now"}
-            </Button>
-          </RailCard>
-          <RailCard label="Recent activity">
-            <RailHead title="Recent activity" />
+              )}
+              <Button
+                size="lg"
+                className="mt-5 w-full"
+                disabled={
+                  !account || template.status === "disabled" || operationActive || rebalanceAction.isPending
+                }
+                onClick={() => {
+                  rebalanceAction.reset();
+                  setRebalanceOpen(true);
+                }}
+              >
+                {operationActive ? "Rebalance in progress" : "Rebalance now"}
+              </Button>
+            </div>
+          </section>
+          <RailList label="Recent activity">
             {rebalanceStatus.data ? (
-              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-4 text-[12px]">
+              <div className="px-4 py-4 text-[12px]">
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium text-ds-ink">Manual rebalance</span>
                   <span className="capitalize text-ds-muted">
@@ -821,14 +900,14 @@ export const Basket = () => {
                 </p>
               </div>
             ) : (
-              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
+              <div className="px-4 py-5 text-center">
                 <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
                 <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
                   Glider does not provide a portfolio operation-history list yet.
                 </p>
               </div>
             )}
-          </RailCard>
+          </RailList>
           <Link to="/baskets" className="text-[13px] font-medium text-ds-link hover:underline">
             Explore more strategies →
           </Link>

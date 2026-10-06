@@ -96,6 +96,7 @@ export const RailList = ({
   to,
   linkLabel,
   children,
+  footer,
 }: {
   label: string;
   meta?: string | undefined;
@@ -104,6 +105,7 @@ export const RailList = ({
   to?: string;
   linkLabel?: string;
   children: ReactNode;
+  footer?: ReactNode;
 }) => (
   <section aria-label={label} className="min-w-0 rounded-xl bg-white p-1">
     <div className="px-5 pt-4">
@@ -111,6 +113,7 @@ export const RailList = ({
       {controls && <div className="mt-[15px]">{controls}</div>}
     </div>
     <div className={`${controls ? "mt-3" : "mt-[11px]"} rounded-lg bg-ds-panel p-1`}>{children}</div>
+    {footer && <div className="px-5 pt-3 pb-4">{footer}</div>}
   </section>
 );
 
