@@ -1,5 +1,14 @@
 import { z } from "zod";
-import { ApiError, Decision, MarketStatus, ManagedBasketPortfolio, PreparedBasketEnrollment, SubmitBasketEnrollment } from "@mercury/types";
+import {
+  ApiError,
+  Decision,
+  MarketStatus,
+  ManagedBasketPortfolio,
+  PreparedBasketEnrollment,
+  SubmitBasketEnrollment,
+  PrepareBasketFunding,
+  PreparedBasketFunding,
+} from "@mercury/types";
 
 export class MercuryError extends Error {
   constructor(
@@ -84,7 +93,8 @@ export class MercuryClient {
   private async call<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.options.token !== undefined) headers.authorization = `Bearer ${this.options.token}`;
-    if (this.options.identityToken !== undefined) headers["x-privy-identity-token"] = this.options.identityToken;
+    if (this.options.identityToken !== undefined)
+      headers["x-privy-identity-token"] = this.options.identityToken;
     if (this.options.walletAddress !== undefined) headers["x-wallet-address"] = this.options.walletAddress;
 
     const res = await this.doFetch(`${this.options.baseUrl}${path}`, {
@@ -124,15 +134,28 @@ export class MercuryClient {
     });
 
   basketEnrollment = (slug: string) =>
-    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
-      z.object({ portfolio: ManagedBasketPortfolio.nullable() }));
+    this.call(
+      `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
+      z.object({ portfolio: ManagedBasketPortfolio.nullable() }),
+    );
 
   prepareBasketEnrollment = (slug: string) =>
-    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/enrollment/prepare`,
-      PreparedBasketEnrollment, { method: "POST" });
+    this.call(
+      `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment/prepare`,
+      PreparedBasketEnrollment,
+      { method: "POST" },
+    );
 
   submitBasketEnrollment = (slug: string, body: z.infer<typeof SubmitBasketEnrollment>) =>
-    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
+    this.call(
+      `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
       z.object({ portfolio: ManagedBasketPortfolio }),
-      { method: "POST", body: JSON.stringify(SubmitBasketEnrollment.parse(body)) });
+      { method: "POST", body: JSON.stringify(SubmitBasketEnrollment.parse(body)) },
+    );
+
+  prepareBasketFunding = (slug: string, amountUsd: string) =>
+    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/prepare`, PreparedBasketFunding, {
+      method: "POST",
+      body: JSON.stringify(PrepareBasketFunding.parse({ amountUsd })),
+    });
 }

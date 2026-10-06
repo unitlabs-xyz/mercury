@@ -3,7 +3,15 @@ import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import type { ManagedBasketTemplate } from "@mercury/types";
 import { usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
-import { basketEnrollmentEnabled, useBasketEnrollment, useBasketEnrollmentAction, useBasketInsights, useBasketTemplate } from "../api/baskets";
+import { useMoney } from "../api/hooks";
+import {
+  basketEnrollmentEnabled,
+  useBasketEnrollment,
+  useBasketEnrollmentAction,
+  useBasketFundingAction,
+  useBasketInsights,
+  useBasketTemplate,
+} from "../api/baskets";
 import { useHistories, useInstruments, usePrices, type Instrument } from "../market/hooks";
 import { Chevron, GlideTable, MoveChip, RailCard, RailHead, RangeSwitch, StatusChip } from "../ui/ds";
 import { AppShell } from "./AppShell";
@@ -11,8 +19,7 @@ import { DotChart } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
-import { EnrollmentRail } from "./baskets/EnrollmentRail";
-import { EnrollmentSheet } from "./baskets/EnrollmentSheet";
+import { EnrollmentRail, EnrollmentSheet, FundingSheet } from "./baskets/Ticket";
 import { modeledSeries } from "./baskets/performance";
 
 type Range = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
@@ -77,15 +84,21 @@ export const Basket = () => {
   const { slug = "" } = useParams();
   const [range, setRange] = useState<Range>("1Y");
   const [enrollmentOpen, setEnrollmentOpen] = useState(false);
+  const [fundingOpen, setFundingOpen] = useState(false);
+  const [fundingReview, setFundingReview] = useState(false);
+  const [fundingAmount, setFundingAmount] = useState("100");
   const [checkingEnrollment, setCheckingEnrollment] = useState(false);
   const enrollmentRequestActive = useRef(false);
+  const fundingRequestActive = useRef(false);
   const result = useBasketTemplate(slug);
   const insights = useBasketInsights(slug);
   const { ready, authenticated } = usePrivy();
   const { identityToken } = useIdentityToken();
   const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null);
   const enrollment = useBasketEnrollment(slug);
+  const money = useMoney();
   const enrollAction = useBasketEnrollmentAction(slug);
+  const fundingAction = useBasketFundingAction(slug);
   const template = result.data;
   const tickers = useMemo(() => template?.allocations.map((item) => item.ticker) ?? [], [template]);
   const mints = useMemo(() => template?.allocations.map((item) => item.mint) ?? [], [template]);
@@ -117,6 +130,24 @@ export const Basket = () => {
     } finally {
       setCheckingEnrollment(false);
       enrollmentRequestActive.current = false;
+    }
+  };
+  const closeFunding = () => {
+    if (fundingAction.isPending) return;
+    setFundingOpen(false);
+    setFundingReview(false);
+    fundingAction.reset();
+  };
+  const confirmFunding = async () => {
+    const portfolio = enrollment.data;
+    if (!portfolio || fundingRequestActive.current) return;
+    fundingRequestActive.current = true;
+    try {
+      await fundingAction.mutateAsync({ amountUsd: fundingAmount, portfolio });
+    } catch {
+      // The review sheet retains the error and prevents an unexamined retry.
+    } finally {
+      fundingRequestActive.current = false;
     }
   };
 
@@ -165,7 +196,11 @@ export const Basket = () => {
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-[20px] leading-tight font-medium text-ds-ink">{name}</h1>
                     <StatusChip tone={template.status === "enabled" ? "up" : "neutral"} size="md">
-                      {template.status === "enabled" ? "Available" : template.status === "candidate" ? "Enrollment pilot" : "Preview"}
+                      {template.status === "enabled"
+                        ? "Available"
+                        : template.status === "candidate"
+                          ? "Enrollment pilot"
+                          : "Preview"}
                     </StatusChip>
                   </div>
                   <p className="mt-2 text-[13px] text-ds-muted">Glider strategy · Solana</p>
@@ -426,8 +461,8 @@ export const Basket = () => {
             <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
               These are tokenized assets held in a user-owned Glider smart account, not shares in a pooled
               basket token. Prices, available liquidity, swap costs and actual execution can differ from the
-              modeled strategy. This template is not available for funding until its end-to-end lifecycle has
-              been verified.
+              modeled strategy. Funding is being piloted; this exact strategy has not yet passed a complete
+              funded entry-to-exit test. USDC can remain uninvested until a rebalance executes.
             </p>
           </details>
         </div>
@@ -436,15 +471,21 @@ export const Basket = () => {
           <EnrollmentRail
             name={name}
             assetCount={allocations.length}
-            portfolio={signedIn ? enrollment.data ?? null : null}
+            portfolio={signedIn ? (enrollment.data ?? null) : null}
             signedIn={signedIn}
             checking={enrollment.isLoading}
             blocked={template.status === "disabled"}
             busy={enrollmentBusy}
             error={enrollment.error?.message}
             onReview={() => {
-              enrollAction.reset();
-              setEnrollmentOpen(true);
+              if (enrollment.data) {
+                fundingAction.reset();
+                setFundingReview(false);
+                setFundingOpen(true);
+              } else {
+                enrollAction.reset();
+                setEnrollmentOpen(true);
+              }
             }}
           />
           <RailCard label="Your position">
@@ -491,6 +532,26 @@ export const Basket = () => {
         onClose={closeEnrollment}
         onConfirm={() => void confirmEnrollment()}
       />
+      {enrollment.data && (
+        <FundingSheet
+          open={fundingOpen}
+          name={name}
+          amount={fundingAmount}
+          onAmount={setFundingAmount}
+          cash={money.data ? Number(money.data.balanceUsd) : null}
+          cashUnavailable={money.isError}
+          portfolio={enrollment.data}
+          review={fundingReview}
+          busy={fundingAction.isPending}
+          walletReady={fundingAction.walletReady}
+          receipt={fundingAction.data ?? null}
+          error={fundingAction.error?.message}
+          onReview={() => setFundingReview(true)}
+          onBack={() => setFundingReview(false)}
+          onConfirm={() => void confirmFunding()}
+          onClose={closeFunding}
+        />
+      )}
     </AppShell>
   );
 };

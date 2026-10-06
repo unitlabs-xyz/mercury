@@ -16,6 +16,7 @@ Catalog tags drive the web discovery shelves: exactly one theme or `pros` groupi
 - Existing [Symmetry baskets](../../services/api/src/baskets.ts) and [basket types](../../packages/types/src/baskets.ts) assume a pooled token. The [web discovery](../../apps/web/src/app/Baskets.tsx) and [detail](../../apps/web/src/app/Basket.tsx) now read Glider templates instead; do not reuse synthetic NAV as portfolio performance.
 - The [buy/order API](../../services/api/src/app.ts), [typed order contracts](../../packages/types/src/orders.ts), [client sequence](../../packages/view/src/order.ts), and [web signing wrapper](../../apps/web/src/api/orders.ts) are references for request boundaries and wallet-signing UX, not Glider execution semantics. Glider enrollment and portfolio operations require their own typed contracts and status handling.
 - Use authenticated owner identity, Glider smart-account IDs, and operation state as the authority for portfolio actions. Add persistence only for data Glider cannot supply or for an explicit audit requirement; avoid duplicating provider positions or catalog allocations in Postgres.
+- Solana funding uses the enrolled portfolio's Glider `accountId` (or `depositAccountId` when supplied) as the USDC destination. The prior NVDAx/TSLAx pilot funded an `accountId` without `depositAccountId`, then rebalanced and exited successfully. Prepare an owner-paid, simulated transfer; show the exact amount and destination before wallet signing. A confirmed transfer is not a confirmed investment.
 
 ## Release gate
 

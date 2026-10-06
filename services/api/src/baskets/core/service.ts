@@ -1,14 +1,39 @@
 import type { ManagedBasketInsights, ManagedBasketTemplate } from "@mercury/types";
-import type { BasketProvider, BasketStore } from "./deps.js";
+import {
+  BasketFundingPreflightError,
+  type BasketFunding,
+  type BasketProvider,
+  type BasketStore,
+} from "./deps.js";
 import type { BasketDefinition, ProviderBasket, StrategyPerformance, SyncResult } from "./primitives.js";
 
 const allocations = (assets: readonly { assetId: string; weightBps: number }[]) =>
   assets.map(({ assetId, weightBps }) => `${assetId}:${weightBps}`).sort();
 
 export class BasketEnrollmentError extends Error {
-  constructor(readonly code: string, readonly status: 403 | 409 | 410 | 503, message: string) {
+  constructor(
+    readonly code: string,
+    readonly status: 400 | 403 | 409 | 410 | 422 | 503,
+    message: string,
+  ) {
     super(message);
   }
+}
+
+const SOLANA_ACCOUNT = /^solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+function usdcRaw(amount: string): bigint {
+  if (!/^(?:0|[1-9]\d{0,8})(?:\.\d{1,6})?$/.test(amount))
+    throw new BasketEnrollmentError(
+      "invalid_amount",
+      400,
+      "Enter a valid USDC amount (up to six decimal places).",
+    );
+  const [whole = "0", fraction = ""] = amount.split(".");
+  const raw = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0") || "0");
+  if (raw === 0n)
+    throw new BasketEnrollmentError("invalid_amount", 400, "Enter an amount greater than zero.");
+  return raw;
 }
 
 function matches(expected: BasketDefinition, actual: ProviderBasket): boolean {
@@ -23,13 +48,16 @@ export class BasketService {
   private readonly performanceCache = new Map<string, { until: number; value: StrategyPerformance | null }>();
   private readonly insightsCache = new Map<string, { until: number; value: ManagedBasketInsights }>();
 
-  constructor(private readonly deps: { provider?: BasketProvider; store: BasketStore }) {}
+  constructor(
+    private readonly deps: { provider?: BasketProvider; store: BasketStore; funding?: BasketFunding },
+  ) {}
 
   private async templateForEnrollment(slug: string) {
     const template = (await this.deps.store.load()).find((item) => item.slug === slug);
     if (!template?.providerId || template.status === "disabled")
       throw new BasketEnrollmentError("enrollment_unavailable", 409, "Basket enrollment is unavailable.");
-    if (!this.deps.provider) throw new BasketEnrollmentError("provider_unavailable", 503, "Glider is not configured.");
+    if (!this.deps.provider)
+      throw new BasketEnrollmentError("provider_unavailable", 503, "Glider is not configured.");
     return { template, provider: this.deps.provider };
   }
 
@@ -38,14 +66,60 @@ export class BasketService {
     return (await provider.portfolios(ownerAccountId, template.providerId!))[0] ?? null;
   }
 
+  async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string) {
+    const amountRaw = usdcRaw(amountUsd);
+    const { template, provider } = await this.templateForEnrollment(slug);
+    if (!this.deps.funding)
+      throw new BasketEnrollmentError("funding_unavailable", 503, "Solana funding is not configured.");
+    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!)).find(
+      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
+    );
+    const account = portfolio?.smartAccounts.find((item) => SOLANA_ACCOUNT.test(item.accountId));
+    const destinationAccountId = account?.depositAccountId ?? account?.accountId;
+    if (!portfolio || !destinationAccountId || !SOLANA_ACCOUNT.test(destinationAccountId))
+      throw new BasketEnrollmentError(
+        "funding_unavailable",
+        409,
+        "No verified Solana funding account is available for this portfolio.",
+      );
+    let prepared;
+    try {
+      prepared = await this.deps.funding.prepare(ownerAccountId, destinationAccountId, amountRaw);
+    } catch (error) {
+      if (error instanceof BasketFundingPreflightError)
+        throw new BasketEnrollmentError(
+          "funding_preflight_failed",
+          422,
+          "The USDC transfer could not be simulated. Check your USDC and SOL balances.",
+        );
+      throw error;
+    }
+    return {
+      portfolioId: portfolio.portfolioId,
+      destinationAccountId,
+      amountRaw: amountRaw.toString(),
+      transaction: prepared.transaction,
+      expiresAt: prepared.expiresAt.toISOString(),
+    };
+  }
+
   async prepareEnrollment(slug: string, userId: string, ownerAccountId: string) {
     const { template, provider } = await this.templateForEnrollment(slug);
     if ((await provider.portfolios(ownerAccountId, template.providerId!)).length > 0)
-      throw new BasketEnrollmentError("already_enrolled", 409, "This wallet already has a portfolio for this strategy.");
+      throw new BasketEnrollmentError(
+        "already_enrolled",
+        409,
+        "This wallet already has a portfolio for this strategy.",
+      );
     const challenge = await provider.prepareEnrollment(ownerAccountId, template.providerId!);
     const expiresAt = new Date(Date.now() + (challenge.solanaTransaction ? 90_000 : 10 * 60_000));
     const intentId = await this.deps.store.saveEnrollmentIntent({
-      userId, slug, ownerAccountId, strategyId: template.providerId!, challenge, expiresAt,
+      userId,
+      slug,
+      ownerAccountId,
+      strategyId: template.providerId!,
+      challenge,
+      expiresAt,
     });
     return {
       intentId,
@@ -55,18 +129,41 @@ export class BasketService {
     };
   }
 
-  async submitEnrollment(slug: string, userId: string, ownerAccountId: string, intentId: string, signed: string) {
+  async submitEnrollment(
+    slug: string,
+    userId: string,
+    ownerAccountId: string,
+    intentId: string,
+    signed: string,
+  ) {
     const { template, provider } = await this.templateForEnrollment(slug);
     const intent = await this.deps.store.enrollmentIntent(intentId);
     if (
-      !intent || intent.userId !== userId || intent.slug !== slug || intent.ownerAccountId !== ownerAccountId ||
-      intent.strategyId !== template.providerId || intent.expiresAt.getTime() <= Date.now()
-    ) throw new BasketEnrollmentError("authorization_invalid", 403, "Enrollment authorization is invalid or expired.");
+      !intent ||
+      intent.userId !== userId ||
+      intent.slug !== slug ||
+      intent.ownerAccountId !== ownerAccountId ||
+      intent.strategyId !== template.providerId ||
+      intent.expiresAt.getTime() <= Date.now()
+    )
+      throw new BasketEnrollmentError(
+        "authorization_invalid",
+        403,
+        "Enrollment authorization is invalid or expired.",
+      );
     if (intent.portfolioId) {
-      const existing = (await provider.portfolios(ownerAccountId, intent.strategyId)).find((p) => p.portfolioId === intent.portfolioId);
+      const existing = (await provider.portfolios(ownerAccountId, intent.strategyId)).find(
+        (p) => p.portfolioId === intent.portfolioId,
+      );
       if (existing) return existing;
     }
-    const portfolio = await provider.enroll(ownerAccountId, intent.strategyId, intent.challenge, signed, template.name);
+    const portfolio = await provider.enroll(
+      ownerAccountId,
+      intent.strategyId,
+      intent.challenge,
+      signed,
+      template.name,
+    );
     await this.deps.store.completeEnrollmentIntent(intentId, portfolio.portfolioId);
     return portfolio;
   }

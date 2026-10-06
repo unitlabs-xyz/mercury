@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BasketService } from "../service.js";
 import { JsonBasketStore } from "../../glider/store.js";
-import type { BasketProvider } from "../deps.js";
+import { BasketFundingPreflightError, type BasketProvider } from "../deps.js";
 import type { BasketTemplate } from "../primitives.js";
 
 const basket: BasketTemplate = {
@@ -47,17 +47,29 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   effectiveSwapFeeBps: async () => {
     throw new Error("unexpected fee read");
   },
-  portfolios: async () => { throw new Error("unexpected portfolio read"); },
-  prepareEnrollment: async () => { throw new Error("unexpected enrollment prepare"); },
-  enroll: async () => { throw new Error("unexpected enrollment submit"); },
+  portfolios: async () => {
+    throw new Error("unexpected portfolio read");
+  },
+  prepareEnrollment: async () => {
+    throw new Error("unexpected enrollment prepare");
+  },
+  enroll: async () => {
+    throw new Error("unexpected enrollment submit");
+  },
   ...changes,
 });
 const store = (definition: BasketTemplate) => ({
   load: async () => [definition],
   withSyncLock: async <T>(work: () => Promise<T>) => work(),
-  saveEnrollmentIntent: async () => { throw new Error("unexpected enrollment save"); },
-  enrollmentIntent: async () => { throw new Error("unexpected enrollment read"); },
-  completeEnrollmentIntent: async () => { throw new Error("unexpected enrollment completion"); },
+  saveEnrollmentIntent: async () => {
+    throw new Error("unexpected enrollment save");
+  },
+  enrollmentIntent: async () => {
+    throw new Error("unexpected enrollment read");
+  },
+  completeEnrollmentIntent: async () => {
+    throw new Error("unexpected enrollment completion");
+  },
 });
 
 describe("BasketService sync", () => {
@@ -283,4 +295,89 @@ it("keeps the catalog available when performance cannot be read", async () => {
   expect(await service.getTemplate("nvidia")).toEqual(
     expect.objectContaining({ slug: "nvidia", performance: null, canEnroll: true }),
   );
+});
+
+it("prepares funding only for the signed-in owner's Glider Solana account", async () => {
+  const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:11111111111111111111111111111111";
+  const destination = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:22222222222222222222222222222222";
+  const service = new BasketService({
+    store: store(basket),
+    provider: provider({
+      portfolios: async () => [
+        {
+          portfolioId: "portfolio-1",
+          ownerAccountId: owner,
+          strategyId: "remote-1",
+          smartAccounts: [{ accountId: destination }],
+        },
+      ],
+    }),
+    funding: {
+      prepare: async (_owner, account, amountRaw) => ({
+        transaction: `${account}:${amountRaw}`,
+        expiresAt: new Date("2026-10-06T12:00:00Z"),
+      }),
+    },
+  });
+
+  expect(await service.prepareFunding("nvidia", owner, "12.345678")).toEqual({
+    portfolioId: "portfolio-1",
+    destinationAccountId: destination,
+    amountRaw: "12345678",
+    transaction: `${destination}:12345678`,
+    expiresAt: "2026-10-06T12:00:00.000Z",
+  });
+});
+
+it("refuses funding when Glider returns a portfolio owned by another wallet", async () => {
+  const service = new BasketService({
+    store: store(basket),
+    provider: provider({
+      portfolios: async () => [
+        {
+          portfolioId: "wrong-owner",
+          ownerAccountId: "solana:other:Attacker",
+          strategyId: "remote-1",
+          smartAccounts: [{ accountId: "solana:other:AttackerVault" }],
+        },
+      ],
+    }),
+    funding: {
+      prepare: async () => {
+        throw new Error("must not build transfer");
+      },
+    },
+  });
+  await expect(service.prepareFunding("nvidia", "solana:mainnet:Owner", "1")).rejects.toMatchObject({
+    code: "funding_unavailable",
+  });
+});
+
+it("reports a failed transfer simulation without presenting it as an enrollment failure", async () => {
+  const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:11111111111111111111111111111111";
+  const service = new BasketService({
+    store: store(basket),
+    provider: provider({
+      portfolios: async () => [
+        {
+          portfolioId: "portfolio-1",
+          ownerAccountId: owner,
+          strategyId: "remote-1",
+          smartAccounts: [
+            { accountId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:22222222222222222222222222222222" },
+          ],
+        },
+      ],
+    }),
+    funding: {
+      prepare: async () => {
+        throw new BasketFundingPreflightError();
+      },
+    },
+  });
+
+  await expect(service.prepareFunding("nvidia", owner, "1")).rejects.toMatchObject({
+    code: "funding_preflight_failed",
+    status: 422,
+  });
 });

@@ -51,6 +51,7 @@ import type { ReconcileDeps } from "./portfolio/apply.js";
 import { BasketService } from "./baskets/core/service.js";
 import { GliderClient } from "./baskets/glider/client.js";
 import { JsonBasketStore } from "./baskets/glider/store.js";
+import { SolanaBasketFunding } from "./baskets/glider/funding.js";
 
 export interface Deps {
   readonly registry: TokenRegistry;
@@ -272,6 +273,7 @@ export function buildReadDeps(
   return {
     basketTemplates: new BasketService({
       store: new JsonBasketStore(config.databaseUrl, undefined, db),
+      funding: new SolanaBasketFunding(config.solanaRpcUrl),
       ...(config.gliderApiKey === undefined ? {} : { provider: new GliderClient(config.gliderApiKey) }),
     }),
     instruments: {

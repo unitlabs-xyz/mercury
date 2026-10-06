@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { ManagedBasketTemplate } from "@mercury/types";
 import { BasketService } from "../baskets/core/service.js";
 import { JsonBasketStore } from "../baskets/glider/store.js";
-import { basketTemplateRoutes } from "./basket-templates.js";
+import { basketRoutes } from "./basket.js";
 
-const routes = basketTemplateRoutes(new BasketService({ store: new JsonBasketStore("postgres://unused") }));
+const routes = basketRoutes(
+  new BasketService({ store: new JsonBasketStore("postgres://unused") }),
+  async (c) => c.json({ error: { code: "unauthenticated" } }, 401),
+);
 
 describe("basket template routes", () => {
   it("lists candidate Solana templates without requiring a wallet", async () => {
@@ -48,4 +51,56 @@ describe("basket template routes", () => {
     expect(template.performance).toBeNull();
     expect(template.tags).toContain("theme:technology");
   });
+});
+
+describe("authenticated basket enrollment", () => {
+  it("uses the verified wallet for enrollment lookup, never a requested owner", async () => {
+    let lookedUpOwner = "";
+    const service = {
+      enrollment: async (_slug: string, owner: string) => {
+        lookedUpOwner = owner;
+        return null;
+      },
+    } as BasketService;
+    const app = basketRoutes(service, async (c, next) => {
+      c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+      await next();
+    });
+    const response = await app.request(
+      "/v1/basket-templates/magnificent-seven/enrollment?ownerAccountId=AttackerWallet",
+    );
+    expect(response.status).toBe(200);
+    expect(lookedUpOwner).toBe("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet");
+  });
+});
+
+it("prepares funding for the verified wallet and ignores a client-supplied destination", async () => {
+  let observed: unknown;
+  const service = {
+    prepareFunding: async (...args: unknown[]) => {
+      observed = args;
+      return {
+        portfolioId: "portfolio-1",
+        destinationAccountId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:Vault",
+        amountRaw: "12000000",
+        transaction: "unsigned",
+        expiresAt: "2026-10-06T12:00:00.000Z",
+      };
+    },
+  } as BasketService;
+  const app = basketRoutes(service, async (c, next) => {
+    c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+    await next();
+  });
+  const response = await app.request("/v1/basket-templates/magnificent-seven/funding/prepare", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ amountUsd: "12", destinationAccountId: "AttackerWallet" }),
+  });
+  expect(response.status).toBe(200);
+  expect(observed).toEqual([
+    "magnificent-seven",
+    "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet",
+    "12",
+  ]);
 });

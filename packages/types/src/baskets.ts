@@ -114,6 +114,16 @@ export const SubmitBasketEnrollment = z.object({
   signed: z.string().min(1).max(20_000),
 });
 
+export const PrepareBasketFunding = z.object({ amountUsd: z.string().min(1).max(16) });
+export const PreparedBasketFunding = z.object({
+  portfolioId: z.string(),
+  destinationAccountId: z.string(),
+  amountRaw: z.string(),
+  transaction: z.string(),
+  expiresAt: z.string(),
+});
+export type PreparedBasketFunding = z.infer<typeof PreparedBasketFunding>;
+
 export const InvestBasketRequest = z.object({ usdAmount: Usd, acceptQueued: z.boolean().default(false) });
 
 export const PlanCadence = z.enum(["weekly", "monthly"]);

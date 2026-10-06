@@ -1,8 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { getBase58Decoder } from "@solana/kit";
-import type { ManagedBasketInsights, ManagedBasketTemplate, ManagedBasketPortfolio, PreparedBasketEnrollment } from "@mercury/types";
+import type {
+  ManagedBasketInsights,
+  ManagedBasketTemplate,
+  ManagedBasketPortfolio,
+  PreparedBasketEnrollment,
+} from "@mercury/types";
+import type { PreparedBasketFunding } from "@mercury/types";
 import { useSignedIn } from "./hooks";
 import { apiFetch } from "./client";
 
@@ -100,8 +107,12 @@ export const useBasketEnrollment = (slug: string) => {
   const walletAddress = wallets[0]?.address;
   return useQuery({
     queryKey: ["api", "basket-enrollment", slug, user?.id, walletAddress],
-    queryFn: async () => (await apiFetch<{ portfolio: ManagedBasketPortfolio | null }>(enrollmentPath(slug))).portfolio,
-    enabled: basketEnrollmentEnabled(ready, authenticated, identityToken !== null) && Boolean(walletAddress) && slug.length > 0,
+    queryFn: async () =>
+      (await apiFetch<{ portfolio: ManagedBasketPortfolio | null }>(enrollmentPath(slug))).portfolio,
+    enabled:
+      basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
+      Boolean(walletAddress) &&
+      slug.length > 0,
     retry: false,
     staleTime: 15_000,
   });
@@ -117,9 +128,10 @@ interface EnrollmentIo {
 /** One challenge, one wallet signature, one submission; Glider never receives a browser-held API key. */
 export async function enrollBasket(_slug: string, io: EnrollmentIo): Promise<ManagedBasketPortfolio> {
   const prepared = await io.prepare();
-  const signed = prepared.authorization.kind === "solana-message"
-    ? await io.signMessage(prepared.authorization.text)
-    : await io.signTransaction(prepared.authorization.transaction);
+  const signed =
+    prepared.authorization.kind === "solana-message"
+      ? await io.signMessage(prepared.authorization.text)
+      : await io.signTransaction(prepared.authorization.transaction);
   return io.submit({ intentId: prepared.intentId, signed });
 }
 
@@ -138,9 +150,13 @@ export const useBasketEnrollmentAction = (slug: string) => {
       const path = enrollmentPath(slug);
       return enrollBasket(slug, {
         prepare: () => apiFetch<PreparedBasketEnrollment>(`${path}/prepare`, { method: "POST" }),
-        submit: async (body) => (await apiFetch<{ portfolio: ManagedBasketPortfolio }>(path, {
-          method: "POST", body: JSON.stringify(body),
-        })).portfolio,
+        submit: async (body) =>
+          (
+            await apiFetch<{ portfolio: ManagedBasketPortfolio }>(path, {
+              method: "POST",
+              body: JSON.stringify(body),
+            })
+          ).portfolio,
         signMessage: async (text) => {
           const result = await signMessage({ message: new TextEncoder().encode(text), wallet });
           return getBase58Decoder().decode(result.signature);
@@ -154,4 +170,88 @@ export const useBasketEnrollmentAction = (slug: string) => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] }),
   });
   return { ...mutation, walletReady: wallets[0] !== undefined };
+};
+
+type FundingReceipt = { signature: string; status: "confirmed" | "pending" };
+
+interface FundingIo {
+  prepare: (amountUsd: string) => Promise<PreparedBasketFunding>;
+  sign: (unsignedTransaction: string) => Promise<string>;
+  send: (signedTransaction: string) => Promise<FundingReceipt>;
+}
+
+/** Recheck the prepared amount and recipient before handing bytes to the wallet. */
+export async function fundBasket(
+  amountUsd: string,
+  portfolio: ManagedBasketPortfolio,
+  io: FundingIo,
+): Promise<FundingReceipt> {
+  if (!/^(?:0|[1-9]\d{0,8})(?:\.\d{1,6})?$/.test(amountUsd)) throw new Error("Enter a valid USDC amount.");
+  const [whole = "0", fraction = ""] = amountUsd.split(".");
+  const amountRaw = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0") || "0");
+  if (amountRaw === 0n) throw new Error("Enter an amount greater than zero.");
+  const destination = portfolio.smartAccounts.find((account) => account.accountId.startsWith("solana:"));
+  if (!destination) throw new Error("This portfolio has no Solana funding account.");
+  const prepared = await io.prepare(amountUsd);
+  if (
+    prepared.portfolioId !== portfolio.portfolioId ||
+    prepared.destinationAccountId !== (destination.depositAccountId ?? destination.accountId)
+  )
+    throw new Error("Funding destination changed. Refresh the portfolio before trying again.");
+  if (prepared.amountRaw !== amountRaw.toString())
+    throw new Error("Funding amount changed. Review it again.");
+  if (Date.parse(prepared.expiresAt) <= Date.now() + 5_000)
+    throw new Error("Funding transaction expired. Try again.");
+  return io.send(await io.sign(prepared.transaction));
+}
+
+export const useBasketFundingAction = (slug: string) => {
+  const qc = useQueryClient();
+  const { wallets } = useWallets();
+  const { signTransaction } = useSignTransaction();
+  const [step, setStep] = useState<"preparing" | "signing" | "sending" | null>(null);
+  const mutation = useMutation({
+    mutationFn: async ({
+      amountUsd,
+      portfolio,
+    }: {
+      amountUsd: string;
+      portfolio: ManagedBasketPortfolio;
+    }) => {
+      const wallet = wallets[0];
+      if (!wallet) throw new Error("Your Solana wallet is still loading.");
+      setStep("preparing");
+      return fundBasket(amountUsd, portfolio, {
+        prepare: (amount) =>
+          apiFetch<PreparedBasketFunding>(
+            `/v1/basket-templates/${encodeURIComponent(slug)}/funding/prepare`,
+            { method: "POST", body: JSON.stringify({ amountUsd: amount }) },
+          ),
+        sign: async (wire) => {
+          setStep("signing");
+          const result = await signTransaction({ transaction: toBytes(wire), wallet });
+          return toBase64(result.signedTransaction);
+        },
+        send: async (wire) => {
+          setStep("sending");
+          return apiFetch<FundingReceipt>("/v1/transactions/send", {
+            method: "POST",
+            body: JSON.stringify({ transaction: wire }),
+          });
+        },
+      });
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] });
+    },
+  });
+  return {
+    ...mutation,
+    step,
+    walletReady: wallets[0] !== undefined,
+    reset: () => {
+      mutation.reset();
+      setStep(null);
+    },
+  };
 };
