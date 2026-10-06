@@ -60,7 +60,12 @@ const lending = (debt = 0, pledgedTokens = 10): LendingSource => ({
         },
   build: async (_wallet, intent) => {
     built.push(intent);
-    return { transactions: ["AAAA"], firstTime: false, expiresAt: new Date("2026-09-27T12:00:00Z") };
+    return {
+      transactions: ["AAAA"],
+      messages: [new Uint8Array([1, 2, 3])],
+      firstTime: false,
+      expiresAt: new Date("2026-09-27T12:00:00Z"),
+    };
   },
 });
 
@@ -230,6 +235,44 @@ describe("POST /v1/borrow/transactions", () => {
     };
     const res = await post(deps(owing), { kind: "repay", usd: "2.00" });
     expect(res.status).toBe(200);
+  });
+
+  it("builds with the relayer as sponsor and remembers each message, so the send route will co-sign it", async () => {
+    let sponsor: string | undefined;
+    const l = lending();
+    const remembered: Uint8Array[] = [];
+    const d: BorrowDeps = {
+      ...deps({
+        ...l,
+        build: async (wallet, intent, s) => {
+          sponsor = s;
+          return l.build(wallet, intent);
+        },
+      }),
+      relay: {
+        relayer: "ReLaYeR",
+        builds: { remember: (m) => remembered.push(m), recognises: () => false, size: 0 },
+      },
+    };
+    expect((await post(d, { kind: "borrow", usd: "100" })).status).toBe(200);
+    expect(sponsor).toBe("ReLaYeR");
+    expect(remembered).toEqual([new Uint8Array([1, 2, 3])]);
+  });
+
+  it("builds unsponsored when no relayer is configured", async () => {
+    let sponsor: string | undefined = "unset";
+    const l = lending();
+    await post(
+      deps({
+        ...l,
+        build: async (wallet, intent, s) => {
+          sponsor = s;
+          return l.build(wallet, intent);
+        },
+      }),
+      { kind: "borrow", usd: "100" },
+    );
+    expect(sponsor).toBeUndefined();
   });
 
   it("rejects a malformed amount", async () => {

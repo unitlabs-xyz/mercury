@@ -76,6 +76,8 @@ export type LendingIntent =
 export interface BuiltTransactions {
   /** Unsigned v0 transactions, base64, to be signed and sent in this order. */
   readonly transactions: readonly string[];
+  /** Each transaction's message, so a sponsored one can be recognised when it comes back signed. */
+  readonly messages: readonly Uint8Array[];
   /** True when the first is one-time setup: the user's obligation does not exist yet. */
   readonly firstTime: boolean;
   readonly expiresAt: Date;
@@ -84,5 +86,6 @@ export interface BuiltTransactions {
 export interface LendingSource {
   terms(): Promise<LendingTerms>;
   position(wallet: string): Promise<LendingPosition | null>;
-  build(wallet: string, intent: LendingIntent): Promise<BuiltTransactions>;
+  /** `sponsor`, when given, pays the fees and any rent the wallet cannot. */
+  build(wallet: string, intent: LendingIntent, sponsor?: string): Promise<BuiltTransactions>;
 }

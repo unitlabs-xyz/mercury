@@ -7,6 +7,7 @@ import {
   createTransactionMessage,
   fetchAddressesForLookupTables,
   getBase64EncodedWireTransaction,
+  getBase64Encoder,
   pipe,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
@@ -28,6 +29,7 @@ import BN from "bn.js";
 import { D, ZERO, type Decimal } from "@mercury/core";
 import { createLendingRpc } from "./rpc.js";
 import { batchedLoader } from "./batch.js";
+import { rentForMissing, tokenAccountsCreatedBy, topUp, transferSol } from "./sponsor.js";
 import type {
   BuiltTransactions,
   CollateralTerms,
@@ -186,7 +188,7 @@ export class KaminoLending implements LendingSource {
     );
   }
 
-  async build(wallet: string, intent: LendingIntent): Promise<BuiltTransactions> {
+  async build(wallet: string, intent: LendingIntent, sponsor?: string): Promise<BuiltTransactions> {
     const market = await this.market();
     const owner = createNoopSigner(address(wallet));
     const existing = await market.getObligationByWallet(owner.address, new VanillaObligation(PROGRAM_ID));
@@ -266,29 +268,118 @@ export class KaminoLending implements LendingSource {
 
     const { value: blockhash } = await this.rpc.getLatestBlockhash().send();
     const luts = await fetchAddressesForLookupTables([XSTOCKS_LUT], this.rpc);
-    const compile = (ixs: readonly Instruction[]) =>
-      getBase64EncodedWireTransaction(
-        compileTransaction(
-          compressTransactionMessageUsingAddressLookupTables(
-            pipe(
-              createTransactionMessage({ version: 0 }),
-              (m) => setTransactionMessageFeePayer(owner.address, m),
-              (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
-              (m) => appendTransactionMessageInstructions(ixs, m),
-            ),
-            luts,
+    const payer = sponsor === undefined ? owner.address : address(sponsor);
+    const compile = (ixs: readonly Instruction[]) => {
+      const tx = compileTransaction(
+        compressTransactionMessageUsingAddressLookupTables(
+          pipe(
+            createTransactionMessage({ version: 0 }),
+            (m) => setTransactionMessageFeePayer(payer, m),
+            (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
+            (m) => appendTransactionMessageInstructions(ixs, m),
           ),
+          luts,
         ),
       );
+      return { wire: getBase64EncodedWireTransaction(tx), messageBytes: Uint8Array.from(tx.messageBytes) };
+    };
+
+    const firstTime = setup.length > 0;
+    let groups: readonly (readonly Instruction[])[] = firstTime ? [setup, actionIxs] : [actionIxs];
+    if (sponsor !== undefined) groups = await this.fund(owner.address, payer, groups, firstTime, compile);
+
+    const compiled = groups.map(compile);
+    for (const { wire } of compiled) {
+      const bytes = getBase64Encoder().encode(wire).length;
+      if (bytes > MAX_TRANSACTION_BYTES) {
+        throw new Error(
+          `kamino: a built transaction is ${bytes} bytes, over Solana's ${MAX_TRANSACTION_BYTES}`,
+        );
+      }
+    }
 
     return {
-      transactions: [...(setup.length > 0 ? [compile(setup)] : []), compile(actionIxs)],
-      firstTime: setup.length > 0,
+      transactions: compiled.map((c) => c.wire),
+      messages: compiled.map((c) => c.messageBytes),
+      firstTime,
       // A blockhash lives about 150 slots, a minute; leave room for signing.
       expiresAt: new Date(Date.now() + 45_000),
     };
   }
+
+  /**
+   * Prepend a relayer-to-owner transfer to each transaction that needs one.
+   *
+   * What a transaction spends from the owner is measured by simulating it with
+   * a probe transfer in front and reading the owner's balance after. The one
+   * transaction that cannot be simulated is a first-time action, which needs
+   * the setup before it to have landed; its only rent is token accounts it
+   * creates, counted instead. See `sponsor.ts`.
+   */
+  private async fund(
+    owner: Address,
+    relayer: Address,
+    groups: readonly (readonly Instruction[])[],
+    firstTime: boolean,
+    compile: (ixs: readonly Instruction[]) => { wire: string },
+  ): Promise<readonly (readonly Instruction[])[]> {
+    const [{ value: ownerBalance }, { value: relayerBalance }] = await Promise.all([
+      this.rpc.getBalance(owner).send(),
+      this.rpc.getBalance(relayer).send(),
+    ]);
+    const probe: bigint = relayerBalance - FEE_RESERVE;
+    if (probe <= 0n) throw new Error("kamino: the relayer has no SOL to sponsor with");
+
+    let held: bigint = ownerBalance;
+    let given = 0n;
+    const funded: (readonly Instruction[])[] = [];
+    for (const [i, ixs] of groups.entries()) {
+      const afterSetup = firstTime && i > 0;
+      let spend: bigint;
+      if (afterSetup) {
+        const created = tokenAccountsCreatedBy(ixs);
+        const { value } = await this.rpc
+          .getMultipleAccounts(
+            created.map((c) => c.account),
+            { encoding: "base64", dataSlice: { offset: 0, length: 0 } },
+          )
+          .send();
+        const exists = new Set(created.filter((_, j) => value[j] !== null).map((c) => String(c.account)));
+        spend = rentForMissing(created, exists);
+      } else {
+        const sim = await this.rpc
+          .simulateTransaction(compile([transferSol(relayer, owner, probe), ...ixs]).wire as never, {
+            encoding: "base64",
+            sigVerify: false,
+            replaceRecentBlockhash: true,
+            accounts: { addresses: [owner], encoding: "base64" },
+          })
+          .send();
+        if (sim.value.err !== null) {
+          throw new Error(
+            `kamino: the sponsored transaction would fail: ${JSON.stringify(sim.value.err, (_, v) => (typeof v === "bigint" ? String(v) : v))}`,
+          );
+        }
+        const after = sim.value.accounts[0]?.lamports ?? 0n;
+        spend = held + probe - BigInt(after);
+      }
+
+      const send = topUp(held, spend);
+      given += send;
+      held = held + send - spend;
+      funded.push(send > 0n ? [transferSol(relayer, owner, send), ...ixs] : ixs);
+    }
+
+    if (given > probe) throw new Error("kamino: the relayer does not hold enough SOL to sponsor this");
+    return funded;
+  }
 }
+
+/** The most a serialised transaction may be. */
+const MAX_TRANSACTION_BYTES = 1232;
+
+/** SOL the relayer keeps for its own signature fees while probing what a top-up needs. */
+const FEE_RESERVE = 1_000_000n;
 
 const toPosition = (market: KaminoMarket, ob: KaminoObligation): LendingPosition => ({
   obligation: ob.obligationAddress,
