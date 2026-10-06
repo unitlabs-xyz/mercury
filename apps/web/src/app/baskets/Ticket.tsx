@@ -5,6 +5,7 @@ import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { RailCard, RailHead } from "../../ui/ds";
 import { Alert, Check } from "../../ui/icons";
+import { Skeleton } from "../portfolio/ui";
 import { AmountWell } from "../stock/Ticket";
 
 interface EnrollmentRailProps {
@@ -12,11 +13,14 @@ interface EnrollmentRailProps {
   assetCount: number;
   portfolio: Pick<ManagedBasketPortfolio, "portfolioId" | "smartAccounts"> | null;
   signedIn: boolean;
+  walletMissing?: boolean | undefined;
   busy: boolean;
   checking?: boolean | undefined;
+  lookupFailed?: boolean | undefined;
   blocked?: boolean | undefined;
   error?: string | undefined;
   onReview: () => void;
+  onRetry: () => void;
 }
 
 /** Same rail dimensions as the Invest ticket; only its state and copy change. */
@@ -25,11 +29,14 @@ export const EnrollmentRail = ({
   assetCount,
   portfolio,
   signedIn,
+  walletMissing = false,
   busy,
   checking = false,
+  lookupFailed = false,
   blocked = false,
   error,
   onReview,
+  onRetry,
 }: EnrollmentRailProps) => {
   const enrolled = portfolio !== null;
   const address = portfolio?.smartAccounts
@@ -39,38 +46,52 @@ export const EnrollmentRail = ({
   return (
     <RailCard label="Invest in strategy">
       <RailHead
-        title={`${enrolled ? "Fund" : "Enroll in"} ${name}`}
-        meta={enrolled ? "Enrolled" : "Solana"}
+        title={checking ? `Invest in ${name}` : `${enrolled ? "Fund" : "Enroll in"} ${name}`}
+        meta={checking ? "Checking" : enrolled ? "Enrolled" : "Solana"}
       />
       <div className="mt-5 min-h-[102px] rounded-lg bg-ds-panel p-4 text-[13px]">
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-medium text-ds-ink">
-            {enrolled
-              ? "Your Glider portfolio is ready"
-              : signedIn
-                ? "Your own portfolio, not a basket token"
-                : "Sign in to enroll"}
-          </p>
-          {address && (
-            <a
-              href={`https://solscan.io/account/${encodeURIComponent(address)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`View smart account ${address} on Solscan`}
-              className="shrink-0 rounded-sm font-mono text-[11px] text-ds-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ds-link"
-            >
-              {address.slice(0, 4)}…{address.slice(-4)} ↗
-            </a>
-          )}
-        </div>
-        <p className="mt-2 leading-relaxed text-ds-muted">
-          {error ??
-            (enrolled
-              ? "Fund it with USDC on Solana. Your assets stay in your own smart account."
-              : signedIn
-                ? "Sign to create your own Glider smart account. No USDC is invested during enrollment; network fees may apply."
-                : "Connect your Solana wallet to create a Glider portfolio for this strategy.")}
-        </p>
+        {checking ? (
+          <div aria-label="Checking your Glider portfolio">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="mt-3 h-4 w-full" />
+            <Skeleton className="mt-2 h-4 w-4/5" />
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-medium text-ds-ink">
+                {enrolled
+                  ? "Your Glider portfolio is ready"
+                  : walletMissing
+                    ? "Solana wallet required"
+                  : signedIn
+                    ? "Your own portfolio, not a basket token"
+                    : "Sign in to enroll"}
+              </p>
+              {address && (
+                <a
+                  href={`https://solscan.io/account/${encodeURIComponent(address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`View smart account ${address} on Solscan`}
+                  className="shrink-0 rounded-sm font-mono text-[11px] text-ds-link hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ds-link"
+                >
+                  {address.slice(0, 4)}…{address.slice(-4)} ↗
+                </a>
+              )}
+            </div>
+            <p className="mt-2 leading-relaxed text-ds-muted">
+              {error ??
+                (enrolled
+                  ? "Fund it with USDC on Solana. Your assets stay in your own smart account."
+                  : walletMissing
+                    ? "Connect a Solana wallet to access this strategy."
+                  : signedIn
+                    ? "Sign to create your own Glider smart account. No USDC is invested during enrollment; network fees may apply."
+                    : "Connect your Solana wallet to create a Glider portfolio for this strategy.")}
+            </p>
+          </>
+        )}
       </div>
       <div className="mt-5 flex items-center justify-between text-[12px]">
         <span className="text-ds-muted">Target assets</span>
@@ -78,26 +99,32 @@ export const EnrollmentRail = ({
       </div>
       <div className="mt-3 flex items-center justify-between text-[12px]">
         <span className="text-ds-muted">Funding</span>
-        <span className="font-medium text-ds-ink">{enrolled ? "USDC on Solana" : "After enrollment"}</span>
+        <span className="font-medium text-ds-ink">
+          {checking ? "Checking" : enrolled ? "USDC on Solana" : "After enrollment"}
+        </span>
       </div>
       <Button
         variant="primary"
         size="lg"
-        onClick={onReview}
-        disabled={!signedIn || busy || checking || blocked}
+        onClick={lookupFailed ? onRetry : onReview}
+        disabled={!signedIn || walletMissing || busy || checking || (blocked && !lookupFailed)}
         className="mt-6 w-full"
       >
-        {enrolled
-          ? "Fund with USDC"
-          : checking
-            ? "Checking portfolio…"
-            : blocked
-              ? "Portfolio unavailable"
-              : busy
-                ? "Preparing enrollment…"
-                : !signedIn
-                  ? "Sign in to enroll"
-                  : "Review enrollment"}
+        {checking
+          ? "Checking portfolio…"
+          : lookupFailed
+            ? "Retry portfolio check"
+            : walletMissing
+              ? "Solana wallet required"
+            : enrolled
+              ? "Fund with USDC"
+              : blocked
+                ? "Portfolio unavailable"
+                : busy
+                  ? "Preparing enrollment…"
+                  : !signedIn
+                    ? "Sign in to enroll"
+                    : "Review enrollment"}
       </Button>
     </RailCard>
   );

@@ -1,5 +1,15 @@
 import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
 
+/** Shared blurred, right-revealing treatment for theme artwork. */
+const THEME_MASK = "linear-gradient(to right, transparent 0%, #000 72%)";
+export const THEME_ART_TREATMENT = {
+  filter: "blur(2px)",
+  transform: "scale(1.04)",
+  opacity: 0.82,
+  maskImage: THEME_MASK,
+  WebkitMaskImage: THEME_MASK,
+} as const;
+
 export const themes: readonly {
   tag: ManagedBasketTag;
   title: string;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
+import { useWallets } from "@privy-io/react-auth/solana";
 import type { ManagedBasketPortfolioSnapshot, ManagedBasketTemplate } from "@mercury/types";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toEvent, usd, usdCompact } from "@mercury/view";
@@ -31,6 +32,7 @@ import {
   StatusChip,
 } from "../ui/ds";
 import { AppShell } from "./AppShell";
+import { LiveStatusChip, PriceError } from "./LiveStatus";
 import { Button } from "../ui/Button";
 import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
@@ -40,6 +42,7 @@ import { EnrollmentRail, EnrollmentSheet, FundingSheet, RebalanceSheet } from ".
 import { modeledSeries } from "./baskets/performance";
 import { RailList } from "./invest/Rail";
 import { EventRow } from "./portfolio/Feed";
+import { Skeleton } from "./portfolio/ui";
 import { LIST_DOT } from "./invest/shared";
 
 type Range = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
@@ -236,6 +239,62 @@ const IconCluster = ({
   );
 };
 
+/** Match the settled detail grid while its first strategy read is in flight. */
+const DetailLoading = ({ assetCount }: { assetCount: number }) => (
+  <AppShell current="baskets" title="Basket" quiet>
+    <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-2 text-[14px] text-ds-muted md:mb-6">
+      <Link to="/baskets" className="hover:text-ds-ink">Baskets</Link>
+      <Chevron />
+      <Skeleton className="h-4 w-36" />
+    </nav>
+    <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
+      <div className="flex min-w-0 flex-col gap-4 md:gap-6">
+        <section aria-label="Loading strategy overview" className="rounded-xl bg-white p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Skeleton className="h-7 w-52 max-w-full" />
+              <Skeleton className="mt-3 h-4 w-32" />
+            </div>
+            <div className="flex gap-1">
+              {[0, 1, 2].map((item) => <Skeleton key={item} className="size-10 rounded-full" />)}
+            </div>
+          </div>
+          <Skeleton className="mt-6 h-4 w-4/5" />
+          <Skeleton className="mt-2 h-4 w-3/5" />
+          <Skeleton className="mt-7 h-9 w-28" />
+          <Skeleton className="mt-5 h-[340px] w-full rounded-lg" />
+        </section>
+        <section aria-label="Loading strategy composition" className="rounded-xl bg-white p-1">
+          <div className="px-5 pt-4 pb-3">
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="mt-2 h-4 w-64 max-w-full" />
+          </div>
+          <div className="space-y-1 rounded-lg bg-ds-panel p-1">
+            {Array.from({ length: assetCount }, (_, item) => <Skeleton key={item} className="h-[60px] w-full rounded-md" />)}
+          </div>
+        </section>
+      </div>
+      <aside className="flex flex-col gap-4 md:gap-6" aria-label="Loading basket account">
+        <RailCard label="Loading investment card">
+          <Skeleton className="h-5 w-44" />
+          <div className="mt-5 min-h-[102px] rounded-lg bg-ds-panel p-4">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="mt-3 h-4 w-full" />
+          </div>
+          <Skeleton className="mt-5 h-4 w-full" />
+          <Skeleton className="mt-3 h-4 w-full" />
+          <Skeleton className="mt-6 h-10 w-full rounded-full" />
+        </RailCard>
+        <RailCard label="Loading your position">
+          <Skeleton className="h-5 w-28" />
+          <Skeleton className="mt-5 h-8 w-32" />
+          <Skeleton className="mt-5 h-14 w-full" />
+        </RailCard>
+      </aside>
+    </div>
+  </AppShell>
+);
+
 export const Basket = () => {
   const { slug = "" } = useParams();
   const [range, setRange] = useState<Range>("1Y");
@@ -255,8 +314,10 @@ export const Basket = () => {
   const rebalanceRequestActive = useRef(false);
   const result = useBasketTemplate(slug);
   const insights = useBasketInsights(slug);
-  const { ready, authenticated } = usePrivy();
+  const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
+  const { wallets } = useWallets();
+  const sessionChecking = !ready || (authenticated && identityToken === null);
   const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null);
   const enrollment = useBasketEnrollment(slug);
   const enrolled = signedIn && Boolean(enrollment.data);
@@ -267,6 +328,22 @@ export const Basket = () => {
   const rebalanceAction = useBasketRebalanceAction(slug);
   const activity = useBasketActivity(slug, enrolled);
   const queryClient = useQueryClient();
+  const ownerContext = `${slug}:${user?.id ?? ""}:${wallets[0]?.address ?? ""}`;
+  const previousOwnerContext = useRef(ownerContext);
+  useEffect(() => {
+    if (previousOwnerContext.current === ownerContext) return;
+    previousOwnerContext.current = ownerContext;
+    setEnrollmentOpen(false);
+    setFundingOpen(false);
+    setFundingReview(false);
+    setRebalanceOpen(false);
+    setRebalanceOperation(null);
+    setShowAllAssets(false);
+    setFundingAmount("100");
+    enrollAction.reset();
+    fundingAction.reset();
+    rebalanceAction.reset();
+  }, [ownerContext, enrollAction, fundingAction, rebalanceAction]);
   const accountId = signedIn ? portfolio.data?.portfolioId : undefined;
   const operationId =
     accountId && accountId === rebalanceOperation?.portfolioId ? rebalanceOperation.operationId : null;
@@ -356,16 +433,22 @@ export const Basket = () => {
     }
   };
 
-  if (result.isLoading || !template)
+  if (!template && result.isPending) {
+    const cachedCatalog = queryClient.getQueryData<ManagedBasketTemplate[]>(["api", "basket-templates"]);
+    const assetCount = cachedCatalog?.find((item) => item.slug === slug)?.allocations.length ?? 7;
+    return <DetailLoading assetCount={assetCount} />;
+  }
+  if (!template)
     return (
       <AppShell current="baskets" title={name} quiet>
-        <div className="rounded-xl bg-white px-6 py-12 text-center text-ds-muted">
-          {result.isLoading ? "Loading strategy…" : "This strategy is unavailable."}
-          {!result.isLoading && (
-            <Link to="/baskets" className="ml-2 text-ds-link">
-              Back to baskets
-            </Link>
-          )}
+        <div className="rounded-xl bg-white p-5">
+          <PriceError
+            message="This strategy is unavailable right now."
+            onRetry={() => void result.refetch()}
+          />
+          <Link to="/baskets" className="mt-4 inline-block text-[13px] text-ds-link hover:underline">
+            Back to baskets
+          </Link>
         </div>
       </AppShell>
     );
@@ -391,6 +474,15 @@ export const Basket = () => {
   const heldAssets = [...(account?.assets ?? [])]
     .filter((asset) => Number(asset.balance) > 0)
     .sort((a, b) => Number(b.valueUsd) - Number(a.valueUsd));
+  const walletMissing = signedIn && !enrollAction.walletReady;
+  const accountLoading = sessionChecking || (signedIn && !walletMissing && (enrollment.isPending || (enrolled && portfolio.isPending)));
+  const ownershipUnknown = signedIn && !walletMissing && enrollment.isError && !enrollment.data;
+  const marketReads = [
+    instruments.dataUpdatedAt, prices.dataUpdatedAt, dayHistory.dataUpdatedAt, weekHistory.dataUpdatedAt,
+  ];
+  const marketUpdatedAt = marketReads.every((at) => at > 0) ? Math.min(...marketReads) : 0;
+  const marketFetching = instruments.isFetching || prices.isFetching || dayHistory.isFetching || weekHistory.isFetching;
+  const marketRefreshFailed = instruments.isError || prices.isError || dayHistory.isError || weekHistory.isError;
 
   return (
     <AppShell current="baskets" title={name} quiet>
@@ -401,6 +493,13 @@ export const Basket = () => {
         <Chevron />
         <span className="text-ds-ink">{name}</span>
       </nav>
+      {result.isError && (
+        <PriceError
+          className="mb-4 md:mb-6"
+          message="Could not refresh this strategy. Showing the last available data."
+          onRetry={() => void result.refetch()}
+        />
+      )}
       <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
         <div className="flex min-w-0 flex-col gap-4 md:gap-6">
           <section
@@ -451,7 +550,8 @@ export const Basket = () => {
               </div>
             </div>
             <div className="rounded-lg bg-ds-panel px-5 py-3 text-[12px] leading-relaxed text-ds-muted">
-              Glider model{performance ? ` · as of ${new Date(performance.asOf).toLocaleDateString()}` : ""}.
+              Glider model{performance ? ` · as of ${new Date(performance.asOf).toLocaleDateString()}` : ""}
+              {result.isFetching ? " · updating" : ""}.
               This is target-allocation history, not a live portfolio return. Past modeled performance does
               not predict future results.
             </div>
@@ -468,7 +568,12 @@ export const Basket = () => {
                   Target weights; actual holdings can drift between rebalances.
                 </p>
               </div>
-              <span className="text-[12px] text-ds-muted">{allocations.length} target assets</span>
+              <div className="flex items-center gap-3">
+                {marketUpdatedAt > 0 && (marketRefreshFailed
+                  ? <span className="text-[11px] text-ds-muted">Last available</span>
+                  : <LiveStatusChip fetching={marketFetching} at={marketUpdatedAt} />)}
+                <span className="text-[12px] text-ds-muted">{allocations.length} target assets</span>
+              </div>
             </div>
             <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
               <GlideTable
@@ -509,16 +614,24 @@ export const Basket = () => {
                       </span>
                       <span className="text-right font-medium text-ds-ink">{weight(asset.weightBps)}</span>
                       <span className="text-right text-ds-ink">
-                        {sharePrice == null ? "—" : usd(sharePrice)}
+                        {sharePrice == null && instruments.isPending
+                          ? <Skeleton className="ml-auto h-4 w-14" />
+                          : sharePrice == null ? "—" : usd(sharePrice)}
                       </span>
                       <span className="text-right text-ds-muted">
-                        {companyCap == null ? "—" : usdCompact(companyCap.toNumber())}
+                        {companyCap == null && prices.isPending
+                          ? <Skeleton className="ml-auto h-4 w-14" />
+                          : companyCap == null ? "—" : usdCompact(companyCap.toNumber())}
                       </span>
                       <span className="flex justify-end">
-                        <MoveChip value={dayHistory.data?.get(asset.ticker)?.changePct ?? null} light />
+                        {dayHistory.isPending
+                          ? <Skeleton className="h-5 w-14" />
+                          : <MoveChip value={dayHistory.data?.get(asset.ticker)?.changePct ?? null} light />}
                       </span>
                       <span className="flex justify-end">
-                        <MoveChip value={weekHistory.data?.get(asset.ticker)?.changePct ?? null} light />
+                        {weekHistory.isPending
+                          ? <Skeleton className="h-5 w-14" />
+                          : <MoveChip value={weekHistory.data?.get(asset.ticker)?.changePct ?? null} light />}
                       </span>
                     </li>
                   );
@@ -547,7 +660,12 @@ export const Basket = () => {
                   smart account. Glider rebalances daily; your actual holdings can drift between rebalances.
                 </p>
                 <p className="mt-5 text-[12px] font-medium text-ds-ink">Where it invests</p>
-                {insights.data?.allocation?.sectors.length ? (
+                {insights.isPending ? (
+                  <div className="mt-2 flex gap-2" aria-label="Loading sector allocation">
+                    <Skeleton className="h-7 w-28" />
+                    <Skeleton className="h-7 w-24" />
+                  </div>
+                ) : insights.data?.allocation?.sectors.length ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {insights.data.allocation.sectors.map((sector) => (
                       <span
@@ -661,9 +779,11 @@ export const Basket = () => {
               <div>
                 <p className="text-ds-muted">Integrator swap fee</p>
                 <p className="mt-1 font-medium text-ds-ink">
-                  {insights.data?.integratorSwapFeeBps == null
-                    ? "Not available"
-                    : `${(insights.data.integratorSwapFeeBps / 100).toFixed(2)}%`}
+                  {insights.isPending
+                    ? <Skeleton className="h-4 w-20" />
+                    : insights.data?.integratorSwapFeeBps == null
+                      ? "Not available"
+                      : `${(insights.data.integratorSwapFeeBps / 100).toFixed(2)}%`}
                 </p>
               </div>
             </div>
@@ -690,10 +810,15 @@ export const Basket = () => {
             assetCount={allocations.length}
             portfolio={signedIn ? (enrollment.data ?? null) : null}
             signedIn={signedIn}
-            checking={enrollment.isLoading}
+            walletMissing={walletMissing}
+            checking={sessionChecking || (signedIn && !walletMissing && enrollment.isPending)}
+            lookupFailed={signedIn && enrollment.isError && !enrollment.data}
             blocked={template.status === "disabled"}
             busy={enrollmentBusy}
-            error={enrollment.error?.message}
+            error={enrollment.isError && enrollment.data
+              ? "Portfolio status could not refresh. Showing your last available enrollment."
+              : enrollment.error?.message}
+            onRetry={() => void enrollment.refetch()}
             onReview={() => {
               if (enrolled) {
                 fundingAction.reset();
@@ -706,7 +831,14 @@ export const Basket = () => {
             }}
           />
           <RailCard label="Your position">
-            <RailHead title="Your position" />
+            <RailHead
+              title="Your position"
+              meta={account
+                ? portfolio.isError
+                  ? "Last available"
+                  : <LiveStatusChip fetching={portfolio.isFetching} at={portfolio.dataUpdatedAt} />
+                : undefined}
+            />
             {account ? (
               <div className="mt-5">
                 <p className="text-[12px] text-ds-muted">Smart-account value</p>
@@ -735,20 +867,44 @@ export const Basket = () => {
                 {account.warnings.length > 0 && (
                   <p className="mt-3 text-[12px] text-ds-muted">Partial read; value may be incomplete.</p>
                 )}
+                {portfolio.isError && (
+                  <button type="button" onClick={() => void portfolio.refetch()} className="mt-3 text-[12px] font-medium text-ds-link hover:underline">
+                    Balance refresh failed · Retry
+                  </button>
+                )}
               </div>
+            ) : accountLoading ? (
+              <div className="mt-5" aria-label="Loading your position">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="mt-2 h-8 w-36" />
+                <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ds-divider pt-4">
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              </div>
+            ) : ownershipUnknown ? (
+              <PriceError
+                className="mt-5"
+                message="Portfolio status is unavailable. Your holdings have not been checked yet."
+                onRetry={() => void enrollment.refetch()}
+              />
+            ) : walletMissing ? (
+              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center text-[12px] text-ds-muted">
+                Connect a Solana wallet to view your basket position.
+              </div>
+            ) : enrolled && portfolio.isError ? (
+              <PriceError
+                className="mt-5"
+                message="Smart-account balances are unavailable."
+                onRetry={() => void portfolio.refetch()}
+              />
             ) : (
               <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
                 <p className="text-[13px] font-medium text-ds-ink">
-                  {enrolled
-                    ? portfolio.isError
-                      ? "Balances unavailable"
-                      : "Loading your portfolio…"
-                    : "No connected portfolio"}
+                  No connected portfolio
                 </p>
                 <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
-                  {enrolled
-                    ? "Your Glider smart-account balances will appear here."
-                    : "Enroll to connect your own Glider smart account."}
+                  Enroll to connect your own Glider smart account.
                 </p>
               </div>
             )}
@@ -766,17 +922,30 @@ export const Basket = () => {
                 )
               }
             >
-              {portfolio.isPending ? (
-                <p className="px-3 py-5 text-[13px] text-ds-muted">Loading account balances…</p>
-              ) : portfolio.isError ? (
-                <p className="px-3 py-5 text-[13px] text-ds-muted">Balances are temporarily unavailable.</p>
-              ) : heldAssets.length === 0 ? (
-                <p className="px-3 py-5 text-[13px] text-ds-muted">
-                  No assets detected yet. USDC can take a short time to appear.
-                </p>
+              {!account && portfolio.isPending ? (
+                <div className="space-y-2 p-3" aria-label="Loading account balances">
+                  {[0, 1, 2].map((item) => <Skeleton key={item} className="h-[52px] w-full rounded-md" />)}
+                </div>
+              ) : !account && portfolio.isError ? (
+                <PriceError
+                  message="Account balances are unavailable."
+                  onRetry={() => void portfolio.refetch()}
+                />
               ) : (
                 <>
-                  <GlideRows as="ul">
+                  {portfolio.isError && (
+                    <div role="alert" className="mx-2 mb-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted">
+                      <span>Refresh failed · showing last balances</span>
+                      <button type="button" onClick={() => void portfolio.refetch()} className="shrink-0 font-medium text-ds-link hover:underline">Retry</button>
+                    </div>
+                  )}
+                  {heldAssets.length === 0 ? (
+                    <p className="px-3 py-5 text-[13px] text-ds-muted">
+                      No assets detected yet. USDC can take a short time to appear.
+                    </p>
+                  ) : (
+                    <>
+                    <GlideRows as="ul">
                     {(showAllAssets ? heldAssets : heldAssets.slice(0, 5)).map((asset) => {
                       const allocation = template.allocations.find((item) => item.assetId === asset.assetId);
                       const history = allocation ? dayHistory.data?.get(allocation.ticker) : null;
@@ -844,6 +1013,8 @@ export const Basket = () => {
                       {showAllAssets ? "Show fewer assets" : `Show all ${heldAssets.length} assets`}
                     </button>
                   )}
+                    </>
+                  )}
                 </>
               )}
             </RailList>
@@ -856,15 +1027,45 @@ export const Basket = () => {
               />
             </div>
             <div className="mt-[11px] rounded-lg bg-ds-panel px-5 pt-4 pb-4">
-              <RebalanceTimer schedule={schedule} hasAccount={Boolean(account)} />
+              {accountLoading ? (
+                <div className="min-h-[160px]" aria-label="Loading rebalance schedule">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="mt-3 h-8 w-36" />
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                  <Skeleton className="mt-4 h-2.5 w-full rounded-full" />
+                </div>
+              ) : walletMissing ? (
+                <div className="min-h-[160px] text-[12px] text-ds-muted">
+                  Connect a Solana wallet to view the rebalance schedule.
+                </div>
+              ) : ownershipUnknown ? (
+                <div className="min-h-[160px] text-[12px] text-ds-muted">
+                  <p>Rebalance schedule is unavailable until portfolio status is known.</p>
+                  <button type="button" onClick={() => void enrollment.refetch()} className="mt-2 font-medium text-ds-link hover:underline">
+                    Retry portfolio check
+                  </button>
+                </div>
+              ) : enrolled && !account ? (
+                <div className="min-h-[160px] text-[12px] text-ds-muted">
+                  <p>Schedule unavailable while account balances cannot be read.</p>
+                  {portfolio.isError && (
+                    <button type="button" onClick={() => void portfolio.refetch()} className="mt-2 font-medium text-ds-link hover:underline">
+                      Retry account read
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <RebalanceTimer schedule={schedule} hasAccount={Boolean(account)} />
+              )}
               {operationId && (
                 <div className="mt-5 border-t border-ds-divider pt-4 text-[12px]">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-ds-muted">Manual rebalance</span>
                     <span className="font-medium capitalize text-ds-ink">
-                      {rebalanceStatus.isError
-                        ? "Status unavailable"
-                        : (operationState?.replaceAll("_", " ") ?? "Checking…")}
+                      {operationState?.replaceAll("_", " ") ?? (rebalanceStatus.isError ? "Status unavailable" : "Checking…")}
                     </span>
                   </div>
                   {rebalanceStatus.data?.error && (
@@ -898,17 +1099,43 @@ export const Basket = () => {
           </section>
           <RailList label="Recent activity">
             {activity.data?.length ? (
-              <ul className="space-y-3 px-4 py-4">
-                {activity.data.slice(0, 5).map((item) => (
-                  <EventRow key={item.id} showSubtitle e={toEvent({
-                    ...item, subtitle: item.subtitle, mint: null, logoUrl: null,
-                  })} />
-                ))}
-              </ul>
+              <>
+                {activity.isError && (
+                  <div role="alert" className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted">
+                    <span>Refresh failed · showing last activity</span>
+                    <button type="button" onClick={() => void activity.refetch()} className="shrink-0 font-medium text-ds-link hover:underline">Retry</button>
+                  </div>
+                )}
+                <ul className="space-y-3 px-4 py-4">
+                  {activity.data.slice(0, 5).map((item) => (
+                    <EventRow key={item.id} showSubtitle e={toEvent({
+                      ...item, subtitle: item.subtitle, mint: null, logoUrl: null,
+                    })} />
+                  ))}
+                </ul>
+              </>
+            ) : (sessionChecking || enrolled) && activity.isPending ? (
+              <div className="space-y-3 px-4 py-4" aria-label="Loading recent activity">
+                {[0, 1].map((item) => <Skeleton key={item} className="h-[48px] w-full" />)}
+              </div>
+            ) : ownershipUnknown ? (
+              <PriceError
+                message="Portfolio status is unavailable, so activity could not be checked."
+                onRetry={() => void enrollment.refetch()}
+              />
+            ) : walletMissing ? (
+              <div className="px-4 py-5 text-center text-[12px] text-ds-muted">
+                Connect a Solana wallet to view basket activity.
+              </div>
+            ) : activity.isError ? (
+              <PriceError
+                message="Recent activity is unavailable."
+                onRetry={() => void activity.refetch()}
+              />
             ) : (
               <div className="px-4 py-5 text-center">
                 <p className="text-[13px] font-medium text-ds-ink">
-                  {activity.isPending ? "Loading activity…" : "No activity to show"}
+                  No activity to show
                 </p>
                 <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
                   Enrollment, confirmed funding and manual rebalances appear here.

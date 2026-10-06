@@ -1,18 +1,21 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
 import { Link } from "react-router-dom";
-import { usePrivy } from "@privy-io/react-auth";
+import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
-import { useBasketTemplates, useOwnedBasketPortfolios } from "../api/baskets";
+import { basketEnrollmentEnabled, useBasketTemplates, useOwnedBasketPortfolios } from "../api/baskets";
 import { useInstruments, type Instrument } from "../market/hooks";
 import { GlideTable } from "../ui/ds";
 import { ArrowRight } from "../ui/icons";
 import { AppShell } from "./AppShell";
+import { LiveStatusChip, PriceError } from "./LiveStatus";
+import { Skeleton } from "./portfolio/ui";
 import { AssetIcon } from "./baskets/AssetIcon";
 import {
   curatedShelves,
   discoveryLogoTickers,
   displayBasketName,
+  THEME_ART_TREATMENT,
   visibleStrategies,
 } from "./baskets/catalog";
 import { BasketsRail } from "./baskets/rail";
@@ -43,6 +46,43 @@ const TextAction = ({ children, onClick }: { children: ReactNode; onClick: () =>
     {children}
     <Arrow />
   </button>
+);
+
+/** Keep the discovery page's three sections in place during its first catalog read. */
+const DiscoveryLoading = () => (
+  <div aria-label="Loading basket strategies" className="space-y-8 sm:space-y-9">
+    <section>
+      <Skeleton className="h-6 w-40 !bg-white" />
+      <Skeleton className="mt-2 h-4 w-64 max-w-full !bg-white" />
+      <div className="mt-4 flex gap-3 overflow-hidden">
+        {[0, 1, 2, 3].map((item) => (
+          <div key={item} className="w-[calc(50%-6px)] min-w-[210px] shrink-0 rounded-lg bg-white p-1 lg:w-[calc(25%-9px)]">
+            <Skeleton className="h-[137px] w-full rounded-md" />
+          </div>
+        ))}
+      </div>
+    </section>
+    <section>
+      <Skeleton className="h-6 w-44 !bg-white" />
+      <Skeleton className="mt-2 h-4 w-72 max-w-full !bg-white" />
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[0, 1, 2, 3].map((item) => (
+          <div key={item} className="rounded-lg bg-white p-1">
+            <Skeleton className="h-[197px] w-full rounded-md" />
+          </div>
+        ))}
+      </div>
+    </section>
+    <section className="rounded-xl bg-white p-1">
+      <div className="px-5 pt-4 pb-3">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="mt-2 h-4 w-64 max-w-full" />
+      </div>
+      <div className="space-y-1 rounded-lg bg-ds-panel p-1">
+        {[0, 1, 2, 3, 4, 5].map((item) => <Skeleton key={item} className="h-[64px] w-full rounded-md" />)}
+      </div>
+    </section>
+  </div>
 );
 
 const Holdings = ({
@@ -81,15 +121,6 @@ const Holdings = ({
     </div>
   );
 };
-
-const THEME_MASK = "linear-gradient(to right, transparent 0%, #000 72%)";
-const THEME_ART_TREATMENT = {
-  filter: "blur(2px)",
-  transform: "scale(1.04)",
-  opacity: 0.82,
-  maskImage: THEME_MASK,
-  WebkitMaskImage: THEME_MASK,
-} as const;
 
 const ThemeShelf = ({
   shelves,
@@ -219,6 +250,9 @@ const StrategyTable = ({
   clear,
   showAll,
   setShowAll,
+  fetching,
+  updatedAt,
+  refreshFailed,
 }: {
   templates: readonly ManagedBasketTemplate[];
   instruments: Instruments;
@@ -226,6 +260,9 @@ const StrategyTable = ({
   clear: () => void;
   showAll: boolean;
   setShowAll: (value: boolean) => void;
+  fetching: boolean;
+  updatedAt: number;
+  refreshFailed: boolean;
 }) => {
   const title = selected
     ? `${selected.replace("theme:", "").replace(/\b\w/g, (letter) => letter.toUpperCase())} strategies`
@@ -243,7 +280,10 @@ const StrategyTable = ({
           <h2 className="text-[16px] font-medium text-ds-ink">{title}</h2>
           <p className="mt-1 text-[12px] text-ds-muted">Explore curated Glider strategies on Solana.</p>
         </div>
-        <div className="flex shrink-0">
+        <div className="flex shrink-0 items-center gap-3">
+          {updatedAt > 0 && (refreshFailed
+            ? <span className="text-[11px] text-ds-muted">Last available</span>
+            : <LiveStatusChip fetching={fetching} at={updatedAt} />)}
           <TextAction
             onClick={() => {
               if (selected) {
@@ -308,6 +348,7 @@ const StrategyTable = ({
 
 export const Baskets = () => {
   const { ready, authenticated, login } = usePrivy();
+  const { identityToken } = useIdentityToken();
   const { wallets } = useWallets();
   const catalog = useBasketTemplates();
   const owned = useOwnedBasketPortfolios();
@@ -332,6 +373,8 @@ export const Baskets = () => {
     () => new Map((instruments.data ?? []).map((item) => [item.ticker, item])),
     [instruments.data],
   );
+  const walletReady = Boolean(wallets[0]?.address);
+  const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null) && walletReady;
   const seeAll = () => {
     setSelected(null);
     setShowAll(true);
@@ -341,27 +384,21 @@ export const Baskets = () => {
     <AppShell current="baskets" title="Baskets" quiet>
       <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
         <div className="min-w-0 space-y-8 pb-6 sm:space-y-9">
-          {catalog.isLoading ? (
-            <div className="rounded-lg bg-white px-6 py-10 text-center text-[13px] text-ds-muted">
-              Loading strategies…
-            </div>
-          ) : catalog.isError ? (
-            <div
-              role="alert"
-              className="rounded-lg bg-white px-6 py-10 text-center text-[13px] text-ds-muted"
-            >
-              Strategies are unavailable right now.{" "}
-              <button
-                type="button"
-                onClick={() => catalog.refetch()}
-                className="font-medium text-blue-600 underline"
-              >
-                Try again
-              </button>
-              .
-            </div>
+          {catalog.isPending && !catalog.data ? (
+            <DiscoveryLoading />
+          ) : catalog.isError && !catalog.data ? (
+            <PriceError
+              message="Strategies are temporarily unavailable."
+              onRetry={() => void catalog.refetch()}
+            />
           ) : (
             <>
+              {catalog.isError && (
+                <PriceError
+                  message="Could not refresh strategies. Showing the last available catalog."
+                  onRetry={() => void catalog.refetch()}
+                />
+              )}
               <ThemeShelf
                 shelves={shelves.themes}
                 select={(tag) => {
@@ -377,6 +414,9 @@ export const Baskets = () => {
                 clear={() => setSelected(null)}
                 showAll={showAll}
                 setShowAll={setShowAll}
+                fetching={catalog.isFetching}
+                updatedAt={catalog.dataUpdatedAt}
+                refreshFailed={catalog.isError}
               />
             </>
           )}
@@ -400,8 +440,8 @@ export const Baskets = () => {
           onExplore={seeAll}
           onSignIn={() => login()}
           onRetry={() => owned.refetch()}
-          signedIn={ready && authenticated && Boolean(wallets[0]?.address)}
-          loading={!ready || (ready && authenticated && Boolean(wallets[0]?.address) && owned.isPending)}
+          signedIn={signedIn}
+          loading={!ready || (authenticated && walletReady && (identityToken === null || owned.isPending))}
           error={owned.isError}
           portfolios={owned.data ?? []}
           templates={templates}

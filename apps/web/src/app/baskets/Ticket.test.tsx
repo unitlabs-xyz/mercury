@@ -9,6 +9,7 @@ const base = {
   busy: false,
   signedIn: true,
   onReview: () => undefined,
+  onRetry: () => undefined,
 };
 
 describe("basket enrollment rail", () => {

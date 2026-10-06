@@ -8,7 +8,7 @@ import { GlideRows, RailCard, RailHead } from "../../ui/ds";
 import { RailList } from "../invest/Rail";
 import { Skeleton } from "../portfolio/ui";
 import { AssetIcon } from "./AssetIcon";
-import { displayBasketName } from "./catalog";
+import { displayBasketName, THEME_ART_TREATMENT } from "./catalog";
 
 const steps = [
   ["Choose a strategy", "Each template sets target weights for Solana tokenized assets."],
@@ -40,7 +40,7 @@ const BasketList = ({
   const visible = expanded ? byUsdcBalance : byUsdcBalance.slice(0, 3);
   const templateBySlug = new Map(templates.map((template) => [template.slug, template]));
 
-  if (loading) {
+  if (loading && (!signedIn || portfolios.length === 0)) {
     return (
       <div className="flex min-h-[182px] flex-col justify-center gap-3 px-3" aria-label="Loading your baskets">
         {[0, 1, 2].map((index) => <Skeleton key={index} className="h-[44px] w-full" />)}
@@ -48,7 +48,7 @@ const BasketList = ({
     );
   }
 
-  if (!signedIn || error || portfolios.length === 0) {
+  if (!signedIn || portfolios.length === 0) {
     const title = !signedIn
       ? "Sign in to see your baskets"
       : error ? "Your baskets are unavailable" : "No baskets yet";
@@ -73,6 +73,14 @@ const BasketList = ({
 
   return (
     <div className="min-h-[182px]">
+      {error && (
+        <div role="alert" className="mx-2 mb-1 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted">
+          <span>Refresh failed · showing last balances</span>
+          <button type="button" onClick={onRetry} className="shrink-0 font-medium text-ds-link hover:underline">
+            Retry
+          </button>
+        </div>
+      )}
       <GlideRows as="ul">
         {visible.map((portfolio) => {
           const template = templateBySlug.get(portfolio.slug);
@@ -170,19 +178,25 @@ export const BasketsRail = (props: RailProps) => (
 
     <section
       aria-label="Explore strategies"
-      className="min-h-[214px] overflow-hidden rounded-xl border-[3px] border-white bg-[#eaf9f8] bg-cover bg-center px-6 py-7 shadow-sm"
-      style={{ backgroundImage: "url('/baskets/themes/7.webp')" }}
+      className="relative min-h-[214px] overflow-hidden rounded-xl border-[3px] border-white bg-[#eef6ff] px-6 py-7 shadow-sm"
     >
-      <h2 className="max-w-[230px] text-[20px] leading-tight font-medium text-ds-ink">
+      <img
+        src="/baskets/themes/1.webp"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 size-full object-cover object-center"
+        style={THEME_ART_TREATMENT}
+      />
+      <h2 className="relative max-w-[230px] text-[20px] leading-tight font-medium text-ds-ink">
         A simpler way to invest
       </h2>
-      <p className="mt-2 max-w-[200px] text-[13px] leading-relaxed text-ds-muted">
+      <p className="relative mt-2 max-w-[200px] text-[13px] leading-relaxed text-ds-muted">
         Discover curated ideas, powered by Glider on Solana.
       </p>
       <button
         type="button"
         onClick={props.onExplore}
-        className="mt-5 inline-flex items-center gap-2 rounded-full bg-ds-ink px-5 py-2 text-[12px] font-medium text-white hover:bg-black"
+        className="relative mt-5 inline-flex items-center gap-2 rounded-full bg-ds-ink px-5 py-2 text-[12px] font-medium text-white hover:bg-black"
       >
         Explore strategies <ArrowRight className="size-3.5" />
       </button>
