@@ -9,6 +9,7 @@ import { planLoanEvents, type PlannedLoanEvent } from "../lending/events.js";
 import type { RecordInput } from "../lending/record.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
+import type { SponsoredBuilds } from "../relay/builds.js";
 
 export interface BorrowDeps {
   readonly lending: LendingSource;
@@ -21,6 +22,12 @@ export interface BorrowDeps {
     planned: readonly PlannedLoanEvent[],
     input: Omit<RecordInput, "mintFor"> & { readonly mintFor: RecordInput["mintFor"] },
   ) => Promise<{ written: number }>;
+  /**
+   * The relayer, when sponsorship is on. Every lending transaction is then
+   * built with it as fee payer, topped up with any rent the wallet cannot
+   * cover, and remembered so the send route will co-sign it.
+   */
+  readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -234,9 +241,11 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
         break;
       }
       case "repay": {
-        if (debt.isZero()) return c.json(fail("nothing_owed", "There is no loan to repay."), 409);
+        // What is actually owed, not the borrow-factor-weighted figure the limits use.
+        const owed = input.position?.debtUsd ?? ZERO;
+        if (owed.isZero()) return c.json(fail("nothing_owed", "There is no loan to repay."), 409);
         // Repaying everything also covers interest accrued since the last refresh, so ask for a little more.
-        const needed = body.usd === "all" ? debt.mul("1.001") : D(body.usd);
+        const needed = body.usd === "all" ? owed.mul("1.001") : D(body.usd);
         if (needed.gt(input.cashUsd)) {
           return c.json(fail("insufficient_cash", "Not enough USDC in the wallet to repay that."), 409);
         }
@@ -267,7 +276,8 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
       }
     }
 
-    const built = await deps.lending.build(wallet, intent);
+    const built = await deps.lending.build(wallet, intent, deps.relay?.relayer);
+    if (deps.relay !== undefined) for (const m of built.messages) deps.relay.builds.remember(m);
     return c.json({
       transactions: built.transactions,
       firstTime: built.firstTime,

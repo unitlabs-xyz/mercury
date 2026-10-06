@@ -51,6 +51,12 @@ console.log(
     ? "sponsorship: off (RELAYER_SECRET_KEY unset); buyers pay their own network costs"
     : `sponsorship: on, paying from ${relay.signer.address}`,
 );
+// Which Jupiter tier the rate limits in the logs below belong to.
+console.log(
+  config.jupiterApiKeys.length === 0
+    ? "jupiter: keyless (JUPITER_API_KEYS unset); lite-api.jup.ag free tier"
+    : `jupiter: ${config.jupiterApiKeys.length} key${config.jupiterApiKeys.length === 1 ? "" : "s"}, rotated per request; api.jup.ag`,
+);
 
 /*
  * The same shape as the relayer above, and for the same reason: a capability

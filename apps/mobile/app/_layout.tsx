@@ -91,7 +91,6 @@ const Gate = () => {
           presentation: "formSheet",
           sheetAllowedDetents: "fitToContents",
           sheetGrabberVisible: true,
-          sheetCornerRadius: 24,
           contentStyle: { backgroundColor: color.surface },
         }}
       />
@@ -102,7 +101,16 @@ const Gate = () => {
           presentation: "formSheet",
           sheetAllowedDetents: "fitToContents",
           sheetGrabberVisible: true,
-          sheetCornerRadius: 24,
+          contentStyle: { backgroundColor: color.surface },
+        }}
+      />
+      {/* Filter and sort for Activity, the same sheet as Invest's. */}
+      <Stack.Screen
+        name="activity-filters"
+        options={{
+          presentation: "formSheet",
+          sheetAllowedDetents: "fitToContents",
+          sheetGrabberVisible: true,
           contentStyle: { backgroundColor: color.surface },
         }}
       />
@@ -117,7 +125,6 @@ const Gate = () => {
           presentation: "formSheet",
           sheetAllowedDetents: "fitToContents",
           sheetGrabberVisible: true,
-          sheetCornerRadius: 24,
           contentStyle: { backgroundColor: color.surface },
         }}
       />

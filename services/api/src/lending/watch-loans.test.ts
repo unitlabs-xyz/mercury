@@ -63,7 +63,7 @@ const deps = (debt: string, notifier: Notifier): WatchDeps => ({
   lending: {
     terms: async () => terms(),
     position: async () => (debt === "none" ? null : position(debt)),
-    build: async () => ({ transactions: [], firstTime: false, expiresAt: NOW }),
+    build: async () => ({ transactions: [], messages: [], firstTime: false, expiresAt: NOW }),
   } satisfies LendingSource,
   chain: { tokenBalances: async () => [], mintConfig: async () => null } as ChainReader,
   usdcMint: USDC,

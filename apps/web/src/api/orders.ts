@@ -2,6 +2,7 @@ import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { placeOrder, type OrderIntent, type OrderResult } from "@mercury/view";
 import { apiFetch } from "./client";
+import { refreshAfterChain } from "./settle";
 
 /**
  * The order sequence itself lives in `@mercury/view`, because the phone runs
@@ -53,7 +54,7 @@ export const useOrderAction = () => {
       );
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ["api"] });
+      refreshAfterChain(qc);
       void qc.invalidateQueries({ queryKey: ["quotes"] });
     },
   });

@@ -20,15 +20,18 @@ export const loanShape = (b: Borrow, debt: number, deposits: (r: BorrowRow) => n
 /**
  * The loan's health as the portfolio's segmented meter: solid for what the
  * loan uses, then the room up to our 80% target, the warning zone and the
- * danger zone where Kamino sells. With `next`, the change being typed shows at
- * half strength. Hover anywhere along it for what that point means.
+ * danger zone where Kamino sells. With `next`, the change being typed shows a
+ * shade lighter. Hover anywhere along it for what that point means.
  */
 export const LoanMeter = ({
   now,
   next,
+  of = "what is pledged",
 }: {
   now: ReturnType<typeof loanShape>;
   next?: ReturnType<typeof loanShape> | undefined;
+  /** What the loan is measured against, for the caption and tooltip. */
+  of?: string | undefined;
 }) => {
   // One scale for both, so the preview lands where it will on the same bar.
   const liquidation = Math.max(now.liquidation, next?.liquidation ?? 0) || 1;
@@ -50,10 +53,10 @@ export const LoanMeter = ({
       <>
         <span className="block font-medium">
           {changed && near(next.ltv)
-            ? `After this: ${pctOf(next.ltv)} of what is pledged`
+            ? `After this: ${pctOf(next.ltv)} of ${of}`
             : near(now.ltv)
-              ? `Now: ${pctOf(now.ltv)} of what is pledged`
-              : `${pctOf(ltv)} of what is pledged`}
+              ? `Now: ${pctOf(now.ltv)} of ${of}`
+              : `${pctOf(ltv)} of ${of}`}
         </span>
         <span className="block opacity-80">{zone}</span>
         {near(target) && <span className="block opacity-80">Safety target {pctOf(target)}</span>}
@@ -65,7 +68,7 @@ export const LoanMeter = ({
   return (
     <div>
       <SegmentMeter
-        label={`Loan is ${pctOf(now.ltv)} of what is pledged${changed ? `, ${pctOf(next.ltv)} after this` : ""}; target ${pctOf(target)}, Kamino sells at ${pctOf(liquidation)}`}
+        label={`Loan is ${pctOf(now.ltv)} of ${of}${changed ? `, ${pctOf(next.ltv)} after this` : ""}; target ${pctOf(target)}, Kamino sells at ${pctOf(liquidation)}`}
         value={at(now.ltv)}
         preview={changed ? at(next.ltv) : undefined}
         tip={tip}
@@ -80,10 +83,10 @@ export const LoanMeter = ({
           {changed ? (
             <>
               {pctOf(now.ltv)} <span aria-hidden>→</span>{" "}
-              <span className="font-medium text-ds-ink">{pctOf(next.ltv)}</span> of what is pledged
+              <span className="font-medium text-ds-ink">{pctOf(next.ltv)}</span> of {of}
             </>
           ) : (
-            `Loan is ${pctOf(now.ltv)} of what is pledged`
+            `Loan is ${pctOf(now.ltv)} of ${of}`
           )}
         </span>
         <span>

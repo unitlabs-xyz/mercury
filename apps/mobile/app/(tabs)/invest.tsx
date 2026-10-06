@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text as RNText, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { TabScene } from "../../src/ui/TabScene";
 import { usd, usdCompact } from "@mercury/view";
 import {
   Icon,
@@ -15,7 +16,14 @@ import {
   StockLogo,
   Text,
 } from "../../src/ui";
-import { useHistories, useInstruments, usePortfolio, type Instrument, type Shelf } from "../../src/api";
+import {
+  useHistories,
+  useInstruments,
+  useInstrumentsByTicker,
+  usePortfolio,
+  type Instrument,
+  type Shelf,
+} from "../../src/api";
 import {
   DEFAULT_FILTERS,
   SORTS,
@@ -27,11 +35,16 @@ import {
   type Sort,
 } from "../../src/invest/filters";
 import { color, font, radius, space } from "../../src/theme";
+import { useWatchlist } from "../../src/watchlist";
 
-const SHELVES: readonly { key: Shelf; label: string }[] = [
+/* The server's three shelves, and one of your own: what you hold, then what you saved. */
+type View_ = Shelf | "yours";
+
+const SHELVES: readonly { key: View_; label: string }[] = [
   { key: "featured", label: "Featured" },
   { key: "movers", label: "Movers" },
   { key: "popular", label: "Popular" },
+  { key: "yours", label: "Yours" },
 ];
 
 /** The logo's diameter, as everywhere else a row is led by one. */
@@ -45,10 +58,19 @@ const SESSION: Record<string, string> = {
   post: "After hours",
 };
 
-export default function Invest() {
+function InvestScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [shelf, setShelf] = useState<Shelf>("featured");
+  const [shelf, setShelf] = useState<View_>("featured");
+  const saved = useWatchlist();
+  /* Home's Invested figure opens this tab on Yours. */
+  const params = useLocalSearchParams<{ shelf?: string }>();
+  useEffect(() => {
+    if (params.shelf !== "yours") return;
+    setShelf("yours");
+    /* Spent, so the next tap from home lands here again. */
+    router.setParams({ shelf: undefined });
+  }, [params.shelf, router]);
   const [query, setQuery] = useState("");
   /* Range, sector, order and "owned only" live in the filter sheet, a separate
      route, so they are kept in a store both can reach. */
@@ -63,9 +85,21 @@ export default function Invest() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const list = useInstruments(shelf, term);
+  const shelfList = useInstruments(shelf === "yours" ? "featured" : shelf, term);
   const portfolio = usePortfolio();
-  const instruments = useMemo(() => list.data?.instruments ?? [], [list.data]);
+  /* Yours, in that order: what you hold, then what you saved and do not. */
+  const mine = useMemo(() => {
+    const held = (portfolio.data?.holdings ?? []).map((h) => h.ticker);
+    return [...held, ...saved.filter((t) => !held.includes(t))];
+  }, [portfolio.data, saved]);
+  const yours = useInstrumentsByTicker(shelf === "yours" ? mine : []);
+  const list = shelf === "yours" && term.length === 0 ? yours : shelfList;
+  const instruments = useMemo(() => {
+    const all = list.data?.instruments ?? [];
+    return shelf === "yours" && term.length === 0
+      ? [...all].sort((a, b) => mine.indexOf(a.ticker) - mine.indexOf(b.ticker))
+      : all;
+  }, [list.data, shelf, mine, term]);
 
   const owned = useMemo(
     () => new Set((portfolio.data?.holdings ?? []).map((h) => h.ticker)),
@@ -105,7 +139,7 @@ export default function Invest() {
   }, [sectors, shown.length]);
 
   /* A sector chosen on one shelf may not exist on the next. */
-  const pickShelf = (next: Shelf) => {
+  const pickShelf = (next: View_) => {
     setShelf(next);
     if (sector !== "all") setFilters({ sector: "all" });
   };
@@ -114,7 +148,7 @@ export default function Invest() {
   const anything = active > 0 || range !== DEFAULT_FILTERS.range;
 
   const searching = term.length > 0;
-  const waiting = list.isPending && list.data === undefined;
+  const waiting = list.isLoading && list.data === undefined;
   const session = instruments[0]?.status;
 
   return (
@@ -208,16 +242,20 @@ export default function Invest() {
               <Text variant="label">
                 {searching
                   ? `Nothing matching "${term}"`
-                  : instruments.length > 0
-                    ? "Nothing matches these filters"
-                    : "No stocks to show"}
+                  : shelf === "yours" && mine.length === 0
+                    ? "Nothing here yet"
+                    : instruments.length > 0
+                      ? "Nothing matches these filters"
+                      : "No stocks to show"}
               </Text>
               <Text variant="small" tone="muted">
                 {searching
                   ? "Try a ticker, or part of a company's name."
-                  : instruments.length > 0
-                    ? "Clear them, or choose a different sector."
-                    : "This usually means we could not reach the market."}
+                  : shelf === "yours" && mine.length === 0
+                    ? "Stocks you buy show here, and any you save with the bookmark."
+                    : instruments.length > 0
+                      ? "Clear them, or choose a different sector."
+                      : "This usually means we could not reach the market."}
               </Text>
             </View>
           ) : (
@@ -236,7 +274,7 @@ export default function Invest() {
 
         {/* The web says this under its screener, and it is the one thing a
             short list here needs explaining. */}
-        {!searching && !waiting && instruments.length > 0 && (
+        {!searching && !waiting && shelf !== "yours" && instruments.length > 0 && (
           <Text variant="small" tone="muted" style={s.footnote}>
             Showing the stocks with pools deep enough for a normal order. Search finds any other tokenised
             stock we support.
@@ -455,3 +493,11 @@ const s = StyleSheet.create({
   empty: { paddingHorizontal: 14, paddingVertical: space.lg, gap: 4 },
   footnote: { paddingHorizontal: space.screen, paddingTop: space.md },
 });
+
+export default function Invest() {
+  return (
+    <TabScene index={1}>
+      <InvestScreen />
+    </TabScene>
+  );
+}

@@ -194,4 +194,39 @@ describe("waitlist", () => {
     expect(res.status).toBe(200);
     expect(((await res.json()) as Joined).card?.position).toBe(1);
   });
+
+  it("does not skip a number when someone signs up twice", async () => {
+    const app = await withCards();
+    await post(app, { email: "a@b.co", country: "India" });
+    await post(app, { email: "a@b.co", country: "India" });
+    const next = (await (await post(app, { email: "c@d.co", country: "India" })).json()) as Joined;
+    expect(next.card?.position).toBe(2);
+  });
+
+  it("sends one welcome by hand, behind the token, and fills a missing handle", async () => {
+    const sent: Notice[] = [];
+    const app = await withCards(sent);
+    await post(app, { email: "a@b.co", name: "saketh", country: "India" });
+    sent.length = 0;
+    const send = (body: unknown, token = "secret") =>
+      app.request("/admin/waitlist/welcome", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+
+    expect((await send({ email: "a@b.co" }, "wrong")).status).toBe(404);
+    expect((await send({ email: "nobody@b.co" })).status).toBe(404);
+
+    const res = await send({ email: "A@B.co", handle: "@saketh_k" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { card: { position: number; handle: string } };
+    expect(body.card).toMatchObject({ position: 1, handle: "saketh_k" });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.to).toBe("a@b.co");
+
+    // A handle they already have is kept.
+    const again = (await (await send({ email: "a@b.co", handle: "someone_else" })).json()) as typeof body;
+    expect(again.card.handle).toBe("saketh_k");
+  });
 });

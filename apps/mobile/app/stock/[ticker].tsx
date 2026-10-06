@@ -25,6 +25,9 @@ import {
   type Span,
   type Wrapper,
 } from "../../src/api";
+import { Haptics } from "../../src/haptics";
+import { toggleWatch, useWatchlist } from "../../src/watchlist";
+import { BorrowCard } from "../../src/stock/BorrowCard";
 import { ExposureCard } from "../../src/stock/ExposureCard";
 import { color, font, radius, space } from "../../src/theme";
 
@@ -54,6 +57,7 @@ export default function Stock() {
   const i = page.data?.instrument;
   const held = (portfolio.data?.holdings ?? []).find((h) => h.ticker === t);
   const exposure = useExposure(t, held !== undefined);
+  const saved = useWatchlist().includes(t);
 
   const points = history.data?.points ?? [];
   const values = points.map(([, p]) => Number(p));
@@ -72,17 +76,33 @@ export default function Stock() {
         : Number(history.data.changePct);
   const moveUsd = first === undefined || last === undefined ? null : last - first;
 
+  const order = (side: "buy" | "sell") =>
+    i !== undefined &&
+    router.push({
+      pathname: "/buy",
+      params: { ticker: t, name: i.name, side, ...(i.logoUrl ? { logoUrl: i.logoUrl } : {}) },
+    });
+
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
       <SafeAreaView edges={["top"]} style={s.fill}>
         <View style={s.nav}>
           <IconButton icon="chevronRight" rotate="180deg" label="Back" onPress={() => router.back()} />
-          {i !== undefined && (
-            <RNText style={s.navTitle} numberOfLines={1}>
-              {i.name}
-            </RNText>
-          )}
+          <RNText style={s.navTitle} numberOfLines={1}>
+            {i?.name ?? ""}
+          </RNText>
+          {/* Saved, it turns dark: the state is the button's face, as a
+              pressed toggle's is, rather than a second glyph to learn. */}
+          <IconButton
+            icon="bookmark"
+            label={saved ? `Remove ${i?.name ?? t} from watchlist` : `Save ${i?.name ?? t} to watchlist`}
+            variant={saved ? "primary" : "secondary"}
+            onPress={() => {
+              void Haptics.selectionAsync();
+              toggleWatch(t);
+            }}
+          />
         </View>
 
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
@@ -175,6 +195,9 @@ export default function Stock() {
             <ExposureCard name={i?.name ?? t} exposure={exposure.data} loading={exposure.isPending} />
           )}
 
+          {/* ── What it is worth as collateral ──────────────────────────── */}
+          {i !== undefined && <BorrowCard ticker={t} name={i.name} />}
+
           {/* ── Where an order goes ─────────────────────────────────────── */}
           {i !== undefined && i.wrappers.length > 0 && (
             <View style={s.card}>
@@ -217,17 +240,27 @@ export default function Stock() {
         </ScrollView>
 
         <View style={[s.footer, { paddingBottom: bottom }]}>
-          <Button
-            label={held === undefined ? "Buy" : "Buy more"}
-            disabled={i === undefined}
-            onPress={() =>
-              i !== undefined &&
-              router.push({
-                pathname: "/buy",
-                params: { ticker: t, name: i.name, ...(i.logoUrl ? { logoUrl: i.logoUrl } : {}) },
-              })
-            }
-          />
+          {/* Selling sits beside buying once there is something to sell, the
+              lesser of the two: a position is held more often than it is left. */}
+          <View style={s.actions}>
+            {held !== undefined && (
+              <View style={s.fill}>
+                <Button
+                  label="Sell"
+                  variant="secondary"
+                  disabled={i === undefined}
+                  onPress={() => i !== undefined && order("sell")}
+                />
+              </View>
+            )}
+            <View style={s.fill}>
+              <Button
+                label={held === undefined ? "Buy" : "Buy more"}
+                disabled={i === undefined}
+                onPress={() => i !== undefined && order("buy")}
+              />
+            </View>
+          </View>
         </View>
       </SafeAreaView>
     </View>
@@ -330,6 +363,7 @@ const s = StyleSheet.create({
 
   about: { marginTop: 8, lineHeight: 21 },
 
+  actions: { flexDirection: "row", gap: space.sm },
   footer: {
     position: "absolute",
     left: 0,

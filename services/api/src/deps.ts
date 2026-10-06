@@ -1,6 +1,8 @@
 import {
   JupiterLite,
   JupiterRegistry,
+  jupiterAccess,
+  parseJupiterKeys,
   SolanaRpc,
   SymmetryVenue,
   USDC_MINT,
@@ -13,6 +15,7 @@ import {
   type TriggerSource,
 } from "@mercury/chain";
 import {
+  CachedPriceBoard,
   JupiterMarket,
   KaminoCredit,
   MintMultipliers,
@@ -91,6 +94,12 @@ export interface Config {
   /** Optional. Program scans (Kamino's reserve lookup), if the main RPC plan refuses them. */
   readonly solanaScanRpcUrl?: string;
   /**
+   * Optional. Jupiter API keys, rotated one per request. Set, every Jupiter call
+   * goes to the paid host (api.jup.ag) for its higher rate limits; empty, they
+   * stay on the keyless free tier.
+   */
+  readonly jupiterApiKeys: readonly string[];
+  /**
    * Optional. The key that pays for sponsored transactions.
    *
    * Absent, sponsorship is off and buyers pay their own network costs — which
@@ -125,6 +134,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     notifyFrom: env["NOTIFY_FROM"] ?? "Mercury <alerts@mercury.invalid>",
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
+    jupiterApiKeys: parseJupiterKeys(env["JUPITER_API_KEYS"]),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
@@ -174,28 +184,31 @@ export function buildAuthDeps(config: Config): AuthDeps {
  * server does not start. Dummy data belongs in the client while the interface is being
  * built, never in the server.
  *
- * Nothing here takes a key. Jupiter's keyless endpoints both price an order and
- * build the transaction that fills it, which is the whole of execution — the
- * Ultra adapter that once needed `JUPITER_API_KEY` is gone, and so is the key.
+ * Jupiter needs no key: its keyless endpoints both price an order and build the
+ * transaction that fills it, which is the whole of execution. `JUPITER_API_KEYS`
+ * only moves every Jupiter call to the paid host, for its rate limits.
  * Triggers are the one piece still missing, and baskets are blocked on the
  * Symmetry spike — both are present so the object is whole, and both throw.
  */
 export function buildDeps(config: Config): Deps {
-  const registry = new JupiterRegistry();
+  // One rotation shared by every Jupiter adapter, so the keys take turns across all of them.
+  const jupiter = jupiterAccess(config.jupiterApiKeys) ?? {};
+  const registry = new JupiterRegistry(jupiter);
   const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl });
-  const market = new JupiterMarket({ registry });
+  const market = new JupiterMarket({ registry, ...jupiter });
 
   return {
     registry,
     supportedStocks: registry,
-    quotes: new JupiterLite(),
+    quotes: new JupiterLite(jupiter),
     triggers: new JupiterTriggersNotYet(),
     sessions: new PythSessions(),
     reference: market,
     // The mint is the authority. `market` implements the same port from
     // Jupiter's copy of the same numbers, and is what the browser falls back to.
     multipliers: new MintMultipliers({ chain }),
-    prices: market,
+    // Every price lookup shares one short cache, so background jobs stop spending Jupiter's rate limit.
+    prices: new CachedPriceBoard(market),
     credit: new KaminoCredit(),
     // Unofficial, keyless, and the only equity history we can reach: Pyth
     // Benchmarks refuses equity feeds on our entitlement and serves one
@@ -317,6 +330,7 @@ export function buildReadDeps(
       usdcMint: USDC_MINT,
       history: deps.history,
       record: (planned, input) => recordLoanEvents(db, planned, input),
+      ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
     send: { rpcUrl: config.solanaRpcUrl, ...(relay === undefined ? {} : { relay }) },
   };

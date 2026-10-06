@@ -6,6 +6,11 @@ import {
   getBase64Encoder,
   getCompiledTransactionMessageDecoder,
   getTransactionDecoder,
+  isSolanaError,
+  SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__ALREADY_PROCESSED,
+  SOLANA_ERROR__TRANSACTION_ERROR__BLOCKHASH_NOT_FOUND,
+  SOLANA_ERROR__TRANSACTION_ERROR__INSUFFICIENT_FUNDS_FOR_FEE,
   type Base64EncodedWireTransaction,
   type Signature,
 } from "@solana/kit";
@@ -127,6 +132,30 @@ export const reasonFrom = (raw: string): string => {
   return "the network rejected this order and did not say why. Nothing has been charged.";
 };
 
+/** The transaction errors `SENTENCES` has words for, by the name it matches on. */
+const TRANSACTION_ERRORS: Readonly<Record<number, string>> = {
+  [SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND]: "AccountNotFound",
+  [SOLANA_ERROR__TRANSACTION_ERROR__INSUFFICIENT_FUNDS_FOR_FEE]: "InsufficientFundsForFee",
+  [SOLANA_ERROR__TRANSACTION_ERROR__BLOCKHASH_NOT_FOUND]: "BlockhashNotFound",
+  [SOLANA_ERROR__TRANSACTION_ERROR__ALREADY_PROCESSED]: "AlreadyProcessed",
+};
+
+/**
+ * The whole of a send failure, as text `reasonFrom` can read.
+ *
+ * A preflight rejected before any program ran — an expired blockhash, a fee
+ * payer with no account — has no logs. Its reason is the transaction error,
+ * which kit hangs off the error as `cause` and leaves out of the message, so
+ * reading only the message turned every one of them into "did not say why".
+ */
+export const failureText = (err: unknown): string => {
+  const message = err instanceof Error ? err.message : "The network rejected the transaction.";
+  const cause = (err as { cause?: unknown } | null)?.cause;
+  if (!isSolanaError(cause)) return message;
+  const code = cause.context.__code;
+  return `${message}\n${TRANSACTION_ERRORS[code] ?? `transaction error #${code}`}`;
+};
+
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
 const Body = z.object({ transaction: z.string().min(1) });
@@ -211,8 +240,7 @@ export function sendRoutes(deps: SendDeps): Hono {
         .send();
     } catch (err) {
       // Preflight failures carry the program's own reason; pass it on rather than a generic 500.
-      const message = err instanceof Error ? err.message : "The network rejected the transaction.";
-      return c.json(fail("send_failed", reasonFrom(message)), 422);
+      return c.json(fail("send_failed", reasonFrom(failureText(err))), 422);
     }
 
     const deadline = Date.now() + confirmMs;

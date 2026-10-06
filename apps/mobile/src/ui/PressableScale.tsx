@@ -22,6 +22,12 @@ export interface PressableScaleProps extends Omit<PressableProps, "style"> {
  * left is the shape moving under it and the taptic engine. `opacity` — React
  * Native's default — says "disabled" rather than "pressed".
  */
+/*
+ * Clamped, so the release settles at 1 instead of swinging past it: an
+ * underdamped spring read as a little pulse after every tap.
+ */
+const PRESS = { damping: 18, stiffness: 320, overshootClamping: true } as const;
+
 export const PressableScale = ({
   children,
   style,
@@ -39,11 +45,11 @@ export const PressableScale = ({
       {...rest}
       disabled={disabled}
       onPressIn={(e) => {
-        if (disabled !== true) scale.value = withSpring(activeScale, { damping: 18, stiffness: 320 });
+        if (disabled !== true && activeScale !== 1) scale.value = withSpring(activeScale, PRESS);
         rest.onPressIn?.(e);
       }}
       onPressOut={(e) => {
-        scale.value = withSpring(1, { damping: 18, stiffness: 320 });
+        if (scale.value !== 1) scale.value = withSpring(1, PRESS);
         rest.onPressOut?.(e);
       }}
       onPress={(e) => {
