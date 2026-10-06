@@ -94,6 +94,26 @@ export const ManagedBasketInsights = z.object({
   integratorSwapFeeBps: z.number().int().nullable(),
 });
 
+export const ManagedBasketPortfolio = z.object({
+  portfolioId: z.string(),
+  ownerAccountId: z.string(),
+  strategyId: z.string(),
+  smartAccounts: z.array(z.object({ accountId: z.string(), depositAccountId: z.string().optional() })),
+});
+
+export const BasketEnrollmentAuthorization = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("solana-message"), text: z.string() }),
+  z.object({ kind: z.literal("solana-transaction"), transaction: z.string() }),
+]);
+export const PreparedBasketEnrollment = z.object({
+  intentId: z.string().uuid(),
+  authorization: BasketEnrollmentAuthorization,
+});
+export const SubmitBasketEnrollment = z.object({
+  intentId: z.string().uuid(),
+  signed: z.string().min(1).max(20_000),
+});
+
 export const InvestBasketRequest = z.object({ usdAmount: Usd, acceptQueued: z.boolean().default(false) });
 
 export const PlanCadence = z.enum(["weekly", "monthly"]);
@@ -115,5 +135,7 @@ export type Basket = z.infer<typeof Basket>;
 export type ManagedBasketTag = z.infer<typeof ManagedBasketTag>;
 export type ManagedBasketTemplate = z.infer<typeof ManagedBasketTemplate>;
 export type ManagedBasketInsights = z.infer<typeof ManagedBasketInsights>;
+export type ManagedBasketPortfolio = z.infer<typeof ManagedBasketPortfolio>;
+export type PreparedBasketEnrollment = z.infer<typeof PreparedBasketEnrollment>;
 export type BasketPreview = z.infer<typeof BasketPreview>;
 export type Plan = z.infer<typeof Plan>;

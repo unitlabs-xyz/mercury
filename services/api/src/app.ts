@@ -23,6 +23,7 @@ import { moneyRoutes } from "./routes/money.js";
 import { portfolioRoutes } from "./routes/portfolio.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 import { basketTemplateRoutes } from "./routes/basket-templates.js";
+import { basketEnrollmentRoutes } from "./routes/basket-enrollment.js";
 
 const fail = (code: ErrorCode | "not_implemented", message: string, details?: unknown) => ({
   error: { code, message, ...(details === undefined ? {} : { details }) },
@@ -75,6 +76,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", waitlistRoutes(read.waitlist));
 
   app.use("/v1/*", requireAuth(auth));
+  app.route("/", basketEnrollmentRoutes(read.basketTemplates));
 
   app.onError((err, c) => {
     if (err.message.startsWith("buildDeps:")) return c.json(NOT_READY, 503);

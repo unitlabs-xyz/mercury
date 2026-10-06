@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import catalogJson from "../../../../catalog.json" with { type: "json" };
 import { JsonBasketStore } from "../store.js";
+import { testDb } from "../../../db/testing.js";
+import { users } from "../../../db/schema.js";
 
 describe("JsonBasketStore", () => {
+  it("persists an enrollment challenge across reads and records its result", async () => {
+    const db = await testDb();
+    const [user] = await db.insert(users).values({ privyUserId: "did:privy:pilot" }).returning();
+    const store = new JsonBasketStore("postgres://unused", catalogJson, db);
+    const id = await store.saveEnrollmentIntent({
+      userId: user!.id, slug: "magnificent-seven", ownerAccountId: "solana:owner",
+      strategyId: "strategy-1", expiresAt: new Date(Date.now() + 60_000),
+      challenge: { flowId: "flow-1", accountIndex: "0", agentAccountId: "solana:agent", message: { kind: "solana-message", text: "Sign me" } },
+    });
+    expect(await store.enrollmentIntent(id)).toMatchObject({ userId: user!.id, slug: "magnificent-seven", portfolioId: null, challenge: { flowId: "flow-1" } });
+    await store.completeEnrollmentIntent(id, "portfolio-1");
+    expect(await store.enrollmentIntent(id)).toMatchObject({ portfolioId: "portfolio-1" });
+  });
   it("resolves the curated catalog to Solana asset IDs", async () => {
     const baskets = await new JsonBasketStore("postgres://unused").load();
     expect(baskets).toHaveLength(22);

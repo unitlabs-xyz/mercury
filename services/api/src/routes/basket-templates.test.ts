@@ -15,7 +15,7 @@ describe("basket template routes", () => {
     expect(response.status).toBe(200);
     expect(templates).toHaveLength(22);
     expect(templates[0]).toEqual(
-      expect.objectContaining({ kind: "managed_portfolio", status: "candidate", canEnroll: false }),
+      expect.objectContaining({ kind: "managed_portfolio", status: "candidate", canEnroll: true }),
     );
     expect(
       templates.every((template) => {

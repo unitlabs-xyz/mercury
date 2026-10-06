@@ -12,6 +12,9 @@ import { Skeleton, relDay } from "./ui";
 
 const RANGES: Range[] = ["1D", "1W", "1M"];
 
+export const performancePercent = (change: number, openingValue: number): number | null =>
+  openingValue === 0 ? (change === 0 ? 0 : null) : (change / openingValue) * 100;
+
 /**
  * One figure in a grey panel: a muted label, the value, one line of context.
  * 24px in the portfolio header; `size="md"` sets it at 20 for denser grids
@@ -215,6 +218,7 @@ export const Performance = ({
   const first = history?.[0]?.value;
   const last = history?.[history.length - 1]?.value;
   const change = first !== undefined && last !== undefined ? last - first : null;
+  const percent = change !== null && first !== undefined ? performancePercent(change, first) : null;
   const days = range === "1D" ? 1 : range === "1W" ? 7 : 30;
   /*
    * A move too small to print is not a fall. Below half a cent `usdSigned`
@@ -247,7 +251,7 @@ export const Performance = ({
                       : "bg-ds-up-chip text-ds-up"
                 }`}
               >
-                <span className="opacity-80">{pct((change / first) * 100)}</span>
+                <span className="opacity-80">{percent === null ? "—" : pct(percent)}</span>
               </span>
               <span className="translate-y-1 text-[12px] leading-none text-ds-ink/80">
                 {range === "1D" ? "today" : `${usdSigned(change / days)} avg/day`}

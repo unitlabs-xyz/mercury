@@ -63,6 +63,24 @@ export const wallets = pgTable(
   (t) => [uniqueIndex("wallet_address_idx").on(t.address)],
 );
 
+/** Prepared user authorizations and their resulting Glider portfolio. Provider balances stay at Glider. */
+export const basketActions = pgTable(
+  "basket_action",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    kind: text("kind").notNull(),
+    ownerAccountId: text("owner_account_id").notNull(),
+    strategyId: text("strategy_id").notNull(),
+    payload: jsonb("payload").notNull(),
+    portfolioId: text("portfolio_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("basket_action_user_created_idx").on(t.userId, t.createdAt)],
+);
+
 /**
  * One signature stream we follow for a wallet.
  *

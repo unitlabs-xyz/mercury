@@ -47,23 +47,31 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   effectiveSwapFeeBps: async () => {
     throw new Error("unexpected fee read");
   },
+  portfolios: async () => { throw new Error("unexpected portfolio read"); },
+  prepareEnrollment: async () => { throw new Error("unexpected enrollment prepare"); },
+  enroll: async () => { throw new Error("unexpected enrollment submit"); },
   ...changes,
 });
 const store = (definition: BasketTemplate) => ({
   load: async () => [definition],
   withSyncLock: async <T>(work: () => Promise<T>) => work(),
+  saveEnrollmentIntent: async () => { throw new Error("unexpected enrollment save"); },
+  enrollmentIntent: async () => { throw new Error("unexpected enrollment read"); },
+  completeEnrollmentIntent: async () => { throw new Error("unexpected enrollment completion"); },
 });
 
 describe("BasketService sync", () => {
   it("uses recorded IDs without a provider call or database lock", async () => {
     const service = new BasketService({
       store: {
+        ...store(basket),
         load: async () => [basket],
         withSyncLock: async () => {
           throw new Error("unexpected lock");
         },
       },
       provider: {
+        ...provider(),
         list: async () => {
           throw new Error("unexpected provider call");
         },
@@ -208,7 +216,7 @@ it("lists the Solana catalog as candidate managed portfolios", async () => {
     expect.objectContaining({
       kind: "managed_portfolio",
       status: "candidate",
-      canEnroll: false,
+      canEnroll: true,
       strategyId: "01M465MY1C2KBER654KJDCYYK9",
       performance: null,
       allocations: expect.arrayContaining([expect.objectContaining({ ticker: "NVDA", weightBps: 1428 })]),
@@ -273,6 +281,6 @@ it("keeps the catalog available when performance cannot be read", async () => {
   });
 
   expect(await service.getTemplate("nvidia")).toEqual(
-    expect.objectContaining({ slug: "nvidia", performance: null, canEnroll: false }),
+    expect.objectContaining({ slug: "nvidia", performance: null, canEnroll: true }),
   );
 });

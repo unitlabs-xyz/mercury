@@ -5,6 +5,12 @@ import type { BasketDefinition, ProviderBasket, StrategyPerformance, SyncResult 
 const allocations = (assets: readonly { assetId: string; weightBps: number }[]) =>
   assets.map(({ assetId, weightBps }) => `${assetId}:${weightBps}`).sort();
 
+export class BasketEnrollmentError extends Error {
+  constructor(readonly code: string, readonly status: 403 | 409 | 410 | 503, message: string) {
+    super(message);
+  }
+}
+
 function matches(expected: BasketDefinition, actual: ProviderBasket): boolean {
   return (
     actual.name === expected.name &&
@@ -19,6 +25,52 @@ export class BasketService {
 
   constructor(private readonly deps: { provider?: BasketProvider; store: BasketStore }) {}
 
+  private async templateForEnrollment(slug: string) {
+    const template = (await this.deps.store.load()).find((item) => item.slug === slug);
+    if (!template?.providerId || template.status === "disabled")
+      throw new BasketEnrollmentError("enrollment_unavailable", 409, "Basket enrollment is unavailable.");
+    if (!this.deps.provider) throw new BasketEnrollmentError("provider_unavailable", 503, "Glider is not configured.");
+    return { template, provider: this.deps.provider };
+  }
+
+  async enrollment(slug: string, ownerAccountId: string) {
+    const { template, provider } = await this.templateForEnrollment(slug);
+    return (await provider.portfolios(ownerAccountId, template.providerId!))[0] ?? null;
+  }
+
+  async prepareEnrollment(slug: string, userId: string, ownerAccountId: string) {
+    const { template, provider } = await this.templateForEnrollment(slug);
+    if ((await provider.portfolios(ownerAccountId, template.providerId!)).length > 0)
+      throw new BasketEnrollmentError("already_enrolled", 409, "This wallet already has a portfolio for this strategy.");
+    const challenge = await provider.prepareEnrollment(ownerAccountId, template.providerId!);
+    const expiresAt = new Date(Date.now() + (challenge.solanaTransaction ? 90_000 : 10 * 60_000));
+    const intentId = await this.deps.store.saveEnrollmentIntent({
+      userId, slug, ownerAccountId, strategyId: template.providerId!, challenge, expiresAt,
+    });
+    return {
+      intentId,
+      authorization: challenge.solanaTransaction
+        ? { kind: "solana-transaction" as const, transaction: challenge.solanaTransaction }
+        : challenge.message,
+    };
+  }
+
+  async submitEnrollment(slug: string, userId: string, ownerAccountId: string, intentId: string, signed: string) {
+    const { template, provider } = await this.templateForEnrollment(slug);
+    const intent = await this.deps.store.enrollmentIntent(intentId);
+    if (
+      !intent || intent.userId !== userId || intent.slug !== slug || intent.ownerAccountId !== ownerAccountId ||
+      intent.strategyId !== template.providerId || intent.expiresAt.getTime() <= Date.now()
+    ) throw new BasketEnrollmentError("authorization_invalid", 403, "Enrollment authorization is invalid or expired.");
+    if (intent.portfolioId) {
+      const existing = (await provider.portfolios(ownerAccountId, intent.strategyId)).find((p) => p.portfolioId === intent.portfolioId);
+      if (existing) return existing;
+    }
+    const portfolio = await provider.enroll(ownerAccountId, intent.strategyId, intent.challenge, signed, template.name);
+    await this.deps.store.completeEnrollmentIntent(intentId, portfolio.portfolioId);
+    return portfolio;
+  }
+
   async listTemplates(): Promise<readonly ManagedBasketTemplate[]> {
     const catalog = await this.deps.store.load();
     return catalog.map((template) => ({
@@ -27,7 +79,7 @@ export class BasketService {
       provider: "glider" as const,
       status: template.status,
       tags: [...template.tags],
-      canEnroll: template.status === "enabled" && template.providerId !== undefined,
+      canEnroll: template.status !== "disabled" && template.providerId !== undefined,
       name: template.name,
       description: template.description,
       strategyId: template.providerId ?? null,

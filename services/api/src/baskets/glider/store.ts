@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
@@ -6,6 +6,9 @@ import { ManagedBasketTag } from "@mercury/types";
 import catalogJson from "../../../catalog.json" with { type: "json" };
 import type { BasketStore } from "../core/deps.js";
 import type { BasketTemplate } from "../core/primitives.js";
+import type { EnrollmentChallenge, EnrollmentIntent } from "../core/primitives.js";
+import type { Db } from "../../db/client.js";
+import { basketActions } from "../../db/schema.js";
 
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const LOCK_KEY = 4_919_208;
@@ -45,7 +48,36 @@ export class JsonBasketStore implements BasketStore {
   constructor(
     private readonly databaseUrl: string,
     private readonly source: unknown = catalogJson,
+    private readonly appDb?: Db,
   ) {}
+
+  private actionsDb(): Db {
+    if (!this.appDb) throw new Error("Basket action store is not configured");
+    return this.appDb;
+  }
+
+  async saveEnrollmentIntent(intent: Omit<EnrollmentIntent, "id" | "portfolioId">): Promise<string> {
+    const [saved] = await this.actionsDb().insert(basketActions).values({
+      userId: intent.userId, slug: intent.slug, kind: "enroll", ownerAccountId: intent.ownerAccountId,
+      strategyId: intent.strategyId, payload: intent.challenge, expiresAt: intent.expiresAt,
+    }).returning({ id: basketActions.id });
+    if (!saved) throw new Error("Could not save enrollment authorization");
+    return saved.id;
+  }
+
+  async enrollmentIntent(id: string): Promise<EnrollmentIntent | null> {
+    const row = await this.actionsDb().query.basketActions.findFirst({ where: eq(basketActions.id, id) });
+    if (!row || row.kind !== "enroll") return null;
+    return {
+      id: row.id, userId: row.userId, slug: row.slug, ownerAccountId: row.ownerAccountId,
+      strategyId: row.strategyId, challenge: row.payload as EnrollmentChallenge,
+      expiresAt: row.expiresAt, portfolioId: row.portfolioId,
+    };
+  }
+
+  async completeEnrollmentIntent(id: string, portfolioId: string): Promise<void> {
+    await this.actionsDb().update(basketActions).set({ portfolioId }).where(eq(basketActions.id, id));
+  }
 
   async load(): Promise<readonly BasketTemplate[]> {
     const catalog = schema.parse(this.source);

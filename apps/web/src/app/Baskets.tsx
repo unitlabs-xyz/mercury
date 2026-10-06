@@ -291,7 +291,7 @@ const StrategyTable = ({
                   <span className="text-right text-ds-muted">{template.allocations.length}</span>
                   <span className="text-right text-ds-muted">Daily</span>
                   <span className="text-right text-ds-muted">
-                    {template.canEnroll ? "Available" : "Preview"}
+                    {template.status === "enabled" ? "Available" : template.status === "candidate" ? "Enrollment pilot" : "Preview"}
                   </span>
                   <Arrow />
                 </Link>

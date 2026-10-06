@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ApiError, Decision, MarketStatus } from "@mercury/types";
+import { ApiError, Decision, MarketStatus, ManagedBasketPortfolio, PreparedBasketEnrollment, SubmitBasketEnrollment } from "@mercury/types";
 
 export class MercuryError extends Error {
   constructor(
@@ -17,6 +17,8 @@ export interface ClientOptions {
   /** The connected Privy wallet. See ADR 0003: we never send a key, only an address. */
   readonly walletAddress?: string;
   readonly token?: string;
+  /** Privy's signed wallet claim, required for owner-bound basket actions. */
+  readonly identityToken?: string;
   readonly fetch?: typeof fetch;
 }
 
@@ -82,6 +84,7 @@ export class MercuryClient {
   private async call<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.options.token !== undefined) headers.authorization = `Bearer ${this.options.token}`;
+    if (this.options.identityToken !== undefined) headers["x-privy-identity-token"] = this.options.identityToken;
     if (this.options.walletAddress !== undefined) headers["x-wallet-address"] = this.options.walletAddress;
 
     const res = await this.doFetch(`${this.options.baseUrl}${path}`, {
@@ -119,4 +122,17 @@ export class MercuryClient {
       method: "POST",
       body: JSON.stringify({ usdAmount, acceptQueued: false }),
     });
+
+  basketEnrollment = (slug: string) =>
+    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
+      z.object({ portfolio: ManagedBasketPortfolio.nullable() }));
+
+  prepareBasketEnrollment = (slug: string) =>
+    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/enrollment/prepare`,
+      PreparedBasketEnrollment, { method: "POST" });
+
+  submitBasketEnrollment = (slug: string, body: z.infer<typeof SubmitBasketEnrollment>) =>
+    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
+      z.object({ portfolio: ManagedBasketPortfolio }),
+      { method: "POST", body: JSON.stringify(SubmitBasketEnrollment.parse(body)) });
 }

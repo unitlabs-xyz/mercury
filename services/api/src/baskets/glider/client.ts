@@ -2,10 +2,11 @@ import createClient, { type Client } from "openapi-fetch";
 import { z } from "zod";
 import type { BasketProvider } from "../core/deps.js";
 import type { ManagedBasketInsights } from "@mercury/types";
-import type { BasketDefinition, ProviderBasket, StrategyPerformance } from "../core/primitives.js";
+import type { BasketDefinition, ProviderBasket, StrategyPerformance, BasketPortfolio, EnrollmentChallenge } from "../core/primitives.js";
 import type { components, paths } from "./generated.js";
 
 const BASE = "https://api.glider.fi/v2";
+const SOLANA_CHAIN_ID = 1_399_811_149;
 const remoteStrategy = z.object({
   strategyId: z.string().min(1),
   name: z.string(),
@@ -51,6 +52,16 @@ const breakdown = z.object({
   }),
 });
 const fees = z.object({ data: z.object({ swapBps: z.number().int().nullable() }) });
+const smartAccount = z.object({ accountId: z.string(), depositAccountId: z.string().optional() });
+const portfolio = z.object({
+  portfolioId: z.string(), ownerAccountId: z.string().nullable(), strategyId: z.string(),
+  smartAccounts: z.array(smartAccount),
+});
+const enrollmentChallenge = z.object({
+  flowId: z.string(), accountIndex: z.string(), agentAccountId: z.string(),
+  message: z.object({ kind: z.literal("solana-message"), text: z.string() }),
+  solanaTransaction: z.string().optional(),
+});
 
 function toBasket(remote: z.infer<typeof remoteStrategy>): ProviderBasket {
   return {
@@ -102,6 +113,47 @@ export class GliderClient implements BasketProvider {
     const parsed = providerError.safeParse(result.error);
     const detail = parsed.success ? ` ${parsed.data.error.code}: ${parsed.data.error.message}` : "";
     throw new Error(`Glider strategy request failed: ${result.response.status} /v2${path}${detail}`);
+  }
+
+  async portfolios(ownerAccountId: string, strategyId: string): Promise<readonly BasketPortfolio[]> {
+    const found: BasketPortfolio[] = [];
+    let cursor: string | null = null;
+    const seen = new Set<string>();
+    do {
+      const result = await this.client.GET("/portfolios", {
+        params: { query: { ownerAccountId, strategyId, limit: 200, ...(cursor ? { cursor } : {}) } },
+      });
+      const page = z.object({ data: z.object({ portfolios: z.array(portfolio) }), nextCursor: z.string().nullable() })
+        .parse(this.checked(result, "/portfolios"));
+      found.push(...page.data.portfolios.filter((item) => item.ownerAccountId === ownerAccountId && item.strategyId === strategyId)
+        .map((item) => ({ portfolioId: item.portfolioId, ownerAccountId, strategyId, smartAccounts: item.smartAccounts })));
+      cursor = page.nextCursor;
+      if (cursor && seen.has(cursor)) throw new Error("Glider portfolio pagination repeated a cursor");
+      if (cursor) seen.add(cursor);
+    } while (cursor);
+    return found;
+  }
+
+  async prepareEnrollment(ownerAccountId: string, strategyId: string): Promise<EnrollmentChallenge> {
+    const result = await this.client.POST("/enroll/signature", {
+      body: { ownerAccountId, strategyId, chainIds: [SOLANA_CHAIN_ID], accountType: "ECDSA" },
+    });
+    return enrollmentChallenge.parse(this.checked(result, "/enroll/signature").data);
+  }
+
+  async enroll(ownerAccountId: string, strategyId: string, challenge: EnrollmentChallenge, signed: string, name: string): Promise<BasketPortfolio> {
+    const result = await this.client.POST("/enroll", {
+      body: {
+        ownerAccountId, strategyId, chainIds: [SOLANA_CHAIN_ID], accountType: "ECDSA",
+        flowId: challenge.flowId, accountIndex: challenge.accountIndex, agentAccountId: challenge.agentAccountId,
+        ...(challenge.solanaTransaction ? { signedSolanaTransaction: signed } : { signature: signed }),
+        portfolioName: name,
+      },
+    });
+    const data = z.object({ portfolioId: z.string(), strategyId: z.string(), smartAccounts: z.array(smartAccount) })
+      .parse(this.checked(result, "/enroll").data);
+    if (data.strategyId !== strategyId) throw new Error("Glider returned a different strategy for enrollment");
+    return { portfolioId: data.portfolioId, ownerAccountId, strategyId, smartAccounts: data.smartAccounts };
   }
 
   async list(): Promise<readonly ProviderBasket[]> {

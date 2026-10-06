@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import type { ManagedBasketTemplate } from "@mercury/types";
 import { usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
-import { useBasketInsights, useBasketTemplate } from "../api/baskets";
+import { basketEnrollmentEnabled, useBasketEnrollment, useBasketEnrollmentAction, useBasketInsights, useBasketTemplate } from "../api/baskets";
 import { useHistories, useInstruments, usePrices, type Instrument } from "../market/hooks";
 import { Chevron, GlideTable, MoveChip, RailCard, RailHead, RangeSwitch, StatusChip } from "../ui/ds";
 import { AppShell } from "./AppShell";
@@ -10,6 +11,8 @@ import { DotChart } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
+import { EnrollmentRail } from "./baskets/EnrollmentRail";
+import { EnrollmentSheet } from "./baskets/EnrollmentSheet";
 import { modeledSeries } from "./baskets/performance";
 
 type Range = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
@@ -73,8 +76,16 @@ const IconCluster = ({
 export const Basket = () => {
   const { slug = "" } = useParams();
   const [range, setRange] = useState<Range>("1Y");
+  const [enrollmentOpen, setEnrollmentOpen] = useState(false);
+  const [checkingEnrollment, setCheckingEnrollment] = useState(false);
+  const enrollmentRequestActive = useRef(false);
   const result = useBasketTemplate(slug);
   const insights = useBasketInsights(slug);
+  const { ready, authenticated } = usePrivy();
+  const { identityToken } = useIdentityToken();
+  const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null);
+  const enrollment = useBasketEnrollment(slug);
+  const enrollAction = useBasketEnrollmentAction(slug);
   const template = result.data;
   const tickers = useMemo(() => template?.allocations.map((item) => item.ticker) ?? [], [template]);
   const mints = useMemo(() => template?.allocations.map((item) => item.mint) ?? [], [template]);
@@ -87,6 +98,27 @@ export const Basket = () => {
     [instruments.data],
   );
   const name = template ? displayBasketName(template.name) : "Basket";
+  const enrollmentBusy = checkingEnrollment || enrollAction.isPending;
+  const closeEnrollment = () => {
+    if (enrollmentBusy) return;
+    setEnrollmentOpen(false);
+    enrollAction.reset();
+  };
+  const confirmEnrollment = async () => {
+    if (enrollmentRequestActive.current) return;
+    enrollmentRequestActive.current = true;
+    setCheckingEnrollment(true);
+    try {
+      // A previous submission may have succeeded upstream even if its response failed.
+      const current = await enrollment.refetch();
+      if (!current.isError && !current.data) await enrollAction.mutateAsync();
+    } catch {
+      // The mutation retains the error for the review sheet to display.
+    } finally {
+      setCheckingEnrollment(false);
+      enrollmentRequestActive.current = false;
+    }
+  };
 
   if (result.isLoading || !template)
     return (
@@ -132,8 +164,8 @@ export const Basket = () => {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-[20px] leading-tight font-medium text-ds-ink">{name}</h1>
-                    <StatusChip tone={template.canEnroll ? "up" : "neutral"} size="md">
-                      {template.canEnroll ? "Available" : "Preview"}
+                    <StatusChip tone={template.status === "enabled" ? "up" : "neutral"} size="md">
+                      {template.status === "enabled" ? "Available" : template.status === "candidate" ? "Enrollment pilot" : "Preview"}
                     </StatusChip>
                   </div>
                   <p className="mt-2 text-[13px] text-ds-muted">Glider strategy · Solana</p>
@@ -401,30 +433,20 @@ export const Basket = () => {
         </div>
 
         <aside className="flex flex-col gap-4 md:gap-6 xl:sticky xl:top-20">
-          <RailCard label="Invest in strategy">
-            <RailHead title={`Invest in ${name}`} meta={template.canEnroll ? "Available" : "Preview"} />
-            <div className="mt-5 rounded-lg bg-ds-panel p-4 text-[13px]">
-              <p className="font-medium text-ds-ink">Trading is not available yet</p>
-              <p className="mt-2 leading-relaxed text-ds-muted">
-                Enrollment and funding are being verified for this Solana strategy.
-              </p>
-            </div>
-            <div className="mt-5 flex items-center justify-between text-[12px]">
-              <span className="text-ds-muted">Target assets</span>
-              <span className="font-medium text-ds-ink">{allocations.length}</span>
-            </div>
-            <div className="mt-3 flex items-center justify-between text-[12px]">
-              <span className="text-ds-muted">Funding</span>
-              <span className="font-medium text-ds-ink">Not available</span>
-            </div>
-            <button
-              type="button"
-              disabled
-              className="mt-6 w-full rounded-full bg-ds-tray px-5 py-3 text-[13px] font-medium text-ds-muted"
-            >
-              Invest unavailable
-            </button>
-          </RailCard>
+          <EnrollmentRail
+            name={name}
+            assetCount={allocations.length}
+            portfolio={signedIn ? enrollment.data ?? null : null}
+            signedIn={signedIn}
+            checking={enrollment.isLoading}
+            blocked={template.status === "disabled"}
+            busy={enrollmentBusy}
+            error={enrollment.error?.message}
+            onReview={() => {
+              enrollAction.reset();
+              setEnrollmentOpen(true);
+            }}
+          />
           <RailCard label="Your position">
             <RailHead title="Your position" />
             <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
@@ -458,6 +480,17 @@ export const Basket = () => {
           </Link>
         </aside>
       </div>
+      <EnrollmentSheet
+        open={enrollmentOpen}
+        name={name}
+        assetCount={allocations.length}
+        walletReady={enrollAction.walletReady}
+        busy={enrollmentBusy}
+        completed={Boolean(enrollment.data || enrollAction.data)}
+        error={enrollAction.error?.message ?? enrollment.error?.message}
+        onClose={closeEnrollment}
+        onConfirm={() => void confirmEnrollment()}
+      />
     </AppShell>
   );
 };

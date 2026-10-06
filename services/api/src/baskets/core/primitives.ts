@@ -32,6 +32,32 @@ export type ProviderBasket = Omit<BasketDefinition, "slug" | "providerId" | "sch
   schedule: unknown;
 };
 
+export interface BasketPortfolio {
+  portfolioId: string;
+  ownerAccountId: string;
+  strategyId: string;
+  smartAccounts: readonly { accountId: string; depositAccountId?: string | undefined }[];
+}
+
+export interface EnrollmentChallenge {
+  flowId: string;
+  accountIndex: string;
+  agentAccountId: string;
+  message: { kind: "solana-message"; text: string };
+  solanaTransaction?: string | undefined;
+}
+
+export interface EnrollmentIntent {
+  id: string;
+  userId: string;
+  slug: string;
+  ownerAccountId: string;
+  strategyId: string;
+  challenge: EnrollmentChallenge;
+  expiresAt: Date;
+  portfolioId: string | null;
+}
+
 export interface SyncResult {
   strategyIds: Record<string, string>;
   recorded: number;

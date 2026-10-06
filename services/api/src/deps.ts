@@ -271,7 +271,7 @@ export function buildReadDeps(
 ): ReadDeps {
   return {
     basketTemplates: new BasketService({
-      store: new JsonBasketStore(config.databaseUrl),
+      store: new JsonBasketStore(config.databaseUrl, undefined, db),
       ...(config.gliderApiKey === undefined ? {} : { provider: new GliderClient(config.gliderApiKey) }),
     }),
     instruments: {

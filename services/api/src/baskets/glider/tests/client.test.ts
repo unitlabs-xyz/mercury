@@ -12,6 +12,39 @@ const remote = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 describe("GliderClient", () => {
+  it("enrolls a Solana owner with the stage-one transaction and its exact flow", async () => {
+    const calls: { path: string; body: unknown }[] = [];
+    const fetcher: typeof fetch = async (input) => {
+      const request = input as Request;
+      const path = new URL(request.url).pathname;
+      const body = request.method === "POST" ? JSON.parse(await request.text()) : null;
+      calls.push({ path, body });
+      if (path.endsWith("/enroll/signature")) return json({ success: true, data: {
+        flowId: "flow-1", accountIndex: "0", agentAccountId: "solana:agent",
+        message: { kind: "solana-message", text: "Sign me" }, solanaTransaction: "unsigned-base64",
+      } });
+      return json({ success: true, data: {
+        portfolioId: "portfolio-1", strategyId: "strategy-1", portfolioName: null,
+        smartAccounts: [{ accountId: "solana:deposit", depositAccountId: "solana:deposit" }],
+      } });
+    };
+    const client = new GliderClient("test-key", fetcher);
+    const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:owner";
+    const challenge = await client.prepareEnrollment(owner, "strategy-1");
+    expect(challenge.solanaTransaction).toBe("unsigned-base64");
+    expect(await client.enroll(owner, "strategy-1", challenge, "signed-base64", "Magnificent Seven")).toEqual({
+      portfolioId: "portfolio-1", ownerAccountId: owner, strategyId: "strategy-1",
+      smartAccounts: [{ accountId: "solana:deposit", depositAccountId: "solana:deposit" }],
+    });
+    expect(calls).toEqual([
+      { path: "/v2/enroll/signature", body: { ownerAccountId: owner, strategyId: "strategy-1", chainIds: [1399811149], accountType: "ECDSA" } },
+      { path: "/v2/enroll", body: {
+        ownerAccountId: owner, strategyId: "strategy-1", chainIds: [1399811149], accountType: "ECDSA",
+        flowId: "flow-1", accountIndex: "0", agentAccountId: "solana:agent",
+        signedSolanaTransaction: "signed-base64", portfolioName: "Magnificent Seven",
+      } },
+    ]);
+  });
   it("requests a weighted Solana allocation breakdown and resolves the inherited swap fee", async () => {
     const calls: { path: string; body: unknown }[] = [];
     const fetcher: typeof fetch = async (input) => {
