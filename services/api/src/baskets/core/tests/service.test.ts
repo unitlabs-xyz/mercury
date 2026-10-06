@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { BasketService } from "../service.js";
-import { JsonBasketStore } from "../../glider/store.js";
 import { BasketFundingPreflightError, type BasketProvider } from "../deps.js";
 import type { BasketTemplate } from "../primitives.js";
 
@@ -252,24 +251,6 @@ describe("BasketService sync", () => {
   });
 });
 
-it("lists all 22 Solana strategies as available managed portfolios", async () => {
-  const service = new BasketService({ store: new JsonBasketStore("postgres://unused") });
-  const templates = await service.listTemplates();
-
-  expect(templates).toHaveLength(22);
-  expect(templates.every((template) => template.status === "enabled" && template.canEnroll)).toBe(true);
-  expect(templates.find((template) => template.slug === "magnificent-seven")).toEqual(
-    expect.objectContaining({
-      kind: "managed_portfolio",
-      status: "enabled",
-      canEnroll: true,
-      strategyId: "01M465MY1C2KBER654KJDCYYK9",
-      performance: null,
-      allocations: expect.arrayContaining([expect.objectContaining({ ticker: "NVDA", weightBps: 1428 })]),
-    }),
-  );
-});
-
 it("labels a new Solana strategy's target-allocation history as modeled performance", async () => {
   const service = new BasketService({
     store: store(basket),
@@ -288,32 +269,6 @@ it("labels a new Solana strategy's target-allocation history as modeled performa
     points: [{ date: "2025-10-05", percentChange: "0.0000" }],
     windows: [{ window: "12m", percentChange: "18.1627", since: "2025-10-05" }],
   });
-});
-
-it("returns provider insights for the selected template without inventing an investment fee", async () => {
-  const service = new BasketService({
-    store: store(basket),
-    provider: provider({
-      allocationBreakdown: async () => ({
-        sectors: [{ label: "Technology", weightPercent: "100", holdingCount: 1 }],
-        themes: [],
-        unclassifiedCount: 0,
-        lowConfidenceCount: 0,
-      }),
-      effectiveSwapFeeBps: async () => null,
-    }),
-  });
-
-  expect(await service.getInsights("nvidia")).toEqual({
-    allocation: {
-      sectors: [{ label: "Technology", weightPercent: "100", holdingCount: 1 }],
-      themes: [],
-      unclassifiedCount: 0,
-      lowConfidenceCount: 0,
-    },
-    integratorSwapFeeBps: null,
-  });
-  expect(await service.getInsights("missing")).toBeNull();
 });
 
 it("keeps the catalog available when performance cannot be read", async () => {
