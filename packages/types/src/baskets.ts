@@ -143,6 +143,21 @@ export const ManagedBasketPortfolioSnapshot = ManagedBasketPortfolio.extend({
 });
 export type ManagedBasketPortfolioSnapshot = z.infer<typeof ManagedBasketPortfolioSnapshot>;
 
+/** An owner-scoped landing-page summary; values describe the live smart account. */
+export const ManagedBasketPortfolioSummary = z.object({
+  portfolioId: z.string(),
+  strategyId: z.string(),
+  slug: z.string(),
+  name: z.string(),
+  targetAssetCount: z.number().int(),
+  totalValueUsd: z.string().nullable(),
+  usdcBalance: z.string().nullable(),
+  inTransitUsd: z.string().nullable(),
+  fetchedAt: z.string().nullable(),
+  partial: z.boolean(),
+});
+export type ManagedBasketPortfolioSummary = z.infer<typeof ManagedBasketPortfolioSummary>;
+
 export const ManagedBasketOperation = z.object({
   operationId: z.string(),
   portfolioId: z.string(),

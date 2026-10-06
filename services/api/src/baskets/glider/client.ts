@@ -143,23 +143,27 @@ export class GliderClient implements BasketProvider {
   }
 
   async portfolios(ownerAccountId: string, strategyId: string): Promise<readonly BasketPortfolio[]> {
+    return (await this.portfoliosForOwner(ownerAccountId, strategyId));
+  }
+
+  async portfoliosForOwner(ownerAccountId: string, strategyId?: string): Promise<readonly BasketPortfolio[]> {
     const found: BasketPortfolio[] = [];
     let cursor: string | null = null;
     const seen = new Set<string>();
     do {
       const result = await this.client.GET("/portfolios", {
-        params: { query: { ownerAccountId, strategyId, limit: 200, ...(cursor ? { cursor } : {}) } },
+        params: { query: { ownerAccountId, ...(strategyId ? { strategyId } : {}), limit: 200, ...(cursor ? { cursor } : {}) } },
       });
       const page = z
         .object({ data: z.object({ portfolios: z.array(portfolio) }), nextCursor: z.string().nullable() })
         .parse(this.checked(result, "/portfolios"));
       found.push(
         ...page.data.portfolios
-          .filter((item) => item.ownerAccountId === ownerAccountId && item.strategyId === strategyId)
+          .filter((item) => item.ownerAccountId === ownerAccountId && (!strategyId || item.strategyId === strategyId))
           .map((item) => ({
             portfolioId: item.portfolioId,
             ownerAccountId,
-            strategyId,
+            strategyId: item.strategyId,
             smartAccounts: item.smartAccounts,
           })),
       );

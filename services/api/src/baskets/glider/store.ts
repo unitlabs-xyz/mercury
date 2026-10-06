@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
@@ -98,6 +98,20 @@ export class JsonBasketStore implements BasketStore {
     }).from(basketActions).where(and(
       eq(basketActions.userId, userId), eq(basketActions.portfolioId, portfolioId),
     )).orderBy(desc(basketActions.createdAt)).limit(20);
+  }
+
+  async completedEnrollments(userId: string, ownerAccountId: string) {
+    const rows = await this.actionsDb().select({
+      portfolioId: basketActions.portfolioId,
+      strategyId: basketActions.strategyId,
+      createdAt: basketActions.createdAt,
+    }).from(basketActions).where(and(
+      eq(basketActions.userId, userId),
+      eq(basketActions.ownerAccountId, ownerAccountId),
+      eq(basketActions.kind, "enroll"),
+      isNotNull(basketActions.portfolioId),
+    )).orderBy(desc(basketActions.createdAt));
+    return rows.flatMap((row) => row.portfolioId === null ? [] : [{ ...row, portfolioId: row.portfolioId }]);
   }
 
   async confirmFunding(input: {

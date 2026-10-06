@@ -88,6 +88,63 @@ export class BasketService {
     return (await provider.portfolios(ownerAccountId, template.providerId!))[0] ?? null;
   }
 
+  async ownedPortfolios(userId: string, ownerAccountId: string) {
+    const provider = this.deps.provider;
+    if (!provider)
+      throw new BasketEnrollmentError("provider_unavailable", 503, "Glider is not configured.");
+    const [catalog, providerPortfolios, enrollments] = await Promise.all([
+      this.deps.store.load(),
+      provider.portfoliosForOwner(ownerAccountId),
+      this.deps.store.completedEnrollments(userId, ownerAccountId),
+    ]);
+    const byStrategy = new Map(catalog.filter((item) => item.providerId).map((item) => [item.providerId!, item]));
+    const enrolledAt = new Map<string, number>();
+    for (const item of enrollments) {
+      const key = `${item.strategyId}:${item.portfolioId}`;
+      if (!enrolledAt.has(key)) enrolledAt.set(key, item.createdAt.getTime());
+    }
+    const seen = new Set<string>();
+    const owned = providerPortfolios.filter((item) => {
+      if (item.ownerAccountId !== ownerAccountId || !byStrategy.has(item.strategyId) || seen.has(item.portfolioId))
+        return false;
+      seen.add(item.portfolioId);
+      return true;
+    }).sort((a, b) =>
+      (enrolledAt.get(`${b.strategyId}:${b.portfolioId}`) ?? 0) -
+      (enrolledAt.get(`${a.strategyId}:${a.portfolioId}`) ?? 0),
+    );
+
+    const summaries = [];
+    // A wallet can own several strategies. Limit concurrent live-position reads.
+    for (let offset = 0; offset < owned.length; offset += 4) {
+      const batch = owned.slice(offset, offset + 4);
+      summaries.push(...await Promise.all(batch.map(async (item) => {
+        const template = byStrategy.get(item.strategyId)!;
+        const base = {
+          portfolioId: item.portfolioId, strategyId: item.strategyId,
+          slug: template.slug, name: template.name, targetAssetCount: template.assets.length,
+        };
+        try {
+          const positions = await provider.positions(item.portfolioId);
+          if (positions.portfolioId !== item.portfolioId) throw new Error("Glider returned another portfolio's positions");
+          const usdc = positions.assets.find((asset) => asset.assetId.endsWith(`/spl:${USDC_MINT}`));
+          return {
+            ...base, totalValueUsd: positions.totalValueUsd,
+            usdcBalance: usdc?.balance ?? null, inTransitUsd: positions.inTransitUsd,
+            fetchedAt: positions.fetchedAt, partial: positions.warnings.length > 0,
+          };
+        } catch (error) {
+          console.warn("Glider basket positions unavailable:", item.portfolioId, error);
+          return {
+            ...base, totalValueUsd: null, usdcBalance: null,
+            inTransitUsd: null, fetchedAt: null, partial: true,
+          };
+        }
+      })));
+    }
+    return summaries;
+  }
+
   async portfolioSnapshot(slug: string, ownerAccountId: string) {
     const { template, provider } = await this.templateForRead(slug);
     const portfolios = await provider.portfolios(ownerAccountId, template.providerId!);

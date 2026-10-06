@@ -50,6 +50,9 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   portfolios: async () => {
     throw new Error("unexpected portfolio read");
   },
+  portfoliosForOwner: async () => {
+    throw new Error("unexpected owner portfolio read");
+  },
   portfolio: async () => {
     throw new Error("unexpected portfolio detail read");
   },
@@ -90,6 +93,7 @@ const store = (definition: BasketTemplate) => ({
     throw new Error("unexpected funding confirmation");
   },
   recentFunding: async () => [],
+  completedEnrollments: async () => [],
 });
 
 describe("BasketService sync", () => {

@@ -12,6 +12,29 @@ const remote = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 describe("GliderClient", () => {
+  it("paginates the authenticated owner's portfolios without requiring a strategy filter", async () => {
+    const owner = "solana:owner";
+    const queries: URLSearchParams[] = [];
+    const client = new GliderClient("test-key", async (input) => {
+      const url = new URL((input as Request).url);
+      queries.push(url.searchParams);
+      const second = url.searchParams.get("cursor") === "next-page";
+      return json({
+        success: true,
+        data: { portfolios: [{
+          portfolioId: second ? "p-2" : "p-1", ownerAccountId: owner,
+          strategyId: second ? "s-2" : "s-1", smartAccounts: [],
+        }] },
+        nextCursor: second ? null : "next-page",
+      });
+    });
+    expect((await client.portfoliosForOwner(owner)).map((item) => item.portfolioId)).toEqual(["p-1", "p-2"]);
+    expect(queries).toHaveLength(2);
+    expect(queries[0]?.get("ownerAccountId")).toBe(owner);
+    expect(queries[0]?.has("strategyId")).toBe(false);
+    expect(queries[1]?.get("cursor")).toBe("next-page");
+  });
+
   it("submits a manual rebalance without a body and preserves the cooldown", async () => {
     const requests: Request[] = [];
     const client = new GliderClient("test-key", async (input) => {

@@ -8,6 +8,7 @@ import type {
   ManagedBasketTemplate,
   ManagedBasketPortfolio,
   ManagedBasketPortfolioSnapshot,
+  ManagedBasketPortfolioSummary,
   ManagedBasketOperation,
   TriggeredBasketRebalance,
   PreparedBasketEnrollment,
@@ -72,6 +73,24 @@ export const useBasketTemplates = () =>
     refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
   });
+
+/** Live, owner-scoped Glider portfolios for the signed-in Solana wallet. */
+export const useOwnedBasketPortfolios = () => {
+  const { ready, authenticated, user } = usePrivy();
+  const { identityToken } = useIdentityToken();
+  const { wallets } = useWallets();
+  const walletAddress = wallets[0]?.address;
+  return useQuery({
+    queryKey: ["api", "basket-portfolios", user?.id, walletAddress],
+    queryFn: async () =>
+      (await apiFetch<{ portfolios: ManagedBasketPortfolioSummary[] }>("/v1/basket-portfolios")).portfolios,
+    enabled: basketEnrollmentEnabled(ready, authenticated, identityToken !== null) && Boolean(walletAddress),
+    retry: false,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+};
 
 export const useBasketTemplate = (slug: string) =>
   useQuery({
@@ -254,7 +273,10 @@ export const useBasketEnrollmentAction = (slug: string) => {
         },
       });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] });
+      void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
+    },
   });
   return { ...mutation, walletReady: wallets[0] !== undefined };
 };
@@ -361,6 +383,7 @@ export const useBasketFundingAction = (slug: string) => {
       void qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] });
       void qc.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
       void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
+      void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
     },
   });
   useEffect(() => {
@@ -377,6 +400,7 @@ export const useBasketFundingAction = (slug: string) => {
         setPendingReceipt(null);
         void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
         void qc.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
+        void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
       } catch (error) {
         if (error instanceof ApiError && error.code === "invalid_transaction") {
           sessionStorage.removeItem(pendingKey);

@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
 import { Link } from "react-router-dom";
-import { useBasketTemplates } from "../api/baskets";
+import { usePrivy } from "@privy-io/react-auth";
+import { useWallets } from "@privy-io/react-auth/solana";
+import { useBasketTemplates, useOwnedBasketPortfolios } from "../api/baskets";
 import { useInstruments, type Instrument } from "../market/hooks";
 import { GlideTable } from "../ui/ds";
 import { ArrowRight } from "../ui/icons";
@@ -305,7 +307,10 @@ const StrategyTable = ({
 };
 
 export const Baskets = () => {
+  const { ready, authenticated, login } = usePrivy();
+  const { wallets } = useWallets();
   const catalog = useBasketTemplates();
+  const owned = useOwnedBasketPortfolios();
   const [selected, setSelected] = useState<ManagedBasketTag | null>(null);
   const [showAll, setShowAll] = useState(false);
   const templates = catalog.data ?? EMPTY_TEMPLATES;
@@ -314,10 +319,14 @@ export const Baskets = () => {
     () => visibleStrategies(templates, selected, showAll),
     [templates, selected, showAll],
   );
-  const tickers = useMemo(
-    () => discoveryLogoTickers(templates, selected, showAll),
-    [templates, selected, showAll],
-  );
+  const tickers = useMemo(() => {
+    const discovery = discoveryLogoTickers(templates, selected, showAll);
+    const ownedSlugs = new Set((owned.data ?? []).map((portfolio) => portfolio.slug));
+    const ownedLogos = templates.filter((template) => ownedSlugs.has(template.slug))
+      .flatMap((template) => [...template.allocations].sort((a, b) => b.weightBps - a.weightBps).slice(0, 2))
+      .map((asset) => asset.ticker);
+    return [...new Set([...discovery, ...ownedLogos])];
+  }, [templates, selected, showAll, owned.data]);
   const instruments = useInstruments(tickers);
   const instrumentsByTicker = useMemo(
     () => new Map((instruments.data ?? []).map((item) => [item.ticker, item])),
@@ -373,8 +382,8 @@ export const Baskets = () => {
           )}
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-slate-500">
             <p>
-              Strategies are provided by Glider. These previews are not yet open for enrollment. Past or
-              modeled performance does not guarantee future results.
+              Strategies are provided by Glider. Assets stay in your own smart account. Past or modeled
+              performance does not guarantee future results.
             </p>
             <a
               href="https://glider.fi"
@@ -387,7 +396,17 @@ export const Baskets = () => {
             </a>
           </footer>
         </div>
-        <BasketsRail onExplore={seeAll} />
+        <BasketsRail
+          onExplore={seeAll}
+          onSignIn={() => login()}
+          onRetry={() => owned.refetch()}
+          signedIn={ready && authenticated && Boolean(wallets[0]?.address)}
+          loading={!ready || (ready && authenticated && Boolean(wallets[0]?.address) && owned.isPending)}
+          error={owned.isError}
+          portfolios={owned.data ?? []}
+          templates={templates}
+          instruments={instrumentsByTicker}
+        />
       </div>
     </AppShell>
   );

@@ -4,6 +4,7 @@ import {
   ManagedBasketTemplate,
   ManagedBasketPortfolio,
   ManagedBasketPortfolioSnapshot,
+  ManagedBasketPortfolioSummary,
   ManagedBasketOperation,
   TriggeredBasketRebalance,
   PreparedBasketEnrollment,
@@ -37,6 +38,19 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
   app.get("/v1/basket-templates", async (c) =>
     c.json({ templates: ManagedBasketTemplate.array().parse(await service.listTemplates()) }),
   );
+
+  app.get("/v1/basket-portfolios", requireBasketAuth, async (c) => {
+    const identity = c.get("identity");
+    const owner = ownerFor(identity.walletAddress);
+    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to view your baskets."), 401);
+    try {
+      const portfolios = await service.ownedPortfolios(identity.userId, owner);
+      return c.json({ portfolios: ManagedBasketPortfolioSummary.array().parse(portfolios) });
+    } catch (error) {
+      const result = handle(error, "portfolio list");
+      return c.json(result.body, result.status);
+    }
+  });
 
   app.get("/v1/basket-templates/:slug", async (c) => {
     const template = await service.getTemplate(c.req.param("slug"));

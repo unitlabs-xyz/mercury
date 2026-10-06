@@ -54,6 +54,21 @@ describe("basket template routes", () => {
 });
 
 describe("authenticated basket enrollment", () => {
+  it("scopes the landing list to the verified wallet, not a request parameter", async () => {
+    let observed: unknown;
+    const service = {
+      ownedPortfolios: async (...args: unknown[]) => { observed = args; return []; },
+    } as unknown as BasketService;
+    const app = basketRoutes(service, async (c, next) => {
+      c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+      await next();
+    });
+    const response = await app.request("/v1/basket-portfolios?ownerAccountId=AttackerWallet");
+    expect(response.status).toBe(200);
+    expect(observed).toEqual(["user-1", "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet"]);
+    expect(await response.json()).toEqual({ portfolios: [] });
+  });
+
   it("uses the verified wallet for enrollment lookup, never a requested owner", async () => {
     let lookedUpOwner = "";
     const service = {

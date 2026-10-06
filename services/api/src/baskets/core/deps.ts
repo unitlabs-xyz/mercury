@@ -25,6 +25,7 @@ export interface BasketProvider {
   ): Promise<NonNullable<ManagedBasketInsights["allocation"]>>;
   effectiveSwapFeeBps(id: string): Promise<number | null>;
   portfolios(ownerAccountId: string, strategyId: string): Promise<readonly BasketPortfolio[]>;
+  portfoliosForOwner(ownerAccountId: string): Promise<readonly BasketPortfolio[]>;
   portfolio(
     id: string,
   ): Promise<
@@ -90,5 +91,8 @@ export interface BasketStore {
   }): Promise<void>;
   recentFunding(userId: string, portfolioId: string): Promise<readonly {
     id: string; occurredAt: Date; title: string; amountUsd: string | null; txSignature: string | null;
+  }[]>;
+  completedEnrollments(userId: string, ownerAccountId: string): Promise<readonly {
+    portfolioId: string; strategyId: string; createdAt: Date;
   }[]>;
 }

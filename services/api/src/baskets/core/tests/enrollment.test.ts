@@ -50,6 +50,7 @@ const store = (changes: Record<string, unknown> = {}) =>
     recentActions: async () => [],
     confirmFunding: async () => undefined,
     recentFunding: async () => [],
+    completedEnrollments: async () => [],
     ...changes,
   }) as BasketStore;
 
@@ -73,6 +74,44 @@ it("credits only a settled equal USDC debit and smart-account credit", () => {
 });
 
 describe("basket enrollment", () => {
+  it("lists only the verified owner's curated portfolios and leaves failed balances unavailable", async () => {
+    const service = new BasketService({
+      store: store({ completedEnrollments: async () => [{
+        portfolioId: "portfolio-1", strategyId: "strategy-1", createdAt: new Date("2026-10-06T00:00:00Z"),
+      }] }),
+      provider: provider({
+        portfoliosForOwner: async () => [
+          portfolio,
+          { ...portfolio, portfolioId: "another-owner", ownerAccountId: "solana:other" },
+          { ...portfolio, portfolioId: "other-strategy", strategyId: "strategy-2" },
+          { ...portfolio, portfolioId: "unavailable" },
+        ],
+        positions: async (id: string) => {
+          if (id === "unavailable") throw new Error("temporary provider failure");
+          return {
+            portfolioId: id, totalValueUsd: "42.00", inTransitUsd: "0",
+            fetchedAt: "2026-10-06T00:00:00Z", warnings: [],
+            assets: [{
+              assetId: `solana:mainnet/spl:${USDC_MINT}`, smartAccountId: "smart-1",
+              symbol: "USDC", decimals: 6, balance: "12.00", balanceRaw: "12000000",
+              priceUsd: "1", valueUsd: "12.00",
+            }],
+          };
+        },
+      }),
+    });
+
+    const result = await service.ownedPortfolios("user-1", owner);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      portfolioId: "portfolio-1", slug: "magnificent-seven",
+      totalValueUsd: "42.00", usdcBalance: "12.00", partial: false,
+    });
+    expect(result[1]).toMatchObject({
+      portfolioId: "unavailable", totalValueUsd: null, usdcBalance: null, partial: true,
+    });
+  });
+
   it("shows an existing owner portfolio instead of preparing another enrollment", async () => {
     const service = new BasketService({
       store: store(),

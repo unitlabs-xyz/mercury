@@ -280,8 +280,10 @@ export const Basket = () => {
     setRebalanceOperation(operationId ? { portfolioId: accountId, operationId } : null);
   }, [accountId]);
   useEffect(() => {
-    if (rebalanceStatus.data?.state === "completed")
+    if (rebalanceStatus.data?.state === "completed") {
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
+      void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
+    }
   }, [queryClient, rebalanceStatus.data?.state, slug]);
   useEffect(() => {
     if (rebalanceStatus.data?.state)
