@@ -274,6 +274,7 @@ export function buildReadDeps(
     basketTemplates: new BasketService({
       store: new JsonBasketStore(config.databaseUrl, undefined, db),
       funding: new SolanaBasketFunding(config.solanaRpcUrl),
+      history: deps.history,
       ...(config.gliderApiKey === undefined ? {} : { provider: new GliderClient(config.gliderApiKey) }),
     }),
     instruments: {

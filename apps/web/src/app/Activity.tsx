@@ -20,7 +20,7 @@ const Amount = ({ event }: { event: Event }) => {
   const sign = event.flow === "in" ? "+" : event.flow === "out" ? "−" : "";
   return (
     <span
-      className={`text-[14px] leading-none font-medium whitespace-nowrap ${event.flow === "out" ? "text-ds-ink" : "text-ds-up"}`}
+      className={`text-[14px] leading-none font-medium whitespace-nowrap ${event.flow === "in" ? "text-ds-up" : "text-ds-ink"}`}
     >
       {sign}
       {event.amount}

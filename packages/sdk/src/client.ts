@@ -11,6 +11,9 @@ import {
   SubmitBasketEnrollment,
   PrepareBasketFunding,
   PreparedBasketFunding,
+  ConfirmBasketFunding,
+  ConfirmedBasketFunding,
+  ManagedBasketActivity,
 } from "@mercury/types";
 
 export class MercuryError extends Error {
@@ -178,4 +181,13 @@ export class MercuryClient {
       method: "POST",
       body: JSON.stringify(PrepareBasketFunding.parse({ amountUsd })),
     });
+
+  confirmBasketFunding = (slug: string, signature: string) =>
+    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`, ConfirmedBasketFunding, {
+      method: "POST", body: JSON.stringify(ConfirmBasketFunding.parse({ signature })),
+    });
+
+  basketActivity = (slug: string) =>
+    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/activity`,
+      z.object({ activity: ManagedBasketActivity.array() }));
 }

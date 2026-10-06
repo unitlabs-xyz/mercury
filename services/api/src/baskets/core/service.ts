@@ -1,4 +1,5 @@
 import type { ManagedBasketInsights, ManagedBasketTemplate } from "@mercury/types";
+import { USDC_MINT, USDC_DECIMALS, type ChainHistory, type TransactionDetail } from "@mercury/chain";
 import {
   BasketFundingPreflightError,
   BasketRebalanceCooldownError,
@@ -22,6 +23,19 @@ export class BasketEnrollmentError extends Error {
 }
 
 const SOLANA_ACCOUNT = /^solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const SIGNATURE = /^[1-9A-HJ-NP-Za-km-z]{80,90}$/;
+const addressOf = (accountId: string) => accountId.slice(accountId.lastIndexOf(":") + 1);
+
+/** Compare settled owner deltas, never a browser-reported amount or wallet-watcher label. */
+export function verifiedBasketFunding(tx: TransactionDetail, sender: string, destination: string): bigint | null {
+  if (!tx.succeeded || sender === destination || !tx.accountKeys.includes(sender)) return null;
+  const balance = (side: TransactionDetail["preTokens"], owner: string) =>
+    side.filter((entry) => entry.mint === USDC_MINT && entry.owner === owner && entry.decimals === USDC_DECIMALS)
+      .reduce((sum, entry) => sum + entry.rawAmount, 0n);
+  const debit = balance(tx.preTokens, sender) - balance(tx.postTokens, sender);
+  const credit = balance(tx.postTokens, destination) - balance(tx.preTokens, destination);
+  return debit > 0n && credit === debit ? debit : null;
+}
 
 function usdcRaw(amount: string): bigint {
   if (!/^(?:0|[1-9]\d{0,8})(?:\.\d{1,6})?$/.test(amount))
@@ -50,7 +64,7 @@ export class BasketService {
   private readonly insightsCache = new Map<string, { until: number; value: ManagedBasketInsights }>();
 
   constructor(
-    private readonly deps: { provider?: BasketProvider; store: BasketStore; funding?: BasketFunding },
+    private readonly deps: { provider?: BasketProvider; store: BasketStore; funding?: BasketFunding; history?: ChainHistory },
   ) {}
 
   private async templateForRead(slug: string) {
@@ -129,7 +143,7 @@ export class BasketService {
     return operation;
   }
 
-  async rebalance(slug: string, ownerAccountId: string) {
+  async rebalance(slug: string, ownerAccountId: string, userId?: string) {
     const { template, provider } = await this.templateForEnrollment(slug);
     const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!))[0];
     if (
@@ -154,7 +168,13 @@ export class BasketService {
         "Portfolio is unavailable for this wallet.",
       );
     try {
-      return await provider.triggerRebalance(portfolio.portfolioId);
+      const triggered = await provider.triggerRebalance(portfolio.portfolioId);
+      if (userId) await this.deps.store.saveRebalance({
+        userId, slug, ownerAccountId, strategyId: template.providerId!,
+        portfolioId: portfolio.portfolioId, operationId: triggered.operationId,
+        submittedAt: triggered.submittedAt,
+      });
+      return triggered;
     } catch (error) {
       if (error instanceof BasketRebalanceCooldownError)
         throw new BasketEnrollmentError(
@@ -203,6 +223,67 @@ export class BasketService {
       transaction: prepared.transaction,
       expiresAt: prepared.expiresAt.toISOString(),
     };
+  }
+
+  async confirmFunding(slug: string, userId: string, ownerAccountId: string, signature: string) {
+    if (!SIGNATURE.test(signature))
+      throw new BasketEnrollmentError("invalid_signature", 400, "Enter a valid Solana transaction signature.");
+    if (!this.deps.history)
+      throw new BasketEnrollmentError("funding_unavailable", 503, "Solana history is not configured.");
+    const { template, provider } = await this.templateForRead(slug);
+    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!)).find(
+      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
+    );
+    const account = portfolio?.smartAccounts.find((item) => SOLANA_ACCOUNT.test(item.accountId));
+    const destinationAccountId = account?.depositAccountId ?? account?.accountId;
+    if (!portfolio || !destinationAccountId || !SOLANA_ACCOUNT.test(destinationAccountId))
+      throw new BasketEnrollmentError("portfolio_unavailable", 409, "No verified funding account is available.");
+    const tx = await this.deps.history.transaction(signature);
+    if (!tx) throw new BasketEnrollmentError("transaction_pending", 409, "Transaction is not settled yet. Try again shortly.");
+    if (tx.signature !== signature)
+      throw new BasketEnrollmentError("invalid_transaction", 422, "Transaction signature did not match.");
+    const amountRaw = verifiedBasketFunding(tx, addressOf(ownerAccountId), addressOf(destinationAccountId));
+    if (amountRaw === null)
+      throw new BasketEnrollmentError("invalid_transaction", 422, "Transaction did not transfer USDC from your wallet to this portfolio's smart account.");
+    await this.deps.store.confirmFunding({
+      userId, slug, portfolioId: portfolio.portfolioId, title: `Funded ${template.name}`,
+      signature, mint: USDC_MINT, amountRaw,
+      occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
+    });
+    return { portfolioId: portfolio.portfolioId, signature, amountRaw: amountRaw.toString() };
+  }
+
+  async activity(slug: string, userId: string, ownerAccountId: string) {
+    const { template, provider } = await this.templateForRead(slug);
+    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!)).find(
+      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
+    );
+    if (!portfolio) return [];
+    const [actions, funding] = await Promise.all([
+      this.deps.store.recentActions(userId, portfolio.portfolioId),
+      this.deps.store.recentFunding(userId, portfolio.portfolioId),
+    ]);
+    const rows = await Promise.all(actions.map(async (action, index) => {
+      let state: string | null = null;
+      // The rail shows five events; avoid one provider request per historical operation.
+      if (index < 5 && action.kind === "rebalance" && action.operationId) {
+        try {
+          const operation = await provider.operation(portfolio.portfolioId, action.operationId);
+          if (operation.portfolioId === portfolio.portfolioId) state = operation.state;
+        } catch { /* Keep the durable submission visible when Glider is temporarily unavailable. */ }
+      }
+      return {
+        id: action.id, kind: action.kind, occurredAt: action.createdAt.toISOString(),
+        title: action.kind === "enroll" ? `Enrolled in ${template.name}` : "Manual rebalance",
+        subtitle: action.kind === "enroll" ? "Portfolio created" : state ?? "Status unavailable",
+        amountUsd: null, txSignature: null,
+      };
+    }));
+    return [...rows, ...funding.map((item) => ({
+      id: item.id, kind: "basket_funding", occurredAt: item.occurredAt.toISOString(),
+      title: item.title, subtitle: "Transfer between your accounts",
+      amountUsd: item.amountUsd, txSignature: item.txSignature,
+    }))].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, 20);
   }
 
   async prepareEnrollment(slug: string, userId: string, ownerAccountId: string) {

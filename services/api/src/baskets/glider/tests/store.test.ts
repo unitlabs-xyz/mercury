@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import catalogJson from "../../../../catalog.json" with { type: "json" };
 import { JsonBasketStore } from "../store.js";
 import { testDb } from "../../../db/testing.js";
-import { users } from "../../../db/schema.js";
+import { activities, users } from "../../../db/schema.js";
+import { eq } from "drizzle-orm";
+import { USDC_MINT } from "@mercury/chain";
 
 describe("JsonBasketStore", () => {
   it("persists an enrollment challenge across reads and records its result", async () => {
@@ -17,6 +19,35 @@ describe("JsonBasketStore", () => {
     expect(await store.enrollmentIntent(id)).toMatchObject({ userId: user!.id, slug: "magnificent-seven", portfolioId: null, challenge: { flowId: "flow-1" } });
     await store.completeEnrollmentIntent(id, "portfolio-1");
     expect(await store.enrollmentIntent(id)).toMatchObject({ portfolioId: "portfolio-1" });
+  });
+  it("enriches a wallet-watcher transfer once and keeps rebalance history", async () => {
+    const db = await testDb();
+    const [user] = await db.insert(users).values({ privyUserId: "did:privy:activity" }).returning();
+    const store = new JsonBasketStore("postgres://unused", catalogJson, db);
+    const signature = "5".repeat(88);
+    await db.insert(activities).values({
+      userId: user!.id, kind: "transfer_out", title: "Sent cash", amountUsd: "5",
+      txSignature: signature, mint: USDC_MINT,
+    });
+    const funding = {
+      userId: user!.id, slug: "magnificent-seven", portfolioId: "portfolio-1",
+      title: "Funded Magnificent Seven", signature, mint: USDC_MINT,
+      amountRaw: 5_000_000n, occurredAt: new Date(),
+    };
+    await store.confirmFunding(funding);
+    await store.confirmFunding(funding);
+    const rows = await db.select().from(activities).where(eq(activities.userId, user!.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "basket_funding", basketPortfolioId: "portfolio-1", title: funding.title });
+    await store.saveRebalance({
+      userId: user!.id, slug: funding.slug, ownerAccountId: "solana:owner",
+      strategyId: "strategy-1", portfolioId: "portfolio-1", operationId: "op-1",
+      submittedAt: "2026-10-06T00:00:00Z",
+    });
+    expect(await store.recentActions(user!.id, "portfolio-1")).toMatchObject([
+      { kind: "rebalance", operationId: "op-1" },
+    ]);
+    expect(await store.recentFunding(user!.id, "portfolio-1")).toHaveLength(1);
   });
   it("resolves the curated catalog to Solana asset IDs", async () => {
     const baskets = await new JsonBasketStore("postgres://unused").load();

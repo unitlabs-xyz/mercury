@@ -3,11 +3,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import type { ManagedBasketPortfolioSnapshot, ManagedBasketTemplate } from "@mercury/types";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { usd, usdCompact } from "@mercury/view";
+import { toEvent, usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
 import { useMoney } from "../api/hooks";
 import {
   basketEnrollmentEnabled,
+  useBasketActivity,
   useBasketEnrollment,
   useBasketEnrollmentAction,
   useBasketFundingAction,
@@ -38,6 +39,7 @@ import { displayBasketName } from "./baskets/catalog";
 import { EnrollmentRail, EnrollmentSheet, FundingSheet, RebalanceSheet } from "./baskets/Ticket";
 import { modeledSeries } from "./baskets/performance";
 import { RailList } from "./invest/Rail";
+import { EventRow } from "./portfolio/Feed";
 import { LIST_DOT } from "./invest/shared";
 
 type Range = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
@@ -263,6 +265,7 @@ export const Basket = () => {
   const enrollAction = useBasketEnrollmentAction(slug);
   const fundingAction = useBasketFundingAction(slug);
   const rebalanceAction = useBasketRebalanceAction(slug);
+  const activity = useBasketActivity(slug, enrolled);
   const queryClient = useQueryClient();
   const accountId = signedIn ? portfolio.data?.portfolioId : undefined;
   const operationId =
@@ -279,6 +282,10 @@ export const Basket = () => {
   useEffect(() => {
     if (rebalanceStatus.data?.state === "completed")
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
+  }, [queryClient, rebalanceStatus.data?.state, slug]);
+  useEffect(() => {
+    if (rebalanceStatus.data?.state)
+      void queryClient.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
   }, [queryClient, rebalanceStatus.data?.state, slug]);
   const template = result.data;
   const tickers = useMemo(() => template?.allocations.map((item) => item.ticker) ?? [], [template]);
@@ -336,6 +343,7 @@ export const Basket = () => {
     rebalanceRequestActive.current = true;
     try {
       const triggered = await rebalanceAction.mutateAsync();
+      void queryClient.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
       sessionStorage.setItem(`basket-rebalance:${accountId}`, triggered.operationId);
       setRebalanceOperation({ portfolioId: accountId, operationId: triggered.operationId });
       setRebalanceOpen(false);
@@ -887,23 +895,21 @@ export const Basket = () => {
             </div>
           </section>
           <RailList label="Recent activity">
-            {rebalanceStatus.data ? (
-              <div className="px-4 py-4 text-[12px]">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium text-ds-ink">Manual rebalance</span>
-                  <span className="capitalize text-ds-muted">
-                    {rebalanceStatus.data.state.replaceAll("_", " ")}
-                  </span>
-                </div>
-                <p className="mt-1 text-ds-muted">
-                  {new Date(rebalanceStatus.data.createdAt).toLocaleString()}
-                </p>
-              </div>
+            {activity.data?.length ? (
+              <ul className="space-y-3 px-4 py-4">
+                {activity.data.slice(0, 5).map((item) => (
+                  <EventRow key={item.id} showSubtitle e={toEvent({
+                    ...item, subtitle: item.subtitle, mint: null, logoUrl: null,
+                  })} />
+                ))}
+              </ul>
             ) : (
               <div className="px-4 py-5 text-center">
-                <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
+                <p className="text-[13px] font-medium text-ds-ink">
+                  {activity.isPending ? "Loading activity…" : "No activity to show"}
+                </p>
                 <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
-                  Glider does not provide a portfolio operation-history list yet.
+                  Enrollment, confirmed funding and manual rebalances appear here.
                 </p>
               </div>
             )}

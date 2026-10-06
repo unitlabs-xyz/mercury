@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { getBase58Decoder } from "@solana/kit";
@@ -11,10 +11,11 @@ import type {
   ManagedBasketOperation,
   TriggeredBasketRebalance,
   PreparedBasketEnrollment,
+  ManagedBasketActivity,
 } from "@mercury/types";
 import type { PreparedBasketFunding } from "@mercury/types";
 import { useSignedIn } from "./hooks";
-import { apiFetch } from "./client";
+import { apiFetch, ApiError } from "./client";
 
 /**
  * A basket as the app reads it: GET /v1/baskets, plus what Symmetry knows
@@ -187,6 +188,23 @@ export const useBasketRebalanceAction = (slug: string) =>
       }),
   });
 
+export const useBasketActivity = (slug: string, enrolled: boolean) => {
+  const { ready, authenticated, user } = usePrivy();
+  const { identityToken } = useIdentityToken();
+  const { wallets } = useWallets();
+  return useQuery({
+    queryKey: ["api", "basket-activity", slug, user?.id, wallets[0]?.address],
+    queryFn: async () => (await apiFetch<{ activity: ManagedBasketActivity[] }>(
+      `/v1/basket-templates/${encodeURIComponent(slug)}/activity`,
+    )).activity,
+    enabled: enrolled && basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
+      Boolean(wallets[0]?.address),
+    retry: false,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+};
+
 interface EnrollmentIo {
   prepare: () => Promise<PreparedBasketEnrollment>;
   submit: (body: { intentId: string; signed: string }) => Promise<ManagedBasketPortfolio>;
@@ -243,6 +261,11 @@ export const useBasketEnrollmentAction = (slug: string) => {
 
 type FundingReceipt = { signature: string; status: "confirmed" | "pending" };
 
+const confirmBasketFunding = (slug: string, signature: string) => apiFetch(
+  `/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`,
+  { method: "POST", body: JSON.stringify({ signature }) },
+);
+
 interface FundingIo {
   prepare: (amountUsd: string) => Promise<PreparedBasketFunding>;
   sign: (unsignedTransaction: string) => Promise<string>;
@@ -279,6 +302,9 @@ export const useBasketFundingAction = (slug: string) => {
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
   const [step, setStep] = useState<"preparing" | "signing" | "sending" | null>(null);
+  const [pendingReceipt, setPendingReceipt] = useState<FundingReceipt | null>(null);
+  const walletAddress = wallets[0]?.address;
+  const pendingKey = walletAddress ? `basket-funding:${slug}:${walletAddress}` : null;
   const mutation = useMutation({
     mutationFn: async ({
       amountUsd,
@@ -290,7 +316,7 @@ export const useBasketFundingAction = (slug: string) => {
       const wallet = wallets[0];
       if (!wallet) throw new Error("Your Solana wallet is still loading.");
       setStep("preparing");
-      return fundBasket(amountUsd, portfolio, {
+      const receipt = await fundBasket(amountUsd, portfolio, {
         prepare: (amount) =>
           apiFetch<PreparedBasketFunding>(
             `/v1/basket-templates/${encodeURIComponent(slug)}/funding/prepare`,
@@ -309,19 +335,71 @@ export const useBasketFundingAction = (slug: string) => {
           });
         },
       });
+      setPendingReceipt({ ...receipt, status: "pending" });
+      if (pendingKey) sessionStorage.setItem(pendingKey, receipt.signature);
+      // Confirmation is idempotent and waits briefly for RPC indexing.
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          await confirmBasketFunding(slug, receipt.signature);
+          if (pendingKey) sessionStorage.removeItem(pendingKey);
+          setPendingReceipt(null);
+          return { ...receipt, status: "confirmed" as const };
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.code !== "transaction_pending") {
+            if (error instanceof ApiError && error.code === "invalid_transaction") {
+              if (pendingKey) sessionStorage.removeItem(pendingKey);
+              setPendingReceipt(null);
+            }
+            throw error;
+          }
+          if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 2_000));
+        }
+      }
+      return { ...receipt, status: "pending" as const };
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] });
       void qc.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
+      void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
     },
   });
+  useEffect(() => {
+    if (!pendingKey || mutation.isPending) return;
+    let busy = false;
+    const retry = async () => {
+      const signature = sessionStorage.getItem(pendingKey);
+      if (!signature || busy) return;
+      setPendingReceipt({ signature, status: "pending" });
+      busy = true;
+      try {
+        await confirmBasketFunding(slug, signature);
+        sessionStorage.removeItem(pendingKey);
+        setPendingReceipt(null);
+        void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
+        void qc.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
+      } catch (error) {
+        if (error instanceof ApiError && error.code === "invalid_transaction") {
+          sessionStorage.removeItem(pendingKey);
+          setPendingReceipt(null);
+        }
+      } finally {
+        busy = false;
+      }
+    };
+    void retry();
+    const timer = window.setInterval(() => void retry(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [pendingKey, mutation.isPending, qc, slug]);
   return {
     ...mutation,
+    data: mutation.data ?? pendingReceipt,
     step,
     walletReady: wallets[0] !== undefined,
     reset: () => {
       mutation.reset();
       setStep(null);
+      const signature = pendingKey ? sessionStorage.getItem(pendingKey) : null;
+      setPendingReceipt(signature ? { signature, status: "pending" } : null);
     },
   };
 };

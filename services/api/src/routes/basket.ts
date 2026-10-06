@@ -10,6 +10,9 @@ import {
   SubmitBasketEnrollment,
   PrepareBasketFunding,
   PreparedBasketFunding,
+  ConfirmBasketFunding,
+  ConfirmedBasketFunding,
+  ManagedBasketActivity,
 } from "@mercury/types";
 import { BasketEnrollmentError, type BasketService } from "../baskets/core/service.js";
 
@@ -88,10 +91,11 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
   });
 
   app.post("/v1/basket-templates/:slug/rebalance", requireBasketAuth, async (c) => {
-    const owner = ownerFor(c.get("identity").walletAddress);
+    const identity = c.get("identity");
+    const owner = ownerFor(identity.walletAddress);
     if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to rebalance."), 401);
     try {
-      const triggered = await service.rebalance(c.req.param("slug"), owner);
+      const triggered = await service.rebalance(c.req.param("slug"), owner, identity.userId);
       return c.json(TriggeredBasketRebalance.parse(triggered), 202);
     } catch (error) {
       const result = handle(error, "rebalance");
@@ -144,6 +148,32 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
       return c.json(PreparedBasketFunding.parse(prepared));
     } catch (error) {
       const result = handle(error, "funding preparation");
+      return c.json(result.body, result.status);
+    }
+  });
+
+  app.post("/v1/basket-templates/:slug/funding/confirm", requireBasketAuth, async (c) => {
+    const identity = c.get("identity");
+    const owner = ownerFor(identity.walletAddress);
+    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to confirm funding."), 401);
+    const parsed = ConfirmBasketFunding.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", "A Solana signature is required."), 400);
+    try {
+      return c.json(ConfirmedBasketFunding.parse(await service.confirmFunding(c.req.param("slug"), identity.userId, owner, parsed.data.signature)));
+    } catch (error) {
+      const result = handle(error, "funding confirmation");
+      return c.json(result.body, result.status);
+    }
+  });
+
+  app.get("/v1/basket-templates/:slug/activity", requireBasketAuth, async (c) => {
+    const identity = c.get("identity");
+    const owner = ownerFor(identity.walletAddress);
+    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to view activity."), 401);
+    try {
+      return c.json({ activity: ManagedBasketActivity.array().parse(await service.activity(c.req.param("slug"), identity.userId, owner)) });
+    } catch (error) {
+      const result = handle(error, "activity read");
       return c.json(result.body, result.status);
     }
   });

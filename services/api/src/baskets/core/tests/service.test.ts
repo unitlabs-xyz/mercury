@@ -82,6 +82,14 @@ const store = (definition: BasketTemplate) => ({
   completeEnrollmentIntent: async () => {
     throw new Error("unexpected enrollment completion");
   },
+  saveRebalance: async () => {
+    throw new Error("unexpected rebalance save");
+  },
+  recentActions: async () => [],
+  confirmFunding: async () => {
+    throw new Error("unexpected funding confirmation");
+  },
+  recentFunding: async () => [],
 });
 
 describe("BasketService sync", () => {

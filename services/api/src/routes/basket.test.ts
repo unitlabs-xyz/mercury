@@ -123,5 +123,5 @@ it("submits rebalance for the verified wallet without accepting a client portfol
     body: JSON.stringify({ portfolioId: "attacker-portfolio" }),
   });
   expect(response.status).toBe(202);
-  expect(observed).toEqual(["magnificent-seven", "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet"]);
+  expect(observed).toEqual(["magnificent-seven", "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet", "user-1"]);
 });

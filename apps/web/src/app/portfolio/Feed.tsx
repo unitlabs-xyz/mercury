@@ -188,16 +188,21 @@ const signed = (e: Event) =>
  * One past event, to activity.svg: the Coming up row with a wider amount
  * column (from x = 228), money in green, and a Pending chip after the label.
  */
-const EventRow = ({ e }: { e: Event }) => (
-  <li className="grid h-6 grid-cols-[24px_minmax(0,1fr)_87px_64px] items-center gap-x-[13px] text-[14px] leading-none">
+export const EventRow = ({ e, showSubtitle = false }: { e: Event; showSubtitle?: boolean }) => (
+  <li
+    className={`grid grid-cols-[24px_minmax(0,1fr)_87px_64px] items-center gap-x-[13px] text-[14px] leading-none ${showSubtitle ? "min-h-9" : "h-6"}`}
+  >
     {EVENT_ICON[e.kind]}
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span className="truncate text-ds-muted">{e.title}</span>
-      {e.pending && (
-        <span className="shrink-0">
-          <StatusChip tone="pending">Pending</StatusChip>
-        </span>
-      )}
+    <span className="flex min-w-0 flex-col gap-1">
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-ds-muted">{e.title}</span>
+        {e.pending && (
+          <span className="shrink-0">
+            <StatusChip tone="pending">Pending</StatusChip>
+          </span>
+        )}
+      </span>
+      {showSubtitle && e.sub && <span className="truncate text-[11px] text-ds-muted">{e.sub}</span>}
     </span>
     <span className={`whitespace-nowrap font-medium ${e.flow === "in" ? "text-ds-up" : "text-ds-ink"}`}>
       {signed(e)}

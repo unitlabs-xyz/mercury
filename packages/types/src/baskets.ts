@@ -183,6 +183,15 @@ export const PreparedBasketFunding = z.object({
   expiresAt: z.string(),
 });
 export type PreparedBasketFunding = z.infer<typeof PreparedBasketFunding>;
+export const ConfirmBasketFunding = z.object({ signature: z.string().min(80).max(90) });
+export const ConfirmedBasketFunding = z.object({
+  portfolioId: z.string(), signature: z.string(), amountRaw: z.string(),
+});
+export const ManagedBasketActivity = z.object({
+  id: z.string(), kind: z.string(), occurredAt: z.string(), title: z.string(),
+  subtitle: z.string(), amountUsd: z.string().nullable(), txSignature: z.string().nullable(),
+});
+export type ManagedBasketActivity = z.infer<typeof ManagedBasketActivity>;
 
 export const InvestBasketRequest = z.object({ usdAmount: Usd, acceptQueued: z.boolean().default(false) });
 

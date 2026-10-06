@@ -63,7 +63,7 @@ export const wallets = pgTable(
   (t) => [uniqueIndex("wallet_address_idx").on(t.address)],
 );
 
-/** Prepared user authorizations and their resulting Glider portfolio. Provider balances stay at Glider. */
+/** Enrollment authorizations and accepted manual rebalances. Provider balances stay at Glider. */
 export const basketActions = pgTable(
   "basket_action",
   {
@@ -75,10 +75,14 @@ export const basketActions = pgTable(
     strategyId: text("strategy_id").notNull(),
     payload: jsonb("payload").notNull(),
     portfolioId: text("portfolio_id"),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    operationId: text("operation_id"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("basket_action_user_created_idx").on(t.userId, t.createdAt)],
+  (t) => [
+    index("basket_action_user_created_idx").on(t.userId, t.createdAt),
+    uniqueIndex("basket_action_user_operation_idx").on(t.userId, t.operationId),
+  ],
 );
 
 /**
@@ -272,7 +276,7 @@ export const orders = pgTable(
   ],
 );
 
-/** An append-only feed. Denormalised on purpose: read constantly, never joined. */
+/** Durable feed. A verified basket funding confirmation may enrich one generic transfer row. */
 export const activities = pgTable(
   "activity",
   {
@@ -288,11 +292,14 @@ export const activities = pgTable(
     refTable: text("ref_table"),
     refId: uuid("ref_id"),
     txSignature: text("tx_signature"),
+    basketSlug: text("basket_slug"),
+    basketPortfolioId: text("basket_portfolio_id"),
     /** Which asset moved. Null on a row with no single asset, such as a dividend. */
     mint: text("mint"),
   },
   (t) => [
     index("activity_user_occurred_idx").on(t.userId, t.occurredAt, t.id),
+    index("activity_basket_portfolio_idx").on(t.userId, t.basketPortfolioId, t.occurredAt),
     /**
      * The idempotency guarantee. A movement seen twice — a crash between
      * writing and advancing a cursor, a transaction that appears in both of a
