@@ -211,7 +211,7 @@ export const BorrowSheet = ({
           <p className="mt-5 text-[14px] text-ds-muted">
             {borrow.isError ? "Could not reach Kamino." : "Loading your position…"}
           </p>
-        ) : action.step === "done" ? (
+        ) : action.isSuccess ? (
           <div className="mt-8 flex flex-col items-center text-center">
             <span className="grid size-11 place-items-center rounded-full bg-ds-up-chip text-ds-up">
               <Check className="size-5" />
@@ -421,7 +421,7 @@ export const BorrowSheet = ({
               );
             })()}
 
-            {(blocked || action.error) && value > 0 && (
+            {!busy && (blocked || action.error) && value > 0 && (
               <p className="mt-4 flex gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-down">
                 <Alert className="mt-px size-3.5 shrink-0" />
                 {blocked ?? (action.error instanceof Error ? action.error.message : "Something went wrong.")}
@@ -432,22 +432,17 @@ export const BorrowSheet = ({
               variant="primary"
               size="lg"
               disabled={!canSubmit}
+              loading={busy}
               onClick={() => intent && action.mutate(intent)}
               className="mt-6 w-full"
             >
-              {busy
-                ? action.step === "signing"
-                  ? `Sign in your wallet${action.progress.of > 1 ? ` (${action.progress.at} of ${action.progress.of})` : ""}`
-                  : action.step === "sending"
-                    ? "Confirming on chain…"
-                    : "Preparing…"
-                : tab === "borrow"
-                  ? `Borrow ${value > 0 ? usd(value) : ""}`.trim()
-                  : tab === "repay"
-                    ? `Repay ${value > 0 ? usd(value) : ""}`.trim()
-                    : tab === "pledge"
-                      ? "Pledge"
-                      : "Withdraw"}
+              {tab === "borrow"
+                ? `Borrow ${value > 0 ? usd(value) : ""}`.trim()
+                : tab === "repay"
+                  ? `Repay ${value > 0 ? usd(value) : ""}`.trim()
+                  : tab === "pledge"
+                    ? "Pledge"
+                    : "Withdraw"}
             </Button>
             {b.obligation === null && tab === "borrow" && (
               <p className="mt-3 text-center text-[12px] text-ds-muted">

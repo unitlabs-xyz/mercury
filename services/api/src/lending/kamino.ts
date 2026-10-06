@@ -282,7 +282,10 @@ const toPosition = (market: KaminoMarket, ob: KaminoObligation): LendingPosition
     ];
   }),
   debtUsd: ob.getBorrows().reduce((s, b) => s.add(dec(b.marketValueRefreshed)), ZERO),
-  debtBfAdjustedUsd: dec(ob.getBorrowedMarketValueBFAdjusted()),
-  allowedBorrowUsd: dec(ob.getMaxAllowedBorrowValue()),
-  liquidationBorrowUsd: dec(ob.getUnhealthyBorrowValue()),
+  // `refreshedStats`, not the `get*Value()` getters: those read the obligation's stored
+  // `*Sf` fields, written by the last on-chain refresh. A borrow refreshes *before* it
+  // borrows, so right after one they still say nothing is owed.
+  debtBfAdjustedUsd: dec(ob.refreshedStats.userTotalBorrowBorrowFactorAdjusted),
+  allowedBorrowUsd: dec(ob.refreshedStats.borrowLimit),
+  liquidationBorrowUsd: dec(ob.refreshedStats.borrowLiquidationLimit),
 });
