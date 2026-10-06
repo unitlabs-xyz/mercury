@@ -36,4 +36,9 @@ describe("readConfig", () => {
     expect("relayerSecretKey" in readConfig(base)).toBe(false);
     expect(readConfig({ ...base, RELAYER_SECRET_KEY: "[1,2,3]" }).relayerSecretKey).toBe("[1,2,3]");
   });
+
+  it("reads Jupiter keys as a comma-separated list, and none as the keyless tier", () => {
+    expect(readConfig(base).jupiterApiKeys).toEqual([]);
+    expect(readConfig({ ...base, JUPITER_API_KEYS: "k1, k2" }).jupiterApiKeys).toEqual(["k1", "k2"]);
+  });
 });
