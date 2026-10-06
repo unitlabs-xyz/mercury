@@ -12,4 +12,8 @@ The [phase spec](spec.md) holds shared decisions. For each next task, present th
 - [x] Refine detail: shared Invest table with labeled underlying-company prices, cap and 1D/1W moves; combine sector context, adaptive allocation mosaic, and facts into one responsive card.
 - [ ] Web onboarding, reviewed USDC transfer, live holdings, schedule, reviewed manual rebalance, and operation-status polling are implemented. Withdrawal remains. No mobile work.
 - [x] Refresh live balances, company context, and modeled strategy history while the basket page is visible; show a compact scheduled-run timer.
+- [ ] Replace the basket detail's single-operation Recent activity stub with the existing activity-card pattern and verifiable basket events.
+- [ ] Audit owner-wallet ↔ Glider strategy/portfolio identity and expose owner-scoped portfolio aggregation.
+- [ ] Replace the baskets landing page's "Your baskets" placeholder with the owner's enrolled portfolios.
+- [ ] Align basket-page loading, refresh, and reload states with the other app pages; avoid empty-state flashes and layout shifts.
 - [ ] Validate every candidate with real-funded entry, rebalance, position readback, and exit; enable only those that pass. Verify API fields and wallet balances with the corresponding UI flow.
