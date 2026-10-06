@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { logsFrom, reasonFrom } from "./send.js";
+import {
+  SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE,
+  SOLANA_ERROR__TRANSACTION_ERROR__BLOCKHASH_NOT_FOUND,
+  SolanaError,
+} from "@solana/kit";
+import { failureText, logsFrom, reasonFrom } from "./send.js";
 
 /**
  * A preflight failure as `@solana/kit` reports one: the useful part is base64,
@@ -74,5 +79,36 @@ describe("reasonFrom", () => {
     // Lost to the reader, kept for us.
     expect(quiet).toHaveBeenCalledWith(expect.stringContaining("no reason we could name"), raw);
     quiet.mockRestore();
+  });
+});
+
+describe("failureText", () => {
+  /** A preflight failure with no logs, the reason only in `cause`, as kit builds one. */
+  const preflight = (cause?: SolanaError) =>
+    new SolanaError(SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE, {
+      accounts: null,
+      fee: null,
+      innerInstructions: null,
+      loadedAccountsDataSize: 0,
+      loadedAddresses: null,
+      logs: [],
+      postBalances: null,
+      postTokenBalances: null,
+      preBalances: null,
+      preTokenBalances: null,
+      replacementBlockhash: null,
+      returnData: null,
+      unitsConsumed: 0n,
+      ...(cause === undefined ? {} : { cause }),
+    } as never);
+
+  it("reads the reason kit keeps in `cause`, so an expired blockhash is named", () => {
+    const err = preflight(new SolanaError(SOLANA_ERROR__TRANSACTION_ERROR__BLOCKHASH_NOT_FOUND));
+    expect(reasonFrom(failureText(err))).toBe("the order took too long to reach the network. Try again.");
+  });
+
+  it("is the message alone when there is no cause", () => {
+    const err = preflight();
+    expect(failureText(err)).toBe(err.message);
   });
 });

@@ -153,6 +153,67 @@ describe("batchedRpc", () => {
     expect(n.requests).toBe(3);
   });
 
+  it("waits seconds after a rate limit, out of the window that refused it", async () => {
+    const waits: number[] = [];
+    const n = node(ok, 429);
+    const call = batchedRpc({
+      rpcUrl: RPC,
+      fetch: n.doFetch,
+      sleep: async (ms) => void waits.push(ms),
+      random: () => 1,
+    });
+
+    await expect(call("a", [])).rejects.toThrow("429");
+
+    expect(n.requests).toBe(4);
+    expect(waits).toEqual([1_000, 2_000, 4_000]);
+  });
+
+  it("treats a batch whose every entry was refused as a rate limit too", async () => {
+    const waits: number[] = [];
+    const n = node((req) => ({ jsonrpc: "2.0", id: req.id, error: { code: -32029, message: "slow down" } }));
+    const call = batchedRpc({
+      rpcUrl: RPC,
+      fetch: n.doFetch,
+      sleep: async (ms) => void waits.push(ms),
+      random: () => 1,
+    });
+
+    await Promise.allSettled([call("a", []), call("b", [])]);
+
+    expect(waits).toEqual([1_000, 2_000, 4_000]);
+  });
+
+  it("jitters each wait between half and all of it", async () => {
+    const waits: number[] = [];
+    const n = node(ok, 429);
+    const call = batchedRpc({
+      rpcUrl: RPC,
+      fetch: n.doFetch,
+      sleep: async (ms) => void waits.push(ms),
+      random: () => 0,
+    });
+
+    await expect(call("a", [])).rejects.toThrow("429");
+
+    expect(waits).toEqual([500, 1_000, 2_000]);
+  });
+
+  it("keeps the short wait for a failure that is not a rate limit", async () => {
+    const waits: number[] = [];
+    const n = node(ok, 503);
+    const call = batchedRpc({
+      rpcUrl: RPC,
+      fetch: n.doFetch,
+      sleep: async (ms) => void waits.push(ms),
+      random: () => 1,
+    });
+
+    await expect(call("a", [])).rejects.toThrow("503");
+
+    expect(waits).toEqual([200, 400, 800]);
+  });
+
   it("does not retry a refusal that repeating cannot fix", async () => {
     const n = node(ok, 400);
     const call = batchedRpc({ rpcUrl: RPC, fetch: n.doFetch, ...nowait });

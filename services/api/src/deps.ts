@@ -293,6 +293,7 @@ export function buildReadDeps(
       usdcMint: USDC_MINT,
       history: deps.history,
       record: (planned, input) => recordLoanEvents(db, planned, input),
+      ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
     send: { rpcUrl: config.solanaRpcUrl, ...(relay === undefined ? {} : { relay }) },
   };

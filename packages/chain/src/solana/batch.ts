@@ -28,7 +28,7 @@ export interface BatchConfig {
    * few parallel requests would not.
    */
   readonly maxBatch?: number;
-  /** Attempts for a request that failed as a whole. */
+  /** Attempts for a request that failed as a whole. Four: one try and three retries. */
   readonly attempts?: number;
   /**
    * How long to keep collecting before sending. The default holds a batch open
@@ -38,11 +38,27 @@ export interface BatchConfig {
    */
   readonly windowMs?: number;
   readonly sleep?: (ms: number) => Promise<void>;
+  /** For the jitter; tests pin it. */
+  readonly random?: () => number;
 }
 
 const RETRYABLE = (status: number) => status === 429 || status >= 500;
 
 const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * How long to wait before retry `n` (1-based).
+ *
+ * A rate limit gets seconds, everything else milliseconds. Alchemy refuses
+ * `getSignaturesForAddress` past a per-second budget and says nothing about
+ * when to come back — no `Retry-After` — so a retry 200ms later lands in the
+ * same second and is refused again. Measured 6 October 2026: at one call a
+ * second, about half were refused. A dropped connection or a 5xx is a
+ * different failure, and the short wait still suits it.
+ */
+const backoffMs = (n: number, rateLimited: boolean, random: () => number): number =>
+  // Jittered between half and the full wait, so callers refused together do not all retry together.
+  (rateLimited ? 1_000 : 200) * 2 ** (n - 1) * (0.5 + random() / 2);
 
 /**
  * One JSON-RPC call, made as part of whatever else is in flight.
@@ -76,8 +92,9 @@ export const batchedRpc = (
 ): (<T>(method: string, params: readonly unknown[]) => Promise<T>) => {
   const doFetch = config.fetch ?? defaultFetch();
   const maxBatch = config.maxBatch ?? 25;
-  const attempts = config.attempts ?? 3;
+  const attempts = config.attempts ?? 4;
   const sleep = config.sleep ?? pause;
+  const random = config.random ?? Math.random;
 
   let queue: Pending[] = [];
   let scheduled = false;
@@ -91,9 +108,11 @@ export const batchedRpc = (
         : batch.map((p, id) => ({ jsonrpc: "2.0", id, method: p.method, params: p.params }));
 
     let lastError: Error | null = null;
+    let rateLimited = false;
 
     for (let attempt = 0; attempt < attempts; attempt++) {
-      if (attempt > 0) await sleep(200 * 2 ** (attempt - 1));
+      if (attempt > 0) await sleep(backoffMs(attempt, rateLimited, random));
+      rateLimited = false;
 
       let replies: readonly RpcReply[];
       try {
@@ -104,6 +123,7 @@ export const batchedRpc = (
         });
         if (!res.ok) {
           lastError = new Error(`solana ${batch[0]?.method ?? "batch"} returned ${res.status}`);
+          rateLimited = res.status === 429;
           if (RETRYABLE(res.status)) continue;
           break;
         }
@@ -138,6 +158,7 @@ export const batchedRpc = (
         replies.length > 0 && replies.every((r) => r.error?.code === 429 || r.error?.code === -32029);
       if (everyEntryRateLimited && attempt < attempts - 1) {
         lastError = new Error(`solana ${batch[0]?.method ?? "batch"} returned 429`);
+        rateLimited = true;
         continue;
       }
 
