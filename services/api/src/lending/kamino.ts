@@ -27,6 +27,7 @@ import {
 import BN from "bn.js";
 import { D, ZERO, type Decimal } from "@mercury/core";
 import { createLendingRpc } from "./rpc.js";
+import { batchedLoader } from "./batch.js";
 import type {
   BuiltTransactions,
   CollateralTerms,
@@ -86,10 +87,12 @@ export class KaminoLending implements LendingSource {
   private readonly rpc: ReturnType<typeof createLendingRpc>;
   private readonly ttlMs: number;
   private cached: { at: number; market: Promise<KaminoMarket> } | null = null;
+  private readonly positionOf: (wallet: string) => Promise<LendingPosition | null>;
 
   constructor(config: KaminoLendingConfig) {
     this.rpc = createLendingRpc(config.rpcUrl, config.scanRpcUrl);
     this.ttlMs = config.ttlMs ?? 30_000;
+    this.positionOf = batchedLoader((wallets) => this.positions(wallets), null);
   }
 
   private market(): Promise<KaminoMarket> {
@@ -152,11 +155,35 @@ export class KaminoLending implements LendingSource {
     };
   }
 
-  async position(wallet: string): Promise<LendingPosition | null> {
+  /**
+   * One wallet's loan, read together with every other wallet asked for at the
+   * same moment. `position-sync` asks for each wallet every two seconds; read
+   * one by one, that was a `getAccountInfo` and a slot lookup per wallet per
+   * pass, which is what ran the RPC plan into 429s.
+   */
+  position(wallet: string): Promise<LendingPosition | null> {
+    return this.positionOf(wallet);
+  }
+
+  /** Many loans in one `getMultipleAccounts` per hundred, priced at one shared ledger instant. */
+  private async positions(wallets: readonly string[]): Promise<ReadonlyMap<string, LendingPosition | null>> {
     const market = await this.market();
-    const ob = await market.getObligationByWallet(address(wallet), new VanillaObligation(PROGRAM_ID));
-    if (ob === null) return null;
-    return toPosition(market, ob);
+    const vanilla = new VanillaObligation(PROGRAM_ID);
+    const [pdas, instant] = await Promise.all([
+      Promise.all(wallets.map((w) => vanilla.toPda(market.getAddress(), address(w)))),
+      getCurrentLedgerInstant(this.rpc),
+    ]);
+    const loaded: (KaminoObligation | null)[] = [];
+    // getMultipleAccounts takes at most 100 addresses.
+    for (let i = 0; i < pdas.length; i += 100) {
+      loaded.push(...(await market.getMultipleObligationsByAddress(pdas.slice(i, i + 100), instant)));
+    }
+    return new Map(
+      wallets.map((w, i) => {
+        const ob = loaded[i] ?? null;
+        return [w, ob === null ? null : toPosition(market, ob)] as const;
+      }),
+    );
   }
 
   async build(wallet: string, intent: LendingIntent): Promise<BuiltTransactions> {
