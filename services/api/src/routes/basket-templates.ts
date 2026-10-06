@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { ManagedBasketTemplate } from "@mercury/types";
+import { ManagedBasketInsights, ManagedBasketTemplate } from "@mercury/types";
 import type { BasketService } from "../baskets/core/service.js";
 
 /** Public catalog reads never enroll a wallet or move funds. */
@@ -15,6 +15,13 @@ export function basketTemplateRoutes(service: BasketService): Hono {
     if (template === null)
       return c.json({ error: { code: "not_found", message: "Unknown basket template." } }, 404);
     return c.json({ template: ManagedBasketTemplate.parse(template) });
+  });
+
+  app.get("/v1/basket-templates/:slug/insights", async (c) => {
+    const insights = await service.getInsights(c.req.param("slug"));
+    if (insights === null)
+      return c.json({ error: { code: "not_found", message: "Unknown basket template." } }, 404);
+    return c.json({ insights: ManagedBasketInsights.parse(insights) });
   });
 
   return app;

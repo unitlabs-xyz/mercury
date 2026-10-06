@@ -77,6 +77,23 @@ export const ManagedBasketTemplate = z.object({
     .nullable(),
 });
 
+/** Read-only provider facts about a strategy's target holdings, not a user's portfolio. */
+export const ManagedBasketInsights = z.object({
+  allocation: z
+    .object({
+      sectors: z.array(
+        z.object({ label: z.string(), weightPercent: z.string(), holdingCount: z.number().int() }),
+      ),
+      themes: z.array(
+        z.object({ label: z.string(), weightPercent: z.string(), holdingCount: z.number().int() }),
+      ),
+      unclassifiedCount: z.number().int(),
+      lowConfidenceCount: z.number().int(),
+    })
+    .nullable(),
+  integratorSwapFeeBps: z.number().int().nullable(),
+});
+
 export const InvestBasketRequest = z.object({ usdAmount: Usd, acceptQueued: z.boolean().default(false) });
 
 export const PlanCadence = z.enum(["weekly", "monthly"]);
@@ -97,5 +114,6 @@ export const Plan = z.object({
 export type Basket = z.infer<typeof Basket>;
 export type ManagedBasketTag = z.infer<typeof ManagedBasketTag>;
 export type ManagedBasketTemplate = z.infer<typeof ManagedBasketTemplate>;
+export type ManagedBasketInsights = z.infer<typeof ManagedBasketInsights>;
 export type BasketPreview = z.infer<typeof BasketPreview>;
 export type Plan = z.infer<typeof Plan>;

@@ -12,6 +12,49 @@ const remote = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 describe("GliderClient", () => {
+  it("requests a weighted Solana allocation breakdown and resolves the inherited swap fee", async () => {
+    const calls: { path: string; body: unknown }[] = [];
+    const fetcher: typeof fetch = async (input) => {
+      const request = input as Request;
+      const path = new URL(request.url).pathname;
+      calls.push({ path, body: request.method === "POST" ? JSON.parse(await request.text()) : null });
+      if (path.endsWith("allocation-breakdown"))
+        return json({
+          success: true,
+          data: {
+            breakdowns: [
+              {
+                dimension: "sector",
+                buckets: [{ key: "technology", label: "Technology", weight: "1", holdingCount: 1 }],
+              },
+            ],
+            diagnostics: { unresolved: [], unsupported: [], unclassified: [], lowConfidence: [] },
+          },
+        });
+      return json({ success: true, data: { swapBps: path.includes("/strategies/") ? null : 50 } });
+    };
+    const client = new GliderClient("test-key", fetcher);
+
+    expect(await client.allocationBreakdown([{ assetId: NVDA_ID, weightBps: 10_000 }])).toEqual({
+      sectors: [{ label: "Technology", weightPercent: "100", holdingCount: 1 }],
+      themes: [],
+      unclassifiedCount: 0,
+      lowConfidenceCount: 0,
+    });
+    expect(await client.effectiveSwapFeeBps("remote-1")).toBe(50);
+    expect(calls).toEqual([
+      {
+        path: "/v2/assets/allocation-breakdown",
+        body: {
+          dimensions: ["sector", "gliderTheme"],
+          multiCategoryMode: "primary",
+          holdings: [{ caipAssetId: NVDA_ID, weight: "100.00" }],
+        },
+      },
+      { path: "/v2/strategies/remote-1/fees", body: null },
+      { path: "/v2/tenant/fees", body: null },
+    ]);
+  });
   it("reads modeled performance for our Solana strategy", async () => {
     const fetcher: typeof fetch = async () =>
       json({

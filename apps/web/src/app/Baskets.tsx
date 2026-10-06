@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
 import { Link } from "react-router-dom";
-import { useBasketTemplates } from "../api/basket-templates";
+import { useBasketTemplates } from "../api/baskets";
 import { useInstruments, type Instrument } from "../market/hooks";
 import { GlideTable } from "../ui/ds";
 import { ArrowRight } from "../ui/icons";

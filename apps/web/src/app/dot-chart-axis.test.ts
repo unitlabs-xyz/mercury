@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { axisBounds } from "./DotChart";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { axisBounds, DotChart } from "./DotChart";
 
 /**
  * The change axis, and the floor under it.
@@ -49,4 +51,19 @@ describe("axisBounds", () => {
     const { hi, lo } = axisBounds([0, 0, 0], 100, true);
     expect(hi - lo).toBeGreaterThanOrEqual(1);
   });
+});
+
+it("labels modeled strategy history as percentages, never dollars", () => {
+  const html = renderToStaticMarkup(
+    createElement(DotChart, {
+      series: [
+        { label: "Jan 1", value: 0 },
+        { label: "Jan 2", value: 12.5 },
+      ],
+      label: "past year",
+      scale: "percent",
+    }),
+  );
+  expect(html).toContain("Modeled return over past year: from 0% to +12.5%");
+  expect(html).not.toContain("$12.50");
 });

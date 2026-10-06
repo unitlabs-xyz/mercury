@@ -151,7 +151,7 @@
       "tags": ["theme:technology", "shelf:featured"],
       "gliderStrategyId": "01M465MY1C2KBER654KJDCYYK9",
       "name": "Mercury Solana - Magnificent Seven",
-      "description": "A Solana Ondo-token adaptation of the public Magnificent Seven allocation. Source-chain performance does not transfer.",
+      "description": "The Magnificent Seven are the companies behind much of the US market's growth over the past decade, brought together in one technology-focused portfolio.",
       "sourceStrategyId": "01KV68M2Y685X59DWAEVX5D5X3",
       "status": "candidate",
       "schedule": {
@@ -201,7 +201,7 @@
       "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664BEJSY687YFFQT6AXS22",
       "name": "Mercury Solana - Nancy Pelosi Tracker (Daily Variant)",
-      "description": "A Solana Ondo-token adaptation of the public Nancy Pelosi Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
+      "description": "Inspired by the positions disclosed in Nancy Pelosi's congressional financial filings, with options represented by their underlying stocks. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0Q9GXP1HBN2Z53RCHCHQW",
       "status": "candidate",
       "schedule": { "type": "interval", "frequency": "daily" },
@@ -268,7 +268,7 @@
       "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664CYACMZCGRXZA8VXN621",
       "name": "Mercury Solana - Warren Buffett Tracker (Daily Variant)",
-      "description": "A Solana Ondo-token adaptation of the public Warren Buffett Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
+      "description": "Inspired by Berkshire Hathaway's publicly disclosed equity holdings and Warren Buffett's long-term approach to owning durable businesses. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QAV0P64JAETT29AS1MAH",
       "status": "candidate",
       "schedule": { "type": "interval", "frequency": "daily" },
@@ -320,7 +320,7 @@
       "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664EEHNRCCM2S6TCEYVDVA",
       "name": "Mercury Solana - Leopold Aschenbrenner Tracker (Daily Variant)",
-      "description": "A Solana Ondo-token adaptation of the public Leopold Aschenbrenner Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
+      "description": "Inspired by the long positions disclosed by Leopold Aschenbrenner's Situational Awareness LP, which invests around the economic consequences of AI. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QA4N1DYBNWTQXJ0XQ7S8",
       "status": "candidate",
       "schedule": { "type": "interval", "frequency": "daily" },
@@ -402,7 +402,7 @@
       "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664G02RJZKJ375Y3PQYCT6",
       "name": "Mercury Solana - Cathie Wood Tracker (Daily Variant)",
-      "description": "A Solana Ondo-token adaptation of the public Cathie Wood Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
+      "description": "Inspired by ARK Invest's publicly published holdings and Cathie Wood's focus on disruptive innovation across AI, robotics, crypto, and genomics. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QBBM4RCD3MG33JB3JKDQ",
       "status": "candidate",
       "schedule": { "type": "interval", "frequency": "daily" },
@@ -484,7 +484,7 @@
       "tags": ["theme:hard-assets", "shelf:featured"],
       "gliderStrategyId": "01M465SR9JKM9EHNFKQRHCVH7G",
       "name": "Mercury Solana - Hard Money",
-      "description": "A Solana Ondo-token adaptation of the public Hard Money allocation. Source-chain performance does not transfer.",
+      "description": "A portfolio built around scarce assets such as precious metals and bitcoin, combining established stores of value with newer ones.",
       "sourceStrategyId": "01KVXG24D6NDH1GBX0FCS68M9B",
       "status": "candidate",
       "schedule": {
@@ -529,7 +529,7 @@
       "tags": ["theme:technology"],
       "gliderStrategyId": "01M465SSR1NQ1PMWVP8GY1GFMJ",
       "name": "Mercury Solana - Quantum",
-      "description": "A Solana Ondo-token adaptation of the public Quantum allocation. Source-chain performance does not transfer.",
+      "description": "Quantum computing seeks to solve problems beyond the reach of classical machines. This strategy brings together major technology companies funding quantum research and smaller developers building its hardware.",
       "sourceStrategyId": "01KVXHMSPVYT832EHC76QVJJ39",
       "status": "candidate",
       "schedule": {
@@ -584,7 +584,7 @@
       "tags": ["theme:energy", "shelf:featured"],
       "gliderStrategyId": "01M465SV8EJG5FSENGRC1BSRKF",
       "name": "Mercury Solana - Energy Infrastructure",
-      "description": "A Solana Ondo-token adaptation of the public Energy Infrastructure allocation. Source-chain performance does not transfer.",
+      "description": "AI data centers, electric vehicles, and manufacturing are lifting electricity demand. This strategy focuses on the utilities, equipment makers, and storage providers expanding power capacity.",
       "sourceStrategyId": "01KVXHVT8Q8QF8SAQJRPYF2XAA",
       "status": "candidate",
       "schedule": {
@@ -639,7 +639,7 @@
       "tags": ["theme:technology", "shelf:featured"],
       "gliderStrategyId": "01M465SWNTQWHRCZ8YKVGK7H86",
       "name": "Mercury Solana - Pure Silicon",
-      "description": "A Solana Ondo-token adaptation of the public Pure Silicon allocation. Source-chain performance does not transfer.",
+      "description": "Semiconductors power devices, AI models, and industrial machines. This strategy focuses on chip designers, memory makers, foundries, and suppliers of production equipment.",
       "sourceStrategyId": "01KVXH3N3ZJH0RF8JS9TRQ7BV7",
       "status": "candidate",
       "schedule": {
@@ -704,7 +704,7 @@
       "tags": ["theme:finance", "shelf:featured"],
       "gliderStrategyId": "01M465SY4J9A20QQ1FAP64T2DH",
       "name": "Mercury Solana - Neo Finance",
-      "description": "A Solana Ondo-token adaptation of the public Neo Finance allocation. Source-chain performance does not transfer.",
+      "description": "Financial services are moving toward digital platforms, payment networks, and crypto-native businesses. This strategy combines established payment companies with newer trading, banking, and stablecoin businesses.",
       "sourceStrategyId": "01KVXGBHHGE4YECQ6MT3BMKGX4",
       "status": "candidate",
       "schedule": {
@@ -769,7 +769,7 @@
       "tags": ["theme:technology"],
       "gliderStrategyId": "01M465SZKK6MKPJ948HBNMSJF2",
       "name": "Mercury Solana - Compute Grab",
-      "description": "A Solana Ondo-token adaptation of the public Compute Grab allocation. Source-chain performance does not transfer.",
+      "description": "The AI build-out needs power, land, and data-center capacity. This strategy focuses on infrastructure operators, cloud providers, computing specialists, and the energy companies supplying them.",
       "sourceStrategyId": "01KVXHE56MX6KR8WW1R0PMN51J",
       "status": "candidate",
       "schedule": {
@@ -829,7 +829,7 @@
       "tags": ["theme:technology", "shelf:featured"],
       "gliderStrategyId": "01M465T1YNCGT98DQAC76M3HP4",
       "name": "Mercury Solana - AI Full Stack",
-      "description": "A Solana Ondo-token adaptation of the public AI Full Stack allocation. Source-chain performance does not transfer.",
+      "description": "The AI build-out spans chips, servers, networking, cloud platforms, and power generation. This strategy spreads exposure across those layers instead of concentrating on a single company.",
       "sourceStrategyId": "01KVXGPDTP3FWTVPEXH6A5XPA4",
       "status": "candidate",
       "schedule": {
@@ -909,7 +909,7 @@
       "tags": ["theme:defense"],
       "gliderStrategyId": "01M465T3HY08FYV7WB10G1JCWM",
       "name": "Mercury Solana - The Arsenal",
-      "description": "A Solana Ondo-token adaptation of the public The Arsenal allocation. Source-chain performance does not transfer.",
+      "description": "Rising defense budgets and advances in software, drones, and autonomous systems are changing the industry. This strategy combines established defense contractors with newer technology companies.",
       "sourceStrategyId": "01KVXKFXVKWCZEEX5C2Q9YW283",
       "status": "candidate",
       "schedule": {
@@ -969,7 +969,7 @@
       "tags": ["theme:technology"],
       "gliderStrategyId": "01M465T51Q1HTKY5C1WM63M2DY",
       "name": "Mercury Solana - Digital Fortress",
-      "description": "A Solana Ondo-token adaptation of the public Digital Fortress allocation. Source-chain performance does not transfer.",
+      "description": "Connected devices and AI systems create more digital infrastructure to protect. This strategy focuses on cybersecurity across endpoint, network, cloud, and identity services.",
       "sourceStrategyId": "01KVXKP9GZ6QXS7D7AMD4696EY",
       "status": "candidate",
       "schedule": {
@@ -1014,7 +1014,7 @@
       "tags": ["theme:energy"],
       "gliderStrategyId": "01M465T6HWWS8SRTW8W9RFWHJ8",
       "name": "Mercury Solana - Black Gold",
-      "description": "A Solana Ondo-token adaptation of the public Black Gold allocation. Source-chain performance does not transfer.",
+      "description": "Oil remains central to the global economy. This strategy spans companies that produce, refine, transport, and service the oil industry.",
       "sourceStrategyId": "01KVXJWCW6ZNGX1A5XH0VVK9PB",
       "status": "candidate",
       "schedule": {
@@ -1069,7 +1069,7 @@
       "tags": ["theme:defense"],
       "gliderStrategyId": "01M465T82SZQDR3PHAPXMB4X2H",
       "name": "Mercury Solana - Escape Velocity",
-      "description": "A Solana Ondo-token adaptation of the public Escape Velocity allocation. Source-chain performance does not transfer.",
+      "description": "The space economy now includes commercial launches, satellites, and orbital services. This strategy focuses on builders and operators developing those markets.",
       "sourceStrategyId": "01KVXKAZA1JH8HEXETJX8VJVHY",
       "status": "candidate",
       "schedule": {
@@ -1129,7 +1129,7 @@
       "tags": ["theme:hard-assets"],
       "gliderStrategyId": "01M465T9FP3ZZVJJSQT7XTMEWA",
       "name": "Mercury Solana - Mine the Future",
-      "description": "A Solana Ondo-token adaptation of the public Mine the Future allocation. Source-chain performance does not transfer.",
+      "description": "Robots, chips, electric vehicles, and advanced manufacturing rely on critical materials. This strategy focuses on miners and processors supplying metals such as rare earths, copper, lithium, and uranium.",
       "sourceStrategyId": "01KVXK3V75W15CAF584JTK311E",
       "status": "candidate",
       "schedule": {
@@ -1184,7 +1184,7 @@
       "tags": ["theme:energy"],
       "gliderStrategyId": "01M465TAZHRZ08V0C46M9N4QHX",
       "name": "Mercury Solana - Going Nuclear",
-      "description": "A Solana Ondo-token adaptation of the public Going Nuclear allocation. Source-chain performance does not transfer.",
+      "description": "Demand for reliable, carbon-free power is renewing interest in nuclear energy. This strategy combines reactor operators, small modular reactor developers, and uranium businesses.",
       "sourceStrategyId": "01KVXJQ7N3Q55WEZRXV1F99BMJ",
       "status": "candidate",
       "schedule": {
@@ -1249,7 +1249,7 @@
       "tags": ["theme:consumer"],
       "gliderStrategyId": "01M465TCDXFTSGBS820GK5RVW8",
       "name": "Mercury Solana - Consumer Brands",
-      "description": "A Solana Ondo-token adaptation of the public Consumer Brands allocation. Source-chain performance does not transfer.",
+      "description": "Consumer brands are part of what people stream, eat, wear, and buy repeatedly. This strategy focuses on established businesses with loyal customers and strong pricing power.",
       "sourceStrategyId": "01KVXM9W3M121FE4409QD70VKW",
       "status": "candidate",
       "schedule": {
@@ -1319,7 +1319,7 @@
       "tags": ["theme:healthcare"],
       "gliderStrategyId": "01M465TDXHZB8TW2PAVCM8D9QM",
       "name": "Mercury Solana - Healthcare Trade",
-      "description": "A Solana Ondo-token adaptation of the public Healthcare Trade allocation. Source-chain performance does not transfer.",
+      "description": "Breakthrough medicines are reshaping healthcare. This strategy combines leaders behind new drug classes with large pharmaceutical, medical-device, and biotechnology companies.",
       "sourceStrategyId": "01KVXM1ZF8GSR20SN3N5GAR3EN",
       "status": "candidate",
       "schedule": {
@@ -1384,7 +1384,7 @@
       "tags": ["theme:consumer"],
       "gliderStrategyId": "01M465TFCGBK7VC8K9VYGP8PM8",
       "name": "Mercury Solana - Road Warriors",
-      "description": "A Solana Ondo-token adaptation of the public Road Warriors allocation. Source-chain performance does not transfer.",
+      "description": "Cars and transportation are changing through electrification and automation. This strategy focuses on vehicle makers, mobility platforms, and self-driving technology companies.",
       "sourceStrategyId": "01KVXKWV9PDJ15R16VYJTD4KYG",
       "status": "candidate",
       "schedule": {
@@ -1444,7 +1444,7 @@
       "tags": ["theme:technology"],
       "gliderStrategyId": "01M465TGW4MZQT4RM4M0X1W4V6",
       "name": "Mercury Solana - Technology Eight",
-      "description": "A Solana Ondo-token technology portfolio. This is a same-theme variant, not the source strategy or its historical performance.",
+      "description": "The Magnificent Seven technology companies plus SpaceX in a Solana tokenized-assets portfolio. This is a same-theme variant of Glider's Mag7x idea; it does not include the source strategy's rewards or fee terms.",
       "sourceStrategyId": "01KZY1G56YFYWKS8AH0PR1YMQX",
       "status": "candidate",
       "schedule": {

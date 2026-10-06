@@ -41,6 +41,12 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   strategyPerformance: async () => {
     throw new Error("unexpected performance read");
   },
+  allocationBreakdown: async () => {
+    throw new Error("unexpected allocation read");
+  },
+  effectiveSwapFeeBps: async () => {
+    throw new Error("unexpected fee read");
+  },
   ...changes,
 });
 const store = (definition: BasketTemplate) => ({
@@ -71,6 +77,12 @@ describe("BasketService sync", () => {
           throw new Error("unexpected provider call");
         },
         strategyPerformance: async () => {
+          throw new Error("unexpected provider call");
+        },
+        allocationBreakdown: async () => {
+          throw new Error("unexpected provider call");
+        },
+        effectiveSwapFeeBps: async () => {
           throw new Error("unexpected provider call");
         },
       },
@@ -222,6 +234,32 @@ it("labels a new Solana strategy's target-allocation history as modeled performa
     points: [{ date: "2025-10-05", percentChange: "0.0000" }],
     windows: [{ window: "12m", percentChange: "18.1627", since: "2025-10-05" }],
   });
+});
+
+it("returns provider insights for the selected template without inventing an investment fee", async () => {
+  const service = new BasketService({
+    store: store(basket),
+    provider: provider({
+      allocationBreakdown: async () => ({
+        sectors: [{ label: "Technology", weightPercent: "100", holdingCount: 1 }],
+        themes: [],
+        unclassifiedCount: 0,
+        lowConfidenceCount: 0,
+      }),
+      effectiveSwapFeeBps: async () => null,
+    }),
+  });
+
+  expect(await service.getInsights("nvidia")).toEqual({
+    allocation: {
+      sectors: [{ label: "Technology", weightPercent: "100", holdingCount: 1 }],
+      themes: [],
+      unclassifiedCount: 0,
+      lowConfidenceCount: 0,
+    },
+    integratorSwapFeeBps: null,
+  });
+  expect(await service.getInsights("missing")).toBeNull();
 });
 
 it("keeps the catalog available when performance cannot be read", async () => {

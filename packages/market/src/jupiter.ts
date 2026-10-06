@@ -15,7 +15,7 @@ interface JupPrice {
   readonly liquidity?: number;
   readonly priceChange24h?: number;
   /** The underlying share, not the token. Independent of the pool. */
-  readonly stockData?: { readonly price?: number; readonly updatedAt?: string };
+  readonly stockData?: { readonly price?: number; readonly mcap?: number; readonly updatedAt?: string };
   /** Token-2022 ScaledUiAmount. Absent for tokens that have never paid a dividend. */
   readonly scaledUiConfig?: {
     readonly multiplier?: number;
@@ -79,6 +79,7 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
         mint,
         usdPricePerToken,
         pricePerShare: dec(p.stockData?.price),
+        underlyingMarketCapUsd: dec(p.stockData?.mcap),
         changePct24h: dec(p.priceChange24h),
         liquidityUsd: dec(p.liquidity) ?? ZERO,
         multiplier: this.effectiveMultiplier(p),

@@ -1,4 +1,4 @@
-import type { ManagedBasketTemplate } from "@mercury/types";
+import type { ManagedBasketInsights, ManagedBasketTemplate } from "@mercury/types";
 import type { BasketProvider, BasketStore } from "./deps.js";
 import type { BasketDefinition, ProviderBasket, StrategyPerformance, SyncResult } from "./primitives.js";
 
@@ -15,6 +15,7 @@ function matches(expected: BasketDefinition, actual: ProviderBasket): boolean {
 
 export class BasketService {
   private readonly performanceCache = new Map<string, { until: number; value: StrategyPerformance | null }>();
+  private readonly insightsCache = new Map<string, { until: number; value: ManagedBasketInsights }>();
 
   constructor(private readonly deps: { provider?: BasketProvider; store: BasketStore }) {}
 
@@ -57,6 +58,33 @@ export class BasketService {
               windows: [...performance.windows],
             },
     };
+  }
+
+  async getInsights(slug: string): Promise<ManagedBasketInsights | null> {
+    const definition = (await this.deps.store.load()).find((item) => item.slug === slug);
+    if (definition === undefined) return null;
+    const empty: ManagedBasketInsights = { allocation: null, integratorSwapFeeBps: null };
+    if (this.deps.provider === undefined || definition.providerId === undefined) return empty;
+    const cached = this.insightsCache.get(definition.providerId);
+    if (cached && Date.now() < cached.until) return cached.value;
+    const provider = this.deps.provider;
+    const [allocation, fee] = await Promise.allSettled([
+      provider.allocationBreakdown(definition.assets),
+      provider.effectiveSwapFeeBps(definition.providerId),
+    ]);
+    const value: ManagedBasketInsights = {
+      allocation: allocation.status === "fulfilled" ? allocation.value : null,
+      integratorSwapFeeBps: fee.status === "fulfilled" ? fee.value : null,
+    };
+    if (allocation.status === "rejected")
+      console.warn("Glider allocation breakdown unavailable:", slug, allocation.reason);
+    if (fee.status === "rejected") console.warn("Glider strategy fee unavailable:", slug, fee.reason);
+    this.insightsCache.set(definition.providerId, {
+      until:
+        Date.now() + (allocation.status === "fulfilled" && fee.status === "fulfilled" ? 300_000 : 30_000),
+      value,
+    });
+    return value;
   }
 
   private async strategyPerformance(id: string | null): Promise<StrategyPerformance | null> {

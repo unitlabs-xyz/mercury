@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import type { ManagedBasketInsights, ManagedBasketTemplate } from "@mercury/types";
 import { useSignedIn } from "./hooks";
 import { apiFetch } from "./client";
 
@@ -46,3 +47,40 @@ export const useBaskets = () => {
 
 /** Where anyone can see, and withdraw from, the vault without us. */
 export const symmetryUrl = (mint: string) => `https://beta.symmetry.fi/dashboard/view/${mint}`;
+
+/** Glider templates are managed portfolios, not the pooled Symmetry baskets above. */
+export const useBasketTemplates = () =>
+  useQuery({
+    queryKey: ["api", "basket-templates"],
+    queryFn: async () =>
+      (await apiFetch<{ templates: ManagedBasketTemplate[] }>("/v1/basket-templates")).templates,
+    staleTime: 5 * 60_000,
+  });
+
+export const useBasketTemplate = (slug: string) =>
+  useQuery({
+    queryKey: ["api", "basket-templates", slug],
+    queryFn: async () =>
+      (
+        await apiFetch<{ template: ManagedBasketTemplate }>(
+          `/v1/basket-templates/${encodeURIComponent(slug)}`,
+        )
+      ).template,
+    enabled: slug.length > 0,
+    retry: false,
+    staleTime: 60_000,
+  });
+
+export const useBasketInsights = (slug: string) =>
+  useQuery({
+    queryKey: ["api", "basket-templates", slug, "insights"],
+    queryFn: async () =>
+      (
+        await apiFetch<{ insights: ManagedBasketInsights }>(
+          `/v1/basket-templates/${encodeURIComponent(slug)}/insights`,
+        )
+      ).insights,
+    enabled: slug.length > 0,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });

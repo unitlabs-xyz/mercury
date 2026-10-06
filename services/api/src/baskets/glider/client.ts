@@ -1,6 +1,7 @@
 import createClient, { type Client } from "openapi-fetch";
 import { z } from "zod";
 import type { BasketProvider } from "../core/deps.js";
+import type { ManagedBasketInsights } from "@mercury/types";
 import type { BasketDefinition, ProviderBasket, StrategyPerformance } from "../core/primitives.js";
 import type { components, paths } from "./generated.js";
 
@@ -33,6 +34,23 @@ const performance = z.object({
   }),
 });
 const providerError = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+const breakdown = z.object({
+  data: z.object({
+    breakdowns: z.array(
+      z.object({
+        dimension: z.enum(["sector", "gliderTheme"]),
+        buckets: z.array(z.object({ label: z.string(), weight: z.string(), holdingCount: z.number().int() })),
+      }),
+    ),
+    diagnostics: z.object({
+      unclassified: z.array(z.unknown()),
+      unresolved: z.array(z.unknown()),
+      unsupported: z.array(z.unknown()),
+      lowConfidence: z.array(z.unknown()),
+    }),
+  }),
+});
+const fees = z.object({ data: z.object({ swapBps: z.number().int().nullable() }) });
 
 function toBasket(remote: z.infer<typeof remoteStrategy>): ProviderBasket {
   return {
@@ -147,5 +165,51 @@ export class GliderClient implements BasketProvider {
       points: parsed.data.points,
       windows: parsed.data.summary?.windows ?? [],
     };
+  }
+
+  async allocationBreakdown(
+    assets: BasketDefinition["assets"],
+  ): Promise<NonNullable<ManagedBasketInsights["allocation"]>> {
+    const result = await this.client.POST("/assets/allocation-breakdown", {
+      body: {
+        dimensions: ["sector", "gliderTheme"],
+        multiCategoryMode: "primary",
+        holdings: assets.map(({ assetId, weightBps }) => ({
+          caipAssetId: assetId,
+          weight: (weightBps / 100).toFixed(2),
+        })),
+      },
+    });
+    const parsed = breakdown.parse(this.checked(result, "/assets/allocation-breakdown"));
+    const buckets = (dimension: "sector" | "gliderTheme") =>
+      parsed.data.breakdowns
+        .find((item) => item.dimension === dimension)
+        ?.buckets.map(({ label, weight, holdingCount }) => ({
+          label,
+          weightPercent: Number((Number(weight) * 100).toFixed(2)).toString(),
+          holdingCount,
+        })) ?? [];
+    return {
+      sectors: buckets("sector"),
+      themes: buckets("gliderTheme"),
+      unclassifiedCount:
+        parsed.data.diagnostics.unclassified.length +
+        parsed.data.diagnostics.unresolved.length +
+        parsed.data.diagnostics.unsupported.length,
+      lowConfidenceCount: parsed.data.diagnostics.lowConfidence.length,
+    };
+  }
+
+  async effectiveSwapFeeBps(id: string): Promise<number | null> {
+    const strategy = fees.parse(
+      this.checked(
+        await this.client.GET("/strategies/{strategyId}/fees", {
+          params: { path: { strategyId: id } },
+        }),
+        `/strategies/${encodeURIComponent(id)}/fees`,
+      ),
+    ).data.swapBps;
+    if (strategy !== null) return strategy;
+    return fees.parse(this.checked(await this.client.GET("/tenant/fees"), "/tenant/fees")).data.swapBps;
   }
 }
