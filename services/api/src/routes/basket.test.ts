@@ -104,3 +104,24 @@ it("prepares funding for the verified wallet and ignores a client-supplied desti
     "12",
   ]);
 });
+
+it("submits rebalance for the verified wallet without accepting a client portfolio ID", async () => {
+  let observed: unknown;
+  const service = {
+    rebalance: async (...args: unknown[]) => {
+      observed = args;
+      return { operationId: "op-1", submittedAt: "2026-10-06T00:00:00Z" };
+    },
+  } as BasketService;
+  const app = basketRoutes(service, async (c, next) => {
+    c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+    await next();
+  });
+  const response = await app.request("/v1/basket-templates/magnificent-seven/rebalance", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ portfolioId: "attacker-portfolio" }),
+  });
+  expect(response.status).toBe(202);
+  expect(observed).toEqual(["magnificent-seven", "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet"]);
+});

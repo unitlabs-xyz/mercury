@@ -34,7 +34,8 @@ export const EnrollmentRail = ({
   const enrolled = portfolio !== null;
   const address = portfolio?.smartAccounts
     .find((account) => account.accountId.startsWith("solana:"))
-    ?.accountId.split(":").at(-1);
+    ?.accountId.split(":")
+    .at(-1);
   return (
     <RailCard label="Invest in strategy">
       <RailHead
@@ -200,6 +201,69 @@ export const EnrollmentSheet = ({
         </div>
       </>
     )}
+  </Dialog>
+);
+
+interface RebalanceSheetProps {
+  open: boolean;
+  name: string;
+  assetCount: number;
+  busy: boolean;
+  error?: string | undefined;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+export const RebalanceSheet = ({
+  open,
+  name,
+  assetCount,
+  busy,
+  error,
+  onClose,
+  onConfirm,
+}: RebalanceSheetProps) => (
+  <Dialog open={open} onClose={onClose} labelledBy="basket-rebalance-title" className="max-w-[520px]">
+    <div className="px-6 pt-6 pb-6">
+      <h2 id="basket-rebalance-title" className="text-[20px] font-medium text-ds-ink">
+        Rebalance {name}
+      </h2>
+      <p className="mt-3 text-[14px] leading-[1.45] text-ds-muted">
+        Glider will work toward this strategy’s target weights in your smart account. This can trade assets
+        and incur network and swap fees.
+      </p>
+      <dl className="mt-6 rounded-lg bg-ds-panel px-4 py-4 text-[13px]">
+        <div className="flex justify-between gap-4">
+          <dt className="text-ds-muted">Target assets</dt>
+          <dd className="font-medium text-ds-ink">{assetCount}</dd>
+        </div>
+        <div className="mt-3 flex justify-between gap-4">
+          <dt className="text-ds-muted">Execution</dt>
+          <dd className="font-medium text-ds-ink">Starts asynchronously</dd>
+        </div>
+      </dl>
+      <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
+        Your holdings may differ from target weights until the operation completes. A short cooldown may apply
+        after submission.
+      </p>
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn"
+        >
+          <Alert className="mt-px size-3.5 shrink-0" />
+          {error}
+        </p>
+      )}
+    </div>
+    <div className="flex gap-2.5 border-t border-ds-divider px-6 py-4">
+      <Button size="lg" onClick={onClose} disabled={busy} className="flex-1">
+        Cancel
+      </Button>
+      <Button variant="primary" size="lg" loading={busy} onClick={onConfirm} className="flex-[1.6]">
+        Confirm rebalance
+      </Button>
+    </div>
   </Dialog>
 );
 

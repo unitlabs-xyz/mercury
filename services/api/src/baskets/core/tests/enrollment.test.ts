@@ -20,29 +20,33 @@ const portfolio = {
   portfolioId: "portfolio-1",
   ownerAccountId: owner,
   strategyId: "strategy-1",
-  smartAccounts: [{ accountId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk" }],
+  smartAccounts: [
+    { accountId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk" },
+  ],
 };
 
-const provider = (changes: Record<string, unknown> = {}) => ({
-  portfolios: async () => [],
-  prepareEnrollment: async () => ({
-    flowId: "flow-1",
-    accountIndex: "0",
-    agentAccountId: owner,
-    message: { kind: "solana-message", text: "Sign this enrollment" },
-  }),
-  enroll: async () => portfolio,
-  ...changes,
-}) as unknown as BasketProvider;
+const provider = (changes: Record<string, unknown> = {}) =>
+  ({
+    portfolios: async () => [],
+    prepareEnrollment: async () => ({
+      flowId: "flow-1",
+      accountIndex: "0",
+      agentAccountId: owner,
+      message: { kind: "solana-message", text: "Sign this enrollment" },
+    }),
+    enroll: async () => portfolio,
+    ...changes,
+  }) as unknown as BasketProvider;
 
-const store = (changes: Record<string, unknown> = {}) => ({
-  load: async () => [template],
-  withSyncLock: async <T>(work: () => Promise<T>) => work(),
-  saveEnrollmentIntent: async () => "intent-1",
-  enrollmentIntent: async () => null,
-  completeEnrollmentIntent: async () => undefined,
-  ...changes,
-}) as BasketStore;
+const store = (changes: Record<string, unknown> = {}) =>
+  ({
+    load: async () => [template],
+    withSyncLock: async <T>(work: () => Promise<T>) => work(),
+    saveEnrollmentIntent: async () => "intent-1",
+    enrollmentIntent: async () => null,
+    completeEnrollmentIntent: async () => undefined,
+    ...changes,
+  }) as BasketStore;
 
 describe("basket enrollment", () => {
   it("shows an existing owner portfolio instead of preparing another enrollment", async () => {
@@ -56,25 +60,75 @@ describe("basket enrollment", () => {
   it("prepares a Solana challenge bound to the verified owner and template", async () => {
     let saved: unknown;
     const service = new BasketService({
-      store: store({ saveEnrollmentIntent: async (intent: unknown) => { saved = intent; return "intent-1"; } }),
+      store: store({
+        saveEnrollmentIntent: async (intent: unknown) => {
+          saved = intent;
+          return "intent-1";
+        },
+      }),
       provider: provider(),
     });
     expect(await service.prepareEnrollment("magnificent-seven", "user-1", owner)).toEqual({
       intentId: "intent-1",
       authorization: { kind: "solana-message", text: "Sign this enrollment" },
     });
-    expect(saved).toMatchObject({ userId: "user-1", slug: "magnificent-seven", ownerAccountId: owner, strategyId: "strategy-1", challenge: { flowId: "flow-1" } });
+    expect(saved).toMatchObject({
+      userId: "user-1",
+      slug: "magnificent-seven",
+      ownerAccountId: owner,
+      strategyId: "strategy-1",
+      challenge: { flowId: "flow-1" },
+    });
   });
 
   it("rejects another user's prepared challenge before calling Glider", async () => {
     const service = new BasketService({
-      store: store({ enrollmentIntent: async () => ({
-        id: "intent-1", userId: "user-2", slug: "magnificent-seven", ownerAccountId: owner,
-        strategyId: "strategy-1", challenge: { flowId: "flow-1", accountIndex: "0", agentAccountId: owner, message: { kind: "solana-message", text: "Sign this enrollment" } },
-        expiresAt: new Date(Date.now() + 60_000), portfolioId: null,
-      }) }),
-      provider: provider({ enroll: async () => { throw new Error("must not call Glider"); } }),
+      store: store({
+        enrollmentIntent: async () => ({
+          id: "intent-1",
+          userId: "user-2",
+          slug: "magnificent-seven",
+          ownerAccountId: owner,
+          strategyId: "strategy-1",
+          challenge: {
+            flowId: "flow-1",
+            accountIndex: "0",
+            agentAccountId: owner,
+            message: { kind: "solana-message", text: "Sign this enrollment" },
+          },
+          expiresAt: new Date(Date.now() + 60_000),
+          portfolioId: null,
+        }),
+      }),
+      provider: provider({
+        enroll: async () => {
+          throw new Error("must not call Glider");
+        },
+      }),
     });
-    await expect(service.submitEnrollment("magnificent-seven", "user-1", owner, "intent-1", "signature")).rejects.toThrow(/authorization/i);
+    await expect(
+      service.submitEnrollment("magnificent-seven", "user-1", owner, "intent-1", "signature"),
+    ).rejects.toThrow(/authorization/i);
   });
+});
+
+it("rebalance submits only a portfolio verified against the signed-in owner and strategy", async () => {
+  const triggered: string[] = [];
+  const service = new BasketService({
+    store: store(),
+    provider: provider({
+      portfolios: async () => [portfolio],
+      portfolio: async () => ({ ...portfolio, schedule: null }),
+      triggerRebalance: async (id: string) => {
+        triggered.push(id);
+        return { operationId: "op-1", submittedAt: "2026-10-06T00:00:00Z" };
+      },
+    }),
+  });
+  expect(await service.rebalance("magnificent-seven", owner)).toMatchObject({ operationId: "op-1" });
+  expect(triggered).toEqual(["portfolio-1"]);
+  await expect(service.rebalance("magnificent-seven", `${owner}-other`)).rejects.toMatchObject({
+    code: "portfolio_unavailable",
+  });
+  expect(triggered).toHaveLength(1);
 });

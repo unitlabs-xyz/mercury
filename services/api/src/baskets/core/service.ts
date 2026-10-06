@@ -1,6 +1,7 @@
 import type { ManagedBasketInsights, ManagedBasketTemplate } from "@mercury/types";
 import {
   BasketFundingPreflightError,
+  BasketRebalanceCooldownError,
   type BasketFunding,
   type BasketProvider,
   type BasketStore,
@@ -13,7 +14,7 @@ const allocations = (assets: readonly { assetId: string; weightBps: number }[]) 
 export class BasketEnrollmentError extends Error {
   constructor(
     readonly code: string,
-    readonly status: 400 | 403 | 409 | 410 | 422 | 503,
+    readonly status: 400 | 403 | 409 | 410 | 422 | 429 | 503,
     message: string,
   ) {
     super(message);
@@ -126,6 +127,45 @@ export class BasketService {
         "Operation is unavailable for this wallet.",
       );
     return operation;
+  }
+
+  async rebalance(slug: string, ownerAccountId: string) {
+    const { template, provider } = await this.templateForEnrollment(slug);
+    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!))[0];
+    if (
+      !portfolio ||
+      portfolio.ownerAccountId !== ownerAccountId ||
+      portfolio.strategyId !== template.providerId
+    )
+      throw new BasketEnrollmentError(
+        "portfolio_unavailable",
+        409,
+        "Portfolio is unavailable for this wallet.",
+      );
+    const detail = await provider.portfolio(portfolio.portfolioId);
+    if (
+      detail.portfolioId !== portfolio.portfolioId ||
+      detail.ownerAccountId !== ownerAccountId ||
+      detail.strategyId !== template.providerId
+    )
+      throw new BasketEnrollmentError(
+        "portfolio_unavailable",
+        409,
+        "Portfolio is unavailable for this wallet.",
+      );
+    try {
+      return await provider.triggerRebalance(portfolio.portfolioId);
+    } catch (error) {
+      if (error instanceof BasketRebalanceCooldownError)
+        throw new BasketEnrollmentError(
+          "rebalance_cooldown",
+          429,
+          error.retryAfterSeconds
+            ? `Rebalance is on cooldown. Try again in ${error.retryAfterSeconds} seconds.`
+            : "Rebalance is on cooldown. Try again shortly.",
+        );
+      throw error;
+    }
   }
 
   async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string) {

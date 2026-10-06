@@ -59,6 +59,9 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   operation: async () => {
     throw new Error("unexpected operation read");
   },
+  triggerRebalance: async () => {
+    throw new Error("unexpected rebalance");
+  },
   prepareEnrollment: async () => {
     throw new Error("unexpected enrollment prepare");
   },

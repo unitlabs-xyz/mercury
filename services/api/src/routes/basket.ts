@@ -5,6 +5,7 @@ import {
   ManagedBasketPortfolio,
   ManagedBasketPortfolioSnapshot,
   ManagedBasketOperation,
+  TriggeredBasketRebalance,
   PreparedBasketEnrollment,
   SubmitBasketEnrollment,
   PrepareBasketFunding,
@@ -82,6 +83,18 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
       return c.json({ operation: ManagedBasketOperation.parse(operation) });
     } catch (error) {
       const result = handle(error, "operation read");
+      return c.json(result.body, result.status);
+    }
+  });
+
+  app.post("/v1/basket-templates/:slug/rebalance", requireBasketAuth, async (c) => {
+    const owner = ownerFor(c.get("identity").walletAddress);
+    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to rebalance."), 401);
+    try {
+      const triggered = await service.rebalance(c.req.param("slug"), owner);
+      return c.json(TriggeredBasketRebalance.parse(triggered), 202);
+    } catch (error) {
+      const result = handle(error, "rebalance");
       return c.json(result.body, result.status);
     }
   });

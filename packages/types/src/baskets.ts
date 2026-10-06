@@ -155,6 +155,12 @@ export const ManagedBasketOperation = z.object({
 });
 export type ManagedBasketOperation = z.infer<typeof ManagedBasketOperation>;
 
+export const TriggeredBasketRebalance = z.object({
+  operationId: z.string().min(1),
+  submittedAt: z.string(),
+});
+export type TriggeredBasketRebalance = z.infer<typeof TriggeredBasketRebalance>;
+
 export const BasketEnrollmentAuthorization = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("solana-message"), text: z.string() }),
   z.object({ kind: z.literal("solana-transaction"), transaction: z.string() }),

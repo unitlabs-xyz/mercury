@@ -2,6 +2,7 @@ import type {
   ManagedBasketInsights,
   ManagedBasketOperation,
   ManagedBasketPortfolioSnapshot,
+  TriggeredBasketRebalance,
 } from "@mercury/types";
 import type {
   BasketDefinition,
@@ -41,6 +42,7 @@ export interface BasketProvider {
     >
   >;
   operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
+  triggerRebalance(portfolioId: string): Promise<TriggeredBasketRebalance>;
   prepareEnrollment(ownerAccountId: string, strategyId: string): Promise<EnrollmentChallenge>;
   enroll(
     ownerAccountId: string,
@@ -63,6 +65,11 @@ export interface BasketFunding {
 }
 
 export class BasketFundingPreflightError extends Error {}
+export class BasketRebalanceCooldownError extends Error {
+  constructor(readonly retryAfterSeconds: number | null) {
+    super("Glider rebalance cooldown is active.");
+  }
+}
 
 export interface BasketStore {
   load(): Promise<readonly BasketTemplate[]>;

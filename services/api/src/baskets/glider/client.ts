@@ -1,9 +1,10 @@
 import createClient, { type Client } from "openapi-fetch";
 import { z } from "zod";
-import type { BasketProvider } from "../core/deps.js";
+import { BasketRebalanceCooldownError, type BasketProvider } from "../core/deps.js";
 import {
   ManagedBasketOperation,
   ManagedBasketPortfolioSnapshot,
+  TriggeredBasketRebalance,
   type ManagedBasketInsights,
 } from "@mercury/types";
 import type {
@@ -202,6 +203,19 @@ export class GliderClient implements BasketProvider {
         result,
         `/portfolios/${encodeURIComponent(portfolioId)}/operations/${encodeURIComponent(operationId)}`,
       ).data,
+    );
+  }
+
+  async triggerRebalance(portfolioId: string) {
+    const result = await this.client.POST("/portfolios/{portfolioId}/rebalance", {
+      params: { path: { portfolioId } },
+    });
+    if (result.response.status === 429) {
+      const seconds = Number(result.response.headers.get("retry-after"));
+      throw new BasketRebalanceCooldownError(Number.isFinite(seconds) && seconds > 0 ? seconds : null);
+    }
+    return TriggeredBasketRebalance.parse(
+      this.checked(result, `/portfolios/${encodeURIComponent(portfolioId)}/rebalance`).data,
     );
   }
 

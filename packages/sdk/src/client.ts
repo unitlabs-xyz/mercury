@@ -6,6 +6,7 @@ import {
   ManagedBasketPortfolio,
   ManagedBasketPortfolioSnapshot,
   ManagedBasketOperation,
+  TriggeredBasketRebalance,
   PreparedBasketEnrollment,
   SubmitBasketEnrollment,
   PrepareBasketFunding,
@@ -152,6 +153,11 @@ export class MercuryClient {
       `/v1/basket-templates/${encodeURIComponent(slug)}/operations/${encodeURIComponent(operationId)}`,
       z.object({ operation: ManagedBasketOperation }),
     );
+
+  triggerBasketRebalance = (slug: string) =>
+    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/rebalance`, TriggeredBasketRebalance, {
+      method: "POST",
+    });
 
   prepareBasketEnrollment = (slug: string) =>
     this.call(

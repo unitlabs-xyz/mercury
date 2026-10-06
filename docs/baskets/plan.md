@@ -6,9 +6,9 @@ The [phase spec](spec.md) holds shared decisions. For each next task, present th
 - [x] Reconcile the catalog on API startup through [BasketService](../../services/api/src/baskets/core/service.ts), [Glider adapter](../../services/api/src/baskets/glider/client.ts), and [JSON store](../../services/api/src/baskets/glider/store.ts); keep focused tests in their `tests/` directories.
 - [x] Backend discovery/detail: public typed `/v1/basket-templates` list/detail, candidate/disabled states, and Glider's **modeled Solana strategy TWR** on detail. Existing pooled-basket routes stay separate.
 - [x] Backend discovery tags: validate one primary theme or pros grouping per catalog entry and expose optional editorial featured tags through list/detail.
-- [ ] Backend lifecycle: enrollment, owner-paid USDC funding, authenticated live positions/schedule, and operation-by-ID read are implemented. Rebalance and both exits remain.
+- [ ] Backend lifecycle: enrollment, owner-paid USDC funding, authenticated live positions/schedule, manual rebalance, and operation-by-ID read are implemented. Both exits remain.
 - [x] Web discovery and strategy detail: tag-driven shelves, local artwork, Glider allocations, modeled-performance labels, and candidate states.
 - [x] Invest-style web detail: overlapping holding icons, percentage-scaled modeled history, target composition, read-only Glider allocation/fee insights, and explicit lifecycle placeholders. No synthetic NAV, basket units, or portfolio activity.
 - [x] Refine detail: shared Invest table with labeled underlying-company prices, cap and 1D/1W moves; combine sector context, adaptive allocation mosaic, and facts into one responsive card.
-- [ ] Web onboarding, reviewed USDC transfer, live holdings, and schedule are implemented. Rebalance, operation tracking, and withdrawal remain. No mobile work.
+- [ ] Web onboarding, reviewed USDC transfer, live holdings, schedule, reviewed manual rebalance, and operation-status polling are implemented. Withdrawal remains. No mobile work.
 - [ ] Validate every candidate with real-funded entry, rebalance, position readback, and exit; enable only those that pass. Verify API fields and wallet balances with the corresponding UI flow.

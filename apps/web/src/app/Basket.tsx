@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import type { ManagedBasketTemplate } from "@mercury/types";
 import { usd, usdCompact } from "@mercury/view";
@@ -10,7 +11,9 @@ import {
   useBasketEnrollmentAction,
   useBasketFundingAction,
   useBasketInsights,
+  useBasketOperation,
   useBasketPortfolio,
+  useBasketRebalanceAction,
   useBasketTemplate,
 } from "../api/baskets";
 import { useHistories, useInstruments, usePrices, type Instrument } from "../market/hooks";
@@ -25,11 +28,12 @@ import {
   StatusChip,
 } from "../ui/ds";
 import { AppShell } from "./AppShell";
+import { Button } from "../ui/Button";
 import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
-import { EnrollmentRail, EnrollmentSheet, FundingSheet } from "./baskets/Ticket";
+import { EnrollmentRail, EnrollmentSheet, FundingSheet, RebalanceSheet } from "./baskets/Ticket";
 import { modeledSeries } from "./baskets/performance";
 import { RailList } from "./invest/Rail";
 import { LIST_DOT } from "./invest/shared";
@@ -107,8 +111,15 @@ export const Basket = () => {
   const [fundingAmount, setFundingAmount] = useState("100");
   const [showAllAssets, setShowAllAssets] = useState(false);
   const [checkingEnrollment, setCheckingEnrollment] = useState(false);
+  const [rebalanceOpen, setRebalanceOpen] = useState(false);
+  const [rebalanceOperation, setRebalanceOperation] = useState<{
+    portfolioId: string;
+    operationId: string;
+  } | null>(null);
+  const [clock, setClock] = useState(() => Date.now());
   const enrollmentRequestActive = useRef(false);
   const fundingRequestActive = useRef(false);
+  const rebalanceRequestActive = useRef(false);
   const result = useBasketTemplate(slug);
   const insights = useBasketInsights(slug);
   const { ready, authenticated } = usePrivy();
@@ -120,6 +131,28 @@ export const Basket = () => {
   const money = useMoney();
   const enrollAction = useBasketEnrollmentAction(slug);
   const fundingAction = useBasketFundingAction(slug);
+  const rebalanceAction = useBasketRebalanceAction(slug);
+  const queryClient = useQueryClient();
+  const accountId = signedIn ? portfolio.data?.portfolioId : undefined;
+  const operationId =
+    accountId && accountId === rebalanceOperation?.portfolioId ? rebalanceOperation.operationId : null;
+  const rebalanceStatus = useBasketOperation(slug, operationId, enrolled);
+  useEffect(() => {
+    if (!accountId) {
+      setRebalanceOperation(null);
+      return;
+    }
+    const operationId = sessionStorage.getItem(`basket-rebalance:${accountId}`);
+    setRebalanceOperation(operationId ? { portfolioId: accountId, operationId } : null);
+  }, [accountId]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (rebalanceStatus.data?.state === "completed")
+      void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
+  }, [queryClient, rebalanceStatus.data?.state, slug]);
   const template = result.data;
   const tickers = useMemo(() => template?.allocations.map((item) => item.ticker) ?? [], [template]);
   const mints = useMemo(() => template?.allocations.map((item) => item.mint) ?? [], [template]);
@@ -171,6 +204,20 @@ export const Basket = () => {
       fundingRequestActive.current = false;
     }
   };
+  const confirmRebalance = async () => {
+    if (!accountId || rebalanceRequestActive.current) return;
+    rebalanceRequestActive.current = true;
+    try {
+      const triggered = await rebalanceAction.mutateAsync();
+      sessionStorage.setItem(`basket-rebalance:${accountId}`, triggered.operationId);
+      setRebalanceOperation({ portfolioId: accountId, operationId: triggered.operationId });
+      setRebalanceOpen(false);
+    } catch {
+      // Keep the review open and show the request error. Never auto-retry a write.
+    } finally {
+      rebalanceRequestActive.current = false;
+    }
+  };
 
   if (result.isLoading || !template)
     return (
@@ -196,6 +243,38 @@ export const Basket = () => {
   const totalWeight = allocations.reduce((sum, asset) => sum + asset.weightBps, 0);
   const year = performance?.windows.find((item) => item.window === "12m");
   const account = signedIn ? portfolio.data : null;
+  const schedule = account?.schedule;
+  const nextDue = schedule?.nextDueAt ? Date.parse(schedule.nextDueAt) : NaN;
+  const remainingMs = Number.isFinite(nextDue) ? Math.max(0, nextDue - clock) : null;
+  const intervalMs = schedule?.intervalMs ?? null;
+  const ringProgress =
+    schedule?.status !== "paused" && remainingMs !== null && intervalMs && intervalMs > 0
+      ? Math.round(100 * (1 - Math.min(1, remainingMs / intervalMs)))
+      : 0;
+  const countdown =
+    schedule?.status === "paused"
+      ? "Paused"
+      : remainingMs === null
+        ? "—"
+        : remainingMs === 0
+          ? "Due"
+          : remainingMs >= 86_400_000
+            ? String(Math.ceil(remainingMs / 86_400_000))
+            : remainingMs >= 3_600_000
+              ? String(Math.ceil(remainingMs / 3_600_000))
+              : String(Math.ceil(remainingMs / 60_000));
+  const countdownUnit =
+    schedule?.status === "paused" || remainingMs === null || remainingMs === 0
+      ? ""
+      : remainingMs >= 86_400_000
+        ? "days left"
+        : remainingMs >= 3_600_000
+          ? "hours left"
+          : "min left";
+  const operationState = rebalanceStatus.data?.state;
+  const operationActive =
+    Boolean(operationId) &&
+    (!operationState || ["accepted", "running", "retrying", "awaiting_user"].includes(operationState));
   const usdcBalance = account?.assets
     .filter((asset) => asset.assetId === USDC_ASSET_ID)
     .reduce((sum, asset) => sum + Number(asset.balance), 0);
@@ -655,44 +734,100 @@ export const Basket = () => {
             </RailList>
           )}
           <RailCard label="Rebalancing">
-            <RailHead
-              title="Rebalancing"
-              meta={
-                account?.schedule?.status === "paused"
-                  ? "Paused"
-                  : (account?.schedule?.frequency ?? undefined)
-              }
-            />
-            <div className="mt-5 flex items-center justify-between gap-3 rounded-lg bg-ds-panel p-4 text-[12px]">
-              <span className="text-ds-muted">Next rebalance</span>
-              <span className="font-medium text-ds-ink">
-                {account?.schedule?.nextDueAt
-                  ? new Date(account.schedule.nextDueAt).toLocaleString()
-                  : account?.schedule?.status === "paused"
+            <RailHead title="Rebalancing" meta={schedule?.status === "paused" ? "Paused" : undefined} />
+            <div className="mt-5 flex items-center gap-5">
+              <div
+                role="img"
+                aria-label={
+                  countdownUnit
+                    ? `${countdown} ${countdownUnit} until scheduled rebalance`
+                    : `Scheduled rebalance: ${countdown}`
+                }
+                className="grid size-[104px] shrink-0 place-items-center rounded-full p-[6px] transition-[background] duration-700 motion-reduce:transition-none"
+                style={{ background: `conic-gradient(#85dca7 ${ringProgress}%, #e5e7e9 ${ringProgress}%)` }}
+              >
+                <div className="flex size-full flex-col items-center justify-center rounded-full bg-white text-center">
+                  <span className="text-[25px] leading-none font-medium text-ds-ink">{countdown}</span>
+                  {countdownUnit && <span className="mt-1 text-[11px] text-ds-muted">{countdownUnit}</span>}
+                </div>
+              </div>
+              <div className="min-w-0 text-[12px]">
+                <p className="text-ds-muted">Next rebalance</p>
+                <p className="mt-1 font-medium text-ds-ink">
+                  {schedule?.status === "paused"
                     ? "Paused"
-                    : account
-                      ? "Not scheduled yet"
-                      : "—"}
-              </span>
+                    : Number.isFinite(nextDue)
+                      ? new Date(nextDue).toLocaleString(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })
+                      : "Not scheduled yet"}
+                </p>
+                <p className="mt-1 text-ds-muted">
+                  {schedule?.frequency ? `Rebalances ${schedule.frequency}` : "Schedule unavailable"}
+                </p>
+              </div>
             </div>
-            <p className="mt-3 text-[12px] leading-relaxed text-ds-muted">
-              {account?.schedule?.lastRebalanceAt
-                ? `Last rebalance: ${new Date(account.schedule.lastRebalanceAt).toLocaleString()}.`
-                : account
-                  ? "No completed rebalance reported yet."
-                  : "Portfolio schedule is not available yet."}{" "}
-              Operation status will appear after a rebalance is requested.
-            </p>
+            {operationId && (
+              <div className="mt-5 rounded-lg bg-ds-panel px-3 py-2.5 text-[12px]">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-ds-muted">Manual rebalance</span>
+                  <span className="font-medium capitalize text-ds-ink">
+                    {rebalanceStatus.isError
+                      ? "Status unavailable"
+                      : (operationState?.replaceAll("_", " ") ?? "Checking…")}
+                  </span>
+                </div>
+                {rebalanceStatus.data?.error && (
+                  <p className="mt-2 text-ds-chip-warn">{rebalanceStatus.data.error}</p>
+                )}
+                {rebalanceStatus.isError && (
+                  <button
+                    type="button"
+                    onClick={() => void rebalanceStatus.refetch()}
+                    className="mt-2 font-medium text-ds-link hover:underline"
+                  >
+                    Check status again
+                  </button>
+                )}
+              </div>
+            )}
+            <Button
+              size="lg"
+              className="mt-5 w-full"
+              disabled={
+                !account || template.status === "disabled" || operationActive || rebalanceAction.isPending
+              }
+              onClick={() => {
+                rebalanceAction.reset();
+                setRebalanceOpen(true);
+              }}
+            >
+              {operationActive ? "Rebalance in progress" : "Rebalance now"}
+            </Button>
           </RailCard>
           <RailCard label="Recent activity">
             <RailHead title="Recent activity" />
-            <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
-              <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
-              <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
-                Glider does not provide an operation-history list. New rebalance and withdrawal operations
-                will be tracked here when those flows are connected.
-              </p>
-            </div>
+            {rebalanceStatus.data ? (
+              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-4 text-[12px]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-medium text-ds-ink">Manual rebalance</span>
+                  <span className="capitalize text-ds-muted">
+                    {rebalanceStatus.data.state.replaceAll("_", " ")}
+                  </span>
+                </div>
+                <p className="mt-1 text-ds-muted">
+                  {new Date(rebalanceStatus.data.createdAt).toLocaleString()}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
+                <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
+                <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
+                  Glider does not provide a portfolio operation-history list yet.
+                </p>
+              </div>
+            )}
           </RailCard>
           <Link to="/baskets" className="text-[13px] font-medium text-ds-link hover:underline">
             Explore more strategies →
@@ -730,6 +865,17 @@ export const Basket = () => {
           onClose={closeFunding}
         />
       )}
+      <RebalanceSheet
+        open={rebalanceOpen}
+        name={name}
+        assetCount={allocations.length}
+        busy={rebalanceAction.isPending}
+        error={rebalanceAction.error?.message}
+        onClose={() => {
+          if (!rebalanceAction.isPending) setRebalanceOpen(false);
+        }}
+        onConfirm={() => void confirmRebalance()}
+      />
     </AppShell>
   );
 };

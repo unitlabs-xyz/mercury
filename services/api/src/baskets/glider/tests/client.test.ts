@@ -12,6 +12,24 @@ const remote = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 describe("GliderClient", () => {
+  it("submits a manual rebalance without a body and preserves the cooldown", async () => {
+    const requests: Request[] = [];
+    const client = new GliderClient("test-key", async (input) => {
+      const request = input as Request;
+      requests.push(request);
+      return requests.length === 1
+        ? json({ success: true, data: { operationId: "op-1", submittedAt: "2026-10-06T00:00:00Z" } }, 202)
+        : new Response(JSON.stringify({ error: { code: "cooldown", message: "Too soon" } }), {
+            status: 429,
+            headers: { "retry-after": "30" },
+          });
+    });
+    expect(await client.triggerRebalance("p-1")).toMatchObject({ operationId: "op-1" });
+    expect(requests[0]?.method).toBe("POST");
+    expect(new URL(requests[0]!.url).pathname).toBe("/v2/portfolios/p-1/rebalance");
+    expect(await requests[0]!.text()).toBe("");
+    await expect(client.triggerRebalance("p-1")).rejects.toMatchObject({ retryAfterSeconds: 30 });
+  });
   it("reads live portfolio balances, schedule, warnings, and operation state", async () => {
     const fetcher: typeof fetch = async (input) => {
       const path = new URL((input as Request).url).pathname;

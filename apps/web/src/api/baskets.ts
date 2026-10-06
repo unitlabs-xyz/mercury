@@ -8,6 +8,8 @@ import type {
   ManagedBasketTemplate,
   ManagedBasketPortfolio,
   ManagedBasketPortfolioSnapshot,
+  ManagedBasketOperation,
+  TriggeredBasketRebalance,
   PreparedBasketEnrollment,
 } from "@mercury/types";
 import type { PreparedBasketFunding } from "@mercury/types";
@@ -140,6 +142,39 @@ export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
     refetchInterval: 30_000,
   });
 };
+
+export const useBasketOperation = (slug: string, operationId: string | null, enrolled: boolean) => {
+  const { ready, authenticated, user } = usePrivy();
+  const { identityToken } = useIdentityToken();
+  const { wallets } = useWallets();
+  return useQuery({
+    queryKey: ["api", "basket-operation", slug, user?.id, wallets[0]?.address, operationId],
+    queryFn: async () =>
+      (
+        await apiFetch<{ operation: ManagedBasketOperation }>(
+          `/v1/basket-templates/${encodeURIComponent(slug)}/operations/${encodeURIComponent(operationId!)}`,
+        )
+      ).operation,
+    enabled:
+      enrolled &&
+      Boolean(operationId) &&
+      basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
+      Boolean(wallets[0]?.address),
+    retry: false,
+    refetchInterval: (query) => {
+      const state = query.state.data?.state;
+      return state && ["completed", "failed", "cancelled"].includes(state) ? false : 4_000;
+    },
+  });
+};
+
+export const useBasketRebalanceAction = (slug: string) =>
+  useMutation({
+    mutationFn: () =>
+      apiFetch<TriggeredBasketRebalance>(`/v1/basket-templates/${encodeURIComponent(slug)}/rebalance`, {
+        method: "POST",
+      }),
+  });
 
 interface EnrollmentIo {
   prepare: () => Promise<PreparedBasketEnrollment>;
