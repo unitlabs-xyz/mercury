@@ -1,6 +1,5 @@
 import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
 
@@ -125,8 +124,6 @@ export type BorrowIntent =
   | { kind: "repay"; usd: string | "all" }
   | { kind: "withdraw"; ticker: string; tokensRaw: string | "all" };
 
-export type Step = "building" | "signing" | "sending" | "done";
-
 const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
@@ -140,14 +137,11 @@ export const useBorrowAction = () => {
   const qc = useQueryClient();
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
-  const [step, setStep] = useState<Step | null>(null);
-  const [progress, setProgress] = useState<{ at: number; of: number }>({ at: 0, of: 0 });
 
   const mutation = useMutation({
     mutationFn: async (intent: BorrowIntent) => {
       const wallet = wallets[0];
       if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
-      setStep("building");
       const built = await apiFetch<{ transactions: string[]; firstTime: boolean }>(
         "/v1/borrow/transactions",
         {
@@ -156,11 +150,8 @@ export const useBorrowAction = () => {
         },
       );
       const signatures: string[] = [];
-      for (const [i, tx] of built.transactions.entries()) {
-        setProgress({ at: i + 1, of: built.transactions.length });
-        setStep("signing");
+      for (const tx of built.transactions) {
         const { signedTransaction } = await signTransaction({ transaction: toBytes(tx), wallet });
-        setStep("sending");
         const sent = await apiFetch<{
           signature: string;
           status: string;
@@ -201,18 +192,16 @@ export const useBorrowAction = () => {
         }).catch(() => undefined);
       }
 
-      setStep("done");
       return { signatures };
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["api"] });
     },
-    onError: () => setStep(null),
   });
 
   /* Same race the buy sheet waits out: Privy fills the wallet list a beat
      after load, and an empty list there is not a missing wallet. */
   const walletReady = wallets[0] !== undefined;
 
-  return { ...mutation, step, progress, walletReady, reset: () => (mutation.reset(), setStep(null)) };
+  return { ...mutation, walletReady };
 };

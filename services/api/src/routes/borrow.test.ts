@@ -222,6 +222,16 @@ describe("POST /v1/borrow/transactions", () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("insufficient_cash");
   });
 
+  it("repays what is owed even when the borrow-factor-weighted debt reads zero", async () => {
+    const l = lending(2);
+    const owing: LendingSource = {
+      ...l,
+      position: async () => ({ ...(await l.position("WaLLeT"))!, debtBfAdjustedUsd: D(0) }),
+    };
+    const res = await post(deps(owing), { kind: "repay", usd: "2.00" });
+    expect(res.status).toBe(200);
+  });
+
   it("rejects a malformed amount", async () => {
     const res = await post(deps(lending()), { kind: "borrow", usd: "-5" });
     expect(res.status).toBe(400);

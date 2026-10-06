@@ -234,9 +234,11 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
         break;
       }
       case "repay": {
-        if (debt.isZero()) return c.json(fail("nothing_owed", "There is no loan to repay."), 409);
+        // What is actually owed, not the borrow-factor-weighted figure the limits use.
+        const owed = input.position?.debtUsd ?? ZERO;
+        if (owed.isZero()) return c.json(fail("nothing_owed", "There is no loan to repay."), 409);
         // Repaying everything also covers interest accrued since the last refresh, so ask for a little more.
-        const needed = body.usd === "all" ? debt.mul("1.001") : D(body.usd);
+        const needed = body.usd === "all" ? owed.mul("1.001") : D(body.usd);
         if (needed.gt(input.cashUsd)) {
           return c.json(fail("insufficient_cash", "Not enough USDC in the wallet to repay that."), 409);
         }
