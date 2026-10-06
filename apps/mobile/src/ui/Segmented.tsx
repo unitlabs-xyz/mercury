@@ -44,7 +44,16 @@ export const Segmented = <T extends string>({
           style={[s.key, fill && s.keyFill, on && s.on]}
         >
           {on && <Surface />}
-          <RNText style={[s.label, on && s.labelOn]}>{o.label}</RNText>
+          {/* One line, always: a label that wrapped pushed the raised face
+              out of shape on a narrow segment ("Withdraw" in a quarter). */}
+          <RNText
+            style={[s.label, on && s.labelOn]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
+            {o.label}
+          </RNText>
         </PressableScale>
       );
     })}
@@ -73,7 +82,7 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "transparent",
   },
-  keyFill: { flex: 1 },
+  keyFill: { flex: 1, paddingHorizontal: 4 },
   on: { borderColor: button.secondary.edge },
   label: { fontFamily: font.regular, fontSize: 13, letterSpacing: -0.2, color: color.muted },
   labelOn: { fontFamily: font.medium, color: color.ink },

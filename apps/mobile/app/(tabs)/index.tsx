@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from "re
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import type { Portfolio as PortfolioData } from "@mercury/types";
+import { TabScene } from "../../src/ui/TabScene";
 import { GROUPS, toEvent, usd, usdCompact, usdSigned, type EventKind } from "@mercury/view";
 import {
   Button,
@@ -12,17 +12,15 @@ import {
   Icon,
   IconButton,
   Mark,
-  MoveChip,
   MovePill,
   PressableScale,
   Skeleton,
-  StockLogo,
   Text,
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio } from "../../src/api";
 import { SmartBand } from "../../src/home/SmartBand";
 import { usePrefs } from "../../src/prefs";
-import { EventRow, EventRowSkeleton, MARK } from "../../src/activity/EventRow";
+import { EventRow, EventRowSkeleton } from "../../src/activity/EventRow";
 import { color, font, radius, space } from "../../src/theme";
 
 /** The three the home screen offers, out of the shared six. */
@@ -36,7 +34,7 @@ const FEED_ROWS = 5;
 
 const num = (v: string | number | null | undefined): number => Number(v ?? 0);
 
-export default function Portfolio() {
+function PortfolioScreen() {
   const insets = useSafeAreaInsets();
   /* Starts as Settings says, and follows it if it changes; the eye still flips it for now. */
   const router = useRouter();
@@ -131,8 +129,6 @@ export default function Portfolio() {
             </>
           )}
 
-          <HoldingsRail holdings={holdings} masked={hidden} loading={waiting} />
-
           {/* Two halves of one number, split by a hairline rather than a gap:
               what is invested and what is not are not two unrelated things
               sitting next to each other. */}
@@ -143,6 +139,12 @@ export default function Portfolio() {
               note={holdings.length === 1 ? "1 position" : `${holdings.length} positions`}
               masked={hidden}
               loading={waiting}
+              /* What you own lives on Invest's Yours shelf; this is the way there. */
+              {...(holdings.length > 0
+                ? {
+                    onPress: () => router.navigate({ pathname: "/invest", params: { shelf: "yours" } }),
+                  }
+                : {})}
             />
             <View style={s.potSplit} />
             <Pot
@@ -239,124 +241,35 @@ const HeroSkeleton = () => (
   </View>
 );
 
-/**
- * The holdings rail: one card per position, scrolling sideways.
- *
- * No share count, following the web's holdings table and for its reason: the
- * value above it is that count times the price, so printing both is the same
- * number twice, and a fractional share count is the least useful way to say how
- * much of something somebody holds.
- */
-const HoldingsRail = ({
-  holdings,
-  masked,
-  loading,
-}: {
-  holdings: PortfolioData["holdings"];
-  masked: boolean;
-  loading: boolean;
-}) => {
-  const router = useRouter();
-  if (loading) {
-    return (
-      <View style={s.railLoading}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={s.holdCard}>
-            <Skeleton width={MARK} height={MARK} style={s.roundSkeleton} />
-            <View style={s.holdText}>
-              <Skeleton width="70%" height={12} />
-              <Skeleton width="90%" height={18} />
-            </View>
-            <Skeleton width={56} height={20} />
-          </View>
-        ))}
-      </View>
-    );
-  }
-
-  if (holdings.length === 0) {
-    return (
-      <PressableScale style={s.railEmpty} onPress={() => router.push("/invest")}>
-        <View style={s.railEmptyTile}>
-          <Icon name="plus" size={17} color={color.ink} />
-        </View>
-        <View style={s.railEmptyMid}>
-          <Text variant="label">Nothing here yet</Text>
-          <Text variant="small" tone="muted">
-            Add cash and buy your first share
-          </Text>
-        </View>
-        <Icon name="chevronRight" size={15} color={color.muted} />
-      </PressableScale>
-    );
-  }
-
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={s.rail}
-      contentContainerStyle={s.railRow}
-    >
-      {holdings.map((h) => (
-        <PressableScale
-          key={h.ticker}
-          style={s.holdCard}
-          onPress={() => router.push({ pathname: "/stock/[ticker]", params: { ticker: h.ticker } })}
-        >
-          <StockLogo ticker={h.ticker} size={MARK} />
-          <View style={s.holdText}>
-            <RNText style={s.holdName} numberOfLines={1}>
-              {h.name}
-            </RNText>
-            <RNText style={s.holdValue} numberOfLines={1}>
-              {masked ? "••••" : usd(h.valueUsd)}
-            </RNText>
-          </View>
-          {masked ? (
-            <View style={s.chipGhost} />
-          ) : (
-            <MoveChip value={h.changePct24h === null ? null : num(h.changePct24h)} />
-          )}
-        </PressableScale>
-      ))}
-
-      {/* At the END of the rail, so it is what scrolling reaches rather than a
-          control competing with the first card. */}
-      <PressableScale style={s.allCard} onPress={() => router.push("/invest")}>
-        <View style={s.allMark}>
-          <Icon name="chevronRight" size={15} color={color.surface} />
-        </View>
-        <RNText style={s.allLabel}>View all</RNText>
-      </PressableScale>
-    </ScrollView>
-  );
-};
-
 const Pot = ({
   label,
   value,
   note,
   masked,
   loading,
+  onPress,
 }: {
   label: string;
   value: number;
   note: string;
   masked: boolean;
   loading: boolean;
+  onPress?: () => void;
 }) => (
-  <View style={s.pot}>
+  <PressableScale style={s.pot} activeScale={0.98} disabled={onPress === undefined} onPress={onPress}>
     <RNText style={s.potLabel}>{label}</RNText>
     {loading ? (
       <Skeleton width="80%" height={20} style={s.potSkeleton} />
     ) : (
       <RNText style={s.potFigure}>{masked ? "••••" : usd(value)}</RNText>
     )}
-    <RNText style={s.potNote} numberOfLines={1}>
-      {note}
-    </RNText>
-  </View>
+    <View style={s.potNoteRow}>
+      <RNText style={s.potNote} numberOfLines={1}>
+        {note}
+      </RNText>
+      {onPress !== undefined && <Icon name="chevronRight" size={12} color={color.muted} />}
+    </View>
+  </PressableScale>
 );
 
 /**
@@ -446,68 +359,11 @@ const s = StyleSheet.create({
 
   heroSkeleton: { gap: 10, paddingTop: 4, paddingBottom: 6 },
 
-  /* Negative margins so the rail scrolls edge to edge through the card's own
-     padding instead of stopping short of both edges. */
-  rail: { marginTop: 18, marginHorizontal: -space.screen },
-  railRow: { flexDirection: "row", gap: 10, paddingHorizontal: space.screen },
-  railLoading: { flexDirection: "row", gap: 10, marginTop: 18, overflow: "hidden" },
-  holdCard: {
-    width: 146,
-    gap: 12,
-    padding: 13,
-    borderRadius: radius.lg,
-    backgroundColor: color.tile,
-    alignItems: "flex-start",
-  },
-  holdText: { gap: 3, alignSelf: "stretch" },
-  holdName: { fontFamily: font.medium, fontSize: 13, letterSpacing: -0.26, color: color.muted },
-  holdValue: { fontFamily: font.medium, fontSize: 19, letterSpacing: -0.5, color: color.ink },
-  /* Holds the row's height while the figures are hidden, so masking does not
-     make every card jump shorter. */
-  chipGhost: { height: 20 },
-  roundSkeleton: { borderRadius: MARK / 2 },
-
-  allCard: {
-    width: 104,
-    padding: 13,
-    borderRadius: radius.lg,
-    backgroundColor: color.tile,
-    justifyContent: "space-between",
-  },
-  allMark: {
-    width: MARK,
-    height: MARK,
-    borderRadius: MARK / 2,
-    backgroundColor: color.ink,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  allLabel: { fontFamily: font.medium, fontSize: 13.5, letterSpacing: -0.27, color: color.ink },
-
-  railEmpty: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 18,
-    padding: 13,
-    borderRadius: radius.lg,
-    backgroundColor: color.tile,
-  },
-  railEmptyTile: {
-    width: MARK,
-    height: MARK,
-    borderRadius: radius.md,
-    backgroundColor: color.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  railEmptyMid: { flex: 1, gap: 2 },
-
   pots: {
     flexDirection: "row",
     alignItems: "stretch",
     gap: 14,
-    marginTop: 12,
+    marginTop: 20,
     paddingVertical: 13,
     paddingHorizontal: 14,
     borderRadius: radius.lg,
@@ -518,6 +374,7 @@ const s = StyleSheet.create({
   potLabel: { fontFamily: font.medium, fontSize: 10, letterSpacing: 0.6, color: color.muted },
   potFigure: { fontFamily: font.medium, fontSize: 20, letterSpacing: -0.4, color: color.ink },
   potSkeleton: { marginVertical: 3 },
+  potNoteRow: { flexDirection: "row", alignItems: "center", gap: 2 },
   potNote: { fontFamily: font.regular, fontSize: 11.5, letterSpacing: -0.1, color: color.muted },
 
   borrowed: {
@@ -573,3 +430,11 @@ const s = StyleSheet.create({
 
   empty: { paddingHorizontal: space.screen, paddingTop: 10, gap: 4 },
 });
+
+export default function Portfolio() {
+  return (
+    <TabScene index={0}>
+      <PortfolioScreen />
+    </TabScene>
+  );
+}

@@ -69,52 +69,6 @@ export const useActivityFeed = (limit = 25) => {
 };
 
 /**
- * Where a loan stands. Only the fields this app reads are declared, as the web
- * does: `GET /v1/borrow` returns a great deal more, and typing all of it here
- * would be a second copy to keep in step for no gain.
- */
-export interface Borrow {
-  readonly debtUsd: number;
-  readonly borrowableUsd: number;
-  /** Cash plus what could still be borrowed: the most an order could spend. */
-  readonly spendableUsd: number;
-  /** What is pledged as collateral, at today's prices. */
-  readonly collateralUsd: number;
-  /** Cash in the wallet, which repayments come out of. */
-  readonly cashUsd?: number;
-  /** The yearly rate on what is borrowed, 0–1. */
-  readonly borrowApy?: number;
-  /** Each stock Kamino accepts: what is pledged and what could be. Numbers may arrive as strings. */
-  readonly collateral?: readonly {
-    readonly ticker: string;
-    readonly isStock: boolean;
-    readonly depositedUsd: number | string;
-    readonly depositableUsd: number | string;
-    readonly borrowableUsd: number | string;
-  }[];
-  readonly overTargetUsd: number;
-  readonly health: "healthy" | "over_limit" | "margin_call" | "liquidation";
-  /** The fall that would reach liquidation, 0–1. Null when nothing is owed. */
-  readonly safeUntilDrop: number | null;
-}
-
-/**
- * A minute, not ten seconds. This reads Kamino rather than our own books, and
- * the figure it answers with only moves when a price does or a loan is touched
- * — both of which already invalidate it.
- */
-export const useBorrow = () => {
-  const signedIn = useSignedIn();
-  return useQuery({
-    queryKey: ["api", "borrow"],
-    queryFn: () => apiFetch<Borrow>("/v1/borrow"),
-    enabled: signedIn,
-    staleTime: 60_000,
-    refetchInterval: 60_000,
-  });
-};
-
-/**
  * One instrument on the shelf, as `GET /v1/instruments` returns it.
  *
  * Market data reaches this app through our own API, where the web reads it
@@ -211,6 +165,22 @@ export interface Wrapper {
   readonly holders: number;
   readonly volume24hUsd: string;
 }
+
+/**
+ * Exactly these stocks, whatever shelf they are on: what someone owns or saved
+ * is not always deep enough to be featured. Public, like the shelves.
+ */
+export const useInstrumentsByTicker = (tickers: readonly string[]) => {
+  const key = [...tickers].sort().join(",");
+  return useQuery({
+    queryKey: ["api", "instruments", "tickers", key],
+    queryFn: () =>
+      apiFetch<{ instruments: Instrument[] }>(`/v1/instruments?tickers=${encodeURIComponent(key)}`),
+    enabled: key.length > 0,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
+  });
+};
 
 export interface InstrumentDetail extends Instrument {
   readonly description: string | null;

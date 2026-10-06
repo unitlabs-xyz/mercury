@@ -1,12 +1,21 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { RefreshControl, ScrollView, Share, StyleSheet, Text as RNText, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { GROUPS, filterEvents, groupByDay, toCsv, toEvent, type Group } from "@mercury/view";
+import { TabScene } from "../../src/ui/TabScene";
+import { filterEvents, groupByDay, toCsv, toEvent } from "@mercury/view";
+import { useRouter } from "expo-router";
 import { useActivityFeed } from "../../src/api";
 import { useActions } from "../../src/actions/Actions";
 import { EventRow, EventRowSkeleton } from "../../src/activity/EventRow";
-import { Button, Chip, Icon, IconButton, Text } from "../../src/ui";
+import {
+  activeActivityCount,
+  resetActivityFilters,
+  setActivityMeta,
+  sortEvents,
+  useActivityFilters,
+} from "../../src/activity/filters";
+import { Button, Icon, IconButton, PressableScale, Surface, Text } from "../../src/ui";
 import { color, font, radius, space } from "../../src/theme";
 
 /** The web reads a hundred; so does this, and filters them on the phone. */
@@ -19,16 +28,16 @@ const PAGE = 30;
  * inside it, the days as small headings and the events as 60-high rows that
  * open in place to their details and the transaction behind them.
  *
- * The filters are the web's, phone-shaped: the type is a row of chips rather
- * than a dropdown, and search sits above it. Year and month are left to the
- * web, where there is room for them; a phone scrolls a hundred events faster
- * than it can work two more menus.
+ * The filters are the web's, phone-shaped: search on the page, and beside it
+ * a Filter button for the rest — type, year, month and the order — in a
+ * sheet, as Invest's are.
  */
-export default function Activity() {
+function ActivityScreen() {
   const insets = useSafeAreaInsets();
   const openActions = useActions();
+  const router = useRouter();
+  const more = useActivityFilters();
   const feed = useActivityFeed(FEED);
-  const [group, setGroup] = useState<Group>("all");
   const [query, setQuery] = useState("");
   const [shown, setShown] = useState(PAGE);
   /* Only a pull shows the spinner. The feed refetches itself every few seconds,
@@ -40,20 +49,31 @@ export default function Activity() {
   };
 
   const events = useMemo(() => (feed.data?.items ?? []).map(toEvent), [feed.data]);
-  const filtered = useMemo(() => filterEvents(events, group, "all", "all", query), [events, group, query]);
-  const days = useMemo(() => groupByDay(filtered.slice(0, shown)), [filtered, shown]);
+  const filtered = useMemo(
+    () => sortEvents(filterEvents(events, more.group, more.year, more.month, query), more.sort),
+    [events, more, query],
+  );
+  /* By amount, days stop meaning anything: one list, under one heading. */
+  const days = useMemo(
+    () =>
+      more.sort === "largest"
+        ? [{ date: "largest", label: "Largest first", events: filtered.slice(0, shown) }]
+        : groupByDay(filtered.slice(0, shown)),
+    [filtered, shown, more.sort],
+  );
+
+  /* Tell the sheet which years there are, and how many events its filters leave. */
+  const years = useMemo(() => [...new Set(events.map((e) => e.date.slice(0, 4)))].sort().reverse(), [events]);
+  useEffect(() => {
+    setActivityMeta({ years, count: filtered.length });
+  }, [years, filtered.length]);
 
   const loading = feed.isPending && feed.data === undefined;
-  const narrowed = group !== "all" || query.trim() !== "";
-  const count = loading
-    ? ""
-    : narrowed
-      ? `${filtered.length} of ${events.length}`
-      : `${events.length} ${events.length === 1 ? "event" : "events"}`;
+  const active = activeActivityCount(more);
 
   const reset = () => {
-    setGroup("all");
     setQuery("");
+    resetActivityFilters();
   };
 
   /* The web downloads a file; a phone hands the same CSV to the share sheet. */
@@ -73,10 +93,7 @@ export default function Activity() {
             takes the full width under them rather than wrapping beside the button. */}
         <View style={s.head}>
           <View style={s.titleLine}>
-            <View style={s.titleRow}>
-              <Text variant="title">Activity</Text>
-              <RNText style={s.count}>{count}</RNText>
-            </View>
+            <Text variant="title">Activity</Text>
             <IconButton icon="download" label="Share as CSV" onPress={exportCsv} />
           </View>
           <RNText style={s.lede}>
@@ -84,42 +101,40 @@ export default function Activity() {
           </RNText>
         </View>
 
-        <View style={s.search}>
-          <Icon name="search" size={16} color={color.muted} />
-          <TextInput
-            style={s.searchInput}
-            value={query}
-            onChangeText={(v) => {
-              setQuery(v);
-              setShown(PAGE);
-            }}
-            placeholder="Search events"
-            placeholderTextColor={color.faint}
-            selectionColor={color.brand}
-            autoCorrect={false}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-          />
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={s.chips}
-          style={s.chipRow}
-        >
-          {GROUPS.map((g) => (
-            <Chip
-              key={g.key}
-              label={g.label}
-              selected={group === g.key}
-              onPress={() => {
-                setGroup(g.key);
+        <View style={s.searchRow}>
+          <View style={s.search}>
+            <Icon name="search" size={16} color={color.muted} />
+            <TextInput
+              style={s.searchInput}
+              value={query}
+              onChangeText={(v) => {
+                setQuery(v);
                 setShown(PAGE);
               }}
+              placeholder="Search events"
+              placeholderTextColor={color.faint}
+              selectionColor={color.brand}
+              autoCorrect={false}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
             />
-          ))}
-        </ScrollView>
+          </View>
+          <PressableScale
+            onPress={() => router.push("/activity-filters")}
+            activeScale={0.96}
+            style={s.filterButton}
+            accessibilityRole="button"
+            accessibilityLabel={active > 0 ? `Filter and sort, ${active} on` : "Filter and sort"}
+          >
+            <Surface />
+            <Icon name="sliders" size={16} color={color.ink} strokeWidth={1.7} />
+            {active > 0 && (
+              <View style={s.badge}>
+                <RNText style={s.badgeText}>{active}</RNText>
+              </View>
+            )}
+          </PressableScale>
+        </View>
 
         <View style={s.card}>
           <View style={s.panel}>
@@ -187,23 +202,49 @@ const s = StyleSheet.create({
   scroll: { paddingBottom: 116 },
   head: { paddingHorizontal: space.screen, paddingBottom: space.md },
   titleLine: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  titleRow: { flexDirection: "row", alignItems: "baseline", gap: 10 },
   /* One line under the title saying what the page is for, on every tab. */
   lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted, marginTop: 4 },
-  count: { fontFamily: font.regular, fontSize: 14, color: color.muted },
-  search: {
+  searchRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: space.sm,
     marginHorizontal: space.screen,
+  },
+  search: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
     paddingHorizontal: space.md,
     height: 44,
     borderRadius: radius.md,
     backgroundColor: color.surface,
   },
+  /* The search field's height, round: Filter beside search, the sheet behind it. */
+  filterButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: "#E9E9E5",
+    overflow: "hidden",
+  },
+  badge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: color.ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: { fontFamily: font.medium, fontSize: 10, color: color.onBand },
   searchInput: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.ink, padding: 0 },
-  chipRow: { flexGrow: 0, marginTop: space.md },
-  chips: { gap: 6, paddingHorizontal: space.screen },
   /* The web's list: a white card, a grey panel inside it, the rows on the panel. */
   card: {
     marginTop: space.md,
@@ -237,3 +278,11 @@ const s = StyleSheet.create({
   },
   blankAction: { marginTop: space.screen },
 });
+
+export default function Activity() {
+  return (
+    <TabScene index={3}>
+      <ActivityScreen />
+    </TabScene>
+  );
+}

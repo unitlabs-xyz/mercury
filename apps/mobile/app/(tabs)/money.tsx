@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from "re
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { TabScene } from "../../src/ui/TabScene";
 import { pct, usd } from "@mercury/view";
 import { useBorrow, useMoney, useSignedIn, type Borrow } from "../../src/api";
 import { useActions } from "../../src/actions/Actions";
@@ -16,12 +17,11 @@ const num = (v: string | number | null | undefined): number => Number(v ?? 0);
  * you can spend on shares, its yield and the verbs, with the figures that
  * follow from it in a grey panel underneath; then where borrowing stands.
  *
- * Borrowing is read here and acted on in the web app for now: the phone shows
- * the loan, its room and how far prices could fall, which is what someone
- * checks on a phone, and leaves pledging and repaying to the screen built for
- * it rather than offering buttons that do not lead anywhere.
+ * Borrowing is read here — the loan, its room and how far prices could fall,
+ * which is what someone checks on a phone — and acted on in the borrow screen
+ * this card opens.
  */
-export default function Money() {
+function MoneyScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const openActions = useActions();
@@ -186,9 +186,7 @@ const Borrowing = ({
           </View>
           <View style={s.noteWrap}>
             {borrow.health === "margin_call" || borrow.health === "liquidation" ? (
-              <Note tone="down">
-                Your loan is close to its limit. Repay or add collateral in the web app now.
-              </Note>
+              <Note tone="down">Your loan is close to its limit. Repay or add collateral now.</Note>
             ) : (
               <RNText style={s.muted}>
                 See what you could borrow, and how a loan would change your account.
@@ -264,3 +262,11 @@ const s = StyleSheet.create({
   noteWrap: { paddingHorizontal: space.md, paddingTop: space.md, paddingBottom: space.sm },
   muted: { fontFamily: font.regular, fontSize: 12, lineHeight: 17, color: color.muted },
 });
+
+export default function Money() {
+  return (
+    <TabScene index={2}>
+      <MoneyScreen />
+    </TabScene>
+  );
+}

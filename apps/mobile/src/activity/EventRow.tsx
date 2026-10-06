@@ -107,7 +107,8 @@ export const EventRow = ({
     <Animated.View layout={LinearTransition.duration(220)} style={[s.wrap, open && s.wrapOpen]}>
       <PressableScale
         haptic={expandable}
-        activeScale={expandable ? 0.99 : 1}
+        /* Opening in place is the answer to the tap; a scale on top read as a pulse. */
+        activeScale={1}
         disabled={!expandable}
         onPress={() => setOpen((v) => !v)}
         accessibilityRole={expandable ? "button" : undefined}

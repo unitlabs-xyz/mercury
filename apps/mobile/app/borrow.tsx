@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text as RNText, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { pct, usd } from "@mercury/view";
-import { useBorrow, useMoney, type Borrow } from "../src/api";
+import { borrowChoices, pct, pickRow, planBorrow, usd, type BorrowTab } from "@mercury/view";
+import { useBorrow, useBorrowAction, type Borrow } from "../src/api";
+import { Haptics } from "../src/haptics";
 import {
   AmountWell,
   Button,
   Chip,
+  Icon,
   IconButton,
   Note,
   Segmented,
@@ -18,7 +20,7 @@ import {
 } from "../src/ui";
 import { color, font, radius, space } from "../src/theme";
 
-type Tab = "borrow" | "repay" | "pledge" | "withdraw";
+type Tab = BorrowTab;
 
 const TABS: readonly { key: Tab; label: string }[] = [
   { key: "borrow", label: "Borrow" },
@@ -26,8 +28,6 @@ const TABS: readonly { key: Tab; label: string }[] = [
   { key: "pledge", label: "Add" },
   { key: "withdraw", label: "Withdraw" },
 ];
-
-const num = (v: string | number | null | undefined): number => Number(v ?? 0);
 
 /** The web's words for each state of a loan. */
 const HEALTH: Record<Borrow["health"], { tone: "up" | "warn" | "down"; label: string }> = {
@@ -42,58 +42,80 @@ const HEALTH: Record<Borrow["health"], { tone: "up" | "warn" | "down"; label: st
  * the loan stands, then the four things you can do — borrow, repay, add
  * collateral, take collateral back — each an amount and what it changes.
  *
- * The figures are real, read from Kamino through our API. The actions are not
- * connected on the phone yet: the transaction path behind them is the next
- * piece of work, so the button says so rather than pretending to submit.
+ * The figures are read from Kamino through our API, and what each action may
+ * do is the web's own arithmetic, from `@mercury/view`. The server checks it
+ * again, builds the transactions, and pays the network fee; the phone signs.
  */
 export default function BorrowScreen() {
   const router = useRouter();
   const bottom = useBottomGap();
   const borrow = useBorrow();
-  const cash = num(useMoney().data?.balanceUsd);
+  const action = useBorrowAction();
   const b = borrow.data;
   const [tab, setTab] = useState<Tab>("borrow");
   const [text, setText] = useState("");
-  const [ticker, setTicker] = useState<string | null>(null);
+  /* A stock page opens this with its own ticker chosen. */
+  const params = useLocalSearchParams<{ ticker?: string }>();
+  const [ticker, setTicker] = useState<string | null>(params.ticker ?? null);
+  /* Max, held as the exact figure rather than the rounded one on screen. */
+  const [atMax, setAtMax] = useState(false);
 
-  const amount = Number(text) || 0;
-  const debt = num(b?.debtUsd);
-  const rows = useMemo(() => (b?.collateral ?? []).filter((r) => r.isStock), [b]);
-  const pledgeable = rows.filter((r) => num(r.depositableUsd) > 0);
-  const pledged = rows.filter((r) => num(r.depositedUsd) > 0);
-  const picks = tab === "pledge" ? pledgeable : tab === "withdraw" ? pledged : [];
-  const chosen = picks.find((r) => r.ticker === ticker) ?? picks[0];
-
-  const max =
-    tab === "borrow"
-      ? num(b?.borrowableUsd)
-      : tab === "repay"
-        ? Math.min(debt, cash)
-        : tab === "pledge"
-          ? num(chosen?.depositableUsd)
-          : num(chosen?.depositedUsd);
+  const debt = b?.debtUsd ?? 0;
+  const cash = b?.cashUsd ?? 0;
+  /* Borrowing chooses which stock to pledge only when there is a choice to make. */
+  const picks = borrowChoices(b, tab);
+  const chosen = tab === "repay" ? undefined : pickRow(picks, ticker);
+  /* The most does not depend on the amount, so it can be read before it. */
+  const most = planBorrow(b, tab, chosen, 0).max;
+  const value = atMax ? most : Number(text) || 0;
+  const plan = planBorrow(b, tab, chosen, value);
+  const unit = plan.inTokens ? `${chosen?.ticker ?? ""}x` : "USDC";
 
   const note =
     tab === "borrow"
-      ? `Up to ${usd(num(b?.borrowableUsd))} at our safety target${b?.borrowApy !== undefined ? ` · about ${pct(num(b.borrowApy) * 100, 1)} a year` : ""}`
+      ? b === undefined
+        ? undefined
+        : `Up to ${usd(plan.max)} at our safety target · about ${pct(b.borrowApy * 100, 1)} a year`
       : tab === "repay"
         ? `${usd(debt)} owed · ${usd(cash)} cash to repay from`
         : chosen === undefined
           ? tab === "pledge"
-            ? "You have no stock Kamino accepts yet."
+            ? "You have no stock Kamino accepts free in your wallet."
             : "Nothing is pledged yet."
           : tab === "pledge"
-            ? `${usd(num(chosen.depositableUsd))} of ${chosen.ticker} you could pledge`
-            : `${usd(num(chosen.depositedUsd))} of ${chosen.ticker} pledged`;
+            ? `${chosen.depositableTokens.toFixed(4)} ${chosen.ticker}x free · ${usd(chosen.depositableUsd)}`
+            : `${chosen.depositedTokens.toFixed(4)} ${chosen.ticker}x pledged · up to ${plan.max.toFixed(4)} can come back`;
 
   const verb = { borrow: "Borrow", repay: "Repay", pledge: "Pledge", withdraw: "Withdraw" }[tab];
   const health = b ? HEALTH[b.health] : undefined;
+  const busy = action.isPending;
+  const canSubmit =
+    plan.intent !== null && value > 0 && plan.blocked === null && !plan.paused && !busy && action.walletReady;
 
   const pick = (next: Tab) => {
     setTab(next);
     setText("");
+    setAtMax(false);
     setTicker(null);
+    action.reset();
   };
+
+  const submit = () => {
+    if (plan.intent === null) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    action.mutate(plan.intent, {
+      onSuccess: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+      onError: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
+    });
+  };
+
+  const label = !action.walletReady
+    ? "Getting your wallet ready"
+    : value > 0 && !plan.inTokens
+      ? `${verb} ${usd(value)}`
+      : value > 0
+        ? `${verb} ${value.toFixed(4)} ${unit}`
+        : verb;
 
   return (
     <View style={s.root}>
@@ -136,8 +158,8 @@ export default function BorrowScreen() {
                 ) : (
                   <View style={s.figures}>
                     <Figure label="Borrowed" value={usd(debt)} />
-                    <Figure label="Can still borrow" value={usd(num(b.borrowableUsd))} />
-                    <Figure label="Pledged" value={usd(num(b.collateralUsd))} />
+                    <Figure label="Can still borrow" value={usd(b.borrowableUsd)} />
+                    <Figure label="Pledged" value={usd(b.collateralUsd)} />
                     <Figure
                       label="Safe until"
                       value={b.safeUntilDrop === null ? "—" : `a ${pct(b.safeUntilDrop * 100, 0)} fall`}
@@ -148,64 +170,139 @@ export default function BorrowScreen() {
             </View>
 
             {/* What to do */}
-            <View style={[s.card, s.action]}>
-              <Segmented options={TABS} value={tab} onChange={pick} fill />
+            {action.isSuccess ? (
+              <View style={[s.card, s.action, s.done]}>
+                <View style={s.doneMark}>
+                  <Icon name="check" size={20} color={color.up} strokeWidth={2.4} />
+                </View>
+                <RNText style={s.doneTitle}>Done</RNText>
+                <RNText style={s.muted}>Confirmed on chain. Your position is updating.</RNText>
+              </View>
+            ) : (
+              <View style={[s.card, s.action]}>
+                <Segmented options={TABS} value={tab} onChange={pick} fill />
 
-              {picks.length > 0 && (
-                <View style={s.chips}>
-                  {picks.map((r) => (
-                    <Chip
-                      key={r.ticker}
-                      label={r.ticker}
-                      selected={chosen?.ticker === r.ticker}
-                      onPress={() => setTicker(r.ticker)}
+                {plan.paused && b !== undefined ? (
+                  <Note tone="warn">
+                    {`${tab === "borrow" ? "Borrowing" : "Withdrawals"} paused until the loan is back inside the limit. Prices fell, so your loan is past the 80% limit. Repay ${usd(b.overTargetUsd)}, or pledge more stock, to unlock both.`}
+                  </Note>
+                ) : (
+                  <>
+                    {tab !== "repay" && picks.length > 1 && (
+                      <View style={s.chips}>
+                        {picks.map((r) => (
+                          <Chip
+                            key={r.ticker}
+                            label={r.ticker}
+                            selected={chosen?.ticker === r.ticker}
+                            onPress={() => {
+                              setTicker(r.ticker);
+                              setText("");
+                              setAtMax(false);
+                            }}
+                          />
+                        ))}
+                      </View>
+                    )}
+
+                    <AmountWell
+                      label={
+                        plan.inTokens
+                          ? `${chosen?.ticker ?? "Stock"} to ${tab === "pledge" ? "pledge" : "take back"}`
+                          : `Amount to ${verb.toLowerCase()}`
+                      }
+                      value={text}
+                      onChange={(next) => {
+                        setAtMax(false);
+                        setText(next);
+                      }}
+                      unit={unit}
+                      tokens={plan.inTokens}
+                      note={note}
+                      invalid={plan.blocked !== null && value > 0}
                     />
-                  ))}
-                </View>
-              )}
 
-              <AmountWell
-                label={
-                  tab === "pledge" || tab === "withdraw"
-                    ? `${chosen?.ticker ?? "Stock"} to ${tab === "pledge" ? "pledge" : "withdraw"}`
-                    : `Amount to ${verb.toLowerCase()}`
-                }
-                value={text}
-                onChange={setText}
-                unit={tab === "pledge" || tab === "withdraw" ? "USD" : "USDC"}
-                max={max > 0 ? max : undefined}
-                note={note}
-                invalid={amount > max && amount > 0}
-              />
+                    {plan.max > 0 && (
+                      <View style={s.chips}>
+                        {plan.presets.map((p) => {
+                          const isMax = p.v === plan.max && plan.inTokens;
+                          const v = presetText(p.v, tab, plan.inTokens);
+                          return (
+                            <Chip
+                              key={p.label}
+                              label={p.label}
+                              selected={isMax ? atMax : !atMax && text === v}
+                              onPress={() => {
+                                setAtMax(isMax);
+                                setText(v);
+                              }}
+                            />
+                          );
+                        })}
+                      </View>
+                    )}
 
-              {tab === "borrow" && (
-                <View style={s.panel}>
-                  <Line k="Paid into" v="Your cash, in USDC" />
-                  <Line k="Owed after" v={usd(debt + amount)} />
-                  <Line k="Held as collateral" v="Your pledged stocks stay yours" />
-                </View>
-              )}
-              {tab === "repay" && (
-                <View style={s.panel}>
-                  <Line k="Owed after" v={usd(Math.max(0, debt - amount))} />
-                  <Line k="Cash after" v={usd(Math.max(0, cash - amount))} />
-                </View>
-              )}
-            </View>
+                    {plan.preview !== null && value > 0 && plan.blocked === null && (
+                      <View style={s.panel}>
+                        {tab === "borrow" && <Line k="Paid into" v="Your cash, in USDC" />}
+                        <Line k="Owed after" v={usd(plan.preview.debt)} />
+                        <Line
+                          k="Safe until"
+                          v={
+                            plan.preview.drop === null
+                              ? "Nothing owed"
+                              : `a ${pct(plan.preview.drop * 100, 0)} fall`
+                          }
+                        />
+                        {plan.preview.note !== undefined && (
+                          <RNText style={s.muted}>{plan.preview.note}</RNText>
+                        )}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            )}
           </ScrollView>
 
           <View style={[s.footer, { paddingBottom: bottom }]}>
-            <Note tone="warn">
-              Borrowing from the phone is not connected yet; the backend for it comes next. It already works
-              in the web app.
-            </Note>
-            <Button label={amount > 0 ? `${verb} ${usd(amount)}` : verb} disabled />
+            {action.isSuccess ? (
+              <Button label="Done" onPress={() => router.back()} />
+            ) : (
+              <>
+                {value > 0 && !busy && (plan.blocked !== null || action.error !== null) && (
+                  <Note tone={plan.blocked !== null ? "warn" : "down"}>
+                    {plan.blocked ??
+                      (action.error !== null && action.error.message.length > 240
+                        ? `${action.error.message.slice(0, 240)}…`
+                        : (action.error?.message ?? ""))}
+                  </Note>
+                )}
+                <Button label={label} busy={busy} disabled={!canSubmit} onPress={submit} />
+              </>
+            )}
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
 }
+
+const floorTo = (v: number, places: number) =>
+  (Math.floor(v * 10 ** places) / 10 ** places).toFixed(places).replace(/\.?0+$/, "");
+
+/**
+ * What a preset puts in the field.
+ *
+ * Tokens show six places, rounded down. Max in tokens is then held apart as
+ * the exact figure (`atMax`): rounding 0.01909536 up gives a hair more than is
+ * pledged, and the screen would refuse its own button; exact, a withdrawal of
+ * everything goes out as "all" and leaves no dust. A borrow rounds down, so
+ * Max never crosses the target; a repay rounds to the cent, close enough to
+ * the debt to count as repaying all of it.
+ */
+const presetText = (v: number, tab: Tab, inTokens: boolean) =>
+  inTokens ? floorTo(v, 6) : tab === "borrow" ? floorTo(v, 2) : v.toFixed(2);
 
 const Figure = ({ label, value }: { label: string; value: string }) => (
   <View style={s.fig}>
@@ -256,6 +353,16 @@ const s = StyleSheet.create({
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   line: { flexDirection: "row", justifyContent: "space-between", gap: space.md },
   lineKey: { fontFamily: font.regular, fontSize: 14, color: color.muted },
+  done: { alignItems: "center", paddingVertical: space.xl, gap: space.sm },
+  doneMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: color.upChip,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doneTitle: { fontFamily: font.medium, fontSize: 20, letterSpacing: -0.4, color: color.ink },
   lineVal: { fontFamily: font.medium, fontSize: 14, color: color.ink, textAlign: "right", flexShrink: 1 },
   footer: {
     paddingHorizontal: space.screen,

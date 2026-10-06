@@ -176,7 +176,9 @@ const Slot = ({
       <PressableScale
         haptic={false}
         onPress={onPress}
-        activeScale={0.94}
+        /* No press scale: the pill moving is the answer to the tap, and a
+           scale settling after it read as a pulse. */
+        activeScale={1}
         accessibilityRole="tab"
         accessibilityLabel={label}
         accessibilityState={{ selected: focused }}

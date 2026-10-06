@@ -6,6 +6,7 @@ import type { Decision } from "@mercury/types";
 import { placeOrder, type OrderIntent, type OrderResult } from "@mercury/view";
 import { apiFetch } from "./client.js";
 import { useSignedIn } from "./hooks.js";
+import { refreshAfterChain } from "./settle.js";
 
 export {
   placeOrder,
@@ -25,8 +26,8 @@ export {
  * Native app, which only ever resolved because a stale node_modules happened
  * to hoist one.
  */
-const toBytes = (b64: string): Uint8Array => Uint8Array.from(Buffer.from(b64, "base64"));
-const toBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
+export const toBytes = (b64: string): Uint8Array => Uint8Array.from(Buffer.from(b64, "base64"));
+export const toBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
 
 /** What a buy would cost right now: the decision, and the charge beside it. */
 export interface Quote {
@@ -34,6 +35,8 @@ export interface Quote {
   readonly fee: { readonly usdc: string; readonly lamports: number };
   /** What actually reaches the swap, after the charge. Null on a sell. */
   readonly investable: string | null;
+  /** What a sale lands in the wallet, net of the charge. Absent on a buy. */
+  readonly proceeds?: string;
 }
 
 /**
@@ -44,16 +47,17 @@ export interface Quote {
  * there is no such thing as a quote for nothing, and asking for one returns a
  * refusal that reads like a fault.
  */
-export const useQuote = (ticker: string, usd: number, side: "buy" | "sell" = "buy") => {
+export const useQuote = (ticker: string, usd: number, side: "buy" | "sell" = "buy", max = false) => {
   const signedIn = useSignedIn();
   return useQuery({
-    queryKey: ["api", "quote", ticker, side, usd],
+    queryKey: ["api", "quote", ticker, side, usd, max],
     queryFn: () =>
       apiFetch<Quote>("/v1/quote", {
         method: "POST",
-        body: JSON.stringify({ ticker, side, amount: String(usd) }),
+        /* `max` is omitted rather than false, as `placeOrder` sends it. */
+        body: JSON.stringify({ ticker, side, amount: String(usd), ...(max ? { max: true } : {}) }),
       }),
-    enabled: signedIn && ticker.length > 0 && usd > 0,
+    enabled: signedIn && ticker.length > 0 && (usd > 0 || max),
     /* A quote is a price, and a price is only true for a moment. */
     staleTime: 10_000,
     refetchInterval: 15_000,
@@ -102,7 +106,7 @@ export const useOrderAction = () => {
       );
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ["api"] });
+      refreshAfterChain(qc);
     },
   });
 

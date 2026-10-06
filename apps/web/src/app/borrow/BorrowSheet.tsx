@@ -1,38 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { useBorrow, useBorrowAction, type Borrow, type BorrowIntent, type BorrowRow } from "../../api/borrow";
+import { useBorrow, useBorrowAction } from "../../api/borrow";
 import { useInstrument, useInstruments } from "../../market/hooks";
 import { Button } from "../../ui/Button";
 import { PanelHeader, SidePanel } from "../../ui/Dialog";
 import { Alert, Check } from "../../ui/icons";
-import { pct, usd } from "@mercury/view";
+import { borrowChoices, pct, pickRow, planBorrow, usd, type BorrowRow, type BorrowTab } from "@mercury/view";
 import { Mark } from "../invest/shared";
 import { LoanMeter, loanNow, loanShape } from "../money/LoanMeter";
 import { Fact, RailLine } from "../stock/Panels";
 import { chip } from "../stock/Ticket";
 
-export type Tab = "borrow" | "repay" | "pledge" | "withdraw";
-
-/** A small cushion so a price tick between quote and signing does not push a borrow past the target. */
-const PRICE_BUFFER = 1.005;
+export type Tab = BorrowTab;
 
 const pctOf = (x: number | null) => (x === null ? "—" : pct(x * 100, 1));
-
-/** Debt over the value at which liquidation starts, after a change. */
-const safeUntil = (b: Borrow, debt: number, deposits: (r: BorrowRow) => number) => {
-  const liquidationAt = b.collateral.reduce(
-    (s, r) => s + deposits(r) * r.pricePerToken * r.liquidationThreshold,
-    0,
-  );
-  return debt <= 0 || liquidationAt <= 0 ? null : Math.max(0, 1 - debt / liquidationAt);
-};
-
-const safePledged = (b: Borrow, deposits: (r: BorrowRow) => number) =>
-  b.collateral.reduce((s, r) => s + deposits(r) * r.pricePerToken * r.ltv * b.safetyTarget, 0);
-
-const raw = (tokens: number, decimals: number, round: "up" | "down") => {
-  const scaled = tokens * 10 ** decimals;
-  return BigInt(round === "up" ? Math.ceil(scaled) : Math.floor(scaled)).toString();
-};
 
 /**
  * Borrow USDC against xStocks, repay, or take collateral back. Everything the
@@ -83,131 +63,17 @@ export const BorrowSheet = ({
   const own = useInstrument(ticker ?? "");
   const info = (t: string) =>
     instruments.data?.find((i) => i.ticker === t) ?? (own.data?.ticker === t ? own.data : undefined);
-  const pledgeable = stocks.filter((r) => r.depositedTokens > 0 || r.depositableTokens > 0);
-  const pledged = stocks.filter((r) => r.depositedTokens > 0);
-  const free = stocks.filter((r) => r.depositableTokens > 0);
-  const all = tab === "withdraw" ? pledged : tab === "pledge" ? free : pledgeable;
+  const all = borrowChoices(b, tab);
   const choices = only && ticker ? all.filter((r) => r.ticker === ticker) : all;
-  // A loan past the limit is locked: only repaying and pledging more are open.
-  const paused = !!b?.locked && (tab === "borrow" || tab === "withdraw");
-  const row =
-    choices.find((r) => r.ticker === pick) ??
-    [...choices].sort((x, y) => y.borrowableUsd - x.borrowableUsd)[0];
+  const row = pickRow(choices, pick);
   const value = Number(settled) || 0;
   const typing = amount !== settled;
 
-  /**
-   * The most you can borrow choosing this stock: what is already open against
-   * the collateral pledged today, plus what pledging this stock's free shares
-   * adds, capped by the pool. The row, Max and the limit check all read this.
-   */
-  const borrowLimit = (r: BorrowRow) =>
-    b
-      ? Math.min(
-          b.poolAvailableUsd,
-          b.borrowableNowUsd + r.depositableTokens * r.pricePerToken * r.ltv * b.safetyTarget,
-        )
-      : 0;
-
-  let intent: BorrowIntent | null = null;
-  let max = 0;
-  let preview: {
-    debt: number;
-    drop: number | null;
-    deposits: (r: BorrowRow) => number;
-    note?: string;
-  } | null = null;
-  let blocked: string | null = null;
-
-  if (b && tab === "borrow" && row) {
-    const perToken = row.pricePerToken * row.ltv * b.safetyTarget;
-    max = borrowLimit(row);
-    const extra = Math.max(0, value - b.borrowableNowUsd);
-    const tokens = extra > 0 ? Math.min(row.depositableTokens, (extra / perToken) * PRICE_BUFFER) : 0;
-    intent =
-      tokens > 0
-        ? {
-            kind: "deposit_and_borrow",
-            ticker: row.ticker,
-            tokensRaw: raw(tokens, row.decimals, "up"),
-            usd: value.toFixed(2),
-          }
-        : { kind: "borrow", usd: value.toFixed(2) };
-    const after = (r: BorrowRow) => r.depositedTokens + (r.ticker === row.ticker ? tokens : 0);
-    preview = {
-      debt: b.debtUsd + value,
-      drop: safeUntil(b, b.debtUsd + value, after),
-      deposits: after,
-      ...(tokens > 0
-        ? { note: `Pledges ${tokens.toFixed(4)} ${row.ticker}x to Kamino. The shares stay yours.` }
-        : {}),
-    };
-    if (value > max + 0.005) blocked = `At most ${usd(max)} at the 80% safety target.`;
-  } else if (b && tab === "repay") {
-    max = Math.min(b.debtUsd, b.cashUsd);
-    intent = {
-      kind: "repay",
-      usd: value >= b.debtUsd - 0.005 && b.cashUsd >= b.debtUsd * 1.001 ? "all" : value.toFixed(2),
-    };
-    preview = {
-      debt: Math.max(0, b.debtUsd - value),
-      drop: safeUntil(b, Math.max(0, b.debtUsd - value), (r) => r.depositedTokens),
-      deposits: (r) => r.depositedTokens,
-    };
-    if (b.debtUsd <= 0) blocked = "There is no loan to repay.";
-    else if (value > b.cashUsd) blocked = `Only ${usd(b.cashUsd)} of cash in the wallet.`;
-  } else if (b && tab === "pledge" && row) {
-    max = row.depositableTokens;
-    intent = { kind: "deposit", ticker: row.ticker, tokensRaw: raw(value, row.decimals, "down") };
-    const after = (r: BorrowRow) => r.depositedTokens + (r.ticker === row.ticker ? value : 0);
-    preview = {
-      debt: b.debtUsd,
-      drop: safeUntil(b, b.debtUsd, after),
-      deposits: after,
-      note: "Adds collateral without borrowing. The shares stay yours and can be withdrawn later.",
-    };
-    if (value > max + 1e-9) blocked = `Only ${max.toFixed(4)} ${row.ticker}x is free in the wallet.`;
-  } else if (b && tab === "withdraw" && row) {
-    const spare = safePledged(b, (r) => r.depositedTokens) - b.debtUsd;
-    const perToken = row.pricePerToken * row.ltv * b.safetyTarget;
-    max =
-      b.debtUsd <= 0
-        ? row.depositedTokens
-        : Math.max(0, Math.min(row.depositedTokens, spare / perToken / PRICE_BUFFER));
-    const all = b.debtUsd <= 0 && value >= row.depositedTokens - 1e-9;
-    intent = {
-      kind: "withdraw",
-      ticker: row.ticker,
-      tokensRaw: all ? "all" : raw(value, row.decimals, "down"),
-    };
-    const after = (r: BorrowRow) => r.depositedTokens - (r.ticker === row.ticker ? value : 0);
-    preview = { debt: b.debtUsd, drop: safeUntil(b, b.debtUsd, after), deposits: after };
-    if (value > max + 1e-9) blocked = "Repay some of the loan first to take that much back.";
-  }
-
-  // Quick amounts under the well, as the buy ticket's: shares of the most for
-  // a borrow, pledge or withdrawal; the figures that unlock something for a repay.
-  const presets: { label: string; v: number }[] = !b
-    ? []
-    : tab === "repay"
-      ? [
-          ...(b.repayToClearMarginCallUsd > 0
-            ? [{ label: "End margin call", v: b.repayToClearMarginCallUsd }]
-            : []),
-          ...(b.overTargetUsd > 0 ? [{ label: "Unlock", v: b.overTargetUsd }] : []),
-          { label: "Half", v: max / 2 },
-          { label: "All", v: max },
-        ]
-      : [
-          { label: "25%", v: max * 0.25 },
-          { label: "50%", v: max * 0.5 },
-          { label: "75%", v: max * 0.75 },
-          { label: "Max", v: max },
-        ];
+  /* The arithmetic that moves money is shared with the phone: @mercury/view's borrow.ts. */
+  const { intent, max, preview, blocked, presets, paused, inTokens } = planBorrow(b, tab, row, value);
 
   const busy = action.isPending;
   const canSubmit = !!intent && value > 0 && !typing && !blocked && !busy && !paused && action.walletReady;
-  const inTokens = tab === "withdraw" || tab === "pledge";
   const unit = inTokens ? `${row?.ticker ?? ""}x` : "USD";
 
   const title =
@@ -265,7 +131,7 @@ export const BorrowSheet = ({
               >
                 Repay {usd(b.overTargetUsd)}
               </Button>
-              {free.length > 0 && (
+              {borrowChoices(b, "pledge").length > 0 && (
                 <Button onClick={() => (setTab("pledge"), setAmount(""))}>Pledge more</Button>
               )}
             </div>

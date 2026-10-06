@@ -57,6 +57,7 @@ const PATHS = {
   },
   chevronRight: { w: STROKE, parts: ["M9 6l6 6-6 6"] },
   chevronDown: { w: STROKE, parts: ["M6 9l6 6 6-6"] },
+  chevronsUpDown: { w: STROKE, parts: ["M8 9l4-4 4 4", "M8 15l4 4 4-4"] },
   sort: { w: 1.8, parts: ["M7 4v16", "M4 17l3 3 3-3", "M17 20V4", "M14 7l3-3 3 3"] },
   blocks: {
     w: 1.9,
@@ -85,6 +86,7 @@ const PATHS = {
   shield: { w: 1.8, parts: ["M12 22s8-4.5 8-11V5l-8-3-8 3v6c0 6.5 8 11 8 11z"] },
   layers: { w: 1.8, parts: ["M12 3v18", "M4 8h16", "M4 16h16"] },
   clock: { w: 1.8, parts: [{ circle: [12, 12, 9] }, "M12 7v5l3 2"] },
+  bookmark: { w: 1.8, parts: ["M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z"] },
   plus: { w: STROKE, parts: ["M12 6v12", "M6 12h12"] },
   /* Four corners and a line across: point a camera at a code. */
   scan: {

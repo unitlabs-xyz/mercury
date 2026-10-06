@@ -16,6 +16,7 @@ export const AmountWell = ({
   max,
   note,
   invalid = false,
+  tokens = false,
 }: {
   label: string;
   value: string;
@@ -25,24 +26,27 @@ export const AmountWell = ({
   max?: number | undefined;
   note?: string | undefined;
   invalid?: boolean;
+  /** Counted in tokens, not dollars: no "$", and Max keeps four places, as the web's pledge field does. */
+  tokens?: boolean;
 }) => (
   <View style={s.panel}>
     <RNText style={s.label}>{label}</RNText>
     <View style={[s.well, invalid && s.invalid]}>
-      <RNText style={s.currency}>$</RNText>
+      {!tokens && <RNText style={s.currency}>$</RNText>}
       <TextInput
         value={value}
         onChangeText={(raw) => onChange(raw.replace(/[^0-9.]/g, "").slice(0, 12))}
         keyboardType="decimal-pad"
-        placeholder="0.00"
+        placeholder={tokens ? "0.0000" : "0.00"}
         placeholderTextColor="rgba(101,101,101,0.5)"
         selectionColor={color.brand}
         style={s.input}
-        accessibilityLabel={`${label} in dollars`}
+        accessibilityLabel={tokens ? `${label} in ${unit}` : `${label} in dollars`}
       />
       {max !== undefined && (
         <PressableScale
-          onPress={() => onChange(max.toFixed(2))}
+          /* Rounded down, so Max never asks for a hair more than there is. */
+          onPress={() => onChange(floorTo(max, tokens ? 4 : 2))}
           activeScale={0.94}
           style={s.max}
           haptic={false}
@@ -56,6 +60,8 @@ export const AmountWell = ({
     {note !== undefined && <RNText style={s.note}>{note}</RNText>}
   </View>
 );
+
+const floorTo = (v: number, places: number) => (Math.floor(v * 10 ** places) / 10 ** places).toFixed(places);
 
 const s = StyleSheet.create({
   panel: { borderRadius: radius.md, backgroundColor: color.tile, padding: space.xs },

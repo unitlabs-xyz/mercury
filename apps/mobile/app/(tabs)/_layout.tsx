@@ -1,4 +1,3 @@
-import { Easing } from "react-native";
 import { Tabs } from "expo-router";
 import { ActionsProvider, useActions } from "../../src/actions/Actions";
 import { TabBar, type IconName } from "../../src/ui";
@@ -17,9 +16,6 @@ const ICONS: Record<string, IconName> = {
   money: "wallet",
   activity: "clock",
 };
-
-/* How far a page travels on its way in or out. Enough to say which way, not a slide. */
-const SHIFT = 28;
 
 export default function TabsLayout() {
   return (
@@ -42,23 +38,7 @@ const Bar = () => {
            transition at the far end and never runs it, so it stayed at zero
            opacity: a blank page under a bar that said Invest. */
         lazy: false,
-        /* In and out, toward the tab you chose: the old page drifts away and
-           fades as the new one settles in from the side it lives on. Short and
-           eased out, so a tap feels answered rather than animated at. */
-        transitionSpec: { animation: "timing", config: { duration: 260, easing: Easing.out(Easing.cubic) } },
-        sceneStyleInterpolator: ({ current }) => ({
-          sceneStyle: {
-            opacity: current.progress.interpolate({ inputRange: [-1, 0, 1], outputRange: [0, 1, 0] }),
-            transform: [
-              {
-                translateX: current.progress.interpolate({
-                  inputRange: [-1, 0, 1],
-                  outputRange: [-SHIFT, 0, SHIFT],
-                }),
-              },
-            ],
-          },
-        }),
+        /* The way in is each tab's own: see TabScene. */
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Portfolio" }} />
