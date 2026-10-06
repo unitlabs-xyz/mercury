@@ -68,6 +68,25 @@ describe("JupiterMarket.pricesFor", () => {
     expect(board.has(NVDAX_MINT)).toBe(true);
   });
 
+  it("keeps at most four batches in flight, so pricing everything is not one burst", async () => {
+    let open = 0;
+    let peak = 0;
+    const f = fakeFetch({ "/price/v3": jupPrice });
+    const m = new JupiterMarket({
+      registry: registry([NVDAX]),
+      fetch: (async (input: Parameters<typeof fetch>[0]) => {
+        open += 1;
+        peak = Math.max(peak, open);
+        await new Promise((r) => setTimeout(r, 1));
+        open -= 1;
+        return f(input);
+      }) as typeof fetch,
+    });
+    const mints = [NVDAX_MINT, ...Array.from({ length: 499 }, (_, i) => `Mint${i}`)];
+    expect((await m.pricesFor(mints)).has(NVDAX_MINT)).toBe(true);
+    expect(peak).toBe(4);
+  });
+
   it("does not call upstream for an empty list", async () => {
     const m = new JupiterMarket({ registry: registry([]), fetch: fakeFetch({}) });
     expect((await m.pricesFor([])).size).toBe(0);

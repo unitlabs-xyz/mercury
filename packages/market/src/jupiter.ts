@@ -9,6 +9,13 @@ const BASE = "https://lite-api.jup.ag";
 /** The most ids price/v3 takes in one request. */
 const PRICE_BATCH = 50;
 
+/**
+ * Batches in flight at once. Pricing the whole universe is ~35 batches, and
+ * firing them together spent Jupiter's per-minute limit in a single burst at
+ * boot, starving every other caller.
+ */
+const PRICE_CONCURRENCY = 4;
+
 interface JupPrice {
   readonly usdPrice?: number;
   readonly decimals?: number;
@@ -58,13 +65,16 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
     // price/v3 answers at most 50 ids per call, so the whole list goes in batches.
     const batches: string[][] = [];
     for (let i = 0; i < mints.length; i += PRICE_BATCH) batches.push(mints.slice(i, i + PRICE_BATCH));
-    const pages = await Promise.all(
-      batches.map(async (ids) => {
-        const res = await this.doFetch(`${this.base}/price/v3?ids=${ids.join(",")}`);
+    const pages: Record<string, JupPrice | null>[] = [];
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      for (let i = next++; i < batches.length; i = next++) {
+        const res = await this.doFetch(`${this.base}/price/v3?ids=${batches[i]!.join(",")}`);
         if (!res.ok) throw new Error(`jupiter price/v3 returned ${res.status}`);
-        return (await res.json()) as Record<string, JupPrice | null>;
-      }),
-    );
+        pages[i] = (await res.json()) as Record<string, JupPrice | null>;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(PRICE_CONCURRENCY, batches.length) }, worker));
     const body: Record<string, JupPrice | null> = Object.assign({}, ...pages);
 
     for (const mint of mints) {

@@ -15,6 +15,7 @@ import {
   type TriggerSource,
 } from "@mercury/chain";
 import {
+  CachedPriceBoard,
   JupiterMarket,
   KaminoCredit,
   MintMultipliers,
@@ -182,7 +183,8 @@ export function buildDeps(config: Config): Deps {
     // The mint is the authority. `market` implements the same port from
     // Jupiter's copy of the same numbers, and is what the browser falls back to.
     multipliers: new MintMultipliers({ chain }),
-    prices: market,
+    // Every price lookup shares one short cache, so background jobs stop spending Jupiter's rate limit.
+    prices: new CachedPriceBoard(market),
     credit: new KaminoCredit(),
     // Unofficial, keyless, and the only equity history we can reach: Pyth
     // Benchmarks refuses equity feeds on our entitlement and serves one
