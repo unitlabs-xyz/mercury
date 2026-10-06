@@ -40,6 +40,13 @@ describe("JsonBasketStore", () => {
       },
       /10,000 bps/,
     ],
+    [
+      "missing primary grouping",
+      (catalog: typeof catalogJson) => {
+        catalog.strategies[0]!.tags = ["shelf:featured"];
+      },
+      /primary theme or pros tag/,
+    ],
   ])("rejects a catalog with %s", async (_case, mutate, expected) => {
     const catalog = structuredClone(catalogJson);
     mutate(catalog);

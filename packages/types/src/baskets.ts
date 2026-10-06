@@ -29,11 +29,24 @@ export const BasketPreview = z.object({
 });
 
 /** A Glider template creates a user-owned portfolio; it is not a pooled token. */
+export const ManagedBasketTag = z.enum([
+  "theme:technology",
+  "theme:energy",
+  "theme:defense",
+  "theme:consumer",
+  "theme:finance",
+  "theme:hard-assets",
+  "theme:healthcare",
+  "shelf:pros",
+  "shelf:featured",
+]);
+
 export const ManagedBasketTemplate = z.object({
   slug: z.string(),
   kind: z.literal("managed_portfolio"),
   provider: z.literal("glider"),
   status: z.enum(["candidate", "disabled", "enabled"]),
+  tags: z.array(ManagedBasketTag),
   canEnroll: z.boolean(),
   name: z.string(),
   description: z.string(),
@@ -82,6 +95,7 @@ export const Plan = z.object({
 });
 
 export type Basket = z.infer<typeof Basket>;
+export type ManagedBasketTag = z.infer<typeof ManagedBasketTag>;
 export type ManagedBasketTemplate = z.infer<typeof ManagedBasketTemplate>;
 export type BasketPreview = z.infer<typeof BasketPreview>;
 export type Plan = z.infer<typeof Plan>;

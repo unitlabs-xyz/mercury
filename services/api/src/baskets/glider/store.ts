@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
+import { ManagedBasketTag } from "@mercury/types";
 import catalogJson from "../../../catalog.json" with { type: "json" };
 import type { BasketStore } from "../core/deps.js";
 import type { BasketTemplate } from "../core/primitives.js";
@@ -14,8 +15,17 @@ const allocation = z.object({
   sourceAssetId: z.string().min(1),
   weightBps: z.number().int().min(1).max(10_000),
 });
+const tags = z
+  .array(ManagedBasketTag)
+  .refine(
+    (values) =>
+      new Set(values).size === values.length &&
+      values.filter((tag) => tag.startsWith("theme:") || tag === "shelf:pros").length === 1,
+    "Each strategy needs exactly one primary theme or pros tag and no duplicates",
+  );
 const strategy = z.object({
   slug: z.string().min(1),
+  tags,
   name: z.string().min(1),
   description: z.string().min(1),
   sourceStrategyId: z.string().min(1),
@@ -68,6 +78,7 @@ export class JsonBasketStore implements BasketStore {
         throw new Error(`${entry.slug}: weights must total 10,000 bps, got ${totalBps}`);
       return {
         slug: entry.slug,
+        tags: entry.tags,
         ...(entry.gliderStrategyId === undefined ? {} : { providerId: entry.gliderStrategyId }),
         name: entry.name,
         description: entry.description,

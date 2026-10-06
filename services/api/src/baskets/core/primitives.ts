@@ -1,3 +1,5 @@
+import type { ManagedBasketTag } from "@mercury/types";
+
 export interface BasketDefinition {
   slug: string;
   providerId?: string;
@@ -11,6 +13,7 @@ export interface BasketDefinition {
 export interface BasketTemplate extends BasketDefinition {
   sourceStrategyId: string;
   status: "candidate" | "disabled" | "enabled";
+  tags: readonly ManagedBasketTag[];
   assets: readonly (BasketDefinition["assets"][number] & { ticker: string })[];
 }
 

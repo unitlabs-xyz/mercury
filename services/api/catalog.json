@@ -148,6 +148,7 @@
   "strategies": [
     {
       "slug": "magnificent-seven",
+      "tags": ["theme:technology", "shelf:featured"],
       "gliderStrategyId": "01M465MY1C2KBER654KJDCYYK9",
       "name": "Mercury Solana - Magnificent Seven",
       "description": "A Solana Ondo-token adaptation of the public Magnificent Seven allocation. Source-chain performance does not transfer.",
@@ -197,6 +198,7 @@
     },
     {
       "slug": "nancy-pelosi-tracker",
+      "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664BEJSY687YFFQT6AXS22",
       "name": "Mercury Solana - Nancy Pelosi Tracker (Daily Variant)",
       "description": "A Solana Ondo-token adaptation of the public Nancy Pelosi Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
@@ -263,6 +265,7 @@
     },
     {
       "slug": "warren-buffett-tracker",
+      "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664CYACMZCGRXZA8VXN621",
       "name": "Mercury Solana - Warren Buffett Tracker (Daily Variant)",
       "description": "A Solana Ondo-token adaptation of the public Warren Buffett Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
@@ -314,6 +317,7 @@
     },
     {
       "slug": "leopold-aschenbrenner-tracker",
+      "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664EEHNRCCM2S6TCEYVDVA",
       "name": "Mercury Solana - Leopold Aschenbrenner Tracker (Daily Variant)",
       "description": "A Solana Ondo-token adaptation of the public Leopold Aschenbrenner Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
@@ -395,6 +399,7 @@
     },
     {
       "slug": "cathie-wood-tracker",
+      "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664G02RJZKJ375Y3PQYCT6",
       "name": "Mercury Solana - Cathie Wood Tracker (Daily Variant)",
       "description": "A Solana Ondo-token adaptation of the public Cathie Wood Tracker allocation. This variant rebalances daily, not on the source weekday New York schedule. Source-chain performance does not transfer.",
@@ -476,6 +481,7 @@
     },
     {
       "slug": "hard-money",
+      "tags": ["theme:hard-assets", "shelf:featured"],
       "gliderStrategyId": "01M465SR9JKM9EHNFKQRHCVH7G",
       "name": "Mercury Solana - Hard Money",
       "description": "A Solana Ondo-token adaptation of the public Hard Money allocation. Source-chain performance does not transfer.",
@@ -520,6 +526,7 @@
     },
     {
       "slug": "quantum",
+      "tags": ["theme:technology"],
       "gliderStrategyId": "01M465SSR1NQ1PMWVP8GY1GFMJ",
       "name": "Mercury Solana - Quantum",
       "description": "A Solana Ondo-token adaptation of the public Quantum allocation. Source-chain performance does not transfer.",
@@ -574,6 +581,7 @@
     },
     {
       "slug": "energy-infrastructure",
+      "tags": ["theme:energy", "shelf:featured"],
       "gliderStrategyId": "01M465SV8EJG5FSENGRC1BSRKF",
       "name": "Mercury Solana - Energy Infrastructure",
       "description": "A Solana Ondo-token adaptation of the public Energy Infrastructure allocation. Source-chain performance does not transfer.",
@@ -628,6 +636,7 @@
     },
     {
       "slug": "pure-silicon",
+      "tags": ["theme:technology", "shelf:featured"],
       "gliderStrategyId": "01M465SWNTQWHRCZ8YKVGK7H86",
       "name": "Mercury Solana - Pure Silicon",
       "description": "A Solana Ondo-token adaptation of the public Pure Silicon allocation. Source-chain performance does not transfer.",
@@ -692,6 +701,7 @@
     },
     {
       "slug": "neo-finance",
+      "tags": ["theme:finance", "shelf:featured"],
       "gliderStrategyId": "01M465SY4J9A20QQ1FAP64T2DH",
       "name": "Mercury Solana - Neo Finance",
       "description": "A Solana Ondo-token adaptation of the public Neo Finance allocation. Source-chain performance does not transfer.",
@@ -756,6 +766,7 @@
     },
     {
       "slug": "compute-grab",
+      "tags": ["theme:technology"],
       "gliderStrategyId": "01M465SZKK6MKPJ948HBNMSJF2",
       "name": "Mercury Solana - Compute Grab",
       "description": "A Solana Ondo-token adaptation of the public Compute Grab allocation. Source-chain performance does not transfer.",
@@ -815,6 +826,7 @@
     },
     {
       "slug": "ai-full-stack",
+      "tags": ["theme:technology", "shelf:featured"],
       "gliderStrategyId": "01M465T1YNCGT98DQAC76M3HP4",
       "name": "Mercury Solana - AI Full Stack",
       "description": "A Solana Ondo-token adaptation of the public AI Full Stack allocation. Source-chain performance does not transfer.",
@@ -894,6 +906,7 @@
     },
     {
       "slug": "the-arsenal",
+      "tags": ["theme:defense"],
       "gliderStrategyId": "01M465T3HY08FYV7WB10G1JCWM",
       "name": "Mercury Solana - The Arsenal",
       "description": "A Solana Ondo-token adaptation of the public The Arsenal allocation. Source-chain performance does not transfer.",
@@ -953,6 +966,7 @@
     },
     {
       "slug": "digital-fortress",
+      "tags": ["theme:technology"],
       "gliderStrategyId": "01M465T51Q1HTKY5C1WM63M2DY",
       "name": "Mercury Solana - Digital Fortress",
       "description": "A Solana Ondo-token adaptation of the public Digital Fortress allocation. Source-chain performance does not transfer.",
@@ -997,6 +1011,7 @@
     },
     {
       "slug": "black-gold",
+      "tags": ["theme:energy"],
       "gliderStrategyId": "01M465T6HWWS8SRTW8W9RFWHJ8",
       "name": "Mercury Solana - Black Gold",
       "description": "A Solana Ondo-token adaptation of the public Black Gold allocation. Source-chain performance does not transfer.",
@@ -1051,6 +1066,7 @@
     },
     {
       "slug": "escape-velocity",
+      "tags": ["theme:defense"],
       "gliderStrategyId": "01M465T82SZQDR3PHAPXMB4X2H",
       "name": "Mercury Solana - Escape Velocity",
       "description": "A Solana Ondo-token adaptation of the public Escape Velocity allocation. Source-chain performance does not transfer.",
@@ -1110,6 +1126,7 @@
     },
     {
       "slug": "mine-the-future",
+      "tags": ["theme:hard-assets"],
       "gliderStrategyId": "01M465T9FP3ZZVJJSQT7XTMEWA",
       "name": "Mercury Solana - Mine the Future",
       "description": "A Solana Ondo-token adaptation of the public Mine the Future allocation. Source-chain performance does not transfer.",
@@ -1164,6 +1181,7 @@
     },
     {
       "slug": "going-nuclear",
+      "tags": ["theme:energy"],
       "gliderStrategyId": "01M465TAZHRZ08V0C46M9N4QHX",
       "name": "Mercury Solana - Going Nuclear",
       "description": "A Solana Ondo-token adaptation of the public Going Nuclear allocation. Source-chain performance does not transfer.",
@@ -1228,6 +1246,7 @@
     },
     {
       "slug": "consumer-brands",
+      "tags": ["theme:consumer"],
       "gliderStrategyId": "01M465TCDXFTSGBS820GK5RVW8",
       "name": "Mercury Solana - Consumer Brands",
       "description": "A Solana Ondo-token adaptation of the public Consumer Brands allocation. Source-chain performance does not transfer.",
@@ -1297,6 +1316,7 @@
     },
     {
       "slug": "healthcare-trade",
+      "tags": ["theme:healthcare"],
       "gliderStrategyId": "01M465TDXHZB8TW2PAVCM8D9QM",
       "name": "Mercury Solana - Healthcare Trade",
       "description": "A Solana Ondo-token adaptation of the public Healthcare Trade allocation. Source-chain performance does not transfer.",
@@ -1361,6 +1381,7 @@
     },
     {
       "slug": "road-warriors",
+      "tags": ["theme:consumer"],
       "gliderStrategyId": "01M465TFCGBK7VC8K9VYGP8PM8",
       "name": "Mercury Solana - Road Warriors",
       "description": "A Solana Ondo-token adaptation of the public Road Warriors allocation. Source-chain performance does not transfer.",
@@ -1420,6 +1441,7 @@
     },
     {
       "slug": "technology-eight",
+      "tags": ["theme:technology"],
       "gliderStrategyId": "01M465TGW4MZQT4RM4M0X1W4V6",
       "name": "Mercury Solana - Technology Eight",
       "description": "A Solana Ondo-token technology portfolio. This is a same-theme variant, not the source strategy or its historical performance.",

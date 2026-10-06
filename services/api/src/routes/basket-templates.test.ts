@@ -17,6 +17,17 @@ describe("basket template routes", () => {
     expect(templates[0]).toEqual(
       expect.objectContaining({ kind: "managed_portfolio", status: "candidate", canEnroll: false }),
     );
+    expect(
+      templates.every((template) => {
+        const primary = template.tags.filter((tag) => tag.startsWith("theme:") || tag === "shelf:pros");
+        return primary.length === 1 && new Set(template.tags).size === template.tags.length;
+      }),
+    ).toBe(true);
+    expect(templates.filter((template) => template.tags.includes("shelf:pros"))).toHaveLength(4);
+    expect(templates.filter((template) => template.tags.includes("shelf:featured"))).toHaveLength(6);
+    expect(templates.find((template) => template.slug === "magnificent-seven")?.tags).toContain(
+      "theme:technology",
+    );
   });
 
   it("returns 404 for an unknown template", async () => {
@@ -35,5 +46,6 @@ describe("basket template routes", () => {
     expect(response.status).toBe(200);
     expect(template.strategyId).toBe("01M465MY1C2KBER654KJDCYYK9");
     expect(template.performance).toBeNull();
+    expect(template.tags).toContain("theme:technology");
   });
 });

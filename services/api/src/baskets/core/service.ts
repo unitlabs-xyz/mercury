@@ -25,6 +25,7 @@ export class BasketService {
       kind: "managed_portfolio" as const,
       provider: "glider" as const,
       status: template.status,
+      tags: [...template.tags],
       canEnroll: template.status === "enabled" && template.providerId !== undefined,
       name: template.name,
       description: template.description,

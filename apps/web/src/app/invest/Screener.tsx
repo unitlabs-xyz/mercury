@@ -1,7 +1,15 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { Span } from "../../market/hooks";
-import { BookmarkMark, GlideRows, InfoTip, MoveChip, Pagination, RangeSwitch, StatusChip } from "../../ui/ds";
+import {
+  BookmarkMark,
+  GlideTable,
+  InfoTip,
+  MoveChip,
+  Pagination,
+  RangeSwitch,
+  StatusChip,
+} from "../../ui/ds";
 import { DotChart, TINY } from "../DotChart";
 import { usd, usdCompact } from "@mercury/view";
 import { Skeleton } from "../portfolio/ui";
@@ -327,37 +335,41 @@ export const Screener = ({
             </p>
           </div>
         ) : (
-          <div className="min-w-[900px]">
-            <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
-              <Head k="name" sort={sort} onSort={onSort} align="left">
-                Name
-              </Head>
-              <Head k="price" sort={sort} onSort={onSort}>
-                Price
-              </Head>
-              <Head k="change" sort={sort} onSort={onSort}>
-                {range}
-              </Head>
-              <span className="text-right">Chart</span>
-              <Head k="volume" sort={sort} onSort={onSort}>
-                Volume 24H
-              </Head>
-              <Head k="holders" sort={sort} onSort={onSort}>
-                Holders
-              </Head>
-              <span />
-            </div>
-            <GlideRows as="ul">
-              {slice.map((r) => (
-                <Line key={r.instrument.ticker} r={r} range={range} onToggle={onToggle} />
-              ))}
-            </GlideRows>
-            {pages > 1 && (
-              <div className="pt-3 pb-[17px]">
-                <Pagination page={at} count={pages} onPage={turn} />
-              </div>
-            )}
-          </div>
+          <GlideTable
+            columns={COLS}
+            headings={
+              <>
+                <Head k="name" sort={sort} onSort={onSort} align="left">
+                  Name
+                </Head>
+                <Head k="price" sort={sort} onSort={onSort}>
+                  Price
+                </Head>
+                <Head k="change" sort={sort} onSort={onSort}>
+                  {range}
+                </Head>
+                <span className="text-right">Chart</span>
+                <Head k="volume" sort={sort} onSort={onSort}>
+                  Volume 24H
+                </Head>
+                <Head k="holders" sort={sort} onSort={onSort}>
+                  Holders
+                </Head>
+                <span />
+              </>
+            }
+            footer={
+              pages > 1 ? (
+                <div className="pt-3 pb-[17px]">
+                  <Pagination page={at} count={pages} onPage={turn} />
+                </div>
+              ) : undefined
+            }
+          >
+            {slice.map((r) => (
+              <Line key={r.instrument.ticker} r={r} range={range} onToggle={onToggle} />
+            ))}
+          </GlideTable>
         )}
       </div>
     </section>

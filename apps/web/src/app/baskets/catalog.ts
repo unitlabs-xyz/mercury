@@ -1,0 +1,99 @@
+import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
+
+export const themes: readonly {
+  tag: ManagedBasketTag;
+  title: string;
+  description: string;
+  image: string;
+}[] = [
+  {
+    tag: "theme:technology",
+    title: "Technology",
+    description: "Computing and the next generation internet.",
+    image: "/baskets/themes/1.webp",
+  },
+  {
+    tag: "theme:energy",
+    title: "Energy",
+    description: "Powering a changing world.",
+    image: "/baskets/themes/7.webp",
+  },
+  {
+    tag: "theme:defense",
+    title: "Defense",
+    description: "Security for a more stable tomorrow.",
+    image: "/baskets/themes/4.webp",
+  },
+  {
+    tag: "theme:consumer",
+    title: "Consumer",
+    description: "The brands people live with.",
+    image: "/baskets/themes/2.webp",
+  },
+  {
+    tag: "theme:finance",
+    title: "Finance",
+    description: "The future of financial services.",
+    image: "/baskets/themes/6.webp",
+  },
+  {
+    tag: "theme:hard-assets",
+    title: "Hard assets",
+    description: "Materials and real-world infrastructure.",
+    image: "/baskets/themes/3.webp",
+  },
+  {
+    tag: "theme:healthcare",
+    title: "Healthcare",
+    description: "Science and modern medicine.",
+    image: "/baskets/themes/5.webp",
+  },
+];
+
+export const investors = [
+  { slug: "nancy-pelosi-tracker", image: "/baskets/investors/3.webp" },
+  { slug: "warren-buffett-tracker", image: "/baskets/investors/4.webp" },
+  { slug: "cathie-wood-tracker", image: "/baskets/investors/1.webp" },
+  { slug: "leopold-aschenbrenner-tracker", image: "/baskets/investors/2.webp" },
+] as const;
+
+export const displayBasketName = (name: string) => name.replace(/^Mercury Solana\s*[-–]\s*/, "");
+
+export const curatedShelves = (templates: readonly ManagedBasketTemplate[]) => ({
+  themes: themes.map((theme) => ({
+    ...theme,
+    count: templates.filter((template) => template.tags.includes(theme.tag)).length,
+  })),
+  pros: investors
+    .map((investor) => ({ ...investor, template: templates.find((item) => item.slug === investor.slug) }))
+    .filter((item): item is typeof item & { template: ManagedBasketTemplate } => item.template !== undefined)
+    .map((item) => ({ ...item.template, image: item.image })),
+  featured: templates.filter((template) => template.tags.includes("shelf:featured")),
+});
+
+export const visibleStrategies = (
+  templates: readonly ManagedBasketTemplate[],
+  selected: ManagedBasketTag | null,
+  showAll: boolean,
+) =>
+  selected
+    ? templates.filter((item) => item.tags.includes(selected))
+    : showAll
+      ? templates
+      : templates.filter((item) => item.tags.includes("shelf:featured"));
+
+/** Only ask the market API for logos that discovery currently shows. */
+export const discoveryLogoTickers = (
+  templates: readonly ManagedBasketTemplate[],
+  selected: ManagedBasketTag | null,
+  showAll: boolean,
+) => [
+  ...new Set(
+    [
+      ...templates.filter((item) => item.tags.includes("shelf:pros")),
+      ...visibleStrategies(templates, selected, showAll),
+    ]
+      .flatMap((item) => [...item.allocations].sort((a, b) => b.weightBps - a.weightBps).slice(0, 5))
+      .map((asset) => asset.ticker),
+  ),
+];

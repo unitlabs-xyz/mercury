@@ -9,6 +9,7 @@ const basket: BasketTemplate = {
   providerId: "remote-1",
   sourceStrategyId: "source-1",
   status: "candidate",
+  tags: ["theme:technology"],
   name: "Mercury Solana - Nvidia",
   description: "One Ondo token.",
   assets: [{ ticker: "NVDA", assetId: "solana:mainnet/spl:nvda", weightBps: 10_000 }],
