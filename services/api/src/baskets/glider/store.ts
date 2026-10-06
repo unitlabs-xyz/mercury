@@ -91,6 +91,19 @@ export class JsonBasketStore implements BasketStore {
     }).onConflictDoNothing({ target: [basketActions.userId, basketActions.operationId] });
   }
 
+  async saveExit(action: {
+    userId: string; slug: string; ownerAccountId: string; strategyId: string;
+    portfolioId: string; operationId: string; submittedAt: string; mode: "in_kind" | "liquidate_usdc";
+  }): Promise<void> {
+    await this.actionsDb().insert(basketActions).values({
+      userId: action.userId, slug: action.slug,
+      kind: action.mode === "in_kind" ? "withdraw_in_kind" : "liquidate_to_usdc",
+      ownerAccountId: action.ownerAccountId, strategyId: action.strategyId,
+      portfolioId: action.portfolioId, operationId: action.operationId,
+      payload: { submittedAt: action.submittedAt },
+    }).onConflictDoNothing({ target: [basketActions.userId, basketActions.operationId] });
+  }
+
   async recentActions(userId: string, portfolioId: string) {
     return this.actionsDb().select({
       id: basketActions.id, kind: basketActions.kind,

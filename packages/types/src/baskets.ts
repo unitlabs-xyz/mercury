@@ -202,6 +202,33 @@ export const ConfirmBasketFunding = z.object({ signature: z.string().min(80).max
 export const ConfirmedBasketFunding = z.object({
   portfolioId: z.string(), signature: z.string(), amountRaw: z.string(),
 });
+export const BasketExitMode = z.enum(["in_kind", "liquidate_usdc"]);
+export type BasketExitMode = z.infer<typeof BasketExitMode>;
+export const BasketExitMessage = z.object({
+  portfolioId: z.string().min(1),
+  recipientAccountId: z.string().min(1),
+  assets: z.array(z.object({ assetId: z.string().min(1), amountRaw: z.string().regex(/^[1-9]\d*$/) })).min(1),
+  nonce: z.string().regex(/^0x[\da-fA-F]{64}$/),
+  expiresAt: z.number().int().positive(),
+  liquidate: z.boolean().optional(),
+  settlementAssetId: z.string().optional(),
+});
+export type BasketExitMessage = z.infer<typeof BasketExitMessage>;
+export const PreparedBasketExit = z.object({
+  mode: BasketExitMode,
+  portfolioId: z.string(),
+  recipientAccountId: z.string(),
+  expiresAt: z.string(),
+  authorization: z.object({ kind: z.literal("solana-message"), text: z.string() }),
+  message: BasketExitMessage,
+});
+export type PreparedBasketExit = z.infer<typeof PreparedBasketExit>;
+export const SubmitBasketExit = z.object({
+  message: BasketExitMessage,
+  signature: z.string().min(1).max(200),
+});
+export const SubmittedBasketExit = TriggeredBasketRebalance.extend({ mode: BasketExitMode });
+export type SubmittedBasketExit = z.infer<typeof SubmittedBasketExit>;
 export const ManagedBasketActivity = z.object({
   id: z.string(), kind: z.string(), occurredAt: z.string(), title: z.string(),
   subtitle: z.string(), amountUsd: z.string().nullable(), txSignature: z.string().nullable(),

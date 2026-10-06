@@ -13,6 +13,9 @@ import type {
   TriggeredBasketRebalance,
   PreparedBasketEnrollment,
   ManagedBasketActivity,
+  BasketExitMode,
+  PreparedBasketExit,
+  SubmittedBasketExit,
 } from "@mercury/types";
 import type { PreparedBasketFunding } from "@mercury/types";
 import { useSignedIn } from "./hooks";
@@ -206,6 +209,40 @@ export const useBasketRebalanceAction = (slug: string) =>
         method: "POST",
       }),
   });
+
+/** Prepare first so the review sheet shows the exact assets and recipient before signing. */
+export const useBasketExitAction = (slug: string) => {
+  const qc = useQueryClient();
+  const { wallets } = useWallets();
+  const { signMessage } = useSignMessage();
+  const path = `/v1/basket-templates/${encodeURIComponent(slug)}/exit`;
+  const prepare = useMutation({
+    mutationFn: (mode: BasketExitMode) => apiFetch<PreparedBasketExit>(
+      `${path}/${mode}/prepare`, { method: "POST" },
+    ),
+  });
+  const submit = useMutation({
+    mutationFn: async (prepared: PreparedBasketExit) => {
+      const wallet = wallets[0];
+      if (!wallet) throw new Error("Your Solana wallet is unavailable.");
+      if (prepared.recipientAccountId !== `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${wallet.address}` ||
+        prepared.message.recipientAccountId !== prepared.recipientAccountId ||
+        prepared.message.portfolioId !== prepared.portfolioId)
+        throw new Error("Withdrawal destination changed. Review the exit again.");
+      if (Date.parse(prepared.expiresAt) <= Date.now() + 5_000)
+        throw new Error("Withdrawal review expired. Prepare it again.");
+      const signed = await signMessage({ message: new TextEncoder().encode(prepared.authorization.text), wallet });
+      const signature = getBase58Decoder().decode(signed.signature);
+      return apiFetch<SubmittedBasketExit>(`${path}/${prepared.mode}`, {
+        method: "POST", body: JSON.stringify({ message: prepared.message, signature }),
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
+    },
+  });
+  return { prepare, submit, walletReady: wallets[0] !== undefined };
+};
 
 export const useBasketActivity = (slug: string, enrolled: boolean) => {
   const { ready, authenticated, user } = usePrivy();

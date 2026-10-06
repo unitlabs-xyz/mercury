@@ -47,6 +47,7 @@ const store = (changes: Record<string, unknown> = {}) =>
     enrollmentIntent: async () => null,
     completeEnrollmentIntent: async () => undefined,
     saveRebalance: async () => undefined,
+    saveExit: async () => undefined,
     recentActions: async () => [],
     confirmFunding: async () => undefined,
     recentFunding: async () => [],

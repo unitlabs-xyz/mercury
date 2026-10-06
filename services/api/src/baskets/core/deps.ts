@@ -3,6 +3,10 @@ import type {
   ManagedBasketOperation,
   ManagedBasketPortfolioSnapshot,
   TriggeredBasketRebalance,
+  BasketExitMessage,
+  BasketExitMode,
+  PreparedBasketExit,
+  SubmittedBasketExit,
 } from "@mercury/types";
 import type {
   BasketDefinition,
@@ -44,6 +48,18 @@ export interface BasketProvider {
   >;
   operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
   triggerRebalance(portfolioId: string): Promise<TriggeredBasketRebalance>;
+  prepareExit(
+    portfolioId: string,
+    mode: BasketExitMode,
+    recipientAccountId: string,
+    assets: readonly { assetId: string; amountRaw: string }[],
+  ): Promise<Pick<PreparedBasketExit, "expiresAt" | "authorization" | "message">>;
+  submitExit(
+    portfolioId: string,
+    mode: BasketExitMode,
+    message: BasketExitMessage,
+    signature: string,
+  ): Promise<Omit<SubmittedBasketExit, "mode">>;
   prepareEnrollment(ownerAccountId: string, strategyId: string): Promise<EnrollmentChallenge>;
   enroll(
     ownerAccountId: string,
@@ -66,6 +82,7 @@ export interface BasketFunding {
 }
 
 export class BasketFundingPreflightError extends Error {}
+export class BasketExitUnsupportedError extends Error {}
 export class BasketRebalanceCooldownError extends Error {
   constructor(readonly retryAfterSeconds: number | null) {
     super("Glider rebalance cooldown is active.");
@@ -81,6 +98,10 @@ export interface BasketStore {
   saveRebalance(action: {
     userId: string; slug: string; ownerAccountId: string; strategyId: string;
     portfolioId: string; operationId: string; submittedAt: string;
+  }): Promise<void>;
+  saveExit(action: {
+    userId: string; slug: string; ownerAccountId: string; strategyId: string;
+    portfolioId: string; operationId: string; submittedAt: string; mode: BasketExitMode;
   }): Promise<void>;
   recentActions(userId: string, portfolioId: string): Promise<readonly {
     id: string; kind: string; createdAt: Date; operationId: string | null;

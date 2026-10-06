@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
-import type { ManagedBasketPortfolioSnapshot, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketExitMode, ManagedBasketPortfolioSnapshot, ManagedBasketTemplate } from "@mercury/types";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toEvent, usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
@@ -12,6 +12,7 @@ import {
   useBasketActivity,
   useBasketEnrollment,
   useBasketEnrollmentAction,
+  useBasketExitAction,
   useBasketFundingAction,
   useBasketInsights,
   useBasketOperation,
@@ -38,10 +39,11 @@ import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
-import { EnrollmentRail, EnrollmentSheet, FundingSheet, RebalanceSheet } from "./baskets/Ticket";
+import { EnrollmentRail, EnrollmentSheet, ExitSheet, FundingSheet, RebalanceSheet } from "./baskets/Ticket";
 import { modeledSeries } from "./baskets/performance";
 import { RailList } from "./invest/Rail";
 import { EventRow } from "./portfolio/Feed";
+import { USDC_MINT, UsdcMark } from "./activity-mark";
 import { Skeleton } from "./portfolio/ui";
 import { LIST_DOT } from "./invest/shared";
 
@@ -305,6 +307,11 @@ export const Basket = () => {
   const [showAllAssets, setShowAllAssets] = useState(false);
   const [checkingEnrollment, setCheckingEnrollment] = useState(false);
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
+  const [exitMode, setExitMode] = useState<BasketExitMode>("in_kind");
+  const [exitOperation, setExitOperation] = useState<{
+    portfolioId: string; operationId: string; mode: BasketExitMode;
+  } | null>(null);
   const [rebalanceOperation, setRebalanceOperation] = useState<{
     portfolioId: string;
     operationId: string;
@@ -312,6 +319,7 @@ export const Basket = () => {
   const enrollmentRequestActive = useRef(false);
   const fundingRequestActive = useRef(false);
   const rebalanceRequestActive = useRef(false);
+  const exitRequestActive = useRef(false);
   const result = useBasketTemplate(slug);
   const insights = useBasketInsights(slug);
   const { ready, authenticated, user } = usePrivy();
@@ -326,6 +334,7 @@ export const Basket = () => {
   const enrollAction = useBasketEnrollmentAction(slug);
   const fundingAction = useBasketFundingAction(slug);
   const rebalanceAction = useBasketRebalanceAction(slug);
+  const exitAction = useBasketExitAction(slug);
   const activity = useBasketActivity(slug, enrolled);
   const queryClient = useQueryClient();
   const ownerContext = `${slug}:${user?.id ?? ""}:${wallets[0]?.address ?? ""}`;
@@ -338,16 +347,22 @@ export const Basket = () => {
     setFundingReview(false);
     setRebalanceOpen(false);
     setRebalanceOperation(null);
+    setExitOpen(false);
+    setExitOperation(null);
     setShowAllAssets(false);
     setFundingAmount("100");
     enrollAction.reset();
     fundingAction.reset();
     rebalanceAction.reset();
-  }, [ownerContext, enrollAction, fundingAction, rebalanceAction]);
+    exitAction.prepare.reset();
+    exitAction.submit.reset();
+  }, [ownerContext, enrollAction, fundingAction, rebalanceAction, exitAction.prepare, exitAction.submit]);
   const accountId = signedIn ? portfolio.data?.portfolioId : undefined;
   const operationId =
     accountId && accountId === rebalanceOperation?.portfolioId ? rebalanceOperation.operationId : null;
   const rebalanceStatus = useBasketOperation(slug, operationId, enrolled);
+  const exitOperationId = accountId && accountId === exitOperation?.portfolioId ? exitOperation.operationId : null;
+  const exitStatus = useBasketOperation(slug, exitOperationId, enrolled);
   useEffect(() => {
     if (!accountId) {
       setRebalanceOperation(null);
@@ -357,11 +372,30 @@ export const Basket = () => {
     setRebalanceOperation(operationId ? { portfolioId: accountId, operationId } : null);
   }, [accountId]);
   useEffect(() => {
+    if (!accountId) {
+      setExitOperation(null);
+      return;
+    }
+    const saved = sessionStorage.getItem(`basket-exit:${accountId}`);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as { operationId?: string; mode?: string };
+      if (parsed.operationId && (parsed.mode === "in_kind" || parsed.mode === "liquidate_usdc"))
+        setExitOperation({ portfolioId: accountId, operationId: parsed.operationId, mode: parsed.mode });
+    } catch { /* An invalid local receipt is not an operation. */ }
+  }, [accountId]);
+  useEffect(() => {
     if (rebalanceStatus.data?.state === "completed") {
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
     }
   }, [queryClient, rebalanceStatus.data?.state, slug]);
+  useEffect(() => {
+    if (exitStatus.data?.state === "completed") {
+      for (const key of ["basket-portfolio", "basket-portfolios", "basket-activity", "portfolio", "money", "activity"])
+        void queryClient.invalidateQueries({ queryKey: ["api", key] });
+    }
+  }, [exitStatus.data?.state, queryClient]);
   useEffect(() => {
     if (rebalanceStatus.data?.state)
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
@@ -432,6 +466,20 @@ export const Basket = () => {
       rebalanceRequestActive.current = false;
     }
   };
+  const confirmExit = async () => {
+    if (!accountId || !exitAction.prepare.data || exitRequestActive.current) return;
+    exitRequestActive.current = true;
+    try {
+      const submitted = await exitAction.submit.mutateAsync(exitAction.prepare.data);
+      const operation = { portfolioId: accountId, operationId: submitted.operationId, mode: submitted.mode };
+      sessionStorage.setItem(`basket-exit:${accountId}`, JSON.stringify(operation));
+      setExitOperation(operation);
+    } catch {
+      // Keep the signed review and error visible; never auto-retry a withdrawal.
+    } finally {
+      exitRequestActive.current = false;
+    }
+  };
 
   if (!template && result.isPending) {
     const cachedCatalog = queryClient.getQueryData<ManagedBasketTemplate[]>(["api", "basket-templates"]);
@@ -468,6 +516,9 @@ export const Basket = () => {
   const operationActive =
     Boolean(operationId) &&
     (!operationState || ["accepted", "running", "retrying", "awaiting_user"].includes(operationState));
+  const exitState = exitStatus.data?.state;
+  const exitActive = Boolean(exitOperationId) &&
+    (!exitState || ["accepted", "running", "retrying", "awaiting_user"].includes(exitState));
   const usdcBalance = account?.assets
     .filter((asset) => asset.assetId === USDC_ASSET_ID)
     .reduce((sum, asset) => sum + Number(asset.balance), 0);
@@ -872,6 +923,29 @@ export const Basket = () => {
                     Balance refresh failed · Retry
                   </button>
                 )}
+                {exitOperationId && (
+                  <div className="mt-4 flex items-center justify-between gap-3 border-t border-ds-divider pt-4 text-[12px]">
+                    <span className="text-ds-muted">{exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}</span>
+                    <span className="font-medium capitalize text-ds-ink">{exitState?.replaceAll("_", " ") ?? (exitStatus.isError ? "Status unavailable" : "Checking…")}</span>
+                  </div>
+                )}
+                {exitStatus.data?.error && <p className="mt-2 text-[12px] text-ds-chip-warn">{exitStatus.data.error}</p>}
+                {exitStatus.isError && exitOperationId && (
+                  <button type="button" onClick={() => void exitStatus.refetch()} className="mt-2 text-[12px] font-medium text-ds-link hover:underline">
+                    Check withdrawal status again
+                  </button>
+                )}
+                {heldAssets.length > 0 && (
+                  <Button size="lg" className="mt-5 w-full" disabled={portfolio.isError || exitActive || operationActive}
+                    onClick={() => {
+                      setExitMode("in_kind");
+                      exitAction.prepare.reset();
+                      exitAction.submit.reset();
+                      setExitOpen(true);
+                    }}>
+                    Withdraw assets
+                  </Button>
+                )}
               </div>
             ) : accountLoading ? (
               <div className="mt-5" aria-label="Loading your position">
@@ -899,7 +973,7 @@ export const Basket = () => {
                 onRetry={() => void portfolio.refetch()}
               />
             ) : (
-              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
+              <div className="-mx-5 -mb-4 mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
                 <p className="text-[13px] font-medium text-ds-ink">
                   No connected portfolio
                 </p>
@@ -962,6 +1036,8 @@ export const Basket = () => {
                                 source={byTicker.get(allocation.ticker)}
                                 className="size-8 shrink-0 rounded-full bg-white object-contain"
                               />
+                            ) : asset.assetId.endsWith(`/spl:${USDC_MINT}`) ? (
+                              <UsdcMark size={32} />
                             ) : (
                               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[10px] font-medium text-ds-ink">
                                 {asset.symbol.slice(0, 3)}
@@ -1086,7 +1162,7 @@ export const Basket = () => {
                 size="lg"
                 className="mt-5 w-full"
                 disabled={
-                  !account || template.status === "disabled" || operationActive || rebalanceAction.isPending
+                  !account || template.status === "disabled" || operationActive || exitActive || rebalanceAction.isPending
                 }
                 onClick={() => {
                   rebalanceAction.reset();
@@ -1138,7 +1214,7 @@ export const Basket = () => {
                   No activity to show
                 </p>
                 <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
-                  Enrollment, confirmed funding and manual rebalances appear here.
+                  Enrollment, confirmed funding, rebalances and withdrawals appear here.
                 </p>
               </div>
             )}
@@ -1190,6 +1266,36 @@ export const Basket = () => {
         }}
         onConfirm={() => void confirmRebalance()}
       />
+      {account && (
+        <ExitSheet
+          open={exitOpen}
+          name={name}
+          mode={exitMode}
+          onMode={(mode) => {
+            setExitMode(mode);
+            exitAction.prepare.reset();
+            exitAction.submit.reset();
+          }}
+          account={account}
+          prepared={exitAction.prepare.data ?? null}
+          submitted={exitAction.submit.data ?? null}
+          busy={exitAction.prepare.isPending || exitAction.submit.isPending}
+          walletReady={exitAction.walletReady}
+          error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
+          onPrepare={() => void exitAction.prepare.mutateAsync(exitMode).catch(() => undefined)}
+          onSubmit={() => void confirmExit()}
+          onBack={() => {
+            exitAction.prepare.reset();
+            exitAction.submit.reset();
+          }}
+          onClose={() => {
+            if (exitAction.prepare.isPending || exitAction.submit.isPending) return;
+            setExitOpen(false);
+            exitAction.prepare.reset();
+            exitAction.submit.reset();
+          }}
+        />
+      )}
     </AppShell>
   );
 };

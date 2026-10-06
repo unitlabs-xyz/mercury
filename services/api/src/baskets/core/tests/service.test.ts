@@ -65,6 +65,12 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   triggerRebalance: async () => {
     throw new Error("unexpected rebalance");
   },
+  prepareExit: async () => {
+    throw new Error("unexpected exit prepare");
+  },
+  submitExit: async () => {
+    throw new Error("unexpected exit submit");
+  },
   prepareEnrollment: async () => {
     throw new Error("unexpected enrollment prepare");
   },
@@ -87,6 +93,9 @@ const store = (definition: BasketTemplate) => ({
   },
   saveRebalance: async () => {
     throw new Error("unexpected rebalance save");
+  },
+  saveExit: async () => {
+    throw new Error("unexpected exit save");
   },
   recentActions: async () => [],
   confirmFunding: async () => {
@@ -475,4 +484,65 @@ it("rejects a provider portfolio belonging to another owner before reading its b
     code: "portfolio_unavailable",
   });
   expect(readPositions).toBe(false);
+});
+
+it("prepares a full in-kind exit for the verified owner and refuses a redirected submission", async () => {
+  const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
+  const assetId = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const message = {
+    portfolioId: "p-1", recipientAccountId: owner,
+    assets: [{ assetId, amountRaw: "1000000" }], nonce: `0x${"a".repeat(64)}`,
+    expiresAt: Math.floor(Date.now() / 1000) + 600, liquidate: false,
+  };
+  let submitted = 0;
+  let recorded = 0;
+  const service = new BasketService({
+    store: { ...store(basket), saveExit: async () => { recorded += 1; } },
+    provider: provider({
+      portfolios: async () => [{ portfolioId: "p-1", ownerAccountId: owner, strategyId: "remote-1", smartAccounts: [{ accountId: owner }] }],
+      portfolio: async () => ({ portfolioId: "p-1", ownerAccountId: owner, strategyId: "remote-1", smartAccounts: [{ accountId: owner }], schedule: null }),
+      positions: async () => ({
+        portfolioId: "p-1", totalValueUsd: "1", inTransitUsd: "0", fetchedAt: new Date().toISOString(), warnings: [],
+        assets: [{ assetId, smartAccountId: owner, symbol: "USDC", decimals: 6, balance: "1", balanceRaw: "1000000", priceUsd: "1", valueUsd: "1" }],
+      }),
+      prepareExit: async (_id, _mode, _recipient, assets) => {
+        expect(assets).toEqual(message.assets);
+        return { expiresAt: new Date(message.expiresAt * 1000).toISOString(), authorization: { kind: "solana-message", text: "Sign full exit" }, message };
+      },
+      submitExit: async () => { submitted += 1; return { operationId: "op-exit", submittedAt: new Date().toISOString() }; },
+    }),
+  });
+  await expect(service.prepareExit("nvidia", owner, "in_kind")).resolves.toMatchObject({ message });
+  await expect(service.submitExit("nvidia", "user-1", owner, "in_kind", { ...message, recipientAccountId: `${owner}Different` }, "signed"))
+    .rejects.toMatchObject({ code: "invalid_exit" });
+  expect(submitted).toBe(0);
+  await expect(service.submitExit("nvidia", "user-1", owner, "in_kind", message, "signed"))
+    .resolves.toMatchObject({ operationId: "op-exit", mode: "in_kind" });
+  expect(submitted).toBe(1);
+  expect(recorded).toBe(1);
+});
+
+it("returns an accepted withdrawal operation even when its audit write is unavailable", async () => {
+  const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
+  const message = {
+    portfolioId: "p-1", recipientAccountId: owner,
+    assets: [{ assetId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", amountRaw: "1" }],
+    nonce: `0x${"b".repeat(64)}`, expiresAt: Math.floor(Date.now() / 1000) + 600,
+  };
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    const service = new BasketService({
+      store: { ...store(basket), saveExit: async () => { throw new Error("db unavailable"); } },
+      provider: provider({
+        portfolios: async () => [{ portfolioId: "p-1", ownerAccountId: owner, strategyId: "remote-1", smartAccounts: [{ accountId: owner }] }],
+        portfolio: async () => ({ portfolioId: "p-1", ownerAccountId: owner, strategyId: "remote-1", smartAccounts: [{ accountId: owner }], schedule: null }),
+        submitExit: async () => ({ operationId: "accepted-op", submittedAt: new Date().toISOString() }),
+      }),
+    });
+    await expect(service.submitExit("nvidia", "user-1", owner, "in_kind", message, "signed"))
+      .resolves.toMatchObject({ operationId: "accepted-op" });
+  } finally {
+    console.error = original;
+  }
 });

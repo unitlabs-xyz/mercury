@@ -1,10 +1,13 @@
 import createClient, { type Client } from "openapi-fetch";
 import { z } from "zod";
-import { BasketRebalanceCooldownError, type BasketProvider } from "../core/deps.js";
+import { BasketExitUnsupportedError, BasketRebalanceCooldownError, type BasketProvider } from "../core/deps.js";
 import {
+  BasketExitMessage,
   ManagedBasketOperation,
   ManagedBasketPortfolioSnapshot,
   TriggeredBasketRebalance,
+  SubmittedBasketExit,
+  type BasketExitMode,
   type ManagedBasketInsights,
 } from "@mercury/types";
 import type {
@@ -18,6 +21,7 @@ import type { components, paths } from "./generated.js";
 
 const BASE = "https://api.glider.fi/v2";
 const SOLANA_CHAIN_ID = 1_399_811_149;
+const SOLANA_USDC = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const remoteStrategy = z.object({
   strategyId: z.string().min(1),
   name: z.string(),
@@ -220,6 +224,55 @@ export class GliderClient implements BasketProvider {
     }
     return TriggeredBasketRebalance.parse(
       this.checked(result, `/portfolios/${encodeURIComponent(portfolioId)}/rebalance`).data,
+    );
+  }
+
+  async prepareExit(
+    portfolioId: string,
+    mode: BasketExitMode,
+    recipientAccountId: string,
+    assets: readonly { assetId: string; amountRaw: string }[],
+  ) {
+    const path = mode === "in_kind" ? "/portfolios/{portfolioId}/withdraw/signature" : "/portfolios/{portfolioId}/liquidate-all/signature";
+    const result = mode === "in_kind"
+      ? await this.client.POST("/portfolios/{portfolioId}/withdraw/signature", {
+        params: { path: { portfolioId } },
+        body: { recipientAccountId, assets: [...assets], liquidate: false },
+      })
+      : await this.client.POST("/portfolios/{portfolioId}/liquidate-all/signature", {
+        params: { path: { portfolioId } },
+        body: { recipientAccountId, settlementAssetId: SOLANA_USDC },
+      });
+    const data = this.checked(result, path.replace("{portfolioId}", encodeURIComponent(portfolioId))).data;
+    if (!data.authorization || data.authorization.kind !== "solana-message")
+      throw new BasketExitUnsupportedError("This portfolio requires an authorization this Solana wallet cannot sign.");
+    const message = BasketExitMessage.parse(data.authorization.message);
+    if (message.portfolioId !== portfolioId || message.recipientAccountId !== recipientAccountId ||
+      Boolean(message.liquidate) !== (mode === "liquidate_usdc"))
+      throw new Error("Glider returned an exit authorization for another portfolio, recipient, or mode.");
+    return {
+      expiresAt: data.expiresAt,
+      authorization: { kind: "solana-message" as const, text: data.authorization.text },
+      message,
+    };
+  }
+
+  async submitExit(portfolioId: string, mode: BasketExitMode, message: BasketExitMessage, signature: string) {
+    const path = mode === "in_kind" ? "/portfolios/{portfolioId}/withdraw" : "/portfolios/{portfolioId}/liquidate-all";
+    // Glider signs the stage-one message. Preserve omitted optional fields verbatim;
+    // its generated stage-two type marks `liquidate` required even when stage one omits it.
+    const wireMessage = message as components["schemas"]["WithdrawMessage"];
+    const result = mode === "in_kind"
+      ? await this.client.POST("/portfolios/{portfolioId}/withdraw", {
+        params: { path: { portfolioId } },
+        body: { message: wireMessage, signature },
+      })
+      : await this.client.POST("/portfolios/{portfolioId}/liquidate-all", {
+        params: { path: { portfolioId } },
+        body: { message: wireMessage, signature },
+      });
+    return SubmittedBasketExit.omit({ mode: true }).parse(
+      this.checked(result, path.replace("{portfolioId}", encodeURIComponent(portfolioId))).data,
     );
   }
 

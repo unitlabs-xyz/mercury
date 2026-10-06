@@ -37,6 +37,8 @@ const KIND: Record<string, EventKind> = {
   basket: "basket",
   enroll: "basket",
   rebalance: "basket",
+  withdraw_in_kind: "basket",
+  liquidate_to_usdc: "basket",
   queued: "queued",
   borrow: "borrow",
   repay: "repay",
@@ -74,7 +76,7 @@ export const toEvent = (i: ActivityItem): Event => {
       i.amountUsd === null
         ? null
         : Math.abs(Number(i.amountUsd)).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-    flow: i.kind === "basket_funding" ? null :
+    flow: i.kind === "basket_funding" || i.kind === "withdraw_in_kind" || i.kind === "liquidate_to_usdc" ? null :
       FLOW[kind] ??
       (i.amountUsd === null || Number(i.amountUsd) === 0 ? null : Number(i.amountUsd) < 0 ? "out" : "in"),
     details: [],

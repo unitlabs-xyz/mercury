@@ -14,6 +14,10 @@ import {
   ConfirmBasketFunding,
   ConfirmedBasketFunding,
   ManagedBasketActivity,
+  BasketExitMode,
+  PreparedBasketExit,
+  SubmitBasketExit,
+  SubmittedBasketExit,
 } from "@mercury/types";
 import { BasketEnrollmentError, type BasketService } from "../baskets/core/service.js";
 
@@ -113,6 +117,37 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
       return c.json(TriggeredBasketRebalance.parse(triggered), 202);
     } catch (error) {
       const result = handle(error, "rebalance");
+      return c.json(result.body, result.status);
+    }
+  });
+
+  app.post("/v1/basket-templates/:slug/exit/:mode/prepare", requireBasketAuth, async (c) => {
+    const owner = ownerFor(c.get("identity").walletAddress);
+    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to exit a basket."), 401);
+    const mode = BasketExitMode.safeParse(c.req.param("mode"));
+    if (!mode.success) return c.json(fail("validation_failed", "Choose an in-kind or USDC exit."), 400);
+    try {
+      return c.json(PreparedBasketExit.parse(await service.prepareExit(c.req.param("slug"), owner, mode.data)));
+    } catch (error) {
+      const result = handle(error, "exit preparation");
+      return c.json(result.body, result.status);
+    }
+  });
+
+  app.post("/v1/basket-templates/:slug/exit/:mode", requireBasketAuth, async (c) => {
+    const identity = c.get("identity");
+    const owner = ownerFor(identity.walletAddress);
+    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to exit a basket."), 401);
+    const mode = BasketExitMode.safeParse(c.req.param("mode"));
+    const body = SubmitBasketExit.safeParse(await c.req.json().catch(() => null));
+    if (!mode.success || !body.success)
+      return c.json(fail("validation_failed", "A valid signed exit authorization is required."), 400);
+    try {
+      return c.json(SubmittedBasketExit.parse(await service.submitExit(
+        c.req.param("slug"), identity.userId, owner, mode.data, body.data.message, body.data.signature,
+      )), 202);
+    } catch (error) {
+      const result = handle(error, "exit submission");
       return c.json(result.body, result.status);
     }
   });

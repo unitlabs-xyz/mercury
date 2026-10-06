@@ -1,7 +1,8 @@
-import type { ManagedBasketInsights, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketExitMessage, BasketExitMode, ManagedBasketInsights, ManagedBasketTemplate } from "@mercury/types";
 import { USDC_MINT, USDC_DECIMALS, type ChainHistory, type TransactionDetail } from "@mercury/chain";
 import {
   BasketFundingPreflightError,
+  BasketExitUnsupportedError,
   BasketRebalanceCooldownError,
   type BasketFunding,
   type BasketProvider,
@@ -23,6 +24,8 @@ export class BasketEnrollmentError extends Error {
 }
 
 const SOLANA_ACCOUNT = /^solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const SOLANA_ASSET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:";
+const SOLANA_USDC = `${SOLANA_ASSET}${USDC_MINT}`;
 const SIGNATURE = /^[1-9A-HJ-NP-Za-km-z]{80,90}$/;
 const addressOf = (accountId: string) => accountId.slice(accountId.lastIndexOf(":") + 1);
 
@@ -245,6 +248,78 @@ export class BasketService {
     }
   }
 
+  private async exitPortfolio(slug: string, ownerAccountId: string) {
+    const { template, provider } = await this.templateForRead(slug);
+    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!)).find(
+      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
+    );
+    if (!portfolio)
+      throw new BasketEnrollmentError("portfolio_unavailable", 409, "No portfolio belongs to this wallet and strategy.");
+    const detail = await provider.portfolio(portfolio.portfolioId);
+    if (detail.portfolioId !== portfolio.portfolioId || detail.ownerAccountId !== ownerAccountId ||
+      detail.strategyId !== template.providerId || !detail.smartAccounts.some((item) => SOLANA_ACCOUNT.test(item.accountId)))
+      throw new BasketEnrollmentError("portfolio_unavailable", 409, "The Solana portfolio could not be verified.");
+    return { template, provider, portfolio };
+  }
+
+  async prepareExit(slug: string, ownerAccountId: string, mode: BasketExitMode) {
+    if (!SOLANA_ACCOUNT.test(ownerAccountId))
+      throw new BasketEnrollmentError("wallet_required", 400, "A Solana wallet is required to exit.");
+    const { provider, portfolio } = await this.exitPortfolio(slug, ownerAccountId);
+    const positions = await provider.positions(portfolio.portfolioId);
+    if (positions.portfolioId !== portfolio.portfolioId)
+      throw new BasketEnrollmentError("portfolio_unavailable", 409, "Portfolio balances could not be verified.");
+    if (mode === "in_kind" && positions.warnings.length > 0)
+      throw new BasketEnrollmentError("positions_incomplete", 409, "Refresh complete portfolio balances before withdrawing assets.");
+    const assets = positions.assets.filter((item) => item.assetId.startsWith(SOLANA_ASSET) && /^[1-9]\d*$/.test(item.balanceRaw))
+      .map(({ assetId, balanceRaw }) => ({ assetId, amountRaw: balanceRaw }));
+    if (assets.length === 0)
+      throw new BasketEnrollmentError("empty_portfolio", 409, "There are no Solana assets available to withdraw.");
+    try {
+      const prepared = await provider.prepareExit(portfolio.portfolioId, mode, ownerAccountId, assets);
+      const { message } = prepared;
+      if (message.portfolioId !== portfolio.portfolioId || message.recipientAccountId !== ownerAccountId ||
+        Boolean(message.liquidate) !== (mode === "liquidate_usdc") ||
+        (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC))
+        throw new Error("Glider returned an exit authorization with mismatched terms.");
+      if (Date.parse(prepared.expiresAt) <= Date.now() + 5_000 || message.expiresAt * 1000 <= Date.now() + 5_000)
+        throw new BasketEnrollmentError("authorization_expired", 409, "The withdrawal authorization expired. Try again.");
+      if (mode === "in_kind" && JSON.stringify(message.assets.slice().sort((a, b) => a.assetId.localeCompare(b.assetId))) !==
+        JSON.stringify(assets.slice().sort((a, b) => a.assetId.localeCompare(b.assetId))))
+        throw new Error("Glider returned a different in-kind asset set.");
+      return { ...prepared, mode, portfolioId: portfolio.portfolioId, recipientAccountId: ownerAccountId };
+    } catch (error) {
+      if (error instanceof BasketExitUnsupportedError)
+        throw new BasketEnrollmentError("unsupported_authorization", 409, error.message);
+      throw error;
+    }
+  }
+
+  async submitExit(slug: string, userId: string, ownerAccountId: string, mode: BasketExitMode, message: BasketExitMessage, signature: string) {
+    const { template, provider, portfolio } = await this.exitPortfolio(slug, ownerAccountId);
+    if (message.portfolioId !== portfolio.portfolioId || message.recipientAccountId !== ownerAccountId ||
+      Boolean(message.liquidate) !== (mode === "liquidate_usdc") ||
+      (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC) ||
+      (mode === "in_kind" && message.settlementAssetId !== undefined))
+      throw new BasketEnrollmentError("invalid_exit", 400, "Exit terms do not match this wallet and portfolio.");
+    if (message.expiresAt * 1000 <= Date.now())
+      throw new BasketEnrollmentError("authorization_expired", 409, "The withdrawal authorization expired. Review it again.");
+    if (message.assets.some((item) => !item.assetId.startsWith(SOLANA_ASSET)))
+      throw new BasketEnrollmentError("invalid_exit", 400, "Exit contains an asset on another chain.");
+    const submitted = await provider.submitExit(portfolio.portfolioId, mode, message, signature);
+    try {
+      await this.deps.store.saveExit({
+        userId, slug, ownerAccountId, strategyId: template.providerId!, portfolioId: portfolio.portfolioId,
+        operationId: submitted.operationId, submittedAt: submitted.submittedAt, mode,
+      });
+    } catch (error) {
+      // Glider has already accepted the exit. Returning an error would invite a fresh
+      // authorization and a second withdrawal; keep the operation ID available.
+      console.error("Accepted basket exit could not be recorded:", submitted.operationId, error);
+    }
+    return { ...submitted, mode };
+  }
+
   async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string) {
     const amountRaw = usdcRaw(amountUsd);
     const { template, provider } = await this.templateForEnrollment(slug);
@@ -323,7 +398,7 @@ export class BasketService {
     const rows = await Promise.all(actions.map(async (action, index) => {
       let state: string | null = null;
       // The rail shows five events; avoid one provider request per historical operation.
-      if (index < 5 && action.kind === "rebalance" && action.operationId) {
+      if (index < 5 && action.kind !== "enroll" && action.operationId) {
         try {
           const operation = await provider.operation(portfolio.portfolioId, action.operationId);
           if (operation.portfolioId === portfolio.portfolioId) state = operation.state;
@@ -331,7 +406,9 @@ export class BasketService {
       }
       return {
         id: action.id, kind: action.kind, occurredAt: action.createdAt.toISOString(),
-        title: action.kind === "enroll" ? `Enrolled in ${template.name}` : "Manual rebalance",
+        title: action.kind === "enroll" ? `Enrolled in ${template.name}`
+          : action.kind === "withdraw_in_kind" ? `Withdrew ${template.name} assets`
+            : action.kind === "liquidate_to_usdc" ? `Exited ${template.name} to USDC` : "Manual rebalance",
         subtitle: action.kind === "enroll" ? "Portfolio created" : state ?? "Status unavailable",
         amountUsd: null, txSignature: null,
       };

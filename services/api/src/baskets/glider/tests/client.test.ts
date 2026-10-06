@@ -53,6 +53,31 @@ describe("GliderClient", () => {
     expect(await requests[0]!.text()).toBe("");
     await expect(client.triggerRebalance("p-1")).rejects.toMatchObject({ retryAfterSeconds: 30 });
   });
+  it.each(["in_kind", "liquidate_usdc"] as const)("uses Glider's two-stage %s exit without changing signed terms", async (mode) => {
+    const recipientAccountId = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:Owner";
+    const assetId = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const message = {
+      portfolioId: "p-1", recipientAccountId, assets: [{ assetId, amountRaw: "1000000" }],
+      nonce: `0x${"a".repeat(64)}`, expiresAt: 9999999999,
+      ...(mode === "liquidate_usdc" ? { liquidate: true, settlementAssetId: assetId } : {}),
+    };
+    const calls: { path: string; body: unknown }[] = [];
+    const client = new GliderClient("test-key", async (input) => {
+      const request = input as Request;
+      const path = new URL(request.url).pathname;
+      calls.push({ path, body: JSON.parse(await request.text()) });
+      return path.endsWith("/signature")
+        ? json({ success: true, data: { authorizationId: message.nonce, expiresAt: "2286-11-20T17:46:39Z", authorization: { kind: "solana-message", text: "Sign exact exit", message } } })
+        : json({ success: true, data: { operationId: "op-1", submittedAt: "2026-10-06T00:00:00Z" } }, 202);
+    });
+    const prepared = await client.prepareExit("p-1", mode, recipientAccountId, message.assets);
+    expect(prepared.message).toEqual(message);
+    expect(await client.submitExit("p-1", mode, prepared.message, "base58-signature")).toMatchObject({ operationId: "op-1" });
+    expect(calls.map((call) => call.path)).toEqual(mode === "in_kind"
+      ? ["/v2/portfolios/p-1/withdraw/signature", "/v2/portfolios/p-1/withdraw"]
+      : ["/v2/portfolios/p-1/liquidate-all/signature", "/v2/portfolios/p-1/liquidate-all"]);
+    expect(calls[1]?.body).toEqual({ message, signature: "base58-signature" });
+  });
   it("reads live portfolio balances, schedule, warnings, and operation state", async () => {
     const fetcher: typeof fetch = async (input) => {
       const path = new URL((input as Request).url).pathname;
