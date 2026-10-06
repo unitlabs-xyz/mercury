@@ -2,6 +2,7 @@ import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
+import { refreshAfterChain } from "./settle";
 
 /** One collateral line from GET /v1/borrow. Money as numbers: these are display figures. */
 export type BorrowRow = {
@@ -195,7 +196,7 @@ export const useBorrowAction = () => {
       return { signatures };
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ["api"] });
+      refreshAfterChain(qc);
     },
   });
 

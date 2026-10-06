@@ -21,7 +21,7 @@ const BUY_PRESETS = [50, 100, 250, 500];
  */
 const SELL_PRESETS = [0.25, 0.5, 0.75] as const;
 
-const chip = (on: boolean) =>
+export const chip = (on: boolean) =>
   `h-8 rounded-md border text-[14px] leading-none text-ds-ink transition-colors max-sm:h-10 disabled:opacity-40 ${
     on ? "border-black/10 bg-linear-to-b from-white to-[#eeeeee]" : "border-transparent hover:bg-white/70"
   }`;

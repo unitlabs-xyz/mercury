@@ -144,7 +144,7 @@ export const SegmentMeter = ({
   value: number;
   zones: readonly Zone[];
   label: string;
-  /** Where a change being typed would take it: bars between `value` and this show at half strength. */
+  /** Where a change being typed would take it: bars between `value` and this show at three-quarter strength. */
   preview?: number | undefined;
   /** What a point along the meter means, for a tooltip that follows the pointer. 0–1 of the bar. */
   tip?: ((at: number) => ReactNode) | undefined;
@@ -210,7 +210,7 @@ export const SegmentMeter = ({
               // 2px between bars, one more where a zone changes.
               marginLeft: i === 0 ? 0 : b.z !== bars[i - 1]!.z ? 3 : 2,
               background: b.color,
-              opacity: b.on ? 1 : b.change ? 0.5 : 0.25,
+              opacity: b.on ? 1 : b.change ? 0.75 : 0.25,
             }}
           />
         ))}
