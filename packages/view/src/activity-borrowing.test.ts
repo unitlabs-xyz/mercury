@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { GROUPS, KIND_LABEL, type EventKind } from "./activity-data";
-import { toEvent } from "./activity-map";
-import type { ActivityItem } from "../api/hooks";
+import { GROUPS, KIND_LABEL, type EventKind } from "./index.js";
+import { toEvent } from "./index.js";
+import type { ActivityItem } from "./activity-map.js";
 
 const row = (over: Partial<ActivityItem> = {}): ActivityItem =>
   ({

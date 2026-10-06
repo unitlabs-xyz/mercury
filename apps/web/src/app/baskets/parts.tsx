@@ -2,7 +2,7 @@ import { memo } from "react";
 import { Link } from "react-router-dom";
 import { MoveChip } from "../../ui/ds";
 import { DotChart, TINY } from "../DotChart";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 import { LIST_DOT, Mark, points } from "../invest/shared";
 import type { Leg, Valued } from "./model";
 

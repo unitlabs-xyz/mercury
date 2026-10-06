@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ButtonLink } from "../../ui/Button";
 import { GlideRows, MoveChip, RailHead, StatusChip } from "../../ui/ds";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 import type { Model, Row } from "./model";
 import { Skeleton } from "./ui";
 

@@ -5,7 +5,7 @@
 //   .vercel/output/config.json            every path to the function; the daily crons
 //   .vercel/output/functions/index.func/  the bundled API and its runtime config
 import { build } from "esbuild";
-import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,6 +53,21 @@ for (const [pkg, file] of WASM) {
   const base = dirname(require.resolve(`${pkg}/package.json`, { paths: [kamino] }));
   await copyFile(join(base, file), join(fn, file.split("/").pop()));
 }
+
+// The founding card's renderer, and what it draws with. The renderer looks for
+// both beside the bundle first (src/waitlist/card.ts).
+await copyFile(
+  require.resolve("@resvg/resvg-wasm/index_bg.wasm", { paths: [root] }),
+  join(fn, "index_bg.wasm"),
+);
+// Satori shapes text with HarfBuzz, which reads its WebAssembly from __dirname.
+const satori = dirname(require.resolve("satori/package.json", { paths: [root] }));
+await copyFile(require.resolve("harfbuzzjs/hb.wasm", { paths: [satori] }), join(fn, "hb.wasm"));
+await cp(join(root, "assets", "card"), join(fn, "assets", "card"), { recursive: true });
+
+// The migrations, so the function can bring the database up to date on a cold
+// start (src/vercel.ts) the way the container does before it serves.
+await cp(join(root, "drizzle"), join(fn, "drizzle"), { recursive: true });
 
 await writeFile(
   join(fn, ".vc-config.json"),

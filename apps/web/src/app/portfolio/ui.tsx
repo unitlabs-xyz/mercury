@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowUp, ChevronRight } from "../../ui/icons";
-import { pct } from "../format";
+import { pct } from "@mercury/view";
 
 /** The dashboard's one container: a titled sheet with an optional link out. */
 export const Panel = ({

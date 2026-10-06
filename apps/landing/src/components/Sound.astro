@@ -1,7 +1,8 @@
 ---
 /**
  * A soft tick for buttons, links and the accordion, a chord swell for
- * success and a lower double tick for an error.
+ * success, a lower double tick for an error, and a sparkle for the founding
+ * card's shimmer.
  *
  * Synthesised rather than loaded: filtered noise and four sines cost nothing
  * to ship. The context
@@ -91,6 +92,55 @@
       }
     };
 
+    /**
+     * The card's shimmer: a C major ninth (C5 E5 G5 B5 D6) that opens one note
+     * at a time, 40ms apart, softened by a lowpass and set in a small room so
+     * it blooms and fades rather than beeps. Timed to the sheen crossing the
+     * card. The room is two seconds of decaying noise, made once.
+     */
+    let room: ConvolverNode | null = null;
+    const sparkle = () => {
+      if (!allowed()) return;
+      const c = audio();
+      if (room === null) {
+        room = c.createConvolver();
+        const len = Math.ceil(c.sampleRate * 2.2);
+        const ir = c.createBuffer(2, len, c.sampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+          const d = ir.getChannelData(ch);
+          for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
+        }
+        room.buffer = ir;
+        const wet = c.createGain();
+        wet.gain.value = 0.55;
+        room.connect(wet).connect(c.destination);
+      }
+      const start = c.currentTime + 0.12;
+      const soften = c.createBiquadFilter();
+      soften.type = "lowpass";
+      soften.frequency.value = 3200;
+      // Quieter than the preview page: it should sit under the moment.
+      const level = c.createGain();
+      level.gain.value = 0.6;
+      soften.connect(level);
+      level.connect(c.destination);
+      level.connect(room);
+      [523.25, 659.25, 783.99, 987.77, 1174.66].forEach((hz, i) => {
+        const at = start + i * 0.04;
+        for (const [mult, peak, attack, decay] of [
+          [1, 0.03 - i * 0.003, 0.09, 1.3],
+          [2, 0.004, 0.05, 0.6],
+        ] as const) {
+          const osc = c.createOscillator();
+          osc.type = "sine";
+          osc.frequency.value = hz * mult;
+          osc.connect(envelope(c, at, peak, attack, decay)).connect(soften);
+          osc.start(at);
+          osc.stop(at + attack + decay + 0.05);
+        }
+      });
+    };
+
     const press = () => tick(5500, 0.07);
     const openPanel = () => tick(6000, 0.065);
     const shutPanel = () => tick(4800, 0.06);
@@ -104,6 +154,7 @@
     // Components announce outcomes; this is the only place that makes them heard.
     addEventListener("mercury:success", success);
     addEventListener("mercury:error", failure);
+    addEventListener("mercury:shimmer", sparkle);
 
     addEventListener(
       "pointerdown",

@@ -2,7 +2,16 @@
 export interface Notice {
   readonly to: string;
   readonly subject: string;
+  /** Plain text. Always sent, so a client that will not render HTML still reads it. */
   readonly body: string;
+  /** Optional HTML alongside the text. */
+  readonly html?: string;
+  readonly attachments?: readonly {
+    readonly filename: string;
+    readonly content: Buffer;
+    /** Set, the attachment is shown in the HTML at `cid:<contentId>` rather than only listed. */
+    readonly contentId?: string;
+  }[];
 }
 
 export interface Notifier {

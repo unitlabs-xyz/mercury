@@ -17,6 +17,7 @@
     "@mercury/market": "workspace:*",
     "@mercury/sdk": "workspace:*",
     "@mercury/types": "workspace:*",
+    "@mercury/view": "workspace:*",
     "@privy-io/react-auth": "^3.45.0",
     "@solana-program/memo": "^0.15.0",
     "@solana-program/system": "^0.15.0",

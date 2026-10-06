@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { Dashboard } from "../../api/dashboard";
 import { Button, ButtonLink } from "../../ui/Button";
 import { ArrowUp, Card, Plus } from "../../ui/icons";
-import { pct, usd, usdCompact, usdSigned } from "../format";
+import { pct, usd, usdCompact, usdSigned } from "@mercury/view";
 import { ValueChart, useHistory, type Range } from "../ValueChart";
 import { HexAllocation, type Slice } from "./HexAllocation";
 import { RailHead, RangeSwitch } from "../../ui/ds";

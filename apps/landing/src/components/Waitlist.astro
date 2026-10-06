@@ -1,7 +1,7 @@
 ---
 import { site } from "../config/site";
 
-// Three fields and a button, in one row wherever it fits. Name is optional;
+// Four fields and a button, in one row wherever it fits. Name and handle are optional;
 // email and country are what the list is for.
 
 // ISO 3166 regions, named in English at build time so the page ships no list
@@ -21,6 +21,18 @@ const countries = REGIONS.split(" ")
   <label class="sr-only" for="wl-email">Email</label>
   <input id="wl-email" name="email" type="email" autocomplete="email" placeholder="Email" required maxlength="254" />
 
+  <label class="sr-only" for="wl-handle">X handle</label>
+  <input
+    id="wl-handle"
+    name="handle"
+    type="text"
+    autocomplete="off"
+    autocapitalize="off"
+    spellcheck="false"
+    placeholder="X handle (optional)"
+    maxlength="40"
+  />
+
   <label class="sr-only" for="wl-country">Country</label>
   <div class="select">
     <select id="wl-country" name="country" autocomplete="country-name" required>
@@ -32,7 +44,36 @@ const countries = REGIONS.split(" ")
   <button type="submit">Join the waitlist</button>
 
   <p class="status" role="status" aria-live="polite" data-waitlist-status></p>
+
+  <button type="button" class="see-card" data-see-card hidden>See your card</button>
 </form>
+
+<!-- The card, above everything: a top-layer dialog, so no frame can clip it. -->
+<dialog class="card-modal" data-card-modal aria-labelledby="card-modal-title">
+  <!-- The headline and the way out, in a row above the card, as the app's dialogs open.
+       No logo here: the card already carries one. -->
+  <div class="card-head">
+    <p class="card-title" id="card-modal-title" data-card-title></p>
+    <button type="button" class="close" data-card-close aria-label="Close">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    </button>
+  </div>
+  <div class="card-frame" data-card-frame>
+    <img data-card-image alt="" width="1200" height="630" />
+  </div>
+  <!-- What Share on X will post, so nobody is surprised by the compose window. -->
+  <div class="card-post">
+    <svg class="card-post-x" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+    <div class="card-post-body">
+      <p data-card-post></p>
+      <span class="card-post-note">Your card shows as the image when you post.</span>
+    </div>
+  </div>
+  <div class="card-actions">
+    <a data-card-share target="_blank" rel="noopener" class="primary">Share on X</a>
+    <button type="button" data-card-download class="ghost">Download</button>
+  </div>
+</dialog>
 
 <style>
   .waitlist {
@@ -40,12 +81,13 @@ const countries = REGIONS.split(" ")
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    width: min(100%, 720px);
+    /* Wide enough for all four fields and the button on one row. */
+    width: min(100%, 880px);
   }
 
   input,
   select {
-    flex: 1 1 150px;
+    flex: 1 1 120px;
     min-width: 0;
     height: 36px;
     padding: 0 14px;
@@ -67,7 +109,7 @@ const countries = REGIONS.split(" ")
   .select {
     position: relative;
     display: flex;
-    flex: 1 1 150px;
+    flex: 1 1 120px;
     min-width: 0;
   }
 
@@ -169,15 +211,229 @@ const countries = REGIONS.split(" ")
     display: none;
   }
 
-  /* Once in, the fields go and the confirmation is the whole form. */
-  .waitlist[data-done] > :not(.status) {
+  /* Once in, the fields go: the confirmation and the way back to their card are the whole form. */
+  .waitlist[data-done] > :not(.status, .see-card) {
     display: none;
+  }
+
+  .see-card[hidden] {
+    display: none;
+  }
+
+  /* Their card, in a dialog over the page. */
+  .card-modal {
+    /* Centred by hand: the site's reset takes away the dialog's own margin: auto. */
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    height: fit-content;
+    width: min(720px, calc(100vw - 32px));
+    max-width: none;
+    padding: 20px 24px 24px;
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 16px;
+    background: #141614;
+    box-shadow: 0 30px 80px rgb(0 0 0 / 0.35);
+    color: #f3f3f3;
+    letter-spacing: -0.02em;
+  }
+
+  .card-modal::backdrop {
+    background: rgb(23 23 23 / 0.45);
+    backdrop-filter: blur(2px);
+  }
+
+  .card-modal[open] {
+    animation: card-in 280ms var(--ease-out) both;
+  }
+
+  @keyframes card-in {
+    from {
+      opacity: 0;
+      translate: 0 10px;
+    }
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+
+  /* The app's dialog close: a quiet square that only fills on hover. */
+  .card-modal .close {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin-right: -8px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    background-image: none;
+    box-shadow: none;
+    color: rgb(243 243 243 / 0.6);
+    cursor: pointer;
+    transition:
+      background-color 160ms var(--ease-out),
+      color 160ms var(--ease-out);
+  }
+
+  .card-modal .close:hover,
+  .card-modal .close:focus-visible {
+    background: rgb(255 255 255 / 0.08);
+    color: #f3f3f3;
+    translate: none;
+  }
+
+  /* The image, and the same sheen the form's art gets, played over it on open. */
+  .card-frame {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    aspect-ratio: 1200 / 630;
+    background: rgb(255 255 255 / 0.06);
+  }
+
+  .card-frame img {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .card-frame[data-shine]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    /* A medium band with eased stops, so it swells in and fades out with no
+       visible edge. */
+    background-image: linear-gradient(
+      122deg,
+      rgb(255 255 255 / 0) 38%,
+      rgb(255 255 255 / 0.03) 41%,
+      rgb(255 255 255 / 0.1) 44.5%,
+      rgb(255 255 255 / 0.22) 48%,
+      rgb(255 255 255 / 0.28) 50%,
+      rgb(255 255 255 / 0.22) 52%,
+      rgb(255 255 255 / 0.1) 55.5%,
+      rgb(255 255 255 / 0.03) 59%,
+      rgb(255 255 255 / 0) 62%
+    );
+    background-size: 300% 100%;
+    background-repeat: no-repeat;
+    animation: wl-sheen 1400ms cubic-bezier(0.4, 0, 0.2, 1) 150ms both;
+  }
+
+  .card-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+  }
+
+  /* What Share on X will say: a quiet line, like a post in a feed. */
+  .card-post {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid rgb(255 255 255 / 0.08);
+  }
+
+  .card-post-x {
+    flex: 0 0 auto;
+    margin-top: 3px;
+    color: rgb(243 243 243 / 0.55);
+  }
+
+  .card-post-body {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .card-post p {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.45;
+    color: #f3f3f3;
+  }
+
+  .card-post-note {
+    font-size: 13px;
+    color: rgb(243 243 243 / 0.45);
+  }
+
+  .card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .card-actions .primary,
+  .card-actions .ghost,
+  .see-card {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 20px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  /* The app's buttons: 40px pills, 14px medium. */
+  .card-actions .primary,
+  .card-actions .ghost {
+    height: 40px;
+    padding: 0 24px;
+  }
+
+  .card-actions .primary {
+    background: #fff;
+    color: #171717;
+  }
+
+  .card-actions .ghost {
+    border: 1px solid rgb(255 255 255 / 0.22);
+    background: rgb(255 255 255 / 0.06);
+    background-image: none;
+    box-shadow: none;
+    color: #f3f3f3;
+  }
+
+  .card-actions .primary:hover,
+  .card-actions .ghost:hover {
+    translate: none;
+  }
+
+  .card-actions .ghost:hover {
+    background: rgb(255 255 255 / 0.12);
+  }
+
+  /* On the CTA art, so it keeps the light-on-photo look. */
+  .see-card {
+    border: 1px solid rgb(255 255 255 / 0.4);
+    background: rgb(255 255 255 / 0.1);
+    background-image: none;
+    box-shadow: none;
+    color: #fff;
   }
 
   /* The form keeps the height the fields had (locked in the script), and the
      confirmation sits where they were. */
   .waitlist[data-done] {
     align-items: center;
+    gap: 16px;
   }
 
   .waitlist[data-done] .status {
@@ -283,6 +539,7 @@ const countries = REGIONS.split(" ")
     const email = form.elements.namedItem("email") as HTMLInputElement;
     const country = form.elements.namedItem("country") as HTMLSelectElement;
     const name = form.elements.namedItem("name") as HTMLInputElement;
+    const handle = form.elements.namedItem("handle") as HTMLInputElement;
 
     // Start on the visitor's own country where the browser says what it is.
     const region = navigator.language.split("-")[1]?.toUpperCase();
@@ -300,6 +557,95 @@ const countries = REGIONS.split(" ")
     };
 
     const mark = (el: HTMLElement, bad: boolean) => el.setAttribute("aria-invalid", String(bad));
+
+    type Card = { position: number; founding: boolean; image: string; intent: string };
+
+    // Kept in this browser until they clear it, so a return visit shows their
+    // card instead of the form. Storage can be off or throw; then it is just
+    // this visit.
+    const KEY = "mercury:founding-card";
+    const saved = (): Card | null => {
+      try {
+        const raw = localStorage.getItem(KEY);
+        const card = raw ? (JSON.parse(raw) as Card) : null;
+        return card && typeof card.position === "number" && typeof card.image === "string" ? card : null;
+      } catch {
+        return null;
+      }
+    };
+    const save = (card: Card) => {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(card));
+      } catch {
+        /* this visit only */
+      }
+    };
+
+    const modal = document.querySelector<HTMLDialogElement>("[data-card-modal]");
+    const frame = modal?.querySelector<HTMLElement>("[data-card-frame]");
+    const img = modal?.querySelector<HTMLImageElement>("[data-card-image]");
+    const title = modal?.querySelector<HTMLElement>("[data-card-title]");
+    const share = modal?.querySelector<HTMLAnchorElement>("[data-card-share]");
+    const download = modal?.querySelector<HTMLButtonElement>("[data-card-download]");
+    const see = form.querySelector<HTMLButtonElement>("[data-see-card]");
+
+    const line = (card: Card) =>
+      card.founding ? `Spot #${card.position} of 500 is yours.` : `Spot #${card.position} is yours.`;
+
+    // Their card, with the post one click away. X takes no image from a link,
+    // so Share opens a compose window whose link unfurls into the card.
+    const openCard = (card: Card) => {
+      if (!modal || !frame || !img || !title || !share || !download) return;
+      img.src = card.image;
+      img.alt = `Your Mercury card, number ${card.position}`;
+      title.textContent = line(card);
+      share.href = card.intent;
+      // The post's words, as the compose window opens with them. The link that
+      // unfurls into the card is added by X on Share, and not shown here.
+      const intent = new URL(card.intent);
+      const post = modal.querySelector<HTMLElement>("[data-card-post]");
+      if (post) post.textContent = intent.searchParams.get("text") ?? "";
+      download.onclick = async () => {
+        // Fetched, because a download attribute is ignored across origins.
+        const blob = await (await fetch(card.image)).blob();
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement("a"), {
+          href: url,
+          download: `mercury-${card.position}.png`,
+        });
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+      // Replayed on every open: removed, a frame to let it go, then put back.
+      frame.removeAttribute("data-shine");
+      if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        requestAnimationFrame(() => {
+          frame.setAttribute("data-shine", "");
+          // Heard with the sheen; Sound.astro decides whether it plays.
+          dispatchEvent(new Event("mercury:shimmer"));
+        });
+      }
+      if (!modal.open) modal.showModal();
+    };
+
+    // The form, swapped for "you're in" and a way back to the card.
+    const done = (message: string, card: Card | null) => {
+      form.setAttribute("data-done", "");
+      status.textContent = message;
+      if (see && card) {
+        see.hidden = false;
+        see.onclick = () => openCard(card);
+      }
+    };
+
+    modal?.querySelector("[data-card-close]")?.addEventListener("click", () => modal.close());
+    // A click on the backdrop lands on the dialog itself, outside its box.
+    modal?.addEventListener("click", (e) => {
+      if (e.target === modal) modal.close();
+    });
+
+    const already = saved();
+    if (already) done(line(already), already);
 
     // Checked as soon as they leave the field, not only on submit.
     email.addEventListener("blur", () => {
@@ -334,7 +680,7 @@ const countries = REGIONS.split(" ")
         return;
       }
 
-      const button = form.querySelector("button")!;
+      const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
       button.disabled = true;
       status.textContent = "";
 
@@ -346,21 +692,31 @@ const countries = REGIONS.split(" ")
             email: email.value.trim(),
             country: country.value,
             ...(name.value.trim() ? { name: name.value.trim() } : {}),
+            ...(handle.value.trim() ? { handle: handle.value.trim() } : {}),
           }),
         });
         if (res.status === 400) {
           const body = await res.json().catch(() => null);
-          status.textContent = body?.error?.message ?? "Check your email and country.";
-          mark(email, true);
+          const message: string = body?.error?.message ?? "Check your email and country.";
+          status.textContent = message;
+          mark(/X handle/.test(message) ? handle : email, true);
           dispatchEvent(new Event("mercury:error"));
           button.disabled = false;
           return;
         }
         if (!res.ok) throw new Error(String(res.status));
+        const joined = (await res.json().catch(() => null)) as { card?: Card } | null;
         form.style.minHeight = `${form.offsetHeight}px`;
-        form.setAttribute("data-done", "");
         shimmer(form);
-        status.textContent = "You're on the list. We'll email you when Mercury opens.";
+        const card = joined?.card;
+        if (card) {
+          save(card);
+          done(`${line(card)} Your card is in your inbox too.`, card);
+          openCard(card);
+        } else {
+          // A repeat signup gets no card back, by design (see the API route).
+          done("You already have a spot. Your card is in your inbox.", null);
+        }
         dispatchEvent(new Event("mercury:success"));
       } catch {
         status.textContent = "That didn't go through. Try again in a moment.";

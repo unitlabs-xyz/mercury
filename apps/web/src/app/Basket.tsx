@@ -19,7 +19,7 @@ import { AppShell } from "./AppShell";
 import { created, feeLabel, shortAddress, useValued, type Valued } from "./baskets/model";
 import { BasketLine, Stack, WeightBar, weight } from "./baskets/parts";
 import { DotChart } from "./DotChart";
-import { usd, usdSigned } from "./format";
+import { usd, usdSigned } from "@mercury/view";
 import { RailList } from "./invest/Rail";
 import { Mark, points } from "./invest/shared";
 import { LiveStatusChip } from "./LiveStatus";

@@ -42,7 +42,7 @@ src/
   styles/global.css         Design tokens + utilities (mirrors apps/web/src/tokens.css)
   assets/                   Artwork the build optimises — see src/assets/README.md
     backgrounds/ ui/ textures/ brand/ fonts/
-public/                     Fixed URLs only: favicons, og-image, robots.txt, logos/
+public/                     Fixed URLs only: favicons, og image, robots.txt, logos/
 ```
 
 ## Where the artwork goes
@@ -51,7 +51,7 @@ public/                     Fixed URLs only: favicons, og-image, robots.txt, log
 backdrops, screenshots, textures. Import it and pass it to `<Media>`: the build emits
 WebP, a hashed name, a `srcset`, and the dimensions that stop the page shifting.
 
-`public/` for anything a machine fetches by URL — favicons, `og-image.png`,
+`public/` for anything a machine fetches by URL — favicons, `og-mercury-v2.png`,
 `robots.txt`, partner logos.
 
 [src/assets/README.md](src/assets/README.md) has the table, the sizes to export at,
@@ -68,7 +68,7 @@ Open the file, edit the object, leave the markup alone.
 - Every `<Media>` — they render a gradient and carry a `data-placeholder` attribute
   naming what belongs there. Import a file from `src/assets` and pass it as `src`.
   Find them with `grep -rn "<Media" src`.
-- `public/og-image.png` is the app's, not the landing's.
+- `public/og-mercury-v2.png` is the shared banner, the same file as the app's. A new banner gets a new filename, because X and LinkedIn cache previews by URL.
 
 ## Design
 

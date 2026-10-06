@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useMoney, usePortfolio, useSignedIn } from "../api/hooks";
 import { useAuthModal } from "../auth/AuthContext";
 import { Check, ChevronDown, Copy, Mail, SignOut } from "../ui/icons";
-import { usd } from "./format";
+import { usd } from "@mercury/view";
 
 const short = (a: string) => (a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
 

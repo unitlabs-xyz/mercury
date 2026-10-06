@@ -1,4 +1,4 @@
-import type { Event } from "./activity-data";
+import type { Event } from "@mercury/view";
 import { EVENT_ICON } from "./portfolio/Feed";
 
 /** Native SOL has no mint of its own; the feed records it under wrapped SOL. */

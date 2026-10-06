@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 
 export type Slice = {
   readonly key: string;

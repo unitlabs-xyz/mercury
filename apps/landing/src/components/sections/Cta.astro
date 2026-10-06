@@ -53,8 +53,9 @@ const FRAME = "1000 / 286";
     padding: 28px 60px;
   }
 
-  /* Below this the form wraps onto more lines than the art's ratio can hold. */
-  @media (width < 56.25rem) {
+  /* Below this the four fields wrap onto a second row, which the art's ratio
+     cannot hold: the frame takes its height from the content instead. */
+  @media (width < 64rem) {
     :global(.frame:has(> .cta-panel)) {
       --ratio: auto;
     }

@@ -7,6 +7,7 @@ import {
   numeric,
   pgTable,
   primaryKey,
+  serial,
   text,
   timestamp,
   uniqueIndex,
@@ -310,8 +311,31 @@ export const waitlist = pgTable(
     name: text("name"),
     country: text("country").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * Their place in line, from 1, in the order they joined. The first 500 are
+     * the founding cohort. Taken from a sequence, so two signups in the same
+     * instant cannot share a number.
+     */
+    position: serial("position").notNull(),
+    /** Their X handle without the @, as typed at signup. What the card shows. */
+    handle: text("handle"),
+    /**
+     * The public name of their card, in its share link. Random rather than the
+     * position, so the links cannot be walked to list everyone on the waitlist.
+     */
+    slug: text("slug").notNull(),
+    /**
+     * The photo behind their card, by file name. Kept so a card someone has
+     * shared never changes; null, or a file since removed, falls back to one
+     * chosen by position.
+     */
+    background: text("background"),
   },
-  (t) => [uniqueIndex("waitlist_email_idx").on(t.email)],
+  (t) => [
+    uniqueIndex("waitlist_email_idx").on(t.email),
+    uniqueIndex("waitlist_position_idx").on(t.position),
+    uniqueIndex("waitlist_slug_idx").on(t.slug),
+  ],
 );
 export type WaitlistEntry = typeof waitlist.$inferSelect;
 

@@ -1,6 +1,7 @@
 import { getRequestListener } from "@hono/node-server";
 import { Hono } from "hono";
 import { createApp } from "./app.js";
+import { applyMigrations } from "./db/migrate.js";
 import { buildAuthDeps, buildDeps, buildReadDeps, buildReconcileDeps, readConfig } from "./deps.js";
 import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
@@ -18,6 +19,14 @@ import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
  * the background work; this keeps the HTTP surface deployable meanwhile.
  */
 const config = readConfig();
+
+/*
+ * Migrate before the first request, as index.ts does. Once per cold start; an
+ * up-to-date schema makes it a single cheap read, and the advisory lock keeps
+ * two cold starts from running the same migration at once. A failure throws
+ * here, so the function errors instead of serving against the wrong schema.
+ */
+await applyMigrations(config.databaseUrl);
 const auth = buildAuthDeps(config);
 const deps = buildDeps(config);
 const read = buildReadDeps(auth.db, deps, config);

@@ -4,7 +4,7 @@ import { useInstruments } from "../../market/hooks";
 import { Button } from "../../ui/Button";
 import { PanelHeader, SidePanel } from "../../ui/Dialog";
 import { Alert, Check } from "../../ui/icons";
-import { pct, usd } from "../format";
+import { pct, usd } from "@mercury/view";
 import { Mark } from "../invest/shared";
 import { LoanMeter, loanNow, loanShape } from "../money/LoanMeter";
 import { RailLine } from "../stock/Panels";

@@ -1,6 +1,6 @@
 import type { Money, Portfolio } from "@mercury/types";
 import type { Dashboard } from "../api/dashboard";
-import type { Event } from "../app/activity-data";
+import type { Event } from "@mercury/view";
 
 /**
  * SAMPLE DATA, FOR LOOKING AT THE DESIGN.

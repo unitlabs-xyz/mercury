@@ -6,6 +6,7 @@ import Footer from "../components/Footer.astro";
 import SmoothScroll from "../components/SmoothScroll.astro";
 import Reveal from "../components/Reveal.astro";
 import Sound from "../components/Sound.astro";
+import Analytics from "@vercel/analytics/astro";
 
 // Preloaded because the hero is set in both of these: without it the browser only
 // discovers them after the stylesheet parses, and the title reflows.
@@ -22,7 +23,8 @@ interface Props {
 const { title, description = site.description, schema = [] } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname.replace(/\/$/, "") || "/", site.url).href;
-const ogImage = new URL("/og-image.png", site.url).href;
+// A new banner gets a new filename: X and LinkedIn cache previews by URL.
+const ogImage = new URL("/og-mercury-v2.png", site.url).href;
 const isHome = Astro.url.pathname === "/";
 
 const baseSchema: Record<string, unknown>[] = [
@@ -69,6 +71,7 @@ const baseSchema: Record<string, unknown>[] = [
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <link rel="sitemap" href="/sitemap-index.xml" />
+    <Analytics />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={site.name} />
@@ -76,11 +79,15 @@ const baseSchema: Record<string, unknown>[] = [
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Mercury — the financial account built for the on-chain world." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content={site.twitter} />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content="Mercury — the financial account built for the on-chain world." />
 
     {
       [...baseSchema, ...schema].map((block) => (

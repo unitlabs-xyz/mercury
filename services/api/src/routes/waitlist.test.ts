@@ -1,8 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { testDb } from "../db/testing.js";
+import type { Notice } from "../notify/ports.js";
 import { dnsAcceptsMail, pgWaitlist, waitlistRoutes } from "./waitlist.js";
 
 const anyDomain = async () => true;
+
+/** No drawing in these tests: the card's bytes are the slug, so a test can tell which was drawn. */
+const fakeRender = async (card: { slug: string }) => Buffer.from(card.slug);
+
+const withCards = async (sent: Notice[] = []) =>
+  waitlistRoutes(
+    pgWaitlist(await testDb(), "secret", anyDomain, {
+      render: fakeRender,
+      wordmark: async () => Buffer.from("wordmark"),
+      pick: async () => "a.jpg",
+      publicBase: "https://cards.test",
+      notifier: { send: async (n) => (sent.push(n), true) },
+    }),
+  );
+
+type Joined = {
+  ok: true;
+  card?: {
+    position: number;
+    handle: string | null;
+    founding: boolean;
+    image: string;
+    page: string;
+    intent: string;
+  };
+};
 
 const post = (app: ReturnType<typeof waitlistRoutes>, body: unknown) =>
   app.request("/waitlist", {
@@ -12,7 +39,7 @@ const post = (app: ReturnType<typeof waitlistRoutes>, body: unknown) =>
   });
 
 describe("waitlist", () => {
-  it("stores an email once, whatever its case, and answers the same both times", async () => {
+  it("stores an email once, whatever its case", async () => {
     const app = waitlistRoutes(pgWaitlist(await testDb(), "secret", anyDomain));
 
     expect((await post(app, { email: "Ada@Example.com", name: "Ada", country: "India" })).status).toBe(200);
@@ -51,7 +78,7 @@ describe("waitlist", () => {
       headers: { authorization: "Bearer secret" },
     });
     const text = await res.text();
-    expect(text.split("\n")[0]).toBe("email,name,country,created_at");
+    expect(text.split("\n")[0]).toBe("position,email,name,handle,country,created_at");
     expect(text).toContain('"Quote ""Q"""');
   });
 
@@ -67,5 +94,139 @@ describe("waitlist", () => {
   it("knows a reserved domain has no mail, and does not wait on DNS forever", async () => {
     expect(await dnsAcceptsMail("nowhere.invalid")).toBe(false);
     expect(await dnsAcceptsMail("example.com", 1)).toBe(true);
+  });
+
+  it("numbers signups in the order they join, from 1", async () => {
+    const app = await withCards();
+    const first = (await (await post(app, { email: "a@b.co", country: "India" })).json()) as Joined;
+    const second = (await (await post(app, { email: "c@d.co", country: "India" })).json()) as Joined;
+    expect(first.card?.position).toBe(1);
+    expect(second.card?.position).toBe(2);
+    expect(first.card?.founding).toBe(true);
+  });
+
+  it("hands a repeat signup nothing back, and sends no second email", async () => {
+    const sent: Notice[] = [];
+    const app = await withCards(sent);
+    await post(app, { email: "a@b.co", country: "India", handle: "ada" });
+    const again = (await (await post(app, { email: "A@B.co", country: "India" })).json()) as Joined;
+    expect(again).toEqual({ ok: true });
+    expect(sent).toHaveLength(1);
+  });
+
+  it("takes a handle with an @, or as a profile link, and stores it bare", async () => {
+    const app = await withCards();
+    const at = (await (
+      await post(app, { email: "a@b.co", country: "India", handle: "@Ada_99" })
+    ).json()) as Joined;
+    const link = (await (
+      await post(app, { email: "c@d.co", country: "India", handle: "https://x.com/grace" })
+    ).json()) as Joined;
+    const blank = (await (
+      await post(app, { email: "e@f.co", country: "India", handle: "  " })
+    ).json()) as Joined;
+    expect(at.card?.handle).toBe("Ada_99");
+    expect(link.card?.handle).toBe("grace");
+    expect(blank.card?.handle).toBeNull();
+  });
+
+  it("refuses something that cannot be an X handle", async () => {
+    const app = await withCards();
+    const res = await post(app, { email: "a@b.co", country: "India", handle: "not a handle!" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { message: string } }).error.message).toMatch(/X handle/);
+  });
+
+  it("emails the card inline, with the post one click away", async () => {
+    const sent: Notice[] = [];
+    const app = await withCards(sent);
+    const { card } = (await (
+      await post(app, { email: "a@b.co", country: "India", handle: "ada" })
+    ).json()) as Joined;
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: "a@b.co", subject: "You're in. Spot #1 of 500 is yours" });
+    expect(sent[0]!.attachments?.map((a) => a.contentId)).toEqual(["card", "wordmark"]);
+    expect(sent[0]!.attachments?.[0]?.filename).toBe("mercury-1.png");
+    // Both images inline, and the spot's details above the card.
+    expect(sent[0]!.html).toContain('src="cid:card"');
+    expect(sent[0]!.html).toContain('src="cid:wordmark"');
+    expect(sent[0]!.html).toContain("prefers-color-scheme: dark");
+    expect(sent[0]!.html).toContain("@ada");
+    expect(sent[0]!.html).toContain("First, 1–100");
+    expect(sent[0]!.body).toContain("Held by: @ada");
+    expect(sent[0]!.body).toContain(card!.intent);
+  });
+
+  it("serves the card by its slug, and the share page that unfurls into it", async () => {
+    const app = await withCards();
+    const { card } = (await (
+      await post(app, { email: "a@b.co", country: "India", handle: "ada" })
+    ).json()) as Joined;
+    const slug = card!.page.split("/f/")[1]!;
+    expect(card!.image).toBe(`https://cards.test/waitlist/cards/${slug}.png`);
+
+    const png = await app.request(`/waitlist/cards/${slug}.png`);
+    expect(png.headers.get("content-type")).toBe("image/png");
+    expect(Buffer.from(await png.arrayBuffer()).toString()).toBe(slug);
+
+    const page = await (await app.request(`/f/${slug}`)).text();
+    expect(page).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(page).toContain(`content="${card!.image}"`);
+    expect(new URL(card!.intent).searchParams.get("url")).toBe(card!.page);
+
+    expect(page).toContain('http-equiv="refresh"');
+    const preview = await (await app.request(`/f/${slug}?preview`)).text();
+    expect(preview).not.toContain('http-equiv="refresh"');
+    expect(preview).toContain(`<img src="${card!.image}"`);
+
+    expect((await app.request("/waitlist/cards/nobody.png")).status).toBe(404);
+  });
+
+  it("keeps a signup when the email cannot be sent", async () => {
+    const app = waitlistRoutes(
+      pgWaitlist(await testDb(), "secret", anyDomain, {
+        render: fakeRender,
+        pick: async () => null,
+        notifier: { send: async () => Promise.reject(new Error("down")) },
+      }),
+    );
+    const res = await post(app, { email: "a@b.co", country: "India" });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as Joined).card?.position).toBe(1);
+  });
+
+  it("does not skip a number when someone signs up twice", async () => {
+    const app = await withCards();
+    await post(app, { email: "a@b.co", country: "India" });
+    await post(app, { email: "a@b.co", country: "India" });
+    const next = (await (await post(app, { email: "c@d.co", country: "India" })).json()) as Joined;
+    expect(next.card?.position).toBe(2);
+  });
+
+  it("sends one welcome by hand, behind the token, and fills a missing handle", async () => {
+    const sent: Notice[] = [];
+    const app = await withCards(sent);
+    await post(app, { email: "a@b.co", name: "saketh", country: "India" });
+    sent.length = 0;
+    const send = (body: unknown, token = "secret") =>
+      app.request("/admin/waitlist/welcome", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+
+    expect((await send({ email: "a@b.co" }, "wrong")).status).toBe(404);
+    expect((await send({ email: "nobody@b.co" })).status).toBe(404);
+
+    const res = await send({ email: "A@B.co", handle: "@saketh_k" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { card: { position: number; handle: string } };
+    expect(body.card).toMatchObject({ position: 1, handle: "saketh_k" });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.to).toBe("a@b.co");
+
+    // A handle they already have is kept.
+    const again = (await (await send({ email: "a@b.co", handle: "someone_else" })).json()) as typeof body;
+    expect(again.card.handle).toBe("saketh_k");
   });
 });

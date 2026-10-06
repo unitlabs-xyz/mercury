@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { memo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 import { Skeleton } from "../portfolio/ui";
 import { GlideRows, MoveChip, RailCard, RailHead } from "../../ui/ds";
 import { DotChart, TINY } from "../DotChart";

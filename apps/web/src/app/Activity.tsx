@@ -4,7 +4,7 @@ import { EASE } from "../motion/config";
 import { Button, ButtonLink } from "../ui/Button";
 import { Chevron, InfoTip, Pagination, StatusChip } from "../ui/ds";
 import { Close, Download, Search } from "../ui/icons";
-import { type Event, type Group } from "./activity-data";
+import { type Event, type Group } from "@mercury/view";
 import { downloadCsv } from "./activity-export";
 import { MONTH_OPTIONS, TYPE_OPTIONS, filterEvents, groupByDay, yearOptions } from "./activity-filters";
 import { useEvents } from "./useEvents";

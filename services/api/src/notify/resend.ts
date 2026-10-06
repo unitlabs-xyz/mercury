@@ -17,6 +17,16 @@ export const resendNotifier = (opts: { apiKey: string; from: string }): Notifier
           to: [notice.to],
           subject: notice.subject,
           text: notice.body,
+          ...(notice.html === undefined ? {} : { html: notice.html }),
+          ...(notice.attachments === undefined
+            ? {}
+            : {
+                attachments: notice.attachments.map((a) => ({
+                  filename: a.filename,
+                  content: a.content.toString("base64"),
+                  ...(a.contentId === undefined ? {} : { content_id: a.contentId }),
+                })),
+              }),
         }),
       });
       if (!res.ok) {

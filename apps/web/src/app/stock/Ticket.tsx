@@ -5,7 +5,7 @@ import { Button } from "../../ui/Button";
 import { RailHead } from "../../ui/ds";
 import { Alert, Clock } from "../../ui/icons";
 import { REFUSE_COPY, refuseCopy } from "../OrderSheet";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 import { RailLine } from "./Panels";
 
 type Side = "buy" | "sell";

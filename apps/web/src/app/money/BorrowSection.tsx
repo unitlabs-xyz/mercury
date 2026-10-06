@@ -5,7 +5,7 @@ import type { Tab } from "../borrow/BorrowSheet";
 import { usePanels } from "../Panels";
 import { Button } from "../../ui/Button";
 import { GlideRows, InfoTip, MoveChip, StatusChip, type Tone } from "../../ui/ds";
-import { pct, usd } from "../format";
+import { pct, usd } from "@mercury/view";
 import { Mark } from "../invest/shared";
 import { HeaderFigure } from "../portfolio/Summary";
 import { Skeleton } from "../portfolio/ui";

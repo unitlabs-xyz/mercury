@@ -19,7 +19,7 @@ import { Clock } from "../ui/icons";
 import { AppShell } from "./AppShell";
 import { OrderSheet } from "./OrderSheet";
 import { DotChart } from "./DotChart";
-import { usd, usdCompact, usdSigned } from "./format";
+import { usd, usdCompact, usdSigned } from "@mercury/view";
 import { RailList, Saved } from "./invest/Rail";
 import { Mark, points, type Row } from "./invest/shared";
 import { LiveStatusChip, PriceError } from "./LiveStatus";

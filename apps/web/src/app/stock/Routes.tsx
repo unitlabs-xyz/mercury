@@ -2,7 +2,7 @@ import type { Decision, PricedCandidate } from "@mercury/core";
 import type { Wrapper } from "../../market/hooks";
 import { InfoTip, RailHead, StatusChip, type Tone } from "../../ui/ds";
 import { ISSUER_NAME } from "../IssuerCompare";
-import { usd } from "../format";
+import { usd } from "@mercury/view";
 import { Skeleton } from "../portfolio/ui";
 
 const REJECTION: Record<string, string> = {
