@@ -1,8 +1,18 @@
 import createClient, { type Client } from "openapi-fetch";
 import { z } from "zod";
 import type { BasketProvider } from "../core/deps.js";
-import type { ManagedBasketInsights } from "@mercury/types";
-import type { BasketDefinition, ProviderBasket, StrategyPerformance, BasketPortfolio, EnrollmentChallenge } from "../core/primitives.js";
+import {
+  ManagedBasketOperation,
+  ManagedBasketPortfolioSnapshot,
+  type ManagedBasketInsights,
+} from "@mercury/types";
+import type {
+  BasketDefinition,
+  ProviderBasket,
+  StrategyPerformance,
+  BasketPortfolio,
+  EnrollmentChallenge,
+} from "../core/primitives.js";
 import type { components, paths } from "./generated.js";
 
 const BASE = "https://api.glider.fi/v2";
@@ -54,11 +64,27 @@ const breakdown = z.object({
 const fees = z.object({ data: z.object({ swapBps: z.number().int().nullable() }) });
 const smartAccount = z.object({ accountId: z.string(), depositAccountId: z.string().optional() });
 const portfolio = z.object({
-  portfolioId: z.string(), ownerAccountId: z.string().nullable(), strategyId: z.string(),
+  portfolioId: z.string(),
+  ownerAccountId: z.string().nullable(),
+  strategyId: z.string(),
   smartAccounts: z.array(smartAccount),
 });
+const portfolioDetail = portfolio.extend({
+  ownerAccountId: z.string(),
+  schedule: ManagedBasketPortfolioSnapshot.shape.schedule,
+});
+const positions = z.object({
+  portfolioId: z.string(),
+  totalValueUsd: z.string(),
+  inTransit: z.object({ totalUsd: z.string() }),
+  fetchedAt: z.string(),
+  assets: ManagedBasketPortfolioSnapshot.shape.assets,
+  warnings: ManagedBasketPortfolioSnapshot.shape.warnings,
+});
 const enrollmentChallenge = z.object({
-  flowId: z.string(), accountIndex: z.string(), agentAccountId: z.string(),
+  flowId: z.string(),
+  accountIndex: z.string(),
+  agentAccountId: z.string(),
   message: z.object({ kind: z.literal("solana-message"), text: z.string() }),
   solanaTransaction: z.string().optional(),
 });
@@ -123,15 +149,60 @@ export class GliderClient implements BasketProvider {
       const result = await this.client.GET("/portfolios", {
         params: { query: { ownerAccountId, strategyId, limit: 200, ...(cursor ? { cursor } : {}) } },
       });
-      const page = z.object({ data: z.object({ portfolios: z.array(portfolio) }), nextCursor: z.string().nullable() })
+      const page = z
+        .object({ data: z.object({ portfolios: z.array(portfolio) }), nextCursor: z.string().nullable() })
         .parse(this.checked(result, "/portfolios"));
-      found.push(...page.data.portfolios.filter((item) => item.ownerAccountId === ownerAccountId && item.strategyId === strategyId)
-        .map((item) => ({ portfolioId: item.portfolioId, ownerAccountId, strategyId, smartAccounts: item.smartAccounts })));
+      found.push(
+        ...page.data.portfolios
+          .filter((item) => item.ownerAccountId === ownerAccountId && item.strategyId === strategyId)
+          .map((item) => ({
+            portfolioId: item.portfolioId,
+            ownerAccountId,
+            strategyId,
+            smartAccounts: item.smartAccounts,
+          })),
+      );
       cursor = page.nextCursor;
       if (cursor && seen.has(cursor)) throw new Error("Glider portfolio pagination repeated a cursor");
       if (cursor) seen.add(cursor);
     } while (cursor);
     return found;
+  }
+
+  async portfolio(id: string) {
+    const result = await this.client.GET("/portfolios/{portfolioId}", {
+      params: { path: { portfolioId: id } },
+    });
+    return portfolioDetail.parse(this.checked(result, `/portfolios/${encodeURIComponent(id)}`).data);
+  }
+
+  async positions(id: string) {
+    const result = await this.client.GET("/portfolios/{portfolioId}/positions", {
+      params: { path: { portfolioId: id } },
+    });
+    const data = positions.parse(
+      this.checked(result, `/portfolios/${encodeURIComponent(id)}/positions`).data,
+    );
+    return {
+      portfolioId: data.portfolioId,
+      totalValueUsd: data.totalValueUsd,
+      inTransitUsd: data.inTransit.totalUsd,
+      fetchedAt: data.fetchedAt,
+      assets: data.assets,
+      warnings: data.warnings,
+    };
+  }
+
+  async operation(portfolioId: string, operationId: string) {
+    const result = await this.client.GET("/portfolios/{portfolioId}/operations/{operationId}", {
+      params: { path: { portfolioId, operationId } },
+    });
+    return ManagedBasketOperation.parse(
+      this.checked(
+        result,
+        `/portfolios/${encodeURIComponent(portfolioId)}/operations/${encodeURIComponent(operationId)}`,
+      ).data,
+    );
   }
 
   async prepareEnrollment(ownerAccountId: string, strategyId: string): Promise<EnrollmentChallenge> {
@@ -141,18 +212,31 @@ export class GliderClient implements BasketProvider {
     return enrollmentChallenge.parse(this.checked(result, "/enroll/signature").data);
   }
 
-  async enroll(ownerAccountId: string, strategyId: string, challenge: EnrollmentChallenge, signed: string, name: string): Promise<BasketPortfolio> {
+  async enroll(
+    ownerAccountId: string,
+    strategyId: string,
+    challenge: EnrollmentChallenge,
+    signed: string,
+    name: string,
+  ): Promise<BasketPortfolio> {
     const result = await this.client.POST("/enroll", {
       body: {
-        ownerAccountId, strategyId, chainIds: [SOLANA_CHAIN_ID], accountType: "ECDSA",
-        flowId: challenge.flowId, accountIndex: challenge.accountIndex, agentAccountId: challenge.agentAccountId,
+        ownerAccountId,
+        strategyId,
+        chainIds: [SOLANA_CHAIN_ID],
+        accountType: "ECDSA",
+        flowId: challenge.flowId,
+        accountIndex: challenge.accountIndex,
+        agentAccountId: challenge.agentAccountId,
         ...(challenge.solanaTransaction ? { signedSolanaTransaction: signed } : { signature: signed }),
         portfolioName: name,
       },
     });
-    const data = z.object({ portfolioId: z.string(), strategyId: z.string(), smartAccounts: z.array(smartAccount) })
+    const data = z
+      .object({ portfolioId: z.string(), strategyId: z.string(), smartAccounts: z.array(smartAccount) })
       .parse(this.checked(result, "/enroll").data);
-    if (data.strategyId !== strategyId) throw new Error("Glider returned a different strategy for enrollment");
+    if (data.strategyId !== strategyId)
+      throw new Error("Glider returned a different strategy for enrollment");
     return { portfolioId: data.portfolioId, ownerAccountId, strategyId, smartAccounts: data.smartAccounts };
   }
 

@@ -3,6 +3,8 @@ import {
   ManagedBasketInsights,
   ManagedBasketTemplate,
   ManagedBasketPortfolio,
+  ManagedBasketPortfolioSnapshot,
+  ManagedBasketOperation,
   PreparedBasketEnrollment,
   SubmitBasketEnrollment,
   PrepareBasketFunding,
@@ -54,6 +56,32 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
       return c.json({ portfolio: portfolio ? ManagedBasketPortfolio.parse(portfolio) : null });
     } catch (error) {
       const result = handle(error);
+      return c.json(result.body, result.status);
+    }
+  });
+
+  app.get("/v1/basket-templates/:slug/portfolio", requireBasketAuth, async (c) => {
+    const owner = ownerFor(c.get("identity").walletAddress);
+    if (!owner)
+      return c.json(fail("wallet_required", "Sign in with a Solana wallet to view a portfolio."), 401);
+    try {
+      const snapshot = await service.portfolioSnapshot(c.req.param("slug"), owner);
+      return c.json({ portfolio: snapshot ? ManagedBasketPortfolioSnapshot.parse(snapshot) : null });
+    } catch (error) {
+      const result = handle(error, "portfolio read");
+      return c.json(result.body, result.status);
+    }
+  });
+
+  app.get("/v1/basket-templates/:slug/operations/:operationId", requireBasketAuth, async (c) => {
+    const owner = ownerFor(c.get("identity").walletAddress);
+    if (!owner)
+      return c.json(fail("wallet_required", "Sign in with a Solana wallet to view an operation."), 401);
+    try {
+      const operation = await service.operation(c.req.param("slug"), owner, c.req.param("operationId"));
+      return c.json({ operation: ManagedBasketOperation.parse(operation) });
+    } catch (error) {
+      const result = handle(error, "operation read");
       return c.json(result.body, result.status);
     }
   });

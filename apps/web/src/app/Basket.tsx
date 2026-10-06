@@ -10,17 +10,29 @@ import {
   useBasketEnrollmentAction,
   useBasketFundingAction,
   useBasketInsights,
+  useBasketPortfolio,
   useBasketTemplate,
 } from "../api/baskets";
 import { useHistories, useInstruments, usePrices, type Instrument } from "../market/hooks";
-import { Chevron, GlideTable, MoveChip, RailCard, RailHead, RangeSwitch, StatusChip } from "../ui/ds";
+import {
+  Chevron,
+  GlideRows,
+  GlideTable,
+  MoveChip,
+  RailCard,
+  RailHead,
+  RangeSwitch,
+  StatusChip,
+} from "../ui/ds";
 import { AppShell } from "./AppShell";
-import { DotChart } from "./DotChart";
+import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
 import { EnrollmentRail, EnrollmentSheet, FundingSheet } from "./baskets/Ticket";
 import { modeledSeries } from "./baskets/performance";
+import { RailList } from "./invest/Rail";
+import { LIST_DOT } from "./invest/shared";
 
 type Range = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
 const RANGES: readonly Range[] = ["1D", "1W", "1M", "3M", "6M", "1Y", "All"];
@@ -44,6 +56,12 @@ const TILE_TONES = [
   "bg-[#f3f1e9]",
   "bg-ds-tag",
 ];
+const USDC_ASSET_ID =
+  "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const assetBalance = (value: string) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "—";
+};
 
 const IconCluster = ({
   template,
@@ -87,6 +105,7 @@ export const Basket = () => {
   const [fundingOpen, setFundingOpen] = useState(false);
   const [fundingReview, setFundingReview] = useState(false);
   const [fundingAmount, setFundingAmount] = useState("100");
+  const [showAllAssets, setShowAllAssets] = useState(false);
   const [checkingEnrollment, setCheckingEnrollment] = useState(false);
   const enrollmentRequestActive = useRef(false);
   const fundingRequestActive = useRef(false);
@@ -96,6 +115,8 @@ export const Basket = () => {
   const { identityToken } = useIdentityToken();
   const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null);
   const enrollment = useBasketEnrollment(slug);
+  const enrolled = signedIn && Boolean(enrollment.data);
+  const portfolio = useBasketPortfolio(slug, enrolled);
   const money = useMoney();
   const enrollAction = useBasketEnrollmentAction(slug);
   const fundingAction = useBasketFundingAction(slug);
@@ -174,6 +195,13 @@ export const Basket = () => {
   const mosaic = allocationRows(allocations);
   const totalWeight = allocations.reduce((sum, asset) => sum + asset.weightBps, 0);
   const year = performance?.windows.find((item) => item.window === "12m");
+  const account = signedIn ? portfolio.data : null;
+  const usdcBalance = account?.assets
+    .filter((asset) => asset.assetId === USDC_ASSET_ID)
+    .reduce((sum, asset) => sum + Number(asset.balance), 0);
+  const heldAssets = [...(account?.assets ?? [])]
+    .filter((asset) => Number(asset.balance) > 0)
+    .sort((a, b) => Number(b.valueUsd) - Number(a.valueUsd));
 
   return (
     <AppShell current="baskets" title={name} quiet>
@@ -478,7 +506,7 @@ export const Basket = () => {
             busy={enrollmentBusy}
             error={enrollment.error?.message}
             onReview={() => {
-              if (enrollment.data) {
+              if (enrolled) {
                 fundingAction.reset();
                 setFundingReview(false);
                 setFundingOpen(true);
@@ -490,21 +518,170 @@ export const Basket = () => {
           />
           <RailCard label="Your position">
             <RailHead title="Your position" />
-            <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
-              <p className="text-[13px] font-medium text-ds-ink">No connected portfolio</p>
-              <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
-                Balances and returns will appear after portfolio tracking is available.
-              </p>
-            </div>
+            {account ? (
+              <div className="mt-5">
+                <p className="text-[12px] text-ds-muted">Smart-account value</p>
+                <p className="mt-1 text-[28px] leading-none font-medium text-ds-ink">
+                  {usd(account.totalValueUsd)}
+                </p>
+                <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ds-divider pt-4 text-[12px]">
+                  <div>
+                    <p className="text-ds-muted">Available USDC</p>
+                    <p className="mt-1 font-medium text-ds-ink">
+                      {usdcBalance == null || !Number.isFinite(usdcBalance) ? "—" : usd(usdcBalance)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-ds-muted">Other assets</p>
+                    <p className="mt-1 font-medium text-ds-ink">
+                      {heldAssets.filter((asset) => asset.assetId !== USDC_ASSET_ID).length}
+                    </p>
+                  </div>
+                </div>
+                {account.inTransitUsd !== "0" && (
+                  <p className="mt-3 text-[12px] text-ds-muted">
+                    Includes {usd(account.inTransitUsd)} in transit.
+                  </p>
+                )}
+                {account.warnings.length > 0 && (
+                  <p className="mt-3 text-[12px] text-ds-muted">Partial read; value may be incomplete.</p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
+                <p className="text-[13px] font-medium text-ds-ink">
+                  {enrolled
+                    ? portfolio.isError
+                      ? "Balances unavailable"
+                      : "Loading your portfolio…"
+                    : "No connected portfolio"}
+                </p>
+                <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
+                  {enrolled
+                    ? "Your Glider smart-account balances will appear here."
+                    : "Enroll to connect your own Glider smart account."}
+                </p>
+              </div>
+            )}
           </RailCard>
+          {enrolled && (
+            <RailList label="Your assets" meta="Value · share 1D">
+              {portfolio.isPending ? (
+                <p className="px-3 py-5 text-[13px] text-ds-muted">Loading account balances…</p>
+              ) : portfolio.isError ? (
+                <p className="px-3 py-5 text-[13px] text-ds-muted">Balances are temporarily unavailable.</p>
+              ) : heldAssets.length === 0 ? (
+                <p className="px-3 py-5 text-[13px] text-ds-muted">
+                  No assets detected yet. USDC can take a short time to appear.
+                </p>
+              ) : (
+                <>
+                  <GlideRows as="ul">
+                    {(showAllAssets ? heldAssets : heldAssets.slice(0, 5)).map((asset) => {
+                      const allocation = template.allocations.find((item) => item.assetId === asset.assetId);
+                      const history = allocation ? dayHistory.data?.get(allocation.ticker) : null;
+                      return (
+                        <li
+                          key={`${asset.smartAccountId}:${asset.assetId}`}
+                          data-row
+                          className="relative grid h-[52px] grid-cols-[minmax(0,1fr)_84px_56px] items-center gap-x-3 rounded-md px-3"
+                        >
+                          <span className="flex min-w-0 items-center gap-3">
+                            {allocation ? (
+                              <AssetIcon
+                                asset={allocation}
+                                source={byTicker.get(allocation.ticker)}
+                                className="size-8 shrink-0 rounded-full bg-white object-contain"
+                              />
+                            ) : (
+                              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[10px] font-medium text-ds-ink">
+                                {asset.symbol.slice(0, 3)}
+                              </span>
+                            )}
+                            <span className="min-w-0">
+                              <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">
+                                {allocation
+                                  ? (byTicker.get(allocation.ticker)?.name ?? asset.symbol)
+                                  : asset.symbol}
+                              </span>
+                              <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">
+                                {assetBalance(asset.balance)} {asset.symbol}
+                              </span>
+                            </span>
+                          </span>
+                          <span className="block h-7 w-full">
+                            {history && history.points.length > 1 && (
+                              <DotChart
+                                scale="price"
+                                series={history.points.map((point) => ({
+                                  label: point.at.toLocaleTimeString(),
+                                  value: point.price,
+                                }))}
+                                label="underlying share today"
+                                axes={false}
+                                interactive={false}
+                                rest={LIST_DOT}
+                                {...TINY}
+                              />
+                            )}
+                          </span>
+                          <span className="flex flex-col items-end">
+                            <span className="text-[14px] leading-[18px] font-medium whitespace-nowrap text-ds-ink">
+                              {usd(asset.valueUsd)}
+                            </span>
+                            {allocation && <MoveChip value={history?.changePct ?? null} light />}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </GlideRows>
+                  {heldAssets.length > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAssets((value) => !value)}
+                      className="w-full px-3 py-2 text-left text-[12px] font-medium text-ds-link hover:underline"
+                    >
+                      {showAllAssets ? "Show fewer assets" : `Show all ${heldAssets.length} assets`}
+                    </button>
+                  )}
+                </>
+              )}
+              {account && (
+                <p className="px-3 pt-2 pb-1 text-[11px] leading-relaxed text-ds-muted">
+                  Value and balance are for your Solana tokens. Charts and 1D moves show underlying shares.
+                  Updated {new Date(account.fetchedAt).toLocaleString()}.
+                </p>
+              )}
+            </RailList>
+          )}
           <RailCard label="Rebalancing">
-            <RailHead title="Rebalancing" meta="Daily" />
+            <RailHead
+              title="Rebalancing"
+              meta={
+                account?.schedule?.status === "paused"
+                  ? "Paused"
+                  : (account?.schedule?.frequency ?? undefined)
+              }
+            />
             <div className="mt-5 flex items-center justify-between gap-3 rounded-lg bg-ds-panel p-4 text-[12px]">
               <span className="text-ds-muted">Next rebalance</span>
-              <span className="font-medium text-ds-ink">After enrollment</span>
+              <span className="font-medium text-ds-ink">
+                {account?.schedule?.nextDueAt
+                  ? new Date(account.schedule.nextDueAt).toLocaleString()
+                  : account?.schedule?.status === "paused"
+                    ? "Paused"
+                    : account
+                      ? "Not scheduled yet"
+                      : "—"}
+              </span>
             </div>
             <p className="mt-3 text-[12px] leading-relaxed text-ds-muted">
-              Timing is specific to each portfolio. No schedule is connected yet.
+              {account?.schedule?.lastRebalanceAt
+                ? `Last rebalance: ${new Date(account.schedule.lastRebalanceAt).toLocaleString()}.`
+                : account
+                  ? "No completed rebalance reported yet."
+                  : "Portfolio schedule is not available yet."}{" "}
+              Operation status will appear after a rebalance is requested.
             </p>
           </RailCard>
           <RailCard label="Recent activity">
@@ -512,7 +689,8 @@ export const Basket = () => {
             <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
               <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
               <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
-                Deposits, rebalances, and withdrawals will appear when tracking is connected.
+                Glider does not provide an operation-history list. New rebalance and withdrawal operations
+                will be tracked here when those flows are connected.
               </p>
             </div>
           </RailCard>
@@ -532,7 +710,7 @@ export const Basket = () => {
         onClose={closeEnrollment}
         onConfirm={() => void confirmEnrollment()}
       />
-      {enrollment.data && (
+      {signedIn && enrollment.data && (
         <FundingSheet
           open={fundingOpen}
           name={name}

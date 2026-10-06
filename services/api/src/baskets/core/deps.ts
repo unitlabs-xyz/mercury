@@ -1,4 +1,8 @@
-import type { ManagedBasketInsights } from "@mercury/types";
+import type {
+  ManagedBasketInsights,
+  ManagedBasketOperation,
+  ManagedBasketPortfolioSnapshot,
+} from "@mercury/types";
 import type {
   BasketDefinition,
   BasketTemplate,
@@ -20,6 +24,23 @@ export interface BasketProvider {
   ): Promise<NonNullable<ManagedBasketInsights["allocation"]>>;
   effectiveSwapFeeBps(id: string): Promise<number | null>;
   portfolios(ownerAccountId: string, strategyId: string): Promise<readonly BasketPortfolio[]>;
+  portfolio(
+    id: string,
+  ): Promise<
+    Pick<
+      ManagedBasketPortfolioSnapshot,
+      "portfolioId" | "ownerAccountId" | "strategyId" | "smartAccounts" | "schedule"
+    >
+  >;
+  positions(
+    id: string,
+  ): Promise<
+    Pick<
+      ManagedBasketPortfolioSnapshot,
+      "portfolioId" | "totalValueUsd" | "inTransitUsd" | "fetchedAt" | "assets" | "warnings"
+    >
+  >;
+  operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
   prepareEnrollment(ownerAccountId: string, strategyId: string): Promise<EnrollmentChallenge>;
   enroll(
     ownerAccountId: string,

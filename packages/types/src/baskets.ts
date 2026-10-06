@@ -101,6 +101,60 @@ export const ManagedBasketPortfolio = z.object({
   smartAccounts: z.array(z.object({ accountId: z.string(), depositAccountId: z.string().optional() })),
 });
 
+/** Live Glider account facts. Values are decimal strings, not basket-token units or P&L. */
+export const ManagedBasketPortfolioSnapshot = ManagedBasketPortfolio.extend({
+  schedule: z
+    .object({
+      status: z.enum(["active", "paused"]),
+      frequency: z.enum(["hourly", "daily", "weekly", "monthly"]).nullable(),
+      intervalMs: z.number().nullable(),
+      nextDueAt: z.string().nullable(),
+      lastRebalanceAt: z.string().nullable(),
+    })
+    .nullable(),
+  totalValueUsd: z.string(),
+  inTransitUsd: z.string(),
+  fetchedAt: z.string(),
+  assets: z.array(
+    z.object({
+      assetId: z.string(),
+      smartAccountId: z.string(),
+      symbol: z.string(),
+      decimals: z.number().int(),
+      balance: z.string(),
+      balanceRaw: z.string(),
+      priceUsd: z.string(),
+      valueUsd: z.string(),
+    }),
+  ),
+  warnings: z.array(
+    z.object({
+      kind: z.enum([
+        "MISSING_SMART_ACCOUNT",
+        "RPC_ERROR",
+        "MISSING_PRICE",
+        "BLOCKLISTED_ASSET",
+        "MISSING_ASSET",
+        "IN_TRANSIT_READ_FAILED",
+      ]),
+      message: z.string(),
+    }),
+  ),
+});
+export type ManagedBasketPortfolioSnapshot = z.infer<typeof ManagedBasketPortfolioSnapshot>;
+
+export const ManagedBasketOperation = z.object({
+  operationId: z.string(),
+  portfolioId: z.string(),
+  kind: z.enum(["withdraw", "rebalance", "bridge", "swap", "deposit", "transfer", "execution", "converge"]),
+  state: z.enum(["accepted", "running", "retrying", "awaiting_user", "completed", "failed", "cancelled"]),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  finishedAt: z.string().nullable(),
+  error: z.string().nullable(),
+});
+export type ManagedBasketOperation = z.infer<typeof ManagedBasketOperation>;
+
 export const BasketEnrollmentAuthorization = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("solana-message"), text: z.string() }),
   z.object({ kind: z.literal("solana-transaction"), transaction: z.string() }),

@@ -52,18 +52,80 @@ export class BasketService {
     private readonly deps: { provider?: BasketProvider; store: BasketStore; funding?: BasketFunding },
   ) {}
 
-  private async templateForEnrollment(slug: string) {
+  private async templateForRead(slug: string) {
     const template = (await this.deps.store.load()).find((item) => item.slug === slug);
-    if (!template?.providerId || template.status === "disabled")
+    if (!template?.providerId)
       throw new BasketEnrollmentError("enrollment_unavailable", 409, "Basket enrollment is unavailable.");
     if (!this.deps.provider)
       throw new BasketEnrollmentError("provider_unavailable", 503, "Glider is not configured.");
     return { template, provider: this.deps.provider };
   }
 
+  private async templateForEnrollment(slug: string) {
+    const resolved = await this.templateForRead(slug);
+    if (resolved.template.status === "disabled")
+      throw new BasketEnrollmentError("enrollment_unavailable", 409, "Basket enrollment is unavailable.");
+    return resolved;
+  }
+
   async enrollment(slug: string, ownerAccountId: string) {
-    const { template, provider } = await this.templateForEnrollment(slug);
+    const { template, provider } = await this.templateForRead(slug);
     return (await provider.portfolios(ownerAccountId, template.providerId!))[0] ?? null;
+  }
+
+  async portfolioSnapshot(slug: string, ownerAccountId: string) {
+    const { template, provider } = await this.templateForRead(slug);
+    const portfolios = await provider.portfolios(ownerAccountId, template.providerId!);
+    const portfolio = portfolios[0];
+    if (!portfolio) return null;
+    if (portfolio.ownerAccountId !== ownerAccountId || portfolio.strategyId !== template.providerId)
+      throw new BasketEnrollmentError(
+        "portfolio_unavailable",
+        409,
+        "Portfolio is unavailable for this wallet.",
+      );
+    const detail = await provider.portfolio(portfolio.portfolioId);
+    if (
+      detail.portfolioId !== portfolio.portfolioId ||
+      detail.ownerAccountId !== ownerAccountId ||
+      detail.strategyId !== template.providerId
+    )
+      throw new BasketEnrollmentError(
+        "portfolio_unavailable",
+        409,
+        "Portfolio is unavailable for this wallet.",
+      );
+    const positions = await provider.positions(portfolio.portfolioId);
+    if (positions.portfolioId !== portfolio.portfolioId)
+      throw new BasketEnrollmentError(
+        "portfolio_unavailable",
+        409,
+        "Portfolio is unavailable for this wallet.",
+      );
+    return { ...detail, ...positions };
+  }
+
+  async operation(slug: string, ownerAccountId: string, operationId: string) {
+    const { template, provider } = await this.templateForRead(slug);
+    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!))[0];
+    if (
+      !portfolio ||
+      portfolio.ownerAccountId !== ownerAccountId ||
+      portfolio.strategyId !== template.providerId
+    )
+      throw new BasketEnrollmentError(
+        "portfolio_unavailable",
+        409,
+        "Portfolio is unavailable for this wallet.",
+      );
+    const operation = await provider.operation(portfolio.portfolioId, operationId);
+    if (operation.portfolioId !== portfolio.portfolioId || operation.operationId !== operationId)
+      throw new BasketEnrollmentError(
+        "operation_unavailable",
+        409,
+        "Operation is unavailable for this wallet.",
+      );
+    return operation;
   }
 
   async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string) {

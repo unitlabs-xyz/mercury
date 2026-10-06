@@ -7,6 +7,7 @@ import type {
   ManagedBasketInsights,
   ManagedBasketTemplate,
   ManagedBasketPortfolio,
+  ManagedBasketPortfolioSnapshot,
   PreparedBasketEnrollment,
 } from "@mercury/types";
 import type { PreparedBasketFunding } from "@mercury/types";
@@ -115,6 +116,28 @@ export const useBasketEnrollment = (slug: string) => {
       slug.length > 0,
     retry: false,
     staleTime: 15_000,
+  });
+};
+
+export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
+  const { ready, authenticated, user } = usePrivy();
+  const { identityToken } = useIdentityToken();
+  const { wallets } = useWallets();
+  return useQuery({
+    queryKey: ["api", "basket-portfolio", slug, user?.id, wallets[0]?.address],
+    queryFn: async () =>
+      (
+        await apiFetch<{ portfolio: ManagedBasketPortfolioSnapshot | null }>(
+          `/v1/basket-templates/${encodeURIComponent(slug)}/portfolio`,
+        )
+      ).portfolio,
+    enabled:
+      enrolled &&
+      basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
+      Boolean(wallets[0]?.address),
+    retry: false,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 };
 
@@ -243,6 +266,7 @@ export const useBasketFundingAction = (slug: string) => {
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] });
+      void qc.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
     },
   });
   return {

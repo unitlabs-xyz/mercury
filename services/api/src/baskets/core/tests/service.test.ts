@@ -50,6 +50,15 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   portfolios: async () => {
     throw new Error("unexpected portfolio read");
   },
+  portfolio: async () => {
+    throw new Error("unexpected portfolio detail read");
+  },
+  positions: async () => {
+    throw new Error("unexpected positions read");
+  },
+  operation: async () => {
+    throw new Error("unexpected operation read");
+  },
   prepareEnrollment: async () => {
     throw new Error("unexpected enrollment prepare");
   },
@@ -380,4 +389,75 @@ it("reports a failed transfer simulation without presenting it as an enrollment 
     code: "funding_preflight_failed",
     status: 422,
   });
+});
+
+it("reads balances and schedule only for the enrolled owner", async () => {
+  const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:owner";
+  const service = new BasketService({
+    store: store({ ...basket, status: "disabled" }),
+    provider: provider({
+      portfolios: async () => [
+        { portfolioId: "p-1", ownerAccountId: owner, strategyId: "remote-1", smartAccounts: [] },
+      ],
+      portfolio: async () => ({
+        portfolioId: "p-1",
+        ownerAccountId: owner,
+        strategyId: "remote-1",
+        smartAccounts: [],
+        schedule: {
+          status: "active",
+          frequency: "daily",
+          intervalMs: 86_400_000,
+          nextDueAt: "2026-10-07T00:00:00Z",
+          lastRebalanceAt: null,
+        },
+      }),
+      positions: async () => ({
+        portfolioId: "p-1",
+        totalValueUsd: "50.000000",
+        inTransitUsd: "0",
+        fetchedAt: "2026-10-06T00:00:00Z",
+        assets: [
+          {
+            assetId:
+              "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            smartAccountId: "solana:account",
+            symbol: "USDC",
+            decimals: 6,
+            balance: "50",
+            balanceRaw: "50000000",
+            priceUsd: "1",
+            valueUsd: "50",
+          },
+        ],
+        warnings: [],
+      }),
+    }),
+  });
+  expect(await service.portfolioSnapshot("nvidia", owner)).toMatchObject({
+    portfolioId: "p-1",
+    totalValueUsd: "50.000000",
+    schedule: { status: "active" },
+    assets: [{ symbol: "USDC", balance: "50" }],
+  });
+});
+
+it("rejects a provider portfolio belonging to another owner before reading its balances", async () => {
+  let readPositions = false;
+  const service = new BasketService({
+    store: store(basket),
+    provider: provider({
+      portfolios: async () => [
+        { portfolioId: "p-1", ownerAccountId: "other", strategyId: "remote-1", smartAccounts: [] },
+      ],
+      positions: async () => {
+        readPositions = true;
+        throw new Error("must not read");
+      },
+    }),
+  });
+  await expect(service.portfolioSnapshot("nvidia", "owner")).rejects.toMatchObject({
+    code: "portfolio_unavailable",
+  });
+  expect(readPositions).toBe(false);
 });

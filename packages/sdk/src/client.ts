@@ -4,6 +4,8 @@ import {
   Decision,
   MarketStatus,
   ManagedBasketPortfolio,
+  ManagedBasketPortfolioSnapshot,
+  ManagedBasketOperation,
   PreparedBasketEnrollment,
   SubmitBasketEnrollment,
   PrepareBasketFunding,
@@ -137,6 +139,18 @@ export class MercuryClient {
     this.call(
       `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
       z.object({ portfolio: ManagedBasketPortfolio.nullable() }),
+    );
+
+  basketPortfolio = (slug: string) =>
+    this.call(
+      `/v1/basket-templates/${encodeURIComponent(slug)}/portfolio`,
+      z.object({ portfolio: ManagedBasketPortfolioSnapshot.nullable() }),
+    );
+
+  basketOperation = (slug: string, operationId: string) =>
+    this.call(
+      `/v1/basket-templates/${encodeURIComponent(slug)}/operations/${encodeURIComponent(operationId)}`,
+      z.object({ operation: ManagedBasketOperation }),
     );
 
   prepareBasketEnrollment = (slug: string) =>

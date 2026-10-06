@@ -12,6 +12,74 @@ const remote = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 describe("GliderClient", () => {
+  it("reads live portfolio balances, schedule, warnings, and operation state", async () => {
+    const fetcher: typeof fetch = async (input) => {
+      const path = new URL((input as Request).url).pathname;
+      if (path.endsWith("/positions"))
+        return json({
+          success: true,
+          data: {
+            portfolioId: "p-1",
+            totalValueUsd: "50.000000",
+            inTransit: { totalUsd: "0", items: [] },
+            fetchedAt: "2026-10-06T00:00:00Z",
+            smartAccounts: [],
+            assets: [
+              {
+                assetId: NVDA_ID,
+                smartAccountId: "solana:account",
+                symbol: "NVDA",
+                decimals: 6,
+                balance: "1",
+                balanceRaw: "1000000",
+                priceUsd: "50",
+                valueUsd: "50",
+              },
+            ],
+            warnings: [{ kind: "MISSING_PRICE", message: "another asset has no price" }],
+          },
+        });
+      if (path.endsWith("/operations/op-1"))
+        return json({
+          success: true,
+          data: {
+            operationId: "op-1",
+            portfolioId: "p-1",
+            kind: "rebalance",
+            state: "running",
+            createdAt: "2026-10-06T00:00:00Z",
+            updatedAt: "2026-10-06T00:00:01Z",
+            finishedAt: null,
+            error: null,
+          },
+        });
+      return json({
+        success: true,
+        data: {
+          portfolioId: "p-1",
+          ownerAccountId: "solana:owner",
+          strategyId: "remote-1",
+          smartAccounts: [],
+          schedule: {
+            status: "active",
+            frequency: "daily",
+            intervalMs: 86_400_000,
+            nextDueAt: "2026-10-07T00:00:00Z",
+            lastRebalanceAt: null,
+          },
+        },
+      });
+    };
+    const client = new GliderClient("test-key", fetcher);
+    expect((await client.portfolio("p-1")).schedule?.nextDueAt).toBe("2026-10-07T00:00:00Z");
+    expect(await client.positions("p-1")).toMatchObject({
+      totalValueUsd: "50.000000",
+      inTransitUsd: "0",
+      assets: [{ balanceRaw: "1000000" }],
+      warnings: [{ kind: "MISSING_PRICE" }],
+    });
+    expect(await client.operation("p-1", "op-1")).toMatchObject({ kind: "rebalance", state: "running" });
+  });
   it("enrolls a Solana owner with the stage-one transaction and its exact flow", async () => {
     const calls: { path: string; body: unknown }[] = [];
     const fetcher: typeof fetch = async (input) => {
@@ -19,30 +87,63 @@ describe("GliderClient", () => {
       const path = new URL(request.url).pathname;
       const body = request.method === "POST" ? JSON.parse(await request.text()) : null;
       calls.push({ path, body });
-      if (path.endsWith("/enroll/signature")) return json({ success: true, data: {
-        flowId: "flow-1", accountIndex: "0", agentAccountId: "solana:agent",
-        message: { kind: "solana-message", text: "Sign me" }, solanaTransaction: "unsigned-base64",
-      } });
-      return json({ success: true, data: {
-        portfolioId: "portfolio-1", strategyId: "strategy-1", portfolioName: null,
-        smartAccounts: [{ accountId: "solana:deposit", depositAccountId: "solana:deposit" }],
-      } });
+      if (path.endsWith("/enroll/signature"))
+        return json({
+          success: true,
+          data: {
+            flowId: "flow-1",
+            accountIndex: "0",
+            agentAccountId: "solana:agent",
+            message: { kind: "solana-message", text: "Sign me" },
+            solanaTransaction: "unsigned-base64",
+          },
+        });
+      return json({
+        success: true,
+        data: {
+          portfolioId: "portfolio-1",
+          strategyId: "strategy-1",
+          portfolioName: null,
+          smartAccounts: [{ accountId: "solana:deposit", depositAccountId: "solana:deposit" }],
+        },
+      });
     };
     const client = new GliderClient("test-key", fetcher);
     const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:owner";
     const challenge = await client.prepareEnrollment(owner, "strategy-1");
     expect(challenge.solanaTransaction).toBe("unsigned-base64");
-    expect(await client.enroll(owner, "strategy-1", challenge, "signed-base64", "Magnificent Seven")).toEqual({
-      portfolioId: "portfolio-1", ownerAccountId: owner, strategyId: "strategy-1",
-      smartAccounts: [{ accountId: "solana:deposit", depositAccountId: "solana:deposit" }],
-    });
+    expect(await client.enroll(owner, "strategy-1", challenge, "signed-base64", "Magnificent Seven")).toEqual(
+      {
+        portfolioId: "portfolio-1",
+        ownerAccountId: owner,
+        strategyId: "strategy-1",
+        smartAccounts: [{ accountId: "solana:deposit", depositAccountId: "solana:deposit" }],
+      },
+    );
     expect(calls).toEqual([
-      { path: "/v2/enroll/signature", body: { ownerAccountId: owner, strategyId: "strategy-1", chainIds: [1399811149], accountType: "ECDSA" } },
-      { path: "/v2/enroll", body: {
-        ownerAccountId: owner, strategyId: "strategy-1", chainIds: [1399811149], accountType: "ECDSA",
-        flowId: "flow-1", accountIndex: "0", agentAccountId: "solana:agent",
-        signedSolanaTransaction: "signed-base64", portfolioName: "Magnificent Seven",
-      } },
+      {
+        path: "/v2/enroll/signature",
+        body: {
+          ownerAccountId: owner,
+          strategyId: "strategy-1",
+          chainIds: [1399811149],
+          accountType: "ECDSA",
+        },
+      },
+      {
+        path: "/v2/enroll",
+        body: {
+          ownerAccountId: owner,
+          strategyId: "strategy-1",
+          chainIds: [1399811149],
+          accountType: "ECDSA",
+          flowId: "flow-1",
+          accountIndex: "0",
+          agentAccountId: "solana:agent",
+          signedSolanaTransaction: "signed-base64",
+          portfolioName: "Magnificent Seven",
+        },
+      },
     ]);
   });
   it("requests a weighted Solana allocation breakdown and resolves the inherited swap fee", async () => {
