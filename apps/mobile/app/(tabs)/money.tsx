@@ -16,10 +16,9 @@ const num = (v: string | number | null | undefined): number => Number(v ?? 0);
  * you can spend on shares, its yield and the verbs, with the figures that
  * follow from it in a grey panel underneath; then where borrowing stands.
  *
- * Borrowing is read here and acted on in the web app for now: the phone shows
- * the loan, its room and how far prices could fall, which is what someone
- * checks on a phone, and leaves pledging and repaying to the screen built for
- * it rather than offering buttons that do not lead anywhere.
+ * Borrowing is read here — the loan, its room and how far prices could fall,
+ * which is what someone checks on a phone — and acted on in the borrow screen
+ * this card opens.
  */
 export default function Money() {
   const insets = useSafeAreaInsets();
@@ -186,9 +185,7 @@ const Borrowing = ({
           </View>
           <View style={s.noteWrap}>
             {borrow.health === "margin_call" || borrow.health === "liquidation" ? (
-              <Note tone="down">
-                Your loan is close to its limit. Repay or add collateral in the web app now.
-              </Note>
+              <Note tone="down">Your loan is close to its limit. Repay or add collateral now.</Note>
             ) : (
               <RNText style={s.muted}>
                 See what you could borrow, and how a loan would change your account.
