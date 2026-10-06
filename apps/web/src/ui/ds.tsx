@@ -403,6 +403,29 @@ export const GlideRows = ({
   );
 };
 
+/** Column labels and gliding rows shared by the Invest and Baskets lists. */
+export const GlideTable = ({
+  columns,
+  headings,
+  children,
+  footer,
+  minWidth = "min-w-[900px]",
+}: {
+  columns: string;
+  headings: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+  minWidth?: string;
+}) => (
+  <div className={minWidth}>
+    <div className={`grid ${columns} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
+      {headings}
+    </div>
+    <GlideRows as="ul">{children}</GlideRows>
+    {footer}
+  </div>
+);
+
 /** A 6 × 12 chevron at 1.8, pagination's Prev and Next in allstocks.svg. */
 const PageChevron = ({ back }: { back?: boolean }) => (
   <svg viewBox="0 0 8 14" width={8} height={14} fill="none" aria-hidden className="shrink-0">

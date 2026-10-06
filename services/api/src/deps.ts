@@ -51,6 +51,10 @@ import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readHoldings, readLatestDebt, readSnapshots } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
+import { BasketService } from "./baskets/core/service.js";
+import { GliderClient } from "./baskets/glider/client.js";
+import { JsonBasketStore } from "./baskets/glider/store.js";
+import { SolanaBasketFunding } from "./baskets/glider/funding.js";
 
 export interface Deps {
   readonly registry: TokenRegistry;
@@ -76,6 +80,8 @@ export interface Config {
   /** Required. Nothing works without these. */
   readonly databaseUrl: string;
   readonly privyAppId: string;
+  /** Optional. Enables one Glider strategy-catalog reconciliation at startup. */
+  readonly gliderApiKey?: string;
   /** Resend, for the loan watcher. Unset means it warns nobody and says so. */
   readonly resendApiKey?: string;
   readonly notifyFrom: string;
@@ -123,6 +129,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     databaseUrl: required(env, "DATABASE_URL"),
     privyAppId: required(env, "PRIVY_APP_ID"),
+    ...(env["GLIDER_API_KEY"] ? { gliderApiKey: env["GLIDER_API_KEY"] } : {}),
     ...(env["RESEND_API_KEY"] ? { resendApiKey: env["RESEND_API_KEY"] } : {}),
     notifyFrom: env["NOTIFY_FROM"] ?? "Mercury <alerts@mercury.invalid>",
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
@@ -134,6 +141,23 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["WAITLIST_ADMIN_TOKEN"] ? { waitlistAdminToken: env["WAITLIST_ADMIN_TOKEN"] } : {}),
     ...(env["WAITLIST_PUBLIC_URL"] ? { waitlistPublicUrl: env["WAITLIST_PUBLIC_URL"] } : {}),
   };
+}
+
+/** Reconcile optional Glider strategies without affecting unrelated API startup. */
+export async function syncConfiguredCatalog(config: Config): Promise<void> {
+  if (config.gliderApiKey === undefined) return;
+  try {
+    const service = new BasketService({
+      provider: new GliderClient(config.gliderApiKey),
+      store: new JsonBasketStore(config.databaseUrl),
+    });
+    const result = await service.sync();
+    console.log(
+      `Glider catalog: ${result.recorded} recorded, ${result.reused} reused, ${result.created} created`,
+    );
+  } catch (error: unknown) {
+    console.error("Glider catalog sync failed; other API features remain available:", error);
+  }
 }
 
 /**
@@ -214,6 +238,7 @@ class JupiterTriggersNotYet implements TriggerSource {
 }
 
 export interface ReadDeps {
+  readonly basketTemplates: BasketService;
   readonly instruments: InstrumentDeps;
   readonly portfolio: PortfolioDeps;
   readonly money: MoneyDeps;
@@ -247,12 +272,24 @@ export function buildReadDeps(
   deps: Deps,
   config: Pick<
     Config,
-    "solanaRpcUrl" | "waitlistAdminToken" | "waitlistPublicUrl" | "resendApiKey" | "notifyFrom"
+    | "databaseUrl"
+    | "gliderApiKey"
+    | "solanaRpcUrl"
+    | "waitlistAdminToken"
+    | "waitlistPublicUrl"
+    | "resendApiKey"
+    | "notifyFrom"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
 ): ReadDeps {
   return {
+    basketTemplates: new BasketService({
+      store: new JsonBasketStore(config.databaseUrl, undefined, db),
+      funding: new SolanaBasketFunding(config.solanaRpcUrl),
+      history: deps.history,
+      ...(config.gliderApiKey === undefined ? {} : { provider: new GliderClient(config.gliderApiKey) }),
+    }),
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),

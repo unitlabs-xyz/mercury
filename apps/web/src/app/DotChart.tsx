@@ -86,6 +86,12 @@ const price = (n: number, step: number) =>
     maximumFractionDigits: digitsFor(step),
   }).format(n);
 
+const percent = (n: number, digits = 2) =>
+  `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)
+    .toFixed(digits)
+    .replace(/\.0+$/, "")
+    .replace(/(\.\d*?)0+$/, "$1")}%`;
+
 /** "Sat 19, 14:00" → "Sat 19": the axis names days; the tooltip has the hour. */
 const day = (label: string) => label.split(",")[0] ?? label;
 
@@ -149,8 +155,9 @@ export const DotChart = ({
    * "price": the price itself, on round price levels (a stock). Colour follows
    * the question: the change scale is green above $0 and red below; the price
    * scale is green where the line rises and red where it falls.
+   * "percent": cumulative modeled return, with a percentage axis and tooltip.
    */
-  scale?: "change" | "price";
+  scale?: "change" | "price" | "percent";
 }) => {
   const [hot, setHot] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -335,11 +342,16 @@ export const DotChart = ({
   // otherwise empty scale.
   const step = niceStep(span || 1);
   // Ticks are placed in change space; on a price scale they fall on round prices.
-  const base = scale === "price" ? (series[0]?.value ?? 0) : 0;
+  const base = scale === "price" || scale === "percent" ? (series[0]?.value ?? 0) : 0;
   const ticks: number[] = [];
   for (let t = Math.ceil((lo + base) / step) * step; t <= hi + base + 1e-9; t += step)
     ticks.push(Math.round((t - base) * 1e6) / 1e6);
-  const axisLabel = (t: number) => (scale === "price" ? price(t + base, step) : tick(t, step));
+  const axisLabel = (t: number) =>
+    scale === "price"
+      ? price(t + base, step)
+      : scale === "percent"
+        ? percent(t + base, digitsFor(step))
+        : tick(t, step);
   // The label column only ever widens: a narrower set of labels on another range
   // would widen the dot grid by a column, and a new grid re-places every dot
   // instead of letting them glide.
@@ -412,9 +424,11 @@ export const DotChart = ({
           gridAutoFlow: "column",
         }}
         role="img"
-        aria-label={`${scale === "price" ? "Price" : "Change in value"} over ${label}: from ${usd(series[0]?.value)} to ${usd(
-          series[series.length - 1]?.value,
-        )}`}
+        aria-label={
+          scale === "percent"
+            ? `Modeled return over ${label}: from ${percent(series[0]?.value ?? 0)} to ${percent(series[series.length - 1]?.value ?? 0)}`
+            : `${scale === "price" ? "Price" : "Change in value"} over ${label}: from ${usd(series[0]?.value)} to ${usd(series[series.length - 1]?.value)}`
+        }
         onPointerLeave={() => setHot(null)}
       >
         {/* The empty matrix: fixed, it never animates. */}
@@ -448,7 +462,7 @@ export const DotChart = ({
               const leaves = !used && wasUsed;
               // An account's change: green above where the range began, red below it.
               // A stock's price: green where it rises, red where it falls.
-              const up = scale === "price" ? (rising[i] ?? true) : valueOfRow(r) >= 0;
+              const up = scale === "price" || scale === "percent" ? (rising[i] ?? true) : valueOfRow(r) >= 0;
               return (
                 <span
                   key={`m${i}-${k}`}
@@ -511,11 +525,13 @@ export const DotChart = ({
                   transform: `translate(${right ? "12px" : "calc(-100% - 12px)"}, -50%)`,
                 }}
               >
-                <p className="text-[14px] leading-none font-medium text-ds-ink">{usd(hotCol.value)}</p>
+                <p className="text-[14px] leading-none font-medium text-ds-ink">
+                  {scale === "percent" ? percent(hotCol.value) : usd(hotCol.value)}
+                </p>
                 <p className="mt-[6px] text-[12px] leading-none text-ds-muted">
                   {hotCol.label} ·{" "}
                   <span className={hotCol.change >= 0 ? "text-ds-up" : "text-ds-down"}>
-                    {usdSigned(hotCol.change)}
+                    {scale === "percent" ? percent(hotCol.change) : usdSigned(hotCol.change)}
                   </span>
                 </p>
               </div>

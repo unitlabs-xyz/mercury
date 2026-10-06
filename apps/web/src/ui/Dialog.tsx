@@ -10,6 +10,11 @@ import { MercuryMark } from "./Logo";
 const useOverlay = (open: boolean, onClose: () => void) => {
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
+  const close = useRef(onClose);
+
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -17,7 +22,7 @@ const useOverlay = (open: boolean, onClose: () => void) => {
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        close.current();
         return;
       }
       if (e.key !== "Tab" || !panel.current) return;
@@ -44,7 +49,7 @@ const useOverlay = (open: boolean, onClose: () => void) => {
       document.body.style.overflow = overflow;
       (opener.current as HTMLElement | null)?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return panel;
 };

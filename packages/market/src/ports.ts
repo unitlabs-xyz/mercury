@@ -49,6 +49,8 @@ export interface TokenPrice {
   readonly usdPricePerToken: Decimal;
   /** What one real share costs. Null for a token with no underlying quote. */
   readonly pricePerShare: Decimal | null;
+  /** Market cap of the underlying company, not the Solana token. */
+  readonly underlyingMarketCapUsd?: Decimal | null;
   readonly changePct24h: Decimal | null;
   readonly liquidityUsd: Decimal;
   readonly multiplier: Decimal;

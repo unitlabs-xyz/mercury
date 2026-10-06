@@ -67,3 +67,9 @@ describe("a loan in the feed", () => {
     }
   });
 });
+
+it("treats a basket exit as an internal account movement, not spending", () => {
+  for (const kind of ["withdraw_in_kind", "liquidate_to_usdc"]) {
+    expect(toEvent(row({ kind, amountUsd: "5" }))).toMatchObject({ kind: "basket", flow: null });
+  }
+});

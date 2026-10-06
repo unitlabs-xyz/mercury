@@ -1,0 +1,26 @@
+# Baskets phase — spec
+
+## Product
+
+Web users discover a Solana strategy template, enroll in their own Glider portfolio, deposit USDC, inspect holdings and operations, rebalance, and withdraw assets in kind or liquidate to USDC. These are **user-owned smart-account portfolios**, not pooled basket tokens. Mobile is out of scope.
+
+The [catalog](../../services/api/catalog.json) is the versioned source for 22 enabled templates, their Glider and source IDs, weights, and Solana Ondo mints. All 22 were created and read back, and product confirmation of Glider support is the availability criterion. A funded lifecycle test of each exact allocation is not required before enabling it. If a strategy later fails, disable it rather than silently replacing holdings.
+
+The templates derive from 21 BNB and one Base public Glider strategies; none of those sources is a Solana portfolio. The Base strategy is a separately named same-theme variant, not a Bitwise product. Four investor trackers are explicitly labeled **Daily Variant** because this Glider tenant rejects cron schedules; all 22 strategies rebalance daily. Some assets are tokenized ETFs or commodities, so describe the catalog as tokenized assets, not stocks only. Glider can compute a target-allocation TWR curve for each newly created Solana strategy using historical asset prices; label this **modeled strategy performance**, never realized user or funded-portfolio performance. Do not substitute source-chain returns or promotional yields. Glider support does not guarantee executable liquidity or realized returns.
+
+Catalog tags drive the web discovery shelves: exactly one theme or `pros` grouping per strategy, with an optional editorial `featured` tag. Featured is not a claim of measured popularity.
+
+## Boundaries
+
+- [Core types and ports](../../services/api/src/baskets/core/deps.ts), [BasketService](../../services/api/src/baskets/core/service.ts), [OpenAPI-typed Glider client](../../services/api/src/baskets/glider/client.ts), and [catalog store](../../services/api/src/baskets/glider/store.ts) own template sync and discovery. Startup composition is in [deps.ts](../../services/api/src/deps.ts). Keep provider I/O out of core.
+- Existing [Symmetry baskets](../../services/api/src/baskets.ts) and [basket types](../../packages/types/src/baskets.ts) assume a pooled token. The [web discovery](../../apps/web/src/app/Baskets.tsx) and [detail](../../apps/web/src/app/Basket.tsx) now read Glider templates instead; do not reuse synthetic NAV as portfolio performance.
+- The [buy/order API](../../services/api/src/app.ts), [typed order contracts](../../packages/types/src/orders.ts), [client sequence](../../packages/view/src/order.ts), and [web signing wrapper](../../apps/web/src/api/orders.ts) are references for request boundaries and wallet-signing UX, not Glider execution semantics. Glider enrollment and portfolio operations require their own typed contracts and status handling.
+- Use authenticated owner identity, Glider smart-account IDs, and operation state as the authority for portfolio actions. Add persistence only for data Glider cannot supply or for an explicit audit requirement; avoid duplicating provider positions or catalog allocations in Postgres.
+- Solana funding uses the enrolled portfolio's Glider `accountId` (or `depositAccountId` when supplied) as the USDC destination. The prior NVDAx/TSLAx pilot funded an `accountId` without `depositAccountId`, then rebalanced and exited successfully. Prepare an owner-paid, simulated transfer; show the exact amount and destination before wallet signing. A confirmed transfer is not a confirmed investment.
+- The main Portfolio should count active Glider smart-account value and show grouped basket holdings separately from wallet holdings. After an exit settles, the received assets belong to the wallet side; do not count the same transfer in both places or invent cost basis for externally received tokens. Keep basket actions and neutral account-to-account movements in the existing durable activity model.
+
+## Release gate
+
+All 22 templates are enabled based on Glider support and confirmed provider records. Individual real-funded round trips are follow-up checks, not an availability gate; when performed, verify owner balances and operation completion, not only a successful prepare response. Solana USDC is `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`; SOL may be needed for fees/rent. A prior NVDAx/TSLAx pilot proves the general Glider flow, not execution quality for every template. Withdrawal can leave dust, so expose both in-kind and liquidation paths.
+
+Future tasks are designed and approved inline; add only durable decisions to this phase spec. Do not create dated task-level specs.

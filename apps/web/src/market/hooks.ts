@@ -153,6 +153,8 @@ export const useInstruments = (tickers: readonly string[]) => {
       ).instruments.map(toInstrument),
     enabled: key.length > 0,
     staleTime: 60_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 };
 
@@ -254,6 +256,8 @@ export const useHistory = (ticker: string, span: Span) =>
     enabled: ticker.length > 0,
     // Intraday spans move while someone watches; the rest settle once a day.
     staleTime: span === "1D" || span === "1W" ? 60_000 : 10 * 60 * 1000,
+    refetchInterval: span === "1D" || span === "1W" ? 60_000 : 10 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
 /** The spans the range switch offers. A subset of what the API serves. */
@@ -291,6 +295,8 @@ export const useHistories = (tickers: readonly string[], span: Span) => {
     },
     enabled: key.length > 0,
     staleTime: span === "1D" || span === "1W" ? 60_000 : 10 * 60 * 1000,
+    refetchInterval: span === "1D" || span === "1W" ? 60_000 : 10 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 };
 
@@ -301,6 +307,7 @@ export const usePrices = (mints: readonly string[]) =>
     enabled: mints.length > 0,
     refetchInterval: 20_000,
     staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 
 /** Collateral factors and the borrow rate. Both move, neither moves fast. */

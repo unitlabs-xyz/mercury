@@ -29,11 +29,16 @@ export interface ActivityItem {
 const KIND: Record<string, EventKind> = {
   transfer_in: "receive",
   transfer_out: "send",
+  basket_funding: "send",
   dividend: "dividend",
   interest: "interest",
   buy: "buy",
   sell: "sell",
   basket: "basket",
+  enroll: "basket",
+  rebalance: "basket",
+  withdraw_in_kind: "basket",
+  liquidate_to_usdc: "basket",
   queued: "queued",
   borrow: "borrow",
   repay: "repay",
@@ -72,8 +77,14 @@ export const toEvent = (i: ActivityItem): Event => {
         ? null
         : Math.abs(Number(i.amountUsd)).toLocaleString("en-US", { style: "currency", currency: "USD" }),
     flow:
-      FLOW[kind] ??
-      (i.amountUsd === null || Number(i.amountUsd) === 0 ? null : Number(i.amountUsd) < 0 ? "out" : "in"),
+      i.kind === "basket_funding" || i.kind === "withdraw_in_kind" || i.kind === "liquidate_to_usdc"
+        ? null
+        : (FLOW[kind] ??
+          (i.amountUsd === null || Number(i.amountUsd) === 0
+            ? null
+            : Number(i.amountUsd) < 0
+              ? "out"
+              : "in")),
     details: [],
     ...(i.txSignature ? { signature: i.txSignature } : {}),
     ...(i.mint ? { mint: i.mint } : {}),

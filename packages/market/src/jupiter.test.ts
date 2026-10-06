@@ -35,6 +35,7 @@ describe("JupiterMarket.pricesFor", () => {
     const price = board.get(NVDAX_MINT);
     expect(price!.usdPricePerToken.toFixed()).toBe(String(nvda.usdPrice));
     expect(price!.pricePerShare!.toFixed()).toBe(String(nvda.stockData!.price));
+    expect(price!.underlyingMarketCapUsd!.toFixed()).toBe("5526523890000");
   });
 
   it("asks for every mint in one request", async () => {
@@ -135,7 +136,9 @@ describe("JupiterMarket.pricesFor", () => {
       registry: registry([NVDAX]),
       fetch: fakeFetch({ "/price/v3": priceOf(NVDAX_MINT, { usdPrice: 10, decimals: 8 }) }),
     });
-    expect((await m.pricesFor([NVDAX_MINT])).get(NVDAX_MINT)!.multiplier).toEqual(D(1));
+    const price = (await m.pricesFor([NVDAX_MINT])).get(NVDAX_MINT)!;
+    expect(price.multiplier).toEqual(D(1));
+    expect(price.underlyingMarketCapUsd).toBeNull();
   });
 
   it("skips a mint Jupiter answered null for, rather than pricing it at zero", async () => {

@@ -85,6 +85,20 @@
       "when": 1791139445224,
       "tag": "0011_waitlist_card",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791260000000,
+      "tag": "0012_basket_action",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791270000000,
+      "tag": "0013_basket_activity",
+      "breakpoints": true
     }
   ]
 }

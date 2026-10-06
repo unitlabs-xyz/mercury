@@ -3,7 +3,7 @@ import { EVENT_ICON } from "./portfolio/Feed";
 
 /** Native SOL has no mint of its own; the feed records it under wrapped SOL. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
-const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 /*
  * The two mints that are money rather than a holding, so they never resolve to
@@ -24,6 +24,28 @@ const MONEY: Record<string, { src: string; bare: boolean }> = {
     bare: false,
   },
 };
+
+/** The same Solana USDC coin in activity and balance lists. */
+export const UsdcMark = ({ size = 36, src = MONEY[USDC_MINT]!.src }: { size?: 32 | 36; src?: string }) => (
+  <span className="relative shrink-0">
+    <img
+      src={src}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      className={`${size === 32 ? "size-8" : "size-9"} rounded-full bg-page object-cover`}
+    />
+    <img
+      src="/logos/solana.svg"
+      alt=""
+      width={16}
+      height={16}
+      loading="lazy"
+      className="absolute -right-px -bottom-px size-4 rounded-full bg-white p-[3px] ring-2 ring-white"
+    />
+  </span>
+);
 
 /**
  * What a row is about, at a glance: the stock's own mark for a trade, the
@@ -66,19 +88,7 @@ export const ActivityMark = ({ event }: { event: Event }) => {
    * row turning white on hover.
    */
   if (event.mint === USDC_MINT) {
-    return (
-      <span className="relative shrink-0">
-        {mark}
-        <img
-          src="/logos/solana.svg"
-          alt=""
-          width={16}
-          height={16}
-          loading="lazy"
-          className="absolute -right-px -bottom-px size-4 rounded-full bg-white p-[3px] ring-2 ring-white"
-        />
-      </span>
-    );
+    return <UsdcMark src={src} />;
   }
 
   return <span className="shrink-0">{mark}</span>;
