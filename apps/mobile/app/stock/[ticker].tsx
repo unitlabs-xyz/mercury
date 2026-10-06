@@ -25,6 +25,8 @@ import {
   type Span,
   type Wrapper,
 } from "../../src/api";
+import { Haptics } from "../../src/haptics";
+import { toggleWatch, useWatchlist } from "../../src/watchlist";
 import { BorrowCard } from "../../src/stock/BorrowCard";
 import { ExposureCard } from "../../src/stock/ExposureCard";
 import { color, font, radius, space } from "../../src/theme";
@@ -55,6 +57,7 @@ export default function Stock() {
   const i = page.data?.instrument;
   const held = (portfolio.data?.holdings ?? []).find((h) => h.ticker === t);
   const exposure = useExposure(t, held !== undefined);
+  const saved = useWatchlist().includes(t);
 
   const points = history.data?.points ?? [];
   const values = points.map(([, p]) => Number(p));
@@ -86,11 +89,20 @@ export default function Stock() {
       <SafeAreaView edges={["top"]} style={s.fill}>
         <View style={s.nav}>
           <IconButton icon="chevronRight" rotate="180deg" label="Back" onPress={() => router.back()} />
-          {i !== undefined && (
-            <RNText style={s.navTitle} numberOfLines={1}>
-              {i.name}
-            </RNText>
-          )}
+          <RNText style={s.navTitle} numberOfLines={1}>
+            {i?.name ?? ""}
+          </RNText>
+          {/* Saved, it turns dark: the state is the button's face, as a
+              pressed toggle's is, rather than a second glyph to learn. */}
+          <IconButton
+            icon="bookmark"
+            label={saved ? `Remove ${i?.name ?? t} from watchlist` : `Save ${i?.name ?? t} to watchlist`}
+            variant={saved ? "primary" : "secondary"}
+            onPress={() => {
+              void Haptics.selectionAsync();
+              toggleWatch(t);
+            }}
+          />
         </View>
 
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>

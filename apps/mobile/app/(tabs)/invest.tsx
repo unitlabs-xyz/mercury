@@ -27,11 +27,16 @@ import {
   type Sort,
 } from "../../src/invest/filters";
 import { color, font, radius, space } from "../../src/theme";
+import { useWatchlist } from "../../src/watchlist";
 
-const SHELVES: readonly { key: Shelf; label: string }[] = [
+/* The server's three shelves, and the one this phone keeps: what was saved. */
+type View_ = Shelf | "saved";
+
+const SHELVES: readonly { key: View_; label: string }[] = [
   { key: "featured", label: "Featured" },
   { key: "movers", label: "Movers" },
   { key: "popular", label: "Popular" },
+  { key: "saved", label: "Saved" },
 ];
 
 /** The logo's diameter, as everywhere else a row is led by one. */
@@ -48,7 +53,8 @@ const SESSION: Record<string, string> = {
 export default function Invest() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [shelf, setShelf] = useState<Shelf>("featured");
+  const [shelf, setShelf] = useState<View_>("featured");
+  const saved = useWatchlist();
   const [query, setQuery] = useState("");
   /* Range, sector, order and "owned only" live in the filter sheet, a separate
      route, so they are kept in a store both can reach. */
@@ -63,9 +69,13 @@ export default function Invest() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const list = useInstruments(shelf, term);
+  /* Saved reads the whole shelf of what we support and keeps the saved ones. */
+  const list = useInstruments(shelf === "saved" ? "featured" : shelf, term);
   const portfolio = usePortfolio();
-  const instruments = useMemo(() => list.data?.instruments ?? [], [list.data]);
+  const instruments = useMemo(() => {
+    const all = list.data?.instruments ?? [];
+    return shelf === "saved" && term.length === 0 ? all.filter((i) => saved.includes(i.ticker)) : all;
+  }, [list.data, shelf, saved, term]);
 
   const owned = useMemo(
     () => new Set((portfolio.data?.holdings ?? []).map((h) => h.ticker)),
@@ -105,7 +115,7 @@ export default function Invest() {
   }, [sectors, shown.length]);
 
   /* A sector chosen on one shelf may not exist on the next. */
-  const pickShelf = (next: Shelf) => {
+  const pickShelf = (next: View_) => {
     setShelf(next);
     if (sector !== "all") setFilters({ sector: "all" });
   };
@@ -208,16 +218,20 @@ export default function Invest() {
               <Text variant="label">
                 {searching
                   ? `Nothing matching "${term}"`
-                  : instruments.length > 0
-                    ? "Nothing matches these filters"
-                    : "No stocks to show"}
+                  : shelf === "saved" && saved.length === 0
+                    ? "Nothing saved yet"
+                    : instruments.length > 0
+                      ? "Nothing matches these filters"
+                      : "No stocks to show"}
               </Text>
               <Text variant="small" tone="muted">
                 {searching
                   ? "Try a ticker, or part of a company's name."
-                  : instruments.length > 0
-                    ? "Clear them, or choose a different sector."
-                    : "This usually means we could not reach the market."}
+                  : shelf === "saved" && saved.length === 0
+                    ? "Tap the bookmark on any stock to keep it here."
+                    : instruments.length > 0
+                      ? "Clear them, or choose a different sector."
+                      : "This usually means we could not reach the market."}
               </Text>
             </View>
           ) : (
@@ -236,7 +250,7 @@ export default function Invest() {
 
         {/* The web says this under its screener, and it is the one thing a
             short list here needs explaining. */}
-        {!searching && !waiting && instruments.length > 0 && (
+        {!searching && !waiting && shelf !== "saved" && instruments.length > 0 && (
           <Text variant="small" tone="muted" style={s.footnote}>
             Showing the stocks with pools deep enough for a normal order. Search finds any other tokenised
             stock we support.
