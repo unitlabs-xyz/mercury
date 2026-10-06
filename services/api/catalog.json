@@ -153,7 +153,7 @@
       "name": "Mercury Solana - Magnificent Seven",
       "description": "The Magnificent Seven are the companies behind much of the US market's growth over the past decade, brought together in one technology-focused portfolio.",
       "sourceStrategyId": "01KV68M2Y685X59DWAEVX5D5X3",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -203,7 +203,7 @@
       "name": "Mercury Solana - Nancy Pelosi Tracker (Daily Variant)",
       "description": "Inspired by the positions disclosed in Nancy Pelosi's congressional financial filings, with options represented by their underlying stocks. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0Q9GXP1HBN2Z53RCHCHQW",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": { "type": "interval", "frequency": "daily" },
       "allocations": [
         {
@@ -270,7 +270,7 @@
       "name": "Mercury Solana - Warren Buffett Tracker (Daily Variant)",
       "description": "Inspired by Berkshire Hathaway's publicly disclosed equity holdings and Warren Buffett's long-term approach to owning durable businesses. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QAV0P64JAETT29AS1MAH",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": { "type": "interval", "frequency": "daily" },
       "allocations": [
         {
@@ -322,7 +322,7 @@
       "name": "Mercury Solana - Leopold Aschenbrenner Tracker (Daily Variant)",
       "description": "Inspired by the long positions disclosed by Leopold Aschenbrenner's Situational Awareness LP, which invests around the economic consequences of AI. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QA4N1DYBNWTQXJ0XQ7S8",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": { "type": "interval", "frequency": "daily" },
       "allocations": [
         {
@@ -404,7 +404,7 @@
       "name": "Mercury Solana - Cathie Wood Tracker (Daily Variant)",
       "description": "Inspired by ARK Invest's publicly published holdings and Cathie Wood's focus on disruptive innovation across AI, robotics, crypto, and genomics. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QBBM4RCD3MG33JB3JKDQ",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": { "type": "interval", "frequency": "daily" },
       "allocations": [
         {
@@ -486,7 +486,7 @@
       "name": "Mercury Solana - Hard Money",
       "description": "A portfolio built around scarce assets such as precious metals and bitcoin, combining established stores of value with newer ones.",
       "sourceStrategyId": "01KVXG24D6NDH1GBX0FCS68M9B",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -531,7 +531,7 @@
       "name": "Mercury Solana - Quantum",
       "description": "Quantum computing seeks to solve problems beyond the reach of classical machines. This strategy brings together major technology companies funding quantum research and smaller developers building its hardware.",
       "sourceStrategyId": "01KVXHMSPVYT832EHC76QVJJ39",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -586,7 +586,7 @@
       "name": "Mercury Solana - Energy Infrastructure",
       "description": "AI data centers, electric vehicles, and manufacturing are lifting electricity demand. This strategy focuses on the utilities, equipment makers, and storage providers expanding power capacity.",
       "sourceStrategyId": "01KVXHVT8Q8QF8SAQJRPYF2XAA",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -641,7 +641,7 @@
       "name": "Mercury Solana - Pure Silicon",
       "description": "Semiconductors power devices, AI models, and industrial machines. This strategy focuses on chip designers, memory makers, foundries, and suppliers of production equipment.",
       "sourceStrategyId": "01KVXH3N3ZJH0RF8JS9TRQ7BV7",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -706,7 +706,7 @@
       "name": "Mercury Solana - Neo Finance",
       "description": "Financial services are moving toward digital platforms, payment networks, and crypto-native businesses. This strategy combines established payment companies with newer trading, banking, and stablecoin businesses.",
       "sourceStrategyId": "01KVXGBHHGE4YECQ6MT3BMKGX4",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -771,7 +771,7 @@
       "name": "Mercury Solana - Compute Grab",
       "description": "The AI build-out needs power, land, and data-center capacity. This strategy focuses on infrastructure operators, cloud providers, computing specialists, and the energy companies supplying them.",
       "sourceStrategyId": "01KVXHE56MX6KR8WW1R0PMN51J",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -831,7 +831,7 @@
       "name": "Mercury Solana - AI Full Stack",
       "description": "The AI build-out spans chips, servers, networking, cloud platforms, and power generation. This strategy spreads exposure across those layers instead of concentrating on a single company.",
       "sourceStrategyId": "01KVXGPDTP3FWTVPEXH6A5XPA4",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -911,7 +911,7 @@
       "name": "Mercury Solana - The Arsenal",
       "description": "Rising defense budgets and advances in software, drones, and autonomous systems are changing the industry. This strategy combines established defense contractors with newer technology companies.",
       "sourceStrategyId": "01KVXKFXVKWCZEEX5C2Q9YW283",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -971,7 +971,7 @@
       "name": "Mercury Solana - Digital Fortress",
       "description": "Connected devices and AI systems create more digital infrastructure to protect. This strategy focuses on cybersecurity across endpoint, network, cloud, and identity services.",
       "sourceStrategyId": "01KVXKP9GZ6QXS7D7AMD4696EY",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -1016,7 +1016,7 @@
       "name": "Mercury Solana - Black Gold",
       "description": "Oil remains central to the global economy. This strategy spans companies that produce, refine, transport, and service the oil industry.",
       "sourceStrategyId": "01KVXJWCW6ZNGX1A5XH0VVK9PB",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -1071,7 +1071,7 @@
       "name": "Mercury Solana - Escape Velocity",
       "description": "The space economy now includes commercial launches, satellites, and orbital services. This strategy focuses on builders and operators developing those markets.",
       "sourceStrategyId": "01KVXKAZA1JH8HEXETJX8VJVHY",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -1131,7 +1131,7 @@
       "name": "Mercury Solana - Mine the Future",
       "description": "Robots, chips, electric vehicles, and advanced manufacturing rely on critical materials. This strategy focuses on miners and processors supplying metals such as rare earths, copper, lithium, and uranium.",
       "sourceStrategyId": "01KVXK3V75W15CAF584JTK311E",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -1186,7 +1186,7 @@
       "name": "Mercury Solana - Going Nuclear",
       "description": "Demand for reliable, carbon-free power is renewing interest in nuclear energy. This strategy combines reactor operators, small modular reactor developers, and uranium businesses.",
       "sourceStrategyId": "01KVXJQ7N3Q55WEZRXV1F99BMJ",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -1251,7 +1251,7 @@
       "name": "Mercury Solana - Consumer Brands",
       "description": "Consumer brands are part of what people stream, eat, wear, and buy repeatedly. This strategy focuses on established businesses with loyal customers and strong pricing power.",
       "sourceStrategyId": "01KVXM9W3M121FE4409QD70VKW",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -1321,7 +1321,7 @@
       "name": "Mercury Solana - Healthcare Trade",
       "description": "Breakthrough medicines are reshaping healthcare. This strategy combines leaders behind new drug classes with large pharmaceutical, medical-device, and biotechnology companies.",
       "sourceStrategyId": "01KVXM1ZF8GSR20SN3N5GAR3EN",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -1386,7 +1386,7 @@
       "name": "Mercury Solana - Road Warriors",
       "description": "Cars and transportation are changing through electrification and automation. This strategy focuses on vehicle makers, mobility platforms, and self-driving technology companies.",
       "sourceStrategyId": "01KVXKWV9PDJ15R16VYJTD4KYG",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"
@@ -1446,7 +1446,7 @@
       "name": "Mercury Solana - Technology Eight",
       "description": "The Magnificent Seven technology companies plus SpaceX in a Solana tokenized-assets portfolio. This is a same-theme variant of Glider's Mag7x idea; it does not include the source strategy's rewards or fee terms.",
       "sourceStrategyId": "01KZY1G56YFYWKS8AH0PR1YMQX",
-      "status": "candidate",
+      "status": "enabled",
       "schedule": {
         "type": "interval",
         "frequency": "daily"

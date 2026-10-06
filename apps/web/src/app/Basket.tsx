@@ -849,8 +849,8 @@ export const Basket = () => {
             <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
               These are tokenized assets held in a user-owned Glider smart account, not shares in a pooled
               basket token. Prices, available liquidity, swap costs and actual execution can differ from the
-              modeled strategy. Funding is being piloted; this exact strategy has not yet passed a complete
-              funded entry-to-exit test. USDC can remain uninvested until a rebalance executes.
+              modeled strategy. Funding with USDC does not automatically buy the target assets; USDC can
+              remain uninvested until a rebalance executes.
             </p>
           </details>
         </div>

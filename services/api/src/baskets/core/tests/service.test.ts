@@ -252,15 +252,16 @@ describe("BasketService sync", () => {
   });
 });
 
-it("lists the Solana catalog as candidate managed portfolios", async () => {
+it("lists all 22 Solana strategies as available managed portfolios", async () => {
   const service = new BasketService({ store: new JsonBasketStore("postgres://unused") });
   const templates = await service.listTemplates();
 
   expect(templates).toHaveLength(22);
+  expect(templates.every((template) => template.status === "enabled" && template.canEnroll)).toBe(true);
   expect(templates.find((template) => template.slug === "magnificent-seven")).toEqual(
     expect.objectContaining({
       kind: "managed_portfolio",
-      status: "candidate",
+      status: "enabled",
       canEnroll: true,
       strategyId: "01M465MY1C2KBER654KJDCYYK9",
       performance: null,
