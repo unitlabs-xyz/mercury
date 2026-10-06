@@ -25,6 +25,7 @@ import {
   type Span,
   type Wrapper,
 } from "../../src/api";
+import { BorrowCard } from "../../src/stock/BorrowCard";
 import { ExposureCard } from "../../src/stock/ExposureCard";
 import { color, font, radius, space } from "../../src/theme";
 
@@ -181,6 +182,9 @@ export default function Stock() {
           {held !== undefined && (
             <ExposureCard name={i?.name ?? t} exposure={exposure.data} loading={exposure.isPending} />
           )}
+
+          {/* ── What it is worth as collateral ──────────────────────────── */}
+          {i !== undefined && <BorrowCard ticker={t} name={i.name} />}
 
           {/* ── Where an order goes ─────────────────────────────────────── */}
           {i !== undefined && i.wrappers.length > 0 && (

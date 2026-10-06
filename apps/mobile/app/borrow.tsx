@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text as RNText, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { borrowChoices, pct, pickRow, planBorrow, usd, type BorrowTab } from "@mercury/view";
 import { useBorrow, useBorrowAction, type Borrow } from "../src/api";
@@ -54,7 +54,9 @@ export default function BorrowScreen() {
   const b = borrow.data;
   const [tab, setTab] = useState<Tab>("borrow");
   const [text, setText] = useState("");
-  const [ticker, setTicker] = useState<string | null>(null);
+  /* A stock page opens this with its own ticker chosen. */
+  const params = useLocalSearchParams<{ ticker?: string }>();
+  const [ticker, setTicker] = useState<string | null>(params.ticker ?? null);
   /* Max, held as the exact figure rather than the rounded one on screen. */
   const [atMax, setAtMax] = useState(false);
 
