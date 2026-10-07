@@ -1,45 +1,80 @@
-import { useState } from "react";
-import { ScrollView, StyleSheet, Text as RNText, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Image, Linking, ScrollView, StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { usd } from "@mercury/view";
-import { Stack } from "../../src/baskets/Stack";
-import { useBaskets, useValued, type Valued } from "../../src/baskets/model";
+import { LinearGradient } from "expo-linear-gradient";
+import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
 import {
-  Chip,
-  IconButton,
-  MoveChip,
-  PressableScale,
-  Skeleton,
-  Sparkline,
-  StatusChip,
-  Text,
-} from "../../src/ui";
-import type { Span } from "../../src/api";
+  BASKET_INVESTORS,
+  BASKET_THEMES,
+  basketStatusLabel,
+  displayBasketName,
+  themeTitle,
+  usd,
+  visibleStrategies,
+} from "@mercury/view";
+import { useSignedIn } from "../../src/api";
+import { useBasketTemplates, useOwnedBasketPortfolios } from "../../src/baskets/api";
+import {
+  AssetStack,
+  INVESTOR_ART,
+  SectionHead,
+  THEME_ART,
+  useHoldingInstruments,
+} from "../../src/baskets/ui";
+import { Button, Icon, IconButton, PressableScale, Skeleton, Text } from "../../src/ui";
 import { color, font, radius, space } from "../../src/theme";
 
-/* The ranges a basket's list offers. Five years is the stock page's; a basket
-   has no vault old enough for it to mean anything. */
-const RANGES: readonly Span[] = ["1D", "1W", "1M", "1Y"];
-
-/** The three things to know before the first one, as the web numbers them. */
+/** How a Glider basket works, as the web's rail numbers it. */
 const HOW: readonly [string, string][] = [
-  ["One amount buys every stock", "Split by the basket's weights, in one order."],
-  ["You hold one token", "It tracks everything inside. Send it, or sell it back whenever."],
-  ["Held in a Symmetry vault", "Not by us. You can withdraw on Symmetry without Mercury."],
+  ["Choose a strategy", "Each one sets target weights across tokenized stocks on Solana."],
+  ["You own the assets", "They live in your own smart account, not in one pooled basket token."],
+  ["Glider rebalances daily", "It works back toward the target weights as prices move."],
 ];
 
+const EMPTY: readonly ManagedBasketTemplate[] = [];
+
 /**
- * Every basket, as the web's Baskets page: one white card holding the list on
- * a grey panel, each basket a 60-high row with the stack of its heaviest
- * stocks, its value and its move over the chosen range; then how baskets work.
+ * Baskets, as the web's page lays them out on a phone: what you already hold,
+ * then the ways in — by theme, by investor, or the list — each strategy a
+ * Glider template that becomes your own portfolio when you enroll.
  */
 export default function Baskets() {
   const router = useRouter();
-  const [range, setRange] = useState<Span>("1M");
-  const baskets = useBaskets();
-  const list = useValued(baskets.data, range);
-  const loading = baskets.isPending || list.loading;
+  const signedIn = useSignedIn();
+  const catalog = useBasketTemplates();
+  const owned = useOwnedBasketPortfolios();
+  const [theme, setTheme] = useState<ManagedBasketTag | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [list, setList] = useState(0);
+  const scroller = useMemo(() => ({ current: null as ScrollView | null }), []);
+
+  const templates = catalog.data ?? EMPTY;
+  const visible = useMemo(() => visibleStrategies(templates, theme, showAll), [templates, theme, showAll]);
+  const pros = useMemo(
+    () =>
+      BASKET_INVESTORS.map((slug) => templates.find((t) => t.slug === slug)).filter(
+        (t): t is ManagedBasketTemplate => t !== undefined,
+      ),
+    [templates],
+  );
+  const instruments = useHoldingInstruments(templates);
+  const bySlug = useMemo(() => new Map(templates.map((t) => [t.slug, t])), [templates]);
+  const open = (slug: string) => router.push({ pathname: "/baskets/[slug]", params: { slug } });
+
+  /* Picking a theme or "see all" brings the list into view, as the web scrolls to it. */
+  const showList = (next: { theme?: ManagedBasketTag | null; all?: boolean }) => {
+    if (next.theme !== undefined) setTheme(next.theme);
+    if (next.all !== undefined) setShowAll(next.all);
+    requestAnimationFrame(() => scroller.current?.scrollTo({ y: list - 12, animated: true }));
+  };
+
+  const title = theme
+    ? `${themeTitle(theme)} strategies`
+    : showAll
+      ? "All strategies"
+      : "Featured strategies";
+  const portfolios = owned.data ?? [];
 
   return (
     <View style={s.root}>
@@ -47,50 +82,265 @@ export default function Baskets() {
         <View style={s.nav}>
           <IconButton icon="chevronRight" rotate="180deg" label="Back" onPress={() => router.back()} />
         </View>
-        <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          ref={(r) => {
+            scroller.current = r;
+          }}
+          contentContainerStyle={s.scroll}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={s.head}>
             <Text variant="title">Baskets</Text>
-            <RNText style={s.meta}>{loading ? "" : `${baskets.data?.length ?? 0} on Symmetry`}</RNText>
+            <RNText style={s.lede}>
+              Ready-made strategies on Glider. The stocks stay in your own smart account, rebalanced daily.
+            </RNText>
           </View>
 
-          <View style={s.chips}>
-            {RANGES.map((r) => (
-              <Chip key={r} label={r} selected={range === r} onPress={() => setRange(r)} />
-            ))}
-          </View>
-
-          <View style={s.card}>
-            <View style={s.panel}>
-              {loading ? (
-                <RowsSkeleton />
-              ) : list.valued.length === 0 ? (
-                <View style={s.blank}>
-                  <RNText style={s.blankTitle}>No baskets yet</RNText>
-                  <RNText style={s.blankBody}>
-                    Baskets appear here once their vault is live on Symmetry.
+          {/* ── What you hold ─────────────────────────────────────────── */}
+          {signedIn && (owned.isPending || portfolios.length > 0 || owned.isError) && (
+            <View style={s.card}>
+              <View style={s.cardHead}>
+                <RNText style={s.cardTitle}>Your baskets</RNText>
+                {portfolios.length > 0 && (
+                  <RNText style={s.meta}>
+                    {portfolios.length} {portfolios.length === 1 ? "portfolio" : "portfolios"}
                   </RNText>
-                </View>
-              ) : (
-                list.valued.map((v) => (
-                  <Line key={v.basket.slug} v={v} onPress={() => router.push(`/baskets/${v.basket.slug}`)} />
-                ))
-              )}
+                )}
+              </View>
+              <View style={s.panel}>
+                {owned.isPending ? (
+                  [0, 1].map((k) => <Skeleton key={k} width="100%" height={44} style={s.rowSkeleton} />)
+                ) : owned.isError && portfolios.length === 0 ? (
+                  <View style={s.blank}>
+                    <RNText style={s.blankTitle}>Your baskets are unavailable</RNText>
+                    <RNText style={s.blankBody}>
+                      We couldn&apos;t load your Glider portfolios. Your assets remain in your smart account.
+                    </RNText>
+                    <Button
+                      size="md"
+                      variant="secondary"
+                      label="Try again"
+                      onPress={() => void owned.refetch()}
+                    />
+                  </View>
+                ) : (
+                  portfolios.map((p) => {
+                    const template = bySlug.get(p.slug);
+                    return (
+                      <PressableScale
+                        key={p.portfolioId}
+                        style={s.row}
+                        activeScale={0.985}
+                        onPress={() => open(p.slug)}
+                        accessibilityRole="button"
+                      >
+                        {template !== undefined && (
+                          <AssetStack template={template} instruments={instruments} limit={2} size={26} />
+                        )}
+                        <View style={s.mid}>
+                          <RNText style={s.name} numberOfLines={1}>
+                            {displayBasketName(p.name)}
+                          </RNText>
+                          <RNText style={s.sub} numberOfLines={1}>
+                            {p.targetAssetCount} target assets · On Glider
+                          </RNText>
+                        </View>
+                        <View style={s.end}>
+                          <RNText style={s.value}>{usd(p.totalValueUsd)}</RNText>
+                          <RNText style={s.sub}>
+                            {p.usdcBalance === null ? "USDC —" : `${usd(p.usdcBalance)} USDC`}
+                          </RNText>
+                        </View>
+                      </PressableScale>
+                    );
+                  })
+                )}
+              </View>
             </View>
-          </View>
+          )}
 
+          {catalog.isPending && catalog.data === undefined ? (
+            <DiscoveryLoading />
+          ) : catalog.isError && catalog.data === undefined ? (
+            <View style={[s.card, s.blank]}>
+              <RNText style={s.blankTitle}>Strategies are temporarily unavailable</RNText>
+              <Button
+                size="md"
+                variant="secondary"
+                label="Try again"
+                onPress={() => void catalog.refetch()}
+              />
+            </View>
+          ) : (
+            <>
+              {/* ── By theme ─────────────────────────────────────────── */}
+              <View style={s.section}>
+                <SectionHead
+                  title="Explore by theme"
+                  sub="Strategies that match your interests and outlook."
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={s.shelf}
+                  decelerationRate="fast"
+                  snapToInterval={THEME_W + 10}
+                >
+                  {BASKET_THEMES.map((t) => {
+                    const count = templates.filter((x) => x.tags.includes(t.tag)).length;
+                    return (
+                      <PressableScale
+                        key={t.tag}
+                        style={[s.theme, theme === t.tag && s.themeOn]}
+                        activeScale={0.97}
+                        onPress={() => showList({ theme: t.tag })}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${t.title}, ${count} strategies`}
+                      >
+                        <Image
+                          source={THEME_ART[t.tag]}
+                          style={s.themeArt}
+                          blurRadius={2}
+                          resizeMode="cover"
+                        />
+                        {/* The web masks the art in from the right; a white wash does the same here. */}
+                        <LinearGradient
+                          colors={["#FFFFFF", "rgba(255,255,255,0.75)", "rgba(255,255,255,0)"]}
+                          locations={[0, 0.45, 0.85]}
+                          start={{ x: 0, y: 0.5 }}
+                          end={{ x: 1, y: 0.5 }}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        <RNText style={s.themeTitle}>{t.title}</RNText>
+                        <RNText style={s.themeBody}>{t.description}</RNText>
+                        <View style={s.themeFoot}>
+                          <RNText style={s.themeCount}>
+                            {count} {count === 1 ? "strategy" : "strategies"}
+                          </RNText>
+                          <Icon name="arrowRight" size={13} color={color.ink} />
+                        </View>
+                      </PressableScale>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* ── Like the pros ────────────────────────────────────── */}
+              {pros.length > 0 && (
+                <View style={s.section}>
+                  <SectionHead
+                    title="Invest like the pros"
+                    sub="Investor-inspired Solana adaptations, not copies of their holdings."
+                  />
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={s.shelf}
+                    decelerationRate="fast"
+                    snapToInterval={PRO_W + 10}
+                  >
+                    {pros.map((t) => (
+                      <PressableScale
+                        key={t.slug}
+                        style={s.pro}
+                        activeScale={0.97}
+                        onPress={() => open(t.slug)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View ${displayBasketName(t.name)} strategy`}
+                      >
+                        <Image source={INVESTOR_ART[t.slug]} style={s.proArt} resizeMode="cover" />
+                        <View style={s.proFoot}>
+                          <RNText style={s.proLabel}>Top holdings · Daily</RNText>
+                          <AssetStack template={t} instruments={instruments} limit={4} size={24} />
+                        </View>
+                      </PressableScale>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* ── The list ─────────────────────────────────────────── */}
+              <View style={s.card} onLayout={(e) => setList(e.nativeEvent.layout.y)}>
+                <View style={s.cardHead}>
+                  <View style={s.fill}>
+                    <RNText style={s.cardTitle}>{title}</RNText>
+                    <RNText style={s.sub}>{visible.length} on Glider</RNText>
+                  </View>
+                  <PressableScale
+                    activeScale={0.96}
+                    onPress={() => {
+                      if (theme) {
+                        setTheme(null);
+                        setShowAll(true);
+                      } else setShowAll(!showAll);
+                    }}
+                  >
+                    <RNText style={s.link}>{theme || !showAll ? "See all" : "Show featured"}</RNText>
+                  </PressableScale>
+                </View>
+                <View style={s.panel}>
+                  {visible.length === 0 ? (
+                    <View style={s.blank}>
+                      <RNText style={s.blankBody}>No strategies in this theme yet.</RNText>
+                    </View>
+                  ) : (
+                    visible.map((t) => (
+                      <PressableScale
+                        key={t.slug}
+                        style={s.strategy}
+                        activeScale={0.985}
+                        onPress={() => open(t.slug)}
+                        accessibilityRole="button"
+                      >
+                        <View style={s.strategyTop}>
+                          <View style={s.mid}>
+                            <RNText style={s.name} numberOfLines={1}>
+                              {displayBasketName(t.name)}
+                            </RNText>
+                            <RNText style={s.sub} numberOfLines={2}>
+                              {t.description}
+                            </RNText>
+                          </View>
+                          <Icon name="chevronRight" size={14} color={color.muted} />
+                        </View>
+                        <View style={s.strategyFoot}>
+                          <AssetStack template={t} instruments={instruments} limit={5} size={24} />
+                          <RNText style={s.sub}>
+                            {t.allocations.length} assets · Daily · {basketStatusLabel(t.status)}
+                          </RNText>
+                        </View>
+                      </PressableScale>
+                    ))
+                  )}
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* ── How it works ─────────────────────────────────────────── */}
           <View style={[s.card, s.how]}>
-            <RNText style={s.howTitle}>How baskets work</RNText>
-            {HOW.map(([title, body], k) => (
-              <View key={title} style={s.step}>
+            <RNText style={s.cardTitle}>How Glider baskets work</RNText>
+            {HOW.map(([head, body], k) => (
+              <View key={head} style={s.step}>
                 <View style={s.stepNo}>
                   <RNText style={s.stepNoText}>{k + 1}</RNText>
                 </View>
                 <View style={s.fill}>
-                  <RNText style={s.stepTitle}>{title}</RNText>
+                  <RNText style={s.stepTitle}>{head}</RNText>
                   <RNText style={s.stepBody}>{body}</RNText>
                 </View>
               </View>
             ))}
+          </View>
+
+          <View style={s.footer}>
+            <RNText style={s.footnote}>
+              Strategies are provided by Glider. Assets stay in your own smart account. Past or modeled
+              performance does not guarantee future results.
+            </RNText>
+            <PressableScale activeScale={0.97} onPress={() => void Linking.openURL("https://glider.fi")}>
+              <RNText style={s.link}>Learn about Glider ›</RNText>
+            </PressableScale>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -98,89 +348,139 @@ export default function Baskets() {
   );
 }
 
-const Line = ({ v, onPress }: { v: Valued; onPress: () => void }) => {
-  const top = [...v.legs].sort((a, b) => b.target - a.target);
-  return (
-    <PressableScale onPress={onPress} activeScale={0.985} style={s.row} accessibilityRole="button">
-      <Stack legs={v.legs} />
-      <View style={s.mid}>
-        <View style={s.titleLine}>
-          <RNText style={s.name} numberOfLines={1}>
-            {v.basket.name}
-          </RNText>
-          {v.basket.position && <StatusChip>Owned</StatusChip>}
-        </View>
-        <RNText style={s.sub} numberOfLines={1}>
-          {`${v.legs.length} stocks · ${top
-            .slice(0, 3)
-            .map((l) => l.ticker)
-            .join(", ")}${v.legs.length > 3 ? "…" : ""}`}
-        </RNText>
-      </View>
-      <Sparkline values={v.series} width={48} height={22} />
-      <View style={s.end}>
-        <RNText style={s.nav$}>{v.nav === null ? "—" : usd(v.nav)}</RNText>
-        <MoveChip value={v.change} />
-      </View>
-    </PressableScale>
-  );
-};
-
-/** Rows still loading, at the rows' own geometry, so nothing moves when they land. */
-const RowsSkeleton = ({ rows = 3 }: { rows?: number }) => (
-  <View>
-    {Array.from({ length: rows }, (_, i) => (
-      <View key={i} style={s.row}>
-        <Skeleton width={72} height={36} style={s.pill} />
-        <View style={[s.mid, s.gap]}>
-          <Skeleton width="70%" height={13} />
-          <Skeleton width="45%" height={11} />
-        </View>
-        <View style={[s.end, s.gap]}>
-          <Skeleton width={56} height={13} />
-          <Skeleton width={44} height={18} />
-        </View>
-      </View>
-    ))}
+/** The shelves' shape while the catalog loads, so nothing jumps when it lands. */
+const DiscoveryLoading = () => (
+  <View style={s.section}>
+    <View style={s.shelf}>
+      {[0, 1].map((k) => (
+        <Skeleton key={k} width={THEME_W} height={150} style={s.round} />
+      ))}
+    </View>
+    <View style={[s.card, s.gap]}>
+      {[0, 1, 2].map((k) => (
+        <Skeleton key={k} width="100%" height={56} />
+      ))}
+    </View>
   </View>
 );
 
+const THEME_W = 200;
+const PRO_W = 168;
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.page },
-  fill: { flex: 1 },
+  fill: { flex: 1, minWidth: 0 },
   nav: { paddingHorizontal: space.screen, paddingTop: space.sm, paddingBottom: space.sm },
-  scroll: { paddingBottom: space.xxl, gap: space.md },
-  head: { flexDirection: "row", alignItems: "baseline", gap: 10, paddingHorizontal: space.screen },
-  meta: { fontFamily: font.regular, fontSize: 14, color: color.muted },
-  chips: { flexDirection: "row", gap: 6, paddingHorizontal: space.screen },
+  scroll: { paddingBottom: space.xxl, gap: space.lg },
+  head: { paddingHorizontal: space.screen, gap: 4 },
+  lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted },
+  section: { gap: space.md },
+  meta: { fontFamily: font.regular, fontSize: 12.5, color: color.muted },
+
   card: {
     marginHorizontal: space.screen,
     borderRadius: radius.lg,
     backgroundColor: color.surface,
     padding: space.xs,
   },
-  panel: { borderRadius: radius.md, backgroundColor: color.tile, padding: space.xs, gap: space.xs },
-  row: { height: 64, flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md },
-  mid: { flex: 1, minWidth: 0 },
-  gap: { gap: 6 },
-  titleLine: { flexDirection: "row", alignItems: "center", gap: 5 },
-  name: { flexShrink: 1, fontFamily: font.medium, fontSize: 14, lineHeight: 18, color: color.ink },
-  sub: { fontFamily: font.regular, fontSize: 12, lineHeight: 16, color: color.muted, marginTop: 2 },
-  end: { alignItems: "flex-end", gap: 4 },
-  nav$: { fontFamily: font.medium, fontSize: 14, color: color.ink },
-  pill: { borderRadius: 18 },
-  blank: { alignItems: "center", paddingVertical: 40, paddingHorizontal: space.lg },
-  blankTitle: { fontFamily: font.medium, fontSize: 14, color: color.ink },
-  blankBody: {
+  cardHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+  },
+  cardTitle: { fontFamily: font.medium, fontSize: 15, letterSpacing: -0.3, color: color.ink },
+  panel: { borderRadius: radius.md, backgroundColor: color.tile, padding: space.xs, gap: 2 },
+  rowSkeleton: { marginVertical: 6 },
+  gap: { gap: space.sm, padding: space.md },
+  round: { borderRadius: radius.lg },
+
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    minHeight: 60,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+  },
+  mid: { flex: 1, minWidth: 0, gap: 3 },
+  end: { alignItems: "flex-end", gap: 3 },
+  name: { fontFamily: font.medium, fontSize: 14.5, letterSpacing: -0.29, color: color.ink },
+  sub: { fontFamily: font.regular, fontSize: 12, lineHeight: 16, color: color.muted },
+  value: { fontFamily: font.medium, fontSize: 14.5, color: color.ink },
+  link: { fontFamily: font.medium, fontSize: 13, color: color.link },
+
+  shelf: { flexDirection: "row", gap: 10, paddingHorizontal: space.screen },
+  theme: {
+    width: THEME_W,
+    height: 150,
+    borderRadius: radius.lg,
+    backgroundColor: color.surface,
+    padding: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: color.surface,
+  },
+  themeOn: { borderColor: color.ink },
+  themeArt: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+    opacity: 0.82,
+  },
+  themeTitle: { fontFamily: font.medium, fontSize: 15, color: color.ink },
+  themeBody: {
+    marginTop: 5,
+    maxWidth: 130,
     fontFamily: font.regular,
     fontSize: 12,
+    lineHeight: 16,
     color: color.muted,
-    marginTop: space.sm,
+  },
+  themeFoot: {
+    position: "absolute",
+    left: 14,
+    bottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  themeCount: { fontFamily: font.medium, fontSize: 12, color: color.ink },
+
+  pro: { width: PRO_W, borderRadius: radius.lg, backgroundColor: color.surface, overflow: "hidden" },
+  proArt: { width: PRO_W, height: PRO_W / 1.25 },
+  proFoot: { paddingHorizontal: 12, paddingTop: 9, paddingBottom: 12, gap: 8 },
+  proLabel: { fontFamily: font.regular, fontSize: 11, color: color.muted },
+
+  strategy: { padding: space.md, borderRadius: radius.md, gap: 10 },
+  strategyTop: { flexDirection: "row", alignItems: "flex-start", gap: space.sm },
+  strategyFoot: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.sm,
+  },
+
+  blank: { alignItems: "center", gap: space.sm, paddingVertical: space.lg, paddingHorizontal: space.lg },
+  blankTitle: { fontFamily: font.medium, fontSize: 14, color: color.ink, textAlign: "center" },
+  blankBody: {
+    fontFamily: font.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: color.muted,
     textAlign: "center",
   },
-  how: { padding: space.screen, gap: space.lg - 8 },
-  howTitle: { fontFamily: font.medium, fontSize: 14, color: color.ink, marginBottom: 2 },
-  step: { flexDirection: "row", gap: 13 },
+
+  how: { padding: space.lg, gap: space.md },
+  step: { flexDirection: "row", gap: space.md },
   stepNo: {
     width: 24,
     height: 24,
@@ -190,6 +490,9 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   stepNoText: { fontFamily: font.medium, fontSize: 12, color: color.ink },
-  stepTitle: { fontFamily: font.medium, fontSize: 14, lineHeight: 18, color: color.ink, marginTop: 3 },
-  stepBody: { fontFamily: font.regular, fontSize: 14, lineHeight: 20, color: color.muted, marginTop: 4 },
+  stepTitle: { fontFamily: font.medium, fontSize: 14, color: color.ink },
+  stepBody: { marginTop: 2, fontFamily: font.regular, fontSize: 12.5, lineHeight: 17, color: color.muted },
+
+  footer: { paddingHorizontal: space.screen, gap: space.sm },
+  footnote: { fontFamily: font.regular, fontSize: 11.5, lineHeight: 16, color: color.faint },
 });
