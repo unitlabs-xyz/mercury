@@ -23,6 +23,7 @@ export const Portfolio = z.object({
   debtUsd: Usd,
   /** True when Kamino could not be read and `debtUsd` is the last hour we recorded. */
   debtIsStale: z.boolean(),
+  /** Estimated rolling 24-hour price move of wallet, pledged, and basket stocks; excludes cash and transfers. */
   changeUsd: Usd,
   changePct: Ratio,
   holdings: z.array(Holding),

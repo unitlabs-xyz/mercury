@@ -20,6 +20,7 @@ const errorOf = async (res: Response) => (await res.json()) as { error: { code: 
 // stand-in is not a mint and `packages/types` is right to refuse it.
 const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 const NVDAON = "9MjAmgHXbu5drkNa9XpzfozgsM5Dcq6bzq1bbuTbqPLY";
+const TSLAON = "KeGv7bsfR4MheC1CkmnAVceoApjrkvBhHYjWb67ondo";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 const price = (mint: string, over: Partial<TokenPrice> = {}): TokenPrice => ({
@@ -175,6 +176,66 @@ describe("GET /v1/portfolio", () => {
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.changeUsd).toBe("80");
     expect(body.changePct).toBe("25");
+  });
+
+  it("includes basket-only and overlapping stocks in the daily move without counting basket cash", async () => {
+    const requested: string[][] = [];
+    const d = deps({
+      prices: {
+        pricesFor: async (mints) => {
+          requested.push([...mints]);
+          const pct = new Map([
+            [NVDAX, D(25)],
+            [NVDAON, D(10)],
+            [TSLAON, D(-20)],
+          ]);
+          return new Map(mints.map((mint) => [mint, price(mint, { changePct24h: pct.get(mint) ?? D(0) })]));
+        },
+      },
+      baskets: async () => ({
+        totalUsd: D(90),
+        fetchedAt: new Date(),
+        baskets: [
+          {
+            portfolioId: "portfolio-1",
+            slug: "pilot",
+            name: "Pilot",
+            valueUsd: "90",
+            inTransitUsd: "0",
+            fetchedAt: new Date().toISOString(),
+            holdings: [
+              {
+                assetId: `solana:mainnet/spl:${NVDAON}`,
+                symbol: "NVDAon",
+                ticker: "NVDA",
+                balance: "1",
+                valueUsd: "50",
+              },
+              {
+                assetId: `solana:mainnet/spl:${TSLAON}`,
+                symbol: "TSLAon",
+                ticker: "TSLA",
+                balance: "1",
+                valueUsd: "30",
+              },
+              {
+                assetId: `solana:mainnet/spl:${USDC}`,
+                symbol: "USDC",
+                ticker: null,
+                balance: "10",
+                valueUsd: "10",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    const move = 80 + (50 * 10) / 110 - (30 * 20) / 80;
+    expect(Number(body.changeUsd)).toBeCloseTo(move);
+    expect(Number(body.changePct)).toBeCloseTo((move / (480 - move)) * 100);
+    expect(body.holdings.map((item) => item.ticker)).toEqual(["NVDA"]);
+    expect(requested[0]).toEqual([NVDAX, NVDAON, TSLAON]);
   });
 
   it("reports profit only on the shares it has a cost for", async () => {

@@ -14,8 +14,8 @@ it("merges basket stocks into holdings without treating them as cash, collateral
     basketUsd: "20",
     debtUsd: "0",
     debtIsStale: false,
-    changeUsd: "0",
-    changePct: "0",
+    changeUsd: "2",
+    changePct: "10",
     holdings: [
       {
         ticker: "NVDA",
@@ -76,9 +76,8 @@ it("merges basket stocks into holdings without treating them as cash, collateral
   expect(model?.basketOtherUsd).toBe(0);
   expect(model?.available).toBe(4);
   expect(model?.returnUsd).toBe(2);
-  const expectedMove = 16 / 101 + 24 / 103;
-  expect(model?.stockMove24hUsd).toBeCloseTo(expectedMove);
-  expect(model?.stockMove24hPct).toBeCloseTo((expectedMove / (24 - expectedMove)) * 100);
+  expect(model?.stockMove24hUsd).toBe(2);
+  expect(model?.stockMove24hPct).toBe(10);
   expect(
     model?.rows.map((row) => [row.ticker, row.value, row.basketValue, row.borrowable, row.returnPct]),
   ).toEqual([
@@ -95,5 +94,5 @@ it("merges basket stocks into holdings without treating them as cash, collateral
     return null;
   };
   renderToStaticMarkup(createElement(WithoutQuote));
-  expect(withoutQuote?.stockMove24hUsd).toBeNull();
+  expect(withoutQuote?.stockMove24hUsd).toBe(2);
 });

@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHolding } from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
-import { cashFrom, priceFor, valuePortfolio } from "../portfolio/value.js";
+import {
+  basketStockMints,
+  cashFrom,
+  priceFor,
+  valueBasketStocks,
+  valuePortfolio,
+} from "../portfolio/value.js";
 import { BasketValuationError, type BasketValueReader } from "../portfolio/baskets.js";
 import { MIN_POINTS, RANGES, bucketSeries, type Range, type Reading } from "../portfolio/history.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
@@ -102,7 +108,12 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     const debtIsStale = liveDebt === null;
     const pledgedByMint = new Map(pledged.map((p) => [p.mint, p]));
 
-    const mints = rows.flatMap((r) => r.wrappers.map((w) => w.mint));
+    const mints = [
+      ...new Set([
+        ...rows.flatMap((r) => r.wrappers.map((w) => w.mint)),
+        ...basketStockMints(basketValue.baskets),
+      ]),
+    ];
     const [board, balances] = await Promise.all([
       deps.prices.pricesFor(mints),
       deps.chain.tokenBalances(identity.walletAddress),
@@ -147,9 +158,12 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       });
     }
 
-    // Cash does not move, so the percentage is of what actually could.
-    const yesterday = value.stocksUsd.sub(value.changeUsd);
-    const changePct = yesterday.isZero() ? ZERO : value.changeUsd.div(yesterday).mul(100);
+    // Current quantities at their rolling 24-hour token moves, not an account return.
+    // Missing quotes contribute no guessed move, as wallet holdings already do.
+    const basketStocks = valueBasketStocks(basketValue.baskets, board);
+    const changeUsd = value.changeUsd.add(basketStocks.changeUsd);
+    const yesterday = value.stocksUsd.add(basketStocks.stocksUsd).sub(changeUsd);
+    const changePct = yesterday.isZero() ? ZERO : changeUsd.div(yesterday).mul(100);
 
     return c.json({
       totalValueUsd: toWire(value.totalUsd),
@@ -157,7 +171,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       basketUsd: toWire(value.basketUsd),
       debtUsd: toWire(value.debtUsd),
       debtIsStale,
-      changeUsd: toWire(value.changeUsd),
+      changeUsd: toWire(changeUsd),
       changePct: toWire(changePct),
       holdings,
       baskets: basketValue.baskets,

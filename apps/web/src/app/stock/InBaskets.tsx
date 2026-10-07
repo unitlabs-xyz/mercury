@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useBasketTemplates } from "../../api/baskets";
-import type { Instrument } from "../../market/hooks";
+import { useInstruments } from "../../market/hooks";
 import { GlideRows } from "../../ui/ds";
 import { AssetIcon } from "../baskets/AssetIcon";
 import { displayBasketName } from "../baskets/catalog";
@@ -13,13 +13,7 @@ const weight = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.00$/, "")}%
  * two marks, its name over the asset count, and this stock's target weight on
  * the right. Hidden when no basket holds it.
  */
-export const InBaskets = ({
-  ticker,
-  instruments,
-}: {
-  ticker: string;
-  instruments: ReadonlyMap<string, Instrument>;
-}) => {
+export const InBaskets = ({ ticker }: { ticker: string }) => {
   const templates = useBasketTemplates();
   const holding = (templates.data ?? [])
     .filter((template) => template.status !== "disabled")
@@ -29,6 +23,18 @@ export const InBaskets = ({
     })
     .sort((a, b) => b.weightBps - a.weightBps)
     .slice(0, 4);
+  const markTickers = [
+    ...new Set(
+      holding.flatMap(({ template }) =>
+        [...template.allocations]
+          .sort((a, b) => b.weightBps - a.weightBps)
+          .slice(0, 2)
+          .map((asset) => asset.ticker),
+      ),
+    ),
+  ];
+  const instruments = useInstruments(markTickers);
+  const byTicker = new Map((instruments.data ?? []).map((instrument) => [instrument.ticker, instrument]));
   if (holding.length === 0) return null;
 
   return (
@@ -53,7 +59,7 @@ export const InBaskets = ({
                       >
                         <AssetIcon
                           asset={asset}
-                          source={instruments.get(asset.ticker)}
+                          source={byTicker.get(asset.ticker)}
                           className="size-7 rounded-full bg-white object-contain ring-2 ring-ds-panel"
                         />
                       </span>

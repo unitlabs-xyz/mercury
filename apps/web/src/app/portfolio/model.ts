@@ -156,24 +156,9 @@ export const useModel = (
       })
       .sort((a, b) => b.value - a.value);
 
-    // This is a move on today's stock quantities, not a return or a balance
-    // change. A missing basket quote makes the estimate incomplete, so do not
-    // silently count that position as flat while its quote is loading.
-    const hasStockQuotes = rows.every(
-      (row) =>
-        row.value <= 0 ||
-        (row.changePct24h !== null && Number.isFinite(row.changePct24h) && row.changePct24h > -100),
-    );
-    const stockMove24hUsd =
-      stocks > 0 && hasStockQuotes
-        ? rows.reduce((sum, row) => {
-            const rate = row.changePct24h;
-            return rate === null ? sum : sum + (row.value * rate) / (100 + rate);
-          }, 0)
-        : null;
-    const previousStocksUsd = stockMove24hUsd === null ? 0 : stocks - stockMove24hUsd;
-    const stockMove24hPct =
-      stockMove24hUsd !== null && previousStocksUsd > 0 ? (stockMove24hUsd / previousStocksUsd) * 100 : null;
+    // The API computes the same estimate for every client from the token quotes it already reads.
+    const stockMove24hUsd = stocks > 0 ? Number(p.changeUsd) : null;
+    const stockMove24hPct = stocks > 0 ? Number(p.changePct) : null;
 
     const costBasis = rows.reduce((s, r) => s + r.costBasisUsd, 0);
     const returnUsd = rows.reduce((sum, row) => sum + row.returnUsd, 0);

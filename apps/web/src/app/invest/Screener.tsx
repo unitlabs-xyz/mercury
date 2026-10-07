@@ -126,6 +126,11 @@ const Line = memo(({ r, range, onToggle }: { r: Row; range: Span; onToggle: (tic
                 <span className="opacity-80">Owned</span>
               </span>
             )}
+            {r.inBasket && (
+              <span className="inline-flex h-[17px] shrink-0 items-center rounded bg-ds-panel px-1.5 text-[10px] leading-none text-ds-muted">
+                In basket
+              </span>
+            )}
           </p>
           <p className="mt-[6px] truncate text-[12px] text-ds-muted">
             {r.instrument.ticker} · {r.instrument.sector}

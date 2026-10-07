@@ -155,14 +155,15 @@ export const Fact = ({ k, children }: { k: string; children: ReactNode }) => (
  * What you hold of it, if anything: the value at 28px, then its four figures
  * in a grey panel set like the About facts.
  */
-export const Position = ({ h }: { h: Holding }) => {
-  const shares = Number(h.shares);
-  const value = Number(h.valueUsd);
-  const cost = Number(h.costBasisUsd);
-  const ret = value - cost;
+export const Position = ({ h, basketValue }: { h: Holding | undefined; basketValue: number }) => {
+  const shares = Number(h?.shares ?? 0);
+  const walletValue = Number(h?.valueUsd ?? 0);
+  const value = walletValue + basketValue;
+  const cost = Number(h?.costBasisUsd ?? 0);
+  const ret = Number(h?.unrealisedPnlUsd ?? 0);
   const retPct = cost > 0 ? (ret / cost) * 100 : 0;
-  const pledged = Number(h.pledgedShares ?? 0);
-  const today = h.changePct24h === null || h.changePct24h === undefined ? null : Number(h.changePct24h);
+  const pledged = Number(h?.pledgedShares ?? 0);
+  const today = h?.changePct24h === null || h?.changePct24h === undefined ? null : Number(h.changePct24h);
   return (
     // A column, so the grey panel runs to 4px from the foot when the row is taller than it.
     <section aria-label="Your position" className="flex min-w-0 flex-col rounded-xl bg-white p-1">
@@ -171,27 +172,37 @@ export const Position = ({ h }: { h: Holding }) => {
         <div className="mt-[15px]">
           <RailFigure
             value={usd(value)}
-            sub={`${shares.toFixed(4)} shares${pledged > 0 ? ` · ${pledged.toFixed(4)} pledged to Kamino` : ""}`}
+            sub={
+              h
+                ? `${shares.toFixed(4)} wallet & pledged shares${pledged > 0 ? ` · ${pledged.toFixed(4)} pledged to Kamino` : ""}`
+                : "Held in your Glider smart account"
+            }
           />
         </div>
       </div>
       <dl className="mt-3 grid flex-1 grid-cols-2 content-center gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5">
-        <Fact k="Total return">
-          <span className={ret < 0 ? "text-ds-loss" : "text-ds-up"}>
-            {usdSigned(ret)}{" "}
-            <span className="text-[12px] font-normal text-ds-muted">
-              {ret >= 0 ? "+" : "−"}
-              {Math.abs(retPct).toFixed(2)}%
+        <Fact k="Wallet & pledged">{h ? usd(walletValue) : "—"}</Fact>
+        <Fact k="In baskets">{basketValue > 0 ? usd(basketValue) : "—"}</Fact>
+        <Fact k="Wallet return">
+          {h && cost > 0 ? (
+            <span className={ret < 0 ? "text-ds-loss" : "text-ds-up"}>
+              {usdSigned(ret)}{" "}
+              <span className="text-[12px] font-normal text-ds-muted">
+                {ret >= 0 ? "+" : "−"}
+                {Math.abs(retPct).toFixed(2)}%
+              </span>
             </span>
-          </span>
+          ) : (
+            "—"
+          )}
         </Fact>
         <Fact k="Today">
           <span className="-my-[3px] inline-flex">
             <MoveChip value={today} light />
           </span>
         </Fact>
-        <Fact k="Average cost">{shares > 0 ? usd(cost / shares) : "—"}</Fact>
-        <Fact k="Cost basis">{usd(cost)}</Fact>
+        <Fact k="Wallet average cost">{shares > 0 && cost > 0 ? usd(cost / shares) : "—"}</Fact>
+        <Fact k="Wallet cost basis">{h && cost > 0 ? usd(cost) : "—"}</Fact>
       </dl>
     </section>
   );
