@@ -27,7 +27,16 @@ const ROWS = 24;
  * affordances or motion worth adding once the screen is otherwise finished;
  * the grid is what makes it ours.
  */
-export const DotChart = ({ values, height = 200 }: { values: readonly number[] | null; height?: number }) => {
+export const DotChart = ({
+  values,
+  height = 200,
+  format = usd,
+}: {
+  values: readonly number[] | null;
+  height?: number;
+  /** How the high and low read: dollars by default, a return as a percentage. */
+  format?: (v: number) => string;
+}) => {
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
@@ -104,8 +113,8 @@ export const DotChart = ({ values, height = 200 }: { values: readonly number[] |
               ticks is the right answer on a 900px card and furniture on a
               phone: the two numbers that bound what is drawn are the two
               anybody reads off it. */}
-          <RNText style={[s.edge, s.hi]}>{usd(grid.hi)}</RNText>
-          <RNText style={[s.edge, s.lo]}>{usd(grid.lo)}</RNText>
+          <RNText style={[s.edge, s.hi]}>{format(grid.hi)}</RNText>
+          <RNText style={[s.edge, s.lo]}>{format(grid.lo)}</RNText>
         </>
       )}
     </View>
