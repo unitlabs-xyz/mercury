@@ -35,7 +35,13 @@ export const Portfolio = () => {
   const money = useMoney();
   const dash = useDashboard();
   // The holdings' own instruments, featured or not, for their names, logos and sectors.
-  const universe = useInstruments(portfolio.data?.holdings.map((h) => h.ticker) ?? []);
+  const universe = useInstruments([
+    ...new Set([
+      ...(portfolio.data?.holdings.map((h) => h.ticker) ?? []),
+      ...(portfolio.data?.baskets.flatMap((b) => b.holdings.flatMap((h) => (h.ticker ? [h.ticker] : []))) ??
+        []),
+    ]),
+  ]);
   const credit = useCreditMarket();
   const { events, loading: eventsLoading } = useEvents();
 
@@ -51,7 +57,11 @@ export const Portfolio = () => {
       {failed && (
         <div className="mb-4 flex items-center gap-3 rounded-xl md:mb-6 border border-down-line bg-down-tint px-4 py-3 text-[13px] text-down-deep">
           <Alert className="size-4 shrink-0" />
-          <p className="flex-1">We could not reach your account. The figures below are missing, not zero.</p>
+          <p className="flex-1">
+            {portfolio.data
+              ? "Account refresh failed. Showing your last available values."
+              : "We could not reach your account. The figures below are missing, not zero."}
+          </p>
           <button
             type="button"
             onClick={() => void portfolio.refetch()}

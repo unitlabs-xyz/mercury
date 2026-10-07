@@ -55,11 +55,13 @@ const stocks = holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
 const portfolio: Portfolio = {
   totalValueUsd: (stocks + cash - debt).toFixed(2),
   cashUsd: cash.toFixed(2),
+  basketUsd: "0",
   debtUsd: debt.toFixed(2),
   debtIsStale: false,
   changeUsd: "39.32",
   changePct: "0.32",
   holdings,
+  baskets: [],
 };
 
 const money: Money = {

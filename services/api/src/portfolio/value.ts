@@ -11,6 +11,8 @@ export interface ValuableHolding {
 export interface PortfolioValue {
   readonly stocksUsd: Decimal;
   readonly cashUsd: Decimal;
+  /** Glider smart-account value, including its in-transit value exactly once. */
+  readonly basketUsd: Decimal;
   /** Owed to Kamino. Borrowed cash is counted in `cashUsd`; this is the other side of it. */
   readonly debtUsd: Decimal;
   /**
@@ -55,6 +57,7 @@ export const valuePortfolio = (
   board: ReadonlyMap<string, TokenPrice>,
   cashUsd: Decimal,
   debtUsd: Decimal,
+  basketUsd: Decimal = ZERO,
 ): PortfolioValue => {
   let stocksUsd = ZERO;
   let changeUsd = ZERO;
@@ -79,5 +82,12 @@ export const valuePortfolio = (
   // Borrowing is total-neutral: the cash arrives and the debt arrives with it.
   // What leverage changes is `stocksUsd` and how far `changeUsd` swings, which
   // is the thing somebody who levers up actually bought.
-  return { stocksUsd, cashUsd, debtUsd, totalUsd: stocksUsd.add(cashUsd).sub(debtUsd), changeUsd };
+  return {
+    stocksUsd,
+    cashUsd,
+    basketUsd,
+    debtUsd,
+    totalUsd: stocksUsd.add(cashUsd).add(basketUsd).sub(debtUsd),
+    changeUsd,
+  };
 };

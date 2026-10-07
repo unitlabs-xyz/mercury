@@ -66,5 +66,8 @@ export const bucketSeries = (
 
   return [...latest.entries()]
     .sort(([a], [b]) => a - b)
-    .map(([, reading]) => ({ at: reading.at.toISOString(), valueUsd: toWire(reading.totalUsd) }));
+    .map(([, reading]) => ({
+      at: reading.at.toISOString(),
+      valueUsd: toWire(reading.totalUsd),
+    }));
 };

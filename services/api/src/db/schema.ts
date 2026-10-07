@@ -390,9 +390,8 @@ export type WaitlistEntry = typeof waitlist.$inferSelect;
  * series is therefore a grid, which is also what lets a range be bucketed by
  * arithmetic rather than by a window function.
  *
- * `baskets_usd` is in the spec's sketch and not here. Nothing computes it —
- * baskets are not in the portfolio total — and a column that is always "0"
- * advertises a capability the system does not have.
+ * Historical rows predate basket valuation. NULL means wallet-only history;
+ * zero means a complete basket read found no basket value.
  */
 export const portfolioSnapshots = pgTable(
   "portfolio_snapshot",
@@ -406,6 +405,7 @@ export const portfolioSnapshots = pgTable(
     totalUsd: usd("total_usd").notNull(),
     stocksUsd: usd("stocks_usd").notNull(),
     cashUsd: usd("cash_usd").notNull(),
+    basketUsd: usd("basket_usd"),
     /**
      * Owed to Kamino at this hour. Defaulted rather than backfilled: rows
      * written before this column measured a gross total, and inventing a debt

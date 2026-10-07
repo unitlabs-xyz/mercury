@@ -35,6 +35,7 @@ export const usePortfolio = () => {
     queryFn: () => apiFetch<Portfolio>("/v1/portfolio"),
     enabled: signedIn,
     ...LIVE,
+    retry: (attempt) => attempt < 1,
   });
 };
 

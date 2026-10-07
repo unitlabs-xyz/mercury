@@ -77,9 +77,15 @@ export async function readLatestDebt(db: Db, userId: string): Promise<Decimal | 
 
 export async function readSnapshots(db: Db, userId: string, from: Date): Promise<readonly Reading[]> {
   const rows = await db
-    .select({ at: portfolioSnapshots.capturedAt, totalUsd: portfolioSnapshots.totalUsd })
+    .select({
+      at: portfolioSnapshots.capturedAt,
+      totalUsd: portfolioSnapshots.totalUsd,
+    })
     .from(portfolioSnapshots)
     .where(and(eq(portfolioSnapshots.userId, userId), gte(portfolioSnapshots.capturedAt, from)))
     .orderBy(asc(portfolioSnapshots.capturedAt));
-  return rows.map((r) => ({ at: r.at, totalUsd: D(r.totalUsd) }));
+  return rows.map((r) => ({
+    at: r.at,
+    totalUsd: D(r.totalUsd),
+  }));
 }

@@ -58,6 +58,7 @@ const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   debt: async () => ZERO,
   lastKnownDebt: async () => null,
   snapshots: async () => [],
+  baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
   ...over,
 });
 
@@ -130,6 +131,40 @@ describe("GET /v1/portfolio", () => {
     expect(body.totalValueUsd).toBe("650");
   });
 
+  it("counts owned basket value without making its USDC wallet cash or a sellable holding", async () => {
+    const d = deps({
+      baskets: async () => ({
+        totalUsd: D("35"),
+        fetchedAt: new Date(),
+        baskets: [
+          {
+            portfolioId: "portfolio-1",
+            slug: "nvda-tsla-50-50",
+            name: "AI & EV Leaders",
+            valueUsd: "35",
+            inTransitUsd: "1",
+            fetchedAt: new Date().toISOString(),
+            holdings: [
+              {
+                assetId: `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:${USDC}`,
+                symbol: "USDC",
+                ticker: null,
+                balance: "1",
+                valueUsd: "1",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.totalValueUsd).toBe("435");
+    expect(body.basketUsd).toBe("35");
+    expect(body.cashUsd).toBe("0");
+    expect(body.holdings).toHaveLength(1);
+    expect(body.baskets[0]?.holdings[0]?.symbol).toBe("USDC");
+  });
+
   it("derives today's change from each holding's own move", async () => {
     // 2 shares now worth $400 after a 25% rise: $80 of that is today's.
     const d = deps({
@@ -170,11 +205,13 @@ describe("GET /v1/portfolio", () => {
     expect(body).toEqual({
       totalValueUsd: "0",
       cashUsd: "0",
+      basketUsd: "0",
       debtUsd: "0",
       debtIsStale: false,
       changeUsd: "0",
       changePct: "0",
       holdings: [],
+      baskets: [],
     });
     expect(body.holdings).toEqual([]);
   });

@@ -17,7 +17,7 @@ import { Skeleton } from "./ui";
  * accepted" against a stock the reader had not asked to borrow against. The
  * stock page's borrow card asks and answers it in one place.
  */
-const COLS = "grid-cols-[minmax(0,1fr)_130px_120px_125px_168px]";
+const COLS = "grid-cols-[minmax(0,1fr)_120px_120px_100px_110px_150px]";
 
 /** A hyphen, as the design draws it, for a fall. */
 const signed = (n: number, text: string) => `${n < 0 ? "-" : "+"}${text}`;
@@ -43,8 +43,8 @@ const Logo = ({ row }: { row: Row }) =>
  * turns white under the pointer. Numbers medium, labels regular, 14 over 12.
  */
 const Line = ({ r }: { r: Row }) => {
-  const pledged = Number(r.pledgedShares ?? 0);
-  const today = r.changePct24h === null || r.changePct24h === undefined ? null : Number(r.changePct24h);
+  const pledged = r.pledgedShares;
+  const today = r.changePct24h;
   return (
     <Link
       to={`/invest/${r.ticker}`}
@@ -62,7 +62,7 @@ const Line = ({ r }: { r: Row }) => {
                 title={`${pledged.toFixed(3)} shares pledged to Kamino as collateral. Still yours; withdraw them to sell.`}
               >
                 <StatusChip tone="neutral">
-                  {pledged >= Number(r.shares) - 1e-9 ? "Pledged" : `${Number(pledged.toFixed(2))} pledged`}
+                  {pledged >= r.shares - 1e-9 ? "Pledged" : `${Number(pledged.toFixed(2))} pledged`}
                 </StatusChip>
               </span>
             )}
@@ -86,6 +86,8 @@ const Line = ({ r }: { r: Row }) => {
        */}
       <span className="text-right font-medium text-ds-ink">{usd(r.value)}</span>
 
+      <span className="text-right text-ds-muted">{r.basketValue > 0 ? usd(r.basketValue) : "—"}</span>
+
       <span className="text-right text-ds-muted">{(r.weight * 100).toFixed(1)}%</span>
 
       {/*
@@ -102,14 +104,23 @@ const Line = ({ r }: { r: Row }) => {
         <MoveChip value={today} />
       </span>
 
-      <span className="flex items-baseline justify-end gap-[5px] whitespace-nowrap">
-        <span className={`font-medium ${r.returnUsd < 0 ? "text-ds-loss" : "text-ds-up"}`}>
-          {signed(r.returnUsd, usd(Math.abs(r.returnUsd)))}
+      {r.returnPct === null ? (
+        <span className="text-right text-ds-muted" title="Cost basis is unavailable for basket holdings">
+          —
         </span>
-        <span className="text-[12px] text-ds-muted">
-          {signed(r.returnUsd, `${Math.abs(r.returnPct).toFixed(1)}%`)}
+      ) : (
+        <span
+          className="flex items-baseline justify-end gap-[5px] whitespace-nowrap"
+          title="Return on wallet and pledged shares only; basket cost basis is unavailable"
+        >
+          <span className={`font-medium ${r.returnUsd < 0 ? "text-ds-loss" : "text-ds-up"}`}>
+            {signed(r.returnUsd, usd(Math.abs(r.returnUsd)))}
+          </span>
+          <span className="text-[12px] text-ds-muted">
+            {signed(r.returnUsd, `${Math.abs(r.returnPct).toFixed(1)}%`)}
+          </span>
         </span>
-      </span>
+      )}
     </Link>
   );
 };
@@ -142,7 +153,7 @@ export const Holdings = ({
     <section aria-label="Holdings" className="min-w-0 rounded-xl bg-white p-1">
       <div className="px-5 pt-4">
         <RailHead
-          title="Holdings"
+          title="Stocks & collateral"
           meta={m ? (rows.length ? `${rows.length} positions, largest first` : "Nothing yet") : undefined}
           to="/invest"
           linkLabel="Browse stocks"
@@ -151,15 +162,28 @@ export const Holdings = ({
 
       <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
         {m && rows.length > 0 && (
-          <div className="min-w-[716px]">
+          <div className="min-w-[830px]">
             <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
               <span>Name</span>
-              <span className="text-right">Value</span>
+              <span className="text-right" title="Wallet, pledged, and basket stock value combined">
+                Value
+              </span>
+              <span
+                className="text-right"
+                title="Held in Glider smart accounts; move to your wallet before selling or using as collateral"
+              >
+                In baskets
+              </span>
               <span className="text-right">Weight</span>
               {/* Inset by the chip's own padding, so the label sits over the
                 figure rather than over the pill around it. */}
               <span className="pr-1.5 text-right">Today</span>
-              <span className="text-right">Return</span>
+              <span
+                className="text-right"
+                title="Return on wallet and pledged shares with recorded cost basis only"
+              >
+                Return
+              </span>
             </div>
             <GlideRows>
               {shown.map((r) => (

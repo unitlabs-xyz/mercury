@@ -3,6 +3,7 @@ import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHoldi
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import { cashFrom, priceFor, valuePortfolio } from "../portfolio/value.js";
+import { BasketValuationError, type BasketValueReader } from "../portfolio/baskets.js";
 import { MIN_POINTS, RANGES, bucketSeries, type Range, type Reading } from "../portfolio/history.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
@@ -40,6 +41,7 @@ export interface PortfolioDeps {
   readonly lastKnownDebt: (userId: string) => Promise<Decimal | null>;
   /** Hourly readings of the account's value, no older than `from`. */
   readonly snapshots: (userId: string, from: Date) => Promise<readonly Reading[]>;
+  readonly baskets: BasketValueReader;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -47,11 +49,13 @@ const fail = (code: string, message: string) => ({ error: { code, message } });
 const EMPTY = {
   totalValueUsd: "0",
   cashUsd: "0",
+  basketUsd: "0",
   debtUsd: "0",
   debtIsStale: false,
   changeUsd: "0",
   changePct: "0",
   holdings: [] as const,
+  baskets: [] as const,
 };
 
 export function portfolioRoutes(deps: PortfolioDeps): Hono {
@@ -67,12 +71,23 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // records in line with the chain is position-sync's job, on its own
     // clock. See services/api/src/index.ts: position-sync.
 
-    const [rows, balances, pledged, liveDebt] = await Promise.all([
-      deps.holdings(identity.userId),
-      deps.chain.tokenBalances(identity.walletAddress),
-      deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
-      deps.debt(identity.walletAddress),
-    ]);
+    let inputs;
+    try {
+      inputs = await Promise.all([
+        deps.baskets(identity.userId, identity.walletAddress).catch((error: unknown) => {
+          if (error instanceof BasketValuationError) throw error;
+          console.error("Portfolio basket valuation failed:", error);
+          throw new BasketValuationError("Basket balances are temporarily unavailable.");
+        }),
+        deps.holdings(identity.userId),
+        deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
+        deps.debt(identity.walletAddress),
+      ]);
+    } catch (error) {
+      if (error instanceof BasketValuationError) return c.json(fail(error.code, error.message), 503);
+      throw error;
+    }
+    const [basketValue, rows, pledged, liveDebt] = inputs;
 
     /*
      * An unreadable Kamino falls back to the last hour that was readable.
@@ -88,13 +103,16 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     const pledgedByMint = new Map(pledged.map((p) => [p.mint, p]));
 
     const mints = rows.flatMap((r) => r.wrappers.map((w) => w.mint));
-    const board = await deps.prices.pricesFor(mints);
+    const [board, balances] = await Promise.all([
+      deps.prices.pricesFor(mints),
+      deps.chain.tokenBalances(identity.walletAddress),
+    ]);
 
     // The figures are `valuePortfolio`'s, so that the hourly snapshot behind the
     // chart and the number at the top of this page cannot drift apart. The loop
     // below is only about the per-holding rows.
     const cashUsd = cashFrom(balances, deps.usdcMint);
-    const value = valuePortfolio(rows, board, cashUsd, debtUsd);
+    const value = valuePortfolio(rows, board, cashUsd, debtUsd, basketValue.totalUsd);
     const holdings = [];
 
     for (const row of rows) {
@@ -136,11 +154,13 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     return c.json({
       totalValueUsd: toWire(value.totalUsd),
       cashUsd: toWire(value.cashUsd),
+      basketUsd: toWire(value.basketUsd),
       debtUsd: toWire(value.debtUsd),
       debtIsStale,
       changeUsd: toWire(value.changeUsd),
       changePct: toWire(changePct),
       holdings,
+      baskets: basketValue.baskets,
     });
   });
 

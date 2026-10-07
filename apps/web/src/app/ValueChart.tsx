@@ -47,19 +47,25 @@ export const LABEL: Record<Range, (at: Date) => string> = {
  * Whether there is a chart at all stays the server's call: it withholds a lone
  * reading, so this never has to decide what one point means.
  */
-export const useHistory = (range: Range): readonly Point[] | null => {
+export const useHistory = (range: Range): { points: readonly Point[] } | null => {
   const recorded = usePortfolioHistory(range);
 
   const points = recorded.data?.points ?? [];
-  if (points.length === 0) return null;
-
-  return points.map((p) => ({ label: LABEL[range](new Date(p.at)), value: Number(p.valueUsd) }));
+  if (points.length < 2) return null;
+  return {
+    points: points.map((p) => ({ label: LABEL[range](new Date(p.at)), value: Number(p.valueUsd) })),
+  };
 };
 
 export const ValueChart = ({ range, onZoom }: { range: Range; onZoom?: (dir: 1 | -1) => void }) => {
-  const series = useHistory(range);
-  return series ? (
-    <DotChart series={series} label={RANGE_LABEL[range]} {...(onZoom ? { onZoom } : {})} />
+  const history = useHistory(range);
+  return history ? (
+    <DotChart
+      series={history.points}
+      label={RANGE_LABEL[range]}
+      scale="price"
+      {...(onZoom ? { onZoom } : {})}
+    />
   ) : (
     <div
       role="img"

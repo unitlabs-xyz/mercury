@@ -1,14 +1,24 @@
 import { useMemo } from "react";
 import type { Portfolio } from "@mercury/types";
+import { USDC_ASSET_ID } from "@mercury/view";
 import type { Borrow } from "../../api/borrow";
 import type { Dashboard } from "../../api/dashboard";
 import type { CreditMarket, Instrument } from "../../market/hooks";
 
-export type Row = Portfolio["holdings"][number] & {
+export type Row = {
+  readonly ticker: string;
+  readonly name: string;
+  readonly shares: number;
+  readonly pledgedShares: number;
+  readonly wrapperCount: number;
+  readonly changePct24h: number | null;
+  readonly costBasisUsd: number;
+  readonly walletValue: number;
+  readonly basketValue: number;
   readonly value: number;
   readonly weight: number;
   readonly returnUsd: number;
-  readonly returnPct: number;
+  readonly returnPct: number | null;
   readonly ltv: number;
   /** At the 80% safety target: value × LTV × 0.8. */
   readonly borrowable: number;
@@ -17,18 +27,25 @@ export type Row = Portfolio["holdings"][number] & {
 };
 
 export type Model = {
-  /** Net worth: stocks plus cash less debt. The figure at the top of the page. */
+  /** Net worth including owned Glider smart accounts. */
   readonly total: number;
-  /** Stocks plus cash, before the loan. What the weights are shares of. */
+  /** Wallet and pledged stocks, wallet cash, and baskets, before the loan. */
   readonly assets: number;
+  /** Wallet and pledged stocks plus stocks held in baskets. */
   readonly stocks: number;
+  /** USDC held in Glider smart accounts; not wallet cash or spending power. */
+  readonly basketCashUsd: number;
+  /** In-transit value and basket assets not represented by stock or USDC rows. */
+  readonly basketOtherUsd: number;
   readonly cash: number;
   /** Owed to Kamino, from the portfolio itself so it always agrees with `total`. */
   readonly debt: number;
   /** True when Kamino could not be read and `debt` is the last hour recorded. */
   readonly debtIsStale: boolean;
-  readonly changeUsd: number;
-  readonly changePct: number;
+  /** Estimated rolling 24-hour price move on current wallet, pledged, and basket stocks. */
+  readonly stockMove24hUsd: number | null;
+  /** Relative to the estimated previous value of those stocks, not net worth. */
+  readonly stockMove24hPct: number | null;
   readonly costBasis: number;
   readonly returnUsd: number;
   readonly returnPct: number;
@@ -74,14 +91,29 @@ export const useModel = (
     if (!p) return undefined;
     const total = Number(p.totalValueUsd);
     const cash = Number(p.cashUsd);
+    const basketUsd = Number(p.basketUsd);
     const debt = Number(p.debtUsd);
-    // Summed from the rows rather than backed out of the total. `total` is net
-    // of the loan now, so the old `total - cash` would quietly subtract the debt
-    // from the stocks as well and understate every holding's weight.
-    const stocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
+    // Value each location separately. Backing stocks out of net worth would
+    // subtract debt, and adding basket stocks again to `assets` would double-count them.
+    const walletStocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
+    const basketStocks = new Map<string, number>();
+    let basketCashUsd = 0;
+    for (const basket of p.baskets) {
+      for (const holding of basket.holdings) {
+        if (holding.assetId === USDC_ASSET_ID) {
+          basketCashUsd += Number(holding.valueUsd);
+          continue;
+        }
+        if (!holding.ticker) continue;
+        basketStocks.set(holding.ticker, (basketStocks.get(holding.ticker) ?? 0) + Number(holding.valueUsd));
+      }
+    }
+    const basketStockUsd = [...basketStocks.values()].reduce((sum, value) => sum + value, 0);
+    const stocks = walletStocks + basketStockUsd;
+    const basketOtherUsd = Math.max(0, basketUsd - basketStockUsd - basketCashUsd);
     // Weights are shares of what is held, not of what is owned outright: a
     // levered account would otherwise show holdings adding up to well past 100%.
-    const assets = stocks + cash;
+    const assets = walletStocks + cash + basketUsd;
     // Kamino's live terms from our API first; its public rates list if that is not in yet.
     const target = borrow?.safetyTarget ?? 0.8;
     const ltvOf = (ticker: string) =>
@@ -90,33 +122,68 @@ export const useModel = (
       credit?.collateral.find((c) => c.ticker === ticker)?.maxLtv ??
       0;
 
-    const rows: Row[] = p.holdings.map((h) => {
-      const value = Number(h.valueUsd);
-      const cost = Number(h.costBasisUsd);
-      const inst = universe?.find((i) => i.ticker === h.ticker);
-      const ltv = ltvOf(h.ticker);
-      return {
-        ...h,
-        value,
-        weight: assets > 0 ? value / assets : 0,
-        returnUsd: value - cost,
-        returnPct: cost > 0 ? ((value - cost) / cost) * 100 : 0,
-        ltv,
-        borrowable: value * ltv * target,
-        logo: inst?.logo,
-        sector: inst?.sector ?? "Other",
-      };
-    });
+    const walletHoldings = new Map(p.holdings.map((holding) => [holding.ticker, holding]));
+    const instruments = new Map(universe?.map((instrument) => [instrument.ticker, instrument]));
+    const rows: Row[] = [...new Set([...walletHoldings.keys(), ...basketStocks.keys()])]
+      .map((ticker) => {
+        const holding = walletHoldings.get(ticker);
+        const inst = instruments.get(ticker);
+        const walletValue = Number(holding?.valueUsd ?? 0);
+        const basketValue = basketStocks.get(ticker) ?? 0;
+        const value = walletValue + basketValue;
+        const cost = Number(holding?.costBasisUsd ?? 0);
+        const returnUsd = Number(holding?.unrealisedPnlUsd ?? 0);
+        const ltv = ltvOf(ticker);
+        return {
+          ticker,
+          name: holding?.name ?? inst?.name ?? ticker,
+          shares: Number(holding?.shares ?? 0),
+          pledgedShares: Number(holding?.pledgedShares ?? 0),
+          wrapperCount: holding?.wrapperCount ?? 1,
+          changePct24h: holding ? Number(holding.changePct24h) : (inst?.quote.todayPct ?? null),
+          costBasisUsd: cost,
+          walletValue,
+          basketValue,
+          value,
+          weight: assets > 0 ? value / assets : 0,
+          returnUsd,
+          returnPct: cost > 0 ? (returnUsd / cost) * 100 : null,
+          ltv,
+          borrowable: walletValue * ltv * target,
+          logo: inst?.logo,
+          sector: inst?.sector ?? "Other",
+        };
+      })
+      .sort((a, b) => b.value - a.value);
 
-    const costBasis = rows.reduce((s, r) => s + Number(r.costBasisUsd), 0);
-    const returnUsd = stocks - costBasis;
+    // This is a move on today's stock quantities, not a return or a balance
+    // change. A missing basket quote makes the estimate incomplete, so do not
+    // silently count that position as flat while its quote is loading.
+    const hasStockQuotes = rows.every(
+      (row) =>
+        row.value <= 0 ||
+        (row.changePct24h !== null && Number.isFinite(row.changePct24h) && row.changePct24h > -100),
+    );
+    const stockMove24hUsd =
+      stocks > 0 && hasStockQuotes
+        ? rows.reduce((sum, row) => {
+            const rate = row.changePct24h;
+            return rate === null ? sum : sum + (row.value * rate) / (100 + rate);
+          }, 0)
+        : null;
+    const previousStocksUsd = stockMove24hUsd === null ? 0 : stocks - stockMove24hUsd;
+    const stockMove24hPct =
+      stockMove24hUsd !== null && previousStocksUsd > 0 ? (stockMove24hUsd / previousStocksUsd) * 100 : null;
+
+    const costBasis = rows.reduce((s, r) => s + r.costBasisUsd, 0);
+    const returnUsd = rows.reduce((sum, row) => sum + row.returnUsd, 0);
 
     // Value, and value an instant before today's move, so the sector's move is weighted by what is held.
     const bySector = new Map<string, { value: number; opening: number }>();
     for (const r of rows) {
       const acc = bySector.get(r.sector) ?? { value: 0, opening: 0 };
       acc.value += r.value;
-      acc.opening += r.value / (1 + Number(r.changePct24h) / 100);
+      acc.opening += r.value / (1 + (r.changePct24h ?? 0) / 100);
       bySector.set(r.sector, acc);
     }
     const sectors = [...bySector]
@@ -136,17 +203,19 @@ export const useModel = (
     const pledged = borrow?.collateralUsd ?? 0;
     const across = (f: (c: Borrow["collateral"][number]) => number) =>
       pledged > 0 ? (borrow?.collateral ?? []).reduce((s, c) => s + c.depositedUsd * f(c), 0) / pledged : 0;
-    const byToday = [...rows].sort((a, b) => Number(b.changePct24h) - Number(a.changePct24h));
+    const byToday = [...rows].sort((a, b) => (b.changePct24h ?? 0) - (a.changePct24h ?? 0));
 
     return {
       total,
       assets,
       stocks,
+      basketCashUsd,
+      basketOtherUsd,
       cash,
       debt,
       debtIsStale: p.debtIsStale,
-      changeUsd: Number(p.changeUsd),
-      changePct: Number(p.changePct),
+      stockMove24hUsd,
+      stockMove24hPct,
       costBasis,
       returnUsd,
       returnPct: costBasis > 0 ? (returnUsd / costBasis) * 100 : 0,

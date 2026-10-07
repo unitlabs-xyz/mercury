@@ -87,25 +87,35 @@ export const HeaderFigure = ({
   </div>
 );
 
-/** Today's move: the percentage in a tinted chip, then the dollars and "today". */
+/** A quoted stock-price move, not a change in the account's net worth. */
 const TodayMove = ({
   pctValue,
   usdValue,
 }: {
-  pctValue: number | undefined;
-  usdValue: number | undefined;
+  pctValue: number | null | undefined;
+  usdValue: number | null | undefined;
 }) => {
+  const missing = pctValue === null || pctValue === undefined || usdValue === null || usdValue === undefined;
   const down = (usdValue ?? 0) < 0;
   return (
-    <p className="mt-3 flex items-center gap-1.5 text-[12px] leading-none">
+    <p
+      className="mt-3 flex flex-wrap items-center gap-1.5 text-[12px] leading-none"
+      title="Estimated from current wallet, pledged, and basket stock values and rolling 24-hour price changes; not investment return or net-worth change."
+    >
       <span
         className={`inline-flex h-5 items-center rounded-md px-2 text-[12px] ${
-          down ? "bg-ds-down-chip text-ds-down" : "bg-ds-up-chip text-ds-up"
+          missing
+            ? "bg-ds-panel text-ds-muted"
+            : down
+              ? "bg-ds-down-chip text-ds-down"
+              : "bg-ds-up-chip text-ds-up"
         }`}
       >
-        <span className="opacity-80">{pctValue === undefined ? "—" : pct(pctValue)}</span>
+        <span className="opacity-80">{pct(pctValue)}</span>
       </span>
-      <span className={`opacity-80 ${down ? "text-ds-down" : "text-ds-up"}`}>{usdSigned(usdValue)}</span>
+      <span className={`opacity-80 ${missing ? "text-ds-muted" : down ? "text-ds-down" : "text-ds-up"}`}>
+        {usdSigned(usdValue)}
+      </span>
       <span className="-ml-0.5 text-ds-ink/80">today</span>
     </p>
   );
@@ -136,7 +146,7 @@ export const AccountHeader = ({
         ) : (
           <Skeleton className="mt-2 h-9 w-48" />
         )}
-        <TodayMove pctValue={m?.changePct} usdValue={m?.changeUsd} />
+        <TodayMove pctValue={m?.stockMove24hPct} usdValue={m?.stockMove24hUsd} />
         <div className="mt-[22px] flex flex-wrap gap-2">
           <ButtonLink to="/invest" variant="primary">
             Invest
@@ -156,17 +166,17 @@ export const AccountHeader = ({
 
       <dl className="m-1 grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5 sm:grid-cols-3 xl:flex xl:flex-1 xl:items-center xl:justify-between xl:py-0 xl:pr-[61px] xl:pl-[85px]">
         <HeaderFigure
-          label="Invested"
+          label="Stocks & collateral"
           value={m ? usd(m.stocks) : "—"}
           sub={m ? `${m.rows.length} positions` : undefined}
         />
         <HeaderFigure
-          label="Total return"
+          label="Stock P&L"
           value={m && m.costBasis > 0 ? usdSigned(m.returnUsd) : "—"}
           sub={
             m && m.costBasis > 0
-              ? `${m.returnUsd >= 0 ? "+" : "−"}${pct(m.returnPct)} all time`
-              : "Nothing bought yet"
+              ? `${m.returnUsd >= 0 ? "+" : "−"}${pct(m.returnPct)} on known-basis shares`
+              : "No recorded stock cost basis"
           }
           tone={m && m.costBasis > 0 ? (m.returnUsd < 0 ? "down" : "up") : undefined}
         />
@@ -215,11 +225,10 @@ export const Performance = ({
   setRange: (r: Range) => void;
 }) => {
   const history = useHistory(range);
-  const first = history?.[0]?.value;
-  const last = history?.[history.length - 1]?.value;
+  const first = history?.points[0]?.value;
+  const last = history?.points[history.points.length - 1]?.value;
   const change = first !== undefined && last !== undefined ? last - first : null;
   const percent = change !== null && first !== undefined ? performancePercent(change, first) : null;
-  const days = range === "1D" ? 1 : range === "1W" ? 7 : 30;
   /*
    * A move too small to print is not a fall. Below half a cent `usdSigned`
    * rounds to zero and rendered "−$0.00" in the loss colour — a minus sign in
@@ -229,10 +238,13 @@ export const Performance = ({
   const flat = change !== null && Math.abs(change) < 0.005;
   const down = change !== null && change < 0 && !flat;
   return (
-    <section aria-label="Performance" className="flex min-w-0 flex-col rounded-xl bg-white px-6 pt-5 pb-5">
+    <section
+      aria-label="Account value history"
+      className="flex min-w-0 flex-col rounded-xl bg-white px-6 pt-5 pb-5"
+    >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[14px] leading-none font-medium text-ds-ink">Performance</h2>
+          <h2 className="text-[14px] leading-none font-medium text-ds-ink">Account value</h2>
           {change !== null && first !== undefined ? (
             <p className="mt-[11px] flex flex-wrap items-center gap-x-2">
               <span
@@ -254,7 +266,7 @@ export const Performance = ({
                 <span className="opacity-80">{percent === null ? "—" : pct(percent)}</span>
               </span>
               <span className="translate-y-1 text-[12px] leading-none text-ds-ink/80">
-                {range === "1D" ? "today" : `${usdSigned(change / days)} avg/day`}
+                Balance change, including transfers
               </span>
             </p>
           ) : (
@@ -278,9 +290,11 @@ export const Performance = ({
   );
 };
 
-/** Top sectors, then everything else folded into one, then cash: at most five slices, one hue each. */
+/** Stock sectors, all USDC, and other basket assets: at most five slices. */
 const slicesOf = (m: Model): Slice[] => {
-  const top = m.sectors.slice(0, m.sectors.length > 4 ? 3 : 4);
+  const cash = m.cash + m.basketCashUsd;
+  const reserved = Number(cash > 0) + Number(m.basketOtherUsd > 0);
+  const top = m.sectors.slice(0, Math.max(0, 4 - reserved));
   const rest = m.sectors.slice(top.length);
   const restValue = rest.reduce((s, r) => s + r.value, 0);
   const restOpen = rest.reduce((s, r) => s + r.value / (1 + r.changePct / 100), 0);
@@ -296,7 +310,22 @@ const slicesOf = (m: Model): Slice[] => {
           },
         ]
       : []),
-    ...(m.cash > 0 ? [{ key: "cash", label: "Cash", value: m.cash, changePct: null }] : []),
+    ...(m.basketOtherUsd > 0
+      ? [{ key: "basket-other", label: "Other assets", value: m.basketOtherUsd, changePct: null }]
+      : []),
+    ...(cash > 0
+      ? [
+          {
+            key: "cash",
+            label: "Cash",
+            value: cash,
+            changePct: null,
+            ...(m.basketCashUsd > 0
+              ? { description: "Includes USDC held in baskets. Only wallet cash is immediately spendable." }
+              : {}),
+          },
+        ]
+      : []),
   ];
 };
 

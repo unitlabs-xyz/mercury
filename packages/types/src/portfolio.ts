@@ -15,9 +15,10 @@ export const Holding = z.object({
 });
 
 export const Portfolio = z.object({
-  /** Net worth: stocks plus cash less debt. */
+  /** Net worth: wallet and pledged stocks, wallet cash, and Glider baskets, less debt. */
   totalValueUsd: Usd,
   cashUsd: Usd,
+  basketUsd: Usd,
   /** Owed to Kamino. Borrowed cash is inside `cashUsd`; this is the other side of it. */
   debtUsd: Usd,
   /** True when Kamino could not be read and `debtUsd` is the last hour we recorded. */
@@ -25,6 +26,25 @@ export const Portfolio = z.object({
   changeUsd: Usd,
   changePct: Ratio,
   holdings: z.array(Holding),
+  baskets: z.array(
+    z.object({
+      portfolioId: z.string(),
+      slug: z.string().nullable(),
+      name: z.string(),
+      valueUsd: Usd,
+      inTransitUsd: Usd,
+      fetchedAt: z.string().datetime(),
+      holdings: z.array(
+        z.object({
+          assetId: z.string(),
+          symbol: z.string(),
+          ticker: z.string().nullable(),
+          balance: z.string(),
+          valueUsd: Usd,
+        }),
+      ),
+    }),
+  ),
 });
 
 /** The ranges the value chart offers. Longer ones wait for there to be data behind them. */
