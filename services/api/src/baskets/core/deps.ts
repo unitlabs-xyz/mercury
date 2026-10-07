@@ -16,6 +16,8 @@ import type {
   BasketPortfolio,
   EnrollmentChallenge,
   EnrollmentIntent,
+  ExitIntent,
+  ExitIntentPayload,
 } from "./primitives.js";
 
 export interface BasketProvider {
@@ -104,16 +106,18 @@ export interface BasketStore {
     operationId: string;
     submittedAt: string;
   }): Promise<void>;
-  saveExit(action: {
+  exitIntent(userId: string, nonce: string): Promise<ExitIntent | null>;
+  saveExitIntent(action: {
     userId: string;
     slug: string;
     ownerAccountId: string;
     strategyId: string;
     portfolioId: string;
-    operationId: string;
-    submittedAt: string;
-    mode: BasketExitMode;
-  }): Promise<void>;
+    nonce: string;
+    expiresAt: Date;
+    payload: ExitIntentPayload;
+  }): Promise<ExitIntent>;
+  attachExitOperation(id: string, operationId: string, submittedAt: Date): Promise<void>;
   recentActions(
     userId: string,
     portfolioId: string,
@@ -144,6 +148,21 @@ export interface BasketStore {
       occurredAt: Date;
       title: string;
       amountUsd: string | null;
+      txSignature: string | null;
+    }[]
+  >;
+  recentSettlements(
+    userId: string,
+    portfolioId: string,
+  ): Promise<
+    readonly {
+      id: string;
+      kind: string;
+      occurredAt: Date;
+      title: string;
+      subtitle: string | null;
+      amountUsd: string | null;
+      tokenQuantity: string | null;
       txSignature: string | null;
     }[]
   >;

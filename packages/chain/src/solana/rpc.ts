@@ -7,6 +7,7 @@ import type {
   SignatureRef,
   TokenBalance,
   TokenBalanceEntry,
+  TokenTransfer,
   TransactionDetail,
 } from "../ports.js";
 import { batchedRpc } from "./batch.js";
@@ -49,15 +50,27 @@ interface RpcSignature {
 }
 
 interface RpcTokenBalance {
+  readonly accountIndex: number;
   readonly mint: string;
   readonly owner?: string;
   readonly uiTokenAmount: { readonly amount: string; readonly decimals: number };
 }
 
+interface RpcParsedInstruction {
+  readonly programId: string;
+  readonly parsed?: {
+    readonly type?: string;
+    readonly info?: Record<string, unknown>;
+  };
+}
+
 interface RpcTransaction {
   readonly blockTime: number | null;
   readonly transaction: {
-    readonly message: { readonly accountKeys: readonly { readonly pubkey: string }[] };
+    readonly message: {
+      readonly accountKeys: readonly { readonly pubkey: string }[];
+      readonly instructions?: readonly RpcParsedInstruction[];
+    };
   };
   readonly meta: {
     /** Null on success; an object naming the instruction that failed otherwise. */
@@ -67,6 +80,10 @@ interface RpcTransaction {
     readonly postBalances: readonly number[];
     readonly preTokenBalances?: readonly RpcTokenBalance[];
     readonly postTokenBalances?: readonly RpcTokenBalance[];
+    readonly innerInstructions?: readonly {
+      readonly index: number;
+      readonly instructions: readonly RpcParsedInstruction[];
+    }[];
   } | null;
 }
 
@@ -84,6 +101,61 @@ const toEntry = (b: RpcTokenBalance): TokenBalanceEntry => ({
   rawAmount: BigInt(b.uiTokenAmount.amount),
   decimals: b.uiTokenAmount.decimals,
 });
+
+const stringAt = (value: unknown): string | null => (typeof value === "string" ? value : null);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object";
+
+function tokenTransfersIn(
+  instructions: readonly RpcParsedInstruction[],
+  keys: readonly string[],
+  balances: readonly RpcTokenBalance[],
+): readonly TokenTransfer[] {
+  const accounts = new Map<string, { mint: string; owner: string | null; decimals: number }>();
+  for (const balance of balances) {
+    const address = keys[balance.accountIndex];
+    if (address === undefined) continue;
+    accounts.set(address, {
+      mint: balance.mint,
+      owner: balance.owner ?? null,
+      decimals: balance.uiTokenAmount.decimals,
+    });
+  }
+
+  const transfers: TokenTransfer[] = [];
+  for (const instruction of instructions) {
+    if (instruction.programId !== TOKEN_PROGRAM && instruction.programId !== TOKEN_2022_PROGRAM) continue;
+    const parsed = instruction.parsed;
+    if (!parsed?.type?.startsWith("transfer") || !parsed.info) continue;
+    const info = parsed.info;
+    const source = stringAt(info["source"]);
+    const destination = stringAt(info["destination"]);
+    if (!source || !destination) continue;
+    const tokenAmountValue = info["tokenAmount"];
+    const tokenAmount = isRecord(tokenAmountValue) ? tokenAmountValue : undefined;
+    const amount = stringAt(tokenAmount?.["amount"] ?? info["amount"]);
+    if (!amount || !/^\d+$/.test(amount) || BigInt(amount) <= 0n) continue;
+    const sourceMeta = accounts.get(source);
+    const destinationMeta = accounts.get(destination);
+    const mint = stringAt(info["mint"]) ?? sourceMeta?.mint ?? destinationMeta?.mint;
+    const decimalsValue = tokenAmount?.["decimals"];
+    const decimals =
+      typeof decimalsValue === "number" ? decimalsValue : (sourceMeta?.decimals ?? destinationMeta?.decimals);
+    if (!mint || decimals === undefined) continue;
+    transfers.push({
+      programId: instruction.programId,
+      source,
+      destination,
+      authority: stringAt(info["authority"]),
+      sourceOwner: sourceMeta?.owner ?? null,
+      destinationOwner: destinationMeta?.owner ?? null,
+      mint,
+      rawAmount: BigInt(amount),
+      decimals,
+    });
+  }
+  return transfers;
+}
 
 export interface SolanaRpcConfig {
   readonly rpcUrl: string;
@@ -259,19 +331,27 @@ export class SolanaRpc implements ChainReader, ChainHistory {
         postLamports: [],
         preTokens: [],
         postTokens: [],
+        tokenTransfersIn: [],
       };
     }
     const meta = res.meta;
+    const keys = res.transaction.message.accountKeys.map((k) => k.pubkey);
+    const balances = [...(meta.preTokenBalances ?? []), ...(meta.postTokenBalances ?? [])];
+    const instructions = [
+      ...(res.transaction.message.instructions ?? []),
+      ...(meta.innerInstructions ?? []).flatMap((group) => group.instructions),
+    ];
     return {
       signature,
       blockTime: res.blockTime,
       succeeded: meta.err === null || meta.err === undefined,
-      accountKeys: res.transaction.message.accountKeys.map((k) => k.pubkey),
+      accountKeys: keys,
       feeLamports: BigInt(meta.fee),
       preLamports: meta.preBalances.map((n) => BigInt(n)),
       postLamports: meta.postBalances.map((n) => BigInt(n)),
       preTokens: (meta.preTokenBalances ?? []).map(toEntry),
       postTokens: (meta.postTokenBalances ?? []).map(toEntry),
+      tokenTransfersIn: tokenTransfersIn(instructions, keys, balances),
     };
   }
 }

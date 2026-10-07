@@ -78,12 +78,20 @@ export const basketActions = pgTable(
     payload: jsonb("payload").notNull(),
     portfolioId: text("portfolio_id"),
     operationId: text("operation_id"),
+    nonce: text("nonce"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    reconciliationState: text("reconciliation_state"),
+    reconcileAfter: timestamp("reconcile_after", { withTimezone: true }),
+    reconcileAttempts: integer("reconcile_attempts").notNull().default(0),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("basket_action_user_created_idx").on(t.userId, t.createdAt),
     uniqueIndex("basket_action_user_operation_idx").on(t.userId, t.operationId),
+    uniqueIndex("basket_action_nonce_idx").on(t.nonce),
+    index("basket_action_reconcile_idx").on(t.reconciliationState, t.reconcileAfter),
   ],
 );
 
@@ -291,6 +299,8 @@ export const activities = pgTable(
     title: text("title").notNull(),
     subtitle: text("subtitle"),
     amountUsd: usd("amount_usd"),
+    /** Settled asset quantity; unlike amountUsd this is never a price estimate. */
+    tokenQuantity: usd("token_quantity"),
     refTable: text("ref_table"),
     refId: uuid("ref_id"),
     txSignature: text("tx_signature"),

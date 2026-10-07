@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURE_OWNER, NVDAX_MINT, USDC_MINT } from "../testing/index.js";
-import { SolanaRpc } from "./rpc.js";
+import { SolanaRpc, TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from "./rpc.js";
 
 const RPC = "https://rpc.example/v1";
 
@@ -126,6 +126,73 @@ describe("SolanaRpc.transaction", () => {
     expect(tx!.preTokens).toEqual([]);
     expect(tx!.postTokens).toEqual([
       { mint: USDC_MINT, owner: FIXTURE_OWNER, rawAmount: 500_000_000n, decimals: 6 },
+    ]);
+  });
+
+  it("preserves parsed outer and inner SPL transfers with token-account owners", async () => {
+    const sourceOwner = "7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
+    const source = "8H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
+    const destination = "9H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
+    const transfer = (programId: string, amount: string) => ({
+      programId,
+      parsed: {
+        type: "transferChecked",
+        info: {
+          source,
+          destination,
+          authority: sourceOwner,
+          mint: USDC_MINT,
+          tokenAmount: { amount, decimals: 6 },
+        },
+      },
+    });
+    const withTransfers = {
+      ...detail,
+      transaction: {
+        message: {
+          accountKeys: [{ pubkey: source }, { pubkey: destination }],
+          instructions: [transfer(TOKEN_PROGRAM, "1000000")],
+        },
+      },
+      meta: {
+        ...detail.meta,
+        preBalances: [0, 0],
+        postBalances: [0, 0],
+        preTokenBalances: [
+          {
+            accountIndex: 0,
+            mint: USDC_MINT,
+            owner: sourceOwner,
+            uiTokenAmount: { amount: "3000000", decimals: 6 },
+          },
+          {
+            accountIndex: 1,
+            mint: USDC_MINT,
+            owner: FIXTURE_OWNER,
+            uiTokenAmount: { amount: "0", decimals: 6 },
+          },
+        ],
+        postTokenBalances: [],
+        innerInstructions: [{ index: 0, instructions: [transfer(TOKEN_2022_PROGRAM, "2000000")] }],
+      },
+    };
+    const tx = await new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: node({ getTransaction: withTransfers }).doFetch,
+    }).transaction(SIG_A);
+    expect(tx?.tokenTransfersIn).toEqual([
+      expect.objectContaining({
+        programId: TOKEN_PROGRAM,
+        sourceOwner,
+        destinationOwner: FIXTURE_OWNER,
+        rawAmount: 1_000_000n,
+      }),
+      expect.objectContaining({
+        programId: TOKEN_2022_PROGRAM,
+        sourceOwner,
+        destinationOwner: FIXTURE_OWNER,
+        rawAmount: 2_000_000n,
+      }),
     ]);
   });
 

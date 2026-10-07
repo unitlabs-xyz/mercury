@@ -56,7 +56,11 @@ cron("/cron/stocks", () =>
 );
 cron("/cron/position-sync", () => syncAllPositions(auth.db, buildReconcileDeps(deps)));
 cron("/cron/wallet-events", () =>
-  syncAllWalletEvents(auth.db, { history: deps.history, lendingProgram: KAMINO_LENDING_PROGRAM }),
+  syncAllWalletEvents(auth.db, {
+    history: deps.history,
+    lendingProgram: KAMINO_LENDING_PROGRAM,
+    ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
+  }),
 );
 
 app.route(

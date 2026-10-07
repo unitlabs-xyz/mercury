@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
@@ -6,7 +6,12 @@ import { ManagedBasketTag } from "@mercury/types";
 import catalogJson from "../../../catalog.json" with { type: "json" };
 import type { BasketStore } from "../core/deps.js";
 import type { BasketTemplate } from "../core/primitives.js";
-import type { EnrollmentChallenge, EnrollmentIntent } from "../core/primitives.js";
+import type {
+  EnrollmentChallenge,
+  EnrollmentIntent,
+  ExitIntent,
+  ExitIntentPayload,
+} from "../core/primitives.js";
 import type { Db } from "../../db/client.js";
 import { activities, basketActions } from "../../db/schema.js";
 
@@ -116,29 +121,83 @@ export class JsonBasketStore implements BasketStore {
       .onConflictDoNothing({ target: [basketActions.userId, basketActions.operationId] });
   }
 
-  async saveExit(action: {
+  private toExitIntent(row: typeof basketActions.$inferSelect): ExitIntent | null {
+    if (
+      (row.kind !== "withdraw_in_kind" && row.kind !== "liquidate_to_usdc") ||
+      !row.portfolioId ||
+      !row.nonce
+    )
+      return null;
+    return {
+      id: row.id,
+      userId: row.userId,
+      slug: row.slug,
+      ownerAccountId: row.ownerAccountId,
+      strategyId: row.strategyId,
+      portfolioId: row.portfolioId,
+      nonce: row.nonce,
+      payload: row.payload as ExitIntentPayload,
+      operationId: row.operationId,
+      submittedAt: row.submittedAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async exitIntent(userId: string, nonce: string): Promise<ExitIntent | null> {
+    const row = await this.actionsDb().query.basketActions.findFirst({
+      where: and(eq(basketActions.userId, userId), eq(basketActions.nonce, nonce)),
+    });
+    return row ? this.toExitIntent(row) : null;
+  }
+
+  async saveExitIntent(action: {
     userId: string;
     slug: string;
     ownerAccountId: string;
     strategyId: string;
     portfolioId: string;
-    operationId: string;
-    submittedAt: string;
-    mode: "in_kind" | "liquidate_usdc";
-  }): Promise<void> {
-    await this.actionsDb()
+    nonce: string;
+    expiresAt: Date;
+    payload: ExitIntentPayload;
+  }): Promise<ExitIntent> {
+    const saved = await this.actionsDb()
       .insert(basketActions)
       .values({
         userId: action.userId,
         slug: action.slug,
-        kind: action.mode === "in_kind" ? "withdraw_in_kind" : "liquidate_to_usdc",
+        kind: action.payload.mode === "in_kind" ? "withdraw_in_kind" : "liquidate_to_usdc",
         ownerAccountId: action.ownerAccountId,
         strategyId: action.strategyId,
         portfolioId: action.portfolioId,
-        operationId: action.operationId,
-        payload: { submittedAt: action.submittedAt },
+        nonce: action.nonce,
+        payload: action.payload,
+        expiresAt: action.expiresAt,
+        reconciliationState: "pending",
       })
-      .onConflictDoNothing({ target: [basketActions.userId, basketActions.operationId] });
+      .onConflictDoNothing({ target: basketActions.nonce })
+      .returning();
+    const row =
+      saved[0] ??
+      (await this.actionsDb().query.basketActions.findFirst({
+        where: eq(basketActions.nonce, action.nonce),
+      }));
+    const intent = row ? this.toExitIntent(row) : null;
+    if (!intent) throw new Error("Could not save basket exit authorization");
+    return intent;
+  }
+
+  async attachExitOperation(id: string, operationId: string, submittedAt: Date): Promise<void> {
+    await this.actionsDb()
+      .update(basketActions)
+      .set({ operationId, submittedAt, reconcileAfter: new Date() })
+      .where(
+        and(
+          eq(basketActions.id, id),
+          or(isNull(basketActions.operationId), eq(basketActions.operationId, operationId)),
+        ),
+      );
+    const row = await this.actionsDb().query.basketActions.findFirst({ where: eq(basketActions.id, id) });
+    if (row?.operationId !== operationId) throw new Error("Basket exit operation conflicts with its intent");
   }
 
   async recentActions(userId: string, portfolioId: string) {
@@ -150,7 +209,13 @@ export class JsonBasketStore implements BasketStore {
         operationId: basketActions.operationId,
       })
       .from(basketActions)
-      .where(and(eq(basketActions.userId, userId), eq(basketActions.portfolioId, portfolioId)))
+      .where(
+        and(
+          eq(basketActions.userId, userId),
+          eq(basketActions.portfolioId, portfolioId),
+          or(eq(basketActions.kind, "enroll"), isNotNull(basketActions.operationId)),
+        ),
+      )
       .orderBy(desc(basketActions.createdAt))
       .limit(20);
   }
@@ -238,6 +303,30 @@ export class JsonBasketStore implements BasketStore {
       )
       .orderBy(desc(activities.occurredAt))
       .limit(20);
+  }
+
+  async recentSettlements(userId: string, portfolioId: string) {
+    return this.actionsDb()
+      .select({
+        id: activities.id,
+        kind: activities.kind,
+        occurredAt: activities.occurredAt,
+        title: activities.title,
+        subtitle: activities.subtitle,
+        amountUsd: activities.amountUsd,
+        tokenQuantity: activities.tokenQuantity,
+        txSignature: activities.txSignature,
+      })
+      .from(activities)
+      .where(
+        and(
+          eq(activities.userId, userId),
+          eq(activities.basketPortfolioId, portfolioId),
+          sql`${activities.kind} IN ('withdraw_in_kind', 'liquidate_to_usdc')`,
+        ),
+      )
+      .orderBy(desc(activities.occurredAt))
+      .limit(40);
   }
 
   async load(): Promise<readonly BasketTemplate[]> {

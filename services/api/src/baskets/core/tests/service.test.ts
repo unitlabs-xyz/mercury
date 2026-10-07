@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BasketService } from "../service.js";
-import { BasketFundingPreflightError, type BasketProvider } from "../deps.js";
+import { BasketFundingPreflightError, type BasketProvider, type BasketStore } from "../deps.js";
 import type { BasketTemplate } from "../primitives.js";
 
 const basket: BasketTemplate = {
@@ -93,14 +93,19 @@ const store = (definition: BasketTemplate) => ({
   saveRebalance: async () => {
     throw new Error("unexpected rebalance save");
   },
-  saveExit: async () => {
+  exitIntent: async () => null,
+  saveExitIntent: async () => {
     throw new Error("unexpected exit save");
+  },
+  attachExitOperation: async () => {
+    throw new Error("unexpected exit completion");
   },
   recentActions: async () => [],
   confirmFunding: async () => {
     throw new Error("unexpected funding confirmation");
   },
   recentFunding: async () => [],
+  recentSettlements: async () => [],
   completedEnrollments: async () => [],
 });
 
@@ -455,11 +460,24 @@ it("prepares a full in-kind exit for the verified owner and refuses a redirected
   };
   let submitted = 0;
   let recorded = 0;
+  let attached = 0;
+  let saved: Parameters<BasketStore["saveExitIntent"]>[0] | undefined;
   const service = new BasketService({
     store: {
       ...store(basket),
-      saveExit: async () => {
+      saveExitIntent: async (action) => {
         recorded += 1;
+        saved = action;
+        return {
+          id: "intent-1",
+          ...action,
+          operationId: null,
+          submittedAt: null,
+          createdAt: new Date(),
+        };
+      },
+      attachExitOperation: async () => {
+        attached += 1;
       },
     },
     provider: provider({
@@ -506,10 +524,16 @@ it("prepares a full in-kind exit for the verified owner and refuses a redirected
         };
       },
       submitExit: async () => {
+        expect(saved).toBeDefined();
         submitted += 1;
         return { operationId: "op-exit", submittedAt: new Date().toISOString() };
       },
     }),
+    history: {
+      tokenAccountsFor: async () => [],
+      signatures: async () => [{ signature: "baseline", slot: 1, blockTime: 1_790_000_000, failed: false }],
+      transaction: async () => null,
+    },
   });
   await expect(service.prepareExit("nvidia", owner, "in_kind")).resolves.toMatchObject({ message });
   await expect(
@@ -528,9 +552,21 @@ it("prepares a full in-kind exit for the verified owner and refuses a redirected
   ).resolves.toMatchObject({ operationId: "op-exit", mode: "in_kind" });
   expect(submitted).toBe(1);
   expect(recorded).toBe(1);
+  expect(attached).toBe(1);
+  expect(saved).toMatchObject({
+    nonce: message.nonce,
+    portfolioId: "p-1",
+    payload: {
+      baselineSignature: "baseline",
+      smartAccountId: owner,
+      recipientAccountId: owner,
+      mode: "in_kind",
+      authorizedAssets: [{ mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", amountRaw: "1000000" }],
+    },
+  });
 });
 
-it("returns an accepted withdrawal operation even when its audit write is unavailable", async () => {
+it("does not submit a withdrawal when its durable intent cannot be saved", async () => {
   const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
   const message = {
     portfolioId: "p-1",
@@ -544,39 +580,43 @@ it("returns an accepted withdrawal operation even when its audit write is unavai
     nonce: `0x${"b".repeat(64)}`,
     expiresAt: Math.floor(Date.now() / 1000) + 600,
   };
-  const original = console.error;
-  console.error = () => undefined;
-  try {
-    const service = new BasketService({
-      store: {
-        ...store(basket),
-        saveExit: async () => {
-          throw new Error("db unavailable");
-        },
+  let submitted = 0;
+  const service = new BasketService({
+    store: {
+      ...store(basket),
+      saveExitIntent: async () => {
+        throw new Error("db unavailable");
       },
-      provider: provider({
-        portfolios: async () => [
-          {
-            portfolioId: "p-1",
-            ownerAccountId: owner,
-            strategyId: "remote-1",
-            smartAccounts: [{ accountId: owner }],
-          },
-        ],
-        portfolio: async () => ({
+    },
+    provider: provider({
+      portfolios: async () => [
+        {
           portfolioId: "p-1",
           ownerAccountId: owner,
           strategyId: "remote-1",
           smartAccounts: [{ accountId: owner }],
-          schedule: null,
-        }),
-        submitExit: async () => ({ operationId: "accepted-op", submittedAt: new Date().toISOString() }),
+        },
+      ],
+      portfolio: async () => ({
+        portfolioId: "p-1",
+        ownerAccountId: owner,
+        strategyId: "remote-1",
+        smartAccounts: [{ accountId: owner }],
+        schedule: null,
       }),
-    });
-    await expect(
-      service.submitExit("nvidia", "user-1", owner, "in_kind", message, "signed"),
-    ).resolves.toMatchObject({ operationId: "accepted-op" });
-  } finally {
-    console.error = original;
-  }
+      submitExit: async () => {
+        submitted += 1;
+        return { operationId: "accepted-op", submittedAt: new Date().toISOString() };
+      },
+    }),
+    history: {
+      tokenAccountsFor: async () => [],
+      signatures: async () => [],
+      transaction: async () => null,
+    },
+  });
+  await expect(service.submitExit("nvidia", "user-1", owner, "in_kind", message, "signed")).rejects.toThrow(
+    "db unavailable",
+  );
+  expect(submitted).toBe(0);
 });
