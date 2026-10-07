@@ -1482,6 +1482,7 @@ export const Basket = () => {
       />
       {account && (
         <ExitSheet
+          key={account.portfolioId}
           open={exitOpen}
           name={name}
           mode={exitMode}
@@ -1496,7 +1497,11 @@ export const Basket = () => {
           busy={exitAction.prepare.isPending || exitAction.submit.isPending}
           walletReady={exitAction.walletReady}
           error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
-          onPrepare={() => void exitAction.prepare.mutateAsync(exitMode).catch(() => undefined)}
+          onPrepare={(assets) =>
+            void exitAction.prepare
+              .mutateAsync({ mode: exitMode, ...(assets ? { assets } : {}) })
+              .catch(() => undefined)
+          }
           onSubmit={() => void confirmExit()}
           onBack={() => {
             exitAction.prepare.reset();

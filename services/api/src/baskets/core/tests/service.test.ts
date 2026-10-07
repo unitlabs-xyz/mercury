@@ -576,6 +576,112 @@ it("prepares a full in-kind exit for the verified owner and refuses a redirected
   });
 });
 
+it("prepares selected in-kind amounts against live balances without changing the full-exit path", async () => {
+  const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
+  const prefix = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:";
+  const first = `${prefix}FirstMint`;
+  const second = `${prefix}SecondMint`;
+  const prepared: { assetId: string; amountRaw: string }[][] = [];
+  const submissions: string[] = [];
+  const service = new BasketService({
+    store: store(basket),
+    provider: provider({
+      portfolios: async () => [
+        {
+          portfolioId: "p-1",
+          ownerAccountId: owner,
+          strategyId: "remote-1",
+          smartAccounts: [{ accountId: owner }],
+        },
+      ],
+      portfolio: async () => ({
+        portfolioId: "p-1",
+        ownerAccountId: owner,
+        strategyId: "remote-1",
+        smartAccounts: [{ accountId: owner }],
+        schedule: null,
+      }),
+      positions: async () => ({
+        portfolioId: "p-1",
+        totalValueUsd: "3",
+        inTransitUsd: "0",
+        fetchedAt: new Date().toISOString(),
+        warnings: [],
+        assets: [
+          {
+            assetId: first,
+            smartAccountId: owner,
+            symbol: "ONE",
+            decimals: 6,
+            balance: "1",
+            balanceRaw: "1000000",
+            priceUsd: "1",
+            valueUsd: "1",
+          },
+          {
+            assetId: second,
+            smartAccountId: owner,
+            symbol: "TWO",
+            decimals: 6,
+            balance: "2",
+            balanceRaw: "2000000",
+            priceUsd: "1",
+            valueUsd: "2",
+          },
+        ],
+      }),
+      prepareExit: async (portfolioId, mode, recipientAccountId, assets, submission) => {
+        prepared.push([...assets]);
+        submissions.push(submission);
+        const expiresAt = Math.floor(Date.now() / 1000) + 600;
+        return {
+          expiresAt: new Date(expiresAt * 1000).toISOString(),
+          authorization: { kind: "solana-message" as const, text: "Sign withdrawal" },
+          message: {
+            portfolioId,
+            recipientAccountId,
+            assets: [...assets],
+            nonce: `0x${"b".repeat(64)}`,
+            expiresAt,
+            liquidate: mode === "liquidate_usdc",
+            ...(mode === "liquidate_usdc"
+              ? { settlementAssetId: `${prefix}EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` }
+              : {}),
+          },
+        };
+      },
+    }),
+  });
+  await service.prepareExit("nvidia", owner, "in_kind", [{ assetId: first, amountRaw: "500000" }]);
+  await service.prepareExit("nvidia", owner, "in_kind", [{ assetId: second, amountRaw: "2000000" }]);
+  await expect(
+    service.prepareExit("nvidia", owner, "liquidate_usdc", [{ assetId: first, amountRaw: "500000" }]),
+  ).resolves.toMatchObject({ submission: "withdraw", message: { liquidate: true } });
+  await expect(service.prepareExit("nvidia", owner, "liquidate_usdc")).resolves.toMatchObject({
+    submission: "liquidate_all",
+  });
+  expect(prepared).toEqual([
+    [{ assetId: first, amountRaw: "500000" }],
+    [{ assetId: second, amountRaw: "2000000" }],
+    [{ assetId: first, amountRaw: "500000" }],
+    [
+      { assetId: first, amountRaw: "1000000" },
+      { assetId: second, amountRaw: "2000000" },
+    ],
+  ]);
+  expect(submissions).toEqual(["withdraw", "withdraw", "withdraw", "liquidate_all"]);
+  await expect(
+    service.prepareExit("nvidia", owner, "in_kind", [{ assetId: first, amountRaw: "1000001" }]),
+  ).rejects.toMatchObject({ code: "invalid_exit_amount" });
+  await expect(
+    service.prepareExit("nvidia", owner, "in_kind", [
+      { assetId: first, amountRaw: "1" },
+      { assetId: first, amountRaw: "1" },
+    ]),
+  ).rejects.toMatchObject({ code: "invalid_exit_amount" });
+  expect(prepared).toHaveLength(4);
+});
+
 it("does not submit a withdrawal when its durable intent cannot be saved", async () => {
   const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
   const message = {
