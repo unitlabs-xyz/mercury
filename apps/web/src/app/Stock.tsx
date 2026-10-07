@@ -28,6 +28,7 @@ import { About, Position, Stats } from "./stock/Panels";
 import { BorrowPanel } from "./stock/BorrowPanel";
 import { InBaskets } from "./stock/InBaskets";
 import { useHeldAs } from "./stock/heldAs";
+import { localTime } from "../ui/localTime";
 import { Routes } from "./stock/Routes";
 import { Ticket } from "./stock/Ticket";
 import { useWatchlist } from "./watchlist";
@@ -176,21 +177,9 @@ export const Stock = () => {
     };
   });
 
-  /**
-   * "Monday at 9:30 AM ET". The zone name is written rather than formatted:
-   * `timeZoneName: "short"` swaps between EDT and EST across the year, and a
-   * reader who has to know which one applies today has been told too much. ET
-   * is true in both halves.
-   */
+  /** "Monday at 7:00 PM IST": when the market opens, in the reader's own zone. */
   const opensAt = session?.nextOpen
-    ? `${session.nextOpen.toLocaleString("en-US", {
-        weekday: "long",
-        timeZone: "America/New_York",
-      })} at ${session.nextOpen.toLocaleString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        timeZone: "America/New_York",
-      })} ET`
+    ? localTime(session.nextOpen, { weekday: "long" }).replace(/^(\w+), /, "$1 at ")
     : undefined;
 
   return (

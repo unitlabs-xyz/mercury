@@ -5,6 +5,7 @@ import { Alert, Check, Clock } from "../ui/icons";
 import { Mark } from "./invest/shared";
 import { SwapPanel, TipLine, Well } from "./review";
 import { InfoTip, StatusChip } from "../ui/ds";
+import { localTime } from "../ui/localTime";
 import { lendableIssuer, TOKEN_NAME, useHeldAs } from "./stock/heldAs";
 import type { Issuer } from "@mercury/types";
 import { useMoney } from "../api/hooks";
@@ -303,14 +304,7 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
           k="Latest"
           v={
             d.marketOpensAt
-              ? `${d.marketOpensAt.toLocaleString("en-US", {
-                  weekday: "long",
-                  timeZone: "America/New_York",
-                })} at ${d.marketOpensAt.toLocaleString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                  timeZone: "America/New_York",
-                })} ET, when the US market opens`
+              ? `${localTime(d.marketOpensAt, { weekday: "long" }).replace(/^(\w+), /, "$1 at ")}, when the US market opens`
               : "When the US market opens"
           }
         />

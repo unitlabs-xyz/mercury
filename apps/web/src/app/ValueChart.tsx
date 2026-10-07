@@ -53,7 +53,12 @@ export const useHistory = (range: Range): readonly Point[] | null => {
   const points = recorded.data?.points ?? [];
   if (points.length === 0) return null;
 
-  return points.map((p) => ({ label: LABEL[range](new Date(p.at)), value: Number(p.valueUsd) }));
+  /* Performance, not balance: money added or taken out since the first point is
+     backed out, so a deposit does not draw as a gain or a send as a loss. */
+  return points.map((p) => ({
+    label: LABEL[range](new Date(p.at)),
+    value: Number(p.valueUsd) - Number(p.netFlowUsd ?? 0),
+  }));
 };
 
 export const ValueChart = ({ range, onZoom }: { range: Range; onZoom?: (dir: 1 | -1) => void }) => {

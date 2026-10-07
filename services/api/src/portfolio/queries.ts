@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, gte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import { D, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
-import { instruments, portfolioSnapshots, positions, tokens } from "../db/schema.js";
+import { activities, instruments, portfolioSnapshots, positions, tokens } from "../db/schema.js";
+import { USDC_MINT } from "@mercury/chain";
 import type { HoldingRow } from "../routes/portfolio.js";
-import type { Reading } from "./history.js";
+import type { Flow, Reading } from "./history.js";
 
 /**
  * Every instrument the user has a position row for, with the wrappers that
@@ -82,4 +83,36 @@ export async function readSnapshots(db: Db, userId: string, from: Date): Promise
     .where(and(eq(portfolioSnapshots.userId, userId), gte(portfolioSnapshots.capturedAt, from)))
     .orderBy(asc(portfolioSnapshots.capturedAt));
   return rows.map((r) => ({ at: r.at, totalUsd: D(r.totalUsd) }));
+}
+
+/*
+ * Cash that crossed the account's edge, signed. Only USDC rows: they carry an
+ * exact dollar amount, and only USDC is in the cash `totalUsd` counts. A SOL
+ * transfer has no dollar figure and is not in the total either.
+ *
+ * In: a deposit, a basket exited to USDC. Out: a send, a basket funded (its
+ * value leaves the wallet this total reads). Trades, loans and repayments
+ * never reach these kinds: `movementsIn` gives them rows of their own.
+ */
+const FLOW_SIGN: Record<string, 1 | -1> = {
+  transfer_in: 1,
+  liquidate_to_usdc: 1,
+  transfer_out: -1,
+  basket_funding: -1,
+};
+
+export async function readFlows(db: Db, userId: string, from: Date): Promise<readonly Flow[]> {
+  const rows = await db
+    .select({ at: activities.occurredAt, kind: activities.kind, amountUsd: activities.amountUsd })
+    .from(activities)
+    .where(
+      and(
+        eq(activities.userId, userId),
+        gte(activities.occurredAt, from),
+        eq(activities.mint, USDC_MINT),
+        inArray(activities.kind, Object.keys(FLOW_SIGN)),
+        isNotNull(activities.amountUsd),
+      ),
+    );
+  return rows.map((r) => ({ at: r.at, usd: D(r.amountUsd ?? "0").mul(FLOW_SIGN[r.kind] ?? 0) }));
 }

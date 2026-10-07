@@ -3,7 +3,14 @@ import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHoldi
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import { cashFrom, priceFor, valuePortfolio } from "../portfolio/value.js";
-import { MIN_POINTS, RANGES, bucketSeries, type Range, type Reading } from "../portfolio/history.js";
+import {
+  MIN_POINTS,
+  RANGES,
+  bucketSeries,
+  type Flow,
+  type Range,
+  type Reading,
+} from "../portfolio/history.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 
@@ -40,6 +47,8 @@ export interface PortfolioDeps {
   readonly lastKnownDebt: (userId: string) => Promise<Decimal | null>;
   /** Hourly readings of the account's value, no older than `from`. */
   readonly snapshots: (userId: string, from: Date) => Promise<readonly Reading[]>;
+  /** Deposits and withdrawals since `from`, signed, so the chart can show performance without them. */
+  readonly flows?: (userId: string, from: Date) => Promise<readonly Flow[]>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -164,7 +173,11 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
 
     const now = new Date();
     const from = new Date(now.getTime() - RANGES[range].spanHours * 3_600_000);
-    const points = bucketSeries(await deps.snapshots(identity.userId, from), range, now);
+    const [readings, flows] = await Promise.all([
+      deps.snapshots(identity.userId, from),
+      deps.flows ? deps.flows(identity.userId, from) : Promise.resolve([]),
+    ]);
+    const points = bucketSeries(readings, range, now, flows);
 
     // One reading is a dot. Withholding it here keeps "is there a chart?" a
     // single decision in a single place, rather than one the client repeats.

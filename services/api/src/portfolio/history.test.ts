@@ -73,3 +73,29 @@ describe("RANGES", () => {
     expect(RANGES["1M"].spanHours).toBe(24 * 30);
   });
 });
+
+describe("bucketSeries, with deposits and withdrawals", () => {
+  const flow = (h: number, usd: string) => ({ at: new Date(NOW.getTime() - h * 3_600_000), usd: D(usd) });
+
+  it("carries the money added since the first point, so a deposit is not a gain", () => {
+    // $10 held, $40 deposited between hours 3 and 2, then the stock gains $1.
+    const out = bucketSeries(
+      [reading(3, "10"), reading(2, "50"), reading(1, "51")],
+      "1D",
+      NOW,
+      [flow(2.5, "40")],
+    );
+    expect(out.map((p) => p.netFlowUsd)).toEqual(["0", "40", "40"]);
+    // What the holdings did: 51 - 40 - 10 = 1.
+    const last = out[2]!;
+    expect(Number(last.valueUsd) - Number(last.netFlowUsd) - Number(out[0]!.valueUsd)).toBe(1);
+  });
+
+  it("subtracts money sent out, and ignores flows before the first point", () => {
+    const out = bucketSeries([reading(3, "100"), reading(1, "70")], "1D", NOW, [
+      flow(5, "1000"),
+      flow(2, "-30"),
+    ]);
+    expect(out.map((p) => p.netFlowUsd)).toEqual(["0", "-30"]);
+  });
+});

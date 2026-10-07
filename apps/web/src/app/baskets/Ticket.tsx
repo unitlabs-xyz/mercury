@@ -92,7 +92,7 @@ export const EnrollmentRail = ({
           <Skeleton className="mt-1 h-9 w-full rounded-md" />
         </div>
       ) : (
-        <AmountWell raw={amount} onRaw={onAmount} />
+        <AmountWell raw={amount} onRaw={onAmount} cash={cash} />
       )}
       {overCash && (
         <p className="mx-5 mt-2.5 text-[12px] leading-[1.45] text-ds-muted">
@@ -146,8 +146,8 @@ export const EnrollmentRail = ({
               : busy
                 ? "Setting up portfolio…"
                 : valid
-                  ? `Invest ${usd(Number(amount))}`
-                  : "Invest"}
+                  ? `Review ${usd(Number(amount))}`
+                  : "Review"}
         </Button>
       </div>
     </section>

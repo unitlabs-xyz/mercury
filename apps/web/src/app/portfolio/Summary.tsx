@@ -5,6 +5,7 @@ import { Button, ButtonLink } from "../../ui/Button";
 import { ArrowUp, Card, Plus } from "../../ui/icons";
 import { pct, usd, usdCompact, usdSigned } from "@mercury/view";
 import { ValueChart, useHistory, type Range } from "../ValueChart";
+import { usePortfolioHistory } from "../../api/hooks";
 import { HexAllocation, type Slice } from "./HexAllocation";
 import { RailHead, RangeSwitch } from "../../ui/ds";
 import type { Model } from "./model";
@@ -218,10 +219,17 @@ export const Performance = ({
   setRange: (r: Range) => void;
 }) => {
   const history = useHistory(range);
+  const recorded = usePortfolioHistory(range).data?.points;
   const first = history?.[0]?.value;
   const last = history?.[history.length - 1]?.value;
   const change = first !== undefined && last !== undefined ? last - first : null;
-  const percent = change !== null && first !== undefined ? performancePercent(change, first) : null;
+  /*
+   * Of what was at work: the opening value plus whatever was added since. An
+   * account that started empty and was funded today has a gain on the money
+   * put in, not a percentage of zero.
+   */
+  const added = Math.max(0, Number(recorded?.[recorded.length - 1]?.netFlowUsd ?? 0));
+  const percent = change !== null && first !== undefined ? performancePercent(change, first + added) : null;
   const days = range === "1D" ? 1 : range === "1W" ? 7 : 30;
   /*
    * A move too small to print is not a fall. Below half a cent `usdSigned`

@@ -48,7 +48,7 @@ import { pgWaitlist, type WaitlistDeps } from "./routes/waitlist.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
-import { readHoldings, readLatestDebt, readSnapshots } from "./portfolio/queries.js";
+import { readFlows, readHoldings, readLatestDebt, readSnapshots } from "./portfolio/queries.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 import { BasketService } from "./baskets/core/service.js";
@@ -312,6 +312,7 @@ export function buildReadDeps(
       debt: (wallet) => debtFrom(deps.lending, wallet),
       lastKnownDebt: (userId) => readLatestDebt(db, userId),
       snapshots: (userId, from) => readSnapshots(db, userId, from),
+      flows: (userId, from) => readFlows(db, userId, from),
     },
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },

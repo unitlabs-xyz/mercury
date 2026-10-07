@@ -34,6 +34,12 @@ export const HistoryRange = z.enum(["1D", "1W", "1M"]);
 export const HistoryPoint = z.object({
   at: z.string().datetime(),
   valueUsd: Usd,
+  /**
+   * Deposits less withdrawals since the first point. `valueUsd - netFlowUsd` is
+   * what the account would be worth had no money come or gone: its change is
+   * performance. Optional so an older server still parses.
+   */
+  netFlowUsd: Usd.optional(),
 });
 
 /**

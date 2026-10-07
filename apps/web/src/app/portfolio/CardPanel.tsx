@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 import type { CardAccount } from "../../api/dashboard";
-import { CardArt } from "../../cards/CardArt";
 import { Button } from "../../ui/Button";
-import { RailCard, RailFigure, RailHead, StatusChip } from "../../ui/ds";
+import { RailCard, RailFigure, RailHead } from "../../ui/ds";
 import { usd } from "@mercury/view";
 import type { Model } from "./model";
 import { Skeleton, relDay, shortDate } from "./ui";
@@ -40,30 +39,33 @@ export const CardPanel = ({
 
   if (!card) {
     return (
-      // Coming soon: the rail's header over a grey panel, like Rebalancing and About.
-      <section aria-label="Card" className="min-w-0 rounded-xl bg-white p-1">
-        <div className="px-5 pt-4">
-          <RailHead
-            title="Card"
-            meta={
-              <StatusChip tone="neutral" size="md">
-                Coming soon
-              </StatusChip>
-            }
-          />
-        </div>
-        <div className="mt-[11px] flex items-center gap-4 rounded-lg bg-ds-panel px-5 py-4">
-          <div className="w-[72px] shrink-0 [&>div]:rounded-lg">
-            <CardArt finish="gold" bare />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[14px] leading-tight font-medium text-ds-ink">Spend without selling</p>
-            <p className="mt-1.5 text-[12px] leading-relaxed text-ds-muted">
-              A card backed by your shares, so you can spend against them and keep them invested.
+      // Coming soon, set like the locked Rebalancing card: what the panel will
+      // show, blurred and inert, with one note over it saying why.
+      <Sheet>
+        <Head />
+        <div className="relative mt-4">
+          <div aria-hidden="true" inert className="pointer-events-none select-none opacity-60 blur-[3px]">
+            <div className="flex items-center justify-between gap-3">
+              <RailFigure value="$248.30" sub="Due 16 Nov, paid automatically" />
+              <Button variant="primary" disabled>
+                Pay
+              </Button>
+            </div>
+            <p className="mt-[13px] border-t border-ds-divider pt-3 text-[14px] leading-tight text-ds-muted">
+              <span className="font-medium text-ds-ink">$412.00</span> spent this month of $2,000 · Credit
+              mode
             </p>
           </div>
+          <div className="absolute inset-0 grid place-items-center px-4">
+            <div className="max-w-[300px] rounded-lg bg-ds-panel px-5 py-4 text-center">
+              <p className="text-[14px] font-medium text-ds-ink">Card coming soon</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-ds-muted">
+                Spend against your shares and keep them invested.
+              </p>
+            </div>
+          </div>
         </div>
-      </section>
+      </Sheet>
     );
   }
 
