@@ -44,8 +44,8 @@ Five things a traditional broker cannot copy, argued in `docs/01-evidence.md`:
    broker has this problem, so no broker has this screen.
 2. **Protection from the wrong wrapper.** Same stock, two issuers, measurably different cost for
    the identical share. Checked on every order, at the size being ordered.
-3. **A basket that is one real token** — holdable, sendable, pledgeable — backed by a vault
-   rather than a rule in a database.
+3. **A basket is a portfolio the user owns** — a Glider smart account per strategy, rebalanced
+   daily, exited in kind or to USDC — rather than a rule in a database or a pooled fund.
 4. **A share count that grows by itself.** Dividends arrive as a rise in the token's multiplier.
    Most integrations ignore the multiplier and their numbers drift wrong.
 5. **Leaving is trivial, and the product says so.** Holdings sit in the user's own wallet.
@@ -94,8 +94,8 @@ price_ (one real share), _collateral factor_.
 
 **Open, and recorded rather than assumed:**
 
-- Whether basket tokens route as a single swap, and whether the xStocks mints are in Symmetry's
-  supported list. Both close by testing, not by discussion.
+- Baskets are Glider portfolios (ADR 0013): each strategy still needs a real-funded round trip,
+  and basket value is not yet in net worth.
 - **Every screen must run on real data by 12 October.** Portfolio, Money and Activity still use
   invented holdings; that is a defect to close, not an accepted state. The known placeholders are
   return figures and 30-day buyer counts in `apps/web/src/market/placeholder.ts`.
@@ -109,7 +109,7 @@ The name is **Mercury**, reversible but currently settled; nothing depends on it
 product that only describes good outcomes is the one users should not trust. Numbers on screen
 say where they came from.
 
-**Third parties are named, never absorbed.** The basket page names Symmetry, the credit page
+**Third parties are named, never absorbed.** The basket page names Glider, the credit page
 names Kamino, prices credit their source. Mercury is not the custodian and will not imply it is.
 
 ## Evidence on Hand

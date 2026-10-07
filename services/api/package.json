@@ -7,6 +7,7 @@
     "dev": "tsx watch --env-file=.env src/index.ts",
     "dev:waitlist": "tsx scripts/waitlist-local.ts",
     "dev:waitlist:mail": "WAITLIST_SEND_MAIL=1 tsx --env-file=.env scripts/waitlist-local.ts",
+    "price-gap": "tsx scripts/price-gap.ts",
     "start": "tsx --env-file=.env src/index.ts",
     "typecheck": "tsc --noEmit",
     "generate:glider-types": "openapi-typescript https://api.glider.fi/v2/openapi.json -o src/baskets/glider/generated.d.ts",

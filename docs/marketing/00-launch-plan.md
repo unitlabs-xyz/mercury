@@ -31,7 +31,7 @@ first sets up a promise the waitlist cannot redeem. Card = rung 5, always marked
 ## 2 · Guardrails (from PRODUCT.md, non-negotiable in public)
 
 - **No invented traction.** No user counts, testimonials, "thousands on the waitlist", partner
-  logos. Protocols are _named_ (Jupiter, Kamino, Symmetry, Backed, Ondo), never implied as partners.
+  logos. Protocols are _named_ (Jupiter, Kamino, Glider, Backed, Ondo), never implied as partners.
 - **Re-run every number the day it is posted.** The evidence doc says so itself. Always state the
   order size ("on a $1,000 buy") and the date read. Screenshot the raw quote and keep it.
 - **No return figures, no yield promises.** Returns are placeholders in the product. The 4.1%
@@ -124,7 +124,7 @@ stacks, no "gm", no "LFG", no "revolutionising finance".
 
 - **Link in the first reply, not the post.** Keep the post itself text + one image/clip.
 - **Tag the protocols when we use them**, factually: @JupiterExchange for routing, @KaminoFinance
-  for credit, @symmetry_fi for baskets, @xStocksFi / @OndoFinance for issuers,
+  for credit, @glider__ for baskets, @xStocksFi / @OndoFinance for issuers,
   @colosseum for the hackathon. (Verify each handle before posting.) Naming them is on-brand and
   they sometimes repost builders.
 - **Founder accounts do the reach, brand account does the record.** Posts from people outperform

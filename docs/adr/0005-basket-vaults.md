@@ -1,6 +1,9 @@
 # ADR 0005 · Baskets are real tokens, built on Symmetry
 
-**Status:** accepted · 19 September 2026 · supersedes the build-or-integrate version
+**Status:** superseded by [ADR 0013](0013-baskets-on-glider.md) · 19 September 2026 · supersedes the build-or-integrate version
+
+> Baskets are now user-owned Glider portfolios, not Symmetry vault tokens. This record is kept
+> for history; the Symmetry spike below never closed.
 
 ## Context
 

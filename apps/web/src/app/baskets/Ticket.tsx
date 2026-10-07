@@ -55,7 +55,7 @@ export const EnrollmentRail = ({
     <RailCard label="Invest in strategy">
       <RailHead
         title={checking ? `Invest in ${name}` : `${enrolled ? "Fund" : "Enroll in"} ${name}`}
-        meta={checking ? "Checking" : enrolled ? "Enrolled" : "Solana"}
+        meta={checking ? "Checking" : enrolled ? "Enrolled" : undefined}
       />
       <div className="-mx-5 mt-5 min-h-[102px] rounded-lg bg-ds-panel px-5 py-4 text-[13px]">
         {checking ? (
