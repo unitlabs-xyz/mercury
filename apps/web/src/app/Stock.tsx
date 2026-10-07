@@ -388,7 +388,6 @@ export const Stock = () => {
         initial={amount}
         side={side}
         max={max}
-        sellableUsd={sellableUsd}
       />
     </AppShell>
   );

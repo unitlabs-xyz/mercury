@@ -34,7 +34,7 @@ export const Money = () => {
       <div className="flex flex-col gap-4 md:gap-6">
         <section aria-label="Cash" className="flex flex-col rounded-xl bg-white xl:min-h-[189px] xl:flex-row">
           <div className="shrink-0 p-6 xl:w-[395px]">
-            <p className="text-[14px] leading-none font-medium text-ds-ink">Available to invest</p>
+            <p className="text-[14px] leading-none font-medium text-ds-ink">Cash</p>
             {m ? (
               <p className="mt-[9px] text-[36px] leading-none font-medium text-ds-ink">{usd(m.balanceUsd)}</p>
             ) : (

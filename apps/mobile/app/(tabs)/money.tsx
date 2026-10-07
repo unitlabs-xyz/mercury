@@ -57,7 +57,7 @@ function MoneyScreen() {
         {/* Cash */}
         <View style={s.card}>
           <View style={s.cash}>
-            <RNText style={s.label}>Available to invest</RNText>
+            <RNText style={s.label}>Cash</RNText>
             {m ? (
               <RNText style={s.figure} numberOfLines={1} adjustsFontSizeToFit>
                 {usd(m.balanceUsd)}

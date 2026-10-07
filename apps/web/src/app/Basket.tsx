@@ -40,8 +40,8 @@ import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
-import { EnrollmentRail, EnrollmentSheet, ExitSheet, FundingSheet, RebalanceSheet } from "./baskets/Ticket";
-import { modeledSeries } from "./baskets/performance";
+import { EnrollmentRail, ExitSheet, InvestSheet, RebalanceSheet } from "./baskets/Ticket";
+import { modeledRanges, modeledSince, modeledWindow } from "@mercury/view";
 import { RailList } from "./invest/Rail";
 import { EventRow } from "./portfolio/Feed";
 import { USDC_MINT, UsdcMark } from "./activity-mark";
@@ -49,16 +49,21 @@ import { Skeleton } from "./portfolio/ui";
 import { LIST_DOT } from "./invest/shared";
 import { Fact } from "./stock/Panels";
 
-type Range = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
-const RANGES: readonly Range[] = ["1D", "1W", "1M", "3M", "6M", "1Y", "All"];
-const WINDOW: Record<Range, string> = {
-  "1D": "1d",
-  "1W": "1w",
-  "1M": "1m",
-  "3M": "3m",
-  "6M": "6m",
-  "1Y": "12m",
-  All: "all",
+type Range = "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
+const WINDOWS = [
+  { key: "1W", window: "1w" },
+  { key: "1M", window: "1m" },
+  { key: "3M", window: "3m" },
+  { key: "6M", window: "6m" },
+  { key: "1Y", window: "12m" },
+  { key: "All", window: "all" },
+] as const satisfies readonly { key: Range; window: string }[];
+const RANGE_NAME: Record<Exclude<Range, "All">, string> = {
+  "1W": "1-week",
+  "1M": "1-month",
+  "3M": "3-month",
+  "6M": "6-month",
+  "1Y": "1-year",
 };
 const weight = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.00$/, "")}%`;
 const returnLabel = (value: string) => `${Number(value) > 0 ? "+" : ""}${Number(value).toFixed(2)}%`;
@@ -156,7 +161,7 @@ const RebalanceTimer = ({
             </AnimatePresence>
           </span>
         )}
-        {remainingMs !== null && schedule?.status === "active" && (
+        {remainingMs !== null && remainingMs > 0 && schedule?.status === "active" && (
           <span aria-hidden="true" className="text-[12px] text-ds-muted">
             remaining
           </span>
@@ -262,7 +267,7 @@ const StockLink = ({
  * What the schedule looks like once there is a portfolio, blurred behind a
  * note — static, so nothing ticks for a portfolio that doesn't exist.
  */
-const RebalanceLocked = () => (
+const RebalanceLocked = ({ enrolled }: { enrolled: boolean }) => (
   <div className="relative">
     <div aria-hidden="true" inert className="pointer-events-none select-none blur-[3px] opacity-60">
       <div className="flex items-center justify-between gap-3 text-[12px] text-ds-muted">
@@ -291,9 +296,13 @@ const RebalanceLocked = () => (
     </div>
     <div className="absolute inset-0 grid place-items-center px-4">
       <div className="max-w-[280px] rounded-lg bg-white px-5 py-4 text-center">
-        <p className="text-[14px] font-medium text-ds-ink">Open a position to rebalance</p>
+        <p className="text-[14px] font-medium text-ds-ink">
+          {enrolled ? "Add USDC to start rebalancing" : "Open a position to rebalance"}
+        </p>
         <p className="mt-1.5 text-[12px] leading-relaxed text-ds-muted">
-          Once you enroll, Glider brings your holdings back to target weights every day.
+          {enrolled
+            ? "Once your first deposit lands, Glider brings your holdings back to target weights every day."
+            : "Once you invest, Glider brings your holdings back to target weights every day."}
         </p>
       </div>
     </div>
@@ -365,9 +374,9 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
 export const Basket = () => {
   const { slug = "" } = useParams();
   const [range, setRange] = useState<Range>("1Y");
-  const [enrollmentOpen, setEnrollmentOpen] = useState(false);
-  const [fundingOpen, setFundingOpen] = useState(false);
-  const [fundingReview, setFundingReview] = useState(false);
+  const [investOpen, setInvestOpen] = useState(false);
+  /* Opened before enrollment: the sheet walks set-up then USDC, and keeps its step map to the end. */
+  const [firstDeposit, setFirstDeposit] = useState(false);
   const [fundingAmount, setFundingAmount] = useState("100");
   const [showAllAssets, setShowAllAssets] = useState(false);
   const [checkingEnrollment, setCheckingEnrollment] = useState(false);
@@ -409,9 +418,8 @@ export const Basket = () => {
   useEffect(() => {
     if (previousOwnerContext.current === ownerContext) return;
     previousOwnerContext.current = ownerContext;
-    setEnrollmentOpen(false);
-    setFundingOpen(false);
-    setFundingReview(false);
+    setInvestOpen(false);
+    setFirstDeposit(false);
     setRebalanceOpen(false);
     setRebalanceOperation(null);
     setExitOpen(false);
@@ -490,11 +498,8 @@ export const Basket = () => {
   );
   const name = template ? displayBasketName(template.name) : "Basket";
   const enrollmentBusy = checkingEnrollment || enrollAction.isPending;
-  const closeEnrollment = () => {
-    if (enrollmentBusy) return;
-    setEnrollmentOpen(false);
-    enrollAction.reset();
-  };
+  /* Enrolled as of this session, even before the enrollment read catches up. */
+  const investPortfolio = signedIn ? (enrollment.data ?? enrollAction.data ?? null) : null;
   const confirmEnrollment = async () => {
     if (enrollmentRequestActive.current) return;
     enrollmentRequestActive.current = true;
@@ -510,14 +515,14 @@ export const Basket = () => {
       enrollmentRequestActive.current = false;
     }
   };
-  const closeFunding = () => {
-    if (fundingAction.isPending) return;
-    setFundingOpen(false);
-    setFundingReview(false);
+  const closeInvest = () => {
+    if (enrollmentBusy || fundingAction.isPending) return;
+    setInvestOpen(false);
+    enrollAction.reset();
     fundingAction.reset();
   };
   const confirmFunding = async () => {
-    const portfolio = enrollment.data;
+    const portfolio = investPortfolio;
     if (!portfolio || fundingRequestActive.current) return;
     fundingRequestActive.current = true;
     try {
@@ -579,14 +584,25 @@ export const Basket = () => {
     );
 
   const performance = template.performance;
-  const selectedWindow = performance?.windows.find((item) => item.window === WINDOW[range]);
-  const since = selectedWindow?.since ?? (range === "All" ? performance?.points[0]?.date : undefined);
-  const chart =
-    selectedWindow === undefined && range !== "All" ? [] : modeledSeries(performance?.points ?? [], since);
+  /* Only the ranges this strategy has history for; a pick it lacks falls back to its longest. */
+  const ranges = modeledRanges(performance, WINDOWS);
+  const shown = ranges.includes(range) ? range : (ranges.at(-1) ?? range);
+  const modeled = modeledWindow(performance, WINDOWS.find((w) => w.key === shown)!.window);
+  const chart = modeled.series;
   const allocations = [...template.allocations].sort((a, b) => b.weightBps - a.weightBps);
   const mosaic = allocationRows(allocations);
   const totalWeight = allocations.reduce((sum, asset) => sum + asset.weightBps, 0);
-  const year = performance?.windows.find((item) => item.window === "12m");
+  /* The headline follows the chosen range; "All" reads as the return since the first modeled day. */
+  const sinceStart = modeledSince(performance);
+  const headline = {
+    label:
+      shown === "All"
+        ? sinceStart
+          ? `Modeled return since ${new Date(`${sinceStart}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}`
+          : "Modeled return"
+        : `Modeled ${RANGE_NAME[shown]} return`,
+    change: modeled.change,
+  };
   const account = signedIn ? portfolio.data : null;
   const schedule = account?.schedule;
   const operationState = rebalanceStatus.data?.state;
@@ -608,7 +624,18 @@ export const Basket = () => {
     sessionChecking ||
     (signedIn && !walletMissing && (enrollment.isPending || (enrolled && portfolio.isPending)));
   const ownershipUnknown = signedIn && !walletMissing && enrollment.isError && !enrollment.data;
-  const rebalanceLocked = !enrolled && !accountLoading && !ownershipUnknown;
+  /*
+   * Enrolled is not invested. Position, assets and rebalancing wait for money
+   * in the portfolio: something held or in transit, or a transfer sent from
+   * this page that the balance read has not caught up with yet.
+   */
+  const funded =
+    enrolled &&
+    (heldAssets.length > 0 ||
+      Number(account?.totalValueUsd ?? 0) > 0 ||
+      Number(account?.inTransitUsd ?? 0) > 0 ||
+      Boolean(fundingAction.data));
+  const rebalanceLocked = !accountLoading && !ownershipUnknown && !funded && !(enrolled && !account);
   const marketReads = [
     instruments.dataUpdatedAt,
     prices.dataUpdatedAt,
@@ -677,20 +704,20 @@ export const Basket = () => {
               </p>
               <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <p className="text-[12px] text-ds-muted">Modeled 1-year return</p>
+                  <p className="text-[12px] text-ds-muted">{headline.label}</p>
                   <p
-                    className={`mt-1 text-[32px] leading-none font-medium ${year ? (Number(year.percentChange) < 0 ? "text-ds-fall" : "text-ds-up") : "text-ds-ink"}`}
+                    className={`mt-1 text-[32px] leading-none font-medium ${headline.change !== null ? (Number(headline.change) < 0 ? "text-ds-fall" : "text-ds-up") : "text-ds-ink"}`}
                   >
-                    {year ? returnLabel(year.percentChange) : "Unavailable"}
+                    {headline.change !== null ? returnLabel(headline.change) : "Unavailable"}
                   </p>
                 </div>
                 <div className="max-w-full overflow-x-auto">
-                  <RangeSwitch options={RANGES} value={range} onChange={setRange} />
+                  {ranges.length > 0 && <RangeSwitch options={ranges} value={shown} onChange={setRange} />}
                 </div>
               </div>
               <div className="mt-4 h-[340px]">
                 {chart.length > 1 ? (
-                  <DotChart series={chart} label={range} scale="percent" />
+                  <DotChart series={chart} label={shown} scale="percent" />
                 ) : (
                   <div className="grid h-full place-items-center rounded-lg bg-ds-panel text-[13px] text-ds-muted">
                     Modeled history is unavailable for this range.
@@ -990,18 +1017,17 @@ export const Basket = () => {
                   : enrollment.error?.message
               }
               onRetry={() => void enrollment.refetch()}
+              amount={fundingAmount}
+              onAmount={setFundingAmount}
+              cash={money.data ? Number(money.data.balanceUsd) : null}
               onReview={() => {
-                if (enrolled) {
-                  fundingAction.reset();
-                  setFundingReview(false);
-                  setFundingOpen(true);
-                } else {
-                  enrollAction.reset();
-                  setEnrollmentOpen(true);
-                }
+                enrollAction.reset();
+                fundingAction.reset();
+                setFirstDeposit(!enrolled);
+                setInvestOpen(true);
               }}
             />
-            {(enrolled || ownershipUnknown) && (
+            {(funded || ownershipUnknown) && (
               <RailCard label="Your position">
                 <RailHead
                   title="Your position"
@@ -1115,7 +1141,7 @@ export const Basket = () => {
                 )}
               </RailCard>
             )}
-            {enrolled && (
+            {funded && (
               <RailList
                 label="Your assets"
                 meta="Value · share 1D"
@@ -1274,7 +1300,7 @@ export const Basket = () => {
                     <Skeleton className="mt-4 h-2.5 w-full rounded-full" />
                   </div>
                 ) : rebalanceLocked ? (
-                  <RebalanceLocked />
+                  <RebalanceLocked enrolled={enrolled} />
                 ) : ownershipUnknown ? (
                   <div className="min-h-[160px] text-[12px] text-ds-muted">
                     <p>Rebalance schedule is unavailable until portfolio status is known.</p>
@@ -1407,37 +1433,42 @@ export const Basket = () => {
           </div>
         </aside>
       </div>
-      <EnrollmentSheet
-        open={enrollmentOpen}
+      <InvestSheet
+        open={investOpen}
         name={name}
         assetCount={allocations.length}
-        walletReady={enrollAction.walletReady}
-        busy={enrollmentBusy}
-        completed={Boolean(enrollment.data || enrollAction.data)}
-        error={enrollAction.error?.message ?? enrollment.error?.message}
-        onClose={closeEnrollment}
-        onConfirm={() => void confirmEnrollment()}
+        mark={
+          <span className="flex items-center -space-x-3" aria-hidden="true">
+            {allocations.slice(0, 2).map((asset, index) => (
+              <span key={asset.assetId} className="relative" style={{ zIndex: 2 - index }}>
+                <AssetIcon
+                  asset={asset}
+                  source={byTicker.get(asset.ticker)}
+                  className="size-10 rounded-full bg-ds-panel object-contain ring-2 ring-white"
+                />
+              </span>
+            ))}
+          </span>
+        }
+        amount={fundingAmount}
+        cash={money.data ? Number(money.data.balanceUsd) : null}
+        portfolio={investPortfolio}
+        firstDeposit={firstDeposit}
+        receipt={fundingAction.data ?? null}
+        enroll={{
+          walletReady: enrollAction.walletReady,
+          busy: enrollmentBusy,
+          error: enrollAction.error?.message ?? enrollment.error?.message,
+          onConfirm: () => void confirmEnrollment(),
+        }}
+        fund={{
+          walletReady: fundingAction.walletReady,
+          busy: fundingAction.isPending,
+          error: fundingAction.error?.message,
+          onConfirm: () => void confirmFunding(),
+        }}
+        onClose={closeInvest}
       />
-      {signedIn && enrollment.data && (
-        <FundingSheet
-          open={fundingOpen}
-          name={name}
-          amount={fundingAmount}
-          onAmount={setFundingAmount}
-          cash={money.data ? Number(money.data.balanceUsd) : null}
-          cashUnavailable={money.isError}
-          portfolio={enrollment.data}
-          review={fundingReview}
-          busy={fundingAction.isPending}
-          walletReady={fundingAction.walletReady}
-          receipt={fundingAction.data ?? null}
-          error={fundingAction.error?.message}
-          onReview={() => setFundingReview(true)}
-          onBack={() => setFundingReview(false)}
-          onConfirm={() => void confirmFunding()}
-          onClose={closeFunding}
-        />
-      )}
       <RebalanceSheet
         open={rebalanceOpen}
         name={name}

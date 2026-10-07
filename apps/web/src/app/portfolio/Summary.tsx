@@ -129,14 +129,17 @@ export const AccountHeader = ({
   const owes = card !== null && card !== undefined && card.statementBalanceUsd > 0;
   return (
     <section aria-label="Account" className="flex flex-col rounded-xl bg-white xl:min-h-[189px] xl:flex-row">
-      <div className="shrink-0 p-6 xl:w-[395px]">
+      <div className="flex shrink-0 flex-col justify-center p-6 xl:w-[395px]">
         <p className="text-[14px] leading-none font-medium text-ds-ink">Net worth</p>
         {m ? (
           <p className="mt-[9px] text-[36px] leading-none font-medium text-ds-ink">{usd(m.total)}</p>
         ) : (
           <Skeleton className="mt-2 h-9 w-48" />
         )}
-        <TodayMove pctValue={m?.changePct} usdValue={m?.changeUsd} />
+        {/* A move that rounds to nothing is not news: no chip, no "+$0.00 today". */}
+        {(!m || Math.abs(m.changeUsd ?? 0) >= 0.005) && (
+          <TodayMove pctValue={m?.changePct} usdValue={m?.changeUsd} />
+        )}
         <div className="mt-[22px] flex flex-wrap gap-2">
           <ButtonLink to="/invest" variant="primary">
             Invest
