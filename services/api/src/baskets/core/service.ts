@@ -1,7 +1,9 @@
 import { isDeepStrictEqual } from "node:util";
 import type {
+  BasketExitAsset,
   BasketExitMessage,
   BasketExitMode,
+  BasketExitSubmission,
   ManagedBasketInsights,
   ManagedBasketTemplate,
 } from "@mercury/types";
@@ -333,7 +335,12 @@ export class BasketService {
     return { template, provider, portfolio, smartAccount };
   }
 
-  async prepareExit(slug: string, ownerAccountId: string, mode: BasketExitMode) {
+  async prepareExit(
+    slug: string,
+    ownerAccountId: string,
+    mode: BasketExitMode,
+    requestedAssets?: readonly BasketExitAsset[],
+  ) {
     if (!SOLANA_ACCOUNT.test(ownerAccountId))
       throw new BasketEnrollmentError("wallet_required", 400, "A Solana wallet is required to exit.");
     const { provider, portfolio } = await this.exitPortfolio(slug, ownerAccountId);
@@ -344,23 +351,49 @@ export class BasketService {
         409,
         "Portfolio balances could not be verified.",
       );
-    if (mode === "in_kind" && positions.warnings.length > 0)
+    if ((mode === "in_kind" || requestedAssets) && positions.warnings.length > 0)
       throw new BasketEnrollmentError(
         "positions_incomplete",
         409,
         "Refresh complete portfolio balances before withdrawing assets.",
       );
-    const assets = positions.assets
+    const available = positions.assets
       .filter((item) => item.assetId.startsWith(SOLANA_ASSET) && /^[1-9]\d*$/.test(item.balanceRaw))
       .map(({ assetId, balanceRaw }) => ({ assetId, amountRaw: balanceRaw }));
+    const submission: BasketExitSubmission =
+      mode === "liquidate_usdc" && !requestedAssets ? "liquidate_all" : "withdraw";
+    const assets = requestedAssets ? [...requestedAssets] : available;
     if (assets.length === 0)
-      throw new BasketEnrollmentError(
-        "empty_portfolio",
-        409,
-        "There are no Solana assets available to withdraw.",
-      );
+      throw new BasketEnrollmentError("empty_portfolio", 409, "Choose at least one asset to withdraw.");
+    if (submission === "withdraw" && assets.length > 10)
+      throw new BasketEnrollmentError("too_many_assets", 400, "Choose up to 10 assets per withdrawal.");
+    if (submission === "withdraw") {
+      const balances = new Map(available.map((asset) => [asset.assetId, BigInt(asset.amountRaw)]));
+      const selected = new Set<string>();
+      for (const asset of assets) {
+        const balance = balances.get(asset.assetId);
+        if (
+          selected.has(asset.assetId) ||
+          balance === undefined ||
+          !/^[1-9]\d*$/.test(asset.amountRaw) ||
+          BigInt(asset.amountRaw) > balance
+        )
+          throw new BasketEnrollmentError(
+            "invalid_exit_amount",
+            409,
+            "Selected asset amounts are invalid or exceed the current portfolio balance. Review them again.",
+          );
+        selected.add(asset.assetId);
+      }
+    }
     try {
-      const prepared = await provider.prepareExit(portfolio.portfolioId, mode, ownerAccountId, assets);
+      const prepared = await provider.prepareExit(
+        portfolio.portfolioId,
+        mode,
+        ownerAccountId,
+        assets,
+        submission,
+      );
       const { message } = prepared;
       if (
         message.portfolioId !== portfolio.portfolioId ||
@@ -379,12 +412,18 @@ export class BasketService {
           "The withdrawal authorization expired. Try again.",
         );
       if (
-        mode === "in_kind" &&
+        submission === "withdraw" &&
         JSON.stringify(message.assets.slice().sort((a, b) => a.assetId.localeCompare(b.assetId))) !==
           JSON.stringify(assets.slice().sort((a, b) => a.assetId.localeCompare(b.assetId)))
       )
-        throw new Error("Glider returned a different in-kind asset set.");
-      return { ...prepared, mode, portfolioId: portfolio.portfolioId, recipientAccountId: ownerAccountId };
+        throw new Error("Glider returned a different selected asset set.");
+      return {
+        ...prepared,
+        mode,
+        submission,
+        portfolioId: portfolio.portfolioId,
+        recipientAccountId: ownerAccountId,
+      };
     } catch (error) {
       if (error instanceof BasketExitUnsupportedError)
         throw new BasketEnrollmentError("unsupported_authorization", 409, error.message);
@@ -399,12 +438,14 @@ export class BasketService {
     mode: BasketExitMode,
     message: BasketExitMessage,
     signature: string,
+    submission: BasketExitSubmission = mode === "in_kind" ? "withdraw" : "liquidate_all",
   ) {
     const { template, provider, portfolio, smartAccount } = await this.exitPortfolio(slug, ownerAccountId);
     if (
       message.portfolioId !== portfolio.portfolioId ||
       message.recipientAccountId !== ownerAccountId ||
       Boolean(message.liquidate) !== (mode === "liquidate_usdc") ||
+      (mode === "in_kind" && submission !== "withdraw") ||
       (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC) ||
       (mode === "in_kind" && message.settlementAssetId !== undefined)
     )
@@ -442,6 +483,7 @@ export class BasketService {
       const latest = await this.deps.history.signatures(addressOf(smartAccount.accountId), { limit: 1 });
       const payload: ExitIntentPayload = {
         mode,
+        submission,
         smartAccountId: smartAccount.accountId,
         recipientAccountId: ownerAccountId,
         baselineSignature: latest[0]?.signature ?? null,
@@ -463,6 +505,7 @@ export class BasketService {
     }
     const expectedPayload = {
       mode,
+      submission,
       smartAccountId: smartAccount.accountId,
       recipientAccountId: ownerAccountId,
       authorization: { message, signature },
@@ -472,6 +515,8 @@ export class BasketService {
     };
     const savedComparable = {
       mode: intent.payload.mode,
+      submission:
+        intent.payload.submission ?? (intent.payload.mode === "in_kind" ? "withdraw" : "liquidate_all"),
       smartAccountId: intent.payload.smartAccountId,
       recipientAccountId: intent.payload.recipientAccountId,
       authorization: intent.payload.authorization,
@@ -502,7 +547,7 @@ export class BasketService {
         409,
         "The withdrawal authorization expired. Review it again.",
       );
-    const submitted = await provider.submitExit(portfolio.portfolioId, mode, message, signature);
+    const submitted = await provider.submitExit(portfolio.portfolioId, mode, message, signature, submission);
     await this.deps.store.attachExitOperation(
       intent.id,
       submitted.operationId,

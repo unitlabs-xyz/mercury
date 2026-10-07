@@ -1,4 +1,9 @@
-import type { BasketExitMessage, BasketExitMode, ManagedBasketTag } from "@mercury/types";
+import type {
+  BasketExitMessage,
+  BasketExitMode,
+  BasketExitSubmission,
+  ManagedBasketTag,
+} from "@mercury/types";
 
 export interface BasketDefinition {
   slug: string;
@@ -60,6 +65,8 @@ export interface EnrollmentIntent {
 
 export interface ExitIntentPayload {
   mode: BasketExitMode;
+  /** Optional for exit intents recorded before selected USDC withdrawals existed. */
+  submission?: BasketExitSubmission | undefined;
   smartAccountId: string;
   recipientAccountId: string;
   baselineSignature: string | null;

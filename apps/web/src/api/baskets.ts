@@ -14,6 +14,7 @@ import type {
   PreparedBasketEnrollment,
   ManagedBasketActivity,
   BasketExitMode,
+  BasketExitAsset,
   PreparedBasketExit,
   SubmittedBasketExit,
 } from "@mercury/types";
@@ -218,8 +219,11 @@ export const useBasketExitAction = (slug: string) => {
   const { signMessage } = useSignMessage();
   const path = `/v1/basket-templates/${encodeURIComponent(slug)}/exit`;
   const prepare = useMutation({
-    mutationFn: (mode: BasketExitMode) =>
-      apiFetch<PreparedBasketExit>(`${path}/${mode}/prepare`, { method: "POST" }),
+    mutationFn: ({ mode, assets }: { mode: BasketExitMode; assets?: BasketExitAsset[] }) =>
+      apiFetch<PreparedBasketExit>(`${path}/${mode}/prepare`, {
+        method: "POST",
+        ...(assets ? { body: JSON.stringify({ assets }) } : {}),
+      }),
   });
   const submit = useMutation({
     mutationFn: async (prepared: PreparedBasketExit) => {
@@ -240,7 +244,7 @@ export const useBasketExitAction = (slug: string) => {
       const signature = getBase58Decoder().decode(signed.signature);
       return apiFetch<SubmittedBasketExit>(`${path}/${prepared.mode}`, {
         method: "POST",
-        body: JSON.stringify({ message: prepared.message, signature }),
+        body: JSON.stringify({ message: prepared.message, signature, submission: prepared.submission }),
       });
     },
     onSuccess: () => {
