@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
   BasketExitMessage,
   BasketExitMode,
@@ -482,7 +483,7 @@ export class BasketService {
       intent.slug !== slug ||
       intent.ownerAccountId !== ownerAccountId ||
       intent.portfolioId !== portfolio.portfolioId ||
-      JSON.stringify(savedComparable) !== JSON.stringify(expectedPayload)
+      !isDeepStrictEqual(savedComparable, expectedPayload)
     )
       throw new BasketEnrollmentError(
         "invalid_exit",

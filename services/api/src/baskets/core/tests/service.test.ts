@@ -471,6 +471,15 @@ it("prepares a full in-kind exit for the verified owner and refuses a redirected
         return {
           id: "intent-1",
           ...action,
+          payload: {
+            ...action.payload,
+            authorization: {
+              ...action.payload.authorization,
+              message: Object.fromEntries(
+                Object.entries(action.payload.authorization.message).reverse(),
+              ) as typeof action.payload.authorization.message,
+            },
+          },
           operationId: null,
           submittedAt: null,
           createdAt: new Date(),
@@ -536,6 +545,7 @@ it("prepares a full in-kind exit for the verified owner and refuses a redirected
     },
   });
   await expect(service.prepareExit("nvidia", owner, "in_kind")).resolves.toMatchObject({ message });
+  expect(recorded).toBe(0);
   await expect(
     service.submitExit(
       "nvidia",

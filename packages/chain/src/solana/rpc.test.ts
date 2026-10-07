@@ -286,6 +286,7 @@ describe("SolanaRpc.transaction", () => {
       postLamports: [],
       preTokens: [],
       postTokens: [],
+      tokenTransfersIn: [],
     });
   });
 
@@ -319,6 +320,7 @@ describe("SolanaRpc.transaction", () => {
       postLamports: [999_995_000n],
       preTokens: [],
       postTokens: [{ mint: USDC_MINT, owner: FIXTURE_OWNER, rawAmount: 500_000_000n, decimals: 6 }],
+      tokenTransfersIn: [],
     });
   });
 
