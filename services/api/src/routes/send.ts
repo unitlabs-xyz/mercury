@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  address,
   createSolanaRpc,
   getBase58Decoder,
   getBase64Encoder,
@@ -14,6 +15,7 @@ import {
   type Base64EncodedWireTransaction,
   type Signature,
 } from "@solana/kit";
+import { buildUsdcTransferTransaction } from "../relay/usdc-transfer.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 import { decodeSponsored } from "../relay/decode.js";
@@ -159,6 +161,15 @@ export const failureText = (err: unknown): string => {
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
 const Body = z.object({ transaction: z.string().min(1) });
+const PrepareBody = z.object({
+  amount: z.string().regex(/^\d+(?:\.\d{1,6})?$/, "Enter a USDC amount with at most six decimals."),
+  to: z.string().min(1),
+});
+
+const usdcBaseUnits = (amount: string): bigint => {
+  const [whole = "0", fraction = ""] = amount.split(".");
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0") || "0");
+};
 
 /**
  * Broadcasts a transaction the user's wallet has already signed, and waits for
@@ -179,6 +190,58 @@ export function sendRoutes(deps: SendDeps): Hono {
   const app = new Hono();
   const rpc = createSolanaRpc(deps.rpcUrl);
   const confirmMs = deps.confirmMs ?? 45_000;
+
+  app.post("/v1/money/send/prepare", async (c) => {
+    const wallet = c.get("identity").walletAddress;
+    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const parsed = PrepareBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json(fail("validation_failed", "Enter a valid USDC amount and recipient."), 400);
+
+    const amountRaw = usdcBaseUnits(parsed.data.amount);
+    if (amountRaw === 0n || amountRaw > 0xffff_ffff_ffff_ffffn) {
+      return c.json(fail("validation_failed", "Enter a valid USDC amount."), 400);
+    }
+
+    let destination;
+    try {
+      destination = address(parsed.data.to.trim());
+    } catch {
+      return c.json(fail("validation_failed", "Enter a valid Solana wallet address."), 400);
+    }
+    if (destination === wallet)
+      return c.json(fail("validation_failed", "You cannot send to your own wallet."), 400);
+
+    try {
+      const { value: lifetime } = await rpc.getLatestBlockhash({ commitment: "confirmed" }).send();
+      const transaction = await buildUsdcTransferTransaction({
+        owner: address(wallet),
+        destination,
+        amountRaw,
+        ...lifetime,
+      });
+      const { value: simulated } = await rpc
+        .simulateTransaction(transaction as Base64EncodedWireTransaction, {
+          encoding: "base64",
+          commitment: "confirmed",
+          sigVerify: false,
+        })
+        .send();
+      if (simulated.err !== null) {
+        return c.json(
+          fail(
+            "send_unavailable",
+            "This transfer cannot be sent. Check your USDC balance and SOL for network fees.",
+          ),
+          422,
+        );
+      }
+      return c.json({ transaction });
+    } catch (err) {
+      console.error("send: could not prepare USDC transfer", err);
+      return c.json(fail("send_unavailable", "Could not prepare this transfer. Please try again."), 503);
+    }
+  });
 
   app.post("/v1/transactions/send", async (c) => {
     const wallet = c.get("identity").walletAddress;
