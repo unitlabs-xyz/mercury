@@ -12,6 +12,7 @@ import {
   TriggeredBasketRebalance,
   SubmittedBasketExit,
   type BasketExitMode,
+  type BasketExitSubmission,
   type ManagedBasketInsights,
 } from "@mercury/types";
 import type {
@@ -247,16 +248,22 @@ export class GliderClient implements BasketProvider {
     mode: BasketExitMode,
     recipientAccountId: string,
     assets: readonly { assetId: string; amountRaw: string }[],
+    submission: BasketExitSubmission,
   ) {
     const path =
-      mode === "in_kind"
+      submission === "withdraw"
         ? "/portfolios/{portfolioId}/withdraw/signature"
         : "/portfolios/{portfolioId}/liquidate-all/signature";
     const result =
-      mode === "in_kind"
+      submission === "withdraw"
         ? await this.client.POST("/portfolios/{portfolioId}/withdraw/signature", {
             params: { path: { portfolioId } },
-            body: { recipientAccountId, assets: [...assets], liquidate: false },
+            body: {
+              recipientAccountId,
+              assets: [...assets],
+              liquidate: mode === "liquidate_usdc",
+              ...(mode === "liquidate_usdc" ? { settlementAssetId: SOLANA_USDC } : {}),
+            },
           })
         : await this.client.POST("/portfolios/{portfolioId}/liquidate-all/signature", {
             params: { path: { portfolioId } },
@@ -281,14 +288,22 @@ export class GliderClient implements BasketProvider {
     };
   }
 
-  async submitExit(portfolioId: string, mode: BasketExitMode, message: BasketExitMessage, signature: string) {
+  async submitExit(
+    portfolioId: string,
+    _mode: BasketExitMode,
+    message: BasketExitMessage,
+    signature: string,
+    submission: BasketExitSubmission,
+  ) {
     const path =
-      mode === "in_kind" ? "/portfolios/{portfolioId}/withdraw" : "/portfolios/{portfolioId}/liquidate-all";
+      submission === "withdraw"
+        ? "/portfolios/{portfolioId}/withdraw"
+        : "/portfolios/{portfolioId}/liquidate-all";
     // Glider signs the stage-one message. Preserve omitted optional fields verbatim;
     // its generated stage-two type marks `liquidate` required even when stage one omits it.
     const wireMessage = message as components["schemas"]["WithdrawMessage"];
     const result =
-      mode === "in_kind"
+      submission === "withdraw"
         ? await this.client.POST("/portfolios/{portfolioId}/withdraw", {
             params: { path: { portfolioId } },
             body: { message: wireMessage, signature },

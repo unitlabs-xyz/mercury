@@ -206,10 +206,21 @@ export const ConfirmedBasketFunding = z.object({
 });
 export const BasketExitMode = z.enum(["in_kind", "liquidate_usdc"]);
 export type BasketExitMode = z.infer<typeof BasketExitMode>;
+export const BasketExitSubmission = z.enum(["withdraw", "liquidate_all"]);
+export type BasketExitSubmission = z.infer<typeof BasketExitSubmission>;
+export const BasketExitAsset = z.object({
+  assetId: z.string().min(1),
+  amountRaw: z
+    .string()
+    .max(32)
+    .regex(/^[1-9]\d*$/),
+});
+export type BasketExitAsset = z.infer<typeof BasketExitAsset>;
+export const PrepareBasketExit = z.object({ assets: z.array(BasketExitAsset).min(1) });
 export const BasketExitMessage = z.object({
   portfolioId: z.string().min(1),
   recipientAccountId: z.string().min(1),
-  assets: z.array(z.object({ assetId: z.string().min(1), amountRaw: z.string().regex(/^[1-9]\d*$/) })).min(1),
+  assets: z.array(BasketExitAsset).min(1),
   nonce: z.string().regex(/^0x[\da-fA-F]{64}$/),
   expiresAt: z.number().int().positive(),
   liquidate: z.boolean().optional(),
@@ -218,6 +229,7 @@ export const BasketExitMessage = z.object({
 export type BasketExitMessage = z.infer<typeof BasketExitMessage>;
 export const PreparedBasketExit = z.object({
   mode: BasketExitMode,
+  submission: BasketExitSubmission,
   portfolioId: z.string(),
   recipientAccountId: z.string(),
   expiresAt: z.string(),
@@ -228,6 +240,7 @@ export type PreparedBasketExit = z.infer<typeof PreparedBasketExit>;
 export const SubmitBasketExit = z.object({
   message: BasketExitMessage,
   signature: z.string().min(1).max(200),
+  submission: BasketExitSubmission.optional(),
 });
 export const SubmittedBasketExit = TriggeredBasketRebalance.extend({ mode: BasketExitMode });
 export type SubmittedBasketExit = z.infer<typeof SubmittedBasketExit>;

@@ -5,6 +5,7 @@ import type {
   TriggeredBasketRebalance,
   BasketExitMessage,
   BasketExitMode,
+  BasketExitSubmission,
   PreparedBasketExit,
   SubmittedBasketExit,
 } from "@mercury/types";
@@ -55,12 +56,14 @@ export interface BasketProvider {
     mode: BasketExitMode,
     recipientAccountId: string,
     assets: readonly { assetId: string; amountRaw: string }[],
+    submission: BasketExitSubmission,
   ): Promise<Pick<PreparedBasketExit, "expiresAt" | "authorization" | "message">>;
   submitExit(
     portfolioId: string,
     mode: BasketExitMode,
     message: BasketExitMessage,
     signature: string,
+    submission: BasketExitSubmission,
   ): Promise<Omit<SubmittedBasketExit, "mode">>;
   prepareEnrollment(ownerAccountId: string, strategyId: string): Promise<EnrollmentChallenge>;
   enroll(

@@ -1,5 +1,10 @@
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
-import { BasketExitMessage, BasketExitMode, type ManagedBasketOperation } from "@mercury/types";
+import {
+  BasketExitMessage,
+  BasketExitMode,
+  BasketExitSubmission,
+  type ManagedBasketOperation,
+} from "@mercury/types";
 import { type ChainHistory, type TransactionDetail } from "@mercury/chain";
 import { z } from "zod";
 import type { Db } from "../../db/client.js";
@@ -15,6 +20,7 @@ const RETRY_SECONDS = [30, 60, 120, 300, 600, 1_800] as const;
 
 const payloadSchema = z.object({
   mode: BasketExitMode,
+  submission: BasketExitSubmission.optional(),
   smartAccountId: z.string().startsWith(SOLANA),
   recipientAccountId: z.string().startsWith(SOLANA),
   baselineSignature: z.string().nullable(),

@@ -59,9 +59,13 @@ describe("GliderClient", () => {
     expect(await requests[0]!.text()).toBe("");
     await expect(client.triggerRebalance("p-1")).rejects.toMatchObject({ retryAfterSeconds: 30 });
   });
-  it.each(["in_kind", "liquidate_usdc"] as const)(
-    "uses Glider's two-stage %s exit without changing signed terms",
-    async (mode) => {
+  it.each([
+    { mode: "in_kind", submission: "withdraw" },
+    { mode: "liquidate_usdc", submission: "liquidate_all" },
+    { mode: "liquidate_usdc", submission: "withdraw" },
+  ] as const)(
+    "uses Glider's $submission submission for $mode without changing signed terms",
+    async ({ mode, submission }) => {
       const recipientAccountId = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:Owner";
       const assetId =
         "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -89,15 +93,25 @@ describe("GliderClient", () => {
             })
           : json({ success: true, data: { operationId: "op-1", submittedAt: "2026-10-06T00:00:00Z" } }, 202);
       });
-      const prepared = await client.prepareExit("p-1", mode, recipientAccountId, message.assets);
+      const prepared = await client.prepareExit("p-1", mode, recipientAccountId, message.assets, submission);
       expect(prepared.message).toEqual(message);
-      expect(await client.submitExit("p-1", mode, prepared.message, "base58-signature")).toMatchObject({
-        operationId: "op-1",
-      });
+      expect(
+        await client.submitExit("p-1", mode, prepared.message, "base58-signature", submission),
+      ).toMatchObject({ operationId: "op-1" });
       expect(calls.map((call) => call.path)).toEqual(
-        mode === "in_kind"
+        submission === "withdraw"
           ? ["/v2/portfolios/p-1/withdraw/signature", "/v2/portfolios/p-1/withdraw"]
           : ["/v2/portfolios/p-1/liquidate-all/signature", "/v2/portfolios/p-1/liquidate-all"],
+      );
+      expect(calls[0]?.body).toEqual(
+        submission === "withdraw"
+          ? {
+              recipientAccountId,
+              assets: message.assets,
+              liquidate: mode === "liquidate_usdc",
+              ...(mode === "liquidate_usdc" ? { settlementAssetId: assetId } : {}),
+            }
+          : { recipientAccountId, settlementAssetId: assetId },
       );
       expect(calls[1]?.body).toEqual({ message, signature: "base58-signature" });
     },

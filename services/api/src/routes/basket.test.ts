@@ -105,6 +105,7 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
       observed = args;
       return {
         mode: "in_kind",
+        submission: "withdraw",
         portfolioId: "p-1",
         recipientAccountId: owner,
         expiresAt: "2026-10-07T00:00:00Z",
@@ -127,8 +128,14 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
     "/v1/basket-templates/magnificent-seven/exit/in_kind/prepare?recipientAccountId=AttackerWallet",
     {
       method: "POST",
+      body: JSON.stringify({ assets: [{ assetId: "solana:asset", amountRaw: "1" }] }),
     },
   );
   expect(response.status).toBe(200);
-  expect(observed).toEqual(["magnificent-seven", owner, "in_kind"]);
+  expect(observed).toEqual([
+    "magnificent-seven",
+    owner,
+    "in_kind",
+    [{ assetId: "solana:asset", amountRaw: "1" }],
+  ]);
 });

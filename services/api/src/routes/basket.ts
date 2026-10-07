@@ -15,6 +15,7 @@ import {
   ConfirmedBasketFunding,
   ManagedBasketActivity,
   BasketExitMode,
+  PrepareBasketExit,
   PreparedBasketExit,
   SubmitBasketExit,
   SubmittedBasketExit,
@@ -127,9 +128,15 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
     if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to exit a basket."), 401);
     const mode = BasketExitMode.safeParse(c.req.param("mode"));
     if (!mode.success) return c.json(fail("validation_failed", "Choose an in-kind or USDC exit."), 400);
+    const request = await c.req.json().catch(() => null);
+    const selection = request === null ? null : PrepareBasketExit.safeParse(request);
+    if (selection && !selection.success)
+      return c.json(fail("validation_failed", "Choose at least one valid asset amount."), 400);
     try {
       return c.json(
-        PreparedBasketExit.parse(await service.prepareExit(c.req.param("slug"), owner, mode.data)),
+        PreparedBasketExit.parse(
+          await service.prepareExit(c.req.param("slug"), owner, mode.data, selection?.data.assets),
+        ),
       );
     } catch (error) {
       const result = handle(error, "exit preparation");
@@ -155,6 +162,7 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
             mode.data,
             body.data.message,
             body.data.signature,
+            body.data.submission,
           ),
         ),
         202,
