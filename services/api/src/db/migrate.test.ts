@@ -25,13 +25,19 @@ describe("MIGRATIONS_FOLDER", () => {
     expect(existsSync(join(MIGRATIONS_FOLDER, "meta", "_journal.json"))).toBe(true);
   });
 
-  it("has the file behind every entry the journal claims", () => {
+  it("has each journal file and snapshot in application order", () => {
     const journal = JSON.parse(readFileSync(join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8")) as {
-      entries: { tag: string }[];
+      entries: { tag: string; when: number }[];
     };
     expect(journal.entries.length).toBeGreaterThan(0);
-    for (const entry of journal.entries) {
+    for (const [index, entry] of journal.entries.entries()) {
       expect(existsSync(join(MIGRATIONS_FOLDER, `${entry.tag}.sql`))).toBe(true);
+      expect(existsSync(join(MIGRATIONS_FOLDER, "meta", `${entry.tag.slice(0, 4)}_snapshot.json`))).toBe(
+        true,
+      );
+      // Drizzle only compares the latest applied timestamp, so a later entry
+      // with an older timestamp would silently skip that migration.
+      if (index > 0) expect(entry.when).toBeGreaterThan(journal.entries[index - 1]!.when);
     }
   });
 

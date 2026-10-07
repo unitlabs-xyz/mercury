@@ -197,6 +197,31 @@
       ]
     },
     {
+      "slug": "nvda-tsla-50-50",
+      "tags": ["theme:technology"],
+      "gliderStrategyId": "01M49AGQ193X4CRQ3MQ4YHNDZJ",
+      "name": "Mercury Solana - AI & EV Leaders",
+      "description": "A focused portfolio of Nvidia and Tesla, combining AI computing and electric vehicles at equal target weights.",
+      "sourceStrategyId": "01M49AGQ193X4CRQ3MQ4YHNDZJ",
+      "status": "candidate",
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
+      "allocations": [
+        {
+          "ticker": "NVDA",
+          "sourceAssetId": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:gEGtLTPNQ7jcg25zTetkbmF7teoDLcrfTnQfmn2ondo",
+          "weightBps": 5000
+        },
+        {
+          "ticker": "TSLA",
+          "sourceAssetId": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:KeGv7bsfR4MheC1CkmnAVceoApjrkvBhHYjWb67ondo",
+          "weightBps": 5000
+        }
+      ]
+    },
+    {
       "slug": "nancy-pelosi-tracker",
       "tags": ["shelf:pros"],
       "gliderStrategyId": "01M4664BEJSY687YFFQT6AXS22",
@@ -204,7 +229,10 @@
       "description": "Inspired by the positions disclosed in Nancy Pelosi's congressional financial filings, with options represented by their underlying stocks. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0Q9GXP1HBN2Z53RCHCHQW",
       "status": "enabled",
-      "schedule": { "type": "interval", "frequency": "daily" },
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
       "allocations": [
         {
           "ticker": "PANW",
@@ -271,7 +299,10 @@
       "description": "Inspired by Berkshire Hathaway's publicly disclosed equity holdings and Warren Buffett's long-term approach to owning durable businesses. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QAV0P64JAETT29AS1MAH",
       "status": "enabled",
-      "schedule": { "type": "interval", "frequency": "daily" },
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
       "allocations": [
         {
           "ticker": "AAPL",
@@ -323,7 +354,10 @@
       "description": "Inspired by the long positions disclosed by Leopold Aschenbrenner's Situational Awareness LP, which invests around the economic consequences of AI. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QA4N1DYBNWTQXJ0XQ7S8",
       "status": "enabled",
-      "schedule": { "type": "interval", "frequency": "daily" },
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
       "allocations": [
         {
           "ticker": "MU",
@@ -405,7 +439,10 @@
       "description": "Inspired by ARK Invest's publicly published holdings and Cathie Wood's focus on disruptive innovation across AI, robotics, crypto, and genomics. This Solana variant rebalances daily rather than on the source strategy's New York weekday schedule.",
       "sourceStrategyId": "01KWJ0QBBM4RCD3MG33JB3JKDQ",
       "status": "enabled",
-      "schedule": { "type": "interval", "frequency": "daily" },
+      "schedule": {
+        "type": "interval",
+        "frequency": "daily"
+      },
       "allocations": [
         {
           "ticker": "TSLA",

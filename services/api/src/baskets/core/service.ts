@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type {
   BasketExitMessage,
   BasketExitMode,
@@ -13,7 +14,13 @@ import {
   type BasketProvider,
   type BasketStore,
 } from "./deps.js";
-import type { BasketDefinition, ProviderBasket, StrategyPerformance, SyncResult } from "./primitives.js";
+import type {
+  BasketDefinition,
+  ExitIntentPayload,
+  ProviderBasket,
+  StrategyPerformance,
+  SyncResult,
+} from "./primitives.js";
 
 const allocations = (assets: readonly { assetId: string; weightBps: number }[]) =>
   assets.map(({ assetId, weightBps }) => `${assetId}:${weightBps}`).sort();
@@ -316,7 +323,14 @@ export class BasketService {
         409,
         "The Solana portfolio could not be verified.",
       );
-    return { template, provider, portfolio };
+    const smartAccount = detail.smartAccounts.find((item) => SOLANA_ACCOUNT.test(item.accountId));
+    if (!smartAccount)
+      throw new BasketEnrollmentError(
+        "portfolio_unavailable",
+        409,
+        "The Solana portfolio could not be verified.",
+      );
+    return { template, provider, portfolio, smartAccount };
   }
 
   async prepareExit(slug: string, ownerAccountId: string, mode: BasketExitMode) {
@@ -386,7 +400,7 @@ export class BasketService {
     message: BasketExitMessage,
     signature: string,
   ) {
-    const { template, provider, portfolio } = await this.exitPortfolio(slug, ownerAccountId);
+    const { template, provider, portfolio, smartAccount } = await this.exitPortfolio(slug, ownerAccountId);
     if (
       message.portfolioId !== portfolio.portfolioId ||
       message.recipientAccountId !== ownerAccountId ||
@@ -399,31 +413,101 @@ export class BasketService {
         400,
         "Exit terms do not match this wallet and portfolio.",
       );
+    if (message.assets.some((item) => !item.assetId.startsWith(SOLANA_ASSET)))
+      throw new BasketEnrollmentError("invalid_exit", 400, "Exit contains an asset on another chain.");
+    if (!this.deps.history)
+      throw new BasketEnrollmentError("provider_unavailable", 503, "Solana history is not configured.");
+    const authorizedAssets = message.assets.map(({ assetId, amountRaw }) => ({
+      mint: assetId.slice(SOLANA_ASSET.length),
+      amountRaw,
+    }));
+    if (new Set(authorizedAssets.map((item) => item.mint)).size !== authorizedAssets.length)
+      throw new BasketEnrollmentError("invalid_exit", 400, "Exit contains a repeated asset.");
+    const expectedTransfers: ExitIntentPayload["expectedTransfers"] =
+      mode === "liquidate_usdc"
+        ? [{ mint: USDC_MINT, symbol: "USDC", amountRaw: null }]
+        : authorizedAssets.map(({ mint, amountRaw }) => ({
+            mint,
+            symbol: template.assets.find((item) => item.assetId === `${SOLANA_ASSET}${mint}`)?.ticker ?? mint,
+            amountRaw,
+          }));
+    let intent = await this.deps.store.exitIntent(userId, message.nonce);
+    if (!intent) {
+      if (message.expiresAt * 1000 <= Date.now())
+        throw new BasketEnrollmentError(
+          "authorization_expired",
+          409,
+          "The withdrawal authorization expired. Review it again.",
+        );
+      const latest = await this.deps.history.signatures(addressOf(smartAccount.accountId), { limit: 1 });
+      const payload: ExitIntentPayload = {
+        mode,
+        smartAccountId: smartAccount.accountId,
+        recipientAccountId: ownerAccountId,
+        baselineSignature: latest[0]?.signature ?? null,
+        authorization: { message, signature },
+        authorizedAssets,
+        expectedTransfers,
+        templateName: template.name,
+      };
+      intent = await this.deps.store.saveExitIntent({
+        userId,
+        slug,
+        ownerAccountId,
+        strategyId: template.providerId!,
+        portfolioId: portfolio.portfolioId,
+        nonce: message.nonce,
+        expiresAt: new Date(message.expiresAt * 1000),
+        payload,
+      });
+    }
+    const expectedPayload = {
+      mode,
+      smartAccountId: smartAccount.accountId,
+      recipientAccountId: ownerAccountId,
+      authorization: { message, signature },
+      authorizedAssets,
+      expectedTransfers,
+      templateName: template.name,
+    };
+    const savedComparable = {
+      mode: intent.payload.mode,
+      smartAccountId: intent.payload.smartAccountId,
+      recipientAccountId: intent.payload.recipientAccountId,
+      authorization: intent.payload.authorization,
+      authorizedAssets: intent.payload.authorizedAssets,
+      expectedTransfers: intent.payload.expectedTransfers,
+      templateName: intent.payload.templateName,
+    };
+    if (
+      intent.slug !== slug ||
+      intent.ownerAccountId !== ownerAccountId ||
+      intent.portfolioId !== portfolio.portfolioId ||
+      !isDeepStrictEqual(savedComparable, expectedPayload)
+    )
+      throw new BasketEnrollmentError(
+        "invalid_exit",
+        409,
+        "This withdrawal authorization was already used with different terms.",
+      );
+    if (intent.operationId)
+      return {
+        operationId: intent.operationId,
+        submittedAt: intent.submittedAt?.toISOString() ?? intent.createdAt.toISOString(),
+        mode,
+      };
     if (message.expiresAt * 1000 <= Date.now())
       throw new BasketEnrollmentError(
         "authorization_expired",
         409,
         "The withdrawal authorization expired. Review it again.",
       );
-    if (message.assets.some((item) => !item.assetId.startsWith(SOLANA_ASSET)))
-      throw new BasketEnrollmentError("invalid_exit", 400, "Exit contains an asset on another chain.");
     const submitted = await provider.submitExit(portfolio.portfolioId, mode, message, signature);
-    try {
-      await this.deps.store.saveExit({
-        userId,
-        slug,
-        ownerAccountId,
-        strategyId: template.providerId!,
-        portfolioId: portfolio.portfolioId,
-        operationId: submitted.operationId,
-        submittedAt: submitted.submittedAt,
-        mode,
-      });
-    } catch (error) {
-      // Glider has already accepted the exit. Returning an error would invite a fresh
-      // authorization and a second withdrawal; keep the operation ID available.
-      console.error("Accepted basket exit could not be recorded:", submitted.operationId, error);
-    }
+    await this.deps.store.attachExitOperation(
+      intent.id,
+      submitted.operationId,
+      new Date(submitted.submittedAt),
+    );
     return { ...submitted, mode };
   }
 
@@ -520,9 +604,10 @@ export class BasketService {
       (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
     );
     if (!portfolio) return [];
-    const [actions, funding] = await Promise.all([
+    const [actions, funding, settlements] = await Promise.all([
       this.deps.store.recentActions(userId, portfolio.portfolioId),
       this.deps.store.recentFunding(userId, portfolio.portfolioId),
+      this.deps.store.recentSettlements(userId, portfolio.portfolioId),
     ]);
     const rows = await Promise.all(
       actions.map(async (action, index) => {
@@ -550,6 +635,7 @@ export class BasketService {
                   : "Manual rebalance",
           subtitle: action.kind === "enroll" ? "Portfolio created" : (state ?? "Status unavailable"),
           amountUsd: null,
+          tokenQuantity: null,
           txSignature: null,
         };
       }),
@@ -563,6 +649,17 @@ export class BasketService {
         title: item.title,
         subtitle: "Transfer between your accounts",
         amountUsd: item.amountUsd,
+        tokenQuantity: null,
+        txSignature: item.txSignature,
+      })),
+      ...settlements.map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        occurredAt: item.occurredAt.toISOString(),
+        title: item.title,
+        subtitle: item.subtitle ?? "Settled transfer",
+        amountUsd: item.amountUsd,
+        tokenQuantity: item.tokenQuantity,
         txSignature: item.txSignature,
       })),
     ]

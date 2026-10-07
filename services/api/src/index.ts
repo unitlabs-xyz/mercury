@@ -155,6 +155,7 @@ every("wallet-events", 30_000, async () => {
   const s = await syncAllWalletEvents(auth.db, {
     history: deps.history,
     lendingProgram: KAMINO_LENDING_PROGRAM,
+    ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
   });
   if (s.written === 0 && s.failed === 0) return null;
   return (

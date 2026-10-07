@@ -79,10 +79,59 @@ describe("JsonBasketStore", () => {
     ]);
     expect(await store.recentFunding(user!.id, "portfolio-1")).toHaveLength(1);
   });
+  it("keeps one durable exit intent per signed nonce and attaches one operation idempotently", async () => {
+    const db = await testDb();
+    const [user] = await db.insert(users).values({ privyUserId: "did:privy:exit-intent" }).returning();
+    const store = new JsonBasketStore("postgres://unused", catalogJson, db);
+    const nonce = `0x${"a".repeat(64)}`;
+    const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:5hw9GJx6pajUsh2RSopHi3DesMkSRSh7ad9VGPVPWcyE";
+    const input = {
+      userId: user!.id,
+      slug: "nvda-tsla-50-50",
+      ownerAccountId: owner,
+      strategyId: "strategy-1",
+      portfolioId: "portfolio-1",
+      nonce,
+      expiresAt: new Date("2026-10-07T01:00:00Z"),
+      payload: {
+        mode: "liquidate_usdc" as const,
+        smartAccountId: owner,
+        recipientAccountId: owner,
+        baselineSignature: null,
+        authorization: {
+          message: {
+            portfolioId: "portfolio-1",
+            recipientAccountId: owner,
+            assets: [{ assetId: `${owner}/spl:stock`, amountRaw: "1" }],
+            nonce,
+            expiresAt: 1_791_340_000,
+            liquidate: true,
+          },
+          signature: "signed",
+        },
+        authorizedAssets: [{ mint: "stock", amountRaw: "1" }],
+        expectedTransfers: [{ mint: USDC_MINT, symbol: "USDC", amountRaw: null }],
+        templateName: "NVDA & TSLA 50/50",
+      },
+    };
+    const first = await store.saveExitIntent(input);
+    const replay = await store.saveExitIntent(input);
+    expect(replay.id).toBe(first.id);
+    await store.attachExitOperation(first.id, "operation-1", new Date("2026-10-07T00:01:00Z"));
+    await store.attachExitOperation(first.id, "operation-1", new Date("2026-10-07T00:01:00Z"));
+    expect(await store.exitIntent(user!.id, nonce)).toMatchObject({
+      id: first.id,
+      operationId: "operation-1",
+      payload: { baselineSignature: null },
+    });
+    await expect(
+      store.attachExitOperation(first.id, "operation-2", new Date("2026-10-07T00:02:00Z")),
+    ).rejects.toThrow(/conflicts/i);
+  });
   it("resolves the curated catalog to Solana asset IDs", async () => {
     const baskets = await new JsonBasketStore("postgres://unused").load();
-    expect(baskets).toHaveLength(22);
-    expect(baskets.flatMap((basket) => basket.assets)).toHaveLength(206);
+    expect(baskets).toHaveLength(23);
+    expect(baskets.flatMap((basket) => basket.assets)).toHaveLength(208);
     const magnificentSeven = baskets.find((basket) => basket.slug === "magnificent-seven");
     expect(magnificentSeven?.assets).toContainEqual({
       ticker: "NVDA",
@@ -92,6 +141,17 @@ describe("JsonBasketStore", () => {
     expect(
       baskets.filter((basket) => basket.slug.endsWith("-tracker") && basket.name.endsWith("(Daily Variant)")),
     ).toHaveLength(4);
+    expect(baskets.find((basket) => basket.slug === "nvda-tsla-50-50")).toMatchObject({
+      providerId: "01M49AGQ193X4CRQ3MQ4YHNDZJ",
+      sourceStrategyId: "01M49AGQ193X4CRQ3MQ4YHNDZJ",
+      status: "candidate",
+      tags: ["theme:technology"],
+      schedule: { type: "interval", frequency: "daily" },
+      assets: [
+        { ticker: "NVDA", weightBps: 5000 },
+        { ticker: "TSLA", weightBps: 5000 },
+      ],
+    });
   });
 
   it.each([

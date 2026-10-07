@@ -55,6 +55,7 @@ import { BasketService } from "./baskets/core/service.js";
 import { GliderClient } from "./baskets/glider/client.js";
 import { JsonBasketStore } from "./baskets/glider/store.js";
 import { SolanaBasketFunding } from "./baskets/glider/funding.js";
+import type { BasketProvider } from "./baskets/core/deps.js";
 
 export interface Deps {
   readonly registry: TokenRegistry;
@@ -74,6 +75,8 @@ export interface Deps {
   readonly baskets: BasketVenue;
   /** Kamino's xStocks market through the klend SDK: reads, and unsigned transactions. */
   readonly lending: LendingSource;
+  /** Optional Glider capability shared by routes and the wallet-events exit reconciler. */
+  readonly basketProvider?: BasketProvider;
 }
 
 export interface Config {
@@ -197,6 +200,7 @@ export function buildDeps(config: Config): Deps {
   const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl });
   const market = new JupiterMarket({ registry, ...jupiter });
 
+  const basketProvider = config.gliderApiKey ? new GliderClient(config.gliderApiKey) : undefined;
   return {
     registry,
     supportedStocks: registry,
@@ -221,6 +225,7 @@ export function buildDeps(config: Config): Deps {
       rpcUrl: config.solanaRpcUrl,
       ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
     }),
+    ...(basketProvider ? { basketProvider } : {}),
   };
 }
 
@@ -288,7 +293,7 @@ export function buildReadDeps(
       store: new JsonBasketStore(config.databaseUrl, undefined, db),
       funding: new SolanaBasketFunding(config.solanaRpcUrl),
       history: deps.history,
-      ...(config.gliderApiKey === undefined ? {} : { provider: new GliderClient(config.gliderApiKey) }),
+      ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
     }),
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),

@@ -4,11 +4,16 @@ import type { Db } from "../db/client.js";
 import { activities, users, walletStreams, wallets } from "../db/schema.js";
 import { movementsIn, type Movement } from "./movements.js";
 import { walkStream } from "./walk.js";
+import { reconcileBasketExits } from "../baskets/glider/reconcile.js";
+import type { ManagedBasketOperation } from "@mercury/types";
 
 export interface WalletEventsDeps {
   readonly history: ChainHistory;
   /** Kamino's lending program, so a loan is not written here as a cash transfer. */
   readonly lendingProgram: string;
+  readonly exitOperations?: {
+    operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
+  };
 }
 
 export interface EventsSummary {
@@ -194,6 +199,18 @@ export async function syncAllWalletEvents(db: Db, deps: WalletEventsDeps): Promi
       // The user, never the address: an address in a log is a person's
       // holdings in a log.
       console.error(`wallet-events: wallet for user ${row.userId} failed`, error);
+    }
+  }
+
+  if (deps.exitOperations) {
+    try {
+      const exits = await reconcileBasketExits(db, {
+        history: deps.history,
+        operation: (portfolioId, operationId) => deps.exitOperations!.operation(portfolioId, operationId),
+      });
+      written += exits.recorded;
+    } catch (error) {
+      console.error("basket-exit reconciliation pass failed", error);
     }
   }
 

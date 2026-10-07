@@ -1,4 +1,4 @@
-import type { ManagedBasketTag } from "@mercury/types";
+import type { BasketExitMessage, BasketExitMode, ManagedBasketTag } from "@mercury/types";
 
 export interface BasketDefinition {
   slug: string;
@@ -56,6 +56,37 @@ export interface EnrollmentIntent {
   challenge: EnrollmentChallenge;
   expiresAt: Date;
   portfolioId: string | null;
+}
+
+export interface ExitIntentPayload {
+  mode: BasketExitMode;
+  smartAccountId: string;
+  recipientAccountId: string;
+  baselineSignature: string | null;
+  authorization: { message: BasketExitMessage; signature: string };
+  /** The exact mint quantities covered by the signed Glider authorization. */
+  authorizedAssets: readonly { mint: string; amountRaw: string }[];
+  expectedTransfers: readonly {
+    mint: string;
+    symbol: string;
+    /** Null for liquidate-to-USDC because the signed input does not promise its output amount. */
+    amountRaw: string | null;
+  }[];
+  templateName: string;
+}
+
+export interface ExitIntent {
+  id: string;
+  userId: string;
+  slug: string;
+  ownerAccountId: string;
+  strategyId: string;
+  portfolioId: string;
+  nonce: string;
+  payload: ExitIntentPayload;
+  operationId: string | null;
+  submittedAt: Date | null;
+  createdAt: Date;
 }
 
 export interface SyncResult {

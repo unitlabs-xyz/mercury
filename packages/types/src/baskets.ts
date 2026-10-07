@@ -238,6 +238,7 @@ export const ManagedBasketActivity = z.object({
   title: z.string(),
   subtitle: z.string(),
   amountUsd: z.string().nullable(),
+  tokenQuantity: z.string().nullable(),
   txSignature: z.string().nullable(),
 });
 export type ManagedBasketActivity = z.infer<typeof ManagedBasketActivity>;

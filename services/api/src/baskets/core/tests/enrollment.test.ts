@@ -47,10 +47,15 @@ const store = (changes: Record<string, unknown> = {}) =>
     enrollmentIntent: async () => null,
     completeEnrollmentIntent: async () => undefined,
     saveRebalance: async () => undefined,
-    saveExit: async () => undefined,
+    exitIntent: async () => null,
+    saveExitIntent: async () => {
+      throw new Error("unexpected exit save");
+    },
+    attachExitOperation: async () => undefined,
     recentActions: async () => [],
     confirmFunding: async () => undefined,
     recentFunding: async () => [],
+    recentSettlements: async () => [],
     completedEnrollments: async () => [],
     ...changes,
   }) as BasketStore;

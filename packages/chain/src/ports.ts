@@ -222,6 +222,19 @@ export interface TokenBalanceEntry {
   readonly decimals: number;
 }
 
+/** One parsed SPL or Token-2022 transfer, including CPI inner instructions. */
+export interface TokenTransfer {
+  readonly programId: string;
+  readonly source: string;
+  readonly destination: string;
+  readonly authority: string | null;
+  readonly sourceOwner: string | null;
+  readonly destinationOwner: string | null;
+  readonly mint: string;
+  readonly rawAmount: bigint;
+  readonly decimals: number;
+}
+
 export interface TransactionDetail {
   readonly signature: string;
   readonly blockTime: number | null;
@@ -239,6 +252,8 @@ export interface TransactionDetail {
   readonly postLamports: readonly bigint[];
   readonly preTokens: readonly TokenBalanceEntry[];
   readonly postTokens: readonly TokenBalanceEntry[];
+  /** Present on live RPC reads; optional keeps recorded fixtures source-compatible. */
+  readonly tokenTransfersIn?: readonly TokenTransfer[];
 }
 
 /**
