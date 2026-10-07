@@ -67,7 +67,8 @@ export const investors = [
   { slug: "leopold-aschenbrenner-tracker", image: "/baskets/investors/2.webp" },
 ] as const;
 
-export const displayBasketName = (name: string) => name.replace(/^Mercury Solana\s*[-–]\s*/, "");
+/* Shared with the phone: @mercury/view's baskets.ts. */
+export { displayBasketName } from "@mercury/view";
 
 export const curatedShelves = (templates: readonly ManagedBasketTemplate[]) => ({
   themes: themes.map((theme) => ({

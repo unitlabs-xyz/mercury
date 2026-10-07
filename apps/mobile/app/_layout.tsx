@@ -114,6 +114,16 @@ const Gate = () => {
           contentStyle: { backgroundColor: color.surface },
         }}
       />
+      {/* Every basket write — enroll, add USDC, rebalance, withdraw — reviewed in one sheet. */}
+      <Stack.Screen
+        name="basket-sheet"
+        options={{
+          presentation: "formSheet",
+          sheetAllowedDetents: "fitToContents",
+          sheetGrabberVisible: true,
+          contentStyle: { backgroundColor: color.surface },
+        }}
+      />
       {/* The camera, edge to edge, sliding up over Send. */}
       <Stack.Screen
         name="scan"

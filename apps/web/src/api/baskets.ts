@@ -19,6 +19,7 @@ import type {
 } from "@mercury/types";
 import type { PreparedBasketFunding } from "@mercury/types";
 import { useSignedIn } from "./hooks";
+import { enrollBasket, fundBasket, type FundingReceipt } from "@mercury/view";
 import { apiFetch, ApiError } from "./client";
 
 /**
@@ -271,22 +272,8 @@ export const useBasketActivity = (slug: string, enrolled: boolean) => {
   });
 };
 
-interface EnrollmentIo {
-  prepare: () => Promise<PreparedBasketEnrollment>;
-  submit: (body: { intentId: string; signed: string }) => Promise<ManagedBasketPortfolio>;
-  signMessage: (text: string) => Promise<string>;
-  signTransaction: (base64: string) => Promise<string>;
-}
-
-/** One challenge, one wallet signature, one submission; Glider never receives a browser-held API key. */
-export async function enrollBasket(_slug: string, io: EnrollmentIo): Promise<ManagedBasketPortfolio> {
-  const prepared = await io.prepare();
-  const signed =
-    prepared.authorization.kind === "solana-message"
-      ? await io.signMessage(prepared.authorization.text)
-      : await io.signTransaction(prepared.authorization.transaction);
-  return io.submit({ intentId: prepared.intentId, signed });
-}
+/* The pre-signing checks are shared with the phone: @mercury/view's baskets.ts. */
+export { enrollBasket, fundBasket } from "@mercury/view";
 
 const toBytes = (base64: string) => Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
@@ -328,44 +315,11 @@ export const useBasketEnrollmentAction = (slug: string) => {
   return { ...mutation, walletReady: wallets[0] !== undefined };
 };
 
-type FundingReceipt = { signature: string; status: "confirmed" | "pending" };
-
 const confirmBasketFunding = (slug: string, signature: string) =>
   apiFetch(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`, {
     method: "POST",
     body: JSON.stringify({ signature }),
   });
-
-interface FundingIo {
-  prepare: (amountUsd: string) => Promise<PreparedBasketFunding>;
-  sign: (unsignedTransaction: string) => Promise<string>;
-  send: (signedTransaction: string) => Promise<FundingReceipt>;
-}
-
-/** Recheck the prepared amount and recipient before handing bytes to the wallet. */
-export async function fundBasket(
-  amountUsd: string,
-  portfolio: ManagedBasketPortfolio,
-  io: FundingIo,
-): Promise<FundingReceipt> {
-  if (!/^(?:0|[1-9]\d{0,8})(?:\.\d{1,6})?$/.test(amountUsd)) throw new Error("Enter a valid USDC amount.");
-  const [whole = "0", fraction = ""] = amountUsd.split(".");
-  const amountRaw = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0") || "0");
-  if (amountRaw === 0n) throw new Error("Enter an amount greater than zero.");
-  const destination = portfolio.smartAccounts.find((account) => account.accountId.startsWith("solana:"));
-  if (!destination) throw new Error("This portfolio has no Solana funding account.");
-  const prepared = await io.prepare(amountUsd);
-  if (
-    prepared.portfolioId !== portfolio.portfolioId ||
-    prepared.destinationAccountId !== (destination.depositAccountId ?? destination.accountId)
-  )
-    throw new Error("Funding destination changed. Refresh the portfolio before trying again.");
-  if (prepared.amountRaw !== amountRaw.toString())
-    throw new Error("Funding amount changed. Review it again.");
-  if (Date.parse(prepared.expiresAt) <= Date.now() + 5_000)
-    throw new Error("Funding transaction expired. Try again.");
-  return io.send(await io.sign(prepared.transaction));
-}
 
 export const useBasketFundingAction = (slug: string) => {
   const qc = useQueryClient();
