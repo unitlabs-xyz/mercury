@@ -42,6 +42,7 @@ import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
 import { EnrollmentRail, EnrollmentSheet, ExitSheet, FundingSheet, RebalanceSheet } from "./baskets/Ticket";
 import { modeledSeries } from "./baskets/performance";
+import { rebalanceOutcome, rebalanceTerminal } from "./baskets/rebalance-status";
 import { RailList } from "./invest/Rail";
 import { EventRow } from "./portfolio/Feed";
 import { USDC_MINT, UsdcMark } from "./activity-mark";
@@ -455,9 +456,10 @@ export const Basket = () => {
     }
   }, [accountId]);
   useEffect(() => {
-    if (rebalanceStatus.data?.state === "completed") {
+    if (rebalanceTerminal(rebalanceStatus.data?.state)) {
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
+      void queryClient.invalidateQueries({ queryKey: ["api", "portfolio"] });
     }
   }, [queryClient, rebalanceStatus.data?.state, slug]);
   useEffect(() => {
@@ -590,6 +592,9 @@ export const Basket = () => {
   const account = signedIn ? portfolio.data : null;
   const schedule = account?.schedule;
   const operationState = rebalanceStatus.data?.state;
+  const rebalanceDisplay = operationState
+    ? rebalanceOutcome(operationState, rebalanceStatus.data?.error ?? null)
+    : null;
   const operationActive =
     Boolean(operationId) &&
     (!operationState || ["accepted", "running", "retrying", "awaiting_user"].includes(operationState));
@@ -1158,7 +1163,8 @@ export const Basket = () => {
                     )}
                     {heldAssets.length === 0 ? (
                       <p className="px-3 py-5 text-[13px] text-ds-muted">
-                        No assets detected yet. USDC can take a short time to appear.
+                        This smart account has no assets right now. Check your wallet and recent activity if
+                        you withdrew them.
                       </p>
                     ) : (
                       <>
@@ -1306,13 +1312,13 @@ export const Basket = () => {
                   <div className="mt-5 border-t border-ds-divider pt-4 text-[12px]">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-ds-muted">Manual rebalance</span>
-                      <span className="font-medium capitalize text-ds-ink">
-                        {operationState?.replaceAll("_", " ") ??
+                      <span className="font-medium text-ds-ink">
+                        {rebalanceDisplay?.label ??
                           (rebalanceStatus.isError ? "Status unavailable" : "Checking…")}
                       </span>
                     </div>
-                    {rebalanceStatus.data?.error && (
-                      <p className="mt-2 text-ds-chip-warn">{rebalanceStatus.data.error}</p>
+                    {rebalanceDisplay?.detail && (
+                      <p className="mt-2 text-ds-chip-warn">{rebalanceDisplay.detail}</p>
                     )}
                     {rebalanceStatus.isError && (
                       <button
