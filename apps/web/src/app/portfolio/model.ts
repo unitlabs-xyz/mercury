@@ -10,8 +10,14 @@ export type Row = Portfolio["holdings"][number] & {
   readonly returnUsd: number;
   readonly returnPct: number;
   readonly ltv: number;
-  /** At the 80% safety target: value × LTV × 0.8. */
+  /** At the 80% safety target, on the part that can back a loan: lendable value × LTV × 0.8. */
   readonly borrowable: number;
+  /**
+   * Of `value`, the part Kamino would take: the xStocks token, pledged or in
+   * the wallet. Ondo tokens of the same stock are not collateral. Null when
+   * Kamino does not take the ticker at all, or the loan read has not landed.
+   */
+  readonly lendableValue: number | null;
   readonly logo: string | undefined;
   readonly sector: string;
 };
@@ -69,16 +75,22 @@ export const useModel = (
   credit: CreditMarket | undefined,
   dash: Dashboard | undefined,
   borrow?: Borrow | undefined,
+  /**
+   * Glider basket accounts, by value. The API's portfolio does not count them
+   * yet (it reads the main wallet only), so they are added here; drop this
+   * once the server includes them. See docs/backend/issuer-aware-holdings.md.
+   */
+  basketsUsd = 0,
 ): Model | undefined =>
   useMemo(() => {
     if (!p) return undefined;
-    const total = Number(p.totalValueUsd);
+    const total = Number(p.totalValueUsd) + basketsUsd;
     const cash = Number(p.cashUsd);
     const debt = Number(p.debtUsd);
     // Summed from the rows rather than backed out of the total. `total` is net
     // of the loan now, so the old `total - cash` would quietly subtract the debt
     // from the stocks as well and understate every holding's weight.
-    const stocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
+    const stocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0) + basketsUsd;
     // Weights are shares of what is held, not of what is owned outright: a
     // levered account would otherwise show holdings adding up to well past 100%.
     const assets = stocks + cash;
@@ -95,6 +107,10 @@ export const useModel = (
       const cost = Number(h.costBasisUsd);
       const inst = universe?.find((i) => i.ticker === h.ticker);
       const ltv = ltvOf(h.ticker);
+      // The loan read is xStocks only, so it already leaves out any Ondo tokens of the
+      // stock. Without it there is no telling the two apart, and nothing is assumed lendable.
+      const c = borrow?.collateral.find((x) => x.isStock && x.ticker === h.ticker);
+      const lendableValue = c ? Math.min(value, c.depositedUsd + c.depositableUsd) : null;
       return {
         ...h,
         value,
@@ -102,7 +118,8 @@ export const useModel = (
         returnUsd: value - cost,
         returnPct: cost > 0 ? ((value - cost) / cost) * 100 : 0,
         ltv,
-        borrowable: value * ltv * target,
+        borrowable: (lendableValue ?? 0) * ltv * target,
+        lendableValue,
         logo: inst?.logo,
         sector: inst?.sector ?? "Other",
       };
@@ -119,6 +136,8 @@ export const useModel = (
       acc.opening += r.value / (1 + Number(r.changePct24h) / 100);
       bySector.set(r.sector, acc);
     }
+    // A basket is its own slice: its stocks are the basket's, not spread across sectors.
+    if (basketsUsd > 0) bySector.set("Baskets", { value: basketsUsd, opening: basketsUsd });
     const sectors = [...bySector]
       .map(([name, { value, opening }]) => ({
         name,
@@ -167,4 +186,4 @@ export const useModel = (
       best: byToday[0],
       worst: byToday.length > 1 ? byToday[byToday.length - 1] : undefined,
     };
-  }, [p, universe, credit, dash, borrow]);
+  }, [p, universe, credit, dash, borrow, basketsUsd]);

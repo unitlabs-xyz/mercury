@@ -38,6 +38,7 @@ import { LiveStatusChip, PriceError } from "./LiveStatus";
 import { Button } from "../ui/Button";
 import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
+import { TOKEN_NAME } from "./stock/heldAs";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
 import { EnrollmentRail, ExitSheet, InvestSheet, RebalanceSheet } from "./baskets/Ticket";
@@ -590,6 +591,15 @@ export const Basket = () => {
   const modeled = modeledWindow(performance, WINDOWS.find((w) => w.key === shown)!.window);
   const chart = modeled.series;
   const allocations = [...template.allocations].sort((a, b) => b.weightBps - a.weightBps);
+  // Which issuer's tokens the strategy buys, read off each allocation's mint. Ondo, for every template today.
+  const issuers = new Set(
+    allocations.flatMap((a) => {
+      const w = byTicker.get(a.ticker)?.wrappers.find((x) => x.mint === a.mint);
+      return w ? [w.issuer] : [];
+    }),
+  );
+  const heldAsLabel =
+    issuers.size === 0 ? "Ondo tokens" : [...issuers].map((i) => `${TOKEN_NAME[i]} tokens`).join(" and ");
   const mosaic = allocationRows(allocations);
   const totalWeight = allocations.reduce((sum, asset) => sum + asset.weightBps, 0);
   /* The headline follows the chosen range; "All" reads as the return since the first modeled day. */
@@ -856,6 +866,10 @@ export const Basket = () => {
                     <Fact k="Assets">{allocations.length}</Fact>
                     <Fact k="Rebalancing">Daily</Fact>
                     <Fact k="Custody">Your smart account</Fact>
+                    <Fact k="Held as">{heldAsLabel}</Fact>
+                    {/* Glider holds the tokens in its smart account, out of Kamino's reach, and
+                        they are Ondo tokens besides. Said here so no one buys in to borrow. */}
+                    <Fact k="Borrowing">Not available</Fact>
                     <Fact k="Swap fee">
                       {insights.isPending ? (
                         <Skeleton className="h-3.5 w-16" />

@@ -6,6 +6,7 @@ import {
   type Candidate,
   type Decimal,
   type Decision,
+  type Issuer,
   type Side,
 } from "@mercury/core";
 import type { Deps } from "./deps.js";
@@ -48,6 +49,11 @@ export interface PriceRequest {
    * quoting wrappers the caller may not own.
    */
   readonly owner?: string;
+  /**
+   * Only this issuer's token. The person picked it in the review, so nothing
+   * else may win, not even at a better price. Absent, every wrapper competes.
+   */
+  readonly issuer?: Issuer;
 }
 
 /**
@@ -61,13 +67,15 @@ export interface PriceRequest {
  * — and the one paying most wins.
  */
 export async function priceOrder(deps: Deps, req: PriceRequest): Promise<Decision | null> {
-  const [wrappers, reference, session] = await Promise.all([
+  const [listed, reference, session] = await Promise.all([
     deps.registry.wrappersFor(req.ticker),
     deps.reference.priceFor(req.ticker),
     deps.sessions.current(),
   ]);
 
-  if (reference === null || wrappers.length === 0) return null;
+  if (reference === null || listed.length === 0) return null;
+  /* A pick that names an issuer this stock does not have leaves no candidates, and `decide` refuses in words. */
+  const wrappers = req.issuer === undefined ? listed : listed.filter((w) => w.issuer === req.issuer);
   const selling = req.side === "sell";
   const fair = fairPricePerShare(reference);
 

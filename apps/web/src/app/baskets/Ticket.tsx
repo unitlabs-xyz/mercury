@@ -269,7 +269,7 @@ const RebalanceNote = () => (
 );
 
 const SheetFoot = ({ children }: { children: ReactNode }) => (
-  <div className="mt-4 flex gap-2.5 border-t border-ds-divider px-5 py-4">{children}</div>
+  <div className="mt-5 flex gap-2.5 px-5 pb-4">{children}</div>
 );
 
 const sendLabel = (amount: string) => (validUsdc(amount) ? `Send ${usd(Number(amount))}` : "Send USDC");
@@ -392,7 +392,7 @@ export const RebalanceSheet = ({
         </p>
       )}
     </div>
-    <div className="flex gap-2.5 border-t border-ds-divider px-6 py-4">
+    <div className="flex gap-2.5 px-6 pb-5">
       <Button size="lg" onClick={onClose} disabled={busy} className="flex-1">
         Cancel
       </Button>
@@ -899,7 +899,7 @@ export const ExitSheet = ({
               </p>
             )}
           </div>
-          <div className="flex shrink-0 gap-2.5 border-t border-ds-divider px-6 py-4">
+          <div className="flex shrink-0 gap-2.5 px-6 pt-2 pb-5">
             <Button size="lg" onClick={prepared ? onBack : close} disabled={busy} className="flex-1">
               {prepared ? "Back" : "Cancel"}
             </Button>

@@ -8,7 +8,10 @@ import { AppShell } from "./AppShell";
 import { Borrowing } from "./portfolio/Borrowing";
 import { CardPanel } from "./portfolio/CardPanel";
 import { Recent, Upcoming } from "./portfolio/Feed";
-import { Holdings } from "./portfolio/Holdings";
+import { Holdings, type BasketHolding } from "./portfolio/Holdings";
+import { useBasketTemplates, useOwnedBasketPortfolios } from "../api/baskets";
+import { AssetIcon } from "./baskets/AssetIcon";
+import { displayBasketName } from "./baskets/catalog";
 import { useModel } from "./portfolio/model";
 import { AccountHeader, Allocation, Performance } from "./portfolio/Summary";
 import { useEvents } from "./useEvents";
@@ -35,12 +38,45 @@ export const Portfolio = () => {
   const money = useMoney();
   const dash = useDashboard();
   // The holdings' own instruments, featured or not, for their names, logos and sectors.
-  const universe = useInstruments(portfolio.data?.holdings.map((h) => h.ticker) ?? []);
+  // Glider baskets, held as one position each, with the template for their marks.
+  const owned = useOwnedBasketPortfolios();
+  const templates = useBasketTemplates();
+  const basketTemplates = (owned.data ?? []).flatMap((b) => {
+    const t = templates.data?.find((x) => x.slug === b.slug);
+    const value = Number(b.totalValueUsd ?? 0) + Number(b.inTransitUsd ?? 0);
+    return value > 0 ? [{ b, t, value }] : [];
+  });
+  const markTickers = basketTemplates.flatMap(({ t }) =>
+    [...(t?.allocations ?? [])]
+      .sort((a, z) => z.weightBps - a.weightBps)
+      .slice(0, 2)
+      .map((a) => a.ticker),
+  );
+  const universe = useInstruments([...(portfolio.data?.holdings.map((h) => h.ticker) ?? []), ...markTickers]);
+  const byTicker = new Map((universe.data ?? []).map((i) => [i.ticker, i]));
+  const baskets: BasketHolding[] = basketTemplates.map(({ b, t, value }) => ({
+    slug: b.slug,
+    name: displayBasketName(b.name),
+    value,
+    assetCount: b.targetAssetCount,
+    marks: [...(t?.allocations ?? [])]
+      .sort((a, z) => z.weightBps - a.weightBps)
+      .slice(0, 2)
+      .map((a) => (
+        <AssetIcon
+          key={a.ticker}
+          asset={a}
+          source={byTicker.get(a.ticker)}
+          className="size-6 rounded-full bg-white object-contain ring-2 ring-ds-panel"
+        />
+      )),
+  }));
+  const basketsUsd = baskets.reduce((s, b) => s + b.value, 0);
   const credit = useCreditMarket();
   const { events, loading: eventsLoading } = useEvents();
 
   const borrow = useBorrow();
-  const m = useModel(portfolio.data, universe.data, credit.data, dash.data, borrow.data);
+  const m = useModel(portfolio.data, universe.data, credit.data, dash.data, borrow.data, basketsUsd);
   const failed = portfolio.isError;
   const apr = Number(money.data?.yieldApr ?? 0);
 
@@ -69,7 +105,7 @@ export const Portfolio = () => {
         <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
           {/* 3 — what you own, then how it has moved and where it sits. */}
           <div className="flex min-w-0 flex-col gap-4 md:gap-6">
-            <Holdings m={m} signedIn={signedIn} failed={failed} />
+            <Holdings m={m} signedIn={signedIn} failed={failed} baskets={baskets} />
             <div className="grid items-stretch gap-4 md:gap-6 lg:grid-cols-2">
               <Performance m={m} range={range} setRange={setRange} />
               <Allocation m={m} />

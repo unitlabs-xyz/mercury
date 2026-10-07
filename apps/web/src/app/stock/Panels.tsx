@@ -7,6 +7,7 @@ import { ISSUER_NAME } from "../IssuerCompare";
 import { usd, usdCompact, usdSigned } from "@mercury/view";
 import { compact } from "../invest/shared";
 import { HeaderFigure } from "../portfolio/Summary";
+import { TOKEN_NAME, type HeldPart } from "./heldAs";
 
 type Holding = Portfolio["holdings"][number];
 
@@ -144,18 +145,90 @@ export const FigureCard = ({
 );
 
 /** One fact in a grey panel, as About sets them: the label at 14 grey over the value at 14 medium. */
-export const Fact = ({ k, children }: { k: string; children: ReactNode }) => (
+export const Fact = ({ k, tip, children }: { k: string; tip?: ReactNode; children: ReactNode }) => (
   <div className="min-w-0">
-    <dt className="text-[14px] leading-none text-ds-muted">{k}</dt>
+    <dt className="flex h-3.5 items-center gap-1.5 text-[14px] leading-none text-ds-muted">
+      {k}
+      {tip && (
+        <InfoTip label={`About ${k.toLowerCase()}`} align="start">
+          {tip}
+        </InfoTip>
+      )}
+    </dt>
     <dd className="mt-[9px] truncate text-[14px] leading-none font-medium text-ds-ink">{children}</dd>
   </div>
 );
 
 /**
+ * The position by token: the split as a hairline bar, then a line each — the
+ * token, whether it can back a loan, its value and its shares. Set in white
+ * under the grey facts so it reads as the footnote it is.
+ */
+const HeldAsList = ({ parts }: { parts: readonly HeldPart[] }) => {
+  const total = parts.reduce((s, p) => s + p.shares, 0);
+  return (
+    <div className="px-5 pt-4 pb-4">
+      <p className="text-[12px] leading-none text-ds-muted">Held as</p>
+      {parts.length > 1 && (
+        <div className="mt-3 flex h-1 gap-0.5 overflow-hidden rounded-full" aria-hidden="true">
+          {parts.map((p) => (
+            <span
+              key={p.issuer}
+              className={p.lendable ? "bg-ds-ink" : "bg-ds-divider"}
+              style={{ width: `${total > 0 ? (p.shares / total) * 100 : 0}%` }}
+            />
+          ))}
+        </div>
+      )}
+      <ul className="mt-3 flex flex-col gap-3">
+        {parts.map((p) => (
+          <li key={p.issuer} className="flex items-center justify-between gap-4">
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                aria-hidden="true"
+                className={`size-2 shrink-0 rounded-full ${p.lendable ? "bg-ds-ink" : "bg-ds-divider"}`}
+              />
+              <span className="min-w-0">
+                <span className="block text-[14px] leading-[18px] font-medium text-ds-ink">
+                  {TOKEN_NAME[p.issuer]}
+                </span>
+                <span className="block text-[12px] leading-4 text-ds-muted">
+                  {p.lendable
+                    ? p.pledged > 0
+                      ? `Borrowable · ${p.pledged.toFixed(4)} pledged`
+                      : "Borrowable"
+                    : "Not borrowable"}
+                </span>
+              </span>
+            </span>
+            <span className="shrink-0 text-right">
+              <span className="block text-[14px] leading-[18px] font-medium text-ds-ink">
+                {usd(p.valueUsd)}
+              </span>
+              <span className="block text-[12px] leading-4 text-ds-muted">{p.shares.toFixed(4)} shares</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+/**
  * What you hold of it, if anything: the value at 28px, then its four figures
  * in a grey panel set like the About facts.
  */
-export const Position = ({ h }: { h: Holding }) => {
+export const Position = ({
+  h,
+  parts,
+  accepted,
+}: {
+  h: Holding;
+  /** The position by issuer, when known. */
+  parts?: readonly HeldPart[] | null | undefined;
+  /** Kamino takes this ticker at all. */
+  accepted?: boolean | null | undefined;
+}) => {
   const shares = Number(h.shares);
   const value = Number(h.valueUsd);
   const cost = Number(h.costBasisUsd);
@@ -193,6 +266,10 @@ export const Position = ({ h }: { h: Holding }) => {
         <Fact k="Average cost">{shares > 0 ? usd(cost / shares) : "—"}</Fact>
         <Fact k="Cost basis">{usd(cost)}</Fact>
       </dl>
+      {/* One stock to the reader, but two tokens underneath, and only one of them
+          backs a loan. Shown when that difference is real: more than one token
+          held, or a ticker Kamino lends against. */}
+      {parts && parts.length > 0 && (parts.length > 1 || accepted) && <HeldAsList parts={parts} />}
     </section>
   );
 };

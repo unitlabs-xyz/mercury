@@ -191,7 +191,7 @@ export const BorrowSheet = ({
                               {usd(shares * r.pricePerToken)}
                             </span>
                             <span className="mt-0.5 block text-[12px] leading-4 text-ds-muted">
-                              {shares.toFixed(4)} shares
+                              {shares.toFixed(4)} shares on xStocks
                             </span>
                           </span>
                         </button>

@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ButtonLink } from "../../ui/Button";
 import { GlideRows, MoveChip, RailHead, StatusChip } from "../../ui/ds";
 import { usd } from "@mercury/view";
 import type { Model, Row } from "./model";
 import { Skeleton } from "./ui";
+import { TOKEN_NAME, useProviders } from "../stock/heldAs";
+import type { Issuer } from "@mercury/types";
 
 /**
  * Built to holdings.svg. The name takes what is left; the figures sit in fixed
@@ -42,7 +44,7 @@ const Logo = ({ row }: { row: Row }) =>
  * One holding, to holdings.svg: a 60px row, 4px in from the grey panel, that
  * turns white under the pointer. Numbers medium, labels regular, 14 over 12.
  */
-const Line = ({ r }: { r: Row }) => {
+const Line = ({ r, providers }: { r: Row; providers: readonly Issuer[] | undefined }) => {
   const pledged = Number(r.pledgedShares ?? 0);
   const today = r.changePct24h === null || r.changePct24h === undefined ? null : Number(r.changePct24h);
   return (
@@ -66,14 +68,11 @@ const Line = ({ r }: { r: Row }) => {
                 </StatusChip>
               </span>
             )}
-            {r.wrapperCount > 1 && (
-              <span className="shrink-0 uppercase">
-                <StatusChip tone="neutral">{r.wrapperCount} issuers</StatusChip>
-              </span>
-            )}
           </p>
           <p className="mt-[6px] truncate text-[12px] text-ds-muted">
             {r.ticker} · {r.sector}
+            {/* Who issues the shares: one provider, or both when a stock is held through each. */}
+            {providers && providers.length > 0 && <> · {providers.map((i) => TOKEN_NAME[i]).join(" + ")}</>}
           </p>
         </div>
       </div>
@@ -114,6 +113,52 @@ const Line = ({ r }: { r: Row }) => {
   );
 };
 
+/** A basket held through Glider: what the holdings list needs of it. */
+export type BasketHolding = {
+  readonly slug: string;
+  readonly name: string;
+  readonly value: number;
+  readonly assetCount: number;
+  /** The basket's two heaviest assets, for the stacked mark. */
+  readonly marks: readonly ReactNode[];
+};
+
+/**
+ * A basket, held as one position: its stocks are the basket's, not separate
+ * rows, and its own page breaks them down. No today or return yet; the API
+ * has no cost basis or 24h move for a Glider account (see the backend doc).
+ */
+const BasketLine = ({ b, weight }: { b: BasketHolding; weight: number }) => (
+  <Link
+    to={`/baskets/${b.slug}`}
+    data-row
+    className={`relative grid h-15 ${COLS} items-center rounded-md px-4 text-[14px] leading-none`}
+  >
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="flex w-9 shrink-0 items-center -space-x-3" aria-hidden="true">
+        {b.marks.map((m, i) => (
+          <span key={i} className="relative" style={{ zIndex: b.marks.length - i }}>
+            {m}
+          </span>
+        ))}
+      </span>
+      <div className="min-w-0">
+        <p className="flex h-3.5 min-w-0 items-center gap-[5px]">
+          <span className="truncate font-medium text-ds-ink">{b.name}</span>
+          <span className="shrink-0 uppercase">
+            <StatusChip tone="neutral">Basket</StatusChip>
+          </span>
+        </p>
+        <p className="mt-[6px] truncate text-[12px] text-ds-muted">{b.assetCount} assets · Ondo</p>
+      </div>
+    </div>
+    <span className="text-right font-medium text-ds-ink">{usd(b.value)}</span>
+    <span className="text-right text-ds-muted">{(weight * 100).toFixed(1)}%</span>
+    <span className="text-right text-ds-muted">—</span>
+    <span className="text-right text-ds-muted">—</span>
+  </Link>
+);
+
 /**
  * The holdings table, to holdings.svg: the rail-card title row, then a grey
  * panel 4px in from the card's edge holding the column labels and the rows.
@@ -122,13 +167,20 @@ export const Holdings = ({
   m,
   signedIn,
   failed,
+  baskets = [],
 }: {
   m: Model | undefined;
   signedIn: boolean;
   failed: boolean;
+  baskets?: readonly BasketHolding[];
 }) => {
   const [showAll, setShowAll] = useState(false);
-  const rows = m?.rows ?? [];
+  const providers = useProviders(m?.rows ?? []);
+  /* Stocks and baskets in one list, largest first: a basket is a position like any other. */
+  const rows = [
+    ...(m?.rows ?? []).map((r) => ({ kind: "stock" as const, key: r.ticker, value: r.value, r })),
+    ...baskets.map((b) => ({ kind: "basket" as const, key: `basket:${b.slug}`, value: b.value, b })),
+  ].sort((a, b) => b.value - a.value);
   /*
    * Three, because the rows are sorted largest first and a portfolio's shape
    * is in its top few — the twentieth position is 0.4% of the money and a
@@ -162,9 +214,17 @@ export const Holdings = ({
               <span className="text-right">Return</span>
             </div>
             <GlideRows>
-              {shown.map((r) => (
-                <Line key={r.ticker} r={r} />
-              ))}
+              {shown.map((item) =>
+                item.kind === "stock" ? (
+                  <Line key={item.key} r={item.r} providers={providers.get(item.r.ticker)} />
+                ) : (
+                  <BasketLine
+                    key={item.key}
+                    b={item.b}
+                    weight={m && m.assets > 0 ? item.b.value / m.assets : 0}
+                  />
+                ),
+              )}
             </GlideRows>
 
             {/* Only when there is something behind it. A control that never

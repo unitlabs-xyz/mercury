@@ -226,7 +226,6 @@ export const Ticket = ({
   proceeds,
   max,
   onMax,
-  wrapperCount,
 }: {
   name: string;
   raw: string;
@@ -253,7 +252,6 @@ export const Ticket = ({
   proceeds: number | null;
   max: boolean;
   onMax: (v: boolean) => void;
-  wrapperCount: number;
 }) => {
   const amount = Number(raw) || 0;
   const selling = side === "sell";
@@ -274,7 +272,8 @@ export const Ticket = ({
    * which, and the note below says what is left. The alternative is a button
    * that promises a clean exit and quietly delivers half of one.
    */
-  const maxLabel = selling && wrapperCount > 1 && best !== null ? `Sell all ${best.symbol}` : "Sell all";
+  /* Which token a sale comes out of is chosen in the review, so the chip makes no promise about it. */
+  const maxLabel = "Sell all";
 
   /*
    * Whether the note belongs under the amount or above the button.
@@ -352,20 +351,6 @@ export const Ticket = ({
         {/* Net of the charge, so the figure here is the figure that lands. */}
         {selling && <RailLine k="You get">{quoting || proceeds === null ? "—" : usd(proceeds)}</RailLine>}
       </dl>
-
-      {/* A sell fills from one wrapper. Saying so before the press beats
-          discovering it at the confirmation, or worse, after it. */}
-      {selling &&
-        wrapperCount > 1 &&
-        filled !== null &&
-        price !== null &&
-        settled > 0 &&
-        filled * price < settled - 0.01 && (
-          <Note tone="warn" icon={<Alert />}>
-            You hold {name} through {wrapperCount} issuers. This sells {usd(filled * price)} of the one paying
-            best today; sell the rest in a second order.
-          </Note>
-        )}
 
       {/* Not an error, so it sits with the field rather than above the button:
           the amount is capped, and the cap is what wants explaining. */}

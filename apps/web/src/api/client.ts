@@ -32,7 +32,7 @@ export class ApiError extends Error {
 export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
   // Sample data for design review (VITE_SAMPLE=1); off in a normal build.
   if (SAMPLE) {
-    const sample = sampleResponse(path);
+    const sample = sampleResponse(path, typeof init.body === "string" ? init.body : undefined);
     if (sample !== undefined) return sample as T;
   }
   // `getAccessToken` answers from memory and only goes to the network when the

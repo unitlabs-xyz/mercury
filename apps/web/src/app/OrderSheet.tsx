@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import type { OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@mercury/core";
+import type { OfferQueueDecision, ExecuteDecision, PricedCandidate, RefuseDecision } from "@mercury/core";
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
 import { Mark } from "./invest/shared";
 import { SwapPanel, TipLine, Well } from "./review";
+import { InfoTip, StatusChip } from "../ui/ds";
+import { lendableIssuer, TOKEN_NAME, useHeldAs } from "./stock/heldAs";
+import type { Issuer } from "@mercury/types";
 import { useMoney } from "../api/hooks";
 import { PriceMoved, useOrderAction } from "../api/orders";
-import { ISSUER_NAME } from "./IssuerCompare";
 import { Button } from "../ui/Button";
 import { useDecision } from "../market/hooks";
 import type { Instrument, PriceMap } from "../market/hooks";
@@ -18,37 +20,177 @@ const num = (d: { toString(): string } | null | undefined) => (d ? Number(d.toSt
 
 /* ── the three outcomes ─────────────────────────────────────────────── */
 
+/** The quotes a person can choose between: every token that fills this amount, cheapest (or best-paying) first. */
+const optionsOf = (d: ExecuteDecision): PricedCandidate[] =>
+  d.candidates
+    .filter((c) => c.viable && c.pricePerShare !== null && c.filledShares !== null)
+    .sort((a, b) => {
+      const pa = num(a.pricePerShare) ?? 0;
+      const pb = num(b.pricePerShare) ?? 0;
+      return d.side === "buy" ? pa - pb : pb - pa;
+    });
+
+/** Tokens quoted but unable to fill this amount: still offered as a row, so the choice is visible, but not pickable. */
+const unavailableOf = (d: ExecuteDecision): PricedCandidate[] =>
+  d.candidates.filter((c) => !(c.viable && c.pricePerShare !== null && c.filledShares !== null));
+
+/** Why a token cannot take this order, in a reader's words. */
+const whyUnavailable = (c: PricedCandidate) =>
+  c.rejection === "impact_too_high"
+    ? `Too little liquidity for this amount${
+        c.priceImpact === null
+          ? ""
+          : ` · ${(Math.abs(num(c.priceImpact) ?? 0) * 100).toFixed(1)}% price impact`
+      }`
+    : "No route for this amount right now";
+
+/**
+ * Which token to buy or sell, when there is more than one. A row per token in
+ * a grey panel, the chosen one raised in white: its name, whether it can back
+ * a loan (only where Kamino lends against the stock at all), and on the right
+ * what this amount gets from it. The best price is chosen to start with.
+ */
+const TokenChoice = ({
+  options,
+  unavailable,
+  picked,
+  onPick,
+  selling,
+  amount,
+  fee,
+  accepted,
+  heldShares,
+}: {
+  options: readonly PricedCandidate[];
+  unavailable: readonly PricedCandidate[];
+  picked: PricedCandidate;
+  onPick: (mint: string) => void;
+  selling: boolean;
+  amount: number;
+  fee: number;
+  accepted: boolean | null;
+  /** What is held of each token, by issuer, for a sell. */
+  heldShares: ReadonlyMap<Issuer, number>;
+}) => {
+  const best = options[0];
+  return (
+    <fieldset className="rounded-lg bg-ds-panel p-1">
+      <legend className="sr-only">{selling ? "Sell from" : "Buy as"}</legend>
+      <p className="px-4 pt-3 pb-2.5 text-[12px] leading-none text-ds-muted">
+        {selling ? "Sell from" : "Buy as"}
+      </p>
+      <div className="flex flex-col gap-1">
+        {options.map((c) => {
+          const on = c.mint === picked.mint;
+          const price = num(c.pricePerShare) ?? 0;
+          const filled = num(c.filledShares) ?? 0;
+          const lendable = lendableIssuer(c.issuer);
+          const held = heldShares.get(c.issuer);
+          return (
+            <label
+              key={c.mint}
+              className={`flex cursor-pointer items-center gap-3 rounded-md px-4 py-3 transition-colors ${
+                on ? "bg-white" : "hover:bg-white/60"
+              }`}
+            >
+              <input
+                type="radio"
+                name="token"
+                value={c.mint}
+                checked={on}
+                onChange={() => onPick(c.mint)}
+                className="sr-only"
+              />
+              <span
+                aria-hidden="true"
+                className={`grid size-4 shrink-0 place-items-center rounded-full border ${
+                  on ? "border-ds-ink" : "border-ds-divider bg-white"
+                }`}
+              >
+                {on && <span className="size-2 rounded-full bg-ds-ink" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 text-[14px] leading-[18px] font-medium text-ds-ink">
+                  {TOKEN_NAME[c.issuer]}
+                  {c.mint === best?.mint && options.length > 1 && (
+                    <StatusChip tone="up">Best price</StatusChip>
+                  )}
+                </span>
+                <span className="mt-0.5 flex items-center gap-1 text-[12px] leading-4 text-ds-muted">
+                  {selling && held !== undefined ? `${held.toFixed(4)} shares held` : `${usd(price)} a share`}
+                  {accepted === true && (
+                    <>
+                      {" · "}
+                      {lendable ? "Borrowable" : "Not borrowable"}
+                      {!lendable && (
+                        <InfoTip label="About borrowing" align="start">
+                          Shares on {TOKEN_NAME[c.issuer]} aren’t borrowable. Shares on xStocks can back a
+                          loan.
+                        </InfoTip>
+                      )}
+                    </>
+                  )}
+                </span>
+              </span>
+              <span className="shrink-0 text-right text-[14px] leading-[18px] font-medium text-ds-ink">
+                {selling
+                  ? usd(Math.max(0, filled * price - fee))
+                  : `${((amount - fee) / price).toFixed(4)} sh`}
+              </span>
+            </label>
+          );
+        })}
+        {unavailable.map((c) => (
+          <div key={c.mint} className="flex items-center gap-3 rounded-md px-4 py-3" aria-disabled="true">
+            <span aria-hidden="true" className="size-4 shrink-0 rounded-full border border-ds-divider" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14px] leading-[18px] font-medium text-ds-muted">
+                {TOKEN_NAME[c.issuer]}
+              </span>
+              <span className="mt-0.5 block text-[12px] leading-4 text-ds-muted">{whyUnavailable(c)}</span>
+            </span>
+            <span className="shrink-0 text-[12px] leading-none text-ds-muted">Unavailable</span>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
+};
+
 /**
  * A fill, laid out as a swap: what leaves on the left, what arrives on the
  * right, then in the same grey panel the facts nothing else here
  * holds — the price against a real share, and which issuer and venue won.
+ * Every figure is of the token picked above it, not only of the best one.
  */
 const Execute = ({
   d,
+  pick,
   amount,
   fee,
-  proceeds,
 }: {
   d: ExecuteDecision;
+  pick: PricedCandidate;
   amount: number;
   fee: number;
-  /** What a sale lands, net of the charge. Null on a buy. */
-  proceeds: number | null;
 }) => {
   const selling = d.side === "sell";
-  const sold = num(d.best.filledShares) ?? 0;
-  const price = num(d.best.pricePerShare) ?? 0;
-  const premium = (num(d.premium) ?? 0) * 100;
+  const sold = num(pick.filledShares) ?? 0;
+  const price = num(pick.pricePerShare) ?? 0;
+  const fair = num(d.fairPricePerShare) ?? 0;
+  const premium = fair > 0 ? (price / fair - 1) * 100 : 0;
   /* The floor the route will not fill below; what moves while a buy lands is the share count. */
-  const worst = num(d.best.worstPricePerShare);
+  const worst = num(pick.worstPricePerShare);
   /* The charge comes out of the amount, so a buyer holding exactly $5 can still spend all of it. */
   const invested = amount - fee;
   const shares = price > 0 ? invested / price : 0;
+  /* Net of the charge, so the figure is the figure that lands. */
+  const proceeds = Math.max(0, sold * price - fee);
   const atLeast =
     !selling && worst && worst > price
       ? `At least ${(invested / worst).toFixed(4)}`
       : selling && worst && worst < price
-        ? `At least ${usd(sold * worst)}`
+        ? `At least ${usd(Math.max(0, sold * worst - fee))}`
         : undefined;
   return (
     <>
@@ -62,7 +204,7 @@ const Execute = ({
         }
         to={
           selling ? (
-            <Well label="You get" value={usd(proceeds ?? 0)} unit="USD" sub={atLeast} />
+            <Well label="You get" value={usd(proceeds)} unit="USD" sub={atLeast} />
           ) : (
             <Well label="You get" value={shares.toFixed(4)} unit="shares" sub={atLeast} />
           )
@@ -96,9 +238,9 @@ const Execute = ({
             <dt className="text-ds-muted">Route</dt>
             <dd className="inline-flex min-w-0 items-center rounded-full bg-white p-[3px] text-[12px] leading-none">
               <span className="rounded-full bg-ds-panel px-2.5 py-1.5 font-medium text-ds-ink">
-                {ISSUER_NAME[d.best.issuer]}
+                {TOKEN_NAME[pick.issuer]}
               </span>
-              {d.best.routeLabels.map((venue, i) => (
+              {pick.routeLabels.map((venue, i) => (
                 <span key={`${venue}-${i}`} className="flex items-center text-ds-ink">
                   <svg
                     viewBox="0 0 8 14"
@@ -123,7 +265,7 @@ const Execute = ({
           </div>
         </dl>
       </SwapPanel>
-      {d.warning && (
+      {d.warning && pick.mint === d.best.mint && (
         <p className="mt-1 flex gap-2 rounded-lg bg-ds-warn-chip px-4 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn">
           <Alert className="mt-px size-3.5 shrink-0" />
           {d.warning}
@@ -228,6 +370,7 @@ export const OrderSheet = ({
 }) => {
   const selling = side === "sell";
   const available = Number(useMoney().data?.balanceUsd ?? 0);
+  const heldAs = useHeldAs(instrument.ticker);
   const [raw, setRaw] = useState("100");
   const buy = useOrderAction();
   const placed = buy.data ?? null;
@@ -246,11 +389,18 @@ export const OrderSheet = ({
     return () => clearTimeout(t);
   }, [amount]);
 
-  const { decision, isLoading, fee, proceeds } = useDecision(open ? instrument : undefined, settled, prices, {
+  const { decision, isLoading, fee } = useDecision(open ? instrument : undefined, settled, prices, {
     side,
     max,
   });
-  const proceedsUsd = proceeds === null ? null : Number(proceeds.toString());
+  /* Which token to trade. Null is the best price; a pick only holds while that token is still on offer. */
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => setPicked(null), [open, side]);
+  const options = decision?.kind === "execute" ? optionsOf(decision) : [];
+  const unavailable = decision?.kind === "execute" ? unavailableOf(decision) : [];
+  const pick =
+    decision?.kind === "execute" ? (options.find((c) => c.mint === picked) ?? decision.best) : null;
+  const heldShares = new Map((heldAs.parts ?? []).map((p) => [p.issuer, p.shares - p.pledged] as const));
   /* Zero unless a relayer is paying the network on this buyer's behalf. */
   const feeUsd = fee === null ? 0 : Number(fee.toString());
 
@@ -401,8 +551,23 @@ export const OrderSheet = ({
                 </div>
               ) : (
                 <>
-                  {decision.kind === "execute" && (
-                    <Execute d={decision} amount={settled} fee={feeUsd} proceeds={proceedsUsd} />
+                  {decision.kind === "execute" && pick && (
+                    <div className="flex flex-col gap-1">
+                      {options.length + unavailable.length > 1 && (
+                        <TokenChoice
+                          options={options}
+                          unavailable={unavailable}
+                          picked={pick}
+                          onPick={setPicked}
+                          selling={selling}
+                          amount={settled}
+                          fee={feeUsd}
+                          accepted={heldAs.accepted}
+                          heldShares={heldShares}
+                        />
+                      )}
+                      <Execute d={decision} pick={pick} amount={settled} fee={feeUsd} />
+                    </div>
                   )}
                   {decision.kind === "offer_queue" && (
                     <div className="px-4">
@@ -419,7 +584,7 @@ export const OrderSheet = ({
             </div>
           </div>
 
-          <div className="flex shrink-0 gap-2.5 border-t border-ds-divider bg-white px-5 py-4">
+          <div className="flex shrink-0 gap-2.5 bg-white px-5 pt-1 pb-4">
             {/* The design system's buttons. These were hand-rolled: a teal
                 rectangle at h-11 for the primary action, where every other
                 button in the app is a near-black pill at h-10. */}
@@ -437,6 +602,8 @@ export const OrderSheet = ({
                   side,
                   usd: settled,
                   ...(max ? { max: true } : {}),
+                  /* The token reviewed, picked or best: the server fills only that one. */
+                  ...(pick ? { issuer: pick.issuer } : {}),
                 })
               }
               className="flex-[1.6]"

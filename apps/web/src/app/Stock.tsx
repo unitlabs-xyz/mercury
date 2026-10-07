@@ -27,6 +27,7 @@ import { Skeleton } from "./portfolio/ui";
 import { About, Position, Stats } from "./stock/Panels";
 import { BorrowPanel } from "./stock/BorrowPanel";
 import { InBaskets } from "./stock/InBaskets";
+import { useHeldAs } from "./stock/heldAs";
 import { Routes } from "./stock/Routes";
 import { Ticket } from "./stock/Ticket";
 import { useWatchlist } from "./watchlist";
@@ -84,6 +85,8 @@ export const Stock = () => {
   const universe = useUniverse();
   const portfolio = usePortfolio();
   const instrument = useMemo(() => one.data ?? undefined, [one.data]);
+  // The position by issuer: one stock to the reader, but only its xStocks part can back a loan.
+  const heldAs = useHeldAs(instrument?.ticker ?? ticker.toUpperCase());
 
   // Live prices for this stock's own tokens: the decision needs each multiplier and quote time.
   const mints = useMemo(() => instrument?.wrappers.map((w) => w.mint) ?? [], [instrument]);
@@ -313,7 +316,7 @@ export const Stock = () => {
           <div className="order-3 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
             {/* What you hold of it and what it could borrow, side by side and level; one alone takes the row. */}
             <div className="grid items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
-              {holding && <Position h={holding} />}
+              {holding && <Position h={holding} parts={heldAs.parts} accepted={heldAs.accepted} />}
               <BorrowPanel ticker={instrument.ticker} name={instrument.name} />
             </div>
 
@@ -360,7 +363,6 @@ export const Stock = () => {
               proceeds={proceeds === null ? null : Number(proceeds.toString())}
               max={max}
               onMax={setMax}
-              wrapperCount={holding?.wrapperCount ?? 1}
             />
           </div>
           <div className="order-4 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
