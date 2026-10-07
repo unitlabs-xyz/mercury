@@ -1,5 +1,8 @@
 # 08 · Roadmap
 
+> Baskets moved from Symmetry to Glider on 5 October ([ADR 0013](adr/0013-baskets-on-glider.md)).
+> The weekly plan below is kept as written; where it says Symmetry, the shipped work is Glider.
+
 Twenty-three days from 19 September to the deadline on 12 October. Four engineers. Web is the
 submission. Integrating Symmetry rather than writing a vault returns roughly a fortnight of one
 engineer, which buys back the iOS app.
@@ -94,8 +97,8 @@ submission.
 
 ## After the hackathon
 
-**1.1, October to December.** Basket rebalancing through Symmetry's keepers, which needs its own
-record. Gifting a holding by link, which baskets being real tokens now makes trivial. More
+**1.1, October to December.** Baskets in net worth and on iOS, with Glider's daily rebalances in
+the activity feed. Real-funded checks for every strategy. Gifting a holding by link. More
 baskets.
 
 **2.0, Q1.** Borrowing against holdings through Kamino, with a risk screen showing both the fall
@@ -103,5 +106,5 @@ the portfolio can take today and the gap it could take on a Monday. Then a card,
 partner who converts to real money and carries identity.
 
 **3.0.** Creator baskets with an automatic fee split and a track record that is a chain of
-timestamped transactions rather than a number you are asked to believe. Symmetry already supports
-third-party basket creation, so this is closer than it was.
+timestamped transactions rather than a number you are asked to believe. Glider already creates
+strategies through its API, so publishing a user's strategy is closer than it was.

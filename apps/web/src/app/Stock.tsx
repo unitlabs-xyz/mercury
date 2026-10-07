@@ -26,6 +26,7 @@ import { LiveStatusChip, PriceError } from "./LiveStatus";
 import { Skeleton } from "./portfolio/ui";
 import { About, Position, Stats } from "./stock/Panels";
 import { BorrowPanel } from "./stock/BorrowPanel";
+import { InBaskets } from "./stock/InBaskets";
 import { Routes } from "./stock/Routes";
 import { Ticket } from "./stock/Ticket";
 import { useWatchlist } from "./watchlist";
@@ -158,6 +159,7 @@ export const Stock = () => {
       ? null
       : Number(((positionUsd * (sellableShares ?? 0)) / shares).toFixed(2));
   const owned = new Set(portfolio.data?.holdings.map((h) => h.ticker));
+  const instrumentsByTicker = new Map((universe.data ?? []).map((i) => [i.ticker, i]));
 
   const similar: Row[] = similarTickers.map((i) => {
     const p = priceInstrument(i, undefined);
@@ -201,10 +203,16 @@ export const Stock = () => {
         <LiveStatusChip fetching={prices.isFetching} at={prices.dataUpdatedAt} />
       </nav>
 
-      <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
-        <div className="flex min-w-0 flex-col gap-4 md:gap-6">
+      {/* Two columns on wide screens. Narrower, both columns dissolve (`contents`)
+          and the cards take one order: the chart, then the order ticket, then the
+          detail panels, then Similar and baskets — buying never sits at the foot. */}
+      <div className="flex flex-col gap-4 md:gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_416px] xl:items-start">
+        <div className="contents xl:flex xl:min-w-0 xl:flex-col xl:gap-6">
           {/* The price and its chart, set like the market cards and the performance card. */}
-          <section aria-label="Price" className="flex min-w-0 flex-col rounded-xl bg-white p-1">
+          <section
+            aria-label="Price"
+            className="order-1 flex min-w-0 flex-col rounded-xl bg-white p-1 xl:order-none"
+          >
             <div className="px-5 pt-5 pb-5">
               <div className="flex items-center justify-between gap-3">
                 {/* The page's subject, larger than a card's: a 48px logo, the name at 20
@@ -302,66 +310,73 @@ export const Stock = () => {
             )}
           </section>
 
-          {/* What you hold of it and what it could borrow, side by side and level; one alone takes the row. */}
-          <div className="grid items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
-            {holding && <Position h={holding} />}
-            <BorrowPanel ticker={instrument.ticker} name={instrument.name} />
+          <div className="order-3 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
+            {/* What you hold of it and what it could borrow, side by side and level; one alone takes the row. */}
+            <div className="grid items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
+              {holding && <Position h={holding} />}
+              <BorrowPanel ticker={instrument.ticker} name={instrument.name} />
+            </div>
+
+            <Stats p={priced} />
+
+            <About i={instrument} />
+
+            {prices.isError ? (
+              <PriceError
+                message="Could not reach Jupiter for live prices."
+                onRetry={() => void prices.refetch()}
+              />
+            ) : (
+              <Routes
+                decision={decision}
+                amount={Math.max(settled, 1)}
+                loading={isLoading || isFetching}
+                wrappers={instrument.wrappers}
+              />
+            )}
           </div>
-
-          <Stats p={priced} />
-
-          <About i={instrument} />
-
-          {prices.isError ? (
-            <PriceError
-              message="Could not reach Jupiter for live prices."
-              onRetry={() => void prices.refetch()}
-            />
-          ) : (
-            <Routes
-              decision={decision}
-              amount={Math.max(settled, 1)}
-              loading={isLoading || isFetching}
-              wrappers={instrument.wrappers}
-            />
-          )}
         </div>
 
-        <aside className="flex flex-col gap-4 md:gap-6 xl:sticky xl:top-20">
-          <Ticket
-            name={instrument.name}
-            raw={raw}
-            onRaw={setRaw}
-            settled={settled}
-            cash={cash}
-            decision={settled === amount ? decision : null}
-            quoting={isLoading || settled !== amount}
-            fair={priced.fair}
-            onReview={() => setBuying(true)}
-            side={side}
-            onSide={setSide}
-            holds={shares !== null && shares > 0}
-            shares={shares}
-            sellableShares={sellableShares}
-            pledgedShares={pledged}
-            positionUsd={positionUsd}
-            sellableUsd={sellableUsd}
-            proceeds={proceeds === null ? null : Number(proceeds.toString())}
-            max={max}
-            onMax={setMax}
-            wrapperCount={holding?.wrapperCount ?? 1}
-          />
-          {similar.length > 0 && (
-            <RailList label="Similar" meta="Today" to="/invest" linkLabel="All stocks">
-              <GlideRows as="ul">
-                {similar.map((r) => (
-                  <li key={r.instrument.ticker}>
-                    <Saved r={r} />
-                  </li>
-                ))}
-              </GlideRows>
-            </RailList>
-          )}
+        <aside className="contents xl:sticky xl:top-20 xl:flex xl:flex-col xl:gap-6">
+          <div className="order-2 min-w-0 xl:order-none">
+            <Ticket
+              name={instrument.name}
+              raw={raw}
+              onRaw={setRaw}
+              settled={settled}
+              cash={cash}
+              decision={settled === amount ? decision : null}
+              quoting={isLoading || settled !== amount}
+              fair={priced.fair}
+              onReview={() => setBuying(true)}
+              side={side}
+              onSide={setSide}
+              holds={shares !== null && shares > 0}
+              shares={shares}
+              sellableShares={sellableShares}
+              pledgedShares={pledged}
+              positionUsd={positionUsd}
+              sellableUsd={sellableUsd}
+              proceeds={proceeds === null ? null : Number(proceeds.toString())}
+              max={max}
+              onMax={setMax}
+              wrapperCount={holding?.wrapperCount ?? 1}
+            />
+          </div>
+          <div className="order-4 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
+            {similar.length > 0 && (
+              <RailList label="Similar" meta="Today" to="/invest" linkLabel="All stocks">
+                <GlideRows as="ul">
+                  {similar.map((r) => (
+                    <li key={r.instrument.ticker}>
+                      <Saved r={r} />
+                    </li>
+                  ))}
+                </GlideRows>
+              </RailList>
+            )}
+            <InBaskets ticker={t} instruments={instrumentsByTicker} />
+          </div>
         </aside>
       </div>
 

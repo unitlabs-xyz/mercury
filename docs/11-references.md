@@ -56,6 +56,8 @@ their method before assuming an advertised APR is real.
 
 ### Symmetry baskets-ui
 
+> No longer used: baskets moved to Glider ([ADR 0013](adr/0013-baskets-on-glider.md)).
+
 `github.com/symmetry-protocol/baskets-ui` · Next.js, Tailwind, Redux · MIT
 
 The reference implementation of the SDK we are integrating, and it is **forkable**. Use it as a

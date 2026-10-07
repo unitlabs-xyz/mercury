@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toEvent, usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
 import { useMoney } from "../api/hooks";
+import { ChevronDown } from "../ui/icons";
 import {
   basketEnrollmentEnabled,
   useBasketActivity,
@@ -46,6 +47,7 @@ import { EventRow } from "./portfolio/Feed";
 import { USDC_MINT, UsdcMark } from "./activity-mark";
 import { Skeleton } from "./portfolio/ui";
 import { LIST_DOT } from "./invest/shared";
+import { Fact } from "./stock/Panels";
 
 type Range = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
 const RANGES: readonly Range[] = ["1D", "1W", "1M", "3M", "6M", "1Y", "All"];
@@ -209,19 +211,22 @@ const RebalanceTimer = ({
 const IconCluster = ({
   template,
   instruments,
+  onClick,
 }: {
   template: ManagedBasketTemplate;
   instruments: ReadonlyMap<string, Instrument>;
+  onClick: () => void;
 }) => {
   const assets = [...template.allocations].sort((a, b) => b.weightBps - a.weightBps);
   return (
-    <div
-      role="img"
+    <button
+      type="button"
+      onClick={onClick}
       aria-label={`Top holdings: ${assets
         .slice(0, 6)
         .map((a) => a.ticker)
-        .join(", ")}`}
-      className="flex items-center -space-x-3 pl-1"
+        .join(", ")}. View strategy composition`}
+      className="flex items-center -space-x-3 rounded-full pl-1 transition-opacity hover:opacity-80"
     >
       {assets.slice(0, 6).map((asset, index) => (
         <span key={asset.assetId} className="relative shrink-0" style={{ zIndex: 6 - index }}>
@@ -233,13 +238,67 @@ const IconCluster = ({
         </span>
       ))}
       {assets.length > 6 && (
-        <span className="relative grid size-12 shrink-0 place-items-center rounded-full bg-ds-panel pl-2 text-[12px] text-ds-muted ring-[3px] ring-white">
+        <span className="relative !ml-1 grid size-12 shrink-0 place-items-center rounded-full bg-ds-panel text-[15px] font-medium text-ds-ink">
           +{assets.length - 6}
         </span>
       )}
-    </div>
+    </button>
   );
 };
+
+/** A row that opens the stock's own page when Mercury lists it, and stays plain text when it doesn't. */
+const StockLink = ({
+  ticker,
+  ...props
+}: {
+  ticker: string | null;
+  className: string;
+  style?: CSSProperties;
+  title?: string;
+  children: ReactNode;
+}) => (ticker ? <Link to={`/invest/${ticker}`} {...props} /> : <div {...props} />);
+
+/**
+ * What the schedule looks like once there is a portfolio, blurred behind a
+ * note — static, so nothing ticks for a portfolio that doesn't exist.
+ */
+const RebalanceLocked = () => (
+  <div className="relative">
+    <div aria-hidden="true" inert className="pointer-events-none select-none blur-[3px] opacity-60">
+      <div className="flex items-center justify-between gap-3 text-[12px] text-ds-muted">
+        <span>Time to next run</span>
+        <span>Automatic</span>
+      </div>
+      <div className="mt-3">
+        <RailFigure value="14h 32m" />
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-3 text-[12px]">
+        <div>
+          <p className="text-ds-muted">Next scheduled</p>
+          <p className="mt-0.5 font-medium text-ds-ink">Tomorrow, 9:00 AM</p>
+        </div>
+        <div>
+          <p className="text-ds-muted">Last completed</p>
+          <p className="mt-0.5 font-medium text-ds-ink">Today</p>
+        </div>
+      </div>
+      <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white">
+        <div className="h-full w-2/5 rounded-full bg-[#d1e7db]" />
+      </div>
+      <Button size="lg" className="mt-5 w-full" disabled>
+        Rebalance now
+      </Button>
+    </div>
+    <div className="absolute inset-0 grid place-items-center px-4">
+      <div className="max-w-[280px] rounded-lg bg-white px-5 py-4 text-center">
+        <p className="text-[14px] font-medium text-ds-ink">Open a position to rebalance</p>
+        <p className="mt-1.5 text-[12px] leading-relaxed text-ds-muted">
+          Once you enroll, Glider brings your holdings back to target weights every day.
+        </p>
+      </div>
+    </div>
+  </div>
+);
 
 /** Match the settled detail grid while its first strategy read is in flight. */
 const DetailLoading = ({ assetCount }: { assetCount: number }) => (
@@ -549,6 +608,7 @@ export const Basket = () => {
     sessionChecking ||
     (signedIn && !walletMissing && (enrollment.isPending || (enrolled && portfolio.isPending)));
   const ownershipUnknown = signedIn && !walletMissing && enrollment.isError && !enrollment.data;
+  const rebalanceLocked = !enrolled && !accountLoading && !ownershipUnknown;
   const marketReads = [
     instruments.dataUpdatedAt,
     prices.dataUpdatedAt,
@@ -577,11 +637,12 @@ export const Basket = () => {
           onRetry={() => void result.refetch()}
         />
       )}
-      <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
-        <div className="flex min-w-0 flex-col gap-4 md:gap-6">
+      {/* Narrower than xl the columns dissolve so enrolling sits right under the chart, not at the foot. */}
+      <div className="flex flex-col gap-4 md:gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_416px] xl:items-start">
+        <div className="contents xl:flex xl:min-w-0 xl:flex-col xl:gap-6">
           <section
             aria-label="Strategy overview and modeled performance"
-            className="min-w-0 rounded-xl bg-white p-1"
+            className="order-1 min-w-0 rounded-xl bg-white p-1 xl:order-none"
           >
             <div className="px-5 pt-5 pb-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -598,7 +659,18 @@ export const Basket = () => {
                   </div>
                   <p className="mt-2 text-[13px] text-ds-muted">Glider strategy · Solana</p>
                 </div>
-                <IconCluster template={template} instruments={byTicker} />
+                <IconCluster
+                  template={template}
+                  instruments={byTicker}
+                  onClick={() =>
+                    document.getElementById("composition")?.scrollIntoView({
+                      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                        ? "auto"
+                        : "smooth",
+                      block: "start",
+                    })
+                  }
+                />
               </div>
               <p className="mt-5 max-w-[680px] text-[14px] leading-relaxed text-ds-muted">
                 {template.description}
@@ -633,699 +705,706 @@ export const Basket = () => {
             </div>
           </section>
 
-          <section
-            aria-label="Strategy composition"
-            className="min-w-0 overflow-hidden rounded-xl bg-white p-1"
-          >
-            <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-4">
-              <div>
-                <h2 className="text-[17px] font-medium text-ds-ink">Strategy composition</h2>
-                <p className="mt-1 text-[12px] text-ds-muted">
-                  Target weights; actual holdings can drift between rebalances.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {marketUpdatedAt > 0 &&
-                  (marketRefreshFailed ? (
-                    <span className="text-[11px] text-ds-muted">Last available</span>
-                  ) : (
-                    <LiveStatusChip fetching={marketFetching} at={marketUpdatedAt} />
-                  ))}
-                <span className="text-[12px] text-ds-muted">{allocations.length} target assets</span>
-              </div>
-            </div>
-            <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
-              <GlideTable
-                columns="grid-cols-[minmax(180px,1fr)_75px_95px_95px_75px_75px] gap-x-3"
-                minWidth="min-w-[680px]"
-                headings={
-                  <>
-                    <span>Asset</span>
-                    <span className="text-right">Weight</span>
-                    <span className="text-right">Share price</span>
-                    <span className="text-right">Company cap</span>
-                    <span className="text-right">1D</span>
-                    <span className="text-right">1W</span>
-                  </>
-                }
-              >
-                {allocations.map((asset) => {
-                  const sharePrice = byTicker.get(asset.ticker)?.quote.fair;
-                  const companyCap = prices.data?.get(asset.mint)?.underlyingMarketCapUsd;
-                  return (
-                    <li
-                      key={asset.assetId}
-                      data-row
-                      className="relative z-[1] grid grid-cols-[minmax(180px,1fr)_75px_95px_95px_75px_75px] items-center gap-x-3 rounded-md px-4 py-3 text-[13px]"
-                    >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <AssetIcon
-                          asset={asset}
-                          source={byTicker.get(asset.ticker)}
-                          className="size-9 shrink-0 rounded-full bg-ds-panel object-contain"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium text-ds-ink">
-                            {byTicker.get(asset.ticker)?.name ?? asset.ticker}
-                          </span>
-                          <span className="text-[11px] text-ds-muted">{asset.ticker}</span>
-                        </span>
-                      </span>
-                      <span className="text-right font-medium text-ds-ink">{weight(asset.weightBps)}</span>
-                      <span className="text-right text-ds-ink">
-                        {sharePrice == null && instruments.isPending ? (
-                          <Skeleton className="ml-auto h-4 w-14" />
-                        ) : sharePrice == null ? (
-                          "—"
-                        ) : (
-                          usd(sharePrice)
-                        )}
-                      </span>
-                      <span className="text-right text-ds-muted">
-                        {companyCap == null && prices.isPending ? (
-                          <Skeleton className="ml-auto h-4 w-14" />
-                        ) : companyCap == null ? (
-                          "—"
-                        ) : (
-                          usdCompact(companyCap.toNumber())
-                        )}
-                      </span>
-                      <span className="flex justify-end">
-                        {dayHistory.isPending ? (
-                          <Skeleton className="h-5 w-14" />
-                        ) : (
-                          <MoveChip value={dayHistory.data?.get(asset.ticker)?.changePct ?? null} light />
-                        )}
-                      </span>
-                      <span className="flex justify-end">
-                        {weekHistory.isPending ? (
-                          <Skeleton className="h-5 w-14" />
-                        ) : (
-                          <MoveChip value={weekHistory.data?.get(asset.ticker)?.changePct ?? null} light />
-                        )}
-                      </span>
-                    </li>
-                  );
-                })}
-              </GlideTable>
-            </div>
-            <p className="mt-3 px-5 pb-4 text-[11px] text-ds-muted">
-              Share price, company cap and 1D/1W moves describe the underlying companies, not the Solana
-              tokens held by this strategy. Unavailable data is shown as —.
-            </p>
-          </section>
-
-          <section
-            aria-label="About and allocation"
-            className="overflow-hidden rounded-xl bg-white p-5 sm:p-6"
-          >
-            <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:gap-8">
-              <div className="flex flex-col">
-                <div className="flex items-center gap-2 text-[11px] text-ds-muted">
-                  <span className="rounded-full bg-ds-panel px-3 py-1">Glider strategy</span>
-                  <span>Solana</span>
+          <div className="order-3 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
+            <section
+              id="composition"
+              aria-label="Strategy composition"
+              className="min-w-0 scroll-mt-24 overflow-hidden rounded-xl bg-white p-1"
+            >
+              <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-4">
+                <div>
+                  <h2 className="text-[17px] font-medium text-ds-ink">Strategy composition</h2>
+                  <p className="mt-1 text-[12px] text-ds-muted">
+                    Target weights; actual holdings can drift between rebalances.
+                  </p>
                 </div>
-                <h2 className="mt-5 text-[18px] font-medium text-ds-ink">About {name}</h2>
-                <p className="mt-3 text-[13px] leading-[1.7] text-ds-muted">
-                  This Solana strategy follows Glider’s target weights with tokenized assets held in your own
-                  smart account. Glider rebalances daily; your actual holdings can drift between rebalances.
-                </p>
-                <p className="mt-5 text-[12px] font-medium text-ds-ink">Where it invests</p>
-                {insights.isPending ? (
-                  <div className="mt-2 flex gap-2" aria-label="Loading sector allocation">
-                    <Skeleton className="h-7 w-28" />
-                    <Skeleton className="h-7 w-24" />
-                  </div>
-                ) : insights.data?.allocation?.sectors.length ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {insights.data.allocation.sectors.map((sector) => (
-                      <span
-                        key={sector.label}
-                        className="rounded-md bg-ds-panel px-2.5 py-1.5 text-[11px] text-ds-muted"
-                      >
-                        {sector.label}{" "}
-                        <span className="font-medium text-ds-ink">
-                          {Number(sector.weightPercent).toFixed(1)}%
-                        </span>
-                      </span>
+                <div className="flex items-center gap-3">
+                  {marketUpdatedAt > 0 &&
+                    (marketRefreshFailed ? (
+                      <span className="text-[11px] text-ds-muted">Last available</span>
+                    ) : (
+                      <LiveStatusChip fetching={marketFetching} at={marketUpdatedAt} />
                     ))}
-                  </div>
-                ) : (
-                  <p className="mt-2 text-[12px] text-ds-muted">Provider classification is unavailable.</p>
-                )}
-                {!!insights.data?.allocation?.unclassifiedCount && (
-                  <p className="mt-3 text-[11px] text-ds-muted">
-                    {insights.data.allocation.unclassifiedCount} holdings lack a sector classification.
-                  </p>
-                )}
-                {!!insights.data?.allocation?.lowConfidenceCount && (
-                  <p className="mt-1 text-[11px] text-ds-muted">
-                    {insights.data.allocation.lowConfidenceCount} sector labels are estimates.
-                  </p>
-                )}
-              </div>
-              <div className="rounded-xl bg-ds-panel p-2.5">
-                <div className="flex items-center justify-between px-2 pb-2 text-[11px] text-ds-muted">
-                  <span>Target allocation</span>
-                  <span>{allocations.length} assets</span>
+                  <span className="text-[12px] text-ds-muted">{allocations.length} target assets</span>
                 </div>
-                <div
-                  className="flex h-[290px] flex-col gap-1.5"
-                  role="img"
-                  aria-label={`Target allocation: ${allocations.map((asset) => `${asset.ticker} ${weight(asset.weightBps)}`).join(", ")}`}
+              </div>
+              <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
+                <GlideTable
+                  columns="grid-cols-[minmax(180px,1fr)_75px_95px_95px_75px_75px] gap-x-3"
+                  minWidth="min-w-[680px]"
+                  headings={
+                    <>
+                      <span>Asset</span>
+                      <span className="text-right">Weight</span>
+                      <span className="text-right">Share price</span>
+                      <span className="text-right">Company cap</span>
+                      <span className="text-right">1D</span>
+                      <span className="text-right">1W</span>
+                    </>
+                  }
                 >
-                  {mosaic.map((row, rowIndex) => {
-                    const rowWeight = row.reduce((sum, tile) => sum + tile.weightBps, 0);
+                  {allocations.map((asset) => {
+                    const sharePrice = byTicker.get(asset.ticker)?.quote.fair;
+                    const companyCap = prices.data?.get(asset.mint)?.underlyingMarketCapUsd;
                     return (
-                      <div
-                        key={rowIndex}
-                        className="flex min-h-0 gap-1.5"
-                        style={{ flexGrow: rowWeight, flexBasis: 0 }}
-                      >
-                        {row.map((tile, index) => (
-                          <div
-                            key={tile.ticker}
-                            className="basket-allocation-tile group min-w-0 overflow-hidden rounded-lg px-2.5 transition-[transform,box-shadow,filter] duration-300 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-sm motion-reduce:transition-none sm:px-3"
-                            style={{ flexGrow: tile.weightBps, flexBasis: 0 }}
-                            title={`${tile.ticker}: ${weight(tile.weightBps)} target weight`}
-                          >
-                            <span
-                              aria-hidden="true"
-                              className={`basket-allocation-color pointer-events-none absolute -inset-3 ${TILE_TONES[(rowIndex * 2 + index) % TILE_TONES.length]}`}
+                      <li key={asset.assetId} data-row className="relative z-[1]">
+                        <StockLink
+                          ticker={byTicker.has(asset.ticker) ? asset.ticker : null}
+                          className="relative grid grid-cols-[minmax(180px,1fr)_75px_95px_95px_75px_75px] items-center gap-x-3 rounded-md px-4 py-3 text-[13px]"
+                        >
+                          <span className="flex min-w-0 items-center gap-3">
+                            <AssetIcon
+                              asset={asset}
+                              source={byTicker.get(asset.ticker)}
+                              className="size-9 shrink-0 rounded-full bg-ds-panel object-contain"
                             />
-                            <span className="basket-allocation-content">
-                              {tile.kind === "asset" ? (
-                                <AssetIcon
-                                  asset={tile.asset}
-                                  source={byTicker.get(tile.ticker)}
-                                  className="size-6 shrink-0 rounded-full object-contain transition-transform duration-300 motion-safe:group-hover:scale-110 motion-reduce:transition-none"
-                                />
-                              ) : (
-                                <span className="flex shrink-0 items-center -space-x-2 pl-0.5">
-                                  {tile.assets.slice(0, 3).map((asset) => (
-                                    <AssetIcon
-                                      key={asset.assetId}
-                                      asset={asset}
-                                      source={byTicker.get(asset.ticker)}
-                                      className="size-6 rounded-full bg-white object-contain ring-2 ring-white"
-                                    />
-                                  ))}
-                                </span>
-                              )}
-                              <span className="flex min-w-0 flex-col">
-                                <span className="truncate text-[12px] font-medium text-ds-ink">
-                                  {tile.ticker}
-                                </span>
-                                <span className="text-[11px] text-ds-muted">
-                                  {weight(tile.weightBps)}
-                                  {tile.kind === "other" ? ` · ${tile.assets.length} assets` : ""}
-                                </span>
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium text-ds-ink">
+                                {byTicker.get(asset.ticker)?.name ?? asset.ticker}
                               </span>
+                              <span className="text-[11px] text-ds-muted">{asset.ticker}</span>
                             </span>
-                          </div>
-                        ))}
-                      </div>
+                          </span>
+                          <span className="text-right font-medium text-ds-ink">
+                            {weight(asset.weightBps)}
+                          </span>
+                          <span className="text-right text-ds-ink">
+                            {sharePrice == null && instruments.isPending ? (
+                              <Skeleton className="ml-auto h-4 w-14" />
+                            ) : sharePrice == null ? (
+                              "—"
+                            ) : (
+                              usd(sharePrice)
+                            )}
+                          </span>
+                          <span className="text-right text-ds-muted">
+                            {companyCap == null && prices.isPending ? (
+                              <Skeleton className="ml-auto h-4 w-14" />
+                            ) : companyCap == null ? (
+                              "—"
+                            ) : (
+                              usdCompact(companyCap.toNumber())
+                            )}
+                          </span>
+                          <span className="flex justify-end">
+                            {dayHistory.isPending ? (
+                              <Skeleton className="h-5 w-14" />
+                            ) : (
+                              <MoveChip value={dayHistory.data?.get(asset.ticker)?.changePct ?? null} light />
+                            )}
+                          </span>
+                          <span className="flex justify-end">
+                            {weekHistory.isPending ? (
+                              <Skeleton className="h-5 w-14" />
+                            ) : (
+                              <MoveChip
+                                value={weekHistory.data?.get(asset.ticker)?.changePct ?? null}
+                                light
+                              />
+                            )}
+                          </span>
+                        </StockLink>
+                      </li>
                     );
                   })}
+                </GlideTable>
+              </div>
+              <p className="mt-3 px-5 pb-4 text-[11px] text-ds-muted">
+                Share price, company cap and 1D/1W moves describe the underlying companies, not the tokens
+                held by this strategy. Unavailable data is shown as —.
+              </p>
+            </section>
+
+            <section aria-label="About and allocation" className="min-w-0 rounded-xl bg-white p-1">
+              <div className="px-5 pt-4">
+                <RailHead title={`About ${name}`} />
+                <p className="mt-[13px] max-w-[72ch] text-[14px] leading-[1.55] text-ds-muted">
+                  Follows Glider’s target weights with tokenized assets held in your own smart account. Glider
+                  rebalances daily; your actual holdings can drift between rebalances.
+                </p>
+              </div>
+              <div className="mt-4 grid gap-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+                <div className="flex flex-col rounded-lg bg-ds-panel px-5 py-5">
+                  <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
+                    <Fact k="Assets">{allocations.length}</Fact>
+                    <Fact k="Rebalancing">Daily</Fact>
+                    <Fact k="Custody">Your smart account</Fact>
+                    <Fact k="Swap fee">
+                      {insights.isPending ? (
+                        <Skeleton className="h-3.5 w-16" />
+                      ) : insights.data?.integratorSwapFeeBps == null ? (
+                        "—"
+                      ) : (
+                        `${(insights.data.integratorSwapFeeBps / 100).toFixed(2)}%`
+                      )}
+                    </Fact>
+                  </dl>
+                  <div className="mt-6 border-t border-ds-divider pt-5">
+                    <p className="text-[14px] leading-none text-ds-muted">Where it invests</p>
+                    {insights.isPending ? (
+                      <div className="mt-4 space-y-4" aria-label="Loading sector allocation">
+                        <Skeleton className="h-7 w-full" />
+                        <Skeleton className="h-7 w-full" />
+                      </div>
+                    ) : insights.data?.allocation?.sectors.length ? (
+                      <ul className="mt-4 space-y-4">
+                        {insights.data.allocation.sectors.map((sector) => (
+                          <li key={sector.label}>
+                            <div className="flex items-baseline justify-between gap-3 text-[14px] leading-none">
+                              <span className="truncate text-ds-ink">{sector.label}</span>
+                              <span className="font-medium text-ds-ink">
+                                {Number(sector.weightPercent).toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white">
+                              <div
+                                className="h-full rounded-full bg-[#d1e7db]"
+                                style={{ width: `${Math.min(100, Number(sector.weightPercent))}%` }}
+                              />
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-[12px] text-ds-muted">Sector classification is unavailable.</p>
+                    )}
+                    {(!!insights.data?.allocation?.unclassifiedCount ||
+                      !!insights.data?.allocation?.lowConfidenceCount) && (
+                      <p className="mt-4 text-[11px] text-ds-muted">
+                        {[
+                          insights.data?.allocation?.unclassifiedCount
+                            ? `${insights.data.allocation.unclassifiedCount} holdings lack a sector`
+                            : null,
+                          insights.data?.allocation?.lowConfidenceCount
+                            ? `${insights.data.allocation.lowConfidenceCount} sector labels are estimates`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                        .
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <p className="px-2 pt-2 text-[10px] text-ds-muted">
-                  Target weights{totalWeight !== 10_000 ? ` · ${weight(totalWeight)} assigned` : ""}; not live
-                  holdings.
-                </p>
+                <div className="rounded-lg bg-ds-panel p-2.5">
+                  <div className="flex items-center justify-between px-2 pt-1 pb-2.5 text-[12px] text-ds-muted">
+                    <span>Target allocation</span>
+                    <span>{allocations.length} assets</span>
+                  </div>
+                  <div className="flex h-[290px] flex-col gap-1.5" aria-label="Target allocation">
+                    {mosaic.map((row, rowIndex) => {
+                      const rowWeight = row.reduce((sum, tile) => sum + tile.weightBps, 0);
+                      return (
+                        <div
+                          key={rowIndex}
+                          className="flex min-h-0 gap-1.5"
+                          style={{ flexGrow: rowWeight, flexBasis: 0 }}
+                        >
+                          {row.map((tile, index) => (
+                            <StockLink
+                              key={tile.ticker}
+                              ticker={tile.kind === "asset" && byTicker.has(tile.ticker) ? tile.ticker : null}
+                              className="basket-allocation-tile group min-w-0 overflow-hidden rounded-lg px-2.5 transition-transform duration-300 motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none sm:px-3"
+                              style={{ flexGrow: tile.weightBps, flexBasis: 0 }}
+                              title={`${tile.ticker}: ${weight(tile.weightBps)} target weight`}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={`basket-allocation-color pointer-events-none absolute -inset-3 ${TILE_TONES[(rowIndex * 2 + index) % TILE_TONES.length]}`}
+                              />
+                              <span className="basket-allocation-content">
+                                {tile.kind === "asset" ? (
+                                  <AssetIcon
+                                    asset={tile.asset}
+                                    source={byTicker.get(tile.ticker)}
+                                    className="size-6 shrink-0 rounded-full object-contain transition-transform duration-300 motion-safe:group-hover:scale-110 motion-reduce:transition-none"
+                                  />
+                                ) : (
+                                  <span className="flex shrink-0 items-center -space-x-2 pl-0.5">
+                                    {tile.assets.slice(0, 3).map((asset) => (
+                                      <AssetIcon
+                                        key={asset.assetId}
+                                        asset={asset}
+                                        source={byTicker.get(asset.ticker)}
+                                        className="size-6 rounded-full bg-white object-contain ring-2 ring-white"
+                                      />
+                                    ))}
+                                  </span>
+                                )}
+                                <span className="flex min-w-0 flex-col">
+                                  <span className="truncate text-[12px] font-medium text-ds-ink">
+                                    {tile.ticker}
+                                  </span>
+                                  <span className="text-[11px] text-ds-muted">
+                                    {weight(tile.weightBps)}
+                                    {tile.kind === "other" ? ` · ${tile.assets.length} assets` : ""}
+                                  </span>
+                                </span>
+                              </span>
+                            </StockLink>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="px-2 pt-2 text-[11px] text-ds-muted">
+                    Target weights{totalWeight !== 10_000 ? ` · ${weight(totalWeight)} assigned` : ""}; not
+                    live holdings.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="mt-6 grid grid-cols-2 gap-4 border-t border-ds-divider pt-5 text-[12px] sm:grid-cols-4">
-              <div>
-                <p className="text-ds-muted">Diversified exposure</p>
-                <p className="mt-1 font-medium text-ds-ink">{allocations.length} assets</p>
-              </div>
-              <div>
-                <p className="text-ds-muted">Rebalancing</p>
-                <p className="mt-1 font-medium text-ds-ink">Daily</p>
-              </div>
-              <div>
-                <p className="text-ds-muted">Custody</p>
-                <p className="mt-1 font-medium text-ds-ink">Your smart account</p>
-              </div>
-              <div>
-                <p className="text-ds-muted">Integrator swap fee</p>
-                <p className="mt-1 font-medium text-ds-ink">
-                  {insights.isPending ? (
-                    <Skeleton className="h-4 w-20" />
-                  ) : insights.data?.integratorSwapFeeBps == null ? (
-                    "Not available"
-                  ) : (
-                    `${(insights.data.integratorSwapFeeBps / 100).toFixed(2)}%`
-                  )}
-                </p>
-              </div>
-            </div>
-          </section>
-          <details className="group rounded-xl bg-white p-5 sm:p-6">
-            <summary className="flex cursor-pointer list-none items-center justify-between text-[14px] font-medium text-ds-ink [&::-webkit-details-marker]:hidden">
-              Risks and disclosures{" "}
-              <span aria-hidden className="text-ds-muted transition-transform group-open:rotate-90">
-                ›
-              </span>
-            </summary>
-            <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
-              These are tokenized assets held in a user-owned Glider smart account, not shares in a pooled
-              basket token. Prices, available liquidity, swap costs and actual execution can differ from the
-              modeled strategy. Funding with USDC does not automatically buy the target assets; USDC can
-              remain uninvested until a rebalance executes.
-            </p>
-          </details>
+            </section>
+            <details className="group rounded-xl bg-white p-5 sm:p-6">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-[14px] font-medium text-ds-ink [&::-webkit-details-marker]:hidden">
+                Risks and disclosures
+                <ChevronDown
+                  aria-hidden="true"
+                  className="size-4 text-ds-muted transition-transform duration-300 group-open:rotate-180 motion-reduce:transition-none"
+                />
+              </summary>
+              <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
+                These are tokenized assets held in a user-owned Glider smart account, not shares in a pooled
+                basket token. Prices, available liquidity, swap costs and actual execution can differ from the
+                modeled strategy. Funding with USDC does not automatically buy the target assets; USDC can
+                remain uninvested until a rebalance executes.
+              </p>
+            </details>
+          </div>
         </div>
 
-        <aside className="flex flex-col gap-4 md:gap-6 xl:sticky xl:top-20">
-          <EnrollmentRail
-            name={name}
-            assetCount={allocations.length}
-            portfolio={signedIn ? (enrollment.data ?? null) : null}
-            signedIn={signedIn}
-            walletMissing={walletMissing}
-            checking={sessionChecking || (signedIn && !walletMissing && enrollment.isPending)}
-            lookupFailed={signedIn && enrollment.isError && !enrollment.data}
-            blocked={template.status === "disabled"}
-            busy={enrollmentBusy}
-            error={
-              enrollment.isError && enrollment.data
-                ? "Portfolio status could not refresh. Showing your last available enrollment."
-                : enrollment.error?.message
-            }
-            onRetry={() => void enrollment.refetch()}
-            onReview={() => {
-              if (enrolled) {
-                fundingAction.reset();
-                setFundingReview(false);
-                setFundingOpen(true);
-              } else {
-                enrollAction.reset();
-                setEnrollmentOpen(true);
+        <aside className="contents xl:sticky xl:top-20 xl:flex xl:flex-col xl:gap-6">
+          <div className="order-2 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
+            <EnrollmentRail
+              name={name}
+              assetCount={allocations.length}
+              portfolio={signedIn ? (enrollment.data ?? null) : null}
+              signedIn={signedIn}
+              walletMissing={walletMissing}
+              checking={sessionChecking || (signedIn && !walletMissing && enrollment.isPending)}
+              lookupFailed={signedIn && enrollment.isError && !enrollment.data}
+              blocked={template.status === "disabled"}
+              busy={enrollmentBusy}
+              error={
+                enrollment.isError && enrollment.data
+                  ? "Portfolio status could not refresh. Showing your last available enrollment."
+                  : enrollment.error?.message
               }
-            }}
-          />
-          <RailCard label="Your position">
-            <RailHead
-              title="Your position"
-              meta={
-                account ? (
-                  portfolio.isError ? (
-                    "Last available"
-                  ) : (
-                    <LiveStatusChip fetching={portfolio.isFetching} at={portfolio.dataUpdatedAt} />
-                  )
-                ) : undefined
-              }
+              onRetry={() => void enrollment.refetch()}
+              onReview={() => {
+                if (enrolled) {
+                  fundingAction.reset();
+                  setFundingReview(false);
+                  setFundingOpen(true);
+                } else {
+                  enrollAction.reset();
+                  setEnrollmentOpen(true);
+                }
+              }}
             />
-            {account ? (
-              <div className="mt-5">
-                <p className="text-[12px] text-ds-muted">Smart-account value</p>
-                <p className="mt-1 text-[28px] leading-none font-medium text-ds-ink">
-                  {usd(account.totalValueUsd)}
-                </p>
-                <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ds-divider pt-4 text-[12px]">
-                  <div>
-                    <p className="text-ds-muted">Available USDC</p>
-                    <p className="mt-1 font-medium text-ds-ink">
-                      {usdcBalance == null || !Number.isFinite(usdcBalance) ? "—" : usd(usdcBalance)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-ds-muted">Other assets</p>
-                    <p className="mt-1 font-medium text-ds-ink">
-                      {heldAssets.filter((asset) => asset.assetId !== USDC_ASSET_ID).length}
-                    </p>
-                  </div>
-                </div>
-                {account.inTransitUsd !== "0" && (
-                  <p className="mt-3 text-[12px] text-ds-muted">
-                    Includes {usd(account.inTransitUsd)} in transit.
-                  </p>
-                )}
-                {account.warnings.length > 0 && (
-                  <p className="mt-3 text-[12px] text-ds-muted">Partial read; value may be incomplete.</p>
-                )}
-                {portfolio.isError && (
-                  <button
-                    type="button"
-                    onClick={() => void portfolio.refetch()}
-                    className="mt-3 text-[12px] font-medium text-ds-link hover:underline"
-                  >
-                    Balance refresh failed · Retry
-                  </button>
-                )}
-                {exitOperationId && (
-                  <div className="mt-4 flex items-center justify-between gap-3 border-t border-ds-divider pt-4 text-[12px]">
-                    <span className="text-ds-muted">
-                      {exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
-                    </span>
-                    <span className="font-medium capitalize text-ds-ink">
-                      {exitState?.replaceAll("_", " ") ??
-                        (exitStatus.isError ? "Status unavailable" : "Checking…")}
-                    </span>
-                  </div>
-                )}
-                {exitStatus.data?.error && (
-                  <p className="mt-2 text-[12px] text-ds-chip-warn">{exitStatus.data.error}</p>
-                )}
-                {exitStatus.isError && exitOperationId && (
-                  <button
-                    type="button"
-                    onClick={() => void exitStatus.refetch()}
-                    className="mt-2 text-[12px] font-medium text-ds-link hover:underline"
-                  >
-                    Check withdrawal status again
-                  </button>
-                )}
-                {heldAssets.length > 0 && (
-                  <Button
-                    size="lg"
-                    className="mt-5 w-full"
-                    disabled={portfolio.isError || exitActive || operationActive}
-                    onClick={() => {
-                      setExitMode("in_kind");
-                      exitAction.prepare.reset();
-                      exitAction.submit.reset();
-                      setExitOpen(true);
-                    }}
-                  >
-                    Withdraw assets
-                  </Button>
-                )}
-              </div>
-            ) : accountLoading ? (
-              <div className="mt-5" aria-label="Loading your position">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="mt-2 h-8 w-36" />
-                <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ds-divider pt-4">
-                  <Skeleton className="h-9 w-full" />
-                  <Skeleton className="h-9 w-full" />
-                </div>
-              </div>
-            ) : ownershipUnknown ? (
-              <PriceError
-                className="mt-5"
-                message="Portfolio status is unavailable. Your holdings have not been checked yet."
-                onRetry={() => void enrollment.refetch()}
-              />
-            ) : walletMissing ? (
-              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center text-[12px] text-ds-muted">
-                Connect a Solana wallet to view your basket position.
-              </div>
-            ) : enrolled && portfolio.isError ? (
-              <PriceError
-                className="mt-5"
-                message="Smart-account balances are unavailable."
-                onRetry={() => void portfolio.refetch()}
-              />
-            ) : (
-              <div className="-mx-5 -mb-4 mt-5 rounded-lg bg-ds-panel px-4 py-5 text-center">
-                <p className="text-[13px] font-medium text-ds-ink">No connected portfolio</p>
-                <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
-                  Enroll to connect your own Glider smart account.
-                </p>
-              </div>
-            )}
-          </RailCard>
-          {enrolled && (
-            <RailList
-              label="Your assets"
-              meta="Value · share 1D"
-              footer={
-                account && (
-                  <p className="text-[11px] leading-relaxed text-ds-muted">
-                    Value and balance are for your Solana tokens. Charts and 1D moves show underlying shares.
-                    Updated {new Date(account.fetchedAt).toLocaleString()}.
-                  </p>
-                )
-              }
-            >
-              {!account && portfolio.isPending ? (
-                <div className="space-y-2 p-3" aria-label="Loading account balances">
-                  {[0, 1, 2].map((item) => (
-                    <Skeleton key={item} className="h-[52px] w-full rounded-md" />
-                  ))}
-                </div>
-              ) : !account && portfolio.isError ? (
-                <PriceError
-                  message="Account balances are unavailable."
-                  onRetry={() => void portfolio.refetch()}
+            {(enrolled || ownershipUnknown) && (
+              <RailCard label="Your position">
+                <RailHead
+                  title="Your position"
+                  meta={
+                    account ? (
+                      portfolio.isError ? (
+                        "Last available"
+                      ) : (
+                        <LiveStatusChip fetching={portfolio.isFetching} at={portfolio.dataUpdatedAt} />
+                      )
+                    ) : undefined
+                  }
                 />
-              ) : (
-                <>
-                  {portfolio.isError && (
-                    <div
-                      role="alert"
-                      className="mx-2 mb-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
-                    >
-                      <span>Refresh failed · showing last balances</span>
+                {account ? (
+                  <div className="mt-5">
+                    <p className="text-[12px] text-ds-muted">Smart-account value</p>
+                    <p className="mt-1 text-[28px] leading-none font-medium text-ds-ink">
+                      {usd(account.totalValueUsd)}
+                    </p>
+                    <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ds-divider pt-4 text-[12px]">
+                      <div>
+                        <p className="text-ds-muted">Available USDC</p>
+                        <p className="mt-1 font-medium text-ds-ink">
+                          {usdcBalance == null || !Number.isFinite(usdcBalance) ? "—" : usd(usdcBalance)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-ds-muted">Other assets</p>
+                        <p className="mt-1 font-medium text-ds-ink">
+                          {heldAssets.filter((asset) => asset.assetId !== USDC_ASSET_ID).length}
+                        </p>
+                      </div>
+                    </div>
+                    {account.inTransitUsd !== "0" && (
+                      <p className="mt-3 text-[12px] text-ds-muted">
+                        Includes {usd(account.inTransitUsd)} in transit.
+                      </p>
+                    )}
+                    {account.warnings.length > 0 && (
+                      <p className="mt-3 text-[12px] text-ds-muted">Partial read; value may be incomplete.</p>
+                    )}
+                    {portfolio.isError && (
                       <button
                         type="button"
                         onClick={() => void portfolio.refetch()}
-                        className="shrink-0 font-medium text-ds-link hover:underline"
+                        className="mt-3 text-[12px] font-medium text-ds-link hover:underline"
                       >
-                        Retry
+                        Balance refresh failed · Retry
                       </button>
+                    )}
+                    {exitOperationId && (
+                      <div className="mt-4 flex items-center justify-between gap-3 border-t border-ds-divider pt-4 text-[12px]">
+                        <span className="text-ds-muted">
+                          {exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
+                        </span>
+                        <span className="font-medium capitalize text-ds-ink">
+                          {exitState?.replaceAll("_", " ") ??
+                            (exitStatus.isError ? "Status unavailable" : "Checking…")}
+                        </span>
+                      </div>
+                    )}
+                    {exitStatus.data?.error && (
+                      <p className="mt-2 text-[12px] text-ds-chip-warn">{exitStatus.data.error}</p>
+                    )}
+                    {exitStatus.isError && exitOperationId && (
+                      <button
+                        type="button"
+                        onClick={() => void exitStatus.refetch()}
+                        className="mt-2 text-[12px] font-medium text-ds-link hover:underline"
+                      >
+                        Check withdrawal status again
+                      </button>
+                    )}
+                    {heldAssets.length > 0 && (
+                      <Button
+                        size="lg"
+                        className="mt-5 w-full"
+                        disabled={portfolio.isError || exitActive || operationActive}
+                        onClick={() => {
+                          setExitMode("in_kind");
+                          exitAction.prepare.reset();
+                          exitAction.submit.reset();
+                          setExitOpen(true);
+                        }}
+                      >
+                        Withdraw assets
+                      </Button>
+                    )}
+                  </div>
+                ) : accountLoading ? (
+                  <div className="mt-5" aria-label="Loading your position">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="mt-2 h-8 w-36" />
+                    <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ds-divider pt-4">
+                      <Skeleton className="h-9 w-full" />
+                      <Skeleton className="h-9 w-full" />
                     </div>
-                  )}
-                  {heldAssets.length === 0 ? (
-                    <p className="px-3 py-5 text-[13px] text-ds-muted">
-                      No assets detected yet. USDC can take a short time to appear.
+                  </div>
+                ) : ownershipUnknown ? (
+                  <PriceError
+                    className="mt-5"
+                    message="Portfolio status is unavailable. Your holdings have not been checked yet."
+                    onRetry={() => void enrollment.refetch()}
+                  />
+                ) : (
+                  <PriceError
+                    className="mt-5"
+                    message="Smart-account balances are unavailable."
+                    onRetry={() => void portfolio.refetch()}
+                  />
+                )}
+              </RailCard>
+            )}
+            {enrolled && (
+              <RailList
+                label="Your assets"
+                meta="Value · share 1D"
+                footer={
+                  account && (
+                    <p className="text-[11px] leading-relaxed text-ds-muted">
+                      Value and balance are for your tokens. Charts and 1D moves show underlying shares.
+                      Updated {new Date(account.fetchedAt).toLocaleString()}.
                     </p>
-                  ) : (
-                    <>
-                      <GlideRows as="ul">
-                        {(showAllAssets ? heldAssets : heldAssets.slice(0, 5)).map((asset) => {
-                          const allocation = template.allocations.find(
-                            (item) => item.assetId === asset.assetId,
-                          );
-                          const history = allocation ? dayHistory.data?.get(allocation.ticker) : null;
-                          return (
-                            <li
-                              key={`${asset.smartAccountId}:${asset.assetId}`}
-                              data-row
-                              className="relative grid h-[52px] grid-cols-[minmax(0,1fr)_84px_56px] items-center gap-x-3 rounded-md px-3"
-                            >
-                              <span className="flex min-w-0 items-center gap-3">
-                                {allocation ? (
-                                  <AssetIcon
-                                    asset={allocation}
-                                    source={byTicker.get(allocation.ticker)}
-                                    className="size-8 shrink-0 rounded-full bg-white object-contain"
-                                  />
-                                ) : asset.assetId.endsWith(`/spl:${USDC_MINT}`) ? (
-                                  <UsdcMark size={32} />
-                                ) : (
-                                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[10px] font-medium text-ds-ink">
-                                    {asset.symbol.slice(0, 3)}
-                                  </span>
-                                )}
-                                <span className="min-w-0">
-                                  <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">
-                                    {allocation
-                                      ? (byTicker.get(allocation.ticker)?.name ?? asset.symbol)
-                                      : asset.symbol}
-                                  </span>
-                                  <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">
-                                    {assetBalance(asset.balance)} {asset.symbol}
-                                  </span>
-                                </span>
-                              </span>
-                              <span className="block h-7 w-full">
-                                {history && history.points.length > 1 && (
-                                  <DotChart
-                                    scale="price"
-                                    series={history.points.map((point) => ({
-                                      label: point.at.toLocaleTimeString(),
-                                      value: point.price,
-                                    }))}
-                                    label="underlying share today"
-                                    axes={false}
-                                    interactive={false}
-                                    rest={LIST_DOT}
-                                    {...TINY}
-                                  />
-                                )}
-                              </span>
-                              <span className="flex flex-col items-end">
-                                <span className="text-[14px] leading-[18px] font-medium whitespace-nowrap text-ds-ink">
-                                  {usd(asset.valueUsd)}
-                                </span>
-                                {allocation && <MoveChip value={history?.changePct ?? null} light />}
-                              </span>
-                            </li>
-                          );
-                        })}
-                      </GlideRows>
-                      {heldAssets.length > 5 && (
+                  )
+                }
+              >
+                {!account && portfolio.isPending ? (
+                  <div className="space-y-2 p-3" aria-label="Loading account balances">
+                    {[0, 1, 2].map((item) => (
+                      <Skeleton key={item} className="h-[52px] w-full rounded-md" />
+                    ))}
+                  </div>
+                ) : !account && portfolio.isError ? (
+                  <PriceError
+                    message="Account balances are unavailable."
+                    onRetry={() => void portfolio.refetch()}
+                  />
+                ) : (
+                  <>
+                    {portfolio.isError && (
+                      <div
+                        role="alert"
+                        className="mx-2 mb-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
+                      >
+                        <span>Refresh failed · showing last balances</span>
                         <button
                           type="button"
-                          onClick={() => setShowAllAssets((value) => !value)}
-                          className="w-full px-3 py-2 text-left text-[12px] font-medium text-ds-link hover:underline"
+                          onClick={() => void portfolio.refetch()}
+                          className="shrink-0 font-medium text-ds-link hover:underline"
                         >
-                          {showAllAssets ? "Show fewer assets" : `Show all ${heldAssets.length} assets`}
+                          Retry
                         </button>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </RailList>
-          )}
-          <section aria-label="Rebalancing" className="min-w-0 rounded-xl bg-white p-1">
-            <div className="px-5 pt-4">
-              <RailHead
-                title="Rebalancing"
-                meta={schedule?.status === "paused" ? "Paused" : (schedule?.frequency ?? undefined)}
-              />
-            </div>
-            <div className="mt-[11px] rounded-lg bg-ds-panel px-5 pt-4 pb-4">
-              {accountLoading ? (
-                <div className="min-h-[160px]" aria-label="Loading rebalance schedule">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="mt-3 h-8 w-36" />
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <Skeleton className="h-10 w-full" />
-                    <Skeleton className="h-10 w-full" />
+                      </div>
+                    )}
+                    {heldAssets.length === 0 ? (
+                      <p className="px-3 py-5 text-[13px] text-ds-muted">
+                        No assets detected yet. USDC can take a short time to appear.
+                      </p>
+                    ) : (
+                      <>
+                        <GlideRows as="ul">
+                          {(showAllAssets ? heldAssets : heldAssets.slice(0, 5)).map((asset) => {
+                            const allocation = template.allocations.find(
+                              (item) => item.assetId === asset.assetId,
+                            );
+                            const history = allocation ? dayHistory.data?.get(allocation.ticker) : null;
+                            return (
+                              <li
+                                key={`${asset.smartAccountId}:${asset.assetId}`}
+                                data-row
+                                className="relative"
+                              >
+                                <StockLink
+                                  ticker={
+                                    allocation && byTicker.has(allocation.ticker) ? allocation.ticker : null
+                                  }
+                                  className="relative grid h-[52px] grid-cols-[minmax(0,1fr)_84px_56px] items-center gap-x-3 rounded-md px-3"
+                                >
+                                  <span className="flex min-w-0 items-center gap-3">
+                                    {allocation ? (
+                                      <AssetIcon
+                                        asset={allocation}
+                                        source={byTicker.get(allocation.ticker)}
+                                        className="size-8 shrink-0 rounded-full bg-white object-contain"
+                                      />
+                                    ) : asset.assetId.endsWith(`/spl:${USDC_MINT}`) ? (
+                                      <UsdcMark size={32} />
+                                    ) : (
+                                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-[10px] font-medium text-ds-ink">
+                                        {asset.symbol.slice(0, 3)}
+                                      </span>
+                                    )}
+                                    <span className="min-w-0">
+                                      <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">
+                                        {allocation
+                                          ? (byTicker.get(allocation.ticker)?.name ?? asset.symbol)
+                                          : asset.symbol}
+                                      </span>
+                                      <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">
+                                        {assetBalance(asset.balance)} {asset.symbol}
+                                      </span>
+                                    </span>
+                                  </span>
+                                  <span className="block h-7 w-full">
+                                    {history && history.points.length > 1 && (
+                                      <DotChart
+                                        scale="price"
+                                        series={history.points.map((point) => ({
+                                          label: point.at.toLocaleTimeString(),
+                                          value: point.price,
+                                        }))}
+                                        label="underlying share today"
+                                        axes={false}
+                                        interactive={false}
+                                        rest={LIST_DOT}
+                                        {...TINY}
+                                      />
+                                    )}
+                                  </span>
+                                  <span className="flex flex-col items-end">
+                                    <span className="text-[14px] leading-[18px] font-medium whitespace-nowrap text-ds-ink">
+                                      {usd(asset.valueUsd)}
+                                    </span>
+                                    {allocation && <MoveChip value={history?.changePct ?? null} light />}
+                                  </span>
+                                </StockLink>
+                              </li>
+                            );
+                          })}
+                        </GlideRows>
+                        {heldAssets.length > 5 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllAssets((value) => !value)}
+                            className="w-full px-3 py-2 text-left text-[12px] font-medium text-ds-link hover:underline"
+                          >
+                            {showAllAssets ? "Show fewer assets" : `Show all ${heldAssets.length} assets`}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+              </RailList>
+            )}
+          </div>
+          <div className="order-4 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
+            <section aria-label="Rebalancing" className="min-w-0 rounded-xl bg-white p-1">
+              <div className="px-5 pt-4">
+                <RailHead
+                  title="Rebalancing"
+                  meta={
+                    rebalanceLocked
+                      ? undefined
+                      : schedule?.status === "paused"
+                        ? "Paused"
+                        : (schedule?.frequency ?? undefined)
+                  }
+                />
+              </div>
+              <div className="mt-[11px] rounded-lg bg-ds-panel px-5 pt-4 pb-4">
+                {accountLoading ? (
+                  <div className="min-h-[160px]" aria-label="Loading rebalance schedule">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="mt-3 h-8 w-36" />
+                    <div className="mt-5 grid grid-cols-2 gap-3">
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                    <Skeleton className="mt-4 h-2.5 w-full rounded-full" />
                   </div>
-                  <Skeleton className="mt-4 h-2.5 w-full rounded-full" />
-                </div>
-              ) : walletMissing ? (
-                <div className="min-h-[160px] text-[12px] text-ds-muted">
-                  Connect a Solana wallet to view the rebalance schedule.
-                </div>
-              ) : ownershipUnknown ? (
-                <div className="min-h-[160px] text-[12px] text-ds-muted">
-                  <p>Rebalance schedule is unavailable until portfolio status is known.</p>
-                  <button
-                    type="button"
-                    onClick={() => void enrollment.refetch()}
-                    className="mt-2 font-medium text-ds-link hover:underline"
-                  >
-                    Retry portfolio check
-                  </button>
-                </div>
-              ) : enrolled && !account ? (
-                <div className="min-h-[160px] text-[12px] text-ds-muted">
-                  <p>Schedule unavailable while account balances cannot be read.</p>
-                  {portfolio.isError && (
+                ) : rebalanceLocked ? (
+                  <RebalanceLocked />
+                ) : ownershipUnknown ? (
+                  <div className="min-h-[160px] text-[12px] text-ds-muted">
+                    <p>Rebalance schedule is unavailable until portfolio status is known.</p>
                     <button
                       type="button"
-                      onClick={() => void portfolio.refetch()}
+                      onClick={() => void enrollment.refetch()}
                       className="mt-2 font-medium text-ds-link hover:underline"
                     >
-                      Retry account read
+                      Retry portfolio check
                     </button>
-                  )}
-                </div>
-              ) : (
-                <RebalanceTimer schedule={schedule} hasAccount={Boolean(account)} />
-              )}
-              {operationId && (
-                <div className="mt-5 border-t border-ds-divider pt-4 text-[12px]">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-ds-muted">Manual rebalance</span>
-                    <span className="font-medium capitalize text-ds-ink">
-                      {operationState?.replaceAll("_", " ") ??
-                        (rebalanceStatus.isError ? "Status unavailable" : "Checking…")}
-                    </span>
                   </div>
-                  {rebalanceStatus.data?.error && (
-                    <p className="mt-2 text-ds-chip-warn">{rebalanceStatus.data.error}</p>
-                  )}
-                  {rebalanceStatus.isError && (
-                    <button
-                      type="button"
-                      onClick={() => void rebalanceStatus.refetch()}
-                      className="mt-2 font-medium text-ds-link hover:underline"
-                    >
-                      Check status again
-                    </button>
-                  )}
-                </div>
-              )}
-              <Button
-                size="lg"
-                className="mt-5 w-full"
-                disabled={
-                  !account ||
-                  template.status === "disabled" ||
-                  operationActive ||
-                  exitActive ||
-                  rebalanceAction.isPending
-                }
-                onClick={() => {
-                  rebalanceAction.reset();
-                  setRebalanceOpen(true);
-                }}
-              >
-                {operationActive ? "Rebalance in progress" : "Rebalance now"}
-              </Button>
-            </div>
-          </section>
-          <RailList label="Recent activity">
-            {activity.data?.length ? (
-              <>
-                {activity.isError && (
-                  <div
-                    role="alert"
-                    className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
-                  >
-                    <span>Refresh failed · showing last activity</span>
-                    <button
-                      type="button"
-                      onClick={() => void activity.refetch()}
-                      className="shrink-0 font-medium text-ds-link hover:underline"
-                    >
-                      Retry
-                    </button>
+                ) : enrolled && !account ? (
+                  <div className="min-h-[160px] text-[12px] text-ds-muted">
+                    <p>Schedule unavailable while account balances cannot be read.</p>
+                    {portfolio.isError && (
+                      <button
+                        type="button"
+                        onClick={() => void portfolio.refetch()}
+                        className="mt-2 font-medium text-ds-link hover:underline"
+                      >
+                        Retry account read
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <RebalanceTimer schedule={schedule} hasAccount={Boolean(account)} />
+                )}
+                {operationId && (
+                  <div className="mt-5 border-t border-ds-divider pt-4 text-[12px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-ds-muted">Manual rebalance</span>
+                      <span className="font-medium capitalize text-ds-ink">
+                        {operationState?.replaceAll("_", " ") ??
+                          (rebalanceStatus.isError ? "Status unavailable" : "Checking…")}
+                      </span>
+                    </div>
+                    {rebalanceStatus.data?.error && (
+                      <p className="mt-2 text-ds-chip-warn">{rebalanceStatus.data.error}</p>
+                    )}
+                    {rebalanceStatus.isError && (
+                      <button
+                        type="button"
+                        onClick={() => void rebalanceStatus.refetch()}
+                        className="mt-2 font-medium text-ds-link hover:underline"
+                      >
+                        Check status again
+                      </button>
+                    )}
                   </div>
                 )}
-                <ul className="space-y-3 px-4 py-4">
-                  {activity.data.slice(0, 5).map((item) => (
-                    <EventRow
-                      key={item.id}
-                      showSubtitle
-                      e={toEvent({
-                        ...item,
-                        subtitle: item.subtitle,
-                        mint: null,
-                        logoUrl: null,
-                      })}
-                    />
-                  ))}
-                </ul>
-              </>
-            ) : (sessionChecking || enrolled) && activity.isPending ? (
-              <div className="space-y-3 px-4 py-4" aria-label="Loading recent activity">
-                {[0, 1].map((item) => (
-                  <Skeleton key={item} className="h-[48px] w-full" />
-                ))}
+                {!rebalanceLocked && (
+                  <Button
+                    size="lg"
+                    className="mt-5 w-full"
+                    disabled={
+                      !account ||
+                      template.status === "disabled" ||
+                      operationActive ||
+                      exitActive ||
+                      rebalanceAction.isPending
+                    }
+                    onClick={() => {
+                      rebalanceAction.reset();
+                      setRebalanceOpen(true);
+                    }}
+                  >
+                    {operationActive ? "Rebalance in progress" : "Rebalance now"}
+                  </Button>
+                )}
               </div>
-            ) : ownershipUnknown ? (
-              <PriceError
-                message="Portfolio status is unavailable, so activity could not be checked."
-                onRetry={() => void enrollment.refetch()}
-              />
-            ) : walletMissing ? (
-              <div className="px-4 py-5 text-center text-[12px] text-ds-muted">
-                Connect a Solana wallet to view basket activity.
-              </div>
-            ) : activity.isError ? (
-              <PriceError message="Recent activity is unavailable." onRetry={() => void activity.refetch()} />
-            ) : (
-              <div className="px-4 py-5 text-center">
-                <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
-                <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
-                  Enrollment, confirmed funding, rebalances and withdrawals appear here.
-                </p>
-              </div>
+            </section>
+            {enrolled && (
+              <RailList label="Recent activity">
+                {activity.data?.length ? (
+                  <>
+                    {activity.isError && (
+                      <div
+                        role="alert"
+                        className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
+                      >
+                        <span>Refresh failed · showing last activity</span>
+                        <button
+                          type="button"
+                          onClick={() => void activity.refetch()}
+                          className="shrink-0 font-medium text-ds-link hover:underline"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+                    <ul className="space-y-3 px-4 py-4">
+                      {activity.data.slice(0, 5).map((item) => (
+                        <EventRow
+                          key={item.id}
+                          showSubtitle
+                          e={toEvent({
+                            ...item,
+                            subtitle: item.subtitle,
+                            mint: null,
+                            logoUrl: null,
+                          })}
+                        />
+                      ))}
+                    </ul>
+                  </>
+                ) : (sessionChecking || enrolled) && activity.isPending ? (
+                  <div className="space-y-3 px-4 py-4" aria-label="Loading recent activity">
+                    {[0, 1].map((item) => (
+                      <Skeleton key={item} className="h-[48px] w-full" />
+                    ))}
+                  </div>
+                ) : activity.isError ? (
+                  <PriceError
+                    message="Recent activity is unavailable."
+                    onRetry={() => void activity.refetch()}
+                  />
+                ) : (
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
+                    <p className="mt-2 text-[12px] leading-relaxed text-ds-muted">
+                      Enrollment, confirmed funding, rebalances and withdrawals appear here.
+                    </p>
+                  </div>
+                )}
+              </RailList>
             )}
-          </RailList>
-          <Link to="/baskets" className="text-[13px] font-medium text-ds-link hover:underline">
-            Explore more strategies →
-          </Link>
+            <Link to="/baskets" className="text-[13px] font-medium text-ds-link hover:underline">
+              Explore more strategies →
+            </Link>
+          </div>
         </aside>
       </div>
       <EnrollmentSheet

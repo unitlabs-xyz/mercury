@@ -2,27 +2,29 @@
 
 ## Settled
 
-| Question                           | Answer                                                                                                                     |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Custody                            | **Privy embedded wallets only.** [ADR 0003](adr/0003-custody.md)                                                           |
-| Baskets                            | **Real tokens, on Symmetry Protocol.** [ADR 0005](adr/0005-basket-vaults.md)                                               |
-| Funding an empty wallet            | **Every path Privy already offers.** We build none. [ADR 0007](adr/0007-wallet-funding.md)                                 |
-| Positioning                        | **Investing, not trading.** No perps, no margin, no options, no order books. [ADR 0009](adr/0009-investing-not-trading.md) |
-| Jupiter integration                | **Ultra everywhere.** No Router path. [ADR 0008](adr/0008-jupiter-ultra.md)                                                |
-| Reference price                    | **Chainlink**, with the dividend-window correction. [ADR 0006](adr/0006-pricing.md)                                        |
-| Judged surface                     | **Web is the submission.** iOS is in scope and is the first cut                                                            |
-| Team                               | **Four engineers.** Allocation in [08 Roadmap](08-roadmap.md)                                                              |
-| Infrastructure accounts            | **Provided.** Jupiter key, RPC, Privy app, Pyth token, hosting                                                             |
-| Brand and design                   | **Designed before the screens are built.** Tokens in [07 Design](07-design.md) take the real values once they exist        |
-| Crypto-native, no ramps we operate | [ADR 0001](adr/0001-crypto-native.md)                                                                                      |
-| Solana, not Robinhood Chain        | [ADR 0002](adr/0002-solana.md)                                                                                             |
-| Monorepo and stack                 | [ADR 0004](adr/0004-stack.md)                                                                                              |
+| Question                           | Answer                                                                                                                        |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Custody                            | **Privy embedded wallets only.** [ADR 0003](adr/0003-custody.md)                                                              |
+| Baskets                            | **User-owned Glider portfolios, no pooled token.** [ADR 0013](adr/0013-baskets-on-glider.md) (replaces the Symmetry decision) |
+| Funding an empty wallet            | **Every path Privy already offers.** We build none. [ADR 0007](adr/0007-wallet-funding.md)                                    |
+| Positioning                        | **Investing, not trading.** No perps, no margin, no options, no order books. [ADR 0009](adr/0009-investing-not-trading.md)    |
+| Jupiter integration                | **Ultra everywhere.** No Router path. [ADR 0008](adr/0008-jupiter-ultra.md)                                                   |
+| Reference price                    | **Chainlink**, with the dividend-window correction. [ADR 0006](adr/0006-pricing.md)                                           |
+| Judged surface                     | **Web is the submission.** iOS is in scope and is the first cut                                                               |
+| Team                               | **Four engineers.** Allocation in [08 Roadmap](08-roadmap.md)                                                                 |
+| Infrastructure accounts            | **Provided.** Jupiter key, RPC, Privy app, Pyth token, hosting                                                                |
+| Brand and design                   | **Designed before the screens are built.** Tokens in [07 Design](07-design.md) take the real values once they exist           |
+| Crypto-native, no ramps we operate | [ADR 0001](adr/0001-crypto-native.md)                                                                                         |
+| Solana, not Robinhood Chain        | [ADR 0002](adr/0002-solana.md)                                                                                                |
+| Monorepo and stack                 | [ADR 0004](adr/0004-stack.md)                                                                                                 |
 
 ---
 
 ## Open · two, and both close by testing
 
 ### 1 · The Symmetry spike · closes 20 September
+
+> Superseded: baskets moved to Glider ([ADR 0013](adr/0013-baskets-on-glider.md)) and this spike never closed. Kept for history.
 
 Two questions now that [ADR 0008](adr/0008-jupiter-ultra.md) has removed the third.
 
@@ -68,8 +70,8 @@ Recorded so they are easy to reverse.
 - **Borrowed funds cannot buy stocks inside the app**, enforced in code. That is the line between
   a Lombard loan and margin, per [ADR 0009](adr/0009-investing-not-trading.md).
 - **Card onramps are offered last** in the funding screen, after the universal deposit address.
-- **The basket page names Symmetry.** We are not the custodian and will not imply we are.
+- **The basket page names Glider.** We are not the custodian and will not imply we are.
 - **Redemption without us is verified before launch**, and stated in the product.
-- **`packages/core` never imports the Symmetry SDK**, keeping our own vault a week of work later
+- **`packages/core` never imports the basket provider** (Glider today, Symmetry when this was written), keeping our own vault a week of work later
   rather than a rewrite.
 - **The name stays `mercury`** until you want otherwise. Nothing depends on it.

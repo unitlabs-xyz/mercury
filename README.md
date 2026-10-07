@@ -55,7 +55,7 @@ services/
   api/        Hono on Node. The only thing the apps talk to, and where the clocked jobs run.
 packages/
   core/       Domain logic with no I/O. Pricing, wrapper choice, cost basis, baskets.
-  chain/      Solana adapters. Jupiter, Symmetry, Kamino, RPC, token registry.
+  chain/      Solana adapters. Jupiter, Kamino, RPC, token registry.
   market/     Reference prices, market hours, multipliers.
   types/      Shared types and Zod schemas.
   sdk/        Typed API client used by web and mobile.
@@ -201,7 +201,7 @@ Changing either one needs a rebuild, not a restart.
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/core`   | **Done and tested.** 40 tests. Execution engine, cost basis, exposure, basket allocation                                                                                                                                                                                                                                   |
 | `packages/types`  | Done. Zod wire schemas                                                                                                                                                                                                                                                                                                     |
-| `packages/chain`  | Registry, Solana reads, and Jupiter's keyless endpoints — which both price an order and build the transaction that fills it. Symmetry awaits the spike                                                                                                                                                                     |
+| `packages/chain`  | Registry, Solana reads, and Jupiter's keyless endpoints — which both price an order and build the transaction that fills it. Baskets run on Glider from `services/api/src/baskets`                                                                                                                                         |
 | `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic                                                                                                                                                                                           |
 | `packages/sdk`    | Done. Typed client, every response parsed                                                                                                                                                                                                                                                                                  |
 | `services/api`    | **Identity, read models and execution done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity answer from Postgres and chain; an order prices, builds, settles and writes its own lot. Four clocked jobs run in-process. Trigger orders are the one piece still missing |

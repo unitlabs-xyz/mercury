@@ -1,114 +1,96 @@
 # 10 · Baskets
 
-Baskets are real tokens, built on **Symmetry Protocol**. Decision and reasoning in
-[ADR 0005](adr/0005-basket-vaults.md).
+Baskets are **user-owned portfolios on Glider**, a managed smart account per user, per strategy.
+Decision and reasoning in [ADR 0013](adr/0013-baskets-on-glider.md), which replaces the Symmetry
+design in [ADR 0005](adr/0005-basket-vaults.md). The working spec is
+[baskets/spec.md](baskets/spec.md).
 
 ## What the user experiences
 
-> Put $500 into Semiconductors. You now hold one position called Semiconductors. You can send it
-> to somebody. You can sell it back whenever you want.
+> Bullish on Big Tech? Pick the Magnificent Seven strategy, sign once to create your own portfolio, send USDC. Glider buys
+> the target weights and rebalances them every day. You can see every holding, rebalance by hand,
+> and withdraw the assets themselves or cash out to USDC whenever you want.
+
+There is **no basket token**. Each strategy a user joins is its own Glider smart account that they
+own, holding the actual tokenized assets. Nothing is pooled with anyone else.
 
 ## The model
 
-Symmetry is permissionless asset-management infrastructure on Solana. A basket is a vault holding
-up to a hundred SPL or Token-2022 mints at target weights, with per-token oracle configuration.
-Creating one mints a token representing the underlying assets.
-
 ```
-          ┌────────────── Symmetry vault ───────────┐
- USDC ──► │ NVDAx  AVGOx  AMDx  TSMx  ASMLx  MUx    │ ──► basket token to the user
-          │ 30%    22%    18%   14%   10%    6%     │
-          └─────────────────────────────────────────┘
-```
-
-We are a client of this, not the operator of it. Users contribute tokens and receive vault
-tokens; they burn vault tokens and receive the underlying assets.
-
-## Investing · two possible paths
-
-Which one we ship is decided by the day-one spike in [ADR 0005](adr/0005-basket-vaults.md).
-
-### Path A · one swap, if basket tokens route through Jupiter
-
-A `@jup-ag/symmetry-sdk` package exists, so this may simply work.
-
-```
-1  User enters $500.
-2  Execution engine quotes USDC → basket token through Jupiter.
-3  The premium gate applies as normal, against the basket's net asset value
-   rather than a single share price.
-4  One swap. One signature. Done.
+                Privy wallet (owner)
+                       │  signs enrollment, funding, exits
+                       ▼
+ USDC ──► Glider smart account (Swig sub-account, one per strategy) ──► rebalanced daily by Glider's agent
+            NVDAon  AAPLon  MSFTon  GOOGLon  …  at target weights (Magnificent Seven: 7 × ~14.3%)
+                       │
+                       └── exit: assets in kind to the owner, or liquidated to USDC
 ```
 
-Dramatically better, and it makes baskets feel like buying a stock rather than assembling one.
+- **Owner.** The user's Privy wallet. Every read and write checks that Glider's
+  `ownerAccountId` and `strategyId` match the signed-in wallet, and withdrawals always go to it.
+- **Smart account.** Glider creates (or reuses) a deterministic Swig account for the wallet and
+  adds a sub-account per portfolio. On Solana the fundable address is the smart account itself
+  (`depositAccountId` equals `accountId`).
+- **Agent.** Glider's automation agent operates the account for rebalancing, within the session
+  key the user signs at enrollment. Mercury never holds user assets or keys; it holds a Glider API
+  key on the server.
+- **Assets.** Tokenized stocks, ETFs and commodities on Solana, currently all Ondo mints (143
+  tickers in the catalog). Describe them as tokenized assets, not stocks only.
 
-### Path B · six swaps and a deposit, if not
+## The catalog
 
-```
-1  User enters $500.
-2  API runs the full execution decision on every constituent at its weight.
-     $150 NVDA, $110 AVGO, $90 AMD, $70 TSM, $50 ASML, $30 MU
-   Any leg that refuses fails the whole basket. Nothing is silently rebalanced.
-3  Client executes six Jupiter swaps, USDC in, stock tokens out.
-4  Client deposits the six amounts into the Symmetry vault.
-5  Vault mints basket tokens pro-rata and sends them to the user.
-```
+`services/api/catalog.json` is the source of truth: **22 strategies**, all enabled, all rebalanced
+**daily** (this Glider tenant does not accept cron schedules).
 
-These are separate transactions, not one. Six Jupiter routes plus a deposit never fit in a single
-Solana transaction, so we stopped pretending they might. See
-[ADR 0008](adr/0008-jupiter-ultra.md).
+| Shelf                    | What it holds                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| Themes (18)              | Technology, Energy, Defense, Consumer and others, e.g. Magnificent Seven, Hard Money, Quantum   |
+| Invest like the pros (4) | Investor-inspired "Daily Variant" trackers. Adaptations, never copies of anyone's real holdings |
+| Featured                 | An editorial tag, not a popularity claim                                                        |
 
-If the swaps land and the deposit does not, the user holds six stock tokens, which is what they
-paid for and is worth the same money. The app detects that state and offers _"finish your
-Semiconductors investment"_, resuming at the deposit. Recording the intent before the first swap
-is what makes the resume possible.
+Weights total 10,000 bps per strategy and every ticker must map to a mint, checked on load. Users
+cannot create their own strategies yet; at startup, any catalog entry without a Glider strategy
+id is created on Glider (private) and read back.
 
-## Redeeming
+Performance shown is **modeled strategy performance**, a target-allocation time-weighted return
+from historical prices. It is never presented as realized or user performance.
 
-Path A is a single swap back to USDC. Path B burns the basket tokens, receives a pro-rata slice
-of every constituent in kind, and sells those slices through the normal execution path.
+## The lifecycle
 
-In-kind redemption is the important property: the vault never needs to find a route, so it can
-never fail because liquidity moved.
+| Step      | Route                                                              | What happens                                                                                                                                     |
+| --------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Discover  | `GET /v1/basket-templates`, `/:slug`, `/:slug/insights`            | Public. Strategy, weights, modeled performance, sector breakdown, Glider's swap fee                                                              |
+| Enroll    | `POST /:slug/enrollment/prepare`, then `/:slug/enrollment`         | Glider issues a challenge; the user signs a message (or a transaction on the sub-account path). Creates the portfolio. No USDC moves             |
+| Fund      | `POST /:slug/funding/prepare`, then `/:slug/funding/confirm`       | Server builds an owner-paid USDC transfer to the smart account and simulates it; the user signs; the server verifies the debit equals the credit |
+| Invest    | Glider                                                             | Glider's agent buys toward the target weights at the next rebalance. Until then, USDC can sit uninvested, and the product says so                |
+| Rebalance | `POST /:slug/rebalance`                                            | Manual trigger on top of the daily schedule. Glider enforces a cooldown, surfaced as `rebalance_cooldown`                                        |
+| Exit      | `POST /:slug/exit/:mode/prepare`, then `/:slug/exit/:mode`         | `in_kind` returns the assets themselves; `liquidate_usdc` sells to USDC. The user signs; the recipient is always the owner. Dust can remain      |
+| Track     | `GET /:slug/portfolio`, `/:slug/activity`, `/v1/basket-portfolios` | Live positions and schedule from Glider; Mercury's own record of enrollments, fundings, rebalances and exits                                     |
 
-## Net asset value
+All routes are under `/v1/basket-templates` unless shown. Write routes need a signed-in wallet.
+Without `GLIDER_API_KEY`, discovery still works and provider-backed routes return
+`provider_unavailable`.
 
-```
-nav        = Σ (constituent balance × oracle price)
-sharePrice = nav / basketTokenSupply
-```
+## What Mercury stores
 
-Oracles are configured per constituent and we set Chainlink where available, per
-[ADR 0006](adr/0006-pricing.md). Multipliers need no special handling for valuation, because a
-token's price already embeds its multiplier. Multipliers matter for displaying share counts and
-comparing wrappers, not for valuing a vault.
+- `basket_action`: enrollments, manual rebalances and exits, with Glider's ids and operation ids.
+- `activity` rows of kind `basket_funding`, tagged with the basket and portfolio.
 
-## Drift
+Positions, balances and allocations stay at Glider and are read live. Glider's automatic daily
+rebalances are not written into Mercury's activity feed.
 
-Version one does not rebalance. Weights drift as constituents move, and the basket page shows
-current weight against target so drift is visible rather than hidden. Symmetry supports
-rebalancing and keepers; turning it on is a version 1.1 decision with its own record, because a
-rebalance means the vault swaps.
+## Fees
 
-## The venue interface
+Glider reports a per-strategy or tenant **integrator swap fee** (`swapBps`), charged on the output
+of each swap, and the basket page shows it. Mercury adds no fee of its own to baskets today. Users
+pay Solana network fees and account rent for enrollment and funding.
 
-Nothing in `packages/core` knows Symmetry exists. The integration lives in `packages/chain`
-behind four methods:
+## Not done yet
 
-```ts
-interface BasketVenue {
-  quote(basketId: string, usdAmount: Decimal): Promise<BasketQuote>;
-  invest(basketId: string, usdAmount: Decimal, owner: Address): Promise<UnsignedTx[]>;
-  redeem(basketId: string, tokens: bigint, owner: Address): Promise<UnsignedTx[]>;
-  value(basketId: string): Promise<{ nav: Decimal; sharePrice: Decimal; weights: Weight[] }>;
-}
-```
-
-That boundary is what keeps writing our own vault a week of work rather than a rewrite.
-
-## What we promise users about the dependency
-
-- **Redemption works without us.** A user can withdraw directly through Symmetry's own interface
-  if our app disappears. We verify this before launch and say it in the product.
-- **Basket definitions live in our database too**, so the same baskets can be recreated elsewhere.
-- **We are not the custodian and do not pretend to be.** The basket page names the protocol.
+- Count basket value in the portfolio's net worth, with basket holdings grouped separately from
+  wallet holdings, and settle exits back into wallet holdings without double counting.
+- Real-funded round trips for every strategy. Availability is based on Glider support, and a
+  pilot proved the flow end to end, not execution quality for each allocation.
+- Baskets on mobile. The iOS app still points at the retired Symmetry screens.
+- Borrowing against a basket. A basket is not a token and its assets sit in the smart account, so
+  it cannot be pledged on Kamino directly; a user can exit in kind and pledge eligible assets.
