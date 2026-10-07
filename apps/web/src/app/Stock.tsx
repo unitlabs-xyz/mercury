@@ -330,7 +330,9 @@ export const Stock = () => {
           <div className="order-3 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
             {/* What you hold of it and what it could borrow, side by side and level; one alone takes the row. */}
             <div className="grid items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
-              {(holding || basketValue > 0) && <Position h={holding} basketValue={basketValue} />}
+              {(holding || basketValue > 0) && (
+                <Position h={holding} basketValue={basketValue} stockTodayPct={priced.todayPct} />
+              )}
               <BorrowPanel ticker={instrument.ticker} name={instrument.name} />
             </div>
 

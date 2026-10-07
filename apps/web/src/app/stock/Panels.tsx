@@ -155,7 +155,15 @@ export const Fact = ({ k, children }: { k: string; children: ReactNode }) => (
  * What you hold of it, if anything: the value at 28px, then its four figures
  * in a grey panel set like the About facts.
  */
-export const Position = ({ h, basketValue }: { h: Holding | undefined; basketValue: number }) => {
+export const Position = ({
+  h,
+  basketValue,
+  stockTodayPct,
+}: {
+  h: Holding | undefined;
+  basketValue: number;
+  stockTodayPct: number | null;
+}) => {
   const shares = Number(h?.shares ?? 0);
   const walletValue = Number(h?.valueUsd ?? 0);
   const value = walletValue + basketValue;
@@ -163,7 +171,7 @@ export const Position = ({ h, basketValue }: { h: Holding | undefined; basketVal
   const ret = Number(h?.unrealisedPnlUsd ?? 0);
   const retPct = cost > 0 ? (ret / cost) * 100 : 0;
   const pledged = Number(h?.pledgedShares ?? 0);
-  const today = h?.changePct24h === null || h?.changePct24h === undefined ? null : Number(h.changePct24h);
+  const today = h ? Number(h.changePct24h) : stockTodayPct;
   return (
     // A column, so the grey panel runs to 4px from the foot when the row is taller than it.
     <section aria-label="Your position" className="flex min-w-0 flex-col rounded-xl bg-white p-1">
