@@ -38,6 +38,7 @@ import { LiveStatusChip, PriceError } from "./LiveStatus";
 import { Button } from "../ui/Button";
 import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
+import { OperationStatus } from "./baskets/OperationStatus";
 import { TOKEN_NAME } from "./stock/heldAs";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
@@ -1098,14 +1099,16 @@ export const Basket = () => {
                       </button>
                     )}
                     {exitOperationId && (
-                      <div className="mt-4 flex items-center justify-between gap-3 border-t border-ds-divider pt-4 text-[12px]">
-                        <span className="text-ds-muted">
-                          {exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
-                        </span>
-                        <span className="font-medium capitalize text-ds-ink">
-                          {exitState?.replaceAll("_", " ") ??
-                            (exitStatus.isError ? "Status unavailable" : "Checking…")}
-                        </span>
+                      <div className="mt-4 border-t border-ds-divider pt-4 text-[12px]">
+                        <OperationStatus
+                          name={exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
+                          state={exitState}
+                          label={
+                            exitState?.replaceAll("_", " ") ??
+                            (exitStatus.isError ? "Status unavailable" : "Checking…")
+                          }
+                          unavailable={exitStatus.isError}
+                        />
                       </div>
                     )}
                     {exitStatus.data?.error && (
@@ -1350,13 +1353,15 @@ export const Basket = () => {
                 )}
                 {operationId && (
                   <div className="mt-5 border-t border-ds-divider pt-4 text-[12px]">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-ds-muted">Manual rebalance</span>
-                      <span className="font-medium text-ds-ink">
-                        {rebalanceDisplay?.label ??
-                          (rebalanceStatus.isError ? "Status unavailable" : "Checking…")}
-                      </span>
-                    </div>
+                    <OperationStatus
+                      name="Manual rebalance"
+                      state={operationState}
+                      label={
+                        rebalanceDisplay?.label ??
+                        (rebalanceStatus.isError ? "Status unavailable" : "Checking…")
+                      }
+                      unavailable={rebalanceStatus.isError}
+                    />
                     {rebalanceDisplay?.detail && (
                       <p className="mt-2 text-ds-chip-warn">{rebalanceDisplay.detail}</p>
                     )}
