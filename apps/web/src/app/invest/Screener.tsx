@@ -114,7 +114,7 @@ const Line = memo(({ r, range, onToggle }: { r: Row; range: Span; onToggle: (tic
             )}
             {r.owned && (
               <span className="inline-flex h-[17px] shrink-0 items-center rounded bg-ds-act-buy-bg px-1.5 text-[10px] leading-none text-ds-act-buy">
-                <span className="opacity-80">Owned</span>
+                Owned
               </span>
             )}
             {r.inBasket && (

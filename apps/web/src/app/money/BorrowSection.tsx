@@ -221,7 +221,7 @@ const Line = ({
           <span className="shrink-0">
             {r.depositedTokens > 0 ? (
               <span className="inline-flex h-[17px] items-center rounded bg-ds-act-buy-bg px-1.5 text-[10px] leading-none text-ds-act-buy">
-                <span className="opacity-80">Pledged</span>
+                Pledged
               </span>
             ) : (
               <StatusChip tone="neutral">Not pledged</StatusChip>

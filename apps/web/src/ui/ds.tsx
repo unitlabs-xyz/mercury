@@ -125,8 +125,12 @@ const CHIP: Record<Tone, string> = {
 };
 
 /**
- * A 17px status chip, 4px radius, 10px text at 80%: "Healthy" in borrowing.svg.
+ * A 17px status chip, 4px radius, 10px text: "Healthy" in borrowing.svg.
  * `size="md"` is 22px with 12px text, for beside a page title where 17px is lost.
+ *
+ * The ink is full strength. It was drawn at 80%, but opacity on text multiplies
+ * against whatever is behind it, and over these tints that left every tone
+ * under the 4.5:1 it needs to be read — the green worst at 2.9:1.
  */
 export const StatusChip = ({
   tone,
@@ -142,7 +146,7 @@ export const StatusChip = ({
       size === "md" ? "h-[22px] rounded-md px-2 text-[12px]" : "h-[17px] rounded px-1.5 text-[10px]"
     } ${CHIP[tone]}`}
   >
-    <span className="opacity-80">{children}</span>
+    {children}
   </span>
 );
 
@@ -336,7 +340,7 @@ export const LiveChip = ({ label, pulsing }: { label: string; pulsing?: boolean 
       )}
       <span className="relative inline-flex size-1.5 rounded-full bg-ds-live" />
     </span>
-    <span className="opacity-80">{label}</span>
+    {label}
   </span>
 );
 
