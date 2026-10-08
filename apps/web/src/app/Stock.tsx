@@ -108,11 +108,14 @@ export const Stock = () => {
     setMax(false);
   }, [ticker]);
 
+  const [acceptImpact, setAcceptImpact] = useState(false);
+  /* A different size is a different cost, so it has to be accepted again. */
+  useEffect(() => setAcceptImpact(false), [settled, side, max]);
   const { decision, isLoading, isFetching, session, proceeds } = useDecision(
     instrument,
     Math.max(settled, 1),
     prices.data,
-    { side, max },
+    { side, max, acceptImpact },
   );
 
   // Already anchored server-side onto the live share price, so the line ends
@@ -365,6 +368,8 @@ export const Stock = () => {
               decision={settled === amount ? decision : null}
               quoting={isLoading || settled !== amount}
               fair={priced.fair}
+              acceptImpact={acceptImpact}
+              onAcceptImpact={setAcceptImpact}
               onReview={() => setBuying(true)}
               side={side}
               onSide={setSide}
@@ -404,6 +409,8 @@ export const Stock = () => {
         initial={amount}
         side={side}
         max={max}
+        acceptImpact={acceptImpact}
+        onAcceptImpact={setAcceptImpact}
       />
     </AppShell>
   );

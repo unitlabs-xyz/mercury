@@ -36,6 +36,8 @@ const unavailableOf = (d: ExecuteDecision): PricedCandidate[] =>
   d.candidates.filter((c) => !(c.viable && c.pricePerShare !== null && c.filledShares !== null));
 
 /** Why a token cannot take this order, in a reader's words. */
+type AcceptImpact = ((accepted: boolean) => void) | undefined;
+
 const whyUnavailable = (c: PricedCandidate) =>
   c.rejection === "impact_too_high"
     ? `Too little liquidity for this amount${
@@ -61,7 +63,9 @@ const TokenChoice = ({
   fee,
   accepted,
   heldShares,
+  onAcceptImpact,
 }: {
+  onAcceptImpact?: AcceptImpact;
   options: readonly PricedCandidate[];
   unavailable: readonly PricedCandidate[];
   picked: PricedCandidate;
@@ -141,18 +145,36 @@ const TokenChoice = ({
             </label>
           );
         })}
-        {unavailable.map((c) => (
-          <div key={c.mint} className="flex items-center gap-3 rounded-md px-4 py-3" aria-disabled="true">
-            <span aria-hidden="true" className="size-4 shrink-0 rounded-full border border-ds-divider" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-[14px] leading-[18px] font-medium text-ds-muted">
-                {TOKEN_NAME[c.issuer]}
+        {unavailable.map((c) => {
+          /* Priced out, not routeless: the cost is knowable, so it is offered rather than withheld. */
+          const choosable = c.rejection === "impact_too_high" && onAcceptImpact !== undefined;
+          return (
+            <div
+              key={c.mint}
+              className="flex items-center gap-3 rounded-md px-4 py-3"
+              aria-disabled={choosable ? undefined : "true"}
+            >
+              <span aria-hidden="true" className="size-4 shrink-0 rounded-full border border-ds-divider" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] leading-[18px] font-medium text-ds-muted">
+                  {TOKEN_NAME[c.issuer]}
+                </span>
+                <span className="mt-0.5 block text-[12px] leading-4 text-ds-muted">{whyUnavailable(c)}</span>
               </span>
-              <span className="mt-0.5 block text-[12px] leading-4 text-ds-muted">{whyUnavailable(c)}</span>
-            </span>
-            <span className="shrink-0 text-[12px] leading-none text-ds-muted">Unavailable</span>
-          </div>
-        ))}
+              {choosable ? (
+                <button
+                  type="button"
+                  onClick={() => onAcceptImpact(true)}
+                  className="shrink-0 text-[12px] leading-none font-medium text-ds-link hover:opacity-80"
+                >
+                  Use anyway
+                </button>
+              ) : (
+                <span className="shrink-0 text-[12px] leading-none text-ds-muted">Unavailable</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </fieldset>
   );
@@ -351,11 +373,16 @@ export const OrderSheet = ({
   initial,
   side = "buy",
   max = false,
+  acceptImpact = false,
+  onAcceptImpact,
 }: {
   instrument: Instrument;
   prices: PriceMap | undefined;
   open: boolean;
   onClose: () => void;
+  /** Carried from the ticket, where the impact was shown and accepted. */
+  acceptImpact?: boolean;
+  onAcceptImpact?: (accepted: boolean) => void;
   /** The amount already typed on the page, so confirming never means typing it twice. */
   initial?: number | undefined;
   side?: "buy" | "sell";
@@ -386,6 +413,7 @@ export const OrderSheet = ({
   const { decision, isLoading, fee } = useDecision(open ? instrument : undefined, settled, prices, {
     side,
     max,
+    acceptImpact,
   });
   /* Which token to trade. Null is the best price; a pick only holds while that token is still on offer. */
   const [picked, setPicked] = useState<string | null>(null);
@@ -558,6 +586,7 @@ export const OrderSheet = ({
                           fee={feeUsd}
                           accepted={heldAs.accepted}
                           heldShares={heldShares}
+                          {...(onAcceptImpact ? { onAcceptImpact } : {})}
                         />
                       )}
                       <Execute d={decision} pick={pick} amount={settled} fee={feeUsd} />
@@ -598,6 +627,7 @@ export const OrderSheet = ({
                   ...(max ? { max: true } : {}),
                   /* The token reviewed, picked or best: the server fills only that one. */
                   ...(pick ? { issuer: pick.issuer } : {}),
+                  ...(acceptImpact ? { acceptImpact: true } : {}),
                 })
               }
               className="flex-[1.6]"

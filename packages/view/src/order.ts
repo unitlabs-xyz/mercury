@@ -19,6 +19,8 @@ export interface OrderIntent {
   readonly max?: boolean;
   /** Trade this issuer's token rather than the best-priced one. Omitted means best price. */
   readonly issuer?: "backed" | "ondo";
+  /** The price impact was shown and accepted, so a route that moves the price is allowed. */
+  readonly acceptImpact?: boolean;
 }
 
 export interface OrderResult {
@@ -124,6 +126,7 @@ export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<Orde
     /* Omitted rather than false, so a buy's body is what it always was. */
     ...(intent.max === true ? { max: true } : {}),
     ...(intent.issuer ? { issuer: intent.issuer } : {}),
+    ...(intent.acceptImpact === true ? { acceptImpact: true } : {}),
   });
   if (created.decision.kind === "refuse") throw new Error(created.decision.detail);
 
