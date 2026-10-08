@@ -152,7 +152,7 @@ export type BasketHolding = {
 /**
  * A basket, held as one position: its stocks are the basket's, not separate
  * rows, and its own page breaks them down. Today is an estimated price move;
- * return is Glider's money-weighted result when it has enough history.
+ * MWR is Glider's money-weighted result when it has enough history.
  */
 const BasketLine = ({ b, weight }: { b: BasketHolding; weight: number }) => (
   <Link
@@ -220,11 +220,9 @@ export const Holdings = ({
 }) => {
   const [showAll, setShowAll] = useState(false);
   const providers = useProviders(m?.rows ?? []);
-  /* Stocks and baskets in one list, largest first: a basket is a position like any other. */
-  const rows = [
-    ...(m?.rows ?? []).map((r) => ({ kind: "stock" as const, key: r.ticker, value: r.value, r })),
-    ...baskets.map((b) => ({ kind: "basket" as const, key: `basket:${b.portfolioId}`, value: b.value, b })),
-  ].sort((a, b) => b.value - a.value);
+  /* Each table is largest first. Baskets stay separate from directly held stocks. */
+  const rows = [...(m?.rows ?? [])].sort((a, b) => b.value - a.value);
+  const basketRows = [...baskets].sort((a, b) => b.value - a.value);
   /*
    * Three, because the rows are sorted largest first and a portfolio's shape
    * is in its top few — the twentieth position is 0.4% of the money and a
@@ -235,97 +233,137 @@ export const Holdings = ({
   const hidden = rows.length - shown.length;
 
   return (
-    <section aria-label="Holdings" className="min-w-0 rounded-xl bg-white p-1">
-      <div className="px-5 pt-4">
-        <RailHead
-          title="Holdings"
-          meta={m ? (rows.length ? `${rows.length} positions, largest first` : "Nothing yet") : undefined}
-          to="/invest"
-          linkLabel="Browse stocks"
-        />
-      </div>
+    <>
+      <section aria-label="Holdings" className="min-w-0 rounded-xl bg-white p-1">
+        <div className="px-5 pt-4">
+          <RailHead
+            title="Holdings"
+            meta={
+              m
+                ? rows.length
+                  ? `${rows.length} positions, largest first`
+                  : basketRows.length
+                    ? "No wallet holdings"
+                    : "Nothing yet"
+                : undefined
+            }
+            to="/invest"
+            linkLabel="Browse stocks"
+          />
+        </div>
 
-      <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
-        {m && rows.length > 0 && (
-          <div className="min-w-[830px]">
-            <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
-              <span>Name</span>
-              <span className="text-right" title="Wallet, pledged, or Glider basket value">
-                Value
-              </span>
-              <span className="text-right">Weight</span>
-              {/* Inset by the chip's own padding, so the label sits over the
+        {(!m || failed || rows.length > 0 || basketRows.length === 0) && (
+          <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
+            {m && rows.length > 0 && (
+              <div className="min-w-[830px]">
+                <div
+                  className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}
+                >
+                  <span>Name</span>
+                  <span className="text-right" title="Wallet and pledged value">
+                    Value
+                  </span>
+                  <span className="text-right">Weight</span>
+                  {/* Inset by the chip's own padding, so the label sits over the
                 figure rather than over the pill around it. */}
-              <span className="pr-1.5 text-right">Today</span>
-              <span
-                className="text-right"
-                title="Return on wallet and pledged shares with recorded cost basis only"
-              >
-                Return
-              </span>
-            </div>
-            <GlideRows>
-              {shown.map((item) =>
-                item.kind === "stock" ? (
-                  <Line key={item.key} r={item.r} providers={providers.get(item.r.ticker)} />
-                ) : (
-                  <BasketLine
-                    key={item.key}
-                    b={item.b}
-                    weight={m && m.assets > 0 ? item.b.value / m.assets : 0}
-                  />
-                ),
-              )}
-            </GlideRows>
+                  <span className="pr-1.5 text-right">Today</span>
+                  <span
+                    className="text-right"
+                    title="Return on wallet and pledged shares with recorded cost basis only"
+                  >
+                    Return
+                  </span>
+                </div>
+                <GlideRows>
+                  {shown.map((r) => (
+                    <Line key={r.ticker} r={r} providers={providers.get(r.ticker)} />
+                  ))}
+                </GlideRows>
 
-            {/* Only when there is something behind it. A control that never
+                {/* Only when there is something behind it. A control that never
                 does anything is furniture. */}
-            {rows.length > 3 && (
-              <button
-                type="button"
-                onClick={() => setShowAll((v) => !v)}
-                className="flex h-11 w-full items-center justify-center rounded-md text-[13px] leading-none font-medium text-ds-muted transition-colors hover:bg-white hover:text-ds-ink"
-              >
-                {showAll ? "Show fewer" : `Show ${hidden} more`}
-              </button>
-            )}
-          </div>
-        )}
-
-        {!m && !failed && (
-          <div className="flex flex-col gap-3 p-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="size-9 rounded-full" />
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="ml-auto h-4 w-20" />
+                {rows.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAll((v) => !v)}
+                    className="flex h-11 w-full items-center justify-center rounded-md text-[13px] leading-none font-medium text-ds-muted transition-colors hover:bg-white hover:text-ds-ink"
+                  >
+                    {showAll ? "Show fewer" : `Show ${hidden} more`}
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {((m && rows.length === 0) || failed) && (
-          <div className="px-6 py-10 text-center">
-            <p className="text-[14px] font-medium text-ds-ink">
-              {failed
-                ? "Could not load your holdings"
-                : signedIn
-                  ? "You do not hold anything yet"
-                  : "Sign in to see your portfolio"}
-            </p>
-            <p className="mx-auto mt-2 max-w-[36ch] text-[12px] text-ds-muted">
-              {failed
-                ? "Your shares are safe in your wallet; we just could not read them. Try again in a moment."
-                : "Anything you buy, or send to your wallet, shows up here."}
-            </p>
-            {signedIn && !failed && (
-              <ButtonLink to="/invest" variant="primary" className="mt-4">
-                Browse stocks
-              </ButtonLink>
+            {!m && !failed && (
+              <div className="flex flex-col gap-3 p-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <Skeleton className="size-9 rounded-full" />
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="ml-auto h-4 w-20" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {((m && rows.length === 0 && basketRows.length === 0) || failed) && (
+              <div className="px-6 py-10 text-center">
+                <p className="text-[14px] font-medium text-ds-ink">
+                  {failed
+                    ? "Could not load your holdings"
+                    : signedIn
+                      ? "You do not hold anything yet"
+                      : "Sign in to see your portfolio"}
+                </p>
+                <p className="mx-auto mt-2 max-w-[36ch] text-[12px] text-ds-muted">
+                  {failed
+                    ? "Your shares are safe in your wallet; we just could not read them. Try again in a moment."
+                    : "Anything you buy, or send to your wallet, shows up here."}
+                </p>
+                {signedIn && !failed && (
+                  <ButtonLink to="/invest" variant="primary" className="mt-4">
+                    Browse stocks
+                  </ButtonLink>
+                )}
+              </div>
             )}
           </div>
         )}
-      </div>
-    </section>
+      </section>
+
+      {m && basketRows.length > 0 && (
+        <section aria-label="Basket holdings" className="min-w-0 rounded-xl bg-white p-1">
+          <div className="px-5 pt-4">
+            <RailHead
+              title="Basket holdings"
+              meta={`${basketRows.length} ${basketRows.length === 1 ? "basket" : "baskets"}, largest first`}
+              to="/baskets"
+              linkLabel="Manage baskets"
+            />
+          </div>
+
+          <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
+            <div className="min-w-[830px]">
+              <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
+                <span>Name</span>
+                <span className="text-right" title="Glider basket value">
+                  Value
+                </span>
+                <span className="text-right">Weight</span>
+                <span className="pr-1.5 text-right">Today</span>
+                <span className="text-right" title="Glider money-weighted all-time return">
+                  MWR
+                </span>
+              </div>
+              <GlideRows>
+                {basketRows.map((b) => (
+                  <BasketLine key={b.portfolioId} b={b} weight={m.assets > 0 ? b.value / m.assets : 0} />
+                ))}
+              </GlideRows>
+            </div>
+          </div>
+        </section>
+      )}
+    </>
   );
 };
