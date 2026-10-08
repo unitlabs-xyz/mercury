@@ -17,6 +17,8 @@ export interface OrderIntent {
   readonly usd: number;
   /** Sell the whole position, in tokens. Never set on a buy. */
   readonly max?: boolean;
+  /** Trade this issuer's token rather than the best-priced one. Omitted means best price. */
+  readonly issuer?: "backed" | "ondo";
 }
 
 export interface OrderResult {
@@ -105,6 +107,7 @@ export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<Orde
     amount: String(intent.usd),
     /* Omitted rather than false, so a buy's body is what it always was. */
     ...(intent.max === true ? { max: true } : {}),
+    ...(intent.issuer ? { issuer: intent.issuer } : {}),
   });
   if (created.decision.kind === "refuse") throw new Error(created.decision.detail);
 

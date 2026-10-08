@@ -1,4 +1,4 @@
-import type { Decision } from "@mercury/core";
+import { DEFAULT_POLICY, type Decision } from "@mercury/core";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../ui/Button";
@@ -10,7 +10,10 @@ import { RailLine } from "./Panels";
 
 type Side = "buy" | "sell";
 
-const BUY_PRESETS = [50, 100, 250, 500];
+/* Three amounts and then Max, which is the cash on hand. */
+const BUY_PRESETS = [50, 100, 250];
+
+const MIN_ORDER_USD = DEFAULT_POLICY.minOrderUsd.toNumber();
 
 /**
  * Fractions when selling, not dollars.
@@ -98,6 +101,7 @@ export const AmountWell = ({
   max = false,
   onMax,
   maxLabel,
+  cash = null,
 }: {
   raw: string;
   onRaw: (v: string) => void;
@@ -114,8 +118,12 @@ export const AmountWell = ({
    * label names which.
    */
   maxLabel?: string;
+  /** Cash on hand: what Max fills in on a buy. Null until it is known, which disables Max. */
+  cash?: number | null;
 }) => {
   const amount = Number(raw) || 0;
+  /* Down to the cent, never up: a rounded-up Max would be more than the cash. */
+  const allCash = cash === null ? 0 : Math.floor(cash * 100) / 100;
   const selling = side === "sell";
   const label = maxLabel ?? "Sell all";
 
@@ -169,6 +177,17 @@ export const AmountWell = ({
                 ${p}
               </button>
             ))}
+        {!selling && (
+          <button
+            type="button"
+            disabled={allCash <= 0}
+            onClick={() => onRaw(allCash.toFixed(2))}
+            aria-pressed={allCash > 0 && amount === allCash}
+            className={chip(allCash > 0 && amount === allCash)}
+          >
+            Max
+          </button>
+        )}
 
         {selling && (
           <button
@@ -226,7 +245,6 @@ export const Ticket = ({
   proceeds,
   max,
   onMax,
-  wrapperCount,
 }: {
   name: string;
   raw: string;
@@ -253,7 +271,6 @@ export const Ticket = ({
   proceeds: number | null;
   max: boolean;
   onMax: (v: boolean) => void;
-  wrapperCount: number;
 }) => {
   const amount = Number(raw) || 0;
   const selling = side === "sell";
@@ -274,7 +291,8 @@ export const Ticket = ({
    * which, and the note below says what is left. The alternative is a button
    * that promises a clean exit and quietly delivers half of one.
    */
-  const maxLabel = selling && wrapperCount > 1 && best !== null ? `Sell all ${best.symbol}` : "Sell all";
+  /* Which token a sale comes out of is chosen in the review, so the chip makes no promise about it. */
+  const maxLabel = "Sell all";
 
   /*
    * Whether the note belongs under the amount or above the button.
@@ -285,7 +303,10 @@ export const Ticket = ({
    * the thing being explained. A halt, a stale price or a market with no depth
    * are not the amount's fault and still take the note above the button.
    */
-  const tooSmall = decision?.kind === "refuse" && decision.reason === "below_minimum";
+  /* Checked here before anything is asked: under $5 no quote is fetched, so there is no refusal to wait for. */
+  const tooSmall =
+    (decision?.kind === "refuse" && decision.reason === "below_minimum") ||
+    (!max && settled > 0 && settled < MIN_ORDER_USD);
   const amountHint = over ? (
     selling ? (
       <>More than you can sell. The most is {usd(sellableUsd ?? 0)}.</>
@@ -332,6 +353,7 @@ export const Ticket = ({
         max={max}
         onMax={onMax}
         maxLabel={maxLabel}
+        cash={cash}
       />
 
       {amountHint && <p className="mx-5 mt-2.5 text-[12px] leading-[1.45] text-ds-muted">{amountHint}</p>}
@@ -339,33 +361,23 @@ export const Ticket = ({
       <dl className="flex flex-col gap-3 px-5 pt-5">
         <RailLine k="Price per share">{price === null ? "—" : usd(price)}</RailLine>
         <RailLine k={selling ? "You sell" : "You get"}>
-          {quoting
-            ? "Quoting…"
-            : selling
-              ? filled === null
-                ? "—"
-                : `${filled.toFixed(4)} shares`
-              : price && settled > 0
-                ? `${(settled / price).toFixed(4)} shares`
-                : "—"}
+          {tooSmall
+            ? "—"
+            : quoting
+              ? "Quoting…"
+              : selling
+                ? filled === null
+                  ? "—"
+                  : `${filled.toFixed(4)} shares`
+                : price && settled > 0
+                  ? `${(settled / price).toFixed(4)} shares`
+                  : "—"}
         </RailLine>
         {/* Net of the charge, so the figure here is the figure that lands. */}
-        {selling && <RailLine k="You get">{quoting || proceeds === null ? "—" : usd(proceeds)}</RailLine>}
-      </dl>
-
-      {/* A sell fills from one wrapper. Saying so before the press beats
-          discovering it at the confirmation, or worse, after it. */}
-      {selling &&
-        wrapperCount > 1 &&
-        filled !== null &&
-        price !== null &&
-        settled > 0 &&
-        filled * price < settled - 0.01 && (
-          <Note tone="warn" icon={<Alert />}>
-            You hold {name} through {wrapperCount} issuers. This sells {usd(filled * price)} of the one paying
-            best today; sell the rest in a second order.
-          </Note>
+        {selling && (
+          <RailLine k="You get">{tooSmall || quoting || proceeds === null ? "—" : usd(proceeds)}</RailLine>
         )}
+      </dl>
 
       {/* Not an error, so it sits with the field rather than above the button:
           the amount is capped, and the cap is what wants explaining. */}
@@ -411,6 +423,7 @@ export const Ticket = ({
           disabled={
             (max ? false : amount <= 0) ||
             over ||
+            tooSmall ||
             allPledged ||
             fair === null ||
             decision?.kind === "refuse" ||

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { D, ZERO } from "@mercury/core";
 import type { TokenBalance } from "@mercury/chain";
 import type { TokenPrice } from "@mercury/market";
-import { cashFrom, valuePortfolio, type ValuableHolding } from "./value.js";
+import { cashFrom, valueBasketStocks, valuePortfolio, type ValuableHolding } from "./value.js";
+import type { ValuedBasket } from "./baskets.js";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -87,6 +88,24 @@ describe("valuePortfolio", () => {
     const v = valuePortfolio([holding("2", ["Xsc9"])], wiped, ZERO, ZERO);
     expect(v.changeUsd).toEqual(ZERO);
   });
+});
+
+it("reports each basket's 24-hour move against its whole value without treating cash as stock", () => {
+  const basket: ValuedBasket = {
+    portfolioId: "basket-1",
+    slug: "stock-and-cash",
+    name: "Stock and cash",
+    valueUsd: "150",
+    inTransitUsd: "0",
+    fetchedAt: "2026-10-08T00:00:00.000Z",
+    holdings: [
+      { assetId: "solana:mainnet/spl:Xsc9", symbol: "NVDAon", ticker: "NVDA", balance: "1", valueUsd: "100" },
+      { assetId: "solana:mainnet/spl:USDC", symbol: "USDC", ticker: null, balance: "50", valueUsd: "50" },
+    ],
+  };
+  const result = valueBasketStocks([basket], new Map([["Xsc9", price("Xsc9", "100", "10")]]));
+  expect(result.byPortfolio.get("basket-1")?.toFixed(2)).toBe("6.45");
+  expect(valueBasketStocks([basket], new Map()).byPortfolio.get("basket-1")).toBeNull();
 });
 
 describe("valuePortfolio, against a loan", () => {

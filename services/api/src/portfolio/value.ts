@@ -63,23 +63,39 @@ export const basketStockMints = (baskets: readonly ValuedBasket[]): string[] => 
 export const valueBasketStocks = (
   baskets: readonly ValuedBasket[],
   board: ReadonlyMap<string, TokenPrice>,
-): { stocksUsd: Decimal; changeUsd: Decimal } => {
+): { stocksUsd: Decimal; changeUsd: Decimal; byPortfolio: ReadonlyMap<string, Decimal | null> } => {
   let stocksUsd = ZERO;
   let changeUsd = ZERO;
+  const byPortfolio = new Map<string, Decimal | null>();
   for (const basket of baskets) {
+    let basketChange = ZERO;
+    let missingQuote = false;
     for (const asset of basket.holdings) {
       if (asset.ticker === null) continue;
       const valueUsd = D(asset.valueUsd);
       stocksUsd = stocksUsd.add(valueUsd);
       const mint = basketStockMint(asset.assetId);
       const changePct24h = mint === null ? null : board.get(mint)?.changePct24h;
-      if (changePct24h === null || changePct24h === undefined) continue;
+      if (changePct24h === null || changePct24h === undefined) {
+        if (valueUsd.gt(ZERO)) missingQuote = true;
+        continue;
+      }
       const denominator = D(100).add(changePct24h);
-      if (denominator.lte(ZERO)) continue;
-      changeUsd = changeUsd.add(valueUsd.mul(changePct24h).div(denominator));
+      if (denominator.lte(ZERO)) {
+        missingQuote = true;
+        continue;
+      }
+      const movedUsd = valueUsd.mul(changePct24h).div(denominator);
+      basketChange = basketChange.add(movedUsd);
+      changeUsd = changeUsd.add(movedUsd);
     }
+    const previous = D(basket.valueUsd).sub(basketChange);
+    byPortfolio.set(
+      basket.portfolioId,
+      missingQuote ? null : previous.gt(ZERO) ? basketChange.div(previous).mul(100) : ZERO,
+    );
   }
-  return { stocksUsd, changeUsd };
+  return { stocksUsd, changeUsd, byPortfolio };
 };
 
 /**

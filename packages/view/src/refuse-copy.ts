@@ -15,7 +15,7 @@ export const REFUSE_COPY: Record<RefuseDecision["reason"], { title: string; body
   },
   impact_too_high: {
     title: "This order would move the price",
-    body: "At this size, buying would push the price up against you. Try a smaller amount, or wait until the US market opens.",
+    body: "Not much of it trades on Solana right now, so at this size buying would push the price up against you. Try a smaller amount.",
   },
   reference_stale: {
     title: "Price is out of date",
@@ -45,7 +45,7 @@ const SELL_COPY: Partial<Record<RefuseDecision["reason"], { title: string; body:
   },
   impact_too_high: {
     title: "This order would move the price",
-    body: "At this size, selling would push the price down against you. Try a smaller amount, or wait until the US market opens.",
+    body: "Not much of it trades on Solana right now, so at this size selling would push the price down against you. Try a smaller amount.",
   },
   corp_action_pending: {
     title: "Dividend being applied",

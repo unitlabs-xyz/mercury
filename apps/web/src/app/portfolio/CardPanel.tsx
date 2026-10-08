@@ -1,15 +1,13 @@
 import type { ReactNode } from "react";
 import type { CardAccount } from "../../api/dashboard";
-import { CardArt } from "../../cards/CardArt";
 import { Button } from "../../ui/Button";
 import { RailCard, RailFigure, RailHead } from "../../ui/ds";
 import { usd } from "@mercury/view";
 import type { Model } from "./model";
 import { Skeleton, relDay, shortDate } from "./ui";
 
-const Head = ({ meta, label }: { meta?: string; label: string }) => (
-  <RailHead title="Card" meta={meta} to="/cards" linkLabel={label} />
-);
+/* No link: the card has no page in the app yet. */
+const Head = ({ meta }: { meta?: string }) => <RailHead title="Card" meta={meta} />;
 
 const Sheet = ({ children }: { children: ReactNode }) => <RailCard label="Card">{children}</RailCard>;
 
@@ -30,7 +28,7 @@ export const CardPanel = ({
   if (loading || !m) {
     return (
       <Sheet>
-        <Head label="Manage" />
+        <Head />
         <div className="mt-4 flex flex-col gap-2">
           <Skeleton className="h-7 w-32" />
           <Skeleton className="h-4 w-48" />
@@ -41,13 +39,31 @@ export const CardPanel = ({
 
   if (!card) {
     return (
+      // Coming soon, set like the locked Rebalancing card: what the panel will
+      // show, blurred and inert, with one note over it saying why.
       <Sheet>
-        <Head label="See plans" />
-        <div className="mt-4 flex items-center gap-3">
-          <div className="w-12 shrink-0">
-            <CardArt finish="gold" bare className="rounded-[5px]" />
+        <Head />
+        <div className="relative mt-4">
+          <div aria-hidden="true" inert className="pointer-events-none select-none opacity-60 blur-[3px]">
+            <div className="flex items-center justify-between gap-3">
+              <RailFigure value="$248.30" sub="Due 16 Nov, paid automatically" />
+              <Button variant="primary" disabled>
+                Pay
+              </Button>
+            </div>
+            <p className="mt-[13px] border-t border-ds-divider pt-3 text-[14px] leading-tight text-ds-muted">
+              <span className="font-medium text-ds-ink">$412.00</span> spent this month of $2,000 · Credit
+              mode
+            </p>
           </div>
-          <p className="text-[14px] text-ds-muted">Spend against your shares without selling them.</p>
+          <div className="absolute inset-0 grid place-items-center px-4">
+            <div className="max-w-[300px] rounded-lg bg-ds-panel px-5 py-4 text-center">
+              <p className="text-[14px] font-medium text-ds-ink">Card coming soon</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-ds-muted">
+                Spend against your shares and keep them invested.
+              </p>
+            </div>
+          </div>
         </div>
       </Sheet>
     );
@@ -60,7 +76,7 @@ export const CardPanel = ({
 
   return (
     <Sheet>
-      <Head meta={`${card.plan} - ${card.last4}`} label="Manage" />
+      <Head meta={`${card.plan} - ${card.last4}`} />
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <RailFigure

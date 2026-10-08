@@ -30,6 +30,28 @@ export interface BasketValue {
 }
 
 export type BasketValueReader = (userId: string, walletAddress: string) => Promise<BasketValue>;
+export type BasketReturnsReader = (walletAddress: string) => Promise<
+  readonly {
+    portfolioId: string;
+    percentChange: string | null;
+  }[]
+>;
+
+export function basketReturnsReader(provider: BasketProvider | undefined): BasketReturnsReader {
+  return async (walletAddress) => {
+    if (!provider) return [];
+    const owner = `${SOLANA_OWNER}${walletAddress}`;
+    const portfolios = await provider.portfoliosForOwner(owner);
+    if (portfolios.some((portfolio) => portfolio.ownerAccountId !== owner))
+      throw new BasketValuationError("Glider returned a portfolio for another owner.");
+    return Promise.all(
+      portfolios.map(async ({ portfolioId }) => ({
+        portfolioId,
+        percentChange: await provider.portfolioReturn(portfolioId),
+      })),
+    );
+  };
+}
 
 const money = (value: string): Decimal => {
   const amount = D(value);

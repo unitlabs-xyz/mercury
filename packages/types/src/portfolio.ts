@@ -8,6 +8,8 @@ export const Holding = z.object({
   valueUsd: Usd,
   costBasisUsd: Usd,
   unrealisedPnlUsd: Usd,
+  /** Shares covered by recorded purchase lots; other shares have unknown basis. */
+  sharesWithBasis: Usd.optional(),
   changePct24h: Ratio,
   wrapperCount: z.number().int().positive(),
   /** Of `shares`, how many are pledged to Kamino as collateral. Still owned; not sellable until withdrawn. */
@@ -34,6 +36,8 @@ export const Portfolio = z.object({
       name: z.string(),
       valueUsd: Usd,
       inTransitUsd: Usd,
+      /** Estimated price move on currently held basket assets, not account P&L. */
+      changePct24h: Ratio.nullable(),
       fetchedAt: z.string().datetime(),
       holdings: z.array(
         z.object({
@@ -55,6 +59,12 @@ export const HistoryRange = z.enum(["1D", "1W", "1M"]);
 export const HistoryPoint = z.object({
   at: z.string().datetime(),
   valueUsd: Usd,
+  /**
+   * Deposits less withdrawals since the first point. `valueUsd - netFlowUsd` is
+   * what the account would be worth had no money come or gone: its change is
+   * performance. Optional so an older server still parses.
+   */
+  netFlowUsd: Usd.optional(),
 });
 
 /**

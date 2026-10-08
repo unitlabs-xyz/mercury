@@ -90,6 +90,8 @@ export const CreateOrderRequest = z.object({
   amount: Usd,
   /* Sell the whole position, in tokens. `amount` is then only a hint for display. */
   max: z.boolean().optional(),
+  /* Trade only this issuer's token, as picked in the review. Absent, the best price wins. Ignored by /v1/quote. */
+  issuer: Issuer.optional(),
 });
 export const CreateOrderResponse = z.object({ orderId: z.string().uuid(), decision: Decision });
 export const UnsignedTxResponse = z.object({

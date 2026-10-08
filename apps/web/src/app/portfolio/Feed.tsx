@@ -73,6 +73,8 @@ const UpcomingRow = ({ u }: { u: UpcomingItem }) => (
 export const Upcoming = ({ items, loading }: { items: readonly UpcomingItem[]; loading: boolean }) => {
   // Loan interest accrues on its own; it is a fact about the loan, not something coming up to act on.
   const shown = items.filter((u) => u.kind !== "loan").slice(0, SHOWN);
+  // Only once something is scheduled; an empty card is furniture.
+  if (!loading && shown.length === 0) return null;
   return (
     <RailCard label="Coming up">
       <RailHead title="Coming up" />
@@ -82,8 +84,6 @@ export const Upcoming = ({ items, loading }: { items: readonly UpcomingItem[]; l
             <Skeleton key={i} className="h-5 w-full" />
           ))}
         </div>
-      ) : shown.length === 0 ? (
-        <p className="mt-3 text-[14px] text-ds-muted">Nothing scheduled.</p>
       ) : (
         <ul className="mt-[15px] flex flex-col gap-2">
           {shown.map((u) => (
@@ -213,6 +213,7 @@ export const EventRow = ({ e, showSubtitle = false }: { e: Event; showSubtitle?:
 
 export const Recent = ({ events, loading }: { events: readonly Event[]; loading: boolean }) => {
   const shown = events.slice(0, 6);
+  if (!loading && shown.length === 0) return null;
   return (
     <RailCard label="Recent activity">
       <RailHead title="Recent activity" to="/activity" linkLabel="View all" />
@@ -222,8 +223,6 @@ export const Recent = ({ events, loading }: { events: readonly Event[]; loading:
             <Skeleton key={i} className="h-5 w-full" />
           ))}
         </div>
-      ) : shown.length === 0 ? (
-        <p className="mt-3 text-[14px] text-ds-muted">Deposits, trades and income show up here.</p>
       ) : (
         <ul className="mt-[15px] flex flex-col gap-2">
           {shown.map((e, i) => (

@@ -3,6 +3,7 @@ import { MercuryLogo } from "../ui/Logo";
 import { useSession } from "../market/hooks";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderChrome } from "./HeaderChrome";
+import { localTime } from "../ui/localTime";
 
 export type NavKey = "portfolio" | "invest" | "baskets" | "money" | "activity";
 
@@ -31,13 +32,8 @@ const MarketPill = () => {
   const open = session.data?.isOpen === true;
   const when = open ? session.data?.nextClose : session.data?.nextOpen;
   const label = STATUS_LABEL[session.data?.status ?? ""] ?? "Market closed";
-  const time = when?.toLocaleString("en-US", {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-    timeZoneName: "short",
-  });
+  // In the reader's own zone: the exchange's hours, told by their clock.
+  const time = when ? localTime(when, { weekday: "short" }) : undefined;
   return (
     <span
       className="flex h-9 items-center rounded-full bg-white/60 px-3.5 text-[13px] whitespace-nowrap"

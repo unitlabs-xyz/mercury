@@ -7,7 +7,7 @@ import { USDC_ASSET_ID } from "@mercury/view";
 import { Allocation } from "./Summary";
 import { useModel, type Model } from "./model";
 
-it("merges basket stocks into holdings without treating them as cash, collateral, or known-basis return", () => {
+it("keeps basket value in net worth without folding its assets into direct stock rows or wallet cash", () => {
   const portfolio: Portfolio = {
     totalValueUsd: "35",
     cashUsd: "5",
@@ -24,6 +24,7 @@ it("merges basket stocks into holdings without treating them as cash, collateral
         valueUsd: "10",
         costBasisUsd: "8",
         unrealisedPnlUsd: "2",
+        sharesWithBasis: "0.05",
         changePct24h: "1",
         wrapperCount: 1,
       },
@@ -35,6 +36,7 @@ it("merges basket stocks into holdings without treating them as cash, collateral
         name: "Basket",
         valueUsd: "20",
         inTransitUsd: "0",
+        changePct24h: "0",
         fetchedAt: "2026-10-07T00:00:00.000Z",
         holdings: [
           { assetId: "nvda", symbol: "NVDAon", ticker: "NVDA", balance: "1", valueUsd: "6" },
@@ -69,23 +71,21 @@ it("merges basket stocks into holdings without treating them as cash, collateral
   };
   renderToStaticMarkup(createElement(Probe));
 
-  expect(model?.stocks).toBe(24);
+  expect(model?.total).toBe(35);
+  expect(model?.stocks).toBe(30);
   expect(model?.assets).toBe(35);
   expect(model?.cash).toBe(5);
-  expect(model?.basketCashUsd).toBe(6);
-  expect(model?.basketOtherUsd).toBe(0);
-  expect(model?.available).toBe(4);
+  expect(model?.basketUsd).toBe(20);
+  expect(model?.available).toBe(0);
   expect(model?.returnUsd).toBe(2);
   expect(model?.stockMove24hUsd).toBe(2);
   expect(model?.stockMove24hPct).toBe(10);
-  expect(
-    model?.rows.map((row) => [row.ticker, row.value, row.basketValue, row.borrowable, row.returnPct]),
-  ).toEqual([
-    ["NVDA", 16, 6, 4, 25],
-    ["TSLA", 8, 8, 0, null],
+  expect(model?.rows.map((row) => [row.ticker, row.value, row.borrowable, row.returnPct])).toEqual([
+    ["NVDA", 10, 0, 25],
   ]);
   const allocation = renderToStaticMarkup(createElement(Allocation, { m: model }));
-  expect(allocation).toContain("Cash 31%");
+  expect(allocation).toContain("Baskets 57%");
+  expect(allocation).toContain("Cash 14%");
   expect(allocation).not.toContain("Basket cash");
 
   let withoutQuote: Model | undefined;

@@ -235,6 +235,8 @@ describe("GET /v1/portfolio", () => {
     expect(Number(body.changeUsd)).toBeCloseTo(move);
     expect(Number(body.changePct)).toBeCloseTo((move / (480 - move)) * 100);
     expect(body.holdings.map((item) => item.ticker)).toEqual(["NVDA"]);
+    const basketMove = (50 * 10) / 110 - (30 * 20) / 80;
+    expect(Number(body.baskets[0]?.changePct24h)).toBeCloseTo((basketMove / (90 - basketMove)) * 100);
     expect(requested[0]).toEqual([NVDAX, NVDAON, TSLAON]);
   });
 
@@ -305,6 +307,20 @@ describe("GET /v1/portfolio", () => {
     const d = deps({ prices: { pricesFor: async () => new Map() } });
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.holdings[0]!).toMatchObject({ ticker: "NVDA", valueUsd: "0", unrealisedPnlUsd: "-300" });
+  });
+});
+
+it("reads basket returns independently of the portfolio valuation", async () => {
+  const app = appWith(
+    deps({
+      baskets: async () => {
+        throw new Error("valuation must not run");
+      },
+      basketReturns: async () => [{ portfolioId: "portfolio-1", percentChange: "2.5" }],
+    }),
+  );
+  expect(await (await app.request("/v1/portfolio/basket-returns")).json()).toEqual({
+    returns: [{ portfolioId: "portfolio-1", percentChange: "2.5" }],
   });
 });
 

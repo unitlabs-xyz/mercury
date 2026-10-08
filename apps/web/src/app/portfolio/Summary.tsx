@@ -5,6 +5,7 @@ import { Button, ButtonLink } from "../../ui/Button";
 import { ArrowUp, Card, Plus } from "../../ui/icons";
 import { pct, usd, usdCompact, usdSigned } from "@mercury/view";
 import { ValueChart, useHistory, type Range } from "../ValueChart";
+import { usePortfolioHistory } from "../../api/hooks";
 import { HexAllocation, type Slice } from "./HexAllocation";
 import { RailHead, RangeSwitch } from "../../ui/ds";
 import type { Model } from "./model";
@@ -139,14 +140,17 @@ export const AccountHeader = ({
   const owes = card !== null && card !== undefined && card.statementBalanceUsd > 0;
   return (
     <section aria-label="Account" className="flex flex-col rounded-xl bg-white xl:min-h-[189px] xl:flex-row">
-      <div className="shrink-0 p-6 xl:w-[395px]">
+      <div className="flex shrink-0 flex-col justify-center p-6 xl:w-[395px]">
         <p className="text-[14px] leading-none font-medium text-ds-ink">Net worth</p>
         {m ? (
           <p className="mt-[9px] text-[36px] leading-none font-medium text-ds-ink">{usd(m.total)}</p>
         ) : (
           <Skeleton className="mt-2 h-9 w-48" />
         )}
-        <TodayMove pctValue={m?.stockMove24hPct} usdValue={m?.stockMove24hUsd} />
+        {/* A move that rounds to nothing is not news: no chip, no "+$0.00 today". */}
+        {(!m || Math.abs(m.stockMove24hUsd ?? 0) >= 0.005) && (
+          <TodayMove pctValue={m?.stockMove24hPct} usdValue={m?.stockMove24hUsd} />
+        )}
         <div className="mt-[22px] flex flex-wrap gap-2">
           <ButtonLink to="/invest" variant="primary">
             Invest
@@ -166,17 +170,19 @@ export const AccountHeader = ({
 
       <dl className="m-1 grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5 sm:grid-cols-3 xl:flex xl:flex-1 xl:items-center xl:justify-between xl:py-0 xl:pr-[61px] xl:pl-[85px]">
         <HeaderFigure
-          label="Stocks & collateral"
+          label="Holdings"
           value={m ? usd(m.stocks) : "—"}
           sub={m ? `${m.rows.length} positions` : undefined}
         />
         <HeaderFigure
-          label="Stock P&L"
-          value={m && m.costBasis > 0 ? usdSigned(m.returnUsd) : "—"}
+          label="Tracked stock P&L"
+          value={m ? usdSigned(m.costBasis > 0 ? m.returnUsd : 0) : "—"}
           sub={
-            m && m.costBasis > 0
-              ? `${m.returnUsd >= 0 ? "+" : "−"}${pct(m.returnPct)} on known-basis shares`
-              : "No recorded stock cost basis"
+            m
+              ? m.costBasis > 0
+                ? `${m.returnUsd >= 0 ? "+" : "−"}${pct(m.returnPct)} on known-basis shares`
+                : `+${pct(0, 1)} · No recorded stock cost basis`
+              : undefined
           }
           tone={m && m.costBasis > 0 ? (m.returnUsd < 0 ? "down" : "up") : undefined}
         />
@@ -225,10 +231,17 @@ export const Performance = ({
   setRange: (r: Range) => void;
 }) => {
   const history = useHistory(range);
+  const recorded = usePortfolioHistory(range).data?.points;
   const first = history?.points[0]?.value;
   const last = history?.points[history.points.length - 1]?.value;
   const change = first !== undefined && last !== undefined ? last - first : null;
-  const percent = change !== null && first !== undefined ? performancePercent(change, first) : null;
+  /*
+   * Of what was at work: the opening value plus whatever was added since. An
+   * account that started empty and was funded today has a gain on the money
+   * put in, not a percentage of zero.
+   */
+  const added = Math.max(0, Number(recorded?.[recorded.length - 1]?.netFlowUsd ?? 0));
+  const percent = change !== null && first !== undefined ? performancePercent(change, first + added) : null;
   /*
    * A move too small to print is not a fall. Below half a cent `usdSigned`
    * rounds to zero and rendered "−$0.00" in the loss colour — a minus sign in
@@ -266,7 +279,7 @@ export const Performance = ({
                 <span className="opacity-80">{percent === null ? "—" : pct(percent)}</span>
               </span>
               <span className="translate-y-1 text-[12px] leading-none text-ds-ink/80">
-                Balance change, including transfers
+                Change excluding external transfers
               </span>
             </p>
           ) : (
@@ -290,28 +303,26 @@ export const Performance = ({
   );
 };
 
-/** Stock sectors, all USDC, and other basket assets: at most five slices. */
+/** Direct stock sectors, baskets, and wallet cash: at most five slices. */
 const slicesOf = (m: Model): Slice[] => {
-  const cash = m.cash + m.basketCashUsd;
-  const reserved = Number(cash > 0) + Number(m.basketOtherUsd > 0);
+  const cash = m.cash;
+  const reserved = Number(cash > 0);
   const top = m.sectors.slice(0, Math.max(0, 4 - reserved));
   const rest = m.sectors.slice(top.length);
   const restValue = rest.reduce((s, r) => s + r.value, 0);
-  const restOpen = rest.reduce((s, r) => s + r.value / (1 + r.changePct / 100), 0);
+  const restKnown = rest.every((r) => r.changePct !== null);
+  const restOpen = rest.reduce((s, r) => s + r.value / (1 + (r.changePct ?? 0) / 100), 0);
   return [
     ...top.map((s) => ({ key: s.name, label: s.name, value: s.value, changePct: s.changePct })),
     ...(rest.length
       ? [
           {
             key: "other",
-            label: `${rest.length} other sectors`,
+            label: `${rest.length} other holdings`,
             value: restValue,
-            changePct: restOpen > 0 ? ((restValue - restOpen) / restOpen) * 100 : 0,
+            changePct: restKnown && restOpen > 0 ? ((restValue - restOpen) / restOpen) * 100 : null,
           },
         ]
-      : []),
-    ...(m.basketOtherUsd > 0
-      ? [{ key: "basket-other", label: "Other assets", value: m.basketOtherUsd, changePct: null }]
       : []),
     ...(cash > 0
       ? [
@@ -320,9 +331,6 @@ const slicesOf = (m: Model): Slice[] => {
             label: "Cash",
             value: cash,
             changePct: null,
-            ...(m.basketCashUsd > 0
-              ? { description: "Includes USDC held in baskets. Only wallet cash is immediately spendable." }
-              : {}),
           },
         ]
       : []),

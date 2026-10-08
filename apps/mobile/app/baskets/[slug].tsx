@@ -14,6 +14,7 @@ import {
   displayBasketName,
   fundingDestination,
   modeledRange,
+  modeledRanges,
   operationActive,
   returnLabel,
   usd,
@@ -126,7 +127,10 @@ export default function Basket() {
   }
 
   const name = displayBasketName(template.name);
-  const { series, change } = modeledRange(template.performance, range);
+  /* Only the ranges this strategy has history for; a pick it lacks falls back to its longest. */
+  const ranges = modeledRanges(template.performance, BASKET_RANGES);
+  const shown = ranges.includes(range) ? range : (ranges.at(-1) ?? range);
+  const { series, change } = modeledRange(template.performance, shown);
   const allocations = byWeight(template.allocations);
   const year = template.performance?.windows.find((w) => w.window === "12m");
   const usdc = account?.assets
@@ -162,7 +166,7 @@ export default function Basket() {
           <View style={s.returnRow}>
             <View>
               <RNText style={s.meta}>
-                Modeled {range === "All" ? "return since start" : `${range} return`}
+                Modeled {shown === "All" ? "return since start" : `${shown} return`}
               </RNText>
               <RNText
                 style={[
@@ -173,13 +177,13 @@ export default function Basket() {
                 {change === null ? "Unavailable" : returnLabel(change)}
               </RNText>
             </View>
-            {year !== undefined && range !== "1Y" && (
+            {year !== undefined && shown !== "1Y" && (
               <RNText style={s.meta}>1Y {returnLabel(year.percentChange)}</RNText>
             )}
           </View>
           <View style={s.chips}>
-            {BASKET_RANGES.map((r) => (
-              <Chip key={r.key} label={r.key} selected={range === r.key} onPress={() => setRange(r.key)} />
+            {ranges.map((key) => (
+              <Chip key={key} label={key} selected={shown === key} onPress={() => setRange(key)} />
             ))}
           </View>
           {series.length > 1 ? (

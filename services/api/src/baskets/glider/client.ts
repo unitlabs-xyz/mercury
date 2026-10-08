@@ -55,6 +55,17 @@ const performance = z.object({
       .optional(),
   }),
 });
+const portfolioPerformance = z.object({
+  data: z.object({
+    portfolioId: z.string(),
+    meta: z.object({ method: z.literal("MWR") }),
+    summary: z
+      .object({
+        windows: z.array(z.object({ window: z.string(), percentChange: z.string() })),
+      })
+      .optional(),
+  }),
+});
 const providerError = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
 const breakdown = z.object({
   data: z.object({
@@ -413,6 +424,17 @@ export class GliderClient implements BasketProvider {
       points: parsed.data.points,
       windows: parsed.data.summary?.windows ?? [],
     };
+  }
+
+  async portfolioReturn(id: string): Promise<string | null> {
+    const result = await this.client.GET("/portfolios/{portfolioId}/performance", {
+      params: { path: { portfolioId: id }, query: { returnMethod: "MWR" } },
+    });
+    const parsed = portfolioPerformance.parse(
+      this.checked(result, `/portfolios/${encodeURIComponent(id)}/performance`),
+    );
+    if (parsed.data.portfolioId !== id) throw new Error(`Glider performance ID mismatch: ${id}`);
+    return parsed.data.summary?.windows.find((window) => window.window === "all")?.percentChange ?? null;
   }
 
   async allocationBreakdown(

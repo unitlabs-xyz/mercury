@@ -117,8 +117,10 @@ const borrow = {
     // Accepted by Kamino, but none held: they do not show as borrowable.
     row("NVDA", 0.55, 0.65, 222.11, 0, 0),
     row("TSLA", 0.55, 0.65, 426.07, 0, 0),
-    row("GOOGL", 0.6, 0.7, 250, 0, 1.65),
-    row("AAPL", 0.4, 0.5, 246.2, 0, 3.12),
+    // Held as Ondo only: Kamino takes GOOGLx, so none of it backs a loan.
+    row("GOOGL", 0.6, 0.7, 250, 0, 0),
+    // 1.2 of the 3.12 as AAPLx; the rest is Ondo and is not counted.
+    row("AAPL", 0.4, 0.5, 246.2, 0, 1.2),
     row("HOOD", 0.3, 0.4, 122.79, 0, 4.8),
   ],
 };
@@ -417,11 +419,205 @@ const baskets = [
 ];
 
 /** The API reads this answers. Anything else goes to the real API. */
-export const sampleResponse = (path: string): unknown | undefined => {
-  const route = path.split("?")[0];
+/**
+ * GET /v1/portfolio/exposure/:ticker, wallet only (pledged shares are not in it).
+ * AAPL is split across both issuers, GOOGL is Ondo only, SPY is xStocks with 3 pledged.
+ */
+const SPLITS: Record<string, [issuer: "backed" | "ondo", shares: number][]> = {
+  AAPL: [
+    ["backed", 1.2],
+    ["ondo", 1.92],
+  ],
+  GOOGL: [["ondo", 1.65]],
+  SPY: [["backed", 2.998]],
+};
+const exposure = (ticker: string) => {
+  const h = holdings.find((x) => x.ticker === ticker);
+  if (!h) return undefined;
+  const per = Number(h.valueUsd) / Number(h.shares);
+  const split = SPLITS[ticker] ?? [["backed", Number(h.shares)]];
+  const total = split.reduce((s, [, n]) => s + n, 0);
+  return {
+    ticker,
+    shares: total.toFixed(6),
+    valueUsd: (total * per).toFixed(2),
+    wrappers: split.map(([issuer, n]) => ({
+      mint: `${ticker}${issuer}Mint`,
+      symbol: issuer === "backed" ? `${ticker}x` : `${ticker}on`,
+      issuer,
+      tokenQty: n.toFixed(6),
+      multiplier: "1",
+      shares: n.toFixed(6),
+      valueUsd: (n * per).toFixed(2),
+      sharePct: ((n / total) * 100).toFixed(2),
+    })),
+    warnings: [],
+  };
+};
+
+/* ── quotes and baskets, so the order review and the basket rows have something to show ── */
+
+const MINT: Record<string, Record<"backed" | "ondo", string>> = {
+  AAPL: {
+    backed: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+    ondo: "123mYEnRLM2LLYsJW3K6oyYh8uP1fngj732iG638ondo",
+  },
+  GOOGL: {
+    backed: "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+    ondo: "GOOGLondoSampleMint11111111111111111111ondo",
+  },
+};
+const FAIR: Record<string, number> = {
+  NVDA: 237.09,
+  AAPL: 335.41,
+  GOOGL: 345.4,
+  SPY: 664.22,
+  HOOD: 122.79,
+  META: 721.76,
+};
+
+const quote = (body: string | undefined) => {
+  const req = JSON.parse(body ?? "{}") as { ticker?: string; side?: "buy" | "sell"; amount?: string };
+  const ticker = req.ticker ?? "AAPL";
+  const side = req.side ?? "buy";
+  const amount = Number(req.amount ?? 100);
+  const fair = FAIR[ticker] ?? 100;
+  const held = Object.fromEntries((SPLITS[ticker] ?? [["backed", 1]]).map(([i, n]) => [i, n]));
+  // Ondo a touch cheaper to buy, xStocks a touch better to sell: the choice is worth showing both ways.
+  const offers = (["backed", "ondo"] as const)
+    .filter((issuer) => side === "buy" || (held[issuer] ?? 0) > 0)
+    .map((issuer) => {
+      const price =
+        side === "buy"
+          ? fair * (issuer === "ondo" ? 0.9992 : 1.0004)
+          : fair * (issuer === "backed" ? 1.0002 : 0.9991);
+      const shares = side === "buy" ? amount / price : Math.min(amount / price, held[issuer] ?? 0);
+      return {
+        mint: MINT[ticker]?.[issuer] ?? `${ticker}${issuer}`,
+        symbol: issuer === "backed" ? `${ticker}x` : `${ticker}on`,
+        issuer,
+        multiplier: "1",
+        pricePerToken: price.toFixed(4),
+        pricePerShare: price.toFixed(4),
+        worstPricePerShare: (side === "buy" ? price * 1.005 : price * 0.995).toFixed(4),
+        filledShares: shares.toFixed(6),
+        priceImpact: ticker === "NVDA" && issuer === "ondo" ? "0.0720" : "0.0004",
+        routeLabels: issuer === "backed" ? ["Byreal"] : ["Meteora DLMM"],
+        // NVDA on Ondo is the real case: about $2.7K of liquidity, so even $9 moves it 7%.
+        ...(ticker === "NVDA" && issuer === "ondo"
+          ? { viable: false, rejection: "impact_too_high" }
+          : { viable: true, rejection: null }),
+      };
+    })
+    .sort((a, b) => (side === "buy" ? 1 : -1) * (Number(a.pricePerShare) - Number(b.pricePerShare)));
+  const best = offers.find((o) => o.viable) ?? offers[0]!;
+  return {
+    decision: {
+      kind: "execute",
+      ticker,
+      side,
+      amount: amount.toFixed(2),
+      fairPricePerShare: fair.toFixed(4),
+      status: "open",
+      candidates: offers,
+      decidedAt: new Date().toISOString(),
+      maxSlippageBps: 50,
+      best,
+      premium: (Number(best.pricePerShare) / fair - 1).toFixed(6),
+      warning: null,
+    },
+    fee: { usdc: "0", lamports: 0 },
+    investable: null,
+    proceeds: side === "sell" ? (Number(best.filledShares) * Number(best.pricePerShare)).toFixed(2) : null,
+  };
+};
+
+const CHAIN = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+const OWNED_BASKETS = [
+  { slug: "magnificent-seven", name: "Mercury Solana - Magnificent Seven", count: 7, value: 367.3 },
+  { slug: "quantum", name: "Mercury Solana - Quantum", count: 8, value: 245.1 },
+];
+const basketPortfolio = (slug: string) => ({
+  portfolioId: `sample-${slug}`,
+  ownerAccountId: `${CHAIN}:7xQmF4d8Vn2pLs9jKcRb3TyWuAeH6gZxMq1NdP4Rk9`,
+  strategyId: `sample-${slug}`,
+  smartAccounts: [{ accountId: `${CHAIN}:GLDRsmart1111111111111111111111111111111111` }],
+});
+/* Magnificent Seven's own Ondo mints, so the assets match the template's allocations. */
+const MAG7 = [
+  ["NVDA", "gEGtLTPNQ7jcg25zTetkbmF7teoDLcrfTnQfmn2ondo", 0.402, 186.2],
+  ["TSLA", "KeGv7bsfR4MheC1CkmnAVceoApjrkvBhHYjWb67ondo", 0.171, 426.07],
+  ["MSFT", "FRmH6iRkMr33DLG6zVLR7EM4LojBFAuq6NtFzG6ondo", 0.139, 527.28],
+  ["AAPL", "123mYEnRLM2LLYsJW3K6oyYh8uP1fngj732iG638ondo", 0.218, 335.41],
+  ["AMZN", "14Tqdo8V1FhzKsE3W2pFsZCzYPQxxupXRcqw9jv6ondo", 0.285, 256.76],
+] as const;
+const basketSnapshot = (slug: string) => {
+  const assets =
+    slug === "magnificent-seven"
+      ? MAG7.map(([ticker, mint, balance, price]) => ({
+          assetId: `${CHAIN}/spl:${mint}`,
+          smartAccountId: `${CHAIN}:GLDRsmart1111111111111111111111111111111111`,
+          symbol: `${ticker}on`,
+          decimals: 9,
+          balance: String(balance),
+          balanceRaw: String(Math.round(balance * 1e9)),
+          priceUsd: String(price),
+          valueUsd: (balance * price).toFixed(2),
+        }))
+      : [];
+  const total = assets.reduce((s, a) => s + Number(a.valueUsd), 0);
+  return {
+    ...basketPortfolio(slug),
+    schedule: {
+      status: "active",
+      frequency: "daily",
+      intervalMs: 86_400_000,
+      nextDueAt: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+      lastRebalanceAt: new Date(Date.now() - 19 * 3_600_000).toISOString(),
+    },
+    totalValueUsd: total.toFixed(2),
+    inTransitUsd: "0",
+    fetchedAt: new Date().toISOString(),
+    assets,
+    warnings: [],
+  };
+};
+const basketRoute = (route: string) => {
+  if (route === "/v1/basket-portfolios") {
+    return {
+      portfolios: OWNED_BASKETS.map((b) => ({
+        portfolioId: `sample-${b.slug}`,
+        strategyId: `sample-${b.slug}`,
+        slug: b.slug,
+        name: b.name,
+        targetAssetCount: b.count,
+        totalValueUsd: b.value.toFixed(2),
+        usdcBalance: "0",
+        inTransitUsd: "0",
+        fetchedAt: new Date().toISOString(),
+        partial: false,
+      })),
+    };
+  }
+  const m = /^\/v1\/basket-templates\/([^/]+)\/(enrollment|portfolio|activity)$/.exec(route);
+  if (!m) return undefined;
+  const [, slug = "", what] = m;
+  const owned = OWNED_BASKETS.some((b) => b.slug === slug);
+  if (what === "enrollment") return { portfolio: owned ? basketPortfolio(slug) : null };
+  if (what === "portfolio") return { portfolio: owned ? basketSnapshot(slug) : null };
+  return { activity: [] };
+};
+
+export const sampleResponse = (path: string, body?: string): unknown | undefined => {
+  const route = path.split("?")[0] ?? path;
   if (route === "/v1/portfolio") return portfolio;
   if (route === "/v1/money") return money;
   if (route === "/v1/borrow") return borrow;
+  if (route === "/v1/quote") return quote(body);
+  const basket = basketRoute(route);
+  if (basket !== undefined) return basket;
+  if (route.startsWith("/v1/portfolio/exposure/"))
+    return exposure(decodeURIComponent(route.split("/").at(-1) ?? ""));
   if (route === "/v1/baskets") return { baskets };
   if (route === "/v1/activity") return { items: [], nextCursor: null };
   if (route === "/v1/portfolio/history") {

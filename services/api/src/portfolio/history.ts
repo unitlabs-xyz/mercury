@@ -1,4 +1,4 @@
-import { toWire, type Decimal } from "@mercury/core";
+import { ZERO, toWire, type Decimal } from "@mercury/core";
 
 /** The ranges the chart offers. Longer ones wait for there to be data behind them. */
 export type Range = "1D" | "1W" | "1M";
@@ -9,10 +9,26 @@ export interface Reading {
   readonly totalUsd: Decimal;
 }
 
+/**
+ * Money that crossed the whole account's edge: a deposit in (positive) or a send
+ * out (negative). Not a basket transfer, trade, loan or dividend:
+ * those move value inside the account, and a trade's gain is the point.
+ */
+export interface Flow {
+  readonly at: Date;
+  readonly usd: Decimal;
+}
+
 /** One drawn point: when it was measured, and what the account was worth then. */
 export interface SeriesPoint {
   readonly at: string;
   readonly valueUsd: string;
+  /**
+   * Deposits less withdrawals since the series' first point, up to this one.
+   * `valueUsd - netFlowUsd` is the account's value had no money come or gone,
+   * so its change is what the holdings themselves did.
+   */
+  readonly netFlowUsd: string;
 }
 
 const HOUR = 3_600_000;
@@ -50,6 +66,7 @@ export const bucketSeries = (
   readings: readonly Reading[],
   range: Range,
   now: Date,
+  flows: readonly Flow[] = [],
 ): readonly SeriesPoint[] => {
   const { spanHours, bucketHours } = RANGES[range];
   const from = now.getTime() - spanHours * HOUR;
@@ -64,10 +81,14 @@ export const bucketSeries = (
     if (held === undefined || reading.at.getTime() > held.at.getTime()) latest.set(bucket, reading);
   }
 
-  return [...latest.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([, reading]) => ({
-      at: reading.at.toISOString(),
-      valueUsd: toWire(reading.totalUsd),
-    }));
+  const picked = [...latest.entries()].sort(([a], [b]) => a - b).map(([, reading]) => reading);
+  /* A reading taken at an hour includes every flow up to it, so a flow counts from the first reading after it. */
+  const start = picked[0]?.at.getTime() ?? 0;
+  const counted = flows.filter((f) => f.at.getTime() > start);
+  return picked.map((reading) => {
+    const net = counted
+      .filter((f) => f.at.getTime() <= reading.at.getTime())
+      .reduce((sum, f) => sum.add(f.usd), ZERO);
+    return { at: reading.at.toISOString(), valueUsd: toWire(reading.totalUsd), netFlowUsd: toWire(net) };
+  });
 };

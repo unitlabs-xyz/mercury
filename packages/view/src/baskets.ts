@@ -77,6 +77,7 @@ export const returnLabel = (value: string | number) =>
 
 /** The return windows Glider models, under the labels a range switch shows. */
 export const BASKET_RANGES = [
+  { key: "1W", window: "1w" },
   { key: "1M", window: "1m" },
   { key: "3M", window: "3m" },
   { key: "6M", window: "6m" },
@@ -102,15 +103,34 @@ export const modeledSeries = (points: readonly { date: string; percentChange: st
     .filter((point) => Number.isFinite(point.value));
 };
 
-/** A template's modeled series and return for one range, as the detail page charts it. */
-export const modeledRange = (performance: ManagedBasketTemplate["performance"], range: BasketRange) => {
-  const window = BASKET_RANGES.find((r) => r.key === range)?.window;
+type Performance = ManagedBasketTemplate["performance"];
+type ModeledWindow = NonNullable<Performance>["windows"][number]["window"];
+
+/**
+ * One window's modeled series and return. Glider only sends a window once the
+ * strategy has history covering it, so a young strategy has no 6m or 12m; "all"
+ * always runs from the first point, with its return read off the series.
+ */
+export const modeledWindow = (performance: Performance, window: ModeledWindow) => {
   const chosen = performance?.windows.find((item) => item.window === window);
-  const since = chosen?.since ?? (range === "All" ? performance?.points[0]?.date : undefined);
-  const series =
-    chosen === undefined && range !== "All" ? [] : modeledSeries(performance?.points ?? [], since);
-  return { series, change: chosen?.percentChange ?? null };
+  if (window !== "all" && chosen === undefined) return { series: [], change: null };
+  const series = modeledSeries(performance?.points ?? [], chosen?.since ?? performance?.points[0]?.date);
+  const change = chosen?.percentChange ?? (series.length > 1 ? String(series.at(-1)!.value) : null);
+  return { series: series.length > 1 ? series : [], change };
 };
+
+/** The ranges a strategy has enough modeled history to chart, in the order given. */
+export const modeledRanges = <K extends string>(
+  performance: Performance,
+  ranges: readonly { key: K; window: ModeledWindow }[],
+) => ranges.filter((r) => modeledWindow(performance, r.window).series.length > 0).map((r) => r.key);
+
+/** The longest history a strategy has: its first point's date, for "since …" labels. */
+export const modeledSince = (performance: Performance) => performance?.points[0]?.date ?? null;
+
+/** A template's modeled series and return for one range, as the detail page charts it. */
+export const modeledRange = (performance: Performance, range: BasketRange) =>
+  modeledWindow(performance, BASKET_RANGES.find((r) => r.key === range)!.window);
 
 type Holding = { readonly ticker: string; readonly weightBps: number };
 

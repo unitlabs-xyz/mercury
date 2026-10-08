@@ -27,6 +27,8 @@ import { Skeleton } from "./portfolio/ui";
 import { About, Position, Stats } from "./stock/Panels";
 import { BorrowPanel } from "./stock/BorrowPanel";
 import { InBaskets } from "./stock/InBaskets";
+import { useHeldAs } from "./stock/heldAs";
+import { localTime } from "../ui/localTime";
 import { Routes } from "./stock/Routes";
 import { Ticket } from "./stock/Ticket";
 import { useWatchlist } from "./watchlist";
@@ -84,6 +86,8 @@ export const Stock = () => {
   const universe = useUniverse();
   const portfolio = usePortfolio();
   const instrument = useMemo(() => one.data ?? undefined, [one.data]);
+  // The position by issuer: one stock to the reader, but only its xStocks part can back a loan.
+  const heldAs = useHeldAs(instrument?.ticker ?? ticker.toUpperCase());
 
   // Live prices for this stock's own tokens: the decision needs each multiplier and quote time.
   const mints = useMemo(() => instrument?.wrappers.map((w) => w.mint) ?? [], [instrument]);
@@ -185,21 +189,9 @@ export const Stock = () => {
     };
   });
 
-  /**
-   * "Monday at 9:30 AM ET". The zone name is written rather than formatted:
-   * `timeZoneName: "short"` swaps between EDT and EST across the year, and a
-   * reader who has to know which one applies today has been told too much. ET
-   * is true in both halves.
-   */
+  /** "Monday at 7:00 PM IST": when the market opens, in the reader's own zone. */
   const opensAt = session?.nextOpen
-    ? `${session.nextOpen.toLocaleString("en-US", {
-        weekday: "long",
-        timeZone: "America/New_York",
-      })} at ${session.nextOpen.toLocaleString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        timeZone: "America/New_York",
-      })} ET`
+    ? localTime(session.nextOpen, { weekday: "long" }).replace(/^(\w+), /, "$1 at ")
     : undefined;
 
   return (
@@ -331,7 +323,13 @@ export const Stock = () => {
             {/* What you hold of it and what it could borrow, side by side and level; one alone takes the row. */}
             <div className="grid items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
               {(holding || basketValue > 0) && (
-                <Position h={holding} basketValue={basketValue} stockTodayPct={priced.todayPct} />
+                <Position
+                  h={holding}
+                  basketValue={basketValue}
+                  stockTodayPct={priced.todayPct}
+                  parts={heldAs.parts}
+                  accepted={heldAs.accepted}
+                />
               )}
               <BorrowPanel ticker={instrument.ticker} name={instrument.name} />
             </div>
@@ -379,7 +377,6 @@ export const Stock = () => {
               proceeds={proceeds === null ? null : Number(proceeds.toString())}
               max={max}
               onMax={setMax}
-              wrapperCount={holding?.wrapperCount ?? 1}
             />
           </div>
           <div className="order-4 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
@@ -407,7 +404,6 @@ export const Stock = () => {
         initial={amount}
         side={side}
         max={max}
-        sellableUsd={sellableUsd}
       />
     </AppShell>
   );

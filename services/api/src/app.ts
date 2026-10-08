@@ -35,12 +35,18 @@ const fail = (code: ErrorCode | "not_implemented", message: string, details?: un
  * tells an absent property apart from one set to `undefined`, and zod's
  * `.optional()` produces the second.
  */
-const toPriceRequest = (body: CreateOrderRequest, wallet: string | null): PriceRequest => ({
+const toPriceRequest = (
+  body: CreateOrderRequest,
+  wallet: string | null,
+  /* Orders honour a picked issuer; quotes do not, because the review needs every token to offer the choice. */
+  pinned = false,
+): PriceRequest => ({
   ticker: body.ticker,
   side: body.side,
   amount: body.amount,
   ...(wallet === null ? {} : { owner: wallet }),
   ...(body.max === true ? { max: true } : {}),
+  ...(pinned && body.issuer !== undefined ? { issuer: body.issuer } : {}),
 });
 
 /** For a refusal that has to name a figure. */
@@ -208,7 +214,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
     const identity = c.get("identity");
-    const decision = await priceOrder(market(), toPriceRequest(parsed.data, identity.walletAddress));
+    const decision = await priceOrder(market(), toPriceRequest(parsed.data, identity.walletAddress, true));
     if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
     const wire = decisionToWire(decision);
@@ -285,6 +291,12 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * to be opened, so this prices once to find the winner and once for real.
      */
     const selling = shown.side === "sell";
+    /*
+     * The token the person reviewed and confirmed, picked or best. Re-pricing
+     * stays on it: switching issuers between the review and the signature
+     * would hand them a token they did not choose, and only xStocks back a loan.
+     */
+    const issuer = shown.best.issuer;
 
     /*
      * A sell needs neither of those passes. The fee does not change how many
@@ -307,6 +319,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
                 ticker: shown.ticker,
                 side: shown.side,
                 amount: shown.amount,
+                issuer,
               });
               if (probe === null || probe.kind === "refuse") return NO_FEE.usdc;
               const f = await quoteFee(
@@ -330,6 +343,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
             side: shown.side,
             amount: order.usdAmount,
             owner,
+            issuer,
             ...(order.max ? { max: true } : {}),
           }
         : {
@@ -337,6 +351,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
             side: shown.side,
             amount: D(shown.amount).sub(feeUsdc).toFixed(),
             feeUsdc: feeUsdc.toFixed(),
+            issuer,
           },
     );
     if (fresh === null) return c.json(fail("not_found", "Unknown instrument."), 404);

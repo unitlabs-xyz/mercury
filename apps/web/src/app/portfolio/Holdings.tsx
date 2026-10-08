@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ButtonLink } from "../../ui/Button";
 import { GlideRows, MoveChip, RailHead, StatusChip } from "../../ui/ds";
-import { usd } from "@mercury/view";
+import { pct, usd, usdSigned } from "@mercury/view";
 import type { Model, Row } from "./model";
 import { Skeleton } from "./ui";
+import { TOKEN_NAME, useProviders } from "../stock/heldAs";
+import type { Issuer } from "@mercury/types";
 
 /**
  * Built to holdings.svg. The name takes what is left; the figures sit in fixed
@@ -17,7 +19,13 @@ import { Skeleton } from "./ui";
  * accepted" against a stock the reader had not asked to borrow against. The
  * stock page's borrow card asks and answers it in one place.
  */
-const COLS = "grid-cols-[minmax(0,1fr)_120px_120px_100px_110px_150px]";
+const COLS = "grid-cols-[minmax(0,1fr)_120px_100px_110px_150px]";
+const ZERO_RETURN = (
+  <>
+    <span className="font-medium text-ds-up">{usdSigned(0)}</span>
+    <span className="text-[12px] text-ds-muted">+{pct(0, 1)}</span>
+  </>
+);
 
 /** A hyphen, as the design draws it, for a fall. */
 const signed = (n: number, text: string) => `${n < 0 ? "-" : "+"}${text}`;
@@ -42,7 +50,7 @@ const Logo = ({ row }: { row: Row }) =>
  * One holding, to holdings.svg: a 60px row, 4px in from the grey panel, that
  * turns white under the pointer. Numbers medium, labels regular, 14 over 12.
  */
-const Line = ({ r }: { r: Row }) => {
+const Line = ({ r, providers }: { r: Row; providers: readonly Issuer[] | undefined }) => {
   const pledged = r.pledgedShares;
   const today = r.changePct24h;
   return (
@@ -66,14 +74,11 @@ const Line = ({ r }: { r: Row }) => {
                 </StatusChip>
               </span>
             )}
-            {r.wrapperCount > 1 && (
-              <span className="shrink-0 uppercase">
-                <StatusChip tone="neutral">{r.wrapperCount} issuers</StatusChip>
-              </span>
-            )}
           </p>
           <p className="mt-[6px] truncate text-[12px] text-ds-muted">
             {r.ticker} · {r.sector}
+            {/* Who issues the shares: one provider, or both when a stock is held through each. */}
+            {providers && providers.length > 0 && <> · {providers.map((i) => TOKEN_NAME[i]).join(" + ")}</>}
           </p>
         </div>
       </div>
@@ -85,8 +90,6 @@ const Line = ({ r }: { r: Row }) => {
        * something you hold. The position's own page carries both.
        */}
       <span className="text-right font-medium text-ds-ink">{usd(r.value)}</span>
-
-      <span className="text-right text-ds-muted">{r.basketValue > 0 ? usd(r.basketValue) : "—"}</span>
 
       <span className="text-right text-ds-muted">{(r.weight * 100).toFixed(1)}%</span>
 
@@ -105,25 +108,100 @@ const Line = ({ r }: { r: Row }) => {
       </span>
 
       {r.returnPct === null ? (
-        <span className="text-right text-ds-muted" title="Cost basis is unavailable for basket holdings">
-          —
+        <span
+          className="flex items-baseline justify-end gap-[5px] whitespace-nowrap"
+          title="Purchase cost was not recorded; zero is a display placeholder, not calculated profit"
+        >
+          {ZERO_RETURN}
         </span>
       ) : (
         <span
           className="flex items-baseline justify-end gap-[5px] whitespace-nowrap"
-          title="Return on wallet and pledged shares only; basket cost basis is unavailable"
+          title={
+            r.returnPartial
+              ? "Partial return: only shares with recorded purchase cost"
+              : "Return on recorded purchase cost"
+          }
         >
           <span className={`font-medium ${r.returnUsd < 0 ? "text-ds-loss" : "text-ds-up"}`}>
             {signed(r.returnUsd, usd(Math.abs(r.returnUsd)))}
           </span>
           <span className="text-[12px] text-ds-muted">
             {signed(r.returnUsd, `${Math.abs(r.returnPct).toFixed(1)}%`)}
+            {r.returnPartial ? " partial" : ""}
           </span>
         </span>
       )}
     </Link>
   );
 };
+
+/** A basket held through Glider: what the holdings list needs of it. */
+export type BasketHolding = {
+  readonly portfolioId: string;
+  readonly slug: string | null;
+  readonly name: string;
+  readonly value: number;
+  readonly assetCount: number;
+  readonly todayPct: number | null;
+  readonly returnPct: number | null;
+  /** The basket's two heaviest assets, for the stacked mark. */
+  readonly marks: readonly ReactNode[];
+};
+
+/**
+ * A basket, held as one position: its stocks are the basket's, not separate
+ * rows, and its own page breaks them down. Today is an estimated price move;
+ * return is Glider's money-weighted result when it has enough history.
+ */
+const BasketLine = ({ b, weight }: { b: BasketHolding; weight: number }) => (
+  <Link
+    to={b.slug ? `/baskets/${b.slug}` : "/baskets"}
+    data-row
+    className={`relative grid h-15 ${COLS} items-center rounded-md px-4 text-[14px] leading-none`}
+  >
+    <div className="flex min-w-0 items-center gap-3">
+      <span className="flex w-9 shrink-0 items-center -space-x-3" aria-hidden="true">
+        {b.marks.map((m, i) => (
+          <span key={i} className="relative" style={{ zIndex: b.marks.length - i }}>
+            {m}
+          </span>
+        ))}
+      </span>
+      <div className="min-w-0">
+        <p className="flex h-3.5 min-w-0 items-center gap-[5px]">
+          <span className="truncate font-medium text-ds-ink">{b.name}</span>
+          <span className="shrink-0 uppercase">
+            <StatusChip tone="neutral">Basket</StatusChip>
+          </span>
+        </p>
+        <p className="mt-[6px] truncate text-[12px] text-ds-muted">{b.assetCount} assets · Ondo</p>
+      </div>
+    </div>
+    <span className="text-right font-medium text-ds-ink">{usd(b.value)}</span>
+    <span className="text-right text-ds-muted">{(weight * 100).toFixed(1)}%</span>
+    <span className="flex justify-end">
+      <MoveChip value={b.todayPct} />
+    </span>
+    <span
+      className="flex items-baseline justify-end gap-[5px] whitespace-nowrap"
+      title={
+        b.returnPct === null
+          ? "All-time return unavailable; zero is a display placeholder"
+          : "Glider money-weighted all-time return"
+      }
+    >
+      {b.returnPct === null ? (
+        ZERO_RETURN
+      ) : (
+        <span className={`font-medium ${b.returnPct < 0 ? "text-ds-loss" : "text-ds-up"}`}>
+          {b.returnPct >= 0 ? "+" : ""}
+          {b.returnPct.toFixed(1)}%
+        </span>
+      )}
+    </span>
+  </Link>
+);
 
 /**
  * The holdings table, to holdings.svg: the rail-card title row, then a grey
@@ -133,13 +211,20 @@ export const Holdings = ({
   m,
   signedIn,
   failed,
+  baskets = [],
 }: {
   m: Model | undefined;
   signedIn: boolean;
   failed: boolean;
+  baskets?: readonly BasketHolding[];
 }) => {
   const [showAll, setShowAll] = useState(false);
-  const rows = m?.rows ?? [];
+  const providers = useProviders(m?.rows ?? []);
+  /* Stocks and baskets in one list, largest first: a basket is a position like any other. */
+  const rows = [
+    ...(m?.rows ?? []).map((r) => ({ kind: "stock" as const, key: r.ticker, value: r.value, r })),
+    ...baskets.map((b) => ({ kind: "basket" as const, key: `basket:${b.portfolioId}`, value: b.value, b })),
+  ].sort((a, b) => b.value - a.value);
   /*
    * Three, because the rows are sorted largest first and a portfolio's shape
    * is in its top few — the twentieth position is 0.4% of the money and a
@@ -153,7 +238,7 @@ export const Holdings = ({
     <section aria-label="Holdings" className="min-w-0 rounded-xl bg-white p-1">
       <div className="px-5 pt-4">
         <RailHead
-          title="Stocks & collateral"
+          title="Holdings"
           meta={m ? (rows.length ? `${rows.length} positions, largest first` : "Nothing yet") : undefined}
           to="/invest"
           linkLabel="Browse stocks"
@@ -165,14 +250,8 @@ export const Holdings = ({
           <div className="min-w-[830px]">
             <div className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
               <span>Name</span>
-              <span className="text-right" title="Wallet, pledged, and basket stock value combined">
+              <span className="text-right" title="Wallet, pledged, or Glider basket value">
                 Value
-              </span>
-              <span
-                className="text-right"
-                title="Held in Glider smart accounts; move to your wallet before selling or using as collateral"
-              >
-                In baskets
               </span>
               <span className="text-right">Weight</span>
               {/* Inset by the chip's own padding, so the label sits over the
@@ -186,9 +265,17 @@ export const Holdings = ({
               </span>
             </div>
             <GlideRows>
-              {shown.map((r) => (
-                <Line key={r.ticker} r={r} />
-              ))}
+              {shown.map((item) =>
+                item.kind === "stock" ? (
+                  <Line key={item.key} r={item.r} providers={providers.get(item.r.ticker)} />
+                ) : (
+                  <BasketLine
+                    key={item.key}
+                    b={item.b}
+                    weight={m && m.assets > 0 ? item.b.value / m.assets : 0}
+                  />
+                ),
+              )}
             </GlideRows>
 
             {/* Only when there is something behind it. A control that never

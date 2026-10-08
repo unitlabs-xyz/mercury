@@ -5,6 +5,7 @@ import { RailCard, RailFigure, RailHead } from "../../ui/ds";
 import { pct, usd } from "@mercury/view";
 import { HeaderFigure } from "../portfolio/Summary";
 import { Fact, FigureCard } from "./Panels";
+import { useHeldAs } from "./heldAs";
 
 /**
  * What this stock is worth as collateral, as a rail card: how much it lends at
@@ -15,15 +16,16 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
   const signedIn = useSignedIn();
   const borrow = useBorrow();
   const row = borrow.data?.collateral.find((r) => r.isStock && r.ticker === ticker);
+  /* Kamino takes the xStocks token of a ticker, never the Ondo one. The rows
+     above are xStocks only, so the Ondo part of a position is what they miss. */
+  const { lendableShares, unlendableShares } = useHeldAs(ticker);
 
   if (!signedIn || !borrow.data) return null;
   if (!row) {
     return (
       <RailCard label="Borrow against it">
         <RailHead title="Borrow against it" />
-        <p className="mt-[15px] text-[14px] leading-[1.45] text-ds-muted">
-          Kamino does not accept {name} as collateral, so you cannot borrow against it.
-        </p>
+        <p className="mt-[15px] text-[14px] leading-[1.45] text-ds-muted">{name} isn’t borrowable yet.</p>
       </RailCard>
     );
   }
@@ -40,6 +42,18 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
           ? ("warn" as const)
           : ("up" as const);
 
+  // Held, but only as tokens Kamino does not take. Its terms would read as an offer this holder cannot use.
+  if (!holds && unlendableShares > 0) {
+    return (
+      <RailCard label="Borrow against it">
+        <RailHead title="Borrow against it" meta={`${pct(borrow.data.borrowApy * 100, 1)} a year`} />
+        <p className="mt-[15px] text-[14px] leading-[1.45] text-ds-muted">
+          Your {name} is on Ondo, and shares on Ondo aren’t borrowable. Shares on xStocks are.
+        </p>
+      </RailCard>
+    );
+  }
+
   // Holding it: the rail card, what you can borrow now and the lines under it.
   if (holds) {
     return (
@@ -51,16 +65,23 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
           <div className="mt-[15px]">
             <RailFigure
               value={usd(row.borrowableUsd)}
-              sub={`You can borrow against your ${name}, without selling it`}
+              sub={`Against your ${name} on xStocks, without selling it`}
             />
           </div>
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5">
+        <dl className="mt-4 grid flex-1 grid-cols-2 content-center gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5">
           <Fact k="Lends up to">
             {pct(target * 100, 1)}{" "}
             <span className="text-[12px] font-normal text-ds-muted">max {pct(row.ltv * 100, 0)}</span>
           </Fact>
           <Fact k="Safe unless it falls">{pct(row.cushionAtTarget * 100, 0)}</Fact>
+          {/* Which shares the figure is of. Only xStocks count; the Ondo part is named, not hidden. */}
+          {lendableShares > 0 && <Fact k="On xStocks">{lendableShares.toFixed(4)} shares</Fact>}
+          {unlendableShares > 0 && (
+            <Fact k="On Ondo" tip="Shares on Ondo aren’t borrowable. Only your xStocks shares count here.">
+              {unlendableShares.toFixed(4)} shares
+            </Fact>
+          )}
           {row.depositedTokens > 0 && <Fact k="Pledged">{usd(row.depositedUsd)}</Fact>}
           {row.depositedTokens > 0 && row.liquidationPrice !== null && row.liquidationDistance !== null && (
             <Fact k="Sold if it reaches">

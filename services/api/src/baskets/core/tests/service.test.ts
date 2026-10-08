@@ -40,6 +40,9 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   strategyPerformance: async () => {
     throw new Error("unexpected performance read");
   },
+  portfolioReturn: async () => {
+    throw new Error("unexpected portfolio return read");
+  },
   allocationBreakdown: async () => {
     throw new Error("unexpected allocation read");
   },

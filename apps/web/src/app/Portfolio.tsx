@@ -8,7 +8,11 @@ import { AppShell } from "./AppShell";
 import { Borrowing } from "./portfolio/Borrowing";
 import { CardPanel } from "./portfolio/CardPanel";
 import { Recent, Upcoming } from "./portfolio/Feed";
-import { Holdings } from "./portfolio/Holdings";
+import { Holdings, type BasketHolding } from "./portfolio/Holdings";
+import { useBasketReturns, useBasketTemplates } from "../api/baskets";
+import { USDC_ASSET_ID } from "@mercury/view";
+import { AssetIcon } from "./baskets/AssetIcon";
+import { displayBasketName } from "./baskets/catalog";
 import { useModel } from "./portfolio/model";
 import { AccountHeader, Allocation, Performance } from "./portfolio/Summary";
 import { useEvents } from "./useEvents";
@@ -34,14 +38,52 @@ export const Portfolio = () => {
   const portfolio = usePortfolio();
   const money = useMoney();
   const dash = useDashboard();
-  // The holdings' own instruments, featured or not, for their names, logos and sectors.
+  // The backend owns basket valuation; templates only supply the two marks.
+  const templates = useBasketTemplates();
+  const basketTemplates = (portfolio.data?.baskets ?? []).flatMap((b) => {
+    const t = templates.data?.find((x) => x.slug === b.slug);
+    const value = Number(b.valueUsd);
+    return value > 0 ? [{ b, t, value }] : [];
+  });
+  const basketReturns = useBasketReturns(basketTemplates.length > 0);
+  const returnsByPortfolio = new Map(
+    basketReturns.data?.map((item) => [item.portfolioId, item.percentChange]),
+  );
+  const markTickers = basketTemplates.flatMap(({ t }) =>
+    [...(t?.allocations ?? [])]
+      .sort((a, z) => z.weightBps - a.weightBps)
+      .slice(0, 2)
+      .map((a) => a.ticker),
+  );
   const universe = useInstruments([
-    ...new Set([
-      ...(portfolio.data?.holdings.map((h) => h.ticker) ?? []),
-      ...(portfolio.data?.baskets.flatMap((b) => b.holdings.flatMap((h) => (h.ticker ? [h.ticker] : []))) ??
-        []),
-    ]),
+    ...new Set([...(portfolio.data?.holdings.map((h) => h.ticker) ?? []), ...markTickers]),
   ]);
+  const byTicker = new Map((universe.data ?? []).map((i) => [i.ticker, i]));
+  const baskets: BasketHolding[] = basketTemplates.map(({ b, t, value }) => ({
+    portfolioId: b.portfolioId,
+    slug: b.slug,
+    name: displayBasketName(b.name),
+    value,
+    assetCount: t?.allocations.length ?? b.holdings.length,
+    todayPct: b.changePct24h === null ? null : Number(b.changePct24h),
+    returnPct:
+      b.holdings.length > 0 && b.holdings.every((asset) => asset.assetId === USDC_ASSET_ID)
+        ? null
+        : returnsByPortfolio.get(b.portfolioId) == null
+          ? null
+          : Number(returnsByPortfolio.get(b.portfolioId)),
+    marks: [...(t?.allocations ?? [])]
+      .sort((a, z) => z.weightBps - a.weightBps)
+      .slice(0, 2)
+      .map((a) => (
+        <AssetIcon
+          key={a.ticker}
+          asset={a}
+          source={byTicker.get(a.ticker)}
+          className="size-6 rounded-full bg-white object-contain ring-2 ring-ds-panel"
+        />
+      )),
+  }));
   const credit = useCreditMarket();
   const { events, loading: eventsLoading } = useEvents();
 
@@ -79,7 +121,7 @@ export const Portfolio = () => {
         <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
           {/* 3 — what you own, then how it has moved and where it sits. */}
           <div className="flex min-w-0 flex-col gap-4 md:gap-6">
-            <Holdings m={m} signedIn={signedIn} failed={failed} />
+            <Holdings m={m} signedIn={signedIn} failed={failed} baskets={baskets} />
             <div className="grid items-stretch gap-4 md:gap-6 lg:grid-cols-2">
               <Performance m={m} range={range} setRange={setRange} />
               <Allocation m={m} />

@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
-import type { OfferQueueDecision, ExecuteDecision, RefuseDecision } from "@mercury/core";
+import type { OfferQueueDecision, ExecuteDecision, PricedCandidate, RefuseDecision } from "@mercury/core";
 import { Dialog } from "../ui/Dialog";
 import { Alert, Check, Clock } from "../ui/icons";
+import { Mark } from "./invest/shared";
+import { SwapPanel, TipLine, Well } from "./review";
+import { InfoTip, StatusChip } from "../ui/ds";
+import { localTime } from "../ui/localTime";
+import { lendableIssuer, TOKEN_NAME, useHeldAs } from "./stock/heldAs";
+import type { Issuer } from "@mercury/types";
 import { useMoney } from "../api/hooks";
 import { PriceMoved, useOrderAction } from "../api/orders";
-import { ISSUER_NAME } from "./IssuerCompare";
 import { Button } from "../ui/Button";
 import { useDecision } from "../market/hooks";
 import type { Instrument, PriceMap } from "../market/hooks";
@@ -12,113 +17,257 @@ import type { Instrument, PriceMap } from "../market/hooks";
 const usd = (v: number) =>
   v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 
-const PRESETS = [50, 100, 250, 500];
-
-/* Fractions of the position when selling, for the reason the ticket has them:
-   a $50 chip does nothing on a $30 holding. See stock/Ticket.tsx. */
-const SELL_PRESETS = [0.25, 0.5, 0.75, 1] as const;
-
-/* The ticket's preset chip (stock/Ticket.tsx): the chosen one raised, the rest flat on the panel. */
-const chip = (on: boolean) =>
-  `h-8 rounded-md border text-[14px] leading-none text-ds-ink transition-colors max-sm:h-10 disabled:opacity-40 ${
-    on ? "border-black/10 bg-linear-to-b from-white to-[#eeeeee]" : "border-transparent hover:bg-white/70"
-  }`;
-
 const num = (d: { toString(): string } | null | undefined) => (d ? Number(d.toString()) : null);
 
 /* ── the three outcomes ─────────────────────────────────────────────── */
 
-const Execute = ({
-  d,
+/** The quotes a person can choose between: every token that fills this amount, cheapest (or best-paying) first. */
+const optionsOf = (d: ExecuteDecision): PricedCandidate[] =>
+  d.candidates
+    .filter((c) => c.viable && c.pricePerShare !== null && c.filledShares !== null)
+    .sort((a, b) => {
+      const pa = num(a.pricePerShare) ?? 0;
+      const pb = num(b.pricePerShare) ?? 0;
+      return d.side === "buy" ? pa - pb : pb - pa;
+    });
+
+/** Tokens quoted but unable to fill this amount: still offered as a row, so the choice is visible, but not pickable. */
+const unavailableOf = (d: ExecuteDecision): PricedCandidate[] =>
+  d.candidates.filter((c) => !(c.viable && c.pricePerShare !== null && c.filledShares !== null));
+
+/** Why a token cannot take this order, in a reader's words. */
+const whyUnavailable = (c: PricedCandidate) =>
+  c.rejection === "impact_too_high"
+    ? `Too little liquidity for this amount${
+        c.priceImpact === null
+          ? ""
+          : ` · ${(Math.abs(num(c.priceImpact) ?? 0) * 100).toFixed(1)}% price impact`
+      }`
+    : "No route for this amount right now";
+
+/**
+ * Which token to buy or sell, when there is more than one. A row per token in
+ * a grey panel, the chosen one raised in white: its name, whether it can back
+ * a loan (only where Kamino lends against the stock at all), and on the right
+ * what this amount gets from it. The best price is chosen to start with.
+ */
+const TokenChoice = ({
+  options,
+  unavailable,
+  picked,
+  onPick,
+  selling,
   amount,
   fee,
-  proceeds,
+  accepted,
+  heldShares,
 }: {
-  d: ExecuteDecision;
+  options: readonly PricedCandidate[];
+  unavailable: readonly PricedCandidate[];
+  picked: PricedCandidate;
+  onPick: (mint: string) => void;
+  selling: boolean;
   amount: number;
   fee: number;
-  /** What a sale lands, net of the charge. Null on a buy. */
-  proceeds: number | null;
+  accepted: boolean | null;
+  /** What is held of each token, by issuer, for a sell. */
+  heldShares: ReadonlyMap<Issuer, number>;
+}) => {
+  const best = options[0];
+  return (
+    <fieldset className="rounded-lg bg-ds-panel p-1">
+      <legend className="sr-only">{selling ? "Sell from" : "Buy as"}</legend>
+      <p className="px-4 pt-3 pb-2.5 text-[12px] leading-none text-ds-muted">
+        {selling ? "Sell from" : "Buy as"}
+      </p>
+      <div className="flex flex-col gap-1">
+        {options.map((c) => {
+          const on = c.mint === picked.mint;
+          const price = num(c.pricePerShare) ?? 0;
+          const filled = num(c.filledShares) ?? 0;
+          const lendable = lendableIssuer(c.issuer);
+          const held = heldShares.get(c.issuer);
+          return (
+            <label
+              key={c.mint}
+              className={`flex cursor-pointer items-center gap-3 rounded-md px-4 py-3 transition-colors ${
+                on ? "bg-white" : "hover:bg-white/60"
+              }`}
+            >
+              <input
+                type="radio"
+                name="token"
+                value={c.mint}
+                checked={on}
+                onChange={() => onPick(c.mint)}
+                className="sr-only"
+              />
+              <span
+                aria-hidden="true"
+                className={`grid size-4 shrink-0 place-items-center rounded-full border ${
+                  on ? "border-ds-ink" : "border-ds-divider bg-white"
+                }`}
+              >
+                {on && <span className="size-2 rounded-full bg-ds-ink" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 text-[14px] leading-[18px] font-medium text-ds-ink">
+                  {TOKEN_NAME[c.issuer]}
+                  {c.mint === best?.mint && options.length > 1 && (
+                    <StatusChip tone="up">Best price</StatusChip>
+                  )}
+                </span>
+                <span className="mt-0.5 flex items-center gap-1 text-[12px] leading-4 text-ds-muted">
+                  {selling && held !== undefined ? `${held.toFixed(4)} shares held` : `${usd(price)} a share`}
+                  {accepted === true && (
+                    <>
+                      {" · "}
+                      {lendable ? "Borrowable" : "Not borrowable"}
+                      {!lendable && (
+                        <InfoTip label="About borrowing" align="start">
+                          Shares on {TOKEN_NAME[c.issuer]} aren’t borrowable. Shares on xStocks can back a
+                          loan.
+                        </InfoTip>
+                      )}
+                    </>
+                  )}
+                </span>
+              </span>
+              <span className="shrink-0 text-right text-[14px] leading-[18px] font-medium text-ds-ink">
+                {selling
+                  ? usd(Math.max(0, filled * price - fee))
+                  : `${((amount - fee) / price).toFixed(4)} sh`}
+              </span>
+            </label>
+          );
+        })}
+        {unavailable.map((c) => (
+          <div key={c.mint} className="flex items-center gap-3 rounded-md px-4 py-3" aria-disabled="true">
+            <span aria-hidden="true" className="size-4 shrink-0 rounded-full border border-ds-divider" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14px] leading-[18px] font-medium text-ds-muted">
+                {TOKEN_NAME[c.issuer]}
+              </span>
+              <span className="mt-0.5 block text-[12px] leading-4 text-ds-muted">{whyUnavailable(c)}</span>
+            </span>
+            <span className="shrink-0 text-[12px] leading-none text-ds-muted">Unavailable</span>
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
+};
+
+/**
+ * A fill, laid out as a swap: what leaves on the left, what arrives on the
+ * right, then in the same grey panel the facts nothing else here
+ * holds — the price against a real share, and which issuer and venue won.
+ * Every figure is of the token picked above it, not only of the best one.
+ */
+const Execute = ({
+  d,
+  pick,
+  amount,
+  fee,
+}: {
+  d: ExecuteDecision;
+  pick: PricedCandidate;
+  amount: number;
+  fee: number;
 }) => {
   const selling = d.side === "sell";
-  const sold = num(d.best.filledShares);
-  const price = num(d.best.pricePerShare) ?? 0;
-  const premium = (num(d.premium) ?? 0) * 100;
-  /*
-   * The floor the route will not fill below. A buy spends a fixed number of
-   * dollars, so what moves while the order lands is the number of shares that
-   * come back — and until now that movement was allowed for in the quote,
-   * bounded by the route, and named nowhere on screen. It is worth up to half
-   * of the premium we promise to protect, so it gets a number.
-   */
-  const worst = num(d.best.worstPricePerShare);
-  /*
-   * What the swap is actually for. The network charge comes out of the amount
-   * rather than being added to it, so a buyer holding exactly $5 can still
-   * spend all of it — adding on top would put their own balance out of reach.
-   */
+  const sold = num(pick.filledShares) ?? 0;
+  const price = num(pick.pricePerShare) ?? 0;
+  const fair = num(d.fairPricePerShare) ?? 0;
+  const premium = fair > 0 ? (price / fair - 1) * 100 : 0;
+  /* The floor the route will not fill below; what moves while a buy lands is the share count. */
+  const worst = num(pick.worstPricePerShare);
+  /* The charge comes out of the amount, so a buyer holding exactly $5 can still spend all of it. */
   const invested = amount - fee;
+  const shares = price > 0 ? invested / price : 0;
+  /* Net of the charge, so the figure is the figure that lands. */
+  const proceeds = Math.max(0, sold * price - fee);
+  const atLeast =
+    !selling && worst && worst > price
+      ? `At least ${(invested / worst).toFixed(4)}`
+      : selling && worst && worst < price
+        ? `At least ${usd(Math.max(0, sold * worst - fee))}`
+        : undefined;
   return (
     <>
-      {/*
-       * No "Ready to buy" banner: an enabled Buy now already says that, and a
-       * green box saying the thing is fine is the kind of reassurance a product
-       * gives instead of information.
-       *
-       * The two facts it did carry are kept, because nothing else here holds
-       * them — which issuer won, and what this costs against a real share.
-       */}
-      <dl className="flex flex-col gap-3 px-1">
-        {/* `You pay` is the amount that leaves the wallet, which is why the
-            charge is shown under it rather than beside the total. Both lines
-            appear only when something is owed, which is once per stock. */}
-        {selling ? (
-          <>
-            <Line k="You sell" v={`${(sold ?? 0).toFixed(4)} shares`} />
-            {fee > 0 && (
-              <Line k="Network fee" v={`−${usd(fee)}`} sub="Covers sending the dollars to your wallet" />
-            )}
-            <Line k="You get" v={usd(proceeds ?? 0)} />
-          </>
-        ) : (
-          <>
-            <Line k="You pay" v={usd(amount)} />
-            {fee > 0 && (
-              <>
-                <Line k="Network fee" v={`−${usd(fee)}`} sub="Covers opening your account for this stock" />
-                <Line k="Invested" v={usd(invested)} />
-              </>
-            )}
-          </>
-        )}
-        <Line
-          k="Price per share"
-          v={usd(price)}
-          sub={
-            Math.abs(premium) < 0.01
-              ? "In line with the real share price"
-              : `${Math.abs(premium).toFixed(2)}% ${premium > 0 ? "above" : "below"} the real share price`
-          }
-        />
-        {/* Shares follow what is invested, not what is paid. Dividing by the
-            gross would print a figure the order cannot deliver. A sale's share
-            count is not derived at all — it is the quantity being sold, and it
-            is already on the first line. */}
-        <Line
-          k={selling ? "Worth" : "Shares"}
-          v={selling ? usd((sold ?? 0) * price) : (invested / price).toFixed(4)}
-          {...(!selling && worst && worst > price
-            ? { sub: `At least ${(invested / worst).toFixed(4)} if the price moves before it lands` }
-            : selling && worst && worst < price
-              ? { sub: `At least ${usd((sold ?? 0) * worst)} if the price moves before it lands` }
-              : {})}
-        />
-        {/* Not monospace: "Raydium CLMM" is the name of a venue, not a
-            measurement. Mono here was a costume for "technical". */}
-        <Line k="Route" v={`${ISSUER_NAME[d.best.issuer]} · ${d.best.routeLabels.join(" → ")}`} />
-      </dl>
-      {d.warning && (
-        <p className="mt-4 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn">
+      <SwapPanel
+        from={
+          selling ? (
+            <Well label="You sell" value={sold.toFixed(4)} unit="shares" sub={`Worth ${usd(sold * price)}`} />
+          ) : (
+            <Well label="You pay" value={usd(amount)} unit="USD" />
+          )
+        }
+        to={
+          selling ? (
+            <Well label="You get" value={usd(proceeds)} unit="USD" sub={atLeast} />
+          ) : (
+            <Well label="You get" value={shares.toFixed(4)} unit="shares" sub={atLeast} />
+          )
+        }
+      >
+        <dl className="flex flex-col gap-3">
+          <TipLine
+            k="Price per share"
+            tip={
+              Math.abs(premium) < 0.01
+                ? "In line with the real share price."
+                : `${Math.abs(premium).toFixed(2)}% ${premium > 0 ? "above" : "below"} the real share price.`
+            }
+          >
+            {usd(price)}
+          </TipLine>
+          {fee > 0 && (
+            <TipLine
+              k="Network fee"
+              tip={
+                selling
+                  ? "Covers sending the dollars to your wallet. Taken from the proceeds."
+                  : `Covers opening your account for this stock, once. Taken from the ${usd(amount)}, so ${usd(invested)} is invested.`
+              }
+            >
+              {usd(fee)}
+            </TipLine>
+          )}
+          {/* Who issues the token, then where it trades: one white pill, the issuer set in grey. */}
+          <div className="flex items-center justify-between gap-4 text-[14px] leading-5">
+            <dt className="text-ds-muted">Route</dt>
+            <dd className="inline-flex min-w-0 items-center rounded-full bg-white p-[3px] text-[12px] leading-none">
+              <span className="rounded-full bg-ds-panel px-2.5 py-1.5 font-medium text-ds-ink">
+                {TOKEN_NAME[pick.issuer]}
+              </span>
+              {pick.routeLabels.map((venue, i) => (
+                <span key={`${venue}-${i}`} className="flex items-center text-ds-ink">
+                  <svg
+                    viewBox="0 0 8 14"
+                    width={5}
+                    height={9}
+                    fill="none"
+                    aria-hidden
+                    className="ml-2 text-ds-muted"
+                  >
+                    <path
+                      d="M1 13L7 7L1 1"
+                      stroke="currentColor"
+                      strokeWidth={1.8}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span className="px-2">{venue}</span>
+                </span>
+              ))}
+            </dd>
+          </div>
+        </dl>
+      </SwapPanel>
+      {d.warning && pick.mint === d.best.mint && (
+        <p className="mt-1 flex gap-2 rounded-lg bg-ds-warn-chip px-4 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn">
           <Alert className="mt-px size-3.5 shrink-0" />
           {d.warning}
         </p>
@@ -155,14 +304,7 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
           k="Latest"
           v={
             d.marketOpensAt
-              ? `${d.marketOpensAt.toLocaleString("en-US", {
-                  weekday: "long",
-                  timeZone: "America/New_York",
-                })} at ${d.marketOpensAt.toLocaleString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                  timeZone: "America/New_York",
-                })} ET, when the US market opens`
+              ? `${localTime(d.marketOpensAt, { weekday: "long" }).replace(/^(\w+), /, "$1 at ")}, when the US market opens`
               : "When the US market opens"
           }
         />
@@ -209,7 +351,6 @@ export const OrderSheet = ({
   initial,
   side = "buy",
   max = false,
-  sellableUsd = null,
 }: {
   instrument: Instrument;
   prices: PriceMap | undefined;
@@ -220,11 +361,10 @@ export const OrderSheet = ({
   side?: "buy" | "sell";
   /** Sell the whole position, in tokens. The amount is then only a display figure. */
   max?: boolean;
-  /** What the sellable part of the position is worth. The fractions are of this. */
-  sellableUsd?: number | null;
 }) => {
   const selling = side === "sell";
   const available = Number(useMoney().data?.balanceUsd ?? 0);
+  const heldAs = useHeldAs(instrument.ticker);
   const [raw, setRaw] = useState("100");
   const buy = useOrderAction();
   const placed = buy.data ?? null;
@@ -243,11 +383,18 @@ export const OrderSheet = ({
     return () => clearTimeout(t);
   }, [amount]);
 
-  const { decision, isLoading, fee, proceeds } = useDecision(open ? instrument : undefined, settled, prices, {
+  const { decision, isLoading, fee } = useDecision(open ? instrument : undefined, settled, prices, {
     side,
     max,
   });
-  const proceedsUsd = proceeds === null ? null : Number(proceeds.toString());
+  /* Which token to trade. Null is the best price; a pick only holds while that token is still on offer. */
+  const [picked, setPicked] = useState<string | null>(null);
+  useEffect(() => setPicked(null), [open, side]);
+  const options = decision?.kind === "execute" ? optionsOf(decision) : [];
+  const unavailable = decision?.kind === "execute" ? unavailableOf(decision) : [];
+  const pick =
+    decision?.kind === "execute" ? (options.find((c) => c.mint === picked) ?? decision.best) : null;
+  const heldShares = new Map((heldAs.parts ?? []).map((p) => [p.issuer, p.shares - p.pledged] as const));
   /* Zero unless a relayer is paying the network on this buyer's behalf. */
   const feeUsd = fee === null ? 0 : Number(fee.toString());
 
@@ -307,11 +454,11 @@ export const OrderSheet = ({
       open={open}
       onClose={close}
       labelledBy="order-title"
-      className="flex max-h-[min(86vh,780px)] max-w-[520px] flex-col"
+      className="flex max-h-[min(86vh,780px)] max-w-[480px] flex-col rounded-xl! p-1"
     >
       {placed ? (
-        <div className="px-6 py-6">
-          <div className="py-4 text-center">
+        <div className="px-5 pt-4 pb-5">
+          <div className="pt-4 text-center">
             <span className="mx-auto grid size-11 place-items-center rounded-full bg-ds-up-chip text-ds-up">
               <Check className="size-5" />
             </span>
@@ -343,81 +490,52 @@ export const OrderSheet = ({
         </div>
       ) : (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-6 pb-6">
-            <h2 id="order-title" className="text-[20px] leading-none font-medium text-ds-ink">
-              {selling ? "Sell" : "Buy"} {instrument.name}
-            </h2>
-            {!selling && (
-              <p className="mt-3 text-[14px] leading-none text-ds-muted">{usd(available)} available</p>
-            )}
-
-            {/* The amount, as the stock page's ticket: a white well on the grey panel, the presets under it. */}
-            <div className="mt-5 rounded-lg bg-ds-panel p-1">
-              <label className="flex h-15 items-center gap-1 rounded-md bg-white px-4 focus-within:outline-1 focus-within:outline-black/10">
-                <span className="text-[28px] leading-none font-medium text-ds-muted">$</span>
-                <input
-                  value={raw}
-                  onChange={(e) => setRaw(e.target.value.replace(/[^0-9.]/g, ""))}
-                  inputMode="decimal"
-                  aria-label="Amount in dollars"
-                  className="w-full min-w-0 bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none"
-                />
-                <span className="shrink-0 text-[12px] text-ds-muted">USD</span>
-              </label>
-              <div className="mt-1 grid grid-cols-4 gap-1" role="group" aria-label="Amount presets">
-                {selling
-                  ? SELL_PRESETS.map((f) => {
-                      const value = sellableUsd === null ? "" : (sellableUsd * f).toFixed(2);
-                      return (
-                        <button
-                          key={f}
-                          type="button"
-                          disabled={sellableUsd === null}
-                          onClick={() => setRaw(value)}
-                          aria-pressed={value !== "" && raw === value}
-                          className={chip(value !== "" && raw === value)}
-                        >
-                          {f === 1 ? "All" : `${f * 100}%`}
-                        </button>
-                      );
-                    })
-                  : PRESETS.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setRaw(String(p))}
-                        aria-pressed={amount === p}
-                        className={chip(amount === p)}
-                      >
-                        ${p}
-                      </button>
-                    ))}
+          {/* The amount well runs to 4px from the sheet's edge, as on the rail cards; everything else sits 20px in. */}
+          <div className="min-h-0 flex-1 overflow-y-auto pt-5 pb-5">
+            {/* A review, not a second ticket: the amount was chosen on the page, so it is shown, not asked
+                for again. Cancel goes back to change it. */}
+            <div className="flex items-center gap-3 px-5">
+              <Mark i={instrument} size={40} />
+              <div className="min-w-0">
+                <h2 id="order-title" className="truncate text-[20px] leading-none font-medium text-ds-ink">
+                  {selling ? "Sell" : "Buy"} {instrument.name}
+                </h2>
+                <p className="mt-2 truncate text-[14px] leading-none text-ds-muted">
+                  {instrument.ticker}
+                  {selling ? "" : ` · ${usd(available)} available`}
+                </p>
               </div>
             </div>
+            {/* The fill says the amount itself, in the swap; until there is one, the amount stands alone. */}
+            {decision?.kind !== "execute" && (
+              <p className="mt-5 px-5 text-[36px] leading-none font-medium text-ds-ink">
+                {selling && max ? "All shares" : usd(amount)}
+              </p>
+            )}
 
             {overBalance && (
-              <p className="mt-3 px-1 text-[12px] leading-[1.45] text-ds-chip-down">
+              <p className="mx-5 mt-3 text-[12px] leading-[1.45] text-ds-chip-down">
                 That is more than your {usd(available)} cash. Add money first.
               </p>
             )}
 
             {moved && (
-              <p className="mt-3 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn">
+              <p className="mx-5 mt-3 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn">
                 <Alert className="mt-px size-3.5 shrink-0" />
                 The price moved while you were deciding, so we stopped rather than buy at it. Buying again
                 uses the price below.
               </p>
             )}
             {failed && (
-              <p className="mt-3 flex gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-down">
+              <p className="mx-5 mt-3 flex gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-down">
                 <Alert className="mt-px size-3.5 shrink-0" />
                 {failed.message}
               </p>
             )}
 
-            <div className="mt-5">
+            <div className="mt-5 [&>.box]:mx-4">
               {!decision ? (
-                <div className="rounded-lg bg-ds-panel px-4 py-4">
+                <div className="box rounded-lg bg-ds-panel px-4 py-4">
                   <p className="text-[14px] leading-none font-medium text-ds-ink">
                     {typing ? "Pricing\u2026" : "Quoting every issuer\u2026"}
                   </p>
@@ -427,17 +545,40 @@ export const OrderSheet = ({
                 </div>
               ) : (
                 <>
-                  {decision.kind === "execute" && (
-                    <Execute d={decision} amount={settled} fee={feeUsd} proceeds={proceedsUsd} />
+                  {decision.kind === "execute" && pick && (
+                    <div className="flex flex-col gap-1">
+                      {options.length + unavailable.length > 1 && (
+                        <TokenChoice
+                          options={options}
+                          unavailable={unavailable}
+                          picked={pick}
+                          onPick={setPicked}
+                          selling={selling}
+                          amount={settled}
+                          fee={feeUsd}
+                          accepted={heldAs.accepted}
+                          heldShares={heldShares}
+                        />
+                      )}
+                      <Execute d={decision} pick={pick} amount={settled} fee={feeUsd} />
+                    </div>
                   )}
-                  {decision.kind === "offer_queue" && <Queue d={decision} amount={settled} />}
-                  {decision.kind === "refuse" && <Refuse d={decision} />}
+                  {decision.kind === "offer_queue" && (
+                    <div className="px-4">
+                      <Queue d={decision} amount={settled} />
+                    </div>
+                  )}
+                  {decision.kind === "refuse" && (
+                    <div className="px-4">
+                      <Refuse d={decision} />
+                    </div>
+                  )}
                 </>
               )}
             </div>
           </div>
 
-          <div className="flex shrink-0 gap-2.5 border-t border-ds-divider bg-white px-6 py-4">
+          <div className="flex shrink-0 gap-2.5 bg-white px-5 pt-1 pb-4">
             {/* The design system's buttons. These were hand-rolled: a teal
                 rectangle at h-11 for the primary action, where every other
                 button in the app is a near-black pill at h-10. */}
@@ -455,6 +596,8 @@ export const OrderSheet = ({
                   side,
                   usd: settled,
                   ...(max ? { max: true } : {}),
+                  /* The token reviewed, picked or best: the server fills only that one. */
+                  ...(pick ? { issuer: pick.issuer } : {}),
                 })
               }
               className="flex-[1.6]"

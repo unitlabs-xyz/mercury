@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { D, ONE, type Decimal, type Issuer } from "@mercury/core";
+import { D, DEFAULT_POLICY, ONE, type Decimal, type Issuer } from "@mercury/core";
 import { JupiterRegistry } from "@mercury/chain";
 import {
   JupiterMarket,
@@ -406,13 +406,15 @@ export const useDecision = (
   const session = useSession();
   const signedIn = useSignedIn();
   const amount = Number.isFinite(usd) && usd > 0 ? usd : 0;
+  /* Under the minimum the answer is known without asking: the ticket says so itself, and no quote is fetched. */
+  const belowMinimum = !max && amount > 0 && amount < DEFAULT_POLICY.minOrderUsd.toNumber();
 
   const quoted = useQuery({
     /* The side and `max` belong in the key: the same dollar figure means a
        different order on each tab, and "everything" is not a dollar figure at
        all. Sharing a cache entry would show a buy's answer on the sell tab. */
     queryKey: ["quote", instrument?.ticker, amount.toFixed(2), side, max, signedIn],
-    enabled: !!instrument && (amount > 0 || max),
+    enabled: !!instrument && (amount > 0 || max) && !belowMinimum,
     staleTime: 10_000,
     refetchInterval: 20_000,
     queryFn: () =>

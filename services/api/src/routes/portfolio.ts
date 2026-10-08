@@ -9,8 +9,19 @@ import {
   valueBasketStocks,
   valuePortfolio,
 } from "../portfolio/value.js";
-import { BasketValuationError, type BasketValueReader } from "../portfolio/baskets.js";
-import { MIN_POINTS, RANGES, bucketSeries, type Range, type Reading } from "../portfolio/history.js";
+import {
+  BasketValuationError,
+  type BasketReturnsReader,
+  type BasketValueReader,
+} from "../portfolio/baskets.js";
+import {
+  MIN_POINTS,
+  RANGES,
+  bucketSeries,
+  type Flow,
+  type Range,
+  type Reading,
+} from "../portfolio/history.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 
@@ -48,6 +59,9 @@ export interface PortfolioDeps {
   /** Hourly readings of the account's value, no older than `from`. */
   readonly snapshots: (userId: string, from: Date) => Promise<readonly Reading[]>;
   readonly baskets: BasketValueReader;
+  readonly basketReturns?: BasketReturnsReader;
+  /** Deposits and withdrawals since `from`, signed, so the chart can show performance without them. */
+  readonly flows?: (userId: string, from: Date) => Promise<readonly Flow[]>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -66,6 +80,18 @@ const EMPTY = {
 
 export function portfolioRoutes(deps: PortfolioDeps): Hono {
   const app = new Hono();
+
+  // Performance is a separate read so a slow Glider curve cannot delay net worth.
+  app.get("/v1/portfolio/basket-returns", async (c) => {
+    const wallet = c.get("identity").walletAddress;
+    if (wallet === null || !deps.basketReturns) return c.json({ returns: [] });
+    try {
+      return c.json({ returns: await deps.basketReturns(wallet) });
+    } catch (error) {
+      console.error("Basket return read failed:", error);
+      return c.json(fail("basket_returns_unavailable", "Basket returns are temporarily unavailable."), 503);
+    }
+  });
 
   app.get("/v1/portfolio", async (c) => {
     const identity = c.get("identity");
@@ -174,7 +200,10 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       changeUsd: toWire(changeUsd),
       changePct: toWire(changePct),
       holdings,
-      baskets: basketValue.baskets,
+      baskets: basketValue.baskets.map((basket) => ({
+        ...basket,
+        changePct24h: basketStocks.byPortfolio.get(basket.portfolioId)?.toString() ?? null,
+      })),
     });
   });
 
@@ -198,7 +227,11 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
 
     const now = new Date();
     const from = new Date(now.getTime() - RANGES[range].spanHours * 3_600_000);
-    const points = bucketSeries(await deps.snapshots(identity.userId, from), range, now);
+    const [readings, flows] = await Promise.all([
+      deps.snapshots(identity.userId, from),
+      deps.flows ? deps.flows(identity.userId, from) : Promise.resolve([]),
+    ]);
+    const points = bucketSeries(readings, range, now, flows);
 
     // One reading is a dot. Withholding it here keeps "is there a chart?" a
     // single decision in a single place, rather than one the client repeats.

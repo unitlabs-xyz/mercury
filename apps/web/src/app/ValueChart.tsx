@@ -53,7 +53,10 @@ export const useHistory = (range: Range): { points: readonly Point[] } | null =>
   const points = recorded.data?.points ?? [];
   if (points.length < 2) return null;
   return {
-    points: points.map((p) => ({ label: LABEL[range](new Date(p.at)), value: Number(p.valueUsd) })),
+    points: points.map((p) => ({
+      label: LABEL[range](new Date(p.at)),
+      value: Number(p.valueUsd) - Number(p.netFlowUsd ?? 0),
+    })),
   };
 };
 

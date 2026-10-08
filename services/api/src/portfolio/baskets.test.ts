@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BasketProvider, BasketStore } from "../baskets/core/deps.js";
-import { basketValueReader } from "./baskets.js";
+import { basketReturnsReader, basketValueReader } from "./baskets.js";
 
 const WALLET = "Wa11et00000000000000000000000000000000";
 const OWNER = `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${WALLET}`;
@@ -49,5 +49,16 @@ describe("basket valuation", () => {
     await expect(basketValueReader(provider(true), store)("user-1", WALLET)).rejects.toMatchObject({
       code: "basket_value_unavailable",
     });
+  });
+});
+
+it("reads the owned portfolio's money-weighted return without relying on its position value", async () => {
+  const glider = {
+    ...provider(),
+    portfolioReturn: async (id: string) => (id === "p1" ? "2.5" : null),
+  } as BasketProvider;
+  expect(await basketReturnsReader(glider)(WALLET)).toEqual([{ portfolioId: "p1", percentChange: "2.5" }]);
+  await expect(basketReturnsReader(glider)("AnotherWallet")).rejects.toMatchObject({
+    code: "basket_value_unavailable",
   });
 });

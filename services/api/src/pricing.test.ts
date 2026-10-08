@@ -146,3 +146,31 @@ describe("priceOrder, buying", () => {
     expect(reads).toBe(0);
   });
 });
+
+describe("priceOrder, with an issuer picked", () => {
+  it("quotes only that issuer's token on a buy", async () => {
+    const { market, asked } = deps();
+    const d = await priceOrder(market, { ticker: "NVDA", side: "buy", amount: "50", issuer: "ondo" });
+    expect(asked.map((a) => a.mint)).toEqual(["Ondo"]);
+    expect(d?.kind === "execute" ? d.best.issuer : null).toBe("ondo");
+  });
+
+  it("sells only from that issuer's token", async () => {
+    const { market, asked } = deps();
+    const d = await priceOrder(market, {
+      ticker: "NVDA",
+      side: "sell",
+      amount: "500",
+      owner: WALLET,
+      issuer: "backed",
+    });
+    expect(asked.map((a) => a.mint)).toEqual(["Xsc9"]);
+    expect(d?.kind === "execute" ? d.best.mint : null).toBe("Xsc9");
+  });
+
+  it("quotes every token when nothing was picked", async () => {
+    const { market, asked } = deps();
+    await priceOrder(market, { ticker: "NVDA", side: "buy", amount: "50" });
+    expect(asked.map((a) => a.mint).sort()).toEqual(["Ondo", "Xsc9"]);
+  });
+});

@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import {
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -8,6 +9,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 /**
@@ -552,19 +554,59 @@ export const InfoTip = ({
   align?: "center" | "start" | "end";
 }) => {
   const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   const id = useId();
+  const anchor = useRef<HTMLSpanElement>(null);
+  const tip = useRef<HTMLSpanElement>(null);
+
+  /*
+   * Drawn in a portal at a fixed position, so no card or modal with its own
+   * overflow can clip it. Placed above the icon by `align`, then pushed back
+   * inside the viewport with an 8px margin, and below the icon when there is
+   * no room above.
+   */
+  useLayoutEffect(() => {
+    if (!open || !anchor.current || !tip.current) return;
+    const a = anchor.current.getBoundingClientRect();
+    const t = tip.current.getBoundingClientRect();
+    const margin = 8;
+    const want =
+      align === "start" ? a.left : align === "end" ? a.right - t.width : a.left + a.width / 2 - t.width / 2;
+    const left = Math.min(Math.max(want, margin), window.innerWidth - t.width - margin);
+    const above = a.top - t.height - margin;
+    setAt({ left, top: above >= margin ? above : a.bottom + margin });
+  }, [open, align]);
+
+  useEffect(() => {
+    if (!open) return;
+    const hide = () => setOpen(false);
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+    return () => {
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
+    };
+  }, [open]);
+
   return (
     <span
+      ref={anchor}
       className="relative inline-flex"
       onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseLeave={() => {
+        setOpen(false);
+        setAt(null);
+      }}
     >
       <button
         type="button"
         aria-label={label}
         aria-describedby={open ? id : undefined}
         onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
+        onBlur={() => {
+          setOpen(false);
+          setAt(null);
+        }}
         onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
         className="grid size-4 place-items-center rounded-full text-ds-muted"
       >
@@ -576,23 +618,26 @@ export const InfoTip = ({
           <circle cx="6" cy="3.55" r="0.62" fill="currentColor" />
         </svg>
       </button>
-      <AnimatePresence>
-        {open && (
-          <motion.span
-            id={id}
-            role="tooltip"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className={`pointer-events-none absolute bottom-full z-50 mb-2 w-max max-w-[300px] rounded-lg bg-ds-ink px-3 py-2 text-left text-[12px] leading-[1.45] font-normal whitespace-normal text-white ${
-              align === "start" ? "left-0" : align === "end" ? "right-0" : "left-1/2 -translate-x-1/2"
-            }`}
-          >
-            {children}
-          </motion.span>
-        )}
-      </AnimatePresence>
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.span
+              ref={tip}
+              id={id}
+              role="tooltip"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: at ? 1 : 0, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              style={{ left: at?.left ?? 0, top: at?.top ?? 0 }}
+              className="pointer-events-none fixed z-[1000] w-max max-w-[min(300px,calc(100vw-16px))] rounded-lg bg-ds-ink px-3 py-2 text-left text-[12px] leading-[1.45] font-normal whitespace-normal text-white"
+            >
+              {children}
+            </motion.span>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </span>
   );
 };

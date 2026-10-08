@@ -1,3 +1,4 @@
+import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
@@ -65,6 +66,23 @@ export const useBaskets = () => {
   });
 };
 
+/** Glider MWR is read separately so the live portfolio value never waits for its curve. */
+export const useBasketReturns = (enabled: boolean) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "basket-returns"],
+    queryFn: async () =>
+      (
+        await apiFetch<{ returns: { portfolioId: string; percentChange: string | null }[] }>(
+          "/v1/portfolio/basket-returns",
+        )
+      ).returns,
+    enabled: signedIn && enabled,
+    staleTime: 2 * 60_000,
+    retry: false,
+  });
+};
+
 /** Where anyone can see, and withdraw from, the vault without us. */
 export const symmetryUrl = (mint: string) => `https://beta.symmetry.fi/dashboard/view/${mint}`;
 
@@ -89,7 +107,9 @@ export const useOwnedBasketPortfolios = () => {
     queryKey: ["api", "basket-portfolios", user?.id, walletAddress],
     queryFn: async () =>
       (await apiFetch<{ portfolios: ManagedBasketPortfolioSummary[] }>("/v1/basket-portfolios")).portfolios,
-    enabled: basketEnrollmentEnabled(ready, authenticated, identityToken !== null) && Boolean(walletAddress),
+    enabled:
+      basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
+      (SAMPLE_NO_LOGIN || Boolean(walletAddress)),
     retry: false,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -133,7 +153,7 @@ export const useBasketInsights = (slug: string) =>
 const enrollmentPath = (slug: string) => `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`;
 
 export const basketEnrollmentEnabled = (ready: boolean, authenticated: boolean, hasIdentityToken: boolean) =>
-  ready && authenticated && hasIdentityToken;
+  SAMPLE_NO_LOGIN || (ready && authenticated && hasIdentityToken);
 
 export const useBasketEnrollment = (slug: string) => {
   const { ready, authenticated, user } = usePrivy();
@@ -146,7 +166,7 @@ export const useBasketEnrollment = (slug: string) => {
       (await apiFetch<{ portfolio: ManagedBasketPortfolio | null }>(enrollmentPath(slug))).portfolio,
     enabled:
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
-      Boolean(walletAddress) &&
+      (SAMPLE_NO_LOGIN || Boolean(walletAddress)) &&
       slug.length > 0,
     retry: false,
     staleTime: 15_000,
@@ -170,7 +190,7 @@ export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
     enabled:
       enrolled &&
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
-      Boolean(wallets[0]?.address),
+      (SAMPLE_NO_LOGIN || Boolean(wallets[0]?.address)),
     retry: false,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -194,7 +214,7 @@ export const useBasketOperation = (slug: string, operationId: string | null, enr
       enrolled &&
       Boolean(operationId) &&
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
-      Boolean(wallets[0]?.address),
+      (SAMPLE_NO_LOGIN || Boolean(wallets[0]?.address)),
     retry: false,
     refetchOnWindowFocus: true,
     refetchInterval: (query) => {
@@ -269,7 +289,7 @@ export const useBasketActivity = (slug: string, enrolled: boolean) => {
     enabled:
       enrolled &&
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
-      Boolean(wallets[0]?.address),
+      (SAMPLE_NO_LOGIN || Boolean(wallets[0]?.address)),
     retry: false,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,

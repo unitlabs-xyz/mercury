@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
-import { Suspense, lazy } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Suspense, lazy, useLayoutEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
 import { Login, RequireAuth } from "./auth/Login";
 import { EASE } from "./motion/config";
 
@@ -18,7 +18,6 @@ const Baskets = lazy(() => import("./app/Baskets").then((m) => ({ default: m.Bas
 const Basket = lazy(() => import("./app/Basket").then((m) => ({ default: m.Basket })));
 const Money = lazy(() => import("./app/Money").then((m) => ({ default: m.Money })));
 const Activity = lazy(() => import("./app/Activity").then((m) => ({ default: m.Activity })));
-const Cards = lazy(() => import("./cards/Cards").then((m) => ({ default: m.Cards })));
 /** The side panels (Add cash, Send, Borrow), drawn over any page; see app/Panels. */
 const GlobalPanels = lazy(() => import("./app/Panels").then((m) => ({ default: m.GlobalPanels })));
 
@@ -37,17 +36,32 @@ const queryClient = new QueryClient({
 /** Holds the page ground while a route chunk arrives, so nothing flashes white. */
 const RouteFallback = () => <div className="min-h-dvh bg-page" />;
 
+/**
+ * A new page opens at its top. Only a new path counts: a query change is a
+ * panel opening over the same page, and Back/Forward (POP) leave the browser
+ * to put you back where you were.
+ */
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  const type = useNavigationType();
+  useLayoutEffect(() => {
+    if (type !== "POP") window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [pathname, type]);
+  return null;
+};
+
 export const App = () => (
   // reducedMotion="user" makes every Motion animation honour the OS setting.
   <MotionConfig reducedMotion="user" transition={{ duration: 0.4, ease: EASE }}>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <ScrollToTop />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Login />} />
-            <Route path="/cards" element={<Cards />} />
-            {/* Card and credit are one page now; the old link still resolves. */}
-            <Route path="/credit" element={<Navigate to="/cards" replace />} />
+            {/* The card is coming soon and its marketing page lives in apps/landing; old links land on the portfolio. */}
+            <Route path="/cards" element={<Navigate to="/portfolio" replace />} />
+            <Route path="/credit" element={<Navigate to="/portfolio" replace />} />
             <Route
               path="/portfolio"
               element={
@@ -88,7 +102,7 @@ export const App = () => (
                 </RequireAuth>
               }
             />
-            <Route path="/borrow" element={<Navigate to="/cards" replace />} />
+            <Route path="/borrow" element={<Navigate to="/portfolio" replace />} />
             <Route
               path="/money"
               element={
