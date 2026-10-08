@@ -51,8 +51,17 @@ export const MONTH_OPTIONS: FilterOption[] = [
   ...MONTH_NAMES.map((name, i) => ({ value: String(i + 1).padStart(2, "0"), label: name })),
 ];
 
-const matches = (e: Event, q: string) =>
-  [e.title, e.sub, ...e.details.flatMap((d) => [d.label, d.value])].join(" ").toLowerCase().includes(q);
+/**
+ * The app's one search test: a case-insensitive substring over the fields worth
+ * matching, with an empty query matching everything. Every list that searches
+ * uses this, so typing the same thing behaves the same wherever you are.
+ */
+export const matchesQuery = (fields: readonly (string | null | undefined)[], query: string) => {
+  const q = query.trim().toLowerCase();
+  return q === "" || fields.filter(Boolean).join(" ").toLowerCase().includes(q);
+};
+
+const eventFields = (e: Event) => [e.title, e.sub, ...e.details.flatMap((d) => [d.label, d.value])];
 
 export const filterEvents = (
   events: readonly Event[],
@@ -62,13 +71,12 @@ export const filterEvents = (
   query: string,
 ) => {
   const kinds = GROUPS.find((g) => g.key === group)?.kinds ?? [];
-  const q = query.trim().toLowerCase();
   return events.filter(
     (e) =>
       (kinds.length === 0 || kinds.includes(e.kind)) &&
       (year === "all" || e.date.slice(0, 4) === year) &&
       (month === "all" || e.date.slice(5, 7) === month) &&
-      (q === "" || matches(e, q)),
+      matchesQuery(eventFields(e), query),
   );
 };
 

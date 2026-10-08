@@ -1,20 +1,21 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
 import { Link } from "react-router-dom";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
 import { basketEnrollmentEnabled, useBasketTemplates, useOwnedBasketPortfolios } from "../api/baskets";
 import { useInstruments, type Instrument } from "../market/hooks";
-import { GlideTable } from "../ui/ds";
+import { GlideTable, SearchField } from "../ui/ds";
 import { ArrowRight } from "../ui/icons";
 import { AppShell } from "./AppShell";
-import { LiveStatusChip, PriceError } from "./LiveStatus";
+import { PriceError } from "./LiveStatus";
 import { Skeleton } from "./portfolio/ui";
 import { AssetIcon } from "./baskets/AssetIcon";
 import {
   curatedShelves,
   discoveryLogoTickers,
   displayBasketName,
+  searchStrategies,
   THEME_ART_TREATMENT,
   visibleStrategies,
 } from "./baskets/catalog";
@@ -255,9 +256,8 @@ const StrategyTable = ({
   clear,
   showAll,
   setShowAll,
-  fetching,
-  updatedAt,
-  refreshFailed,
+  query,
+  setQuery,
 }: {
   templates: readonly ManagedBasketTemplate[];
   instruments: Instruments;
@@ -265,15 +265,17 @@ const StrategyTable = ({
   clear: () => void;
   showAll: boolean;
   setShowAll: (value: boolean) => void;
-  fetching: boolean;
-  updatedAt: number;
-  refreshFailed: boolean;
+  query: string;
+  setQuery: (value: string) => void;
 }) => {
-  const title = selected
-    ? `${selected.replace("theme:", "").replace(/\b\w/g, (letter) => letter.toUpperCase())} strategies`
-    : showAll
-      ? "All strategies"
-      : "Featured strategies";
+  const searching = query.trim() !== "";
+  const title = searching
+    ? "Search results"
+    : selected
+      ? `${selected.replace("theme:", "").replace(/\b\w/g, (letter) => letter.toUpperCase())} strategies`
+      : showAll
+        ? "All strategies"
+        : "Featured strategies";
   return (
     <section
       id="strategies"
@@ -283,15 +285,19 @@ const StrategyTable = ({
       <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4">
         <div>
           <h2 className="text-[16px] font-medium text-ds-ink">{title}</h2>
-          <p className="mt-1 text-[12px] text-ds-muted">Explore curated Glider strategies on Solana.</p>
+          <p className="mt-1 text-[12px] text-ds-muted">
+            {searching
+              ? `${templates.length} ${templates.length === 1 ? "strategy" : "strategies"} matching “${query.trim()}”.`
+              : "Explore curated Glider strategies on Solana."}
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
-          {updatedAt > 0 &&
-            (refreshFailed ? (
-              <span className="text-[11px] text-ds-muted">Last available</span>
-            ) : (
-              <LiveStatusChip fetching={fetching} at={updatedAt} />
-            ))}
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            placeholder="Search by strategy, company or ticker"
+            label="Search strategies"
+          />
           <TextAction
             onClick={() => {
               if (selected) {
@@ -306,7 +312,9 @@ const StrategyTable = ({
       </header>
       <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
         {templates.length === 0 ? (
-          <p className="px-4 py-8 text-center text-[13px] text-ds-muted">No strategies in this theme yet.</p>
+          <p className="px-4 py-8 text-center text-[13px] text-ds-muted">
+            {searching ? `No strategy matches “${query.trim()}”.` : "No strategies in this theme yet."}
+          </p>
         ) : (
           <GlideTable
             columns={STRATEGY_COLS}
@@ -366,25 +374,43 @@ export const Baskets = () => {
   const owned = useOwnedBasketPortfolios();
   const [selected, setSelected] = useState<ManagedBasketTag | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [query, setQuery] = useState("");
+  const [term, setTerm] = useState("");
+  /* Typing filters a local catalog, so a short settle is enough to keep it from thrashing. */
+  useEffect(() => {
+    const timer = setTimeout(() => setTerm(query.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const searching = term !== "";
   const templates = catalog.data ?? EMPTY_TEMPLATES;
   const shelves = useMemo(() => curatedShelves(templates), [templates]);
-  const visible = useMemo(
-    () => visibleStrategies(templates, selected, showAll),
-    [templates, selected, showAll],
-  );
   const tickers = useMemo(() => {
-    const discovery = discoveryLogoTickers(templates, selected, showAll);
+    /* A search reads every holding's company name, so it needs the whole catalog's instruments. */
+    const discovery = searching
+      ? templates.flatMap((template) => template.allocations.map((asset) => asset.ticker))
+      : discoveryLogoTickers(templates, selected, showAll);
     const ownedSlugs = new Set((owned.data ?? []).map((portfolio) => portfolio.slug));
     const ownedLogos = templates
       .filter((template) => ownedSlugs.has(template.slug))
       .flatMap((template) => [...template.allocations].sort((a, b) => b.weightBps - a.weightBps).slice(0, 2))
       .map((asset) => asset.ticker);
     return [...new Set([...discovery, ...ownedLogos])];
-  }, [templates, selected, showAll, owned.data]);
+  }, [templates, selected, showAll, owned.data, searching]);
   const instruments = useInstruments(tickers);
   const instrumentsByTicker = useMemo(
     () => new Map((instruments.data ?? []).map((item) => [item.ticker, item])),
     [instruments.data],
+  );
+  const companyNames = useMemo(
+    () => new Map([...instrumentsByTicker].map(([ticker, item]) => [ticker, item.name])),
+    [instrumentsByTicker],
+  );
+  const visible = useMemo(
+    () =>
+      searching
+        ? searchStrategies(templates, term, companyNames)
+        : visibleStrategies(templates, selected, showAll),
+    [templates, selected, showAll, searching, term, companyNames],
   );
   const walletReady = Boolean(wallets[0]?.address);
   const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null) && walletReady;
@@ -427,9 +453,8 @@ export const Baskets = () => {
                 clear={() => setSelected(null)}
                 showAll={showAll}
                 setShowAll={setShowAll}
-                fetching={catalog.isFetching}
-                updatedAt={catalog.dataUpdatedAt}
-                refreshFailed={catalog.isError}
+                query={query}
+                setQuery={setQuery}
               />
             </>
           )}
