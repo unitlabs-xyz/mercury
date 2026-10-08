@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   borrowChoices,
   borrowFromWire,
+  floorCents,
   pickRow,
   planBorrow,
   type Borrow,
@@ -73,6 +74,15 @@ describe("planBorrow", () => {
     expect(planBorrow(b, "borrow", b.collateral[0], 40).intent).toEqual({ kind: "borrow", usd: "40.00" });
   });
 
+  it("never asks for more than the limit when it is not a whole cent", () => {
+    /* A cap of $0.5098 asked for $0.51 and the server refused the extra penny. */
+    const b = position({ borrowableNowUsd: 0.5098 });
+    const plan = planBorrow(b, "borrow", b.collateral[0], 0.5098);
+    expect(plan.intent).toEqual({ kind: "borrow", usd: "0.50" });
+    /* Whatever the limit is, every borrow preset must be an amount that can be sent. */
+    for (const preset of plan.presets) expect(preset.v).toBe(floorCents(preset.v));
+  });
+
   it("refuses past the safety target", () => {
     const b = position();
     expect(planBorrow(b, "borrow", b.collateral[0], 81).blocked).toMatch(/At most \$80\.00/);
@@ -97,6 +107,17 @@ describe("planBorrow", () => {
     const b = position({ collateral: [pledged] });
     const plan = planBorrow(b, "withdraw", pledged, 0.25);
     expect(plan.max).toBe(0.25);
+    expect(plan.intent).toEqual({ kind: "withdraw", ticker: "NVDA", tokensRaw: "all" });
+  });
+
+  it("takes an odd pledge back in full, with no loan to repay", () => {
+    /* Max rounded 0.0202355 up to 0.020236 and the sheet then asked for a repayment of a debt of zero. */
+    const pledged = row({ depositedTokens: 0.0202355, depositableTokens: 0 });
+    const b = position({ collateral: [pledged], debtUsd: 0 });
+    const offered = planBorrow(b, "withdraw", pledged, 0).presets.find((p) => p.label === "Max")!.v;
+    expect(offered).toBeLessThanOrEqual(pledged.depositedTokens);
+    const plan = planBorrow(b, "withdraw", pledged, offered);
+    expect(plan.blocked).toBeNull();
     expect(plan.intent).toEqual({ kind: "withdraw", ticker: "NVDA", tokensRaw: "all" });
   });
 
