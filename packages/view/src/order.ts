@@ -85,7 +85,8 @@ export interface OrderIo {
    * so a confirm the node was too slow to answer can be asked again later.
    */
   onSent?(sent: { orderId: string; signature: string }): void;
-  settled?(orderId: string): void;
+  /** Recorded by the server, so the claim kept at `onSent` can be dropped. */
+  onRecorded?(sent: { orderId: string; signature: string }): void;
   /** Between confirm attempts. Injected so a test does not wait in real time. */
   wait?(ms: number): Promise<void>;
 }
@@ -181,7 +182,7 @@ export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<Orde
   }
   if (filled === null) throw new Error("The order was sent but could not be recorded.");
 
-  io.settled?.(created.orderId);
+  io.onRecorded?.({ orderId: created.orderId, signature: sent.signature });
   io.onStep("done");
   return { orderId: created.orderId, ...filled, realisedPnlUsd: filled.realisedPnlUsd ?? null };
 }

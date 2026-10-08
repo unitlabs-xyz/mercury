@@ -7,7 +7,7 @@ const FILL = { shares: "0.02", pricePerShare: "235.39", usd: "5" };
 /** A server whose confirm is behind for the first `pendingTimes` attempts. */
 const io = (pendingTimes: number, confirmError?: unknown) => {
   const sent: { orderId: string; signature: string }[] = [];
-  const settled: string[] = [];
+  const recorded: { orderId: string; signature: string }[] = [];
   let confirms = 0;
   const port: OrderIo = {
     post: async (path: string) => {
@@ -21,10 +21,10 @@ const io = (pendingTimes: number, confirmError?: unknown) => {
     sign: async () => "signed",
     onStep: () => undefined,
     onSent: (s) => sent.push(s),
-    settled: (id) => settled.push(id),
+    onRecorded: (s) => recorded.push(s),
     wait: async () => undefined,
   };
-  return { port, sent, settled, confirms: () => confirms };
+  return { port, sent, recorded, confirms: () => confirms };
 };
 
 const intent = { ticker: "NVDA", side: "buy", usd: 5 } as never;
@@ -36,18 +36,18 @@ describe("placeOrder confirm", () => {
     expect(t.confirms()).toBe(4);
   });
 
-  it("hands the signature out before the first confirm, and clears it once recorded", async () => {
+  it("hands the signature out before the first confirm, and takes it back once recorded", async () => {
     const t = io(2);
     await placeOrder(t.port, intent);
     expect(t.sent).toEqual([{ orderId: "o1", signature: "sig" }]);
-    expect(t.settled).toEqual(["o1"]);
+    expect(t.recorded).toEqual([{ orderId: "o1", signature: "sig" }]);
   });
 
   it("keeps the signature when every attempt is spent, so it can be asked again later", async () => {
     const t = io(Number.MAX_SAFE_INTEGER);
     await expect(placeOrder(t.port, intent)).rejects.toMatchObject({ code: "transaction_pending" });
     expect(t.sent).toHaveLength(1);
-    expect(t.settled).toEqual([]);
+    expect(t.recorded).toEqual([]);
   });
 
   it("does not retry an answer that will not change", async () => {
