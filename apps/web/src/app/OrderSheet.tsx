@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { motion } from "motion/react";
 import type { OfferQueueDecision, ExecuteDecision, PricedCandidate, RefuseDecision } from "@mercury/core";
 import { Dialog } from "../ui/Dialog";
-import { Alert, Check, Clock } from "../ui/icons";
+import { Alert, Clock } from "../ui/icons";
 import { Mark } from "./invest/shared";
 import { SwapPanel, TipLine, Well } from "./review";
 import { InfoTip, StatusChip } from "../ui/ds";
@@ -343,6 +344,111 @@ const Line = ({ k, v, sub }: { k: string; v: string; sub?: string }) => (
 
 /* ── the sheet ──────────────────────────────────────────────────────── */
 
+/**
+ * The order, done. The stock's mark with a green tick on it says what happened at a glance; the
+ * figures underneath sit on the grey panel as rail lines, read off the chain, not the quote. Its
+ * parts arrive a beat apart (the launch film plays the same thing).
+ */
+const placedItem = {
+  hidden: { opacity: 0, y: 8, filter: "blur(4px)" },
+  shown: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.5, ease: [0.25, 0.8, 0.3, 1] } },
+} as const;
+
+const PlacedLine = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <motion.div variants={placedItem} className="flex h-5 items-center justify-between text-[14px] leading-none">
+    <span className="text-ds-muted">{label}</span>
+    <span className="font-medium text-ds-ink">{children}</span>
+  </motion.div>
+);
+
+const Placed = ({
+  selling,
+  instrument,
+  shares,
+  pricePerShare,
+  total,
+  realisedPnlUsd,
+  onDone,
+}: {
+  selling: boolean;
+  instrument: Instrument;
+  shares: number;
+  pricePerShare: number;
+  /** What actually moved, from the order: shares × price would round a cent off. */
+  total: number;
+  realisedPnlUsd: number | null;
+  onDone: () => void;
+}) => (
+  <motion.div
+    initial="hidden"
+    animate="shown"
+    transition={{ staggerChildren: 0.06 }}
+    className="px-5 pt-6 pb-5"
+  >
+    {/* The mark, big, with the tick on it; what happened beside it, as on the review sheet. */}
+    <div className="flex items-center gap-3">
+      {/* The mark slides in from the right, growing out from its left edge; then the badge lands, then the tick draws. */}
+      <motion.div
+        initial={{ x: 24, scale: 0.55, opacity: 0, filter: "blur(4px)" }}
+        animate={{ x: 0, scale: 1, opacity: 1, filter: "blur(0px)" }}
+        transition={{ type: "spring", stiffness: 220, damping: 24 }}
+        style={{ transformOrigin: "0% 50%" }}
+        className="relative size-[42px] shrink-0"
+      >
+        <Mark i={instrument} size={42} />
+        <motion.span
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.3, type: "spring", stiffness: 420, damping: 18 }}
+          className="absolute -right-[3px] -bottom-[3px] grid size-[18px] place-items-center rounded-full bg-ds-up ring-2 ring-white"
+        >
+          <svg viewBox="0 0 24 24" width={10} height={10} fill="none" aria-hidden>
+            <motion.path
+              d="M5 12.5l4.5 4.5L19 7.5"
+              stroke="#fff"
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ delay: 0.45, duration: 0.35, ease: [0.65, 0, 0.35, 1] }}
+            />
+          </svg>
+        </motion.span>
+      </motion.div>
+      <div className="min-w-0">
+        <motion.h2 variants={placedItem} id="order-title" className="truncate text-[18px] leading-none font-medium text-ds-ink">
+          {selling ? "Sold" : "Bought"} {instrument.name}
+        </motion.h2>
+        <motion.p variants={placedItem} className="mt-1.5 text-[14px] leading-none text-ds-muted">
+          {selling ? "The money is in your cash." : "It's in your portfolio."}
+        </motion.p>
+      </div>
+    </div>
+    <motion.div
+      variants={placedItem}
+      transition={{ staggerChildren: 0.05, delayChildren: 0.05 }}
+      className="mt-5 grid gap-3 rounded-lg bg-ds-panel px-4 py-4"
+    >
+      <PlacedLine label="Shares">{shares.toFixed(4)}</PlacedLine>
+      <PlacedLine label="Price per share">{usd(pricePerShare)}</PlacedLine>
+      <PlacedLine label={selling ? "You got" : "You paid"}>{usd(total)}</PlacedLine>
+      {/* A sale is the one moment in this product where a gain stops being a number on a screen
+          and becomes money. Worth saying. */}
+      {realisedPnlUsd !== null && (
+        <PlacedLine label={realisedPnlUsd < 0 ? "Realised loss" : "Realised gain"}>
+          <span className={realisedPnlUsd < 0 ? "text-ds-down" : "text-ds-up"}>{usd(Math.abs(realisedPnlUsd))}</span>
+        </PlacedLine>
+      )}
+    </motion.div>
+    <motion.div variants={placedItem}>
+      <Button variant="primary" size="lg" onClick={onDone} className="mt-5 w-full">
+        Done
+      </Button>
+    </motion.div>
+  </motion.div>
+);
+
 export const OrderSheet = ({
   instrument,
   prices,
@@ -457,37 +563,15 @@ export const OrderSheet = ({
       className="flex max-h-[min(86vh,780px)] max-w-[480px] flex-col rounded-xl! p-1"
     >
       {placed ? (
-        <div className="px-5 pt-4 pb-5">
-          <div className="pt-4 text-center">
-            <span className="mx-auto grid size-11 place-items-center rounded-full bg-ds-up-chip text-ds-up">
-              <Check className="size-5" />
-            </span>
-            <h2 id="order-title" className="mt-4 text-[20px] leading-none font-medium text-ds-ink">
-              {selling ? "Sold" : "Bought"}
-            </h2>
-            {/* The numbers read off the chain, not the ones we quoted. What
-                someone wants after a trade is what they actually got. */}
-            <p className="mx-auto mt-3 max-w-[38ch] text-[14px] leading-[1.45] text-ds-muted">
-              {Number(placed.shares).toFixed(4)} shares of {instrument.name} at{" "}
-              {usd(Number(placed.pricePerShare))} a share.
-            </p>
-            {/* A sale is the one moment in this product where a gain stops
-                being a number on a screen and becomes money. Worth saying. */}
-            {placed.realisedPnlUsd !== null && (
-              <p className="mt-1.5 text-[14px] text-ds-muted">
-                {Number(placed.realisedPnlUsd) < 0 ? "Realised loss" : "Realised gain"}{" "}
-                <span
-                  className={`font-medium ${Number(placed.realisedPnlUsd) < 0 ? "text-ds-down" : "text-ds-up"}`}
-                >
-                  {usd(Math.abs(Number(placed.realisedPnlUsd)))}
-                </span>
-              </p>
-            )}
-            <Button variant="primary" size="lg" onClick={close} className="mt-6 w-full">
-              Done
-            </Button>
-          </div>
-        </div>
+        <Placed
+          selling={selling}
+          instrument={instrument}
+          shares={Number(placed.shares)}
+          pricePerShare={Number(placed.pricePerShare)}
+          total={Number(placed.usd)}
+          realisedPnlUsd={placed.realisedPnlUsd === null ? null : Number(placed.realisedPnlUsd)}
+          onDone={close}
+        />
       ) : (
         <>
           {/* The amount well runs to 4px from the sheet's edge, as on the rail cards; everything else sits 20px in. */}
@@ -497,7 +581,7 @@ export const OrderSheet = ({
             <div className="flex items-center gap-3 px-5">
               <Mark i={instrument} size={40} />
               <div className="min-w-0">
-                <h2 id="order-title" className="truncate text-[20px] leading-none font-medium text-ds-ink">
+                <h2 id="order-title" className="truncate text-[18px] leading-none font-medium text-ds-ink">
                   {selling ? "Sell" : "Buy"} {instrument.name}
                 </h2>
                 <p className="mt-2 truncate text-[14px] leading-none text-ds-muted">
