@@ -221,11 +221,21 @@ const SheetError = ({ children }: { children: ReactNode }) => (
  * The sheet's top, as on the stock order sheet: the basket's lead marks at 40,
  * the title at 20, one grey line under it.
  */
-const SheetHead = ({ mark, title, sub }: { mark: ReactNode; title: string; sub?: string | undefined }) => (
+const SheetHead = ({
+  id = "basket-invest-title",
+  mark,
+  title,
+  sub,
+}: {
+  id?: string;
+  mark: ReactNode;
+  title: string;
+  sub?: string | undefined;
+}) => (
   <div className="flex items-center gap-3 px-5 pt-5">
     <span className="shrink-0">{mark}</span>
     <div className="min-w-0">
-      <h2 id="basket-invest-title" className="truncate text-[20px] leading-none font-medium text-ds-ink">
+      <h2 id={id} className="truncate text-[20px] leading-none font-medium text-ds-ink">
         {title}
       </h2>
       {sub && <p className="mt-2 truncate text-[14px] leading-none text-ds-muted">{sub}</p>}
@@ -260,12 +270,18 @@ const Swap = ({
 const REBALANCE_TIP =
   "Glider checks your portfolio against the target weights every day and trades back toward them.";
 
-/** When the money is actually invested: worth seeing before signing, so it is a callout, not a footnote. */
-const RebalanceNote = () => (
+/** What happens after signing, where it will be read: a callout, not a footnote. */
+const SheetNote = ({ children }: { children: ReactNode }) => (
   <p className="mt-1 flex items-start gap-2 rounded-lg bg-ds-warn-chip px-4 py-3 text-[12px] leading-[1.45] text-ds-chip-warn">
     <Clock className="mt-px size-3.5 shrink-0" />
-    Your USDC sits in your portfolio until Glider’s next daily rebalance, which buys the target assets.
+    <span>{children}</span>
   </p>
+);
+
+const RebalanceNote = () => (
+  <SheetNote>
+    Your USDC sits in your portfolio until Glider’s next daily rebalance, which buys the target assets.
+  </SheetNote>
 );
 
 const SheetFoot = ({ children }: { children: ReactNode }) => (
@@ -343,6 +359,8 @@ const EnrollmentStep = ({
 interface RebalanceSheetProps {
   open: boolean;
   name: string;
+  /** The basket's lead marks, set at 40 in the head. */
+  mark: ReactNode;
   assetCount: number;
   busy: boolean;
   error?: string | undefined;
@@ -350,56 +368,60 @@ interface RebalanceSheetProps {
   onConfirm: () => void;
 }
 
+/**
+ * Built from the same pieces as the sheet that puts money in, because it is the
+ * same moment: a basket named at the top, the facts on one grey panel, what
+ * happens after signing in the callout, and the two buttons.
+ */
 export const RebalanceSheet = ({
   open,
   name,
+  mark,
   assetCount,
   busy,
   error,
   onClose,
   onConfirm,
 }: RebalanceSheetProps) => (
-  <Dialog open={open} onClose={onClose} labelledBy="basket-rebalance-title" className="max-w-[520px]">
-    <div className="px-6 pt-6 pb-6">
-      <h2 id="basket-rebalance-title" className="text-[20px] font-medium text-ds-ink">
-        Rebalance {name}
-      </h2>
-      <p className="mt-3 text-[14px] leading-[1.45] text-ds-muted">
-        Glider will work toward this strategy’s target weights in your smart account. This can trade assets
-        and incur network and swap fees.
-      </p>
-      <dl className="mt-6 rounded-lg bg-ds-panel px-4 py-4 text-[13px]">
-        <div className="flex justify-between gap-4">
-          <dt className="text-ds-muted">Target assets</dt>
-          <dd className="font-medium text-ds-ink">{assetCount}</dd>
-        </div>
-        <div className="mt-3 flex justify-between gap-4">
-          <dt className="text-ds-muted">Execution</dt>
-          <dd className="font-medium text-ds-ink">Starts asynchronously</dd>
-        </div>
-      </dl>
-      <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
-        Your holdings may differ from target weights until the operation completes. A short cooldown may apply
-        after submission.
-      </p>
-      {error && (
-        <p
-          role="alert"
-          className="mt-4 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn"
+  <Dialog
+    open={open}
+    onClose={onClose}
+    labelledBy="basket-rebalance-title"
+    className="max-w-[480px] rounded-xl! p-1"
+  >
+    <SheetHead
+      id="basket-rebalance-title"
+      mark={mark}
+      title={`Rebalance ${name}`}
+      sub={`${assetCount} target ${assetCount === 1 ? "asset" : "assets"} · On Glider`}
+    />
+    <div className="mt-5 rounded-lg bg-ds-panel px-4 py-4">
+      <dl className="flex flex-col gap-3">
+        <TipLine k="Target assets">{assetCount}</TipLine>
+        <TipLine k="Rebalancing" tip={REBALANCE_TIP}>
+          Daily
+        </TipLine>
+        <TipLine
+          k="Execution"
+          tip="Glider trades in the background. The sheet closes once it has accepted the request, not once the trades have settled."
         >
-          <Alert className="mt-px size-3.5 shrink-0" />
-          {error}
-        </p>
-      )}
+          Starts asynchronously
+        </TipLine>
+      </dl>
     </div>
-    <div className="flex gap-2.5 px-6 pb-5">
+    <SheetNote>
+      Your holdings may differ from the target weights until this completes, and trading them costs network
+      and swap fees. A short cooldown may apply afterwards.
+    </SheetNote>
+    {error && <SheetError>{error}</SheetError>}
+    <SheetFoot>
       <Button size="lg" onClick={onClose} disabled={busy} className="flex-1">
         Cancel
       </Button>
       <Button variant="primary" size="lg" loading={busy} onClick={onConfirm} className="flex-[1.6]">
         Confirm rebalance
       </Button>
-    </div>
+    </SheetFoot>
   </Dialog>
 );
 
