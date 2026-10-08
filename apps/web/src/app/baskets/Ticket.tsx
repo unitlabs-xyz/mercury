@@ -608,6 +608,10 @@ export const InvestSheet = ({
 interface ExitSheetProps {
   open: boolean;
   name: string;
+  /** The basket's lead marks, set at 40 in the head. */
+  mark: ReactNode;
+  /** Each holding's own mark, by asset id: the page knows the tickers, this sheet only has symbols. */
+  assetMarks: ReadonlyMap<string, ReactNode>;
   mode: BasketExitMode;
   onMode: (mode: BasketExitMode) => void;
   account: ManagedBasketPortfolioSnapshot;
@@ -621,6 +625,27 @@ interface ExitSheetProps {
   onBack: () => void;
   onClose: () => void;
 }
+
+/** One holding, named: its mark and what it is, faded once nothing is being taken. */
+const Identity = ({
+  mark,
+  symbol,
+  detail,
+  dimmed,
+}: {
+  mark: ReactNode;
+  symbol: string;
+  detail: string;
+  dimmed: boolean;
+}) => (
+  <div className={`flex min-w-0 flex-1 items-center gap-3 ${dimmed ? "opacity-55" : ""}`}>
+    <span className="shrink-0">{mark}</span>
+    <span className="min-w-0 flex-1">
+      <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">{symbol}</span>
+      <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">{detail}</span>
+    </span>
+  </div>
+);
 
 const exitAssets = (account: ManagedBasketPortfolioSnapshot) =>
   account.assets.filter(
@@ -645,16 +670,15 @@ const rawTokenAmount = (amount: string, decimals: number): bigint | null => {
 
 const fullSelection = (account: ManagedBasketPortfolioSnapshot) =>
   Object.fromEntries(
-    exitAssets(account).map((asset) => [
-      asset.assetId,
-      { selected: true, amount: tokenAmount(asset.balanceRaw, asset.decimals) },
-    ]),
-  ) as Record<string, { selected: boolean; amount: string }>;
+    exitAssets(account).map((asset) => [asset.assetId, tokenAmount(asset.balanceRaw, asset.decimals)]),
+  ) as Record<string, string>;
 
 /** The review always displays Glider's signed amounts, not the editable draft. */
 export const ExitSheet = ({
   open,
   name,
+  mark,
+  assetMarks,
   mode,
   onMode,
   account,
@@ -678,23 +702,34 @@ export const ExitSheet = ({
   let selectionError: string | null = null;
   if (manual && !prepared) {
     for (const asset of available) {
-      const row = selection[asset.assetId];
-      if (!row?.selected) continue;
-      const raw = rawTokenAmount(row.amount, asset.decimals);
-      if (raw === null || raw === 0n) {
+      const amount = selection[asset.assetId] ?? "";
+      /* Nothing asked for is nothing withdrawn, which is a choice rather than a mistake. */
+      if (amount.trim() === "") continue;
+      const raw = rawTokenAmount(amount, asset.decimals);
+      if (raw === null) {
         selectionError = `Enter a valid ${asset.symbol} amount.`;
         break;
       }
+      if (raw === 0n) continue;
       if (raw > BigInt(asset.balanceRaw)) {
         selectionError = `${asset.symbol} exceeds your portfolio balance.`;
         break;
       }
       selectedAssets.push({ assetId: asset.assetId, amountRaw: raw.toString() });
     }
-    if (!selectionError && selectedAssets.length === 0) selectionError = "Select at least one asset.";
+    if (!selectionError && selectedAssets.length === 0)
+      selectionError = "Enter an amount for at least one asset.";
     if (!selectionError && selectedAssets.length > 10)
       selectionError = "Choose up to 10 assets per withdrawal.";
   }
+  const taking = (asset: (typeof available)[number]) =>
+    (rawTokenAmount(selection[asset.assetId] ?? "", asset.decimals) ?? 0n) > 0n;
+  const selectedCount = manual && !prepared ? available.filter(taking).length : count;
+  /* The value of what is actually going: the whole portfolio until assets are deselected. */
+  const withdrawingUsd =
+    manual && !prepared
+      ? available.filter(taking).reduce((sum, asset) => sum + Number(asset.valueUsd), 0)
+      : Number(account.totalValueUsd);
   const close = () => {
     if (busy) return;
     setManual(false);
@@ -706,10 +741,10 @@ export const ExitSheet = ({
       open={open}
       onClose={close}
       labelledBy="basket-exit-title"
-      className="flex max-h-[calc(100dvh-2rem)] max-w-[520px] flex-col"
+      className="flex max-h-[min(86vh,780px)] max-w-[480px] flex-col rounded-xl! p-1"
     >
       {submitted ? (
-        <div className="px-6 py-10 text-center">
+        <div className="px-5 py-10 text-center">
           <span className="mx-auto grid size-11 place-items-center rounded-full bg-ds-up-chip text-ds-up">
             <Check className="size-5" />
           </span>
@@ -726,17 +761,19 @@ export const ExitSheet = ({
         </div>
       ) : (
         <>
-          <div className="overflow-y-auto px-6 pt-6 pb-6">
-            <h2 id="basket-exit-title" className="text-[20px] font-medium text-ds-ink">
-              {prepared ? "Review withdrawal" : `Withdraw ${name}`}
-            </h2>
-            <p className="mt-3 text-[14px] leading-[1.45] text-ds-muted">
-              {prepared
-                ? "Check the exact authorization before your wallet signs it."
-                : "Choose how to move your portfolio back to your Solana wallet."}
-            </p>
+          <div className="min-h-0 flex-1 overflow-y-auto pb-1">
+            <SheetHead
+              id="basket-exit-title"
+              mark={mark}
+              title={prepared ? "Review withdrawal" : `Withdraw ${name}`}
+              sub={
+                prepared
+                  ? "Check this before your wallet signs it"
+                  : `${count} ${count === 1 ? "asset" : "assets"} · ${usd(account.totalValueUsd)}`
+              }
+            />
             {!prepared && (
-              <div className="mt-6 grid grid-cols-2 gap-1 rounded-lg bg-ds-panel p-1 text-[13px]">
+              <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-ds-panel p-1 text-[13px]">
                 {(["in_kind", "liquidate_usdc"] as const).map((choice) => (
                   <button
                     key={choice}
@@ -750,178 +787,195 @@ export const ExitSheet = ({
                 ))}
               </div>
             )}
-            {!prepared && (
-              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-4 text-[13px]">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-ds-ink">
-                      {mode === "in_kind" ? "Assets to withdraw" : "Assets to convert"}
-                    </p>
-                    <p className="mt-1 text-[12px] text-ds-muted">
-                      {manual
-                        ? "Choose assets and enter an amount for each."
-                        : mode === "in_kind"
-                          ? "All assets are set to their full balance."
-                          : "Glider will convert eligible assets to USDC."}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={manual}
-                    aria-label="Customize assets and amounts"
-                    disabled={busy}
-                    onClick={() => setManual((current) => !current)}
-                    className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ds-link ${manual ? "bg-ds-ink" : "bg-ds-divider"}`}
-                  >
-                    <span
-                      className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${manual ? "left-0.5 translate-x-5" : "left-0.5"}`}
-                    />
-                  </button>
-                </div>
-                <div className="mt-3 space-y-2 border-t border-ds-divider pt-3">
-                  {available.map((asset) => {
-                    const row = selection[asset.assetId] ?? {
-                      selected: true,
-                      amount: tokenAmount(asset.balanceRaw, asset.decimals),
-                    };
-                    return (
-                      <div
-                        key={asset.assetId}
-                        className="flex items-center gap-2.5 rounded-md bg-white px-3 py-2.5"
-                      >
-                        {manual && (
-                          <input
-                            type="checkbox"
-                            checked={row.selected}
-                            aria-label={`Withdraw ${asset.symbol}`}
-                            disabled={busy}
-                            onChange={(event) =>
-                              setSelection((current) => ({
-                                ...current,
-                                [asset.assetId]: { ...row, selected: event.target.checked },
-                              }))
-                            }
-                            className="size-4 shrink-0 accent-ds-ink"
-                          />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium text-ds-ink">{asset.symbol}</p>
-                          {manual && (
-                            <p className="text-[11px] text-ds-muted">
-                              Available {tokenAmount(asset.balanceRaw, asset.decimals)}
-                            </p>
-                          )}
-                        </div>
-                        {manual ? (
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              autoComplete="off"
-                              aria-label={`${asset.symbol} withdrawal amount`}
-                              value={row.amount}
-                              disabled={busy || !row.selected}
-                              onChange={(event) =>
-                                setSelection((current) => ({
-                                  ...current,
-                                  [asset.assetId]: { ...row, amount: event.target.value },
-                                }))
-                              }
-                              className="w-24 min-w-0 rounded-md border border-ds-divider bg-white px-2 py-1.5 text-right tabular-nums text-ds-ink focus:border-ds-ink focus:outline-none disabled:opacity-40 sm:w-32"
-                            />
-                            <button
-                              type="button"
-                              disabled={busy || !row.selected}
-                              onClick={() =>
-                                setSelection((current) => ({
-                                  ...current,
-                                  [asset.assetId]: {
-                                    selected: true,
-                                    amount: tokenAmount(asset.balanceRaw, asset.decimals),
-                                  },
-                                }))
-                              }
-                              className="rounded-md px-1.5 py-1.5 text-[11px] font-medium text-ds-link hover:bg-ds-panel disabled:opacity-40"
-                            >
-                              Max
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="shrink-0 tabular-nums text-ds-ink">
-                            {tokenAmount(asset.balanceRaw, asset.decimals)}
-                          </span>
-                        )}
+            <div className="mt-3">
+              <SwapPanel
+                before={
+                  prepared ? (
+                    <>
+                      <div className="px-4 pt-3 pb-3 text-[13px]">
+                        <p className="font-medium text-ds-ink">
+                          {mode === "in_kind" ? "Assets to receive" : "Assets Glider will convert"}
+                        </p>
+                        <p className="mt-1 text-[12px] text-ds-muted">
+                          Signed exactly as listed. Your wallet will show the same amounts.
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
-                {selectionError && (
-                  <p role="alert" className="mt-2 text-[12px] text-ds-chip-warn">
-                    {selectionError}
-                  </p>
-                )}
-              </div>
-            )}
-            <dl className="mt-5 space-y-3 rounded-lg bg-ds-panel px-4 py-4 text-[13px]">
-              <div className="flex justify-between gap-4">
-                <dt className="text-ds-muted">Current portfolio value</dt>
-                <dd className="font-medium text-ds-ink">{usd(account.totalValueUsd)}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-ds-muted">Assets in account</dt>
-                <dd className="font-medium text-ds-ink">{count}</dd>
-              </div>
-              <div>
-                <dt className="text-ds-muted">Destination · your Solana wallet</dt>
-                <dd className="mt-1 break-all font-mono text-[12px] text-ds-ink">{destination}</dd>
-              </div>
-              {prepared && (
-                <div className="border-t border-ds-divider pt-3">
-                  <dt className="text-ds-muted">
-                    {mode === "in_kind" ? "Assets to receive" : "Assets Glider will attempt to convert"}
-                  </dt>
-                  <dd className="mt-2 max-h-36 space-y-1.5 overflow-y-auto">
-                    {prepared.message.assets.map((asset) => {
-                      const holding = byAsset.get(asset.assetId);
-                      return (
-                        <div key={asset.assetId} className="flex justify-between gap-3 text-ds-ink">
-                          <span className="truncate">{holding?.symbol ?? asset.assetId}</span>
-                          <span className="shrink-0">
-                            {holding
-                              ? tokenAmount(asset.amountRaw, holding.decimals)
-                              : `${asset.amountRaw} raw units`}
-                          </span>
+                      <div className="max-h-44 space-y-1 overflow-y-auto">
+                        {prepared.message.assets.map((asset) => {
+                          const holding = byAsset.get(asset.assetId);
+                          return (
+                            <div
+                              key={asset.assetId}
+                              className="flex items-center gap-3 rounded-md bg-white px-4 py-3"
+                            >
+                              <Identity
+                                mark={assetMarks.get(asset.assetId)}
+                                symbol={holding?.symbol ?? asset.assetId}
+                                detail={holding ? usd(holding.valueUsd) : "Unlisted token"}
+                                dimmed={false}
+                              />
+                              <span className="shrink-0 text-[14px] leading-[18px] font-medium tabular-nums text-ds-ink">
+                                {holding
+                                  ? tokenAmount(asset.amountRaw, holding.decimals)
+                                  : `${asset.amountRaw} raw`}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="h-1" />
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-3 px-4 pt-3 pb-3 text-[13px]">
+                        <div>
+                          <p className="font-medium text-ds-ink">
+                            {mode === "in_kind" ? "Assets to withdraw" : "Assets to convert"}
+                          </p>
+                          <p className="mt-1 text-[12px] text-ds-muted">
+                            {manual
+                              ? "Set how much of each to take. Leave one empty to keep it."
+                              : mode === "in_kind"
+                                ? "All assets are set to their full balance."
+                                : "Glider will convert eligible assets to USDC."}
+                          </p>
                         </div>
-                      );
-                    })}
-                  </dd>
-                </div>
-              )}
-            </dl>
-            <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="text-[12px] text-ds-muted">Customize</span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={manual}
+                            aria-label="Customize assets and amounts"
+                            disabled={busy}
+                            onClick={() => setManual((current) => !current)}
+                            className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ds-link ${manual ? "bg-ds-ink" : "bg-ds-divider"}`}
+                          >
+                            <span
+                              className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${manual ? "left-0.5 translate-x-5" : "left-0.5"}`}
+                            />
+                          </button>
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {available.map((asset) => {
+                          const full = tokenAmount(asset.balanceRaw, asset.decimals);
+                          const amount = selection[asset.assetId] ?? full;
+                          const taken = (rawTokenAmount(amount, asset.decimals) ?? 0n) > 0n;
+                          return (
+                            <div
+                              key={asset.assetId}
+                              className={`flex items-center gap-3 rounded-md px-4 py-3 transition-colors ${
+                                taken || !manual ? "bg-white" : "hover:bg-white/60"
+                              }`}
+                            >
+                              <Identity
+                                mark={assetMarks.get(asset.assetId)}
+                                symbol={asset.symbol}
+                                detail={manual ? `Available ${full}` : usd(asset.valueUsd)}
+                                dimmed={manual && !taken}
+                              />
+                              {manual ? (
+                                <label className="flex h-9 w-[168px] shrink-0 items-center gap-1 rounded-lg bg-ds-panel px-3 focus-within:outline-1 focus-within:outline-black/10 has-disabled:opacity-40">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    autoComplete="off"
+                                    aria-label={`${asset.symbol} withdrawal amount`}
+                                    value={amount}
+                                    disabled={busy}
+                                    onChange={(event) =>
+                                      setSelection((current) => ({
+                                        ...current,
+                                        [asset.assetId]: event.target.value,
+                                      }))
+                                    }
+                                    className="w-full min-w-0 bg-transparent text-right tabular-nums text-ds-ink outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    aria-label={
+                                      taken ? `Leave all ${asset.symbol}` : `Withdraw all ${asset.symbol}`
+                                    }
+                                    onClick={() =>
+                                      setSelection((current) => ({
+                                        ...current,
+                                        [asset.assetId]: taken ? "" : full,
+                                      }))
+                                    }
+                                    className="shrink-0 text-[11px] font-medium text-ds-link hover:opacity-80 disabled:opacity-40"
+                                  >
+                                    {taken ? "None" : "Max"}
+                                  </button>
+                                </label>
+                              ) : (
+                                <span className="shrink-0 truncate tabular-nums text-ds-ink">
+                                  {tokenAmount(asset.balanceRaw, asset.decimals)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {selectionError && (
+                        <p role="alert" className="px-4 pt-2 text-[12px] text-ds-chip-warn">
+                          {selectionError}
+                        </p>
+                      )}
+                      {/* The wells read as the next card in the stack, not a new panel. */}
+                      <div className="h-1" />
+                    </>
+                  )
+                }
+                from={
+                  <Well
+                    label="You withdraw"
+                    value={String(selectedCount)}
+                    unit={selectedCount === 1 ? "asset" : "assets"}
+                    sub={`Worth ${usd(withdrawingUsd)}`}
+                  />
+                }
+                to={
+                  <Well
+                    label="You get"
+                    value={mode === "in_kind" ? String(selectedCount) : usd(withdrawingUsd)}
+                    unit={mode === "in_kind" ? "tokens" : "USDC"}
+                    sub={mode === "in_kind" ? "In your wallet" : "After the swap"}
+                  />
+                }
+              >
+                <dl className="flex flex-col gap-3">
+                  {manual && <TipLine k="Portfolio value">{usd(account.totalValueUsd)}</TipLine>}
+                  <TipLine
+                    k="Assets in account"
+                    tip="Everything the portfolio holds, whether or not this withdrawal takes it."
+                  >
+                    {count}
+                  </TipLine>
+                  <TipLine k="Destination" tip={`Your Solana wallet · ${destination}`}>
+                    Wallet · {short(destination)}
+                  </TipLine>
+                </dl>
+              </SwapPanel>
+            </div>
+            <SheetNote>
               {mode === "in_kind"
-                ? "The listed tokens move to your wallet without a sale. Any assets left in the portfolio may rebalance on its next scheduled run. Values may change during settlement."
-                : "Glider swaps the listed eligible assets into Solana USDC and sends the proceeds to your wallet. Unselected, small, or illiquid balances may remain in the smart account and rebalance later."}
-            </p>
+                ? "These tokens move to your wallet without being sold. Anything left behind may rebalance on the next scheduled run, and values can shift while it settles."
+                : "Glider sells the listed assets for USDC and sends the proceeds to your wallet. Small or illiquid balances may stay behind and rebalance later."}
+            </SheetNote>
             {!walletReady && (
-              <p className="mt-3 text-[12px] text-ds-muted">Waiting for your Solana wallet.</p>
+              <p className="mx-5 mt-3 text-[12px] text-ds-muted">Waiting for your Solana wallet…</p>
             )}
             {error && (
-              <p
-                role="alert"
-                className="mt-4 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn"
-              >
-                <Alert className="mt-px size-3.5 shrink-0" />
-                <span>
-                  {error}{" "}
-                  {prepared &&
-                    "If submission is uncertain, retry this same authorization; do not start a new withdrawal."}
-                </span>
-              </p>
+              <SheetError>
+                {error}{" "}
+                {prepared &&
+                  "If submission is uncertain, retry this same authorization; do not start a new withdrawal."}
+              </SheetError>
             )}
           </div>
-          <div className="flex shrink-0 gap-2.5 px-6 pt-2 pb-5">
+          <SheetFoot>
             <Button size="lg" onClick={prepared ? onBack : close} disabled={busy} className="flex-1">
               {prepared ? "Back" : "Cancel"}
             </Button>
@@ -939,7 +993,7 @@ export const ExitSheet = ({
             >
               {prepared ? "Sign and submit withdrawal" : "Review withdrawal"}
             </Button>
-          </div>
+          </SheetFoot>
         </>
       )}
     </Dialog>

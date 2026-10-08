@@ -651,6 +651,22 @@ export const Basket = () => {
       Number(account?.totalValueUsd ?? 0) > 0 ||
       Number(account?.inTransitUsd ?? 0) > 0 ||
       Boolean(fundingAction.data));
+  /*
+   * A mark per holding, by asset id. The withdrawal sheet reads live balances
+   * off Glider, which name an asset by symbol; only the template knows which
+   * ticker that is, and only the instrument knows its logo.
+   */
+  const assetMarks = new Map(
+    allocations.map((asset) => [
+      asset.assetId,
+      <AssetIcon
+        key={asset.assetId}
+        asset={asset}
+        source={byTicker.get(asset.ticker)}
+        className="size-7 rounded-full bg-ds-panel object-contain"
+      />,
+    ]),
+  );
   /* The basket's two heaviest marks at 40, as every sheet that names it shows them. */
   const basketMark = (
     <span className="flex items-center -space-x-3" aria-hidden="true">
@@ -1513,6 +1529,8 @@ export const Basket = () => {
           key={account.portfolioId}
           open={exitOpen}
           name={name}
+          mark={basketMark}
+          assetMarks={assetMarks}
           mode={exitMode}
           onMode={(mode) => {
             setExitMode(mode);

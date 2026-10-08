@@ -55,13 +55,17 @@ export const TipLine = ({
 export const SwapPanel = ({
   from,
   to,
+  before,
   children,
 }: {
   from: ReactNode;
   to: ReactNode;
+  /** Whatever decides the swap, on the same grey: the withdrawal picks its assets here. */
+  before?: ReactNode;
   children?: ReactNode;
 }) => (
   <div className="rounded-lg bg-ds-panel p-1">
+    {before}
     {/* The badge reaches about 18px into each well, so the wells pad their inner side to clear it. */}
     <div className="relative grid grid-cols-2 gap-1 [&>*:first-child]:pr-7 [&>*:nth-child(2)]:pl-8">
       {from}
