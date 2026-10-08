@@ -1,9 +1,9 @@
-import { useEffect } from "react";
 import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { placeOrder, type OrderIntent, type OrderResult } from "@mercury/view";
-import { ApiError, apiFetch } from "./client";
+import { apiFetch } from "./client";
 import { refreshAfterChain } from "./settle";
+import { forgetConfirm, rememberConfirm, usePendingConfirm } from "./pending-confirm";
 
 /**
  * The order sequence itself lives in `@mercury/view`, because the phone runs
@@ -23,27 +23,15 @@ export {
 const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
-/*
- * A sent order whose confirm has not landed yet. The transaction is on chain;
- * only our record of it is missing, so the signature is kept until the node
- * catches up and the fill can be read off it. Session-scoped, like the basket
- * funding receipt it mirrors.
- */
 const PENDING_KEY = "order-confirm";
 
 type SentOrder = { orderId: string; signature: string };
 
-const readSent = (): SentOrder | null => {
-  try {
-    const raw = sessionStorage.getItem(PENDING_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { orderId?: unknown; signature?: unknown };
-    return typeof parsed.orderId === "string" && typeof parsed.signature === "string"
-      ? { orderId: parsed.orderId, signature: parsed.signature }
-      : null;
-  } catch {
-    return null;
-  }
+const parseSent = (raw: unknown): SentOrder | null => {
+  const claim = raw as { orderId?: unknown; signature?: unknown };
+  return typeof claim?.orderId === "string" && typeof claim.signature === "string"
+    ? { orderId: claim.orderId, signature: claim.signature }
+    : null;
 };
 
 const confirmSent = (sent: SentOrder) =>
@@ -79,8 +67,8 @@ export const useOrderAction = () => {
            * still reports them; nothing on screen is waiting to hear.
            */
           onStep: () => undefined,
-          onSent: (sent) => sessionStorage.setItem(PENDING_KEY, JSON.stringify(sent)),
-          settled: () => sessionStorage.removeItem(PENDING_KEY),
+          onSent: (sent) => rememberConfirm(PENDING_KEY, sent),
+          settled: () => forgetConfirm(PENDING_KEY),
         },
         intent,
       );
@@ -100,35 +88,8 @@ export const useOrderAction = () => {
    */
   const walletReady = wallets[0] !== undefined;
 
-  /*
-   * An order whose confirm ran out of attempts, or whose tab was reloaded
-   * mid-confirm. The transaction is already on chain, so this keeps asking
-   * until the node can answer — or until the server says the claim is bad.
-   */
-  useEffect(() => {
-    if (mutation.isPending) return undefined;
-    let stopped = false;
-    const attempt = async () => {
-      const sent = readSent();
-      if (sent === null || stopped) return;
-      try {
-        await confirmSent(sent);
-        sessionStorage.removeItem(PENDING_KEY);
-        refreshAfterChain(qc);
-      } catch (error) {
-        /* Only a node that is behind is worth asking again; a rejected claim never changes. */
-        if (error instanceof ApiError && error.code !== "transaction_pending") {
-          sessionStorage.removeItem(PENDING_KEY);
-        }
-      }
-    };
-    void attempt();
-    const timer = setInterval(() => void attempt(), 5_000);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [mutation.isPending, qc]);
+  /* An order whose confirm ran out of attempts, or whose tab reloaded mid-confirm. */
+  usePendingConfirm(PENDING_KEY, parseSent, confirmSent, mutation.isPending);
 
   return { ...mutation, walletReady, reset: () => mutation.reset() };
 };

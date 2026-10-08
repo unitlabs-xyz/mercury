@@ -309,11 +309,16 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
     const { signature, action } = parsed.data;
 
-    // Not yet on chain is a different answer from never: a client can confirm
-    // before the node it asks has caught up, and that is worth retrying.
+    /*
+     * Not yet on chain is a different answer from never: a client can confirm
+     * before the node it asks has caught up, and that is worth retrying. It
+     * says so in the code the order and basket confirms use, because this is
+     * the only account anything has of a loan — no job can infer one from the
+     * balances, so a dropped confirm loses the event for good.
+     */
     const tx = await deps.history.transaction(signature);
     if (tx === null) {
-      return c.json(fail("not_found", "That transaction has not reached the chain yet."), 404);
+      return c.json(fail("transaction_pending", "Transaction is not settled yet. Try again shortly."), 409);
     }
     if (!tx.accountKeys.includes(wallet)) {
       return c.json(fail("validation_failed", "That transaction is not this wallet's."), 422);
