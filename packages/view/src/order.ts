@@ -77,7 +77,23 @@ export interface OrderIo {
   /** Takes an unsigned transaction in base64 and gives back a signed one. */
   sign(unsigned: string): Promise<string>;
   onStep(step: OrderStep): void;
+  /**
+   * The transaction is on chain but not yet recorded. A client that can keep
+   * the signature somewhere durable does so here, and clears it on `settled`,
+   * so a confirm the node was too slow to answer can be asked again later.
+   */
+  onSent?(sent: { orderId: string; signature: string }): void;
+  settled?(orderId: string): void;
+  /** Between confirm attempts. Injected so a test does not wait in real time. */
+  wait?(ms: number): Promise<void>;
 }
+
+/** Attempts and spacing match the basket funding confirm, which solves the same race. */
+const CONFIRM_ATTEMPTS = 6;
+const CONFIRM_GAP_MS = 2_000;
+
+const isPending = (e: unknown) =>
+  typeof e === "object" && e !== null && (e as { code?: unknown }).code === "transaction_pending";
 
 /**
  * One order, end to end, whichever way it points.
@@ -136,13 +152,33 @@ export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<Orde
   if (sent.status === "failed") throw new Error(sent.error ?? "The transaction failed on chain.");
 
   io.onStep("recording");
-  const filled = await io.post<{
-    shares: string;
-    pricePerShare: string;
-    usd: string;
-    realisedPnlUsd?: string | null;
-  }>(`/v1/orders/${created.orderId}/confirm`, { signature: sent.signature });
+  /*
+   * The transaction is on chain from here on, whatever the rest of this says.
+   * The node we ask may not see it for some time, so the signature is handed
+   * to the client to keep before the first attempt rather than after the last.
+   */
+  io.onSent?.({ orderId: created.orderId, signature: sent.signature });
+  const confirm = () =>
+    io.post<{
+      shares: string;
+      pricePerShare: string;
+      usd: string;
+      realisedPnlUsd?: string | null;
+    }>(`/v1/orders/${created.orderId}/confirm`, { signature: sent.signature });
 
+  let filled: Awaited<ReturnType<typeof confirm>> | null = null;
+  for (let attempt = 0; attempt < CONFIRM_ATTEMPTS && filled === null; attempt++) {
+    try {
+      filled = await confirm();
+    } catch (e: unknown) {
+      /* Only the node being behind is worth asking again; anything else is an answer. */
+      if (!isPending(e) || attempt === CONFIRM_ATTEMPTS - 1) throw e;
+      await (io.wait?.(CONFIRM_GAP_MS) ?? new Promise((r) => setTimeout(r, CONFIRM_GAP_MS)));
+    }
+  }
+  if (filled === null) throw new Error("The order was sent but could not be recorded.");
+
+  io.settled?.(created.orderId);
   io.onStep("done");
   return { orderId: created.orderId, ...filled, realisedPnlUsd: filled.realisedPnlUsd ?? null };
 }
