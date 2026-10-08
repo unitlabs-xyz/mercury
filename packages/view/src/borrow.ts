@@ -139,6 +139,19 @@ const safePledged = (b: Borrow, deposits: (r: BorrowRow) => number) =>
   b.collateral.reduce((s, r) => s + deposits(r) * r.pricePerToken * r.ltv * b.safetyTarget, 0);
 
 /** Tokens to base units, as a string the server parses as a bigint. */
+/**
+ * Down to the cent, never up.
+ *
+ * The amount is sent as a two-decimal string and the server checks it against
+ * a full-precision cap with no tolerance, so a limit of $0.5098 rounded to the
+ * nearest cent asks for $0.51 — a penny more than it is allowed, and refused.
+ * Rounding down can only ever ask for less than is permitted.
+ */
+export const floorCents = (usdValue: number) => Math.floor(usdValue * 100) / 100;
+
+/** The same, for a token amount against the six decimals the field shows. */
+export const floorTokens = (tokens: number) => Math.floor(tokens * 1e6) / 1e6;
+
 export const tokensToRaw = (tokens: number, decimals: number, round: "up" | "down") => {
   const scaled = tokens * 10 ** decimals;
   return BigInt(round === "up" ? Math.ceil(scaled) : Math.floor(scaled)).toString();
@@ -216,9 +229,9 @@ export const planBorrow = (
             kind: "deposit_and_borrow",
             ticker: row.ticker,
             tokensRaw: tokensToRaw(tokens, row.decimals, "up"),
-            usd: value.toFixed(2),
+            usd: floorCents(value).toFixed(2),
           }
-        : { kind: "borrow", usd: value.toFixed(2) };
+        : { kind: "borrow", usd: floorCents(value).toFixed(2) };
     const after = (r: BorrowRow) => r.depositedTokens + (r.ticker === row.ticker ? tokens : 0);
     preview = {
       debt: b.debtUsd + value,
@@ -260,7 +273,12 @@ export const planBorrow = (
       b.debtUsd <= 0
         ? row.depositedTokens
         : Math.max(0, Math.min(row.depositedTokens, spare / perToken / PRICE_BUFFER));
-    const all = b.debtUsd <= 0 && value >= row.depositedTokens - 1e-9;
+    /*
+     * Max offers what the six-decimal field can hold, which is a hair under the
+     * true balance. With nothing owed that still means all of it, and only the
+     * sentinel takes the dust with it.
+     */
+    const all = b.debtUsd <= 0 && value >= floorTokens(row.depositedTokens) - 1e-9;
     intent = {
       kind: "withdraw",
       ticker: row.ticker,
@@ -268,7 +286,11 @@ export const planBorrow = (
     };
     const after = (r: BorrowRow) => r.depositedTokens - (r.ticker === row.ticker ? value : 0);
     preview = { debt: b.debtUsd, drop: safeUntil(b, b.debtUsd, after), deposits: after };
-    if (value > max + 1e-9) blocked = "Repay some of the loan first to take that much back.";
+    if (value > max + 1e-9)
+      blocked =
+        b.debtUsd > 0
+          ? "Repay some of the loan first to take that much back."
+          : `Only ${max.toFixed(4)} ${row.ticker}x is pledged.`;
   }
 
   // Shares of the most for a borrow, pledge or withdrawal; the figures that
@@ -284,12 +306,19 @@ export const planBorrow = (
           { label: "Half", v: max / 2 },
           { label: "All", v: max },
         ]
-      : [
-          { label: "25%", v: max * 0.25 },
-          { label: "50%", v: max * 0.5 },
-          { label: "75%", v: max * 0.75 },
-          { label: "Max", v: max },
-        ];
+      : tab === "borrow"
+        ? [
+            { label: "25%", v: floorCents(max * 0.25) },
+            { label: "50%", v: floorCents(max * 0.5) },
+            { label: "75%", v: floorCents(max * 0.75) },
+            { label: "Max", v: floorCents(max) },
+          ]
+        : [
+            { label: "25%", v: floorTokens(max * 0.25) },
+            { label: "50%", v: floorTokens(max * 0.5) },
+            { label: "75%", v: floorTokens(max * 0.75) },
+            { label: "Max", v: floorTokens(max) },
+          ];
 
   return {
     intent,

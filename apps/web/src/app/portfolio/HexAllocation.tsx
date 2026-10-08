@@ -5,6 +5,7 @@ export type Slice = {
   readonly key: string;
   readonly label: string;
   readonly value: number;
+  readonly description?: string;
   /** Today's move in percent, or null where nothing moves (cash). */
   readonly changePct: number | null;
 };
@@ -177,6 +178,7 @@ export const HexAllocation = ({ slices, total }: { slices: readonly Slice[]; tot
           return (
             <li
               key={s.key}
+              title={s.description}
               onPointerEnter={() => setHot(s.key)}
               className="grid h-9 grid-cols-[62.4%_minmax(0,1fr)_auto] items-center text-[14px] leading-none"
               style={{ opacity: dim ? 0.45 : 1, transition: dim ? "opacity 300ms ease" : "opacity 0ms" }}

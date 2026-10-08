@@ -55,6 +55,13 @@ export const Invest = () => {
       history: ReadonlyMap<string, History | null> | undefined,
     ): Row[] => {
       const owned = new Set(portfolio.data?.holdings.map((h) => h.ticker));
+      const inBasket = new Set(
+        portfolio.data?.baskets.flatMap((basket) =>
+          basket.holdings.flatMap((asset) =>
+            asset.ticker && Number(asset.valueUsd) > 0 ? [asset.ticker] : [],
+          ),
+        ),
+      );
       return (source ?? []).map((i) => {
         const p = priceInstrument(i, undefined);
         const h = history?.get(i.ticker) ?? null;
@@ -68,6 +75,7 @@ export const Invest = () => {
           // way the row draws no chart rather than an invented one.
           spark: h === null ? null : h.points.map((pt) => pt.price),
           owned: owned.has(i.ticker),
+          inBasket: inBasket.has(i.ticker),
           saved: false,
         };
       });

@@ -143,5 +143,16 @@ export const relDay = (isoDate: string) => {
   return d > 0 ? `in ${d} days` : `${-d} days ago`;
 };
 
+/** "just now", "5m ago", "2h ago", then the day: how a minutes-old event is read. */
+export const relTime = (iso: string) => {
+  const seconds = Math.round((Date.now() - Date.parse(iso)) / 1000);
+  if (!Number.isFinite(seconds)) return "";
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours}h ago` : relDay(iso.slice(0, 10));
+};
+
 export const shortDate = (isoDate: string) =>
   new Date(`${isoDate}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });

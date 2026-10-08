@@ -49,6 +49,7 @@ import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import { readFlows, readHoldings, readLatestDebt, readSnapshots } from "./portfolio/queries.js";
+import { basketReturnsReader, basketValueReader } from "./portfolio/baskets.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 import { BasketService } from "./baskets/core/service.js";
@@ -288,9 +289,11 @@ export function buildReadDeps(
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
 ): ReadDeps {
+  const basketStore = new JsonBasketStore(config.databaseUrl, undefined, db);
+  const baskets = basketValueReader(deps.basketProvider, basketStore);
   return {
     basketTemplates: new BasketService({
-      store: new JsonBasketStore(config.databaseUrl, undefined, db),
+      store: basketStore,
       funding: new SolanaBasketFunding(config.solanaRpcUrl),
       history: deps.history,
       ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
@@ -312,6 +315,8 @@ export function buildReadDeps(
       debt: (wallet) => debtFrom(deps.lending, wallet),
       lastKnownDebt: (userId) => readLatestDebt(db, userId),
       snapshots: (userId, from) => readSnapshots(db, userId, from),
+      baskets,
+      basketReturns: basketReturnsReader(deps.basketProvider),
       flows: (userId, from) => readFlows(db, userId, from),
     },
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },

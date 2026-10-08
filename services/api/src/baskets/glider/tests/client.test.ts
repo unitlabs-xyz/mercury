@@ -12,6 +12,22 @@ const remote = {
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
 describe("GliderClient", () => {
+  it("reads the portfolio's all-time money-weighted return", async () => {
+    const client = new GliderClient("test-key", async (input) => {
+      const url = new URL((input as Request).url);
+      expect(url.pathname).toBe("/v2/portfolios/p-1/performance");
+      expect(url.searchParams.get("returnMethod")).toBe("MWR");
+      return json({
+        success: true,
+        data: {
+          portfolioId: "p-1",
+          meta: { method: "MWR" },
+          summary: { windows: [{ window: "all", percentChange: "2.5" }] },
+        },
+      });
+    });
+    expect(await client.portfolioReturn("p-1")).toBe("2.5");
+  });
   it("paginates the authenticated owner's portfolios without requiring a strategy filter", async () => {
     const owner = "solana:owner";
     const queries: URLSearchParams[] = [];

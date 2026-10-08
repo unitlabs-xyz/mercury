@@ -20,6 +20,7 @@ const errorOf = async (res: Response) => (await res.json()) as { error: { code: 
 // stand-in is not a mint and `packages/types` is right to refuse it.
 const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 const NVDAON = "9MjAmgHXbu5drkNa9XpzfozgsM5Dcq6bzq1bbuTbqPLY";
+const TSLAON = "KeGv7bsfR4MheC1CkmnAVceoApjrkvBhHYjWb67ondo";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 const price = (mint: string, over: Partial<TokenPrice> = {}): TokenPrice => ({
@@ -58,6 +59,7 @@ const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   debt: async () => ZERO,
   lastKnownDebt: async () => null,
   snapshots: async () => [],
+  baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
   ...over,
 });
 
@@ -130,6 +132,40 @@ describe("GET /v1/portfolio", () => {
     expect(body.totalValueUsd).toBe("650");
   });
 
+  it("counts owned basket value without making its USDC wallet cash or a sellable holding", async () => {
+    const d = deps({
+      baskets: async () => ({
+        totalUsd: D("35"),
+        fetchedAt: new Date(),
+        baskets: [
+          {
+            portfolioId: "portfolio-1",
+            slug: "nvda-tsla-50-50",
+            name: "AI & EV Leaders",
+            valueUsd: "35",
+            inTransitUsd: "1",
+            fetchedAt: new Date().toISOString(),
+            holdings: [
+              {
+                assetId: `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:${USDC}`,
+                symbol: "USDC",
+                ticker: null,
+                balance: "1",
+                valueUsd: "1",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.totalValueUsd).toBe("435");
+    expect(body.basketUsd).toBe("35");
+    expect(body.cashUsd).toBe("0");
+    expect(body.holdings).toHaveLength(1);
+    expect(body.baskets[0]?.holdings[0]?.symbol).toBe("USDC");
+  });
+
   it("derives today's change from each holding's own move", async () => {
     // 2 shares now worth $400 after a 25% rise: $80 of that is today's.
     const d = deps({
@@ -140,6 +176,68 @@ describe("GET /v1/portfolio", () => {
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.changeUsd).toBe("80");
     expect(body.changePct).toBe("25");
+  });
+
+  it("includes basket-only and overlapping stocks in the daily move without counting basket cash", async () => {
+    const requested: string[][] = [];
+    const d = deps({
+      prices: {
+        pricesFor: async (mints) => {
+          requested.push([...mints]);
+          const pct = new Map([
+            [NVDAX, D(25)],
+            [NVDAON, D(10)],
+            [TSLAON, D(-20)],
+          ]);
+          return new Map(mints.map((mint) => [mint, price(mint, { changePct24h: pct.get(mint) ?? D(0) })]));
+        },
+      },
+      baskets: async () => ({
+        totalUsd: D(90),
+        fetchedAt: new Date(),
+        baskets: [
+          {
+            portfolioId: "portfolio-1",
+            slug: "pilot",
+            name: "Pilot",
+            valueUsd: "90",
+            inTransitUsd: "0",
+            fetchedAt: new Date().toISOString(),
+            holdings: [
+              {
+                assetId: `solana:mainnet/spl:${NVDAON}`,
+                symbol: "NVDAon",
+                ticker: "NVDA",
+                balance: "1",
+                valueUsd: "50",
+              },
+              {
+                assetId: `solana:mainnet/spl:${TSLAON}`,
+                symbol: "TSLAon",
+                ticker: "TSLA",
+                balance: "1",
+                valueUsd: "30",
+              },
+              {
+                assetId: `solana:mainnet/spl:${USDC}`,
+                symbol: "USDC",
+                ticker: null,
+                balance: "10",
+                valueUsd: "10",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    const move = 80 + (50 * 10) / 110 - (30 * 20) / 80;
+    expect(Number(body.changeUsd)).toBeCloseTo(move);
+    expect(Number(body.changePct)).toBeCloseTo((move / (480 - move)) * 100);
+    expect(body.holdings.map((item) => item.ticker)).toEqual(["NVDA"]);
+    const basketMove = (50 * 10) / 110 - (30 * 20) / 80;
+    expect(Number(body.baskets[0]?.changePct24h)).toBeCloseTo((basketMove / (90 - basketMove)) * 100);
+    expect(requested[0]).toEqual([NVDAX, NVDAON, TSLAON]);
   });
 
   it("reports profit only on the shares it has a cost for", async () => {
@@ -170,11 +268,13 @@ describe("GET /v1/portfolio", () => {
     expect(body).toEqual({
       totalValueUsd: "0",
       cashUsd: "0",
+      basketUsd: "0",
       debtUsd: "0",
       debtIsStale: false,
       changeUsd: "0",
       changePct: "0",
       holdings: [],
+      baskets: [],
     });
     expect(body.holdings).toEqual([]);
   });
@@ -207,6 +307,20 @@ describe("GET /v1/portfolio", () => {
     const d = deps({ prices: { pricesFor: async () => new Map() } });
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.holdings[0]!).toMatchObject({ ticker: "NVDA", valueUsd: "0", unrealisedPnlUsd: "-300" });
+  });
+});
+
+it("reads basket returns independently of the portfolio valuation", async () => {
+  const app = appWith(
+    deps({
+      baskets: async () => {
+        throw new Error("valuation must not run");
+      },
+      basketReturns: async () => [{ portfolioId: "portfolio-1", percentChange: "2.5" }],
+    }),
+  );
+  expect(await (await app.request("/v1/portfolio/basket-returns")).json()).toEqual({
+    returns: [{ portfolioId: "portfolio-1", percentChange: "2.5" }],
   });
 });
 

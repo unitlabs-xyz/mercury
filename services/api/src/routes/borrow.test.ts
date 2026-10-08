@@ -310,12 +310,13 @@ describe("POST /v1/borrow/confirm", () => {
     expect(recorded[1]!.title).toBe("Borrowed $500.00 against SPY");
   });
 
-  it("refuses a signature the chain has not seen, so the client can retry", async () => {
+  it("refuses a signature the chain has not seen with a code the client can retry on", async () => {
     const res = await confirm(deps(lending()), {
       signature: "MISSING",
       action: { kind: "borrow", usd: "500" },
     });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("transaction_pending");
   });
 
   it("refuses a transaction that is not this wallet's", async () => {

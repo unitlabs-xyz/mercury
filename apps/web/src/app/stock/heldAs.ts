@@ -53,7 +53,7 @@ const useExposure = (ticker: string, held: boolean) => useQuery(exposureQuery(ti
  * wallet holds none. A ticker is missing until its read lands.
  */
 export const useProviders = (
-  holdings: readonly { ticker: string; pledgedShares?: string | undefined }[],
+  holdings: readonly { ticker: string; pledgedShares?: string | number | undefined }[],
 ): ReadonlyMap<string, readonly Issuer[]> => {
   const reads = useQueries({ queries: holdings.map((h) => exposureQuery(h.ticker, true)) });
   const out = new Map<string, Issuer[]>();

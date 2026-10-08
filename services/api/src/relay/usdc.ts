@@ -7,17 +7,9 @@ import {
 } from "@solana/kit";
 
 /**
- * The two pieces of SPL the relayer needs, written out rather than imported.
- *
- * `@solana-program/token` would supply both, but its current release needs a
- * newer `@solana/kit` than this service can take: the version here is pinned
- * flat at 2.3.0, without a caret, to satisfy Kamino's SDK. Moving the whole
- * service's Solana library to encode one transfer is the tail wagging the dog.
- *
- * What is written here is small and fixed. The account layout and the
- * instruction tag are part of the SPL token program's public interface and
- * have not changed since it shipped, and the derivation is checked against a
- * real account read from mainnet rather than against our own arithmetic.
+ * Legacy helpers for the relayer's sponsor-fee transfer. Wallet sends and
+ * basket funding use the compatible `@solana-program/token` client; keep this
+ * fee instruction unchanged until the relayer is migrated separately.
  */
 
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;

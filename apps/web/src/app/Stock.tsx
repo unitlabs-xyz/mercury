@@ -149,6 +149,13 @@ export const Stock = () => {
   const up = change >= 0;
   const saved = watchlist.has(t);
   const holding = portfolio.data?.holdings.find((h) => h.ticker === t);
+  const basketValue =
+    portfolio.data?.baskets.reduce(
+      (total, basket) =>
+        total +
+        basket.holdings.reduce((sum, asset) => sum + (asset.ticker === t ? Number(asset.valueUsd) : 0), 0),
+      0,
+    ) ?? 0;
   const cash = portfolio.data ? Number(portfolio.data.cashUsd) : null;
   const shares = holding ? Number(holding.shares) : null;
   const pledged = holding?.pledgedShares === undefined ? null : Number(holding.pledgedShares);
@@ -163,7 +170,11 @@ export const Stock = () => {
       ? null
       : Number(((positionUsd * (sellableShares ?? 0)) / shares).toFixed(2));
   const owned = new Set(portfolio.data?.holdings.map((h) => h.ticker));
-  const instrumentsByTicker = new Map((universe.data ?? []).map((i) => [i.ticker, i]));
+  const inBasket = new Set(
+    portfolio.data?.baskets.flatMap((basket) =>
+      basket.holdings.flatMap((asset) => (asset.ticker && Number(asset.valueUsd) > 0 ? [asset.ticker] : [])),
+    ),
+  );
 
   const similar: Row[] = similarTickers.map((i) => {
     const p = priceInstrument(i, undefined);
@@ -173,6 +184,7 @@ export const Stock = () => {
       change: p.todayPct ?? 0,
       spark: h === null ? null : h.points.map((pt) => pt.price),
       owned: owned.has(i.ticker),
+      inBasket: inBasket.has(i.ticker),
       saved: watchlist.has(i.ticker),
     };
   });
@@ -231,6 +243,11 @@ export const Stock = () => {
                         {holding && (
                           <StatusChip tone="owned" size="md">
                             Owned
+                          </StatusChip>
+                        )}
+                        {basketValue > 0 && (
+                          <StatusChip tone="neutral" size="md">
+                            In basket
                           </StatusChip>
                         )}
                       </span>
@@ -305,7 +322,15 @@ export const Stock = () => {
           <div className="order-3 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
             {/* What you hold of it and what it could borrow, side by side and level; one alone takes the row. */}
             <div className="grid items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
-              {holding && <Position h={holding} parts={heldAs.parts} accepted={heldAs.accepted} />}
+              {(holding || basketValue > 0) && (
+                <Position
+                  h={holding}
+                  basketValue={basketValue}
+                  stockTodayPct={priced.todayPct}
+                  parts={heldAs.parts}
+                  accepted={heldAs.accepted}
+                />
+              )}
               <BorrowPanel ticker={instrument.ticker} name={instrument.name} />
             </div>
 
@@ -366,7 +391,7 @@ export const Stock = () => {
                 </GlideRows>
               </RailList>
             )}
-            <InBaskets ticker={t} instruments={instrumentsByTicker} />
+            <InBaskets ticker={t} />
           </div>
         </aside>
       </div>

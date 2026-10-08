@@ -197,3 +197,27 @@ describe("POST /v1/transactions/send", () => {
     expect(relay.used).toBe(false);
   });
 });
+
+describe("POST /v1/money/send/prepare", () => {
+  const prepare = (walletAddress: string | null, amount: string, to: string) =>
+    app(walletAddress).request("/v1/money/send/prepare", {
+      method: "POST",
+      body: JSON.stringify({ amount, to }),
+      headers: { "content-type": "application/json" },
+    });
+
+  it("requires an authenticated wallet", async () => {
+    expect((await prepare(null, "20", "11111111111111111111111111111111")).status).toBe(401);
+  });
+
+  it("rejects over-precise and zero USDC amounts before touching RPC", async () => {
+    expect((await prepare("wallet", "1.0000001", "11111111111111111111111111111111")).status).toBe(400);
+    expect((await prepare("wallet", "0", "11111111111111111111111111111111")).status).toBe(400);
+  });
+
+  it("rejects invalid and self destinations before touching RPC", async () => {
+    const wallet = (await txFrom(false)).wallet;
+    expect((await prepare(wallet, "1", "not-a-solana-address")).status).toBe(400);
+    expect((await prepare(wallet, "1", wallet)).status).toBe(400);
+  });
+});

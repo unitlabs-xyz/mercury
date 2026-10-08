@@ -9,7 +9,8 @@ import { Borrowing } from "./portfolio/Borrowing";
 import { CardPanel } from "./portfolio/CardPanel";
 import { Recent, Upcoming } from "./portfolio/Feed";
 import { Holdings, type BasketHolding } from "./portfolio/Holdings";
-import { useBasketTemplates, useOwnedBasketPortfolios } from "../api/baskets";
+import { useBasketReturns, useBasketTemplates } from "../api/baskets";
+import { USDC_ASSET_ID } from "@mercury/view";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { displayBasketName } from "./baskets/catalog";
 import { useModel } from "./portfolio/model";
@@ -37,28 +38,40 @@ export const Portfolio = () => {
   const portfolio = usePortfolio();
   const money = useMoney();
   const dash = useDashboard();
-  // The holdings' own instruments, featured or not, for their names, logos and sectors.
-  // Glider baskets, held as one position each, with the template for their marks.
-  const owned = useOwnedBasketPortfolios();
+  // The backend owns basket valuation; templates only supply the two marks.
   const templates = useBasketTemplates();
-  const basketTemplates = (owned.data ?? []).flatMap((b) => {
+  const basketTemplates = (portfolio.data?.baskets ?? []).flatMap((b) => {
     const t = templates.data?.find((x) => x.slug === b.slug);
-    const value = Number(b.totalValueUsd ?? 0) + Number(b.inTransitUsd ?? 0);
+    const value = Number(b.valueUsd);
     return value > 0 ? [{ b, t, value }] : [];
   });
+  const basketReturns = useBasketReturns(basketTemplates.length > 0);
+  const returnsByPortfolio = new Map(
+    basketReturns.data?.map((item) => [item.portfolioId, item.percentChange]),
+  );
   const markTickers = basketTemplates.flatMap(({ t }) =>
     [...(t?.allocations ?? [])]
       .sort((a, z) => z.weightBps - a.weightBps)
       .slice(0, 2)
       .map((a) => a.ticker),
   );
-  const universe = useInstruments([...(portfolio.data?.holdings.map((h) => h.ticker) ?? []), ...markTickers]);
+  const universe = useInstruments([
+    ...new Set([...(portfolio.data?.holdings.map((h) => h.ticker) ?? []), ...markTickers]),
+  ]);
   const byTicker = new Map((universe.data ?? []).map((i) => [i.ticker, i]));
   const baskets: BasketHolding[] = basketTemplates.map(({ b, t, value }) => ({
+    portfolioId: b.portfolioId,
     slug: b.slug,
     name: displayBasketName(b.name),
     value,
-    assetCount: b.targetAssetCount,
+    assetCount: t?.allocations.length ?? b.holdings.length,
+    todayPct: b.changePct24h === null ? null : Number(b.changePct24h),
+    returnPct:
+      b.holdings.length > 0 && b.holdings.every((asset) => asset.assetId === USDC_ASSET_ID)
+        ? null
+        : returnsByPortfolio.get(b.portfolioId) == null
+          ? null
+          : Number(returnsByPortfolio.get(b.portfolioId)),
     marks: [...(t?.allocations ?? [])]
       .sort((a, z) => z.weightBps - a.weightBps)
       .slice(0, 2)
@@ -71,12 +84,11 @@ export const Portfolio = () => {
         />
       )),
   }));
-  const basketsUsd = baskets.reduce((s, b) => s + b.value, 0);
   const credit = useCreditMarket();
   const { events, loading: eventsLoading } = useEvents();
 
   const borrow = useBorrow();
-  const m = useModel(portfolio.data, universe.data, credit.data, dash.data, borrow.data, basketsUsd);
+  const m = useModel(portfolio.data, universe.data, credit.data, dash.data, borrow.data);
   const failed = portfolio.isError;
   const apr = Number(money.data?.yieldApr ?? 0);
 
@@ -87,7 +99,11 @@ export const Portfolio = () => {
       {failed && (
         <div className="mb-4 flex items-center gap-3 rounded-xl md:mb-6 border border-down-line bg-down-tint px-4 py-3 text-[13px] text-down-deep">
           <Alert className="size-4 shrink-0" />
-          <p className="flex-1">We could not reach your account. The figures below are missing, not zero.</p>
+          <p className="flex-1">
+            {portfolio.data
+              ? "Account refresh failed. Showing your last available values."
+              : "We could not reach your account. The figures below are missing, not zero."}
+          </p>
           <button
             type="button"
             onClick={() => void portfolio.refetch()}

@@ -1,5 +1,5 @@
 import { SAMPLE_NO_LOGIN } from "../dev/sample";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
@@ -63,6 +63,23 @@ export const useBaskets = () => {
     queryFn: async () => (await apiFetch<{ baskets: Basket[] }>("/v1/baskets")).baskets,
     enabled: signedIn,
     staleTime: 5 * 60_000,
+  });
+};
+
+/** Glider MWR is read separately so the live portfolio value never waits for its curve. */
+export const useBasketReturns = (enabled: boolean) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "basket-returns"],
+    queryFn: async () =>
+      (
+        await apiFetch<{ returns: { portfolioId: string; percentChange: string | null }[] }>(
+          "/v1/portfolio/basket-returns",
+        )
+      ).returns,
+    enabled: signedIn && enabled,
+    staleTime: 2 * 60_000,
+    retry: false,
   });
 };
 
@@ -181,29 +198,53 @@ export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
   });
 };
 
-export const useBasketOperation = (slug: string, operationId: string | null, enrolled: boolean) => {
+/** Who is asking, so one operation is cached per signed-in wallet rather than globally. */
+type Viewer = { signedIn: boolean; userId: string | undefined; address: string | undefined };
+
+const useViewer = (): Viewer => {
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
   const { wallets } = useWallets();
-  return useQuery({
-    queryKey: ["api", "basket-operation", slug, user?.id, wallets[0]?.address, operationId],
+  return {
+    signedIn:
+      basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
+      (SAMPLE_NO_LOGIN || Boolean(wallets[0]?.address)),
+    userId: user?.id,
+    address: wallets[0]?.address,
+  };
+};
+
+/* Shared so one operation and a list of them are the same request, cache entry and cadence. */
+const basketOperationQuery = (slug: string, operationId: string | null, enabled: boolean, viewer: Viewer) =>
+  queryOptions({
+    queryKey: ["api", "basket-operation", slug, viewer.userId, viewer.address, operationId],
     queryFn: async () =>
       (
         await apiFetch<{ operation: ManagedBasketOperation }>(
           `/v1/basket-templates/${encodeURIComponent(slug)}/operations/${encodeURIComponent(operationId!)}`,
         )
       ).operation,
-    enabled:
-      enrolled &&
-      Boolean(operationId) &&
-      basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
-      (SAMPLE_NO_LOGIN || Boolean(wallets[0]?.address)),
+    enabled: enabled && Boolean(operationId) && viewer.signedIn,
     retry: false,
     refetchOnWindowFocus: true,
     refetchInterval: (query) => {
       const state = query.state.data?.state;
       return state && ["completed", "failed", "cancelled"].includes(state) ? false : 4_000;
     },
+  });
+
+export const useBasketOperation = (slug: string, operationId: string | null, enrolled: boolean) =>
+  useQuery(basketOperationQuery(slug, operationId, enrolled, useViewer()));
+
+/*
+ * Several operations at once, for views that list baskets rather than one. The
+ * count varies with the person's portfolios, so this cannot be a loop of
+ * useBasketOperation; useQueries also keeps every state in one place to sort by.
+ */
+export const useBasketOperations = (requests: readonly { slug: string; operationId: string }[]) => {
+  const viewer = useViewer();
+  return useQueries({
+    queries: requests.map((request) => basketOperationQuery(request.slug, request.operationId, true, viewer)),
   });
 };
 

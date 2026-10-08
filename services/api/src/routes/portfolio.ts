@@ -2,7 +2,18 @@ import { Hono } from "hono";
 import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHolding } from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
-import { cashFrom, priceFor, valuePortfolio } from "../portfolio/value.js";
+import {
+  basketStockMints,
+  cashFrom,
+  priceFor,
+  valueBasketStocks,
+  valuePortfolio,
+} from "../portfolio/value.js";
+import {
+  BasketValuationError,
+  type BasketReturnsReader,
+  type BasketValueReader,
+} from "../portfolio/baskets.js";
 import {
   MIN_POINTS,
   RANGES,
@@ -47,6 +58,8 @@ export interface PortfolioDeps {
   readonly lastKnownDebt: (userId: string) => Promise<Decimal | null>;
   /** Hourly readings of the account's value, no older than `from`. */
   readonly snapshots: (userId: string, from: Date) => Promise<readonly Reading[]>;
+  readonly baskets: BasketValueReader;
+  readonly basketReturns?: BasketReturnsReader;
   /** Deposits and withdrawals since `from`, signed, so the chart can show performance without them. */
   readonly flows?: (userId: string, from: Date) => Promise<readonly Flow[]>;
 }
@@ -56,15 +69,29 @@ const fail = (code: string, message: string) => ({ error: { code, message } });
 const EMPTY = {
   totalValueUsd: "0",
   cashUsd: "0",
+  basketUsd: "0",
   debtUsd: "0",
   debtIsStale: false,
   changeUsd: "0",
   changePct: "0",
   holdings: [] as const,
+  baskets: [] as const,
 };
 
 export function portfolioRoutes(deps: PortfolioDeps): Hono {
   const app = new Hono();
+
+  // Performance is a separate read so a slow Glider curve cannot delay net worth.
+  app.get("/v1/portfolio/basket-returns", async (c) => {
+    const wallet = c.get("identity").walletAddress;
+    if (wallet === null || !deps.basketReturns) return c.json({ returns: [] });
+    try {
+      return c.json({ returns: await deps.basketReturns(wallet) });
+    } catch (error) {
+      console.error("Basket return read failed:", error);
+      return c.json(fail("basket_returns_unavailable", "Basket returns are temporarily unavailable."), 503);
+    }
+  });
 
   app.get("/v1/portfolio", async (c) => {
     const identity = c.get("identity");
@@ -76,12 +103,23 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // records in line with the chain is position-sync's job, on its own
     // clock. See services/api/src/index.ts: position-sync.
 
-    const [rows, balances, pledged, liveDebt] = await Promise.all([
-      deps.holdings(identity.userId),
-      deps.chain.tokenBalances(identity.walletAddress),
-      deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
-      deps.debt(identity.walletAddress),
-    ]);
+    let inputs;
+    try {
+      inputs = await Promise.all([
+        deps.baskets(identity.userId, identity.walletAddress).catch((error: unknown) => {
+          if (error instanceof BasketValuationError) throw error;
+          console.error("Portfolio basket valuation failed:", error);
+          throw new BasketValuationError("Basket balances are temporarily unavailable.");
+        }),
+        deps.holdings(identity.userId),
+        deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
+        deps.debt(identity.walletAddress),
+      ]);
+    } catch (error) {
+      if (error instanceof BasketValuationError) return c.json(fail(error.code, error.message), 503);
+      throw error;
+    }
+    const [basketValue, rows, pledged, liveDebt] = inputs;
 
     /*
      * An unreadable Kamino falls back to the last hour that was readable.
@@ -96,14 +134,22 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     const debtIsStale = liveDebt === null;
     const pledgedByMint = new Map(pledged.map((p) => [p.mint, p]));
 
-    const mints = rows.flatMap((r) => r.wrappers.map((w) => w.mint));
-    const board = await deps.prices.pricesFor(mints);
+    const mints = [
+      ...new Set([
+        ...rows.flatMap((r) => r.wrappers.map((w) => w.mint)),
+        ...basketStockMints(basketValue.baskets),
+      ]),
+    ];
+    const [board, balances] = await Promise.all([
+      deps.prices.pricesFor(mints),
+      deps.chain.tokenBalances(identity.walletAddress),
+    ]);
 
     // The figures are `valuePortfolio`'s, so that the hourly snapshot behind the
     // chart and the number at the top of this page cannot drift apart. The loop
     // below is only about the per-holding rows.
     const cashUsd = cashFrom(balances, deps.usdcMint);
-    const value = valuePortfolio(rows, board, cashUsd, debtUsd);
+    const value = valuePortfolio(rows, board, cashUsd, debtUsd, basketValue.totalUsd);
     const holdings = [];
 
     for (const row of rows) {
@@ -138,18 +184,26 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       });
     }
 
-    // Cash does not move, so the percentage is of what actually could.
-    const yesterday = value.stocksUsd.sub(value.changeUsd);
-    const changePct = yesterday.isZero() ? ZERO : value.changeUsd.div(yesterday).mul(100);
+    // Current quantities at their rolling 24-hour token moves, not an account return.
+    // Missing quotes contribute no guessed move, as wallet holdings already do.
+    const basketStocks = valueBasketStocks(basketValue.baskets, board);
+    const changeUsd = value.changeUsd.add(basketStocks.changeUsd);
+    const yesterday = value.stocksUsd.add(basketStocks.stocksUsd).sub(changeUsd);
+    const changePct = yesterday.isZero() ? ZERO : changeUsd.div(yesterday).mul(100);
 
     return c.json({
       totalValueUsd: toWire(value.totalUsd),
       cashUsd: toWire(value.cashUsd),
+      basketUsd: toWire(value.basketUsd),
       debtUsd: toWire(value.debtUsd),
       debtIsStale,
-      changeUsd: toWire(value.changeUsd),
+      changeUsd: toWire(changeUsd),
       changePct: toWire(changePct),
       holdings,
+      baskets: basketValue.baskets.map((basket) => ({
+        ...basket,
+        changePct24h: basketStocks.byPortfolio.get(basket.portfolioId)?.toString() ?? null,
+      })),
     });
   });
 

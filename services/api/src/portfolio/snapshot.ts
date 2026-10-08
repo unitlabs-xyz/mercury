@@ -6,6 +6,7 @@ import type { Db } from "../db/client.js";
 import { portfolioSnapshots, users, wallets } from "../db/schema.js";
 import { hourOf } from "./history.js";
 import { cashFrom, valuePortfolio, type ValuableHolding } from "./value.js";
+import type { BasketValueReader } from "./baskets.js";
 
 export interface SnapshotDeps {
   readonly holdings: (userId: string) => Promise<readonly ValuableHolding[]>;
@@ -14,6 +15,7 @@ export interface SnapshotDeps {
   readonly prices: PriceBoard;
   readonly chain: ChainReader;
   readonly usdcMint: string;
+  readonly baskets: BasketValueReader;
 }
 
 export interface SnapshotSummary {
@@ -56,10 +58,10 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
       const row = rows[next++];
       if (row === undefined) return;
       try {
-        const [held, balances, debtUsd] = await Promise.all([
+        const [held, debtUsd, basketValue] = await Promise.all([
           deps.holdings(row.userId),
-          deps.chain.tokenBalances(row.address),
           deps.debt(row.address),
+          deps.baskets(row.userId, row.address),
         ]);
         /*
          * A reading with unknown debt is not a reading. Every other job can
@@ -71,8 +73,17 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
          */
         if (debtUsd === null) throw new Error("debt unreadable; skipping this reading");
 
-        const board = await deps.prices.pricesFor(held.flatMap((h) => h.wrappers.map((w) => w.mint)));
-        const value = valuePortfolio(held, board, cashFrom(balances, deps.usdcMint), debtUsd);
+        const [board, balances] = await Promise.all([
+          deps.prices.pricesFor(held.flatMap((h) => h.wrappers.map((w) => w.mint))),
+          deps.chain.tokenBalances(row.address),
+        ]);
+        const value = valuePortfolio(
+          held,
+          board,
+          cashFrom(balances, deps.usdcMint),
+          debtUsd,
+          basketValue.totalUsd,
+        );
 
         await db
           .insert(portfolioSnapshots)
@@ -82,6 +93,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
             totalUsd: toWire(value.totalUsd),
             stocksUsd: toWire(value.stocksUsd),
             cashUsd: toWire(value.cashUsd),
+            basketUsd: toWire(value.basketUsd),
             debtUsd: toWire(value.debtUsd),
           })
           // A deploy mid-hour re-reads the same hour. The later reading is the
@@ -92,6 +104,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
               totalUsd: toWire(value.totalUsd),
               stocksUsd: toWire(value.stocksUsd),
               cashUsd: toWire(value.cashUsd),
+              basketUsd: toWire(value.basketUsd),
               debtUsd: toWire(value.debtUsd),
             },
           });

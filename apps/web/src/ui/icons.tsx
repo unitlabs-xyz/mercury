@@ -27,6 +27,16 @@ export const Globe = (p: Icon) => (
   </svg>
 );
 
+/** The search glass, drawn to the screener design: an 11px mark at 0.833 stroke. */
+export const Glass = () => (
+  <svg viewBox="742.5 30.5 11 11" width={11} height={11} fill="none" aria-hidden className="shrink-0">
+    <g stroke="currentColor" strokeWidth={0.833} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M750.778 38.7778L753 41.0001" />
+      <path d="M751.889 35.4444C751.889 32.9898 749.899 31 747.444 31C744.99 31 743 32.9898 743 35.4444C743 37.899 744.99 39.8889 747.444 39.8889C749.899 39.8889 751.889 37.899 751.889 35.4444Z" />
+    </g>
+  </svg>
+);
+
 export const ArrowRight = (p: Icon) => (
   <svg {...base} {...p}>
     <path d="M5 12h14" />

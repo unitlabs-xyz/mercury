@@ -503,11 +503,17 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     ]);
     if (ref === null || token === null) return c.json(fail("not_found", "Unknown token."), 404);
 
-    // Not yet on chain is a different answer from never: a client can confirm
-    // before the node it asks has caught up, and that is worth retrying.
+    /*
+     * Not yet on chain is a different answer from never: a client can confirm
+     * before the node it asks has caught up, and that is worth retrying. It
+     * gets the retryable code basket funding already uses, because `not_found`
+     * also means an unknown order or token here — a caller cannot tell a
+     * transaction that will appear from one of those, and so cannot know
+     * whether asking again is worth anything.
+     */
     const tx = await market().history.transaction(parsed.data.signature);
     if (tx === null) {
-      return c.json(fail("not_found", "That transaction has not reached the chain yet."), 404);
+      return c.json(fail("transaction_pending", "Transaction is not settled yet. Try again shortly."), 409);
     }
 
     const fill = planFill(tx, {

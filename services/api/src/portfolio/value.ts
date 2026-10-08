@@ -1,6 +1,7 @@
 import { D, ZERO, type Decimal } from "@mercury/core";
 import type { TokenBalance } from "@mercury/chain";
 import type { TokenPrice } from "@mercury/market";
+import type { ValuedBasket } from "./baskets.js";
 
 /** A holding, reduced to what valuing it needs. */
 export interface ValuableHolding {
@@ -11,6 +12,8 @@ export interface ValuableHolding {
 export interface PortfolioValue {
   readonly stocksUsd: Decimal;
   readonly cashUsd: Decimal;
+  /** Glider smart-account value, including its in-transit value exactly once. */
+  readonly basketUsd: Decimal;
   /** Owed to Kamino. Borrowed cash is counted in `cashUsd`; this is the other side of it. */
   readonly debtUsd: Decimal;
   /**
@@ -42,6 +45,59 @@ export const priceFor = (
   board: ReadonlyMap<string, TokenPrice>,
 ): TokenPrice | undefined => row.wrappers.map((w) => board.get(w.mint)).find((p) => p !== undefined);
 
+const basketStockMint = (assetId: string): string | null =>
+  assetId.startsWith("solana:") ? (assetId.split("/spl:")[1] ?? null) : null;
+
+/** Only stock tokens need a price-change quote; basket cash and transfers do not move with stocks. */
+export const basketStockMints = (baskets: readonly ValuedBasket[]): string[] => [
+  ...new Set(
+    baskets.flatMap((basket) =>
+      basket.holdings.flatMap((asset) =>
+        asset.ticker === null ? [] : (basketStockMint(asset.assetId) ?? []),
+      ),
+    ),
+  ),
+];
+
+/** Glider supplies the current value; Jupiter supplies only the token's rolling 24-hour move. */
+export const valueBasketStocks = (
+  baskets: readonly ValuedBasket[],
+  board: ReadonlyMap<string, TokenPrice>,
+): { stocksUsd: Decimal; changeUsd: Decimal; byPortfolio: ReadonlyMap<string, Decimal | null> } => {
+  let stocksUsd = ZERO;
+  let changeUsd = ZERO;
+  const byPortfolio = new Map<string, Decimal | null>();
+  for (const basket of baskets) {
+    let basketChange = ZERO;
+    let missingQuote = false;
+    for (const asset of basket.holdings) {
+      if (asset.ticker === null) continue;
+      const valueUsd = D(asset.valueUsd);
+      stocksUsd = stocksUsd.add(valueUsd);
+      const mint = basketStockMint(asset.assetId);
+      const changePct24h = mint === null ? null : board.get(mint)?.changePct24h;
+      if (changePct24h === null || changePct24h === undefined) {
+        if (valueUsd.gt(ZERO)) missingQuote = true;
+        continue;
+      }
+      const denominator = D(100).add(changePct24h);
+      if (denominator.lte(ZERO)) {
+        missingQuote = true;
+        continue;
+      }
+      const movedUsd = valueUsd.mul(changePct24h).div(denominator);
+      basketChange = basketChange.add(movedUsd);
+      changeUsd = changeUsd.add(movedUsd);
+    }
+    const previous = D(basket.valueUsd).sub(basketChange);
+    byPortfolio.set(
+      basket.portfolioId,
+      missingQuote ? null : previous.gt(ZERO) ? basketChange.div(previous).mul(100) : ZERO,
+    );
+  }
+  return { stocksUsd, changeUsd, byPortfolio };
+};
+
 /**
  * What an account is worth, from holdings and a price board.
  *
@@ -55,6 +111,7 @@ export const valuePortfolio = (
   board: ReadonlyMap<string, TokenPrice>,
   cashUsd: Decimal,
   debtUsd: Decimal,
+  basketUsd: Decimal = ZERO,
 ): PortfolioValue => {
   let stocksUsd = ZERO;
   let changeUsd = ZERO;
@@ -79,5 +136,12 @@ export const valuePortfolio = (
   // Borrowing is total-neutral: the cash arrives and the debt arrives with it.
   // What leverage changes is `stocksUsd` and how far `changeUsd` swings, which
   // is the thing somebody who levers up actually bought.
-  return { stocksUsd, cashUsd, debtUsd, totalUsd: stocksUsd.add(cashUsd).sub(debtUsd), changeUsd };
+  return {
+    stocksUsd,
+    cashUsd,
+    basketUsd,
+    debtUsd,
+    totalUsd: stocksUsd.add(cashUsd).add(basketUsd).sub(debtUsd),
+    changeUsd,
+  };
 };

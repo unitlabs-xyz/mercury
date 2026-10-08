@@ -8,6 +8,8 @@ export const Holding = z.object({
   valueUsd: Usd,
   costBasisUsd: Usd,
   unrealisedPnlUsd: Usd,
+  /** Shares covered by recorded purchase lots; other shares have unknown basis. */
+  sharesWithBasis: Usd.optional(),
   changePct24h: Ratio,
   wrapperCount: z.number().int().positive(),
   /** Of `shares`, how many are pledged to Kamino as collateral. Still owned; not sellable until withdrawn. */
@@ -15,16 +17,39 @@ export const Holding = z.object({
 });
 
 export const Portfolio = z.object({
-  /** Net worth: stocks plus cash less debt. */
+  /** Net worth: wallet and pledged stocks, wallet cash, and Glider baskets, less debt. */
   totalValueUsd: Usd,
   cashUsd: Usd,
+  basketUsd: Usd,
   /** Owed to Kamino. Borrowed cash is inside `cashUsd`; this is the other side of it. */
   debtUsd: Usd,
   /** True when Kamino could not be read and `debtUsd` is the last hour we recorded. */
   debtIsStale: z.boolean(),
+  /** Estimated rolling 24-hour price move of wallet, pledged, and basket stocks; excludes cash and transfers. */
   changeUsd: Usd,
   changePct: Ratio,
   holdings: z.array(Holding),
+  baskets: z.array(
+    z.object({
+      portfolioId: z.string(),
+      slug: z.string().nullable(),
+      name: z.string(),
+      valueUsd: Usd,
+      inTransitUsd: Usd,
+      /** Estimated price move on currently held basket assets, not account P&L. */
+      changePct24h: Ratio.nullable(),
+      fetchedAt: z.string().datetime(),
+      holdings: z.array(
+        z.object({
+          assetId: z.string(),
+          symbol: z.string(),
+          ticker: z.string().nullable(),
+          balance: z.string(),
+          valueUsd: Usd,
+        }),
+      ),
+    }),
+  ),
 });
 
 /** The ranges the value chart offers. Longer ones wait for there to be data behind them. */

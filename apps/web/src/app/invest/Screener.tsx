@@ -8,6 +8,7 @@ import {
   MoveChip,
   Pagination,
   RangeSwitch,
+  SearchField,
   StatusChip,
 } from "../../ui/ds";
 import { DotChart, TINY } from "../DotChart";
@@ -54,16 +55,6 @@ const SortArrow = ({ desc }: { desc: boolean }) => (
           <path d="M7.857 4.429C7.857 4.429 5.332 1 4.429 1C3.525 1 1 4.429 1 4.429" />
         </>
       )}
-    </g>
-  </svg>
-);
-
-/** The search glass from allstocks.svg: a 9px ring and its handle at 0.83. */
-const Glass = () => (
-  <svg viewBox="742.5 30.5 11 11" width={11} height={11} fill="none" aria-hidden className="shrink-0">
-    <g stroke="currentColor" strokeWidth={0.833} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M750.778 38.7778L753 41.0001" />
-      <path d="M751.889 35.4444C751.889 32.9898 749.899 31 747.444 31C744.99 31 743 32.9898 743 35.4444C743 37.899 744.99 39.8889 747.444 39.8889C749.899 39.8889 751.889 37.899 751.889 35.4444Z" />
     </g>
   </svg>
 );
@@ -123,7 +114,12 @@ const Line = memo(({ r, range, onToggle }: { r: Row; range: Span; onToggle: (tic
             )}
             {r.owned && (
               <span className="inline-flex h-[17px] shrink-0 items-center rounded bg-ds-act-buy-bg px-1.5 text-[10px] leading-none text-ds-act-buy">
-                <span className="opacity-80">Owned</span>
+                Owned
+              </span>
+            )}
+            {r.inBasket && (
+              <span className="inline-flex h-[17px] shrink-0 items-center rounded bg-ds-panel px-1.5 text-[10px] leading-none text-ds-muted">
+                In basket
               </span>
             )}
           </p>
@@ -281,16 +277,12 @@ export const Screener = ({
           </InfoTip>
         </div>
         <div className="flex w-full flex-wrap items-center gap-1 sm:w-auto">
-          <label className="flex h-8 w-full items-center gap-2 rounded-lg bg-ds-panel px-3 text-ds-muted sm:w-[237px]">
-            <Glass />
-            <input
-              value={query}
-              onChange={(e) => onQuery(e.target.value)}
-              placeholder="Search by company or ticker"
-              aria-label="Search stocks"
-              className="w-full bg-transparent text-[14px] text-ds-ink outline-none placeholder:text-ds-muted"
-            />
-          </label>
+          <SearchField
+            value={query}
+            onChange={onQuery}
+            placeholder="Search by company or ticker"
+            label="Search stocks"
+          />
           <RangeSwitch options={LIST_RANGES} value={range} onChange={onRange} />
         </div>
       </header>

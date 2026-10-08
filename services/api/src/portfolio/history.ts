@@ -10,8 +10,8 @@ export interface Reading {
 }
 
 /**
- * Money that crossed the account's edge: a deposit in (positive), a send or a
- * transfer to a basket out (negative). Not a trade, a loan or a dividend:
+ * Money that crossed the whole account's edge: a deposit in (positive) or a send
+ * out (negative). Not a basket transfer, trade, loan or dividend:
  * those move value inside the account, and a trade's gain is the point.
  */
 export interface Flow {

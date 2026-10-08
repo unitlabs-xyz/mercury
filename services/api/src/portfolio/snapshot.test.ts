@@ -48,6 +48,7 @@ const deps = (over: Partial<SnapshotDeps> = {}): SnapshotDeps => ({
   prices: { pricesFor: async () => new Map([[MINT, price]]) } as unknown as SnapshotDeps["prices"],
   usdcMint: USDC,
   debt: async () => ZERO,
+  baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
   ...over,
 });
 
@@ -69,7 +70,36 @@ describe("snapshotAllPortfolios", () => {
     expect(rows).toHaveLength(1);
     expect(Number(rows[0]!.stocksUsd)).toBe(100);
     expect(Number(rows[0]!.cashUsd)).toBe(14.25);
+    expect(Number(rows[0]!.basketUsd)).toBe(0);
     expect(Number(rows[0]!.totalUsd)).toBe(114.25);
+  });
+
+  it("includes complete basket value and skips an incomplete basket read", async () => {
+    const { db, ids } = await seed(1);
+    const at = new Date("2026-09-30T12:05:00.000Z");
+    await snapshotAllPortfolios(
+      db,
+      deps({
+        baskets: async () => ({ totalUsd: D("50"), baskets: [], fetchedAt: at }),
+      }),
+      at,
+    );
+    const [saved] = await rowsFor(db, ids[0]!);
+    expect(Number(saved!.totalUsd)).toBe(164.25);
+    expect(Number(saved!.basketUsd)).toBe(50);
+
+    const later = new Date("2026-09-30T13:05:00.000Z");
+    const summary = await snapshotAllPortfolios(
+      db,
+      deps({
+        baskets: async () => {
+          throw new Error("partial positions");
+        },
+      }),
+      later,
+    );
+    expect(summary.written).toBe(0);
+    expect(await rowsFor(db, ids[0]!)).toHaveLength(1);
   });
 
   it("keys the reading to the top of the hour, not to the moment it ran", async () => {

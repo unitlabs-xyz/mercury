@@ -27,6 +27,8 @@ export interface BasketProvider {
   create(basket: BasketDefinition): Promise<string>;
   get(id: string): Promise<ProviderBasket>;
   strategyPerformance(id: string): Promise<StrategyPerformance>;
+  /** Glider's all-time money-weighted return, absent until enough history exists. */
+  portfolioReturn(id: string): Promise<string | null>;
   allocationBreakdown(
     assets: BasketDefinition["assets"],
   ): Promise<NonNullable<ManagedBasketInsights["allocation"]>>;

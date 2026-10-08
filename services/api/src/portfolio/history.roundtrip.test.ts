@@ -65,6 +65,7 @@ describe("snapshot to chart, over a real database", () => {
         prices: { pricesFor: async () => new Map([[MINT, priceAt(perShare)]]) } as unknown as PriceBoard,
         usdcMint: USDC,
         debt: async () => ZERO,
+        baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
       };
       const at = new Date(now.getTime() - (prices.length - 1 - i) * 3_600_000);
       await snapshotAllPortfolios(db, deps, at);
@@ -87,6 +88,7 @@ describe("snapshot to chart, over a real database", () => {
         debt: async () => ZERO,
         lastKnownDebt: async () => null,
         snapshots: (userId, from) => readSnapshots(db, userId, from),
+        baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
       }),
     );
 
@@ -141,6 +143,7 @@ describe("a loan, over a real database", () => {
         prices: { pricesFor: async () => new Map([[MINT, priceAt("100")]]) } as unknown as PriceBoard,
         usdcMint: USDC,
         debt: async () => D(hour.debt),
+        baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
       };
       await snapshotAllPortfolios(db, deps, new Date(now.getTime() - (hours.length - 1 - i) * 3_600_000));
     }
@@ -162,6 +165,7 @@ describe("a loan, over a real database", () => {
         debt: async () => ZERO,
         lastKnownDebt: async () => null,
         snapshots: (userId, from) => readSnapshots(db, userId, from),
+        baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
       }),
     );
 

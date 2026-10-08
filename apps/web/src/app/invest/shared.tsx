@@ -8,6 +8,7 @@ export type Row = Priced & {
   readonly change: number;
   readonly spark: number[] | null;
   readonly owned: boolean;
+  readonly inBasket: boolean;
   readonly saved: boolean;
 };
 

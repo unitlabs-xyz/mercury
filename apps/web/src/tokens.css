@@ -63,8 +63,8 @@
   --color-ds-loss: #c94d42;
   --color-ds-tag: #f3f3f3;
   --color-ds-chip-pending: #935b00;
-  /* status chips: tint behind, the ink at 80% */
-  --color-ds-chip-up: #318b33;
+  /* status chips: tint behind, the ink full strength so it stays legible on it */
+  --color-ds-chip-up: #1d7d1f;
   --color-ds-warn-chip: rgb(203 180 137 / 0.22);
   --color-ds-chip-warn: #8a6a2a;
   --color-ds-chip-down: #b33d29;

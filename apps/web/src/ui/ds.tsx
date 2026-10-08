@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { Close, Glass } from "./icons";
 import { Link } from "react-router-dom";
 
 /**
@@ -69,6 +70,49 @@ export const RailHead = ({
   </header>
 );
 
+/**
+ * The app's search box, as the Invest screener draws it: a 32px panel-grey
+ * field with the glass, and a clear once there is something to clear. Every
+ * list that searches uses this, so the control is the same wherever it appears.
+ */
+export const SearchField = ({
+  value,
+  onChange,
+  placeholder,
+  label,
+  className = "",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  label: string;
+  className?: string;
+}) => (
+  <label
+    className={`flex h-8 w-full items-center gap-2 rounded-lg bg-ds-panel px-3 text-ds-muted sm:w-[237px] ${className}`}
+  >
+    <Glass />
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      aria-label={label}
+      /* A placeholder longer than the field is trimmed, never cut mid-letter. */
+      className="min-w-0 flex-1 overflow-hidden bg-transparent text-[14px] text-ellipsis text-ds-ink outline-none placeholder:text-ds-muted"
+    />
+    {value !== "" && (
+      <button
+        type="button"
+        onClick={() => onChange("")}
+        aria-label="Clear search"
+        className="shrink-0 text-ds-muted transition-colors hover:text-ds-ink"
+      >
+        <Close className="size-3.5" />
+      </button>
+    )}
+  </label>
+);
+
 export type Tone = "up" | "warn" | "down" | "pending" | "neutral" | "owned";
 
 const CHIP: Record<Tone, string> = {
@@ -81,8 +125,12 @@ const CHIP: Record<Tone, string> = {
 };
 
 /**
- * A 17px status chip, 4px radius, 10px text at 80%: "Healthy" in borrowing.svg.
+ * A 17px status chip, 4px radius, 10px text: "Healthy" in borrowing.svg.
  * `size="md"` is 22px with 12px text, for beside a page title where 17px is lost.
+ *
+ * The ink is full strength. It was drawn at 80%, but opacity on text multiplies
+ * against whatever is behind it, and over these tints that left every tone
+ * under the 4.5:1 it needs to be read — the green worst at 2.9:1.
  */
 export const StatusChip = ({
   tone,
@@ -98,7 +146,7 @@ export const StatusChip = ({
       size === "md" ? "h-[22px] rounded-md px-2 text-[12px]" : "h-[17px] rounded px-1.5 text-[10px]"
     } ${CHIP[tone]}`}
   >
-    <span className="opacity-80">{children}</span>
+    {children}
   </span>
 );
 
@@ -292,7 +340,7 @@ export const LiveChip = ({ label, pulsing }: { label: string; pulsing?: boolean 
       )}
       <span className="relative inline-flex size-1.5 rounded-full bg-ds-live" />
     </span>
-    <span className="opacity-80">{label}</span>
+    {label}
   </span>
 );
 

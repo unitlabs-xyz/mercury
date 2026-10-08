@@ -79,12 +79,9 @@ describe("bucketSeries, with deposits and withdrawals", () => {
 
   it("carries the money added since the first point, so a deposit is not a gain", () => {
     // $10 held, $40 deposited between hours 3 and 2, then the stock gains $1.
-    const out = bucketSeries(
-      [reading(3, "10"), reading(2, "50"), reading(1, "51")],
-      "1D",
-      NOW,
-      [flow(2.5, "40")],
-    );
+    const out = bucketSeries([reading(3, "10"), reading(2, "50"), reading(1, "51")], "1D", NOW, [
+      flow(2.5, "40"),
+    ]);
     expect(out.map((p) => p.netFlowUsd)).toEqual(["0", "40", "40"]);
     // What the holdings did: 51 - 40 - 10 = 1.
     const last = out[2]!;

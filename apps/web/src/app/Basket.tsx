@@ -38,10 +38,12 @@ import { LiveStatusChip, PriceError } from "./LiveStatus";
 import { Button } from "../ui/Button";
 import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
+import { OperationStatus } from "./baskets/OperationStatus";
 import { TOKEN_NAME } from "./stock/heldAs";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
 import { EnrollmentRail, ExitSheet, InvestSheet, RebalanceSheet } from "./baskets/Ticket";
+import { rebalanceOutcome, rebalanceTerminal } from "./baskets/rebalance-status";
 import { modeledRanges, modeledSince, modeledWindow } from "@mercury/view";
 import { RailList } from "./invest/Rail";
 import { EventRow } from "./portfolio/Feed";
@@ -464,9 +466,10 @@ export const Basket = () => {
     }
   }, [accountId]);
   useEffect(() => {
-    if (rebalanceStatus.data?.state === "completed") {
+    if (rebalanceTerminal(rebalanceStatus.data?.state)) {
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
       void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
+      void queryClient.invalidateQueries({ queryKey: ["api", "portfolio"] });
     }
   }, [queryClient, rebalanceStatus.data?.state, slug]);
   useEffect(() => {
@@ -616,6 +619,9 @@ export const Basket = () => {
   const account = signedIn ? portfolio.data : null;
   const schedule = account?.schedule;
   const operationState = rebalanceStatus.data?.state;
+  const rebalanceDisplay = operationState
+    ? rebalanceOutcome(operationState, rebalanceStatus.data?.error ?? null)
+    : null;
   const operationActive =
     Boolean(operationId) &&
     (!operationState || ["accepted", "running", "retrying", "awaiting_user"].includes(operationState));
@@ -1093,14 +1099,16 @@ export const Basket = () => {
                       </button>
                     )}
                     {exitOperationId && (
-                      <div className="mt-4 flex items-center justify-between gap-3 border-t border-ds-divider pt-4 text-[12px]">
-                        <span className="text-ds-muted">
-                          {exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
-                        </span>
-                        <span className="font-medium capitalize text-ds-ink">
-                          {exitState?.replaceAll("_", " ") ??
-                            (exitStatus.isError ? "Status unavailable" : "Checking…")}
-                        </span>
+                      <div className="mt-4 border-t border-ds-divider pt-4 text-[12px]">
+                        <OperationStatus
+                          name={exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
+                          state={exitState}
+                          label={
+                            exitState?.replaceAll("_", " ") ??
+                            (exitStatus.isError ? "Status unavailable" : "Checking…")
+                          }
+                          unavailable={exitStatus.isError}
+                        />
                       </div>
                     )}
                     {exitStatus.data?.error && (
@@ -1198,7 +1206,8 @@ export const Basket = () => {
                     )}
                     {heldAssets.length === 0 ? (
                       <p className="px-3 py-5 text-[13px] text-ds-muted">
-                        No assets detected yet. USDC can take a short time to appear.
+                        This smart account has no assets right now. Check your wallet and recent activity if
+                        you withdrew them.
                       </p>
                     ) : (
                       <>
@@ -1344,15 +1353,17 @@ export const Basket = () => {
                 )}
                 {operationId && (
                   <div className="mt-5 border-t border-ds-divider pt-4 text-[12px]">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-ds-muted">Manual rebalance</span>
-                      <span className="font-medium capitalize text-ds-ink">
-                        {operationState?.replaceAll("_", " ") ??
-                          (rebalanceStatus.isError ? "Status unavailable" : "Checking…")}
-                      </span>
-                    </div>
-                    {rebalanceStatus.data?.error && (
-                      <p className="mt-2 text-ds-chip-warn">{rebalanceStatus.data.error}</p>
+                    <OperationStatus
+                      name="Manual rebalance"
+                      state={operationState}
+                      label={
+                        rebalanceDisplay?.label ??
+                        (rebalanceStatus.isError ? "Status unavailable" : "Checking…")
+                      }
+                      unavailable={rebalanceStatus.isError}
+                    />
+                    {rebalanceDisplay?.detail && (
+                      <p className="mt-2 text-ds-chip-warn">{rebalanceDisplay.detail}</p>
                     )}
                     {rebalanceStatus.isError && (
                       <button
