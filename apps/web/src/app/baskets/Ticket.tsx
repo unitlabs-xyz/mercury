@@ -724,12 +724,29 @@ export const ExitSheet = ({
   }
   const taking = (asset: (typeof available)[number]) =>
     (rawTokenAmount(selection[asset.assetId] ?? "", asset.decimals) ?? 0n) > 0n;
-  const selectedCount = manual && !prepared ? available.filter(taking).length : count;
-  /* The value of what is actually going: the whole portfolio until assets are deselected. */
-  const withdrawingUsd =
-    manual && !prepared
-      ? available.filter(taking).reduce((sum, asset) => sum + Number(asset.valueUsd), 0)
-      : Number(account.totalValueUsd);
+  /* What a withdrawn amount of a holding is worth, as a share of that holding. */
+  const valueOf = (assetId: string, amountRaw: string) => {
+    const holding = byAsset.get(assetId);
+    const balance = Number(holding?.balanceRaw ?? 0);
+    if (holding === undefined || balance <= 0) return 0;
+    return Number(holding.valueUsd) * (Number(amountRaw) / balance);
+  };
+  /*
+   * What is actually going, at each step: the signed list once there is one,
+   * the ticked rows while choosing, and the whole portfolio when nothing has
+   * been narrowed. Falling back to the portfolio after signing said two assets
+   * over a list naming one.
+   */
+  const going: readonly { assetId: string; amountRaw: string }[] = prepared
+    ? prepared.message.assets
+    : manual
+      ? available.filter(taking).map((asset) => ({
+          assetId: asset.assetId,
+          amountRaw: (rawTokenAmount(selection[asset.assetId] ?? "", asset.decimals) ?? 0n).toString(),
+        }))
+      : available.map((asset) => ({ assetId: asset.assetId, amountRaw: asset.balanceRaw }));
+  const selectedCount = going.length;
+  const withdrawingUsd = going.reduce((sum, item) => sum + valueOf(item.assetId, item.amountRaw), 0);
   const close = () => {
     if (busy) return;
     setManual(false);
@@ -811,7 +828,9 @@ export const ExitSheet = ({
                               <Identity
                                 mark={assetMarks.get(asset.assetId)}
                                 symbol={holding?.symbol ?? asset.assetId}
-                                detail={holding ? usd(holding.valueUsd) : "Unlisted token"}
+                                detail={
+                                  holding ? usd(valueOf(asset.assetId, asset.amountRaw)) : "Unlisted token"
+                                }
                                 dimmed={false}
                               />
                               <span className="shrink-0 text-[14px] leading-[18px] font-medium tabular-nums text-ds-ink">
