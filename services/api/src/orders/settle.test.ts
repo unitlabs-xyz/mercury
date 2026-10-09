@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { D } from "@mercury/core";
+import { D, ZERO } from "@mercury/core";
 import { testDb } from "../db/testing.js";
 import { activities, instruments, lots, orders, positions, tokens, users } from "../db/schema.js";
 import { settleOrder, tokenRefFor } from "./settle.js";
@@ -49,6 +49,7 @@ const aFill: Fill = {
   tokens: D("0.449018"),
   shares: D("0.44978187"),
   usd: D(100),
+  feeUsd: ZERO,
   pricePerShare: D("222.33"),
   occurredAt: AT,
 };
@@ -66,6 +67,7 @@ const inputFor = (
   tokenId: s.tokenId,
   instrumentId: s.instrumentId,
   fill: aFill,
+  referencePricePerShare: null,
   ...over,
 });
 
@@ -167,6 +169,76 @@ describe("settleOrder", () => {
     const [row] = await s.db.select().from(activities);
     expect(row!.subtitle).toBe("0.449782 shares at $222.33");
     expect(row!.subtitle).not.toContain("·");
+  });
+
+  it("keeps the fee off the share price and on its own line", async () => {
+    const s = await seed();
+    // $20 left the wallet, $0.23 of it to the relayer, so $19.77 bought the
+    // shares. The lot has to record $19.77 worth, or the position opens down
+    // 1.15% on a stock that has not moved.
+    await settleOrder(
+      s.db,
+      inputFor(s, {
+        fill: { ...aFill, usd: D("19.77"), feeUsd: D("0.23"), pricePerShare: D("43.95") },
+      }),
+    );
+
+    const [lot] = await s.db.select().from(lots);
+    expect(lot!.unitCostUsd).toBe("43.950000000000000000");
+    expect(lot!.feeUsd).toBe("0.230000000000000000");
+
+    const [order] = await s.db.select().from(orders).where(eq(orders.id, s.orderId));
+    expect(order!.feeUsd).toBe("0.230000000000000000");
+
+    const [activity] = await s.db.select().from(activities);
+    expect(activity!.subtitle).toContain("$0.23 fee");
+    // What crossed the wallet's edge is the swap plus the charge.
+    expect(activity!.amountUsd).toBe("20.000000000000000000");
+  });
+
+  it("records what the stock was quoted at, so a return can be split later", async () => {
+    const s = await seed();
+    await settleOrder(s.db, inputFor(s, { referencePricePerShare: D("220.00") }));
+    const [lot] = await s.db.select().from(lots);
+    expect(lot!.referencePriceUsd).toBe("220.000000000000000000");
+    // $222.33 paid against $220.00 quoted is $2.33 a share of premium and
+    // spread, which is a cost of trading and not the stock falling.
+    expect(lot!.unitCostUsd).toBe("222.330000000000000000");
+  });
+
+  it("leaves the reference null when nothing could price the mint", async () => {
+    const s = await seed();
+    await settleOrder(s.db, inputFor(s));
+    const [lot] = await s.db.select().from(lots);
+    expect(lot!.referencePriceUsd).toBeNull();
+  });
+
+  it("stores what a sell made on the order, so closing a position cannot erase it", async () => {
+    const s = await seed();
+    await s.db.insert(positions).values({
+      userId: s.userId,
+      instrumentId: s.instrumentId,
+      shares: "1",
+      sharesWithBasis: "1",
+      costBasisUsd: "200",
+      avgUnitCostUsd: "200",
+    });
+
+    await settleOrder(s.db, inputFor(s, { side: "sell", fill: { ...aFill, feeUsd: D("0.25") } }));
+    const [order] = await s.db.select().from(orders).where(eq(orders.id, s.orderId));
+    // Gross of its own fee: the fee is on the same row, counted once.
+    expect(order!.realisedPnlUsd).toBe("10.043626000000000000");
+    expect(order!.feeUsd).toBe("0.250000000000000000");
+    // A sell leaves the wallet the proceeds less the charge.
+    const [activity] = await s.db.select().from(activities);
+    expect(activity!.amountUsd).toBe("99.750000000000000000");
+  });
+
+  it("leaves the realised figure null on a buy, which realises nothing", async () => {
+    const s = await seed();
+    await settleOrder(s.db, inputFor(s));
+    const [order] = await s.db.select().from(orders).where(eq(orders.id, s.orderId));
+    expect(order!.realisedPnlUsd).toBeNull();
   });
 
   it("will not settle an order that already reached an end", async () => {

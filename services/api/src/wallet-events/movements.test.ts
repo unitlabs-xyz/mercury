@@ -248,3 +248,87 @@ describe("movementsIn — a Kamino transaction", () => {
     expect(m[0]!.title).toBe("Added cash");
   });
 });
+
+/**
+ * Money between a wallet and its own Glider smart account is not cash crossing
+ * the account's edge.
+ *
+ * Read as a withdrawal, funding a basket printed a gain on the performance
+ * chart equal to the amount funded: the flow said -$500 while net worth did
+ * not move, because the money came back as basket value. The reconcilers do
+ * correct the row afterwards — but afterwards is a race, and never at all for
+ * a funding nobody confirmed.
+ */
+describe("movementsIn — a basket's own smart account", () => {
+  const SMART = "GLiDer7wKq2ZvB3nXpQmTaVuRsYhLcEdF8jNkW1bMpQz";
+  const PORTFOLIO = "portfolio-7";
+  const withBaskets = { ...ctx, basketAccounts: new Map([[SMART, PORTFOLIO]]) };
+
+  /** $500 out of the wallet and into the smart account, in one transfer. */
+  const funding = tx({
+    preTokens: [usdc(WALLET, 500_000_000n), usdc(SMART, 0n)],
+    postTokens: [usdc(WALLET, 0n), usdc(SMART, 500_000_000n)],
+  });
+
+  it("marks funding with the portfolio it went to, so the chart leaves it out", () => {
+    const [m] = movementsIn(funding, withBaskets);
+    expect(m!.basketPortfolioId).toBe(PORTFOLIO);
+    expect(m!.amountUsd!.toFixed()).toBe("500");
+    // Still a transfer from the wallet's side, and still in the feed: what
+    // changes is that it is not counted as money leaving the account.
+    expect(m!.kind).toBe("transfer_out");
+    expect(m!.title).toBe("Cash to a basket");
+  });
+
+  it("marks an exit the same way, coming back", () => {
+    const exit = tx({
+      preTokens: [usdc(WALLET, 0n), usdc(SMART, 500_000_000n)],
+      postTokens: [usdc(WALLET, 500_000_000n), usdc(SMART, 0n)],
+    });
+    const [m] = movementsIn(exit, withBaskets);
+    expect(m!.basketPortfolioId).toBe(PORTFOLIO);
+    expect(m!.kind).toBe("transfer_in");
+    expect(m!.title).toBe("Cash from a basket");
+  });
+
+  it("leaves an ordinary deposit alone, which is cash crossing the edge", () => {
+    const deposit = tx({ preTokens: [], postTokens: [usdc(WALLET, 500_000_000n)] });
+    const [m] = movementsIn(deposit, withBaskets);
+    expect(m!.basketPortfolioId).toBeUndefined();
+    expect(m!.title).toBe("Added cash");
+  });
+
+  it("does not mark a smart account that was named but took no money", () => {
+    // A smart account can appear in a transaction's keys without taking part
+    // in its cash. Matching on that would hide a real deposit from the chart.
+    const bystander = tx({
+      accountKeys: [WALLET, SMART],
+      preTokens: [usdc(SMART, 1_000_000n)],
+      postTokens: [usdc(WALLET, 500_000_000n), usdc(SMART, 1_000_000n)],
+    });
+    expect(movementsIn(bystander, withBaskets)[0]!.basketPortfolioId).toBeUndefined();
+  });
+
+  it("marks nothing when the wallet has no basket accounts, which is most wallets", () => {
+    expect(movementsIn(funding, ctx)[0]!.basketPortfolioId).toBeUndefined();
+    expect(movementsIn(funding, { ...ctx, basketAccounts: new Map() })[0]!.basketPortfolioId).toBeUndefined();
+  });
+
+  it("ignores a basket account that is the wallet itself, which would mark every deposit", () => {
+    const self = { ...ctx, basketAccounts: new Map([[WALLET, PORTFOLIO]]) };
+    const deposit = tx({ preTokens: [], postTokens: [usdc(WALLET, 500_000_000n)] });
+    expect(movementsIn(deposit, self)[0]!.basketPortfolioId).toBeUndefined();
+  });
+
+  it("still writes nothing for a swap, basket accounts or not", () => {
+    // The swap rule runs first and is not weakened by any of this.
+    const swap = tx({
+      preTokens: [usdc(WALLET, 500_000_000n)],
+      postTokens: [
+        usdc(WALLET, 400_000_000n),
+        { mint: "Xsc9", owner: WALLET, rawAmount: 44_901_800n, decimals: 8 },
+      ],
+    });
+    expect(movementsIn(swap, withBaskets)).toEqual([]);
+  });
+});

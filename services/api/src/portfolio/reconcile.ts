@@ -18,8 +18,16 @@ export interface HeldToken {
   readonly recordedRawAmount: bigint;
   /** The sum of our lots' share counts. */
   readonly recordedShares: Decimal;
-  /** The sum of our lots' shares x unit cost. */
+  /** The sum of our lots' shares x unit cost. Fees are not in it. */
   readonly recordedCostUsd: Decimal;
+  /**
+   * The sum of our lots' shares x the price the stock was quoted at when each
+   * was acquired. A lot with no reference recorded contributes its execution
+   * price instead, which reads as no premium paid rather than as a guess.
+   */
+  readonly recordedReferenceUsd: Decimal;
+  /** The sum of our lots' fees. */
+  readonly recordedFeeUsd: Decimal;
 }
 
 export interface LotWrite {
@@ -50,6 +58,10 @@ export interface PositionWrite {
   /** How many of those shares we hold a lot for, and so can price a cost against. */
   readonly sharesWithBasisUsd: Decimal;
   readonly costBasisUsd: Decimal;
+  /** The same shares at the quotes they were bought against. See `HeldToken`. */
+  readonly referenceBasisUsd: Decimal;
+  /** Fees paid to acquire the shares still held. */
+  readonly feeUsd: Decimal;
   readonly avgUnitCostUsd: Decimal;
 }
 
@@ -100,7 +112,10 @@ const plural = (shares: Decimal): string => {
 export function planReconciliation(held: readonly HeldToken[], now: Date): Reconciliation {
   const lots: LotWrite[] = [];
   const activity: ActivityWrite[] = [];
-  const byInstrument = new Map<string, { shares: Decimal; withBasis: Decimal; cost: Decimal }>();
+  const byInstrument = new Map<
+    string,
+    { shares: Decimal; withBasis: Decimal; cost: Decimal; reference: Decimal; fee: Decimal }
+  >();
 
   for (const token of held) {
     // What the chain says you hold. This is a fact and it is never inferred.
@@ -108,6 +123,8 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
 
     let recordedShares = token.recordedShares;
     const cost = token.recordedCostUsd;
+    const reference = token.recordedReferenceUsd;
+    const fee = token.recordedFeeUsd;
 
     // A dividend: the multiplier rose, so the tokens we have lots for are worth
     // more shares than those lots record. Zero cost, so the average cost per
@@ -161,11 +178,23 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     const withBasis = Decimal.min(recordedShares, chainShares);
     const ratio = recordedShares.isZero() ? ZERO : withBasis.div(recordedShares);
 
-    const running = byInstrument.get(token.instrumentId) ?? { shares: ZERO, withBasis: ZERO, cost: ZERO };
+    const running = byInstrument.get(token.instrumentId) ?? {
+      shares: ZERO,
+      withBasis: ZERO,
+      cost: ZERO,
+      reference: ZERO,
+      fee: ZERO,
+    };
     byInstrument.set(token.instrumentId, {
       shares: running.shares.add(chainShares),
       withBasis: running.withBasis.add(withBasis),
       cost: running.cost.add(cost.mul(ratio)),
+      // Scaled by the same ratio as the cost, and they have to be: a capped
+      // basis whose reference was not capped with it would report the shares
+      // that left as a market move, and the two lines would stop summing to
+      // the dollars.
+      reference: running.reference.add(reference.mul(ratio)),
+      fee: running.fee.add(fee.mul(ratio)),
     });
   }
 
@@ -174,6 +203,8 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     shares: r.shares,
     sharesWithBasisUsd: r.withBasis,
     costBasisUsd: r.cost,
+    referenceBasisUsd: r.reference,
+    feeUsd: r.fee,
     avgUnitCostUsd: r.withBasis.isZero() ? ZERO : r.cost.div(r.withBasis),
   }));
 

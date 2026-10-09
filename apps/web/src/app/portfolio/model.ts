@@ -18,6 +18,11 @@ export type Row = {
   readonly weight: number;
   readonly returnUsd: number;
   readonly returnPct: number | null;
+  /** Of `returnUsd`, what the stock did: today's quote against the one it was bought against. */
+  readonly marketReturnUsd: number;
+  readonly marketReturnPct: number | null;
+  /** And what it cost to get in: premium and spread paid, plus fees. Positive is a cost. */
+  readonly tradingCostUsd: number;
   readonly ltv: number;
   /** At the 80% safety target, on the part that can back a loan: lendable value × LTV × 0.8. */
   readonly borrowable: number;
@@ -51,6 +56,22 @@ export type Model = {
   readonly costBasis: number;
   readonly returnUsd: number;
   readonly returnPct: number;
+  /** Of `returnUsd`, the part that is the stocks moving. See `stackedReturn`. */
+  readonly marketReturnUsd: number;
+  readonly marketReturnPct: number;
+  /** And the part that was the cost of trading. Positive is a cost. */
+  readonly tradingCostUsd: number;
+  /**
+   * What the baskets are up or down against the cash that went into them.
+   *
+   * A total, net of Glider's fees, and kept apart from the figures above
+   * because it cannot be split the way they can: the fills happen inside
+   * Glider and we never see one. Zero when no basket has a recorded basis.
+   */
+  readonly basketReturnUsd: number;
+  readonly basketCostBasis: number;
+  /** False when a basket paid out in kind, so its basis understates what came back. */
+  readonly basketBasisIsComplete: boolean;
   readonly rows: readonly Row[];
   readonly sectors: readonly { name: string; value: number; share: number; changePct: number | null }[];
   /** Debt plus what could still be borrowed, at the safety target. */
@@ -114,6 +135,11 @@ export const useModel = (
       const shares = Number(h.shares);
       const sharesWithBasis = Number(h.sharesWithBasis ?? 0);
       const returnUsd = Number(h.unrealisedPnlUsd);
+      // A server that has not been told about the split sends neither figure,
+      // and then the whole return is read as market move with nothing charged
+      // for trading — which is what it used to claim anyway.
+      const tradingCostUsd = Number(h.tradingCostUsd ?? 0);
+      const marketReturnUsd = h.marketPnlUsd === undefined ? returnUsd : Number(h.marketPnlUsd);
       const inst = universe?.find((i) => i.ticker === h.ticker);
       const ltv = ltvOf(h.ticker);
       // The loan read is xStocks only, so it already leaves out any Ondo tokens of the
@@ -134,6 +160,12 @@ export const useModel = (
         weight: assets > 0 ? value / assets : 0,
         returnUsd,
         returnPct: cost > 0 ? (returnUsd / cost) * 100 : null,
+        marketReturnUsd,
+        // Against what the shares were quoted at when they were bought, which
+        // is what the move is measured from: a percentage of the price paid
+        // would fold the premium back into the figure it was taken out of.
+        marketReturnPct: cost - tradingCostUsd > 0 ? (marketReturnUsd / (cost - tradingCostUsd)) * 100 : null,
+        tradingCostUsd,
         ltv,
         borrowable: (lendableValue ?? 0) * ltv * target,
         lendableValue,
@@ -146,8 +178,20 @@ export const useModel = (
     const stockMove24hUsd = stocks > 0 ? Number(p.changeUsd) : null;
     const stockMove24hPct = stocks > 0 ? Number(p.changePct) : null;
 
+    // Only baskets that recorded a basis. One funded by a path we never
+    // witnessed has no cost, and counting it at zero would report the whole of
+    // its value as profit.
+    const withBasis = p.baskets.filter((b) => b.costBasisUsd !== undefined);
+    const basketCostBasis = withBasis.reduce((s, b) => s + Number(b.costBasisUsd), 0);
+    const basketReturnUsd = withBasis.reduce((s, b) => s + Number(b.pnlUsd ?? 0), 0);
+    const basketBasisIsComplete = withBasis.every((b) => b.basisIsComplete !== false);
+
     const costBasis = rows.reduce((s, r) => s + r.costBasisUsd, 0);
     const returnUsd = rows.reduce((sum, row) => sum + row.returnUsd, 0);
+    const marketReturnUsd = rows.reduce((sum, row) => sum + row.marketReturnUsd, 0);
+    const tradingCostUsd = rows.reduce((sum, row) => sum + row.tradingCostUsd, 0);
+    /* What the shares were quoted at when they were bought, summed. */
+    const referenceBasis = costBasis - tradingCostUsd;
 
     // Value, and value an instant before today's move, so the sector's move is weighted by what is held.
     const bySector = new Map<string, { value: number; opening: number | null }>();
@@ -202,6 +246,12 @@ export const useModel = (
       costBasis,
       returnUsd,
       returnPct: costBasis > 0 ? (returnUsd / costBasis) * 100 : 0,
+      marketReturnUsd,
+      marketReturnPct: referenceBasis > 0 ? (marketReturnUsd / referenceBasis) * 100 : 0,
+      tradingCostUsd,
+      basketReturnUsd,
+      basketCostBasis,
+      basketBasisIsComplete,
       rows,
       sectors,
       power,

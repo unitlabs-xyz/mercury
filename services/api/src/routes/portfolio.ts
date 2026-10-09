@@ -1,14 +1,26 @@
 import { Hono } from "hono";
-import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHolding } from "@mercury/core";
+import {
+  D,
+  exposure,
+  stackedReturn,
+  toWire,
+  ZERO,
+  type Decimal,
+  type Issuer,
+  type WrapperHolding,
+} from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import {
   basketStockMints,
   cashFrom,
+  marketPricePerShare,
   priceFor,
   valueBasketStocks,
   valuePortfolio,
 } from "../portfolio/value.js";
+import { basketBases, basketPnl, basketReturnPct } from "../portfolio/basket-basis.js";
+import type { BasketMovement, InKindExit } from "../portfolio/basket-basis.js";
 import {
   BasketValuationError,
   type BasketReturnsReader,
@@ -40,6 +52,10 @@ export interface HoldingRow {
   /** Of those shares, how many we hold a lot for. */
   readonly sharesWithBasis: Decimal;
   readonly costBasisUsd: Decimal;
+  /** The same shares at the quotes they were bought against. */
+  readonly referenceBasisUsd: Decimal;
+  /** Fees paid to acquire the shares still held. */
+  readonly feeUsd: Decimal;
   readonly avgUnitCostUsd: Decimal;
   readonly wrappers: readonly HoldingWrapper[];
 }
@@ -62,6 +78,15 @@ export interface PortfolioDeps {
   readonly basketReturns?: BasketReturnsReader;
   /** Deposits and withdrawals since `from`, signed, so the chart can show performance without them. */
   readonly flows?: (userId: string, from: Date) => Promise<readonly Flow[]>;
+  /**
+   * Cash that crossed between the wallet and its own baskets, for a basket's
+   * cost basis. Absent, a basket reports its value and no cost — which is
+   * what it did before, and why a basket contributed nothing to the account's
+   * return however much was in it.
+   */
+  readonly basketMovements?: (
+    userId: string,
+  ) => Promise<{ movements: readonly BasketMovement[]; inKindExits: readonly InKindExit[] }>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -114,12 +139,16 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         deps.holdings(identity.userId),
         deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
         deps.debt(identity.walletAddress),
+        deps.basketMovements
+          ? deps.basketMovements(identity.userId)
+          : Promise.resolve({ movements: [], inKindExits: [] }),
       ]);
     } catch (error) {
       if (error instanceof BasketValuationError) return c.json(fail(error.code, error.message), 503);
       throw error;
     }
-    const [basketValue, rows, pledged, liveDebt] = inputs;
+    const [basketValue, rows, pledged, liveDebt, basketFlows] = inputs;
+    const bases = basketBases(basketFlows.movements, basketFlows.inKindExits);
 
     /*
      * An unreadable Kamino falls back to the last hour that was readable.
@@ -156,8 +185,18 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       if (row.shares.lte(ZERO)) continue; // a closed holding is not a row
 
       const priced = priceFor(row, board);
-      const perShare = priced?.pricePerShare ?? ZERO;
+      // The pool values the holding; the quote measures what the stock did.
+      const perShare = priced === undefined ? ZERO : marketPricePerShare(priced);
       const changePct24h = priced?.changePct24h ?? ZERO;
+      const stacked = stackedReturn(
+        {
+          sharesWithBasis: row.sharesWithBasis,
+          costBasisUsd: row.costBasisUsd,
+          referenceBasisUsd: row.referenceBasisUsd,
+          feeUsd: row.feeUsd,
+        },
+        { marketPerShare: perShare, referencePerShare: priced?.pricePerShare ?? null },
+      );
 
       // Pledged tokens are shares too, at the same multiplier as the wallet's.
       const pledgedShares = row.wrappers.reduce((s, w) => {
@@ -176,7 +215,13 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         // Measured over the shares a lot covers, not over the holding. Shares
         // that arrived from outside have no cost we can prove, and pretending
         // their basis is zero would report the whole of their value as profit.
-        unrealisedPnlUsd: toWire(row.sharesWithBasis.mul(perShare).sub(row.costBasisUsd)),
+        //
+        // Three figures where there was one. The total is unchanged and still
+        // the dollars; the other two say how much of it the stock did and how
+        // much of it was the cost of getting in. See `stackedReturn`.
+        unrealisedPnlUsd: toWire(stacked.totalPnlUsd),
+        marketPnlUsd: toWire(stacked.marketPnlUsd),
+        tradingCostUsd: toWire(stacked.tradingCostUsd),
         sharesWithBasis: toWire(row.sharesWithBasis),
         changePct24h: toWire(changePct24h),
         wrapperCount: row.wrappers.length,
@@ -200,10 +245,28 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       changeUsd: toWire(changeUsd),
       changePct: toWire(changePct),
       holdings,
-      baskets: basketValue.baskets.map((basket) => ({
-        ...basket,
-        changePct24h: basketStocks.byPortfolio.get(basket.portfolioId)?.toString() ?? null,
-      })),
+      baskets: basketValue.baskets.map((basket) => {
+        const basis = bases.get(basket.portfolioId);
+        const valueUsd = D(basket.valueUsd);
+        return {
+          ...basket,
+          changePct24h: basketStocks.byPortfolio.get(basket.portfolioId)?.toString() ?? null,
+          /*
+           * A total, net of everything Glider charged, and said so wherever it
+           * is shown. Unlike a wallet holding there is no way to separate the
+           * stocks' move from the cost of trading them: the fills happen
+           * inside Glider and we never see one.
+           */
+          ...(basis === undefined
+            ? {}
+            : {
+                costBasisUsd: toWire(basis.investedUsd),
+                pnlUsd: toWire(basketPnl(valueUsd, basis)),
+                returnPct: basketReturnPct(valueUsd, basis)?.toString() ?? null,
+                basisIsComplete: basis.isComplete,
+              }),
+        };
+      }),
     });
   });
 

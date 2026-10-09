@@ -123,6 +123,18 @@ export interface BasketStore {
     payload: ExitIntentPayload;
   }): Promise<ExitIntent>;
   attachExitOperation(id: string, operationId: string, submittedAt: Date): Promise<void>;
+  /**
+   * Which Glider smart account this owner's basket money moves through.
+   *
+   * Recorded as soon as it is resolved, which is before any money can reach
+   * it, so the wallet-events job can tell basket funding from a withdrawal
+   * when it first sees the transfer rather than only once it is confirmed.
+   */
+  rememberBasketAccount(input: {
+    ownerAccountId: string;
+    portfolioId: string;
+    address: string;
+  }): Promise<void>;
   recentActions(
     userId: string,
     portfolioId: string,

@@ -14,6 +14,14 @@ export interface SettleInput {
   readonly tokenId: string;
   readonly instrumentId: string;
   readonly fill: Fill;
+  /**
+   * What one real share was quoted at around the fill, from the price board.
+   *
+   * Recorded on the lot so a return can be split into what the stock did and
+   * what it cost to get in. Null when nothing could price the mint, and then
+   * the execution price stands in for it downstream.
+   */
+  readonly referencePricePerShare: Decimal | null;
 }
 
 /** The rows a fill is written against, resolved from the mint the order chose. */
@@ -42,7 +50,8 @@ const trim = (v: Decimal, dp: number): string => {
 const money = (v: Decimal): string => `$${v.toDecimalPlaces(2).toFixed(2)}`;
 
 /**
- * What a sell made, when we can prove it.
+ * What a sell made, when we can prove it. Gross of the sell's own fee, which
+ * is recorded beside it on the same order row and so counted exactly once.
  *
  * Average cost, against the shares we hold a lot for. When the user is selling
  * more shares than we have a basis for — some arrived by a path we did not
@@ -94,6 +103,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         status: "filled",
         txSignature: input.signature,
         filledAt: fill.occurredAt,
+        feeUsd: fixed(fill.feeUsd),
       })
       .where(
         and(
@@ -115,6 +125,10 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         shares: fixed(fill.shares),
         // The price actually paid, per real share. Not the quote.
         unitCostUsd: fixed(fill.pricePerShare),
+        feeUsd: fixed(fill.feeUsd),
+        ...(input.referencePricePerShare === null
+          ? {}
+          : { referencePriceUsd: fixed(input.referencePricePerShare) }),
         acquiredAt: fill.occurredAt,
         source: "buy",
         // We watched this one land and read the amounts off the chain.
@@ -134,10 +148,22 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
 
     const realisedPnlUsd = input.side === "sell" ? realisedOn(fill.shares, fill.usd, position) : null;
 
+    // Stored, not only printed. The subtitle was the only place this number
+    // ever existed, so a closed position took its whole profit with it.
+    if (realisedPnlUsd !== null) {
+      await tx
+        .update(orders)
+        .set({ realisedPnlUsd: fixed(realisedPnlUsd) })
+        .where(eq(orders.id, input.orderId));
+    }
+
     const gain =
       realisedPnlUsd === null
         ? ""
         : ` · ${realisedPnlUsd.gte(ZERO) ? "+" : "−"}${money(realisedPnlUsd.abs())}`;
+    // The charge for sponsoring gets its own clause rather than being folded
+    // into the gain, which is the whole point of separating it.
+    const charge = fill.feeUsd.gt(ZERO) ? ` · ${money(fill.feeUsd)} fee` : "";
 
     await tx
       .insert(activities)
@@ -146,8 +172,11 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         kind: input.side,
         occurredAt: fill.occurredAt,
         title: `${input.side === "buy" ? "Bought" : "Sold"} ${input.ticker}`,
-        subtitle: `${trim(fill.shares, 6)} shares at ${money(fill.pricePerShare)}${gain}`,
-        amountUsd: fixed(fill.usd),
+        subtitle: `${trim(fill.shares, 6)} shares at ${money(fill.pricePerShare)}${gain}${charge}`,
+        // What crossed the wallet's edge, which is the swap plus the charge on
+        // a buy and the swap less the charge on a sell. The feed is about cash
+        // moving; the price the shares went at is in the subtitle.
+        amountUsd: fixed(input.side === "buy" ? fill.usd.add(fill.feeUsd) : fill.usd.sub(fill.feeUsd)),
         refTable: "order",
         refId: input.orderId,
         txSignature: input.signature,

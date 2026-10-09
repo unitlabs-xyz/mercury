@@ -48,6 +48,11 @@ export async function loadHeldTokens(
         rawAmount: sql<string>`coalesce(sum(${lots.tokenQty}), 0)`,
         shares: sql<string>`coalesce(sum(${lots.shares}), 0)`,
         cost: sql<string>`coalesce(sum(${lots.shares} * ${lots.unitCostUsd}), 0)`,
+        // A lot written before the reference was recorded falls back to the
+        // price it executed at, which reads as no premium paid. Guessing one
+        // from today's quote would book a market move that never happened.
+        reference: sql<string>`coalesce(sum(${lots.shares} * coalesce(${lots.referencePriceUsd}, ${lots.unitCostUsd})), 0)`,
+        fee: sql<string>`coalesce(sum(${lots.feeUsd}), 0)`,
       })
       .from(lots)
       .where(eq(lots.userId, userId))
@@ -89,6 +94,8 @@ export async function loadHeldTokens(
       recordedRawAmount: row === undefined ? 0n : BigInt(row.rawAmount),
       recordedShares: row === undefined ? ZERO : D(row.shares),
       recordedCostUsd: row === undefined ? ZERO : D(row.cost),
+      recordedReferenceUsd: row === undefined ? ZERO : D(row.reference),
+      recordedFeeUsd: row === undefined ? ZERO : D(row.fee),
     } satisfies HeldToken;
   });
 }
@@ -140,6 +147,8 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
           shares: fixed(p.shares),
           sharesWithBasis: fixed(p.sharesWithBasisUsd),
           costBasisUsd: fixed(p.costBasisUsd),
+          referenceBasisUsd: fixed(p.referenceBasisUsd),
+          feeUsd: fixed(p.feeUsd),
           avgUnitCostUsd: fixed(p.avgUnitCostUsd),
           updatedAt: new Date(),
         })
@@ -149,6 +158,8 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
             shares: fixed(p.shares),
             sharesWithBasis: fixed(p.sharesWithBasisUsd),
             costBasisUsd: fixed(p.costBasisUsd),
+            referenceBasisUsd: fixed(p.referenceBasisUsd),
+            feeUsd: fixed(p.feeUsd),
             avgUnitCostUsd: fixed(p.avgUnitCostUsd),
             updatedAt: new Date(),
           },
