@@ -66,12 +66,23 @@ export const Portfolio = () => {
     value,
     assetCount: t?.allocations.length ?? b.holdings.length,
     todayPct: b.changePct24h === null ? null : Number(b.changePct24h),
+    /*
+     * Our own basis first, in dollars, because that is the figure the rest of
+     * the page is in and the only one we can show beside a holding's. Glider's
+     * money-weighted percentage stands in when we have no basis — a basket
+     * funded by a path we never witnessed — and it is all they give us.
+     */
+    pnlUsd: b.pnlUsd === undefined ? null : Number(b.pnlUsd),
+    costBasisUsd: b.costBasisUsd === undefined ? null : Number(b.costBasisUsd),
+    basisIsComplete: b.basisIsComplete ?? true,
     returnPct:
-      b.holdings.length > 0 && b.holdings.every((asset) => asset.assetId === USDC_ASSET_ID)
-        ? null
-        : returnsByPortfolio.get(b.portfolioId) == null
+      b.returnPct != null
+        ? Number(b.returnPct)
+        : b.holdings.length > 0 && b.holdings.every((asset) => asset.assetId === USDC_ASSET_ID)
           ? null
-          : Number(returnsByPortfolio.get(b.portfolioId)),
+          : returnsByPortfolio.get(b.portfolioId) == null
+            ? null
+            : Number(returnsByPortfolio.get(b.portfolioId)),
     marks: [...(t?.allocations ?? [])]
       .sort((a, z) => z.weightBps - a.weightBps)
       .slice(0, 2)

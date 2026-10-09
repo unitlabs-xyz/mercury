@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { CARD_HEIGHT, CARD_WIDTH, listBackgrounds, pickBackground, renderCard } from "./card.js";
+import {
+  CARD_HEIGHT,
+  CARD_WIDTH,
+  listBackgrounds,
+  pickBackground,
+  renderCard,
+  WAVES_FROM,
+  waveFor,
+  waveNumber,
+} from "./card.js";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -31,5 +40,24 @@ describe("choosing a photo", () => {
         expect(await pickBackground(previous, () => r)).not.toBe(previous);
       }
     }
+  });
+});
+
+describe("waves", () => {
+  const at = (hours: number) => new Date(WAVES_FROM + hours * 3_600_000);
+
+  it("puts each six hours after the beta opened into its own wave", () => {
+    expect(waveNumber(at(0))).toBe(1);
+    expect(waveNumber(at(5.99))).toBe(1);
+    expect(waveNumber(at(6))).toBe(2);
+    expect(waveNumber(at(13))).toBe(3);
+    expect(waveFor(900, at(13))).toBe("Wave 3");
+  });
+
+  it("keeps the position-based wave for anyone who joined before", () => {
+    expect(waveNumber(at(-1))).toBeNull();
+    expect(waveFor(42, at(-1))).toBe("First, 1–100");
+    expect(waveFor(300)).toBe("Second, 101–500");
+    expect(waveFor(900)).toBe("Public");
   });
 });

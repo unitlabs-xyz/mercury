@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { waitlist } from "../db/schema.js";
 import type { Notifier } from "../notify/ports.js";
-import { pickBackground, renderCard, renderWordmark } from "../waitlist/card.js";
+import { pickBackground, renderCard } from "../waitlist/card.js";
 import { cardPage, cardView, welcomeNotice } from "../waitlist/share.js";
 
 /** X's own rule: letters, digits and underscores, at most fifteen. */
@@ -44,6 +44,8 @@ export interface CardRow {
   readonly handle: string | null;
   readonly name: string | null;
   readonly background: string | null;
+  /** When they signed up, which decides their wave. */
+  readonly joinedAt?: Date;
 }
 
 export interface WaitlistDeps {
@@ -59,8 +61,6 @@ export interface WaitlistDeps {
   /** False only when the domain certainly cannot receive mail. */
   readonly acceptsMail: (domain: string) => Promise<boolean>;
   readonly render: (card: CardRow) => Promise<Buffer>;
-  /** The wordmark badge the welcome email carries, as a PNG. */
-  readonly wordmark: () => Promise<Buffer>;
   /** Sends the welcome email. Without a provider it logs and sends nothing. */
   readonly notifier?: Notifier;
   /**
@@ -103,13 +103,14 @@ const toCard = (r: typeof waitlist.$inferSelect): CardRow => ({
   handle: r.handle,
   name: r.name,
   background: r.background,
+  joinedAt: r.createdAt,
 });
 
 export const pgWaitlist = (
   db: Db,
   adminToken?: string,
   acceptsMail = dnsAcceptsMail,
-  extra: Partial<Pick<WaitlistDeps, "notifier" | "publicBase" | "render" | "wordmark">> & {
+  extra: Partial<Pick<WaitlistDeps, "notifier" | "publicBase" | "render">> & {
     readonly pick?: (previous: string | null) => Promise<string | null>;
   } = {},
 ): WaitlistDeps => ({
@@ -169,7 +170,6 @@ export const pgWaitlist = (
     }));
   },
   render: extra.render ?? renderCard,
-  wordmark: extra.wordmark ?? renderWordmark,
   ...(extra.notifier ? { notifier: extra.notifier } : {}),
   ...(extra.publicBase ? { publicBase: extra.publicBase.replace(/\/$/, "") } : {}),
   ...(adminToken ? { adminToken } : {}),
@@ -232,8 +232,8 @@ export function waitlistRoutes(deps: WaitlistDeps) {
     // draws on demand.
     if (deps.notifier) {
       try {
-        const [png, wordmark] = await Promise.all([deps.render(card), deps.wordmark()]);
-        await deps.notifier.send(welcomeNotice(parsed.data.email, view, png, wordmark));
+        const png = await deps.render(card);
+        await deps.notifier.send(welcomeNotice(parsed.data.email, view, png));
       } catch (error: unknown) {
         console.error("waitlist: welcome email not sent", error);
       }
@@ -293,8 +293,8 @@ export function waitlistRoutes(deps: WaitlistDeps) {
       return c.json({ error: { code: "unavailable", message: "No mail provider is configured." } }, 503);
     }
     const view = cardView(card, originOf(c, deps.publicBase));
-    const [png, wordmark] = await Promise.all([deps.render(card), deps.wordmark()]);
-    const sent = await deps.notifier.send(welcomeNotice(parsed.data.email, view, png, wordmark));
+    const png = await deps.render(card);
+    const sent = await deps.notifier.send(welcomeNotice(parsed.data.email, view, png));
     if (!sent) return c.json({ error: { code: "not_sent", message: "The mail provider refused it." } }, 502);
     return c.json({ ok: true, sent: parsed.data.email, card: view });
   });

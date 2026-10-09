@@ -6,9 +6,9 @@ export const site = {
   name: "Mercury",
   // The landing domain. It feeds canonical URLs, OG tags and the sitemap.
   url: "https://trymercury.xyz",
-  // The web app. Nothing links to it while signup is a waitlist. Its own domain
-  // (app.trymercury.xyz) once DNS points there; the Vercel address until then.
-  app: "https://mercury-web-nine.vercel.app/",
+  // The web app, open in beta. The hero and the bar send people here first;
+  // the waitlist stays for anyone not yet let in.
+  app: "https://beta.trymercury.xyz",
   // The API the waitlist form posts to. Set PUBLIC_API_URL on the Vercel project;
   // unset, it is the API running locally.
   api: (import.meta.env.PUBLIC_API_URL ?? "http://localhost:8787").replace(/\/$/, ""),

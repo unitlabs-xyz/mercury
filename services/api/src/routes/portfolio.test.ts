@@ -41,9 +41,24 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
   shares: D(2),
   sharesWithBasis: D(2),
   costBasisUsd: D(300),
+  // Filled at the quote and free, unless a test says otherwise, so a stacked
+  // return is all market move and no cost of trading.
+  referenceBasisUsd: over.costBasisUsd ?? D(300),
+  feeUsd: ZERO,
   avgUnitCostUsd: D(150),
   wrappers: [{ mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 }],
   ...over,
+});
+
+/** One Glider basket worth `valueUsd`, holding nothing the price board must answer for. */
+const basket = (valueUsd: string) => ({
+  portfolioId: "portfolio-1",
+  slug: "nvda-tsla-50-50",
+  name: "AI & EV Leaders",
+  valueUsd,
+  inTransitUsd: "0",
+  fetchedAt: new Date().toISOString(),
+  holdings: [],
 });
 
 const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
@@ -254,6 +269,174 @@ describe("GET /v1/portfolio", () => {
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.holdings[0]!.valueUsd).toBe("1000"); // 5 shares at $200
     expect(body.holdings[0]!.unrealisedPnlUsd).toBe("100"); // 2 x $200 - $300
+  });
+
+  it("splits a return into what the stock did and what the trade cost", async () => {
+    // 2 shares bought for $300 when they were quoted at $296, $0.46 of fee,
+    // now worth $400. The old single figure said +$99.54 and gave no way to
+    // see that $4.46 of the move was never the stock.
+    const d = deps({
+      holdings: async () => [holding({ costBasisUsd: D(300), referenceBasisUsd: D(296), feeUsd: D("0.46") })],
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!).toMatchObject({
+      marketPnlUsd: "104", // 2 x $200 against $296 quoted
+      tradingCostUsd: "4.46", // $4 of premium and spread, plus $0.46 of fee
+      unrealisedPnlUsd: "99.54",
+    });
+  });
+
+  it("reports no market move on a stock sitting where it was bought", async () => {
+    // The symptom this exists to fix: a position whose stock has not moved at
+    // all used to report the fee and the premium as a loss.
+    const d = deps({
+      holdings: async () => [
+        holding({ costBasisUsd: D("400.46"), referenceBasisUsd: D(400), feeUsd: D("0.46") }),
+      ],
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!).toMatchObject({
+      marketPnlUsd: "0",
+      tradingCostUsd: "0.92",
+      unrealisedPnlUsd: "-0.92",
+    });
+  });
+
+  it("keeps the two lines summing to the dollars, so the split hides nothing", async () => {
+    const d = deps({
+      holdings: async () => [holding({ costBasisUsd: D(300), referenceBasisUsd: D(296), feeUsd: D("0.46") })],
+    });
+    const h = (await portfolioOf(await appWith(d).request("/v1/portfolio"))).holdings[0]!;
+    expect(D(h.marketPnlUsd!).sub(D(h.tradingCostUsd!)).toFixed()).toBe(h.unrealisedPnlUsd);
+  });
+
+  it("gives a basket a cost basis from the cash that went into it", async () => {
+    // Without this a basket contributes value to net worth and no cost at all,
+    // so an account with $500 in baskets and $20 in one stock reported a P&L
+    // that was about the $20.
+    const d = deps({
+      baskets: async () => ({
+        totalUsd: D("542.10"),
+        fetchedAt: new Date(),
+        baskets: [basket("542.10")],
+      }),
+      basketMovements: async () => ({
+        movements: [{ portfolioId: "portfolio-1", amountUsd: D(500), inward: true }],
+        inKindExits: [],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.baskets[0]!).toMatchObject({
+      costBasisUsd: "500",
+      pnlUsd: "42.1",
+      returnPct: "8.42",
+      basisIsComplete: true,
+    });
+  });
+
+  it("takes money that came back out of a basket off its basis", async () => {
+    const d = deps({
+      baskets: async () => ({ totalUsd: D("330"), fetchedAt: new Date(), baskets: [basket("330")] }),
+      basketMovements: async () => ({
+        movements: [
+          { portfolioId: "portfolio-1", amountUsd: D(500), inward: true },
+          { portfolioId: "portfolio-1", amountUsd: D(200), inward: false },
+        ],
+        inKindExits: [],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.baskets[0]!).toMatchObject({ costBasisUsd: "300", pnlUsd: "30" });
+  });
+
+  it("says a basis is incomplete when something left the basket in kind", async () => {
+    // Tokens left, not dollars, so nothing recorded what they were worth.
+    const d = deps({
+      baskets: async () => ({ totalUsd: D("100"), fetchedAt: new Date(), baskets: [basket("100")] }),
+      basketMovements: async () => ({
+        movements: [{ portfolioId: "portfolio-1", amountUsd: D(500), inward: true }],
+        inKindExits: [{ portfolioId: "portfolio-1" }],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.baskets[0]!.basisIsComplete).toBe(false);
+  });
+
+  it("leaves a basket's basis off entirely when no money is recorded against it", async () => {
+    // Enrolled through a path we did not witness. A basis of zero would report
+    // the whole of the basket's value as profit.
+    const d = deps({
+      baskets: async () => ({ totalUsd: D("100"), fetchedAt: new Date(), baskets: [basket("100")] }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.baskets[0]!.costBasisUsd).toBeUndefined();
+    expect(body.baskets[0]!.pnlUsd).toBeUndefined();
+  });
+
+  it("values a holding at the pool, not at the underlying quote", async () => {
+    // The two are different numbers: measured across twenty xStocks on 9
+    // October 2026 they differed by a median 0.49%, as far apart as 9.4%.
+    // What the wallet is worth is what the pool would pay for it.
+    const d = deps({
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(mints.map((m) => [m, price(m, { usdPricePerToken: D(198), pricePerShare: D(200) })])),
+      } satisfies PriceBoard,
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!.valueUsd).toBe("396"); // 2 shares at $198, not $200
+  });
+
+  it("divides the pool's token price by the multiplier to get a share", async () => {
+    // A token is `multiplier` shares, so the pool's price per token is that
+    // many shares' worth. Using it per share would double a holder's value
+    // every time the multiplier did.
+    const d = deps({
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(
+            mints.map((m) => [
+              m,
+              price(m, { usdPricePerToken: D(400), pricePerShare: D(200), multiplier: D(2) }),
+            ]),
+          ),
+      } satisfies PriceBoard,
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!.valueUsd).toBe("400"); // 2 shares at $400/2
+  });
+
+  it("charges the discount it would be sold into, without calling it the stock falling", async () => {
+    // The stock is exactly where it was bought and the token is under it.
+    const d = deps({
+      holdings: async () => [holding({ costBasisUsd: D(400), referenceBasisUsd: D(400), feeUsd: ZERO })],
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(mints.map((m) => [m, price(m, { usdPricePerToken: D(198), pricePerShare: D(200) })])),
+      } satisfies PriceBoard,
+    });
+    const h = (await portfolioOf(await appWith(d).request("/v1/portfolio"))).holdings[0]!;
+    expect(h.marketPnlUsd).toBe("0");
+    expect(h.tradingCostUsd).toBe("4");
+    expect(h.unrealisedPnlUsd).toBe("-4");
+  });
+
+  it("agrees with the exposure endpoint about what one holding is worth", async () => {
+    // These valued the same shares differently: the portfolio at the issuer's
+    // quote and the exposure breakdown at the pool. Whichever a reader saw
+    // second looked like a bug.
+    const d = deps({
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(mints.map((m) => [m, price(m, { usdPricePerToken: D(198), pricePerShare: D(200) })])),
+      } satisfies PriceBoard,
+    });
+    const app = appWith(d);
+    const body = await portfolioOf(await app.request("/v1/portfolio"));
+    const exposure = (await (await app.request("/v1/portfolio/exposure/NVDA")).json()) as {
+      valueUsd: string;
+    };
+    expect(exposure.valueUsd).toBe(body.holdings[0]!.valueUsd);
   });
 
   it("says how many of the shares a cost is known for", async () => {

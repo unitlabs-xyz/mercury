@@ -516,10 +516,15 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     if (owner === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
 
     const mint = decision.best.mint;
-    const [ref, token, multiplier] = await Promise.all([
+    const [ref, token, multiplier, board] = await Promise.all([
       read.fills.tokenRef(mint),
       market().registry.byMint(mint),
       market().multipliers.multiplierFor(mint),
+      // The underlying quote, to record on the lot beside the price paid. It
+      // is read here rather than taken from the order's own `referencePrice`
+      // because that one is from the quote the user was shown, which can be a
+      // minute older than the fill.
+      market().prices.pricesFor([mint]),
     ]);
     if (ref === null || token === null) return c.json(fail("not_found", "Unknown token."), 404);
 
@@ -542,6 +547,9 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       mint,
       decimals: token.decimals,
       multiplier: multiplier ?? D(1),
+      // Without this the charge for sponsoring is indistinguishable from money
+      // the swap spent, and it lands in the share price.
+      ...(read.send.relay === undefined ? {} : { relayer: read.send.relay.signer.address }),
       now: new Date(),
     });
     if (fill.kind === "not_a_fill") return c.json(fail("validation_failed", fill.detail), 422);
@@ -556,6 +564,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       tokenId: ref.tokenId,
       instrumentId: ref.instrumentId,
       fill,
+      referencePricePerShare: board.get(mint)?.pricePerShare ?? null,
     });
 
     return c.json({
@@ -564,6 +573,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       shares: toWire(fill.shares),
       pricePerShare: toWire(fill.pricePerShare),
       usd: toWire(fill.usd),
+      feeUsd: toWire(fill.feeUsd),
       realisedPnlUsd:
         settled.kind === "settled" && settled.realisedPnlUsd !== null ? toWire(settled.realisedPnlUsd) : null,
     });

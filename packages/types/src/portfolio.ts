@@ -7,7 +7,15 @@ export const Holding = z.object({
   shares: Usd,
   valueUsd: Usd,
   costBasisUsd: Usd,
+  /** The dollars the position is up or down: `marketPnlUsd` less `tradingCostUsd`. */
   unrealisedPnlUsd: Usd,
+  /**
+   * Of that, what the stock did — today's quote against the quote it was
+   * bought against. Optional for a client reading an older server.
+   */
+  marketPnlUsd: Usd.optional(),
+  /** And what it cost to get in: premium and spread paid, plus fees. Positive is a cost. */
+  tradingCostUsd: Usd.optional(),
   /** Shares covered by recorded purchase lots; other shares have unknown basis. */
   sharesWithBasis: Usd.optional(),
   changePct24h: Ratio,
@@ -38,6 +46,24 @@ export const Portfolio = z.object({
       inTransitUsd: Usd,
       /** Estimated price move on currently held basket assets, not account P&L. */
       changePct24h: Ratio.nullable(),
+      /**
+       * What went into this basket and never came back out: cash in less cash
+       * out. A basket has no lots — the fills happen inside Glider — so this is
+       * the only basis there is.
+       */
+      costBasisUsd: Usd.optional(),
+      /**
+       * Value against that basis. A total, net of everything Glider charged,
+       * and not separable into the stocks' move and the cost of trading them
+       * the way a wallet holding's return is.
+       */
+      pnlUsd: Usd.optional(),
+      returnPct: Ratio.nullable().optional(),
+      /**
+       * False when something left this basket in kind, so no dollar figure was
+       * recorded for it and the basis understates what came back out.
+       */
+      basisIsComplete: z.boolean().optional(),
       fetchedAt: z.string().datetime(),
       holdings: z.array(
         z.object({

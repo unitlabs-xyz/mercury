@@ -1,4 +1,6 @@
+// First, before anything that might reach for a global it sets.
 import "./polyfills";
+import { Analytics } from "@vercel/analytics/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -14,5 +16,7 @@ createRoot(document.getElementById("root")!).render(
     <PrivyBoundary>
       <App />
     </PrivyBoundary>
+    {/* Vercel Web Analytics: visitors and page views, on the Vercel deployment. */}
+    <Analytics />
   </StrictMode>,
 );

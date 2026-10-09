@@ -103,6 +103,7 @@ const store = (definition: BasketTemplate) => ({
   attachExitOperation: async () => {
     throw new Error("unexpected exit completion");
   },
+  rememberBasketAccount: async () => undefined,
   recentActions: async () => [],
   confirmFunding: async () => {
     throw new Error("unexpected funding confirmation");

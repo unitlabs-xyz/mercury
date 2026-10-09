@@ -6,6 +6,7 @@ import { planFill, type FillContext } from "./fill.js";
 const WALLET = "6Yg9nNQEqCQBMcYHLrrfj6qGjcR6hvhdhHQZPjtDqLRT";
 const OTHER = "FMVHP1xw6ZHB9zLGyrJeeAvEzCBgouH8bPzdkYqq2C5W";
 const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
+const RELAYER = "ReLay1nQ4Ka9ApDLnjZ8pQZaKuRnRxTYL5gWPhVrNqA";
 const NOW = new Date("2026-09-29T12:00:00.000Z");
 
 const bal = (mint: string, owner: string, rawAmount: bigint, decimals: number): TokenBalanceEntry => ({
@@ -147,23 +148,105 @@ describe("planFill", () => {
 });
 
 /**
- * A sponsored sell puts the swap and the repayment in one transaction, so the
- * USDC delta the chain reports is already net of the charge. That is the right
- * number to keep: it is what reached the wallet, and it is symmetric with a
- * sponsored buy, whose delta is already gross of the charge for the same reason.
+ * A sponsored trade puts the swap and the charge for sponsoring it in one
+ * transaction, so the wallet's own USDC delta is gross of the charge on a buy
+ * and net of it on a sell. Neither is the trade: the charge bought no shares.
+ * It is read off the relayer's own leg and reported separately, so a position
+ * does not open at a loss of exactly the fee and a sale does not give up its
+ * fee twice.
  */
-describe("a sponsored sell", () => {
-  it("records the proceeds net of the charge, because that is what arrived", () => {
-    const sold = tx({
-      preTokens: [bal(NVDAX, WALLET, 100_000_000n, 8)],
-      // One whole token out; $10 in from the swap, less $0.25 back to the relayer.
-      postTokens: [bal(NVDAX, WALLET, 0n, 8), bal(USDC_MINT, WALLET, 9_750_000n, 6)],
-    });
-    const fill = planFill(sold, ctx({ side: "sell", multiplier: D(1) }));
+describe("a sponsored trade", () => {
+  /** A buy charges first, so $20 leaves the wallet and $19.77 of it reaches the swap. */
+  const sponsoredBuy = tx({
+    preTokens: [bal(USDC_MINT, WALLET, 20_000_000n, 6), bal(USDC_MINT, RELAYER, 1_000_000n, 6)],
+    postTokens: [
+      bal(USDC_MINT, WALLET, 0n, 6),
+      bal(USDC_MINT, RELAYER, 1_230_000n, 6),
+      bal(NVDAX, WALLET, 100_000_000n, 8),
+    ],
+  });
+
+  it("prices a buy on what reached the swap, not on what left the wallet", () => {
+    const fill = planFill(sponsoredBuy, ctx({ relayer: RELAYER, multiplier: D(1) }));
     expect(fill.kind).toBe("filled");
     if (fill.kind !== "filled") return;
-    expect(fill.usd.toFixed(2)).toBe("9.75");
-    expect(fill.shares.toFixed(2)).toBe("1.00");
-    expect(fill.pricePerShare.toFixed(2)).toBe("9.75");
+    expect(fill.feeUsd.toFixed(2)).toBe("0.23");
+    expect(fill.usd.toFixed(2)).toBe("19.77");
+    // Not $20.00. A whole token bought with $19.77 cost $19.77, and recording
+    // it at $20.00 is the -1.15% opening loss this separation exists to stop.
+    expect(fill.pricePerShare.toFixed(2)).toBe("19.77");
+  });
+
+  it("prices a sell on what the swap made, not on what reached the wallet", () => {
+    const sold = tx({
+      preTokens: [bal(NVDAX, WALLET, 100_000_000n, 8), bal(USDC_MINT, RELAYER, 1_000_000n, 6)],
+      // One whole token out; $10 in from the swap, less $0.25 back to the relayer.
+      postTokens: [
+        bal(NVDAX, WALLET, 0n, 8),
+        bal(USDC_MINT, WALLET, 9_750_000n, 6),
+        bal(USDC_MINT, RELAYER, 1_250_000n, 6),
+      ],
+    });
+    const fill = planFill(sold, ctx({ side: "sell", relayer: RELAYER, multiplier: D(1) }));
+    expect(fill.kind).toBe("filled");
+    if (fill.kind !== "filled") return;
+    expect(fill.feeUsd.toFixed(2)).toBe("0.25");
+    expect(fill.usd.toFixed(2)).toBe("10.00");
+    expect(fill.pricePerShare.toFixed(2)).toBe("10.00");
+  });
+
+  it("charges nothing when the trade was not sponsored, so the delta is the trade", () => {
+    const fill = planFill(aBuy, ctx());
+    expect(fill.kind === "filled" && fill.feeUsd.toFixed()).toBe("0");
+    expect(fill.kind === "filled" && fill.usd.toFixed()).toBe("100");
+  });
+
+  it("ignores a relayer leg nobody named, so an unsponsored trade cannot lose dollars to it", () => {
+    // The same transaction, read without being told who the relayer is: the
+    // charge is then part of the trade, which is the old behaviour and the bug.
+    const fill = planFill(sponsoredBuy, ctx({ multiplier: D(1) }));
+    expect(fill.kind === "filled" && fill.usd.toFixed(2)).toBe("20.00");
+  });
+
+  it("reads no charge from a relayer that spent USDC rather than receiving it", () => {
+    const refunded = tx({
+      preTokens: [bal(USDC_MINT, WALLET, 20_000_000n, 6), bal(USDC_MINT, RELAYER, 1_000_000n, 6)],
+      postTokens: [
+        bal(USDC_MINT, WALLET, 0n, 6),
+        bal(USDC_MINT, RELAYER, 900_000n, 6),
+        bal(NVDAX, WALLET, 100_000_000n, 8),
+      ],
+    });
+    // A negative fee would add dollars to the swap that nobody paid, pricing
+    // the share above what left the wallet.
+    const fill = planFill(refunded, ctx({ relayer: RELAYER, multiplier: D(1) }));
+    expect(fill.kind === "filled" && fill.feeUsd.toFixed()).toBe("0");
+    expect(fill.kind === "filled" && fill.usd.toFixed(2)).toBe("20.00");
+  });
+
+  it("refuses a buy whose whole movement was the charge, rather than pricing shares at nothing", () => {
+    const allFee = tx({
+      preTokens: [bal(USDC_MINT, WALLET, 230_000n, 6), bal(USDC_MINT, RELAYER, 0n, 6)],
+      postTokens: [
+        bal(USDC_MINT, WALLET, 0n, 6),
+        bal(USDC_MINT, RELAYER, 230_000n, 6),
+        bal(NVDAX, WALLET, 100_000_000n, 8),
+      ],
+    });
+    const fill = planFill(allFee, ctx({ relayer: RELAYER, multiplier: D(1) }));
+    expect(fill.kind).toBe("not_a_fill");
+  });
+
+  it("takes no charge from a relayer that is the trader, which would read the trade as its own fee", () => {
+    // A sell, because that is where it bites: the trader's USDC goes up, so
+    // reading their own leg as the charge would double the proceeds. On a buy
+    // the leg is negative and no charge is read from it either way.
+    const sold = tx({
+      preTokens: [bal(NVDAX, WALLET, 100_000_000n, 8)],
+      postTokens: [bal(NVDAX, WALLET, 0n, 8), bal(USDC_MINT, WALLET, 10_000_000n, 6)],
+    });
+    const fill = planFill(sold, ctx({ side: "sell", relayer: WALLET, multiplier: D(1) }));
+    expect(fill.kind === "filled" && fill.feeUsd.toFixed()).toBe("0");
+    expect(fill.kind === "filled" && fill.usd.toFixed(2)).toBe("10.00");
   });
 });

@@ -16,8 +16,27 @@ export const CARD_HEIGHT = 630;
 /** The one line every card carries, the same on all of them. */
 export const CARD_LINE = "Money that stays invested and spendable.";
 
-/** Who gets in when: the first hundred, then the rest of the founding 500, then everyone. Shown in the welcome email. */
-export function waveFor(position: number): string {
+/**
+ * Since the beta opened, the waitlist lets people in by when they joined, not
+ * by position: everyone who signs up in the same six hours is one wave. Wave 1
+ * is the first six hours after midnight IST on 10 October 2026.
+ */
+export const WAVES_FROM = Date.parse("2026-10-09T18:30:00Z");
+export const WAVE_HOURS = 6;
+
+/** The wave a signup at this moment belongs to, or null before waves began. */
+export function waveNumber(joinedAt: Date): number | null {
+  const elapsed = joinedAt.getTime() - WAVES_FROM;
+  return elapsed < 0 ? null : 1 + Math.floor(elapsed / (WAVE_HOURS * 3_600_000));
+}
+
+/**
+ * Shown in the welcome email and on the landing page's card. A signup from
+ * before the beta keeps the position-based wave it was first told.
+ */
+export function waveFor(position: number, joinedAt?: Date): string {
+  const n = joinedAt ? waveNumber(joinedAt) : null;
+  if (n !== null) return `Wave ${n}`;
   if (position <= 100) return "First, 1–100";
   if (position <= FOUNDING_SEATS) return `Second, 101–${FOUNDING_SEATS}`;
   return "Public";

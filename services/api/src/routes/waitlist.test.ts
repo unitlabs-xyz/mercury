@@ -12,7 +12,6 @@ const withCards = async (sent: Notice[] = []) =>
   waitlistRoutes(
     pgWaitlist(await testDb(), "secret", anyDomain, {
       render: fakeRender,
-      wordmark: async () => Buffer.from("wordmark"),
       pick: async () => "a.jpg",
       publicBase: "https://cards.test",
       notifier: { send: async (n) => (sent.push(n), true) },
@@ -25,6 +24,7 @@ type Joined = {
     position: number;
     handle: string | null;
     founding: boolean;
+    wave: string;
     image: string;
     page: string;
     intent: string;
@@ -144,15 +144,20 @@ describe("waitlist", () => {
       await post(app, { email: "a@b.co", country: "India", handle: "ada" })
     ).json()) as Joined;
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({ to: "a@b.co", subject: "You're in. Spot #1 of 500 is yours" });
-    expect(sent[0]!.attachments?.map((a) => a.contentId)).toEqual(["card", "wordmark"]);
+    // Joined after the beta opened, so by wave; which wave depends on today's clock.
+    expect(sent[0]!.to).toBe("a@b.co");
+    expect(sent[0]!.subject).toMatch(/^You're in wave \d+\. Spot #1 is yours$/);
+    expect(card!.wave).toMatch(/^Wave \d+$/);
+    // The card and nothing else: no logo attachment above the headline.
+    expect(sent[0]!.attachments?.map((a) => a.contentId)).toEqual(["card"]);
+    expect(sent[0]!.headers?.["List-Unsubscribe"]).toContain("mailto:");
     expect(sent[0]!.attachments?.[0]?.filename).toBe("mercury-1.png");
-    // Both images inline, and the spot's details above the card.
+    // The card inline, and the spot's details above it.
     expect(sent[0]!.html).toContain('src="cid:card"');
-    expect(sent[0]!.html).toContain('src="cid:wordmark"');
+    expect(sent[0]!.html).not.toContain("cid:wordmark");
     expect(sent[0]!.html).toContain("prefers-color-scheme: dark");
     expect(sent[0]!.html).toContain("@ada");
-    expect(sent[0]!.html).toContain("First, 1–100");
+    expect(sent[0]!.body).toMatch(/Wave: \d+/);
     expect(sent[0]!.body).toContain("Held by: @ada");
     expect(sent[0]!.body).toContain(card!.intent);
   });

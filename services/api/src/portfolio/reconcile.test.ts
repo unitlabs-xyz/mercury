@@ -18,6 +18,11 @@ const held = (over: Partial<HeldToken> = {}): HeldToken => ({
   recordedRawAmount: 0n,
   recordedShares: ZERO,
   recordedCostUsd: ZERO,
+  // Filled at the quote and free, unless a test says otherwise. A reference of
+  // zero against a recorded cost would mean the whole cost was premium, which
+  // is not what most of these tests are about.
+  recordedReferenceUsd: over.recordedCostUsd ?? ZERO,
+  recordedFeeUsd: ZERO,
   ...over,
 });
 
@@ -42,6 +47,8 @@ describe("planReconciliation: tokens that arrived from outside", () => {
         shares: D(1),
         sharesWithBasisUsd: ZERO,
         costBasisUsd: ZERO,
+        referenceBasisUsd: ZERO,
+        feeUsd: ZERO,
         avgUnitCostUsd: ZERO,
       },
     ]);
@@ -202,9 +209,35 @@ describe("planReconciliation: tokens that left", () => {
       shares: D("0.5"),
       sharesWithBasisUsd: D("0.5"),
       costBasisUsd: D(100),
+      referenceBasisUsd: D(100),
+      feeUsd: ZERO,
       // Average cost does not move when a position shrinks. That is what
       // average-cost accounting means, and it is why the scaling is pro rata.
       avgUnitCostUsd: D(200),
+    });
+  });
+
+  it("scales the reference and the fees by the same ratio as the cost", () => {
+    // Half the position left. If the cost were capped and the reference were
+    // not, the shares that went would read as a market move, and the two lines
+    // of a stacked return would stop summing to the dollars.
+    const plan = planReconciliation(
+      [
+        held({
+          chainRawAmount: ONE_TOKEN / 2n,
+          recordedRawAmount: ONE_TOKEN,
+          recordedShares: D(1),
+          recordedCostUsd: D(200),
+          recordedReferenceUsd: D("198.00"),
+          recordedFeeUsd: D("0.46"),
+        }),
+      ],
+      NOW,
+    );
+    expect(plan.positions[0]).toMatchObject({
+      costBasisUsd: D(100),
+      referenceBasisUsd: D(99),
+      feeUsd: D("0.23"),
     });
   });
 
@@ -226,6 +259,8 @@ describe("planReconciliation: tokens that left", () => {
       shares: ZERO,
       sharesWithBasisUsd: ZERO,
       costBasisUsd: ZERO,
+      referenceBasisUsd: ZERO,
+      feeUsd: ZERO,
       avgUnitCostUsd: ZERO,
     });
   });
@@ -260,6 +295,8 @@ describe("planReconciliation: rolling up", () => {
       shares: D(3),
       sharesWithBasisUsd: D(1),
       costBasisUsd: D(200),
+      referenceBasisUsd: D(200),
+      feeUsd: ZERO,
       avgUnitCostUsd: D(200),
     });
   });
@@ -285,6 +322,8 @@ describe("planReconciliation: rolling up", () => {
         shares: ZERO,
         sharesWithBasisUsd: ZERO,
         costBasisUsd: ZERO,
+        referenceBasisUsd: ZERO,
+        feeUsd: ZERO,
         avgUnitCostUsd: ZERO,
       },
     ]);

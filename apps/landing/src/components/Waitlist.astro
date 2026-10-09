@@ -558,7 +558,7 @@ const countries = REGIONS.split(" ")
 
     const mark = (el: HTMLElement, bad: boolean) => el.setAttribute("aria-invalid", String(bad));
 
-    type Card = { position: number; founding: boolean; image: string; intent: string };
+    type Card = { position: number; founding: boolean; image: string; intent: string; wave?: string };
 
     // Kept in this browser until they clear it, so a return visit shows their
     // card instead of the form. Storage can be off or throw; then it is just
@@ -589,8 +589,13 @@ const countries = REGIONS.split(" ")
     const download = modal?.querySelector<HTMLButtonElement>("[data-card-download]");
     const see = form.querySelector<HTMLButtonElement>("[data-see-card]");
 
+    // Since the beta opened, signups are let in by wave: "Spot #612 is yours, wave 3."
     const line = (card: Card) =>
-      card.founding ? `Spot #${card.position} of 500 is yours.` : `Spot #${card.position} is yours.`;
+      card.wave?.startsWith("Wave ")
+        ? `Spot #${card.position} is yours, ${card.wave.toLowerCase()}.`
+        : card.founding
+          ? `Spot #${card.position} of 500 is yours.`
+          : `Spot #${card.position} is yours.`;
 
     // Their card, with the post one click away. X takes no image from a link,
     // so Share opens a compose window whose link unfurls into the card.
