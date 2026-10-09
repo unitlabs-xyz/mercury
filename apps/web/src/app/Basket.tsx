@@ -1096,8 +1096,7 @@ export const Basket = () => {
                 />
                 {account ? (
                   <div className="mt-5">
-                    <p className="text-[12px] text-ds-muted">Smart-account value</p>
-                    <p className="mt-1 text-[28px] leading-none font-medium text-ds-ink">
+                    <p className="text-[28px] leading-none font-medium text-ds-ink">
                       {usd(account.totalValueUsd)}
                     </p>
                     <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ds-divider pt-4 text-[12px]">
