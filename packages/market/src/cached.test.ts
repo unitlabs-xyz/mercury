@@ -282,24 +282,67 @@ describe("CachedPriceBoard, serving a stale entry while it is replaced", () => {
     expect(up.calls).toEqual([["A"], ["A"]]);
   });
 
-  it("waits for a fresh price when the caller names an age", async () => {
+  it("sends at once when the caller names an age, instead of waiting in the window", async () => {
     let now = 0;
     const { up, clock, cached } = await warmed(() => now);
 
     now = 2_000;
+    const quote = await cached.pricesFor(["A"], { maxAgeMs: 1_000 });
+    // Answered without the window ever being flushed. Half a second of
+    // collecting would eat most of the second of freshness it just asked for.
+    expect(up.calls).toEqual([["A"], ["A"]]);
+    expect(clock.flushes).toHaveLength(1);
+    expect(quote.get("A")).toBeDefined();
+  });
+
+  it("waits for that answer rather than being handed the stale entry", async () => {
+    const up = upstream();
+    const clock = manual();
+    let now = 0;
+    const cached = new CachedPriceBoard(up.board, {
+      ttlMs: 1_000,
+      staleMs: 60_000,
+      now: () => now,
+      schedule: clock.schedule,
+    });
+    const first = cached.pricesFor(["A"]);
+    clock.flushes[0]!();
+    await first;
+
+    now = 2_000;
+    up.holdNext();
     let settled = false;
     const quote = cached.pricesFor(["A"], { maxAgeMs: 1_000 }).then((b) => {
       settled = true;
       return b;
     });
     await drained();
-    // Nothing yet: a price an order is checked against is not served from an
-    // entry we already know to be out of date.
+    // Sent, and being waited on: a price an order is checked against is not
+    // served from an entry we already know to be out of date.
     expect(settled).toBe(false);
+    up.release();
+    expect((await quote).get("A")).toBeDefined();
+  });
 
-    clock.flushes[1]!();
-    await quote;
-    expect(up.calls).toEqual([["A"], ["A"]]);
+  it("takes along whatever the window had already collected", async () => {
+    const up = upstream();
+    const clock = manual();
+    const cached = new CachedPriceBoard(up.board, { schedule: clock.schedule });
+
+    const screen = cached.pricesFor(["A", "B"]);
+    const quote = cached.pricesFor(["C"], { maxAgeMs: 1_000 });
+    const [shelf, priced] = await Promise.all([screen, quote]);
+
+    // One request, not two. Closing the window early is the quote's to do, and
+    // the reader already waiting in it is answered sooner, which costs nothing.
+    expect(up.calls).toEqual([["A", "B", "C"]]);
+    expect([...shelf.keys()].sort()).toEqual(["A", "B"]);
+    expect(priced.get("C")).toBeDefined();
+
+    // And the window still fires afterwards. A batch sent twice would be a
+    // second request for ids already answered, which is the whole point lost.
+    clock.flushes[0]!();
+    expect(up.calls).toEqual([["A", "B", "C"]]);
   });
 
   it("waits once the entry is too old to be worth showing", async () => {

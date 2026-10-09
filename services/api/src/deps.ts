@@ -134,6 +134,23 @@ export interface Config {
  */
 const REFERENCE_MAX_AGE_MS = 1_000;
 
+/**
+ * How long the price board collects misses before it asks.
+ *
+ * Half a second, which is a lot of latency to accept on purpose. It buys a
+ * lower refusal rate: `price/v3` costs the same for one id as for fifty, so
+ * everything that arrives inside the window rides one request instead of one
+ * each, and the allowance is ten requests a second across every Jupiter
+ * adapter in the process. A shelf that renders 500ms later is worth a quote
+ * that is not refused.
+ *
+ * It is not paid by the paths that cannot afford it. A caller naming a
+ * `maxAgeMs` — the quote path — closes the batch and sends it immediately, and
+ * a mint anybody has read in the last minute is served from the board without
+ * waiting for anything at all.
+ */
+const PRICE_WINDOW_MS = 500;
+
 const required = (env: NodeJS.ProcessEnv, key: string): string => {
   const value = env[key];
   if (value === undefined || value.length === 0) throw new Error(`${key} is required`);
@@ -213,7 +230,7 @@ export function buildDeps(config: Config): Deps {
   const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl });
   const market = new JupiterMarket({ registry, ...jupiter });
   // Built here rather than inline below, because the reference reads through it.
-  const prices = new CachedPriceBoard(market);
+  const prices = new CachedPriceBoard(market, { windowMs: PRICE_WINDOW_MS });
 
   const basketProvider = config.gliderApiKey ? new GliderClient(config.gliderApiKey) : undefined;
   return {

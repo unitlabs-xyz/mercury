@@ -59,6 +59,8 @@ const afterWindow = (flush: () => void, ms: number): void => {
 interface Batch {
   readonly mints: Set<string>;
   readonly answer: Promise<ReadonlyMap<string, TokenPrice>>;
+  /** Sends it. Idempotent, because the window and an urgent caller race to call it. */
+  readonly close: () => void;
 }
 
 /**
@@ -142,7 +144,13 @@ export class CachedPriceBoard implements PriceBoard {
     if (misses.length > 0 || behind.length > 0) {
       // One batch for both, so a reader who blocks on one mint and is served a
       // stale one for another pays a single request rather than two.
-      const answer = this.enqueue([...misses, ...behind]);
+      //
+      // A caller that named an age does not wait in the window either. The
+      // window is latency traded for requests, which is a good trade for a
+      // screen and a bad one for a quote: half a second of collecting would
+      // eat most of the second of freshness such a caller just asked for. It
+      // takes whatever has collected so far and sends it now.
+      const answer = this.enqueue([...misses, ...behind], !mayServeStale);
       for (const mint of misses) waits.set(mint, answer);
       // A refresh has no caller waiting on it — the reader already has an
       // answer — so its failure must not surface as an unhandled rejection.
@@ -159,10 +167,11 @@ export class CachedPriceBoard implements PriceBoard {
   }
 
   /** These mints into the open batch, opening one if there is none. */
-  private enqueue(mints: readonly string[]): Promise<ReadonlyMap<string, TokenPrice>> {
+  private enqueue(mints: readonly string[], urgent: boolean): Promise<ReadonlyMap<string, TokenPrice>> {
     const open = this.batch;
     if (open !== null) {
       this.join(open, mints);
+      if (urgent) open.close();
       return open.answer;
     }
 
@@ -190,16 +199,22 @@ export class CachedPriceBoard implements PriceBoard {
       };
     });
 
-    const batch: Batch = { mints: waiting, answer };
-    this.batch = batch;
-    // Every mint is in the batch before the window opens, so a scheduler that
-    // closes it in the same tick still sends a batch with something in it.
-    this.join(batch, mints);
-    this.schedule(() => {
-      // Only ever closes its own batch, never a later one that replaced it.
-      if (this.batch === batch) this.batch = null;
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      // Only ever clears its own batch, never a later one that replaced it.
+      if (this.batch?.mints === waiting) this.batch = null;
       send();
-    }, this.windowMs);
+    };
+
+    const batch: Batch = { mints: waiting, answer, close };
+    this.batch = batch;
+    // Every mint is in the batch before it can be closed, so an urgent caller
+    // or a scheduler that fires in the same tick still sends something.
+    this.join(batch, mints);
+    if (urgent) close();
+    else this.schedule(close, this.windowMs);
     return answer;
   }
 
