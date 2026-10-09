@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toEvent, usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
 import { useMoney } from "../api/hooks";
+import { refreshAfterChain } from "../api/settle";
 import { ChevronDown } from "../ui/icons";
 import {
   basketEnrollmentEnabled,
@@ -465,30 +466,18 @@ export const Basket = () => {
       /* An invalid local receipt is not an operation. */
     }
   }, [accountId]);
+  /* Glider settles on its own clock, so the poll that notices is the only
+     thing that can refresh the account afterwards. */
   useEffect(() => {
-    if (rebalanceTerminal(rebalanceStatus.data?.state)) {
-      void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
-      void queryClient.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
-      void queryClient.invalidateQueries({ queryKey: ["api", "portfolio"] });
-    }
+    const state = rebalanceStatus.data?.state;
+    if (state === undefined) return;
+    // Every step is a row in the basket's activity; only the last moves money.
+    if (rebalanceTerminal(state)) refreshAfterChain(queryClient);
+    else void queryClient.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
   }, [queryClient, rebalanceStatus.data?.state, slug]);
   useEffect(() => {
-    if (exitStatus.data?.state === "completed") {
-      for (const key of [
-        "basket-portfolio",
-        "basket-portfolios",
-        "basket-activity",
-        "portfolio",
-        "money",
-        "activity",
-      ])
-        void queryClient.invalidateQueries({ queryKey: ["api", key] });
-    }
+    if (exitStatus.data?.state === "completed") refreshAfterChain(queryClient);
   }, [exitStatus.data?.state, queryClient]);
-  useEffect(() => {
-    if (rebalanceStatus.data?.state)
-      void queryClient.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
-  }, [queryClient, rebalanceStatus.data?.state, slug]);
   const template = result.data;
   const tickers = useMemo(() => template?.allocations.map((item) => item.ticker) ?? [], [template]);
   const mints = useMemo(() => template?.allocations.map((item) => item.mint) ?? [], [template]);
@@ -545,7 +534,6 @@ export const Basket = () => {
     rebalanceRequestActive.current = true;
     try {
       const triggered = await rebalanceAction.mutateAsync();
-      void queryClient.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
       sessionStorage.setItem(`basket-rebalance:${accountId}`, triggered.operationId);
       setRebalanceOperation({ portfolioId: accountId, operationId: triggered.operationId });
       setRebalanceOpen(false);

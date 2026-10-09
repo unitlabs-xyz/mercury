@@ -66,10 +66,7 @@ export const useOrderAction = () => {
         intent,
       );
     },
-    onSettled: () => {
-      refreshAfterChain(qc);
-      void qc.invalidateQueries({ queryKey: ["quotes"] });
-    },
+    onSettled: () => refreshAfterChain(qc),
   });
 
   /*

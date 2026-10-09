@@ -2,6 +2,7 @@ import { D, ONE, type Decimal } from "@mercury/core";
 import type {
   ChainHistory,
   ChainReader,
+  Commitment,
   MintConfig,
   SignaturePage,
   SignatureRef,
@@ -206,13 +207,14 @@ export class SolanaRpc implements ChainReader, ChainHistory {
    * built on it would be right on one RPC provider and wrong on another. The
    * multiplier is applied once, by us, from `mintConfig`.
    */
-  async tokenBalances(owner: string): Promise<readonly TokenBalance[]> {
+  async tokenBalances(owner: string, commitment: Commitment = "confirmed"): Promise<readonly TokenBalance[]> {
     const pages = await Promise.all(
       [TOKEN_PROGRAM, TOKEN_2022_PROGRAM].map((programId) =>
         this.call<{ value: readonly ParsedTokenAccount[] }>("getTokenAccountsByOwner", [
           owner,
           { programId },
-          { encoding: "jsonParsed" },
+          // Always explicit: omitted, the node picks `finalized`.
+          { encoding: "jsonParsed", commitment },
         ]),
       ),
     );

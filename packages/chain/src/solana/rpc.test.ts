@@ -10,6 +10,7 @@ import {
   SPYX_MINT,
   USDC_MINT,
 } from "../testing/index.js";
+import type { Commitment } from "../ports.js";
 import { SolanaRpc } from "./rpc.js";
 
 const RPC = "https://rpc.example/v1";
@@ -98,6 +99,23 @@ describe("SolanaRpc.tokenBalances", () => {
     expect(node.calls[0]).toContain(SPL);
     expect(node.calls[0]).toContain(TOKEN_2022);
     expect(node.calls[0]).toContain(FIXTURE_OWNER);
+  });
+
+  /* Nothing type-checks this: the config object is valid without a commitment,
+     and a node with none defaults to `finalized`. */
+  const commitmentsAsked = async (commitment?: Commitment): Promise<unknown[]> => {
+    const node = nodeServing();
+    await new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch }).tokenBalances(FIXTURE_OWNER, commitment);
+    const sent = JSON.parse(node.calls[0] ?? "[]") as RpcRequest[];
+    return sent.map((req) => (req.params?.[2] as { commitment?: unknown }).commitment);
+  };
+
+  it("reads at confirmed by default, both programs", async () => {
+    expect(await commitmentsAsked()).toEqual(["confirmed", "confirmed"]);
+  });
+
+  it("reads at finalized when a caller that writes asks for it", async () => {
+    expect(await commitmentsAsked("finalized")).toEqual(["finalized", "finalized"]);
   });
 
   it("returns raw amounts as bigint, and never touches uiAmount", async () => {

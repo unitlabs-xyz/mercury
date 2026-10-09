@@ -27,7 +27,9 @@ export async function loadHeldTokens(
   walletAddress: string,
 ): Promise<readonly HeldToken[]> {
   const [balances, known, recorded] = await Promise.all([
-    deps.chain.tokenBalances(walletAddress),
+    // Finalized: this writes lots, and a dropped block would leave a purchase
+    // that never happened.
+    deps.chain.tokenBalances(walletAddress, "finalized"),
     db
       .select({
         tokenId: tokens.id,
