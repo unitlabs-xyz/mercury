@@ -14,6 +14,7 @@ import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import {
   basketStockMints,
   cashFrom,
+  marketPricePerShare,
   priceFor,
   valueBasketStocks,
   valuePortfolio,
@@ -184,7 +185,8 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       if (row.shares.lte(ZERO)) continue; // a closed holding is not a row
 
       const priced = priceFor(row, board);
-      const perShare = priced?.pricePerShare ?? ZERO;
+      // The pool values the holding; the quote measures what the stock did.
+      const perShare = priced === undefined ? ZERO : marketPricePerShare(priced);
       const changePct24h = priced?.changePct24h ?? ZERO;
       const stacked = stackedReturn(
         {
@@ -193,7 +195,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
           referenceBasisUsd: row.referenceBasisUsd,
           feeUsd: row.feeUsd,
         },
-        perShare,
+        { marketPerShare: perShare, referencePerShare: priced?.pricePerShare ?? null },
       );
 
       // Pledged tokens are shares too, at the same multiplier as the wallet's.

@@ -373,6 +373,72 @@ describe("GET /v1/portfolio", () => {
     expect(body.baskets[0]!.pnlUsd).toBeUndefined();
   });
 
+  it("values a holding at the pool, not at the underlying quote", async () => {
+    // The two are different numbers: measured across twenty xStocks on 9
+    // October 2026 they differed by a median 0.49%, as far apart as 9.4%.
+    // What the wallet is worth is what the pool would pay for it.
+    const d = deps({
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(mints.map((m) => [m, price(m, { usdPricePerToken: D(198), pricePerShare: D(200) })])),
+      } satisfies PriceBoard,
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!.valueUsd).toBe("396"); // 2 shares at $198, not $200
+  });
+
+  it("divides the pool's token price by the multiplier to get a share", async () => {
+    // A token is `multiplier` shares, so the pool's price per token is that
+    // many shares' worth. Using it per share would double a holder's value
+    // every time the multiplier did.
+    const d = deps({
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(
+            mints.map((m) => [
+              m,
+              price(m, { usdPricePerToken: D(400), pricePerShare: D(200), multiplier: D(2) }),
+            ]),
+          ),
+      } satisfies PriceBoard,
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!.valueUsd).toBe("400"); // 2 shares at $400/2
+  });
+
+  it("charges the discount it would be sold into, without calling it the stock falling", async () => {
+    // The stock is exactly where it was bought and the token is under it.
+    const d = deps({
+      holdings: async () => [holding({ costBasisUsd: D(400), referenceBasisUsd: D(400), feeUsd: ZERO })],
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(mints.map((m) => [m, price(m, { usdPricePerToken: D(198), pricePerShare: D(200) })])),
+      } satisfies PriceBoard,
+    });
+    const h = (await portfolioOf(await appWith(d).request("/v1/portfolio"))).holdings[0]!;
+    expect(h.marketPnlUsd).toBe("0");
+    expect(h.tradingCostUsd).toBe("4");
+    expect(h.unrealisedPnlUsd).toBe("-4");
+  });
+
+  it("agrees with the exposure endpoint about what one holding is worth", async () => {
+    // These valued the same shares differently: the portfolio at the issuer's
+    // quote and the exposure breakdown at the pool. Whichever a reader saw
+    // second looked like a bug.
+    const d = deps({
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(mints.map((m) => [m, price(m, { usdPricePerToken: D(198), pricePerShare: D(200) })])),
+      } satisfies PriceBoard,
+    });
+    const app = appWith(d);
+    const body = await portfolioOf(await app.request("/v1/portfolio"));
+    const exposure = (await (await app.request("/v1/portfolio/exposure/NVDA")).json()) as {
+      valueUsd: string;
+    };
+    expect(exposure.valueUsd).toBe(body.holdings[0]!.valueUsd);
+  });
+
   it("says how many of the shares a cost is known for", async () => {
     const d = deps({
       holdings: async () => [holding({ shares: D(5), sharesWithBasis: D(2) })],
