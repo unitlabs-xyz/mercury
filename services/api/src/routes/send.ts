@@ -15,7 +15,10 @@ import {
   type Base64EncodedWireTransaction,
   type Signature,
 } from "@solana/kit";
+import { D, type Decimal } from "@mercury/core";
 import { buildUsdcTransferTransaction } from "../relay/usdc-transfer.js";
+import { buildSponsoredTransfer } from "../relay/transfer.js";
+import { quoteTransferFee, type FeeQuoteDeps } from "../relay/quote.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 import { decodeSponsored } from "../relay/decode.js";
@@ -27,6 +30,16 @@ export interface SendDeps {
   readonly rpcUrl: string;
   /** How long to wait for confirmation before answering "pending". */
   readonly confirmMs?: number;
+  /**
+   * Reads the recipient's balances and the SOL price, to price the rent a
+   * sponsored transfer may owe.
+   *
+   * Absent, a sponsored transfer is composed and sent for nothing — the
+   * relayer pays the rent and is not repaid. That is the safe direction to
+   * degrade in: the transfer still works, and the only thing lost is our own
+   * money, rather than a sender being charged a figure nobody could price.
+   */
+  readonly fees?: FeeQuoteDeps | undefined;
   /**
    * Sponsorship, or nothing. Absent, every transaction must still be fee-paid
    * by the caller's own wallet, which is the behaviour before any of this.
@@ -161,6 +174,7 @@ export const failureText = (err: unknown): string => {
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
 const Body = z.object({ transaction: z.string().min(1) });
+const QuoteBody = z.object({ to: z.string().min(1) });
 const PrepareBody = z.object({
   amount: z.string().regex(/^\d+(?:\.\d{1,6})?$/, "Enter a USDC amount with at most six decimals."),
   to: z.string().min(1),
@@ -191,6 +205,53 @@ export function sendRoutes(deps: SendDeps): Hono {
   const rpc = createSolanaRpc(deps.rpcUrl);
   const confirmMs = deps.confirmMs ?? 45_000;
 
+  /**
+   * What the sender repays, which is the recipient's account rent or nothing.
+   *
+   * Nothing at all when no relayer is configured: the sender is paying their
+   * own network costs in SOL on that path, so charging USDC as well would be
+   * charging twice.
+   */
+  const rentOwed = async (destination: string): Promise<Decimal> =>
+    deps.relay === undefined || deps.fees === undefined
+      ? D(0)
+      : (await quoteTransferFee(deps.fees, { destination })).usdc;
+
+  /**
+   * What a transfer to this recipient will cost, before an amount is typed.
+   *
+   * Separate from `prepare` because the answer decides what "Max" means, and
+   * Max is pressed before anything has been built. It turns only on the
+   * recipient — whether they already hold USDC — so it is cheap and stable
+   * enough for a field to ask on every address it accepts.
+   */
+  app.post("/v1/money/send/quote", async (c) => {
+    const wallet = c.get("identity").walletAddress;
+    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const parsed = QuoteBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", "Enter a recipient address."), 400);
+
+    let destination;
+    try {
+      destination = address(parsed.data.to.trim());
+    } catch {
+      return c.json(fail("validation_failed", "Enter a valid Solana wallet address."), 400);
+    }
+
+    try {
+      const feeUsdc = await rentOwed(destination);
+      return c.json({ feeUsd: feeUsdc.toString(), sponsored: deps.relay !== undefined });
+    } catch (err) {
+      /*
+       * A quote we cannot get is not a reason to block a transfer. Zero and
+       * unsponsored is what the screen showed before any of this existed, and
+       * `prepare` prices it again for real.
+       */
+      console.error("send: could not quote the transfer fee", err);
+      return c.json({ feeUsd: "0", sponsored: deps.relay !== undefined });
+    }
+  });
+
   app.post("/v1/money/send/prepare", async (c) => {
     const wallet = c.get("identity").walletAddress;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
@@ -212,16 +273,41 @@ export function sendRoutes(deps: SendDeps): Hono {
     if (destination === wallet)
       return c.json(fail("validation_failed", "You cannot send to your own wallet."), 400);
 
+    const relay = deps.relay;
     try {
-      const { value: lifetime } = await rpc.getLatestBlockhash({ commitment: "confirmed" }).send();
-      const transaction = await buildUsdcTransferTransaction({
-        owner: address(wallet),
-        destination,
-        amountRaw,
-        ...lifetime,
-      });
+      const [{ value: lifetime }, feeUsdc] = await Promise.all([
+        rpc.getLatestBlockhash({ commitment: "confirmed" }).send(),
+        rentOwed(destination),
+      ]);
+
+      /*
+       * Sponsored when there is a relayer to pay. The sender signs a
+       * transaction whose fee payer is ours and whose rent we put up, and
+       * repays the rent in USDC inside the same message. Without a relayer
+       * this is the wallet-paid transfer it has always been, which needs SOL.
+       */
+      const built =
+        relay === undefined
+          ? {
+              wire: await buildUsdcTransferTransaction({
+                owner: address(wallet),
+                destination,
+                amountRaw,
+                ...lifetime,
+              }),
+              messageBytes: null,
+            }
+          : await buildSponsoredTransfer({
+              owner: address(wallet),
+              destination,
+              amountRaw,
+              relayer: address(relay.signer.address),
+              feeUsdc,
+              ...lifetime,
+            });
+
       const { value: simulated } = await rpc
-        .simulateTransaction(transaction as Base64EncodedWireTransaction, {
+        .simulateTransaction(built.wire as Base64EncodedWireTransaction, {
           encoding: "base64",
           commitment: "confirmed",
           sigVerify: false,
@@ -231,12 +317,17 @@ export function sendRoutes(deps: SendDeps): Hono {
         return c.json(
           fail(
             "send_unavailable",
-            "This transfer cannot be sent. Check your USDC balance and SOL for network fees.",
+            relay === undefined
+              ? "This transfer cannot be sent. Check your USDC balance and SOL for network fees."
+              : "This transfer cannot be sent. Check your USDC balance and try again.",
           ),
           422,
         );
       }
-      return c.json({ transaction });
+
+      /* Remembered only once it simulates, or the relayer will not co-sign it. */
+      if (built.messageBytes !== null && relay !== undefined) relay.builds.remember(built.messageBytes);
+      return c.json({ transaction: built.wire, feeUsd: feeUsdc.toString() });
     } catch (err) {
       console.error("send: could not prepare USDC transfer", err);
       return c.json(fail("send_unavailable", "Could not prepare this transfer. Please try again."), 503);

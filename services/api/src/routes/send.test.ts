@@ -18,6 +18,8 @@ import { sendRoutes } from "./send.js";
 import type { SendDeps } from "./send.js";
 import { inMemoryBuilds } from "../relay/builds.js";
 import { getBase64Encoder, getTransactionDecoder } from "@solana/kit";
+import { D } from "@mercury/core";
+import { USDC_MINT } from "@mercury/chain";
 
 const lifetime = { blockhash: "11111111111111111111111111111111" as Blockhash, lastValidBlockHeight: 1n };
 
@@ -219,5 +221,116 @@ describe("POST /v1/money/send/prepare", () => {
     const wallet = (await txFrom(false)).wallet;
     expect((await prepare(wallet, "1", "not-a-solana-address")).status).toBe(400);
     expect((await prepare(wallet, "1", wallet)).status).toBe(400);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+
+const RELAYER_ADDRESS = "Xs7ZdzSHLU9GLSSPoSZuMkQ8GHjNKz1F8gUQRA2ZfZ7";
+const RECIPIENT = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+
+/** A relayer that would co-sign, which is all the quote route reads of it. */
+const stubRelay = (): SendDeps["relay"] => ({
+  signer: { address: RELAYER_ADDRESS, cosign: async (wire: string) => wire },
+  builds: inMemoryBuilds(),
+});
+
+const feeDeps = (recipientHoldsUsdc: boolean, solUsd: string | null) =>
+  ({
+    chain: {
+      tokenBalances: async () =>
+        recipientHoldsUsdc ? [{ mint: USDC_MINT, rawAmount: 1n, decimals: 6 }] : [],
+      mintConfig: async () => null,
+    },
+    prices: {
+      pricesFor: async () =>
+        new Map(
+          solUsd === null
+            ? []
+            : [
+                [
+                  SOL_MINT,
+                  {
+                    mint: SOL_MINT,
+                    usdPricePerToken: D(solUsd),
+                    pricePerShare: null,
+                    changePct24h: null,
+                    liquidityUsd: D(0),
+                    multiplier: D(1),
+                    observedAt: new Date(),
+                  },
+                ],
+              ],
+        ),
+    },
+  }) as unknown as NonNullable<SendDeps["fees"]>;
+
+const quote = (opts: {
+  wallet?: string | null;
+  to?: string;
+  sponsored?: boolean;
+  recipientHoldsUsdc?: boolean;
+  solUsd?: string | null;
+}) => {
+  const a = new Hono();
+  a.use("*", async (c, next) => {
+    c.set("identity", {
+      userId: "user-1",
+      privyUserId: "did:privy:1",
+      walletAddress: opts.wallet === undefined ? "8fLSHcVtPjDMytCpaK7AJjvU2tzpoGQudR5fFffmGdX6" : opts.wallet,
+    });
+    await next();
+  });
+  a.route(
+    "/",
+    sendRoutes({
+      rpcUrl: "http://127.0.0.1:1",
+      fees: feeDeps(opts.recipientHoldsUsdc ?? false, opts.solUsd === undefined ? "119.39" : opts.solUsd),
+      ...(opts.sponsored === false ? {} : { relay: stubRelay() }),
+    }),
+  );
+  return a.request("/v1/money/send/quote", {
+    method: "POST",
+    body: JSON.stringify({ to: opts.to ?? RECIPIENT }),
+    headers: { "content-type": "application/json" },
+  });
+};
+
+describe("POST /v1/money/send/quote", () => {
+  it("charges the rent when the recipient has never held USDC", async () => {
+    const res = await quote({});
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ feeUsd: "0.25", sponsored: true });
+  });
+
+  it("charges nothing when the recipient already holds USDC, which is the ordinary case", async () => {
+    const res = await quote({ recipientHoldsUsdc: true });
+    expect(await res.json()).toEqual({ feeUsd: "0", sponsored: true });
+  });
+
+  /*
+   * Without a relayer the sender is paying their own network costs in SOL, so
+   * charging USDC on top would be charging twice. `sponsored: false` is what
+   * tells the screen it cannot promise to cover the fee.
+   */
+  it("charges nothing and claims nothing when no relayer is configured", async () => {
+    const res = await quote({ sponsored: false });
+    expect(await res.json()).toEqual({ feeUsd: "0", sponsored: false });
+  });
+
+  it("charges nothing when SOL has no price, rather than guessing one", async () => {
+    const res = await quote({ solUsd: null });
+    expect(await res.json()).toEqual({ feeUsd: "0", sponsored: true });
+  });
+
+  it("refuses an address that is not on Solana", async () => {
+    const res = await quote({ to: "not-an-address" });
+    expect(res.status).toBe(400);
+  });
+
+  it("refuses a session with no wallet", async () => {
+    const res = await quote({ wallet: null });
+    expect(res.status).toBe(401);
   });
 });
