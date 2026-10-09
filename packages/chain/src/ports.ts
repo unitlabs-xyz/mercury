@@ -193,6 +193,19 @@ export interface ChainReader {
   tokenBalances(owner: string): Promise<readonly TokenBalance[]>;
   /** Null when the account does not exist or is not a Token-2022 mint. */
   mintConfig(mint: string): Promise<MintConfig | null>;
+  /**
+   * Optional. Many mints as one call rather than one call each.
+   *
+   * `batchedRpc` already puts calls issued together into one HTTP request, so
+   * this is not about round trips — it is about what the node is asked to do.
+   * A hundred `getAccountInfo` calls are a hundred billed method calls however
+   * few requests carry them; one `getMultipleAccounts` is one. A mint absent
+   * from the map is one the node had no account for.
+   *
+   * Optional because it is a capability, not a contract: a reader that cannot
+   * do it leaves it out and callers fall back to `mintConfig`.
+   */
+  mintConfigs?(mints: readonly string[]): Promise<ReadonlyMap<string, MintConfig>>;
 }
 
 /** One signature from an address's history. */

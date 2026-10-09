@@ -39,6 +39,10 @@ const deps = (over: { balances?: TokenBalance[]; multipliers?: Record<string, st
     sessions: { current: async () => ({ status: "open", isOpen: true, nextOpenAt: null }) },
     multipliers: {
       multiplierFor: async (mint: string) => D(over.multipliers?.[mint] ?? "1"),
+      // The same per-mint fixture, because a wrapper's own multiplier is what
+      // the sell path converts through and one test exists to prove it.
+      multipliersFor: async (mints: readonly string[]) =>
+        new Map(mints.map((mint) => [mint, D(over.multipliers?.[mint] ?? "1")])),
       isPaused: async () => false,
     },
     quotes: {

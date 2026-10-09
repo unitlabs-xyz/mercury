@@ -28,8 +28,12 @@ export async function pledgedByMint(
  * that runs on half the picture rewrites them wrongly.
  */
 export function withPledged(chain: ChainReader, lending: LendingSource): ChainReader {
+  // Bound once, because forwarding it only where the wrapped reader has it is
+  // what stops the wrapper claiming a capability the thing underneath lacks.
+  const many = chain.mintConfigs?.bind(chain);
   return {
     mintConfig: (mint) => chain.mintConfig(mint),
+    ...(many === undefined ? {} : { mintConfigs: many }),
     tokenBalances: async (owner) => {
       const [wallet, pledged] = await Promise.all([
         chain.tokenBalances(owner),

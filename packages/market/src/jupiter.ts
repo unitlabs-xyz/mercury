@@ -1,12 +1,21 @@
 import { D, ZERO, ONE, type Decimal, type ReferencePrice } from "@mercury/core";
 import type { TokenRegistry } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard, ReferenceSource, TokenPrice } from "./ports.js";
+import { referenceFrom } from "./reference.js";
 import { defaultFetch } from "@mercury/chain";
 
 /** Jupiter's free tier. Keyless and CORS-open, which is what makes it the fallback path. */
 const BASE = "https://lite-api.jup.ag";
 
-/** The most ids price/v3 takes in one request. */
+/**
+ * The most ids price/v3 takes in one request.
+ *
+ * A hard ceiling, and a quiet one: asked for fifty-one, Jupiter answers 200
+ * with the first fifty and says nothing about the one it dropped (measured 9
+ * October 2026; two hundred ids is refused outright with a 414). So raising
+ * this does not fetch more, it silently stops pricing holdings — which is why
+ * a test pins it rather than trusting the number to stay read.
+ */
 const PRICE_BATCH = 50;
 
 /**
@@ -100,31 +109,30 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
   }
 
   /**
-   * The reference is one real share's price, taken from the Backed wrapper where
-   * there is one. Both issuers wrap the same company, so either would do; Backed
-   * is preferred because its pools are the deep ones and its feed is the one that
-   * keeps updating.
+   * The reference, priced from this client's own requests.
+   *
+   * The server does not read it here — it reads through `BoardReference` onto
+   * the shared cache — but the browser has no cache to share, and this is the
+   * one place the two agree on which wrapper speaks for a company.
    */
-  async priceFor(ticker: string): Promise<ReferencePrice | null> {
-    const wrappers = await this.config.registry.wrappersFor(ticker);
-    if (wrappers.length === 0) return null;
+  priceFor(ticker: string): Promise<ReferencePrice | null> {
+    return referenceFrom({ registry: this.config.registry, board: this, now: this.now }, ticker);
+  }
 
-    const board = await this.pricesFor(wrappers.map((w) => w.mint));
-    const preferred = wrappers.find((w) => w.issuer === "backed") ?? wrappers[0]!;
-    const price = board.get(preferred.mint) ?? [...board.values()][0];
-    if (price === undefined || price.pricePerShare === null) return null;
-
-    return {
-      pricePerShare: price.pricePerShare,
-      observedAt: price.observedAt ?? new Date(this.now()),
-      // A dividend that has gone ex but is not yet folded into the multiplier.
-      // No upstream we read publishes one, so it is zero and honestly so.
-      pendingDividendNet: ZERO,
-    };
+  /**
+   * One request for every mint asked about, rather than one each.
+   *
+   * `price/v3` carries the multiplier beside the price, so this costs nothing
+   * the caller was not already paying — and asking per mint cost a whole
+   * request for a single id.
+   */
+  async multipliersFor(mints: readonly string[]): Promise<ReadonlyMap<string, Decimal>> {
+    const board = await this.pricesFor(mints);
+    return new Map([...board].map(([mint, price]) => [mint, price.multiplier]));
   }
 
   async multiplierFor(mint: string): Promise<Decimal | null> {
-    return (await this.pricesFor([mint])).get(mint)?.multiplier ?? null;
+    return (await this.multipliersFor([mint])).get(mint) ?? null;
   }
 
   /**

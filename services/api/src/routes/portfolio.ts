@@ -249,9 +249,14 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       return c.json(fail("not_found", `No position in ${ticker}.`), 404);
     }
 
-    const [balances, board] = await Promise.all([
+    const mints = row.wrappers.map((w) => w.mint);
+    // The multipliers are read here, not inside the loop below. Awaiting one
+    // mint before asking about the next made this a round trip per wrapper,
+    // and nothing underneath can batch calls a loop issues one at a time.
+    const [balances, board, multipliers] = await Promise.all([
       deps.chain.tokenBalances(identity.walletAddress),
-      deps.prices.pricesFor(row.wrappers.map((w) => w.mint)),
+      deps.prices.pricesFor(mints),
+      deps.multipliers.multipliersFor(mints),
     ]);
 
     const held: WrapperHolding[] = [];
@@ -259,7 +264,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       const balance = balances.find((b) => b.mint === wrapper.mint);
       if (balance === undefined || balance.rawAmount === 0n) continue;
       const price = board.get(wrapper.mint);
-      const multiplier = (await deps.multipliers.multiplierFor(wrapper.mint)) ?? price?.multiplier ?? D(1);
+      const multiplier = multipliers.get(wrapper.mint) ?? price?.multiplier ?? D(1);
       held.push({
         mint: wrapper.mint,
         symbol: wrapper.symbol,

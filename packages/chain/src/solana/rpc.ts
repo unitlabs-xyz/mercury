@@ -157,6 +157,9 @@ function tokenTransfersIn(
   return transfers;
 }
 
+/** `getMultipleAccounts` takes at most a hundred keys and refuses the call past that. */
+const ACCOUNTS_BATCH = 100;
+
 export interface SolanaRpcConfig {
   readonly rpcUrl: string;
   readonly fetch?: typeof fetch;
@@ -237,7 +240,43 @@ export class SolanaRpc implements ChainReader, ChainHistory {
       mint,
       { encoding: "jsonParsed" },
     ]);
-    const info = result.value?.data.parsed?.info;
+    return this.toMintConfig(result.value);
+  }
+
+  /**
+   * Every mint asked about, in calls of a hundred.
+   *
+   * `getMultipleAccounts` takes at most a hundred keys and refuses the call
+   * past that, so the list is chunked. Answers come back by position, which is
+   * why the chunk is kept beside its page rather than the mints re-derived.
+   */
+  async mintConfigs(mints: readonly string[]): Promise<ReadonlyMap<string, MintConfig>> {
+    const chunks: string[][] = [];
+    for (let i = 0; i < mints.length; i += ACCOUNTS_BATCH) {
+      chunks.push(mints.slice(i, i + ACCOUNTS_BATCH));
+    }
+    const pages = await Promise.all(
+      chunks.map((chunk) =>
+        this.call<{ value: readonly (ParsedMint | null)[] }>("getMultipleAccounts", [
+          chunk,
+          { encoding: "jsonParsed" },
+        ]),
+      ),
+    );
+
+    const found = new Map<string, MintConfig>();
+    chunks.forEach((chunk, page) => {
+      chunk.forEach((mint, index) => {
+        const config = this.toMintConfig(pages[page]?.value[index] ?? null);
+        if (config !== null) found.set(mint, config);
+      });
+    });
+    return found;
+  }
+
+  /** One parse, so a mint read on its own and one read in a batch cannot differ. */
+  private toMintConfig(account: ParsedMint | null | undefined): MintConfig | null {
+    const info = account?.data.parsed?.info;
     if (info === undefined || info.decimals === undefined) return null;
 
     const extensions = info.extensions ?? [];

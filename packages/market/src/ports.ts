@@ -38,6 +38,15 @@ export interface ReferenceSource {
  */
 export interface MultiplierSource {
   multiplierFor(mint: string): Promise<Decimal | null>;
+  /**
+   * Several mints in one ask.
+   *
+   * Every caller that needs more than one wants them together, and asking one
+   * at a time down a loop costs a round trip per mint. A mint with no
+   * multiplier is absent from the map rather than present as one — the same
+   * distinction `multiplierFor` makes by answering null.
+   */
+  multipliersFor(mints: readonly string[]): Promise<ReadonlyMap<string, Decimal>>;
   /** Token-2022 Pausable. True when the issuer has halted the token. */
   isPaused(mint: string): Promise<boolean>;
 }
@@ -63,7 +72,21 @@ export interface TokenPrice {
  * response, so they are fetched together rather than twice.
  */
 export interface PriceBoard {
-  pricesFor(mints: readonly string[]): Promise<ReadonlyMap<string, TokenPrice>>;
+  pricesFor(mints: readonly string[], ask?: PriceAsk): Promise<ReadonlyMap<string, TokenPrice>>;
+}
+
+/**
+ * What a caller needs of a board that caches.
+ *
+ * A portfolio read and a live quote want the same prices to different
+ * standards: one is a figure on a screen, the other is the number an order is
+ * checked against. Rather than give the quote path its own cache — a second
+ * memory of the same upstream, warmed separately — it asks the shared board
+ * for a fresher answer. A board that holds nothing ignores this.
+ */
+export interface PriceAsk {
+  /** Refuse anything older. Omitted, the board's own window decides. */
+  readonly maxAgeMs?: number;
 }
 
 export interface Collateral {

@@ -347,3 +347,92 @@ describe("SolanaRpc.transaction", () => {
     expect((await rpc.transaction(SIGNATURE))?.succeeded).toBe(false);
   });
 });
+
+/** A node that answers `getMultipleAccounts` positionally, from a map of mint to account. */
+const accountsNode = (accounts: Record<string, unknown>) => {
+  const asked: string[][] = [];
+  const requests: string[] = [];
+  const doFetch = ((_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const raw = String(init?.body);
+    requests.push(raw);
+    const parsed: unknown = JSON.parse(raw);
+    const reqs: RpcRequest[] = Array.isArray(parsed) ? (parsed as RpcRequest[]) : [parsed as RpcRequest];
+    const replies = reqs.map((req, i) => {
+      const keys = (req.params?.[0] ?? []) as readonly string[];
+      asked.push([...keys]);
+      return {
+        jsonrpc: "2.0",
+        id: req.id ?? i,
+        result: { context: { slot: 1 }, value: keys.map((key) => accounts[key] ?? null) },
+      };
+    });
+    return Promise.resolve(
+      new Response(JSON.stringify(Array.isArray(parsed) ? replies : replies[0]), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  }) as typeof fetch;
+  return { doFetch, asked, requests };
+};
+
+/** A mint with no switchover pending, which is what most of them are most of the time. */
+const mintAccount = (multiplier: string) => mintWith({ multiplier }, false).result.value;
+
+describe("SolanaRpc.mintConfigs", () => {
+  it("reads every mint in one call, and keeps each answer with the mint it was asked about", async () => {
+    const node = accountsNode({
+      [NVDAX_MINT]: mintAccount("1.001701196801074"),
+      [SPYX_MINT]: mintAccount("1.25"),
+    });
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
+    const found = await rpc.mintConfigs([NVDAX_MINT, SPYX_MINT]);
+
+    expect(node.asked).toEqual([[NVDAX_MINT, SPYX_MINT]]);
+    // Distinct multipliers, so a mapping that crossed the two would show here
+    // rather than passing on a fixture where both answers are the same.
+    expect(found.get(NVDAX_MINT)!.multiplier.toFixed()).toBe("1.001701196801074");
+    expect(found.get(SPYX_MINT)!.multiplier.toFixed()).toBe("1.25");
+  });
+
+  it("leaves out a mint the node has no account for, without shifting the rest", async () => {
+    const node = accountsNode({
+      [NVDAX_MINT]: mintAccount("1.5"),
+      [SPYX_MINT]: mintAccount("1.25"),
+    });
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
+    const found = await rpc.mintConfigs([NVDAX_MINT, "NotAMint", SPYX_MINT]);
+
+    expect([...found.keys()]).toEqual([NVDAX_MINT, SPYX_MINT]);
+    // The null in the middle is the trap: a reader that dropped it before
+    // pairing would hand SPYX's multiplier to the mint after the gap.
+    expect(found.get(SPYX_MINT)!.multiplier.toFixed()).toBe("1.25");
+  });
+
+  it("splits past a hundred keys, which is the most the call takes", async () => {
+    const mints = Array.from({ length: 150 }, (_, i) => `Mint${String(i).padStart(40, "0")}`);
+    const node = accountsNode(Object.fromEntries(mints.map((m) => [m, mintAccount("1")])));
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
+    const found = await rpc.mintConfigs(mints);
+
+    expect(found.size).toBe(150);
+    expect(node.asked.map((a) => a.length)).toEqual([100, 50]);
+    // Issued together, so both chunks travel in one HTTP request.
+    expect(node.requests).toHaveLength(1);
+  });
+
+  it("agrees with reading the same mint on its own", async () => {
+    const accounts = { [NVDAX_MINT]: mintAccount("1.001701196801074") };
+    const batched = await new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: accountsNode(accounts).doFetch,
+    }).mintConfigs([NVDAX_MINT]);
+    const alone = await new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: mintWith({ multiplier: "1.001701196801074" }, false) }),
+    }).mintConfig(NVDAX_MINT);
+
+    expect(batched.get(NVDAX_MINT)!.multiplier.toFixed()).toBe(alone!.multiplier.toFixed());
+    expect(batched.get(NVDAX_MINT)!.decimals).toBe(alone!.decimals);
+    expect(batched.get(NVDAX_MINT)!.isPaused).toBe(alone!.isPaused);
+  });
+});

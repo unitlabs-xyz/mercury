@@ -202,4 +202,29 @@ describe("JupiterMarket as a MultiplierSource", () => {
     const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: fakeFetch({ "/price/v3": jupPrice }) });
     expect(await m.isPaused(NVDAX_MINT)).toBe(false);
   });
+
+  it("answers many mints from one request rather than one request each", async () => {
+    const seen: string[] = [];
+    const f = fakeFetch({ "/price/v3": jupPrice });
+    const m = new JupiterMarket({
+      registry: registry([NVDAX]),
+      fetch: ((input: Parameters<typeof fetch>[0]) => {
+        seen.push(String(input));
+        return f(input);
+      }) as typeof fetch,
+    });
+    const found = await m.multipliersFor([NVDAX_MINT, SPYX_MINT]);
+    // Asked one at a time, each of these cost a whole request for a single id
+    // on an endpoint whose keyless allowance is thirty requests a minute.
+    expect(seen).toHaveLength(1);
+    expect(found.get(NVDAX_MINT)!.gte(D(1))).toBe(true);
+  });
+
+  it("leaves out a mint it could not price, rather than calling it one", async () => {
+    const m = new JupiterMarket({
+      registry: registry([NVDAX]),
+      fetch: fakeFetch({ "/price/v3": priceOf(NVDAX_MINT, { usdPrice: 182 }) }),
+    });
+    expect([...(await m.multipliersFor([NVDAX_MINT, "NotAMint"])).keys()]).toEqual([NVDAX_MINT]);
+  });
 });

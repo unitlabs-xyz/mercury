@@ -3,6 +3,7 @@ export * from "./pyth.js";
 export * from "./jupiter.js";
 export * from "./cached.js";
 export * from "./mint.js";
+export * from "./reference.js";
 export * from "./kamino.js";
 export * from "./yahoo.js";
 export * from "./returns.js";

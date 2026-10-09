@@ -115,11 +115,17 @@ const every = (name: string, ms: number, run: () => Promise<string | null>) => {
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                 |
  * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email               |
  *
- * Two jobs the design called for are not here. A price cache: prices are read
- * from upstream per call instead, which every portfolio read and every
- * snapshot pass pays for. And a poller for Jupiter trigger orders: trigger
- * orders are not built, and `gateExecution` turns the decision that would
- * create one into a refusal rather than a queue nobody watches.
+ * One job the design called for is not here: a poller for Jupiter trigger
+ * orders. Trigger orders are not built, and `gateExecution` turns the decision
+ * that would create one into a refusal rather than a queue nobody watches.
+ *
+ * The other, a price cache, is no longer a job. `CachedPriceBoard` holds every
+ * price lookup in the server for a few seconds and collects the misses that
+ * arrive together into one request, so the jobs below share prices with each
+ * other and with every read — which is what they used to each pay for
+ * separately. What is still per-call is the asking: nothing here warms the
+ * board ahead of a reader. For 596 priceable mints that would be twelve
+ * requests a pass, against a keyless allowance of thirty a minute.
  */
 every("stocks", 6 * 60 * 60 * 1000, async () => {
   const s = await syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices });
