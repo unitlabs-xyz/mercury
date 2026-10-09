@@ -344,7 +344,10 @@ const slicesOf = (m: Model): Slice[] => {
  * with the total beside it, the hex graph in a 208px slot, then the legend.
  */
 export const Allocation = ({ m }: { m: Model | undefined }) => (
-  <section aria-label="Allocation" className="flex min-w-0 flex-col rounded-xl bg-white px-4 pt-5 pb-[14px] sm:px-6">
+  <section
+    aria-label="Allocation"
+    className="flex min-w-0 flex-col rounded-xl bg-white px-4 pt-5 pb-[14px] sm:px-6"
+  >
     <RailHead title="Allocation" meta={m && m.assets > 0 ? usd(m.assets) : undefined} />
     <div className="mt-[25px]">
       {!m ? (
