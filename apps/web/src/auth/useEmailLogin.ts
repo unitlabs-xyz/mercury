@@ -4,6 +4,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Pending = "sending" | "resending" | "checking" | "creating" | null;
 
+/** Why a send or a code was refused. `code` is Privy's, so the screen can tell them apart. */
+export type Rejection = { readonly code: string | null; readonly message: string };
+
+/*
+ * A literal rather than the SDK's `PrivyErrorCode`: that enum is a type-only
+ * export, so importing it for a runtime comparison type-checks and then fails
+ * in the browser with "does not provide an export named 'PrivyErrorCode'".
+ */
+export const NOT_INVITED = "allowlist_rejected";
+
+const codeOf = (cause: unknown): string | null => {
+  if (typeof cause !== "object" || cause === null || !("privyErrorCode" in cause)) return null;
+  const code = (cause as { privyErrorCode?: unknown }).privyErrorCode;
+  return typeof code === "string" ? code : null;
+};
+
+const rejection = (cause: unknown, fallback: string): Rejection => ({
+  code: codeOf(cause),
+  message: cause instanceof Error && cause.message ? cause.message : fallback,
+});
+
 export const SEND_MS = 800;
 export const RESEND_MS = 650;
 export const CHECK_MS = 700;
@@ -29,12 +50,13 @@ export const useEmailLogin = () => {
 
   /**
    * Privy's own flow state, mirrored into a ref so the async helpers below can
-   * read it without being re-created on every transition.
+   * read it without being re-created on every transition. The whole state
+   * rather than the status, because the `error` branch carries the reason.
    */
-  const status = useRef(state.status);
+  const latest = useRef(state);
   useEffect(() => {
-    status.current = state.status;
-  }, [state.status]);
+    latest.current = state;
+  }, [state]);
 
   /**
    * On a cold page load `sendCode` dispatches the email but its promise does
@@ -46,9 +68,15 @@ export const useEmailLogin = () => {
   const reaches = (target: string, timeoutMs = 20_000) =>
     new Promise<void>((resolve, reject) => {
       const started = Date.now();
+      // Privy leaves the previous attempt's outcome in place until its own next
+      // transition, so nothing here counts until the state object changes —
+      // otherwise a second try is refused instantly for the first try's reason.
+      const before = latest.current;
       const tick = () => {
-        if (status.current === target) return resolve();
-        if (status.current === "error") return reject(new Error("Privy rejected that."));
+        const now = latest.current;
+        const moved = now !== before;
+        if (moved && now.status === target) return resolve();
+        if (moved && now.status === "error") return reject(now.error ?? new Error("Privy rejected that."));
         if (Date.now() - started > timeoutMs) return reject(new Error("Privy did not respond."));
         setTimeout(tick, 120);
       };
@@ -56,18 +84,26 @@ export const useEmailLogin = () => {
     });
   const { createWallet } = useCreateWallet();
   const [pending, setPending] = useState<Pending>(null);
-  const [rejected, setRejected] = useState<string | null>(null);
+  const [rejected, setRejected] = useState<Rejection | null>(null);
 
   const send = useCallback(
     async (email: string, resend = false) => {
       setPending(resend ? "resending" : "sending");
       setRejected(null);
       try {
-        const call = sendCode({ email }).catch(() => undefined);
+        const call = sendCode({ email });
+        /*
+         * The rejection must reach the catch below, so it is not caught here:
+         * swallowing it showed a refused address the code screen and a
+         * countdown for a code that was never sent. This handler only covers
+         * the case where `reaches` wins the race and the call rejects later,
+         * with nobody waiting on it.
+         */
+        void call.catch(() => undefined);
         await atLeast(resend ? RESEND_MS : SEND_MS, Promise.race([call, reaches("awaiting-code-input")]));
         return true;
       } catch (cause) {
-        setRejected(cause instanceof Error ? cause.message : "That did not work.");
+        setRejected(rejection(cause, "That did not work."));
         return false;
       } finally {
         setPending(null);
@@ -83,7 +119,7 @@ export const useEmailLogin = () => {
       try {
         await atLeast(CHECK_MS, loginWithCode({ code }));
       } catch (cause) {
-        setRejected(cause instanceof Error ? cause.message : "That code did not work.");
+        setRejected(rejection(cause, "That code did not work."));
         setPending(null);
         return false;
       }
