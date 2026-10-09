@@ -94,6 +94,11 @@ function PortfolioScreen() {
   const waiting = portfolio.isPending && p === undefined;
   const failed = portfolio.isError && p === undefined;
   const figure = (v: number) => (hidden ? MASK : usd(v));
+  /* A part's share of what the account holds, before any loan. */
+  const share = (v: number) => {
+    const whole = stocksUsd + basketUsd + cashUsd;
+    return whole > 0 ? v / whole : 0;
+  };
   const toYours = () => router.navigate({ pathname: "/invest", params: { shelf: "yours" } });
 
   const refreshAll = async (): Promise<void> => {
@@ -170,51 +175,59 @@ function PortfolioScreen() {
           </View>
 
           {/*
-           * What the total is made of, in the hero itself: one bar for where the
-           * money sits, then a row for each part with its colour, its count and
-           * where it goes. The things to do with it live behind the + button.
+           * What the total is made of, kept quiet: a hairline split in the parts'
+           * colours, then the parts as plain columns — no panels, no icons. The
+           * things to do with the money live behind the + button.
            */}
-          <View style={s.panel}>
-            {!waiting && !hidden && stocksUsd + basketUsd + cashUsd > 0 && (
-              <Allocation stocks={stocksUsd} baskets={basketUsd} cash={cashUsd} />
+          <View style={s.split}>
+            {!waiting && !hidden && share(stocksUsd) + share(basketUsd) + share(cashUsd) > 0 && (
+              <View style={s.line}>
+                {[
+                  { key: "stocks", v: share(stocksUsd), tint: ALLOC.stocks },
+                  { key: "baskets", v: share(basketUsd), tint: ALLOC.baskets },
+                  { key: "cash", v: share(cashUsd), tint: ALLOC.cash },
+                ]
+                  .filter((part) => part.v > 0)
+                  .map((part) => (
+                    <View key={part.key} style={{ flex: part.v, backgroundColor: part.tint }} />
+                  ))}
+              </View>
             )}
-            <Part
-              tint={ALLOC.stocks}
-              label="Stocks"
-              sub={holdings.length === 1 ? "1 position" : `${holdings.length} positions`}
-              value={figure(stocksUsd)}
-              loading={waiting}
-              onPress={toYours}
-            />
-            {basketUsd > 0 && (
-              <Part
-                tint={ALLOC.baskets}
-                label="Baskets"
-                sub={baskets.length === 1 ? "1 basket" : `${baskets.length} baskets`}
-                value={figure(basketUsd)}
+            <View style={s.columns}>
+              <Column
+                label="Stocks"
+                value={figure(stocksUsd)}
+                sub={holdings.length === 1 ? "1 position" : `${holdings.length} positions`}
                 loading={waiting}
-                onPress={() => router.push("/baskets")}
+                onPress={toYours}
               />
-            )}
-            <Part
-              tint={ALLOC.cash}
-              label="Cash"
-              sub={money.data ? `Earning ${pct(apr, 1)} a year` : "In your account"}
-              value={figure(cashUsd)}
-              loading={waiting}
-              onPress={() => router.navigate("/money")}
-            />
-            {debtUsd > 0 && (
-              <Part
-                tint={color.warn}
-                label="Borrowed"
-                sub={borrowedLine(p?.debtIsStale === true, borrow.data)}
-                value={hidden ? MASK : `−${usd(debtUsd)}`}
-                warn={borrow.data !== undefined && borrow.data.health !== "healthy"}
+              {basketUsd > 0 && (
+                <Column
+                  label="Baskets"
+                  value={figure(basketUsd)}
+                  sub={baskets.length === 1 ? "1 basket" : `${baskets.length} baskets`}
+                  loading={waiting}
+                  onPress={() => router.push("/baskets")}
+                />
+              )}
+              <Column
+                label="Cash"
+                value={figure(cashUsd)}
+                sub={money.data ? `${pct(apr, 1)} a year` : "In your account"}
                 loading={waiting}
-                onPress={() => router.push("/borrow")}
+                onPress={() => router.navigate("/money")}
               />
-            )}
+              {debtUsd > 0 && (
+                <Column
+                  label="Borrowed"
+                  value={hidden ? MASK : `−${usd(debtUsd)}`}
+                  sub={borrowedLine(p?.debtIsStale === true, borrow.data)}
+                  warn={borrow.data !== undefined && borrow.data.health !== "healthy"}
+                  loading={waiting}
+                  onPress={() => router.push("/borrow")}
+                />
+              )}
+            </View>
           </View>
         </View>
 
@@ -373,54 +386,35 @@ const SectionHead = ({
   </View>
 );
 
-/** One part of the total: its colour from the bar, what it is, and what it is worth. */
-const Part = ({
-  tint,
+/** One part of the total as a plain column: its name, what it is worth, one line under it. */
+const Column = ({
   label,
-  sub,
   value,
+  sub,
   warn = false,
   loading,
   onPress,
 }: {
-  tint: string;
   label: string;
-  sub: string;
   value: string;
+  sub: string;
   warn?: boolean;
   loading: boolean;
   onPress: () => void;
 }) => (
-  <PressableScale style={s.part} activeScale={0.985} onPress={onPress} accessibilityRole="button">
-    <View style={[s.swatch, { backgroundColor: tint }]} />
-    <View style={s.mid}>
-      <RNText style={s.partLabel}>{label}</RNText>
-      <RNText style={s.sub} numberOfLines={1}>
-        {sub}
-      </RNText>
-    </View>
+  <PressableScale style={s.column} activeScale={0.97} onPress={onPress} accessibilityRole="button">
+    <RNText style={s.columnLabel}>{label}</RNText>
     {loading ? (
-      <Skeleton width={64} height={15} />
+      <Skeleton width="70%" height={18} style={s.columnSkeleton} />
     ) : (
-      <RNText style={[s.partValue, warn && s.warnInk]}>{value}</RNText>
+      <RNText style={[s.columnValue, warn && s.warnInk]} numberOfLines={1} adjustsFontSizeToFit>
+        {value}
+      </RNText>
     )}
-    <Icon name="chevronRight" size={13} color={color.faint} />
+    <RNText style={s.columnSub} numberOfLines={1}>
+      {sub}
+    </RNText>
   </PressableScale>
-);
-
-/** Where the money sits, as one bar: stocks, baskets, cash — the web's allocation, at a glance. */
-const Allocation = ({ stocks, baskets, cash }: { stocks: number; baskets: number; cash: number }) => (
-  <View style={s.bar}>
-    {[
-      { key: "stocks", value: stocks, tint: ALLOC.stocks },
-      { key: "baskets", value: baskets, tint: ALLOC.baskets },
-      { key: "cash", value: cash, tint: ALLOC.cash },
-    ]
-      .filter((part) => part.value > 0)
-      .map((part) => (
-        <View key={part.key} style={{ flex: part.value, backgroundColor: part.tint }} />
-      ))}
-  </View>
 );
 
 /** A tinted round mark for a row with no logo of its own. */
@@ -500,28 +494,21 @@ const s = StyleSheet.create({
   label: { fontFamily: font.medium, fontSize: 14, color: color.ink },
   worth: { fontFamily: font.medium, fontSize: 40, letterSpacing: -1.4, lineHeight: 46, color: color.ink },
 
-  panel: { borderRadius: radius.lg, backgroundColor: color.tile, padding: space.sm, paddingTop: 14, gap: 2 },
-  part: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    minHeight: 52,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.md,
+  split: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.divider,
+    gap: 14,
   },
-  partLabel: { fontFamily: font.medium, fontSize: 14.5, letterSpacing: -0.29, color: color.ink },
-  partValue: { fontFamily: font.medium, fontSize: 15, letterSpacing: -0.3, color: color.ink },
-
-  bar: {
-    flexDirection: "row",
-    height: 8,
-    borderRadius: 4,
-    overflow: "hidden",
-    gap: 2,
-    marginHorizontal: space.sm,
-    marginBottom: 6,
-  },
-  swatch: { width: 4, height: 28, borderRadius: 2 },
+  line: { flexDirection: "row", height: 2, borderRadius: 1, overflow: "hidden", gap: 2 },
+  columns: { flexDirection: "row", gap: space.md },
+  column: { flex: 1, minWidth: 0, gap: 3 },
+  columnLabel: { fontFamily: font.regular, fontSize: 12.5, color: color.muted },
+  columnValue: { fontFamily: font.medium, fontSize: 18, letterSpacing: -0.36, color: color.ink },
+  columnSkeleton: { marginVertical: 2 },
+  columnSub: { fontFamily: font.regular, fontSize: 11.5, color: color.faint },
 
   sectionHead: {
     flexDirection: "row",
