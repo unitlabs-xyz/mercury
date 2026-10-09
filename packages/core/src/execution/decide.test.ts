@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { D, asBps, fromPct } from "../money.js";
-import { decide, fairPricePerShare, multiplierChangesTheAnswer } from "./decide.js";
+import { decide, fairPricePerShare, multiplierChangesTheAnswer, staleWidening } from "./decide.js";
 import { DEFAULT_POLICY, withPolicy } from "./policy.js";
 import {
   NVDA_CANDIDATES,
@@ -149,8 +149,62 @@ describe("guards", () => {
     expect(decide(buyInput({ status: "halted" })).kind).toBe("refuse");
   });
 
-  it("refuses a stale reference while the market is open", () => {
+  /*
+   * Age widens the band; it does not close the door. A 20-minute-old reference
+   * used to refuse, which was stricter than a *fresh* reference saying the
+   * route is 3% over fair value — that only warns. It also refused sells,
+   * which the premium gate itself says must not happen.
+   */
+  it("lets an order through on a stale reference while the market is open", () => {
     const d = decide(buyInput({ reference: reference(222.365, 0, 20 * 60) }));
+    expect(d.kind).not.toBe("refuse");
+  });
+
+  it("refuses only once the reference is too old to price against at all", () => {
+    const d = decide(buyInput({ reference: reference(222.365, 0, 2 * 3600) }));
+    expect(d.kind === "refuse" && d.reason).toBe("reference_stale");
+  });
+
+  /*
+   * The case the old bar got catastrophically wrong. The issuer's feed freezes
+   * at the closing bell — measured 9 October 2026 — so by Saturday the only
+   * reference that exists is Friday's close. Refusing then is refusing to
+   * trade on the only price there is.
+   */
+  it("trades against the last close all weekend, because that is the only price there is", () => {
+    const d = decide(buyInput({ reference: reference(222.365, 0, 48 * 3600), status: "closed" }));
+    expect(d.kind).not.toBe("refuse");
+  });
+
+  it("never refuses a sell for staleness, whatever the hour", () => {
+    // "Wait for New York to open" is not a remedy available to someone who
+    // needs their own money back at 2am.
+    const d = decide(sellInput({ reference: reference(222.365, 0, 60 * 3600), status: "closed" }));
+    expect(d.kind).not.toBe("refuse");
+  });
+
+  it("widens the premium tolerance with age, and no further than the cap", () => {
+    const fresh = staleWidening(100, "open", DEFAULT_POLICY);
+    const half = staleWidening(300 + (3_600 - 300) / 2, "open", DEFAULT_POLICY);
+    const past = staleWidening(10 * 3_600, "open", DEFAULT_POLICY);
+    expect(fresh.toFixed()).toBe("0");
+    expect(half.mul(10_000).toFixed(0)).toBe("50");
+    // Capped: a band that widens for ever stops being a band.
+    expect(past.mul(10_000).toFixed(0)).toBe("100");
+  });
+
+  /*
+   * Almost flat while the market is shut, by design. Weekend drift was
+   * measured under 15 basis points, so two days old is not two days' worth of
+   * uncertain — the range there is days, not minutes.
+   */
+  it("barely widens over a weekend, because a closed market does not drift", () => {
+    const w = staleWidening(48 * 3600, "closed", DEFAULT_POLICY);
+    expect(w.mul(10_000).toNumber()).toBeLessThan(50);
+  });
+
+  it("still refuses when it cannot tell whether the market is open", () => {
+    const d = decide(buyInput({ status: "stale" }));
     expect(d.kind === "refuse" && d.reason).toBe("reference_stale");
   });
 

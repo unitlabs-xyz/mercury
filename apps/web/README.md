@@ -1,3 +1,3 @@
 # @mercury/web
 
-Not scaffolded yet. See [docs/03-architecture.md](../../docs/03-architecture.md).
+Vite web app, deployed on Vercel (see [vercel.json](vercel.json)). See [docs/03-architecture.md](../../docs/03-architecture.md).

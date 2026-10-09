@@ -116,6 +116,44 @@ const rank = (a: PricedCandidate, b: PricedCandidate, side: Side): number => {
 const maxAgeSec = (status: InstrumentStatus, policy: DecisionInput["policy"]): number =>
   TRADING_SESSIONS.includes(status) ? policy.maxReferenceAgeSecOpen : policy.maxReferenceAgeSecClosed;
 
+const deadAgeSec = (status: InstrumentStatus, policy: DecisionInput["policy"]): number =>
+  TRADING_SESSIONS.includes(status) ? policy.deadReferenceAgeSecOpen : policy.deadReferenceAgeSecClosed;
+
+/**
+ * How much the premium tolerance widens for a reference this old.
+ *
+ * Zero while the reference is fresh, ramping to `referenceStaleMaxWidenBps` at
+ * the age where the reference is abandoned altogether.
+ *
+ * The ramp exists because of what the gap actually contains. `premium` is the
+ * route's price over the reference's, and once the reference is behind, part of
+ * that gap is the market having moved since the reading rather than the pool
+ * being dislocated. Measuring the second against a bar sized for the first
+ * reports movement as dislocation. Widening with age is the honest way to say
+ * "we are less sure", and it is bounded so the check cannot widen into
+ * meaninglessness.
+ *
+ * Linear between the two bounds, and the bounds are session-dependent, so the
+ * same ramp is steep during trading hours — where 300s to 3600s is the whole
+ * range — and almost flat while the market is shut, where the range is days.
+ * That matches the evidence: weekend drift was measured under 15 basis points,
+ * so a reference that is two days old is not two days' worth of uncertain.
+ */
+export const staleWidening = (
+  ageSec: number,
+  status: InstrumentStatus,
+  policy: DecisionInput["policy"],
+): Decimal => {
+  const fresh = maxAgeSec(status, policy);
+  const dead = deadAgeSec(status, policy);
+  if (ageSec <= fresh) return ZERO;
+  // A dead bound at or below the fresh one would divide by zero or go
+  // negative; the whole widening is then meaningless, so there is none.
+  if (dead <= fresh) return ZERO;
+  const through = Math.min((ageSec - fresh) / (dead - fresh), 1);
+  return D(policy.referenceStaleMaxWidenBps).div(10_000).mul(through);
+};
+
 export function decide(input: DecisionInput): Decision {
   const { side, policy, status, reference, now } = input;
   const fair = fairPricePerShare(reference);
@@ -160,13 +198,40 @@ export function decide(input: DecisionInput): Decision {
     );
   }
 
+  /*
+   * An old reference widens the tolerance; it does not close the door.
+   *
+   * It used to refuse, which was the wrong shape twice over. It was stricter
+   * than the thing it guards — a *fresh* reference saying the route is 3% over
+   * fair value is a warning the user may act on (see §4), while a reference
+   * merely 301 seconds old stopped them dead. And it refused sells, which §4
+   * says in as many words we must not do: "wait for New York to open" is not a
+   * remedy available to someone who needs their money back at 2am.
+   *
+   * It also could not work. The issuer's feed freezes when the underlying
+   * market closes — measured on 9 October 2026, the quote stopped advancing at
+   * the 20:00 UTC close and its age then grew without bound — so a bar of 900s
+   * refused every order from a quarter past the close until the next session.
+   * xStocks trade around the clock; the shares behind them do not, and no feed
+   * anywhere can make a Saturday price exist. A freshness bar no source can
+   * meet is not a safety property.
+   *
+   * What the reference actually guards against is persistent dislocation
+   * between the pool and the real share price, which moves over hours. The
+   * risks that move in seconds are already bounded by `maxPriceImpact` from the
+   * quote itself and by `slippageBps` on chain, and neither reads this.
+   */
   const ageSec = (now.getTime() - reference.observedAt.getTime()) / 1000;
-  if (status === "stale" || ageSec > maxAgeSec(status, policy)) {
+  if (status === "stale") {
+    return refuse("reference_stale", "We cannot tell whether this market is open.");
+  }
+  if (ageSec > deadAgeSec(status, policy)) {
     return refuse(
       "reference_stale",
-      `The reference price is ${Math.round(ageSec)}s old and cannot be trusted.`,
+      `The reference price is ${Math.round(ageSec / 3600)}h old, which is too old to price against.`,
     );
   }
+  const tolerance = policy.premiumTolerance.add(staleWidening(ageSec, status, policy));
   if (priced.length === 0) {
     /* Two different facts wear the same refusal. A buy has nothing to buy
        because no wrapper is registered; a sell has nothing to sell because the
@@ -210,7 +275,7 @@ export function decide(input: DecisionInput): Decision {
     premium,
   };
 
-  if (adverse.lte(policy.premiumTolerance)) {
+  if (adverse.lte(tolerance)) {
     return { ...shared, kind: "execute", warning: null };
   }
 
@@ -238,8 +303,7 @@ export function decide(input: DecisionInput): Decision {
     };
   }
 
-  const trigger =
-    side === "buy" ? fair.mul(ONE.add(policy.premiumTolerance)) : fair.mul(ONE.sub(policy.premiumTolerance));
+  const trigger = side === "buy" ? fair.mul(ONE.add(tolerance)) : fair.mul(ONE.sub(tolerance));
 
   return {
     ...shared,

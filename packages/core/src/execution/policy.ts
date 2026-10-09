@@ -12,12 +12,29 @@ import type { ExecutionPolicy } from "./types.js";
  * product refused every order for the last seconds of each cycle — about one
  * minute in eight, for the life of the market session.
  *
- * 300s clears that interval with margin. It is a looser guarantee than 120s
- * pretended to offer, and it is one the data can actually keep; a freshness bar
- * no source can meet is not a safety property, it is a coin toss. The real fix
- * is a reference that updates in seconds — Pyth publishes equities
- * continuously, and ADR 0010's reason for not reading it (CORS) stopped
- * applying when pricing moved to the server.
+ * 300s cleared that interval, then stopped clearing it: measured again on
+ * 9 October 2026 the republish gap was 155s median and 221s at worst, and one
+ * reading in 77 was already past 300s during the regular session. Chasing the
+ * feed with a bigger number is what this file did last time.
+ *
+ * So 300s and 900s no longer refuse anything. They are the point past which the
+ * reference is treated as uncertain and `premiumTolerance` widens with its age,
+ * up to `referenceStaleMaxWidenBps`; `deadReferenceAgeSec*` is where it is
+ * abandoned. The ages above were the argument for that: the issuer's feed
+ * freezes at the closing bell — on 9 October 2026 the quote stopped advancing
+ * at 20:00 UTC and its age grew without bound — so any minutes-long bar refuses
+ * every order from shortly after the close until the next session, including
+ * sells. xStocks trade around the clock and the shares behind them do not; no
+ * feed can make a Saturday price exist, so the only correct response to an old
+ * reference out of hours is to widen the band, not to shut the door.
+ *
+ * Four days of `deadReferenceAgeSecClosed` clears a long weekend. An hour of
+ * `deadReferenceAgeSecOpen` is tighter on purpose: while the market trades, an
+ * hour-old price is genuinely behind rather than merely closed.
+ *
+ * A reference that updates in seconds is still worth having, and `PythReference`
+ * now reads one. It does not replace any of the above — Pyth's equity feeds
+ * close with the exchange too.
  *
  * `slippageBps` lived in the Jupiter adapter as a hardcoded 50, which put half
  * of the 100 basis point premium tolerance outside the tolerance's own reach:
@@ -39,6 +56,9 @@ export const DEFAULT_POLICY: ExecutionPolicy = {
   maxQuoteDriftBps: 50,
   maxReferenceAgeSecOpen: 300,
   maxReferenceAgeSecClosed: 900,
+  deadReferenceAgeSecOpen: 3_600,
+  deadReferenceAgeSecClosed: 345_600,
+  referenceStaleMaxWidenBps: 100,
   minOrderUsd: D(5),
   blockOnCorpActionPending: true,
 };
