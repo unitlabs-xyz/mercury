@@ -1,47 +1,20 @@
 import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ApiError, apiFetch } from "./client";
+import { apiFetch } from "./client";
+import { sendUsdc, type SendIntent, type SendReceipt } from "@mercury/view";
 import { refreshAfterChain } from "./settle";
 
-export interface SendIntent {
-  readonly amount: string;
-  readonly to: string;
-}
-
-export interface SendReceipt {
-  readonly signature: string;
-  readonly status: "confirmed" | "pending";
-}
-
-export class SendSubmissionUncertain extends Error {
-  constructor() {
-    super("Submission could not be confirmed. Check your wallet activity before trying another transfer.");
-  }
-}
+/* The sequence and its uncertainty rule are shared with the phone: @mercury/view's send.ts. */
+export {
+  sendUsdc,
+  SendSubmissionUncertain,
+  type SendIntent,
+  type SendIo,
+  type SendReceipt,
+} from "@mercury/view";
 
 const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
-
-export interface SendIo {
-  prepare: (intent: SendIntent) => Promise<string>;
-  sign: (transaction: string) => Promise<string>;
-  submit: (signedTransaction: string) => Promise<SendReceipt>;
-}
-
-export async function sendUsdc(io: SendIo, intent: SendIntent): Promise<SendReceipt> {
-  const transaction = await io.prepare(intent);
-  const signed = await io.sign(transaction);
-  try {
-    const receipt = await io.submit(signed);
-    if (receipt.status === "confirmed" || receipt.status === "pending") return receipt;
-    throw new Error("The transfer failed on chain.");
-  } catch (error) {
-    // A 4xx is a definite rejection. A lost response or server error could
-    // happen after broadcast, so never invite a new transfer automatically.
-    if (error instanceof ApiError && error.status < 500) throw error;
-    throw new SendSubmissionUncertain();
-  }
-}
 
 export const useSendAction = () => {
   const qc = useQueryClient();
