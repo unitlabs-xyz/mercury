@@ -377,7 +377,10 @@ const placedItem = {
 } as const;
 
 const PlacedLine = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <motion.div variants={placedItem} className="flex h-5 items-center justify-between text-[14px] leading-none">
+  <motion.div
+    variants={placedItem}
+    className="flex h-5 items-center justify-between text-[14px] leading-none"
+  >
     <span className="text-ds-muted">{label}</span>
     <span className="font-medium text-ds-ink">{children}</span>
   </motion.div>
@@ -439,7 +442,11 @@ const Placed = ({
         </motion.span>
       </motion.div>
       <div className="min-w-0">
-        <motion.h2 variants={placedItem} id="order-title" className="truncate text-[18px] leading-none font-medium text-ds-ink">
+        <motion.h2
+          variants={placedItem}
+          id="order-title"
+          className="truncate text-[18px] leading-none font-medium text-ds-ink"
+        >
           {selling ? "Sold" : "Bought"} {instrument.name}
         </motion.h2>
         <motion.p variants={placedItem} className="mt-1.5 text-[14px] leading-none text-ds-muted">
@@ -459,7 +466,9 @@ const Placed = ({
           and becomes money. Worth saying. */}
       {realisedPnlUsd !== null && (
         <PlacedLine label={realisedPnlUsd < 0 ? "Realised loss" : "Realised gain"}>
-          <span className={realisedPnlUsd < 0 ? "text-ds-down" : "text-ds-up"}>{usd(Math.abs(realisedPnlUsd))}</span>
+          <span className={realisedPnlUsd < 0 ? "text-ds-down" : "text-ds-up"}>
+            {usd(Math.abs(realisedPnlUsd))}
+          </span>
         </PlacedLine>
       )}
     </motion.div>
