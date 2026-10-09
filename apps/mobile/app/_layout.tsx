@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ActivityIndicator, AppState, View, StyleSheet, type AppStateStatus } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useFonts } from "expo-font";
@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-
 import { usePrivy } from "@privy-io/expo";
 import { PrivyBoundary } from "../src/auth/PrivyBoundary";
 import { TokenSync } from "../src/api";
+import { forgetTrackedOperations } from "../src/baskets/api";
 import DiatypeBold from "../assets/fonts/ABCDiatype-Bold.ttf";
 import DiatypeMedium from "../assets/fonts/ABCDiatype-Medium.ttf";
 import DiatypeRegular from "../assets/fonts/ABCDiatype-Regular.ttf";
@@ -53,6 +54,19 @@ const Gate = () => {
   const { user, isReady } = usePrivy();
   const segments = useSegments();
   const router = useRouter();
+
+  /* Forgets the account on sign-out. Its reads are keyed by what they are, not
+     whose, so the next person to sign in on this phone would otherwise be shown
+     the last one's balance, holdings and deposit address until their own came back. */
+  const signedIn = useRef(false);
+  useEffect(() => {
+    if (!isReady) return;
+    if (signedIn.current && user === null) {
+      queries.clear();
+      forgetTrackedOperations();
+    }
+    signedIn.current = user !== null;
+  }, [isReady, user]);
 
   useEffect(() => {
     if (!isReady) return;

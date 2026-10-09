@@ -8,7 +8,7 @@ import type {
   SubmittedBasketExit,
 } from "@mercury/types";
 import { usd } from "@mercury/view";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
@@ -669,6 +669,13 @@ export const ExitSheet = ({
 }: ExitSheetProps) => {
   const [manual, setManual] = useState(false);
   const [selection, setSelection] = useState(() => fullSelection(account));
+  /* From the balances as they are now. Taken once at page load, a holding that
+     has since shrunk read as more than you have, and one that arrived since was
+     left out of the withdrawal. Only on opening: the account is a new object
+     on every refetch, so it is not a dependency. */
+  useEffect(() => {
+    if (open) setSelection(fullSelection(account));
+  }, [open]);
   const available = exitAssets(account);
   const byAsset = new Map(account.assets.map((asset) => [asset.assetId, asset]));
   const count = available.length;
@@ -725,7 +732,6 @@ export const ExitSheet = ({
   const close = () => {
     if (busy) return;
     setManual(false);
-    setSelection(fullSelection(account));
     onClose();
   };
   return (

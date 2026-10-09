@@ -17,7 +17,7 @@ const LOOKS_LIKE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
  */
 export default function SignIn() {
   const router = useRouter();
-  const { send, submit, pending, rejected } = useEmailLogin();
+  const { send, submit, reset, pending, rejected } = useEmailLogin();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
@@ -64,6 +64,8 @@ export default function SignIn() {
   return (
     <Screen
       onBack={() => {
+        /* A wrong code is no fault of the address, so it does not follow it back. */
+        reset();
         setSent(false);
         setCode("");
       }}

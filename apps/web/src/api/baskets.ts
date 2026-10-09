@@ -379,6 +379,8 @@ const refreshBasket = (qc: ReturnType<typeof useQueryClient>, slug: string) => {
   for (const key of ["basket-enrollment", "basket-portfolio", "basket-activity"])
     void qc.invalidateQueries({ queryKey: ["api", key, slug] });
   void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
+  /* Funding spends cash, and the balance beside the ticket has to follow it. */
+  void qc.invalidateQueries({ queryKey: ["api", "money"] });
 };
 
 export const useBasketFundingAction = (slug: string) => {

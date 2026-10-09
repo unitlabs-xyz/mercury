@@ -66,7 +66,15 @@ export function betaNotice(r: BetaRecipient, wordmark: Buffer, appUrl = BETA_URL
     why,
   ].join("\n");
 
-  const c = { bg: "#ffffff", fg: "#141614", muted: "#4f554d", line: "#e4e7e1", fine: "#7f867c", btnBg: "#141614", btnFg: "#ffffff" };
+  const c = {
+    bg: "#ffffff",
+    fg: "#141614",
+    muted: "#4f554d",
+    line: "#e4e7e1",
+    fine: "#7f867c",
+    btnBg: "#141614",
+    btnFg: "#ffffff",
+  };
   const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
   const para = (p: string) =>
     `<tr><td class="mx-muted" style="padding:20px 20px 0;font-family:${font};font-size:15px;line-height:1.7;color:${c.muted}">${escape(p)}</td></tr>`;
@@ -75,7 +83,8 @@ export function betaNotice(r: BetaRecipient, wordmark: Buffer, appUrl = BETA_URL
 <table role="presentation" class="mx-line" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${c.line}">
 ${copy.points
   .map(
-    (p) => `<tr><td class="mx-line mx-fg" style="padding:16px 0;border-bottom:1px solid ${c.line};font-family:${font};font-size:15px;line-height:1.55;color:${c.fg}">${escape(p)}</td></tr>`,
+    (p) =>
+      `<tr><td class="mx-line mx-fg" style="padding:16px 0;border-bottom:1px solid ${c.line};font-family:${font};font-size:15px;line-height:1.55;color:${c.fg}">${escape(p)}</td></tr>`,
   )
   .join("\n")}
 </table></td></tr>`

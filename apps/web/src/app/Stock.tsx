@@ -406,6 +406,15 @@ export const Stock = () => {
         prices={prices.data}
         open={buying}
         onClose={() => setBuying(false)}
+        onPlaced={() => {
+          /* The order is placed, so the ticket starts over. Left as it was, a
+             "Sell all" keeps quoting a sale of shares that are now gone, and the
+             tabs that could switch it back are hidden with the position. */
+          setRaw("100");
+          setSide("buy");
+          setMax(false);
+          setAcceptImpact(false);
+        }}
         initial={amount}
         side={side}
         max={max}
