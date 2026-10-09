@@ -78,8 +78,43 @@ export interface ExecutionPolicy {
    * shown and the quote that gets built, before we stop and ask again.
    */
   readonly maxQuoteDriftBps: number;
+  /**
+   * How old the reference may be before it is treated as uncertain.
+   *
+   * Not a cliff any more. Inside this, the premium tolerance is exactly
+   * `premiumTolerance`; past it the tolerance widens with age, up to
+   * `referenceStaleMaxWidenBps`, and the order still goes through the ordinary
+   * premium logic rather than being refused outright.
+   */
   readonly maxReferenceAgeSecOpen: number;
   readonly maxReferenceAgeSecClosed: number;
+  /**
+   * The age past which the reference carries no information and the order is
+   * refused.
+   *
+   * Session-dependent because the two regimes are different in kind. While the
+   * market trades, an hour-old price is genuinely behind — the thing it is
+   * meant to describe has moved and we cannot say by how much. While the market
+   * is shut, the reference *is* the last close: it is as old as the weekend and
+   * every brokerage in the world is valuing the same position off the same
+   * number. Refusing then would not be caution, it would be refusing to trade
+   * on the only price that exists.
+   *
+   * Four days clears a long weekend. Past that, something is broken upstream
+   * rather than merely closed.
+   */
+  readonly deadReferenceAgeSecOpen: number;
+  readonly deadReferenceAgeSecClosed: number;
+  /**
+   * How far the premium tolerance may widen for an old reference, at the point
+   * the reference is about to be abandoned entirely.
+   *
+   * It widens because an old reference is uncertain, not because a bigger
+   * premium became acceptable — the gap being measured is partly real
+   * dislocation and partly the market having moved since the reading. Capped,
+   * because past some width the check stops being a check.
+   */
+  readonly referenceStaleMaxWidenBps: number;
   readonly minOrderUsd: Decimal;
   readonly blockOnCorpActionPending: boolean;
 }

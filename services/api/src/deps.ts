@@ -16,6 +16,8 @@ import {
 } from "@mercury/chain";
 import {
   BoardReference,
+  FallbackReference,
+  PythReference,
   CachedPriceBoard,
   JupiterMarket,
   KaminoCredit,
@@ -65,6 +67,12 @@ import { GliderClient } from "./baskets/glider/client.js";
 import { JsonBasketStore } from "./baskets/glider/store.js";
 import { SolanaBasketFunding } from "./baskets/glider/funding.js";
 import type { BasketProvider } from "./baskets/core/deps.js";
+
+/** Pyth in front of the issuer's quote, or the issuer's quote alone. */
+const withFallback = (pythApiKey: string | undefined, issuer: ReferenceSource): ReferenceSource =>
+  pythApiKey === undefined
+    ? issuer
+    : new FallbackReference(new PythReference({ apiKey: pythApiKey }), issuer);
 
 export interface Deps {
   readonly registry: TokenRegistry;
@@ -122,6 +130,14 @@ export interface Config {
    * funded relayer still sells stock.
    */
   readonly relayerSecretKey?: string;
+  /**
+   * Hermes rejects Pyth's price endpoints without one, as of 26 August 2026.
+   * Unset, the reference price is the issuer's quote inside Jupiter's
+   * `price/v3`, which republishes every two or three minutes — workable, but
+   * the premium check then spends part of its one percent on market movement
+   * rather than on dislocation.
+   */
+  readonly pythApiKey?: string;
   /** Optional. The bearer token for `GET /admin/waitlist`; unset, that route is a 404. */
   readonly waitlistAdminToken?: string;
   /**
@@ -179,6 +195,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
     jupiterApiKeys: parseJupiterKeys(env["JUPITER_API_KEYS"]),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
+    ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
     ...(env["WAITLIST_ADMIN_TOKEN"] ? { waitlistAdminToken: env["WAITLIST_ADMIN_TOKEN"] } : {}),
@@ -253,7 +270,19 @@ export function buildDeps(config: Config): Deps {
     // and wiring it directly made every quote pay a fresh Jupiter request for
     // prices a shelf read had just fetched — the one path that never hit the
     // cache, on the endpoint whose keyless limit is thirty requests a minute.
-    reference: new BoardReference({ registry, board: prices, maxAgeMs: REFERENCE_MAX_AGE_MS }),
+    /*
+     * Pyth first where it has a feed, the issuer's quote behind it.
+     *
+     * Pyth publishes continuously; the issuer republishes every 155 seconds at
+     * the median. But Pyth carries 820 of the 1,506 tagged tickers, so
+     * something has to answer for the rest — and the same fallback is what
+     * keeps the product up if the key expires or Hermes is rate-limited,
+     * because `priceOrder` turns a missing reference into "Unknown instrument".
+     */
+    reference: withFallback(
+      config.pythApiKey,
+      new BoardReference({ registry, board: prices, maxAgeMs: REFERENCE_MAX_AGE_MS }),
+    ),
     // The mint is the authority. `market` implements the same port from
     // Jupiter's copy of the same numbers, and is what the browser falls back to.
     multipliers: new MintMultipliers({ chain }),

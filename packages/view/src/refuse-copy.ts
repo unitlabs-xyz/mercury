@@ -17,9 +17,15 @@ export const REFUSE_COPY: Record<RefuseDecision["reason"], { title: string; body
     title: "This order would move the price",
     body: "Not much of it trades on Solana right now, so at this size buying would push the price up against you. Try a smaller amount.",
   },
+  /*
+   * This used to be the ordinary out-of-hours state, and "in a moment" was a
+   * promise it could not keep — the share price feed stops at the closing bell,
+   * so the wait was until the next session. It is now reached only when the
+   * feed is actually broken, which is not something a reader can wait out.
+   */
   reference_stale: {
-    title: "Price is out of date",
-    body: "We can't confirm what a share is worth right now, so we're not placing orders. Try again in a moment.",
+    title: "We can't price this right now",
+    body: "The share price feed isn't reporting, so we're not placing orders against it. This is on us, and we're on it.",
   },
   instrument_halted: { title: "Trading halted", body: "The exchange has halted this stock." },
   corp_action_pending: {
