@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Image, Linking, ScrollView, StyleSheet, Text as RNText, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Image, Linking, ScrollView, StyleSheet, Text as RNText, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -9,12 +9,19 @@ import {
   BASKET_THEMES,
   basketStatusLabel,
   displayBasketName,
+  rebalanceOutcome,
+  searchStrategies,
   themeTitle,
   usd,
   visibleStrategies,
 } from "@mercury/view";
 import { useSignedIn } from "../../src/api";
-import { useBasketTemplates, useOwnedBasketPortfolios } from "../../src/baskets/api";
+import {
+  useBasketOperations,
+  useBasketTemplates,
+  useOwnedBasketPortfolios,
+  useTrackedOperations,
+} from "../../src/baskets/api";
 import {
   AssetStack,
   INVESTOR_ART,
@@ -47,10 +54,30 @@ export default function Baskets() {
   const [theme, setTheme] = useState<ManagedBasketTag | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [list, setList] = useState(0);
+  const [query, setQuery] = useState("");
+  /* Search once typing settles, as the web waits 250ms. */
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setTerm(query.trim()), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+  const searching = term !== "";
   const scroller = useMemo(() => ({ current: null as ScrollView | null }), []);
 
   const templates = catalog.data ?? EMPTY;
-  const visible = useMemo(() => visibleStrategies(templates, theme, showAll), [templates, theme, showAll]);
+  /* A search reads every holding's company name, so it needs the whole catalog's instruments. */
+  const instruments = useHoldingInstruments(templates, searching ? 100 : 5);
+  const companyNames = useMemo(
+    () => new Map([...instruments].map(([ticker, i]) => [ticker, i.name])),
+    [instruments],
+  );
+  const visible = useMemo(
+    () =>
+      searching
+        ? searchStrategies(templates, term, companyNames)
+        : visibleStrategies(templates, theme, showAll),
+    [templates, theme, showAll, searching, term, companyNames],
+  );
   const pros = useMemo(
     () =>
       BASKET_INVESTORS.map((slug) => templates.find((t) => t.slug === slug)).filter(
@@ -58,7 +85,6 @@ export default function Baskets() {
       ),
     [templates],
   );
-  const instruments = useHoldingInstruments(templates);
   const bySlug = useMemo(() => new Map(templates.map((t) => [t.slug, t])), [templates]);
   const open = (slug: string) => router.push({ pathname: "/baskets/[slug]", params: { slug } });
 
@@ -69,11 +95,13 @@ export default function Baskets() {
     requestAnimationFrame(() => scroller.current?.scrollTo({ y: list - 12, animated: true }));
   };
 
-  const title = theme
-    ? `${themeTitle(theme)} strategies`
-    : showAll
-      ? "All strategies"
-      : "Featured strategies";
+  const title = searching
+    ? "Search results"
+    : theme
+      ? `${themeTitle(theme)} strategies`
+      : showAll
+        ? "All strategies"
+        : "Featured strategies";
   const portfolios = owned.data ?? [];
 
   return (
@@ -95,6 +123,24 @@ export default function Baskets() {
               Ready-made strategies on Glider. The stocks stay in your own smart account, rebalanced daily.
             </RNText>
           </View>
+
+          <View style={s.search}>
+            <Icon name="search" size={16} color={color.muted} />
+            <TextInput
+              style={s.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search by strategy, company or ticker"
+              placeholderTextColor={color.faint}
+              selectionColor={color.brand}
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
+          </View>
+
+          <Operations />
 
           {/* ── What you hold ─────────────────────────────────────────── */}
           {signedIn && (owned.isPending || portfolios.length > 0 || owned.isError) && (
@@ -174,59 +220,61 @@ export default function Baskets() {
           ) : (
             <>
               {/* ── By theme ─────────────────────────────────────────── */}
-              <View style={s.section}>
-                <SectionHead
-                  title="Explore by theme"
-                  sub="Strategies that match your interests and outlook."
-                />
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={s.shelf}
-                  decelerationRate="fast"
-                  snapToInterval={THEME_W + 10}
-                >
-                  {BASKET_THEMES.map((t) => {
-                    const count = templates.filter((x) => x.tags.includes(t.tag)).length;
-                    return (
-                      <PressableScale
-                        key={t.tag}
-                        style={[s.theme, theme === t.tag && s.themeOn]}
-                        activeScale={0.97}
-                        onPress={() => showList({ theme: t.tag })}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${t.title}, ${count} strategies`}
-                      >
-                        <Image
-                          source={THEME_ART[t.tag]}
-                          style={s.themeArt}
-                          blurRadius={2}
-                          resizeMode="cover"
-                        />
-                        {/* The web masks the art in from the right; a white wash does the same here. */}
-                        <LinearGradient
-                          colors={["#FFFFFF", "rgba(255,255,255,0.75)", "rgba(255,255,255,0)"]}
-                          locations={[0, 0.45, 0.85]}
-                          start={{ x: 0, y: 0.5 }}
-                          end={{ x: 1, y: 0.5 }}
-                          style={StyleSheet.absoluteFill}
-                        />
-                        <RNText style={s.themeTitle}>{t.title}</RNText>
-                        <RNText style={s.themeBody}>{t.description}</RNText>
-                        <View style={s.themeFoot}>
-                          <RNText style={s.themeCount}>
-                            {count} {count === 1 ? "strategy" : "strategies"}
-                          </RNText>
-                          <Icon name="arrowRight" size={13} color={color.ink} />
-                        </View>
-                      </PressableScale>
-                    );
-                  })}
-                </ScrollView>
-              </View>
+              {!searching && (
+                <View style={s.section}>
+                  <SectionHead
+                    title="Explore by theme"
+                    sub="Strategies that match your interests and outlook."
+                  />
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={s.shelf}
+                    decelerationRate="fast"
+                    snapToInterval={THEME_W + 10}
+                  >
+                    {BASKET_THEMES.map((t) => {
+                      const count = templates.filter((x) => x.tags.includes(t.tag)).length;
+                      return (
+                        <PressableScale
+                          key={t.tag}
+                          style={[s.theme, theme === t.tag && s.themeOn]}
+                          activeScale={0.97}
+                          onPress={() => showList({ theme: t.tag })}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${t.title}, ${count} strategies`}
+                        >
+                          <Image
+                            source={THEME_ART[t.tag]}
+                            style={s.themeArt}
+                            blurRadius={2}
+                            resizeMode="cover"
+                          />
+                          {/* The web masks the art in from the right; a white wash does the same here. */}
+                          <LinearGradient
+                            colors={["#FFFFFF", "rgba(255,255,255,0.75)", "rgba(255,255,255,0)"]}
+                            locations={[0, 0.45, 0.85]}
+                            start={{ x: 0, y: 0.5 }}
+                            end={{ x: 1, y: 0.5 }}
+                            style={StyleSheet.absoluteFill}
+                          />
+                          <RNText style={s.themeTitle}>{t.title}</RNText>
+                          <RNText style={s.themeBody}>{t.description}</RNText>
+                          <View style={s.themeFoot}>
+                            <RNText style={s.themeCount}>
+                              {count} {count === 1 ? "strategy" : "strategies"}
+                            </RNText>
+                            <Icon name="arrowRight" size={13} color={color.ink} />
+                          </View>
+                        </PressableScale>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
 
               {/* ── Like the pros ────────────────────────────────────── */}
-              {pros.length > 0 && (
+              {!searching && pros.length > 0 && (
                 <View style={s.section}>
                   <SectionHead
                     title="Invest like the pros"
@@ -264,24 +312,30 @@ export default function Baskets() {
                 <View style={s.cardHead}>
                   <View style={s.fill}>
                     <RNText style={s.cardTitle}>{title}</RNText>
-                    <RNText style={s.sub}>{visible.length} on Glider</RNText>
+                    <RNText style={s.sub}>
+                      {searching ? `${visible.length} matching “${term}”` : `${visible.length} on Glider`}
+                    </RNText>
                   </View>
-                  <PressableScale
-                    activeScale={0.96}
-                    onPress={() => {
-                      if (theme) {
-                        setTheme(null);
-                        setShowAll(true);
-                      } else setShowAll(!showAll);
-                    }}
-                  >
-                    <RNText style={s.link}>{theme || !showAll ? "See all" : "Show featured"}</RNText>
-                  </PressableScale>
+                  {!searching && (
+                    <PressableScale
+                      activeScale={0.96}
+                      onPress={() => {
+                        if (theme) {
+                          setTheme(null);
+                          setShowAll(true);
+                        } else setShowAll(!showAll);
+                      }}
+                    >
+                      <RNText style={s.link}>{theme || !showAll ? "See all" : "Show featured"}</RNText>
+                    </PressableScale>
+                  )}
                 </View>
                 <View style={s.panel}>
                   {visible.length === 0 ? (
                     <View style={s.blank}>
-                      <RNText style={s.blankBody}>No strategies in this theme yet.</RNText>
+                      <RNText style={s.blankBody}>
+                        {searching ? `No strategy matches “${term}”.` : "No strategies in this theme yet."}
+                      </RNText>
                     </View>
                   ) : (
                     visible.map((t) => (
@@ -348,6 +402,76 @@ export default function Baskets() {
   );
 }
 
+/**
+ * The rebalances and withdrawals started this session, in flight first: the
+ * web's "Basket operations" rail. Glider accepts the work before it settles,
+ * so this is where somebody sees it land without opening each basket.
+ */
+const Operations = () => {
+  const router = useRouter();
+  const tracked = useTrackedOperations();
+  const entries = Object.values(tracked);
+  const results = useBasketOperations(entries.map(({ slug, operationId }) => ({ slug, operationId })));
+  if (entries.length === 0) return null;
+  const rows = entries
+    .map((op, k) => ({ op, data: results[k]?.data, failed: results[k]?.isError === true }))
+    .sort((a, b) => Number(isActive(b.data?.state)) - Number(isActive(a.data?.state)));
+  return (
+    <View style={s.card}>
+      <View style={s.cardHead}>
+        <RNText style={s.cardTitle}>Basket operations</RNText>
+        <RNText style={s.meta}>On Glider</RNText>
+      </View>
+      <View style={s.panel}>
+        {rows.map(({ op, data, failed }) => {
+          const outcome = data ? rebalanceOutcome(data.state, data.error) : null;
+          const active = isActive(data?.state);
+          return (
+            <PressableScale
+              key={op.operationId}
+              style={s.row}
+              activeScale={0.985}
+              onPress={() => router.push({ pathname: "/baskets/[slug]", params: { slug: op.slug } })}
+            >
+              <View
+                style={[
+                  s.dot,
+                  {
+                    backgroundColor: active
+                      ? color.warn
+                      : data?.state === "completed"
+                        ? color.up
+                        : color.down,
+                  },
+                ]}
+              />
+              <View style={s.mid}>
+                <RNText style={s.name} numberOfLines={1}>
+                  {displayBasketName(op.name)}
+                </RNText>
+                <RNText style={s.sub}>
+                  {op.kind === "rebalance"
+                    ? "Manual rebalance"
+                    : op.mode === "in_kind"
+                      ? "Withdrawal in kind"
+                      : "Withdrawal to USDC"}
+                </RNText>
+              </View>
+              <RNText style={s.state}>
+                {failed ? "Status unavailable" : (outcome?.label ?? "Checking…")}
+              </RNText>
+            </PressableScale>
+          );
+        })}
+      </View>
+    </View>
+  );
+};
+
+/** A state Glider has not reported yet is still work in flight. */
+const isActive = (state: string | undefined) =>
+  state === undefined || ["accepted", "running", "retrying", "awaiting_user"].includes(state);
+
 /** The shelves' shape while the catalog loads, so nothing jumps when it lands. */
 const DiscoveryLoading = () => (
   <View style={s.section}>
@@ -375,6 +499,19 @@ const s = StyleSheet.create({
   head: { paddingHorizontal: space.screen, gap: 4 },
   lede: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: color.muted },
   section: { gap: space.md },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+    marginHorizontal: space.screen,
+    paddingHorizontal: space.md,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: color.surface,
+  },
+  searchInput: { flex: 1, fontFamily: font.regular, fontSize: 14, color: color.ink, padding: 0 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  state: { fontFamily: font.medium, fontSize: 12.5, color: color.ink },
   meta: { fontFamily: font.regular, fontSize: 12.5, color: color.muted },
 
   card: {

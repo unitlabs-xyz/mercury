@@ -1,10 +1,11 @@
 import { useSyncExternalStore } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { VersionedTransaction } from "@solana/web3.js";
 import { Buffer } from "buffer";
 import bs58 from "bs58";
 import type {
+  BasketExitAsset,
   BasketExitMode,
   ManagedBasketActivity,
   ManagedBasketInsights,
@@ -155,6 +156,8 @@ export const useBasketOperation = (slug: string, operationId: string | null) => 
  * they live for the session in memory, which is what that amounts to.
  */
 export interface TrackedOperation {
+  readonly slug: string;
+  readonly name: string;
   readonly operationId: string;
   readonly kind: "rebalance" | "exit";
   readonly mode?: BasketExitMode;
@@ -171,6 +174,30 @@ export const trackOperation = (portfolioId: string, op: TrackedOperation) => {
 };
 export const useTrackedOperation = (portfolioId: string | undefined) =>
   useSyncExternalStore(subscribe, () => (portfolioId === undefined ? undefined : tracked[portfolioId]));
+/** Every operation started this session, by portfolio: what the Baskets landing lists. */
+export const useTrackedOperations = () => useSyncExternalStore(subscribe, () => tracked);
+
+/** Several operations at once, each polled until it settles. */
+export const useBasketOperations = (requests: readonly { slug: string; operationId: string }[]) => {
+  const owner = useOwner();
+  return useQueries({
+    queries: requests.map(({ slug, operationId }) => ({
+      queryKey: ["api", "basket-operation", slug, owner.address, operationId],
+      queryFn: async () =>
+        (
+          await apiFetch<{ operation: ManagedBasketOperation }>(
+            `${slugPath(slug)}/operations/${encodeURIComponent(operationId)}`,
+          )
+        ).operation,
+      enabled: owner.ready,
+      retry: false,
+      refetchInterval: (query: { state: { data?: ManagedBasketOperation } }) => {
+        const state = query.state.data?.state;
+        return state && ["completed", "failed", "cancelled"].includes(state) ? false : 4_000;
+      },
+    })),
+  });
+};
 
 /* ── signing ──────────────────────────────────────────────────────────────── */
 
@@ -311,9 +338,13 @@ export const useBasketRebalanceAction = (slug: string) => {
 export const useBasketExitAction = (slug: string) => {
   const qc = useQueryClient();
   const signer = useSigner();
+  /* Without assets, the whole portfolio; with them, exactly those amounts. */
   const prepare = useMutation({
-    mutationFn: (mode: BasketExitMode) =>
-      apiFetch<PreparedBasketExit>(`${slugPath(slug)}/exit/${mode}/prepare`, { method: "POST" }),
+    mutationFn: ({ mode, assets }: { mode: BasketExitMode; assets?: BasketExitAsset[] }) =>
+      apiFetch<PreparedBasketExit>(`${slugPath(slug)}/exit/${mode}/prepare`, {
+        method: "POST",
+        ...(assets ? { body: JSON.stringify({ assets }) } : {}),
+      }),
   });
   const submit = useMutation({
     mutationFn: async (prepared: PreparedBasketExit) => {
@@ -329,7 +360,7 @@ export const useBasketExitAction = (slug: string) => {
       const signature = await signer.signMessage(prepared.authorization.text);
       return apiFetch<SubmittedBasketExit>(`${slugPath(slug)}/exit/${prepared.mode}`, {
         method: "POST",
-        body: JSON.stringify({ message: prepared.message, signature }),
+        body: JSON.stringify({ message: prepared.message, signature, submission: prepared.submission }),
       });
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] }),
