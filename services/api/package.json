@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "allowlist": "tsx --env-file=.env scripts/allowlist-waitlist.ts",
+    "beta-mail": "tsx --env-file-if-exists=.env scripts/beta-mail.ts",
+    "og-image": "tsx scripts/og-image.ts",
     "dev": "tsx watch --env-file=.env src/index.ts",
     "dev:waitlist": "tsx scripts/waitlist-local.ts",
     "dev:waitlist:mail": "WAITLIST_SEND_MAIL=1 tsx --env-file=.env scripts/waitlist-local.ts",

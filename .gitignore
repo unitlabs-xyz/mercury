@@ -20,3 +20,4 @@ android/
 
 # Emails the local waitlist server (pnpm --filter @mercury/api dev:waitlist) would have sent
 .waitlist-mail
+.beta-mail
