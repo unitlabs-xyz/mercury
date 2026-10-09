@@ -1,3 +1,5 @@
+import { D } from "@mercury/core";
+
 /**
  * Sending USDC: prepare on the server, sign in the wallet, relay.
  *
@@ -6,6 +8,37 @@
  * broadcast, so the failure is reported as uncertain — check before sending
  * again — never as a plain failure that invites a second transfer.
  */
+/**
+ * What a transfer to a given recipient will cost the sender.
+ *
+ * Two separate facts, and the screen needs both. `sponsored` says whether a
+ * relayer is paying the network at all — false is the old world, where the
+ * wallet needs SOL and we cannot say otherwise. `feeUsd` is the rent for
+ * opening the recipient's USDC account, which only they can owe and only the
+ * first time anyone sends them dollars.
+ */
+export interface SendQuote {
+  /** In USDC. "0" when nothing is owed, which is the ordinary case. */
+  readonly feeUsd: string;
+  readonly sponsored: boolean;
+}
+
+/** What to assume before a quote arrives, or when one cannot be had. */
+export const NO_SEND_QUOTE: SendQuote = { feeUsd: "0", sponsored: false };
+
+/**
+ * The most of a balance that can actually leave.
+ *
+ * Max has to subtract the charge or it fails by construction: a sender holding
+ * exactly $20 cannot send $20 and repay $0.22 out of the same $20. Subtracting
+ * is what makes "Max" mean "all of it", which is the only thing it can
+ * usefully mean.
+ */
+export const maxSendable = (balanceUsd: string | number | null | undefined, quote: SendQuote): string => {
+  const most = D(balanceUsd ?? 0).sub(D(quote.feeUsd));
+  return most.gt(0) ? most.toString() : "0";
+};
+
 export interface SendIntent {
   readonly amount: string;
   readonly to: string;
