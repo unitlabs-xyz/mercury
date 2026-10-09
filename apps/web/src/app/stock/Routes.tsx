@@ -58,7 +58,7 @@ export const Routes = ({
 
   return (
     <section aria-label="Where your order goes" className="min-w-0 rounded-xl bg-white p-1">
-      <div className="px-5 pt-4">
+      <div className="px-3 sm:px-5 pt-4">
         <RailHead
           title={decision && decision.candidates.length === 1 ? "Your route" : "Where your order goes"}
           meta={

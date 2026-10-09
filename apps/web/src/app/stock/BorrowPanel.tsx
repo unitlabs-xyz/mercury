@@ -86,7 +86,7 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
       // Set like Your position: the figure, then its facts in a grey panel. A column,
       // so the button sits 24px from the sides and 20px from the foot however tall the row is.
       <section aria-label="Borrow against it" className="flex min-w-0 flex-col rounded-xl bg-white p-1">
-        <div className="px-5 pt-4">
+        <div className="px-3 sm:px-5 pt-4">
           <RailHead title="Borrow against it" meta={`${pct(borrow.data.borrowApy * 100, 1)} a year`} />
           <div className="mt-[15px]">
             <RailFigure
@@ -121,7 +121,7 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
           )}
         </dl>
         {row.borrowableUsd > 0 && (
-          <div className="mt-auto px-5 pt-4 pb-4">
+          <div className="mt-auto px-3 sm:px-5 pt-4 pb-4">
             <ButtonLink
               to={`?borrow=borrow&ticker=${encodeURIComponent(ticker)}&only=1`}
               size="lg"

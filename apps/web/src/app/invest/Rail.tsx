@@ -108,7 +108,7 @@ export const RailList = ({
   footer?: ReactNode;
 }) => (
   <section aria-label={label} className="min-w-0 rounded-xl bg-white p-1">
-    <div className="px-5 pt-4">
+    <div className="px-3 sm:px-5 pt-4">
       <RailHead title={label} meta={meta} {...(to && linkLabel ? { to, linkLabel } : {})} />
       {controls && <div className="mt-[15px]">{controls}</div>}
     </div>

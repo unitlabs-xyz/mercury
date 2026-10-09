@@ -44,7 +44,7 @@ const SINCE: Record<Span, string> = {
 
 const Missing = ({ loading }: { loading: boolean }) => (
   <AppShell current="invest" title="Invest" quiet>
-    <section className="rounded-xl bg-white px-6 py-12 text-center">
+    <section className="rounded-xl bg-white px-4 py-12 sm:px-6 text-center">
       {loading ? (
         <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
           <Skeleton className="size-12 rounded-full" />

@@ -59,7 +59,7 @@ const DiscoveryLoading = () => (
         {[0, 1, 2, 3].map((item) => (
           <div
             key={item}
-            className="w-[calc(50%-6px)] min-w-[210px] shrink-0 rounded-lg bg-white p-1 lg:w-[calc(25%-9px)]"
+            className="w-[78%] shrink-0 rounded-lg bg-white p-1 sm:w-[calc(50%-6px)] lg:w-[calc(25%-9px)]"
           >
             <Skeleton className="h-[137px] w-full rounded-md" />
           </div>
@@ -69,16 +69,19 @@ const DiscoveryLoading = () => (
     <section>
       <Skeleton className="h-6 w-44 !bg-white" />
       <Skeleton className="mt-2 h-4 w-72 max-w-full !bg-white" />
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 flex gap-3 overflow-hidden">
         {[0, 1, 2, 3].map((item) => (
-          <div key={item} className="rounded-lg bg-white p-1">
+          <div
+            key={item}
+            className="w-[78%] shrink-0 rounded-lg bg-white p-1 sm:w-[calc(50%-6px)] lg:w-[calc(25%-9px)]"
+          >
             <Skeleton className="h-[197px] w-full rounded-md" />
           </div>
         ))}
       </div>
     </section>
     <section className="rounded-xl bg-white p-1">
-      <div className="px-5 pt-4 pb-3">
+      <div className="px-3 sm:px-5 pt-4 pb-3">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="mt-2 h-4 w-64 max-w-full" />
       </div>
@@ -128,125 +131,167 @@ const Holdings = ({
   );
 };
 
+/*
+ * A row of cards that scrolls sideways. The arrows used to float over the
+ * first and last card, covering their text; they sit in the heading now, on
+ * wider screens only, and grey out at either end. On a phone the row runs to
+ * the screen edge so the next card peeks in, which says "swipe" on its own.
+ */
+const Shelf = ({
+  id,
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  id: string;
+  title: string;
+  subtitle: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) => {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ prev: false, next: false });
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return undefined;
+    const read = () =>
+      setEdges({ prev: el.scrollLeft > 4, next: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+    read();
+    el.addEventListener("scroll", read, { passive: true });
+    const resize = new ResizeObserver(read);
+    resize.observe(el);
+    return () => {
+      el.removeEventListener("scroll", read);
+      resize.disconnect();
+    };
+  }, []);
+
+  const step = (direction: 1 | -1) => {
+    const el = scroller.current;
+    const card = el?.firstElementChild as HTMLElement | null;
+    el?.scrollBy({ left: direction * ((card?.offsetWidth ?? 280) + 12), behavior: "smooth" });
+  };
+
+  const arrow = (direction: 1 | -1) => (
+    <button
+      type="button"
+      onClick={() => step(direction)}
+      disabled={direction === 1 ? !edges.next : !edges.prev}
+      aria-label={direction === 1 ? `Next in ${title}` : `Previous in ${title}`}
+      className="grid size-8 place-items-center rounded-full bg-white text-ds-ink shadow-sm transition-opacity hover:bg-ds-panel disabled:cursor-default disabled:opacity-40 disabled:hover:bg-white"
+    >
+      <Arrow left={direction === -1} />
+    </button>
+  );
+
+  return (
+    <section id={id} aria-label={title} className="scroll-mt-24">
+      <Heading
+        title={title}
+        subtitle={subtitle}
+        action={
+          (action || edges.prev || edges.next) && (
+            <div className="flex items-center gap-4">
+              {action}
+              {(edges.prev || edges.next) && (
+                <div className="flex gap-2 max-sm:hidden">
+                  {arrow(-1)}
+                  {arrow(1)}
+                </div>
+              )}
+            </div>
+          )
+        }
+      />
+      <div
+        ref={scroller}
+        className="-mx-5 flex snap-x snap-mandatory scroll-px-5 gap-3 overflow-x-auto px-5 pt-1 pb-2 [scrollbar-width:none] sm:mx-0 sm:scroll-px-0 sm:px-0 [&::-webkit-scrollbar]:hidden [&>*]:shrink-0 [&>*]:snap-start"
+      >
+        {children}
+      </div>
+    </section>
+  );
+};
+
+/* Four across on a wide screen, two on a tablet, one and a peek on a phone. */
+const CARD_WIDTH = "w-[78%] sm:w-[calc(50%-6px)] lg:w-[calc(25%-9px)]";
+
 const ThemeShelf = ({
   shelves,
   select,
 }: {
   shelves: ReturnType<typeof curatedShelves>["themes"];
   select: (tag: ManagedBasketTag) => void;
-}) => {
-  const scroller = useRef<HTMLDivElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <section id="themes" aria-label="Explore by theme" className="scroll-mt-24">
-      <Heading
-        title="Explore by theme"
-        subtitle="Find strategies that match your interests and outlook."
-        action={
-          <TextAction onClick={() => setExpanded(!expanded)}>
-            {expanded ? "Show fewer themes" : "See all themes"}
-          </TextAction>
-        }
-      />
-      <div className="relative">
-        {!expanded && (
-          <button
-            type="button"
-            onClick={() => scroller.current?.scrollBy({ left: -280, behavior: "smooth" })}
-            aria-label="Previous themes"
-            className="absolute top-1/2 -left-4 z-10 grid size-9 -translate-y-1/2 place-items-center rounded-full bg-white text-ds-ink shadow-sm hover:bg-ds-panel"
-          >
-            <Arrow left />
-          </button>
-        )}
-        <div
-          ref={scroller}
-          className={
-            expanded
-              ? "grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-              : "flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          }
-        >
-          {shelves.map((theme) => (
-            <button
-              key={theme.tag}
-              type="button"
-              onClick={() => select(theme.tag)}
-              className={`relative min-h-[145px] overflow-hidden rounded-lg border border-white bg-white p-4 text-left shadow-sm transition-transform hover:-translate-y-0.5 ${expanded ? "" : "w-[calc(50%-6px)] min-w-[210px] shrink-0 snap-start lg:w-[calc(25%-9px)]"}`}
-            >
-              <img
-                src={theme.image}
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-                className="pointer-events-none absolute inset-0 size-full object-cover object-center"
-                style={THEME_ART_TREATMENT}
-              />
-              <span className="relative block text-[15px] font-medium text-ds-ink">{theme.title}</span>
-              <span className="relative mt-1.5 block max-w-[140px] text-[12px] leading-snug text-slate-500">
-                {theme.description}
-              </span>
-              <span className="absolute bottom-4 left-4 z-10 inline-flex items-center gap-2 text-[12px] font-medium text-ds-ink">
-                {theme.count} {theme.count === 1 ? "strategy" : "strategies"}
-                <Arrow />
-              </span>
-            </button>
-          ))}
-        </div>
-        {!expanded && (
-          <button
-            type="button"
-            onClick={() => scroller.current?.scrollBy({ left: 280, behavior: "smooth" })}
-            aria-label="Next themes"
-            className="absolute top-1/2 -right-4 z-10 grid size-9 -translate-y-1/2 place-items-center rounded-full bg-white text-ds-ink shadow-sm hover:bg-ds-panel"
-          >
-            <Arrow />
-          </button>
-        )}
-      </div>
-    </section>
-  );
-};
+}) => (
+  <Shelf
+    id="themes"
+    title="Explore by theme"
+    subtitle="Find strategies that match your interests and outlook."
+  >
+    {shelves.map((theme) => (
+      <button
+        key={theme.tag}
+        type="button"
+        onClick={() => select(theme.tag)}
+        className={`relative min-h-[145px] overflow-hidden rounded-lg border border-white bg-white p-4 text-left shadow-sm transition-transform hover:-translate-y-0.5 ${CARD_WIDTH}`}
+      >
+        <img
+          src={theme.image}
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          className="pointer-events-none absolute inset-0 size-full object-cover object-center"
+          style={THEME_ART_TREATMENT}
+        />
+        <span className="relative block text-[15px] font-medium text-ds-ink">{theme.title}</span>
+        <span className="relative mt-1.5 block max-w-[140px] text-[12px] leading-snug text-slate-500">
+          {theme.description}
+        </span>
+        <span className="absolute bottom-4 left-4 z-10 inline-flex items-center gap-2 text-[12px] font-medium text-ds-ink">
+          {theme.count} {theme.count === 1 ? "strategy" : "strategies"}
+          <Arrow />
+        </span>
+      </button>
+    ))}
+  </Shelf>
+);
 
 const ProsShelf = ({
   templates,
   instruments,
-  showAll,
 }: {
   templates: ReturnType<typeof curatedShelves>["pros"];
   instruments: Instruments;
-  showAll: () => void;
 }) => (
-  <section id="pros" aria-label="Invest like the pros" className="scroll-mt-24">
-    <Heading
-      title="Invest like the pros"
-      subtitle="Investor-inspired Solana adaptations, not copies of their holdings."
-      action={<TextAction onClick={showAll}>See all strategies</TextAction>}
-    />
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {templates.map((template) => (
-        <Link
-          key={template.slug}
-          to={`/baskets/${template.slug}`}
-          className="group overflow-hidden rounded-lg bg-white shadow-sm transition-transform hover:-translate-y-0.5"
-          aria-label={`View ${displayBasketName(template.name)} strategy`}
-        >
-          <img
-            src={template.image}
-            alt=""
-            loading="lazy"
-            className="aspect-[1.25/1] w-full object-cover object-top"
-          />
-          <div className="px-4 pt-2.5 pb-3.5">
-            <p className="text-[11px] text-slate-500">Top holdings · Daily variant</p>
-            <div className="mt-2">
-              <Holdings template={template} instruments={instruments} limit={4} />
-            </div>
+  <Shelf
+    id="pros"
+    title="Invest like the pros"
+    subtitle="Investor-inspired Solana adaptations, not copies of their holdings."
+  >
+    {templates.map((template) => (
+      <Link
+        key={template.slug}
+        to={`/baskets/${template.slug}`}
+        className={`group overflow-hidden rounded-lg bg-white shadow-sm transition-transform hover:-translate-y-0.5 ${CARD_WIDTH}`}
+        aria-label={`View ${displayBasketName(template.name)} strategy`}
+      >
+        <img
+          src={template.image}
+          alt=""
+          loading="lazy"
+          className="aspect-[1.25/1] w-full object-cover object-top"
+        />
+        <div className="px-4 pt-2.5 pb-3.5">
+          <p className="text-[11px] text-slate-500">Top holdings · Daily variant</p>
+          <div className="mt-2">
+            <Holdings template={template} instruments={instruments} limit={4} />
           </div>
-        </Link>
-      ))}
-    </div>
-  </section>
+        </div>
+      </Link>
+    ))}
+  </Shelf>
 );
 
 const StrategyTable = ({
@@ -282,7 +327,7 @@ const StrategyTable = ({
       aria-label="Basket strategies"
       className="min-w-0 scroll-mt-24 rounded-xl bg-white p-1"
     >
-      <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-3 sm:px-5 pt-4">
         <div>
           <h2 className="text-[16px] font-medium text-ds-ink">{title}</h2>
           <p className="mt-1 text-[12px] text-ds-muted">
@@ -291,7 +336,7 @@ const StrategyTable = ({
               : "Explore curated Glider strategies on Solana."}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:shrink-0">
           <SearchField
             value={query}
             onChange={setQuery}
@@ -445,7 +490,7 @@ export const Baskets = () => {
                   document.getElementById("strategies")?.scrollIntoView({ behavior: "smooth" });
                 }}
               />
-              <ProsShelf templates={shelves.pros} instruments={instrumentsByTicker} showAll={seeAll} />
+              <ProsShelf templates={shelves.pros} instruments={instrumentsByTicker} />
               <StrategyTable
                 templates={visible}
                 instruments={instrumentsByTicker}

@@ -342,7 +342,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
           <Skeleton className="mt-5 h-[340px] w-full rounded-lg" />
         </section>
         <section aria-label="Loading strategy composition" className="rounded-xl bg-white p-1">
-          <div className="px-5 pt-4 pb-3">
+          <div className="px-3 sm:px-5 pt-4 pb-3">
             <Skeleton className="h-5 w-44" />
             <Skeleton className="mt-2 h-4 w-64 max-w-full" />
           </div>
@@ -787,7 +787,7 @@ export const Basket = () => {
               aria-label="Strategy composition"
               className="min-w-0 scroll-mt-24 overflow-hidden rounded-xl bg-white p-1"
             >
-              <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-4">
+              <div className="flex flex-wrap items-end justify-between gap-3 px-3 sm:px-5 pt-4">
                 <div>
                   <h2 className="text-[17px] font-medium text-ds-ink">Strategy composition</h2>
                   <p className="mt-1 text-[12px] text-ds-muted">
@@ -892,7 +892,7 @@ export const Basket = () => {
             </section>
 
             <section aria-label="About and allocation" className="min-w-0 rounded-xl bg-white p-1">
-              <div className="px-5 pt-4">
+              <div className="px-3 sm:px-5 pt-4">
                 <RailHead title={`About ${name}`} />
                 <p className="mt-[13px] max-w-[72ch] text-[14px] leading-[1.55] text-ds-muted">
                   Follows Glider’s target weights with tokenized assets held in your own smart account. Glider
@@ -1332,7 +1332,7 @@ export const Basket = () => {
           </div>
           <div className="order-4 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
             <section aria-label="Rebalancing" className="min-w-0 rounded-xl bg-white p-1">
-              <div className="px-5 pt-4">
+              <div className="px-3 sm:px-5 pt-4">
                 <RailHead
                   title="Rebalancing"
                   meta={
@@ -1344,7 +1344,7 @@ export const Basket = () => {
                   }
                 />
               </div>
-              <div className="mt-[11px] rounded-lg bg-ds-panel px-5 pt-4 pb-4">
+              <div className="mt-[11px] rounded-lg bg-ds-panel px-3 sm:px-5 pt-4 pb-4">
                 {accountLoading ? (
                   <div className="min-h-[160px]" aria-label="Loading rebalance schedule">
                     <Skeleton className="h-4 w-32" />

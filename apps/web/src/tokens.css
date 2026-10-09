@@ -219,6 +219,25 @@
   }
 }
 
+/* A row of pills or buttons that, on a phone, keeps one line and scrolls
+   sideways rather than wrapping into a ragged stack. The 4px of block padding
+   keeps button shadows and focus rings from being clipped by the scroller. */
+@utility scroll-row {
+  @media (width < 40rem) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-block: 4px;
+    margin-block: -4px;
+    & > * {
+      flex-shrink: 0;
+    }
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+}
+
 @utility stamp {
   font-size: 11px;
   font-weight: 500;

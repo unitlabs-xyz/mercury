@@ -33,7 +33,7 @@ export const Chevron = () => (
 
 /** A white 12px-radius sheet with 20px above and below and 24px sides: every rail card. */
 export const RailCard = ({ label, children }: { label: string; children: ReactNode }) => (
-  <section aria-label={label} className="rounded-xl bg-white px-6 py-5">
+  <section aria-label={label} className="rounded-xl bg-white px-4 py-5 sm:px-6">
     {children}
   </section>
 );

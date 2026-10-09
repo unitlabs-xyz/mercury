@@ -84,7 +84,7 @@ export const EnrollmentRail = ({
             : (error ?? null);
   return (
     <section aria-label={`Invest in ${name}`} className="min-w-0 rounded-xl bg-white p-1">
-      <div className="px-5 pt-4">
+      <div className="px-3 sm:px-5 pt-4">
         <RailHead title={`Invest in ${name}`} meta={cash === null ? undefined : `${usd(cash)} cash`} />
       </div>
       {checking ? (

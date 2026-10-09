@@ -28,6 +28,23 @@ export const CodeInput = ({
     onChange(next.replace(/\D/g, ""));
   };
 
+  /* iOS's "From Mail" suggestion and keyboard pastes arrive as a change, not a
+     paste, carrying the whole code in one box. Take every digit, not the last. */
+  const onInput = (i: number, raw: string) => {
+    const old = value[i];
+    const incoming =
+      old && raw.length > 1
+        ? raw.startsWith(old)
+          ? raw.slice(1)
+          : raw.endsWith(old)
+            ? raw.slice(0, -1)
+            : raw
+        : raw;
+    const digits = incoming.replace(/\D/g, "");
+    if (digits.length <= 1) return setAt(i, digits);
+    onChange((digits.length >= LENGTH ? digits : value.slice(0, i) + digits).slice(0, LENGTH));
+  };
+
   const onKeyDown = (i: number) => (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace" && !value[i]) {
       e.preventDefault();
@@ -54,15 +71,15 @@ export const CodeInput = ({
               boxes.current[i] = el;
             }}
             value={value[i] ?? ""}
-            onChange={(e) => setAt(i, e.target.value.slice(-1))}
+            onChange={(e) => onInput(i, e.target.value)}
             onKeyDown={onKeyDown(i)}
             onPaste={onPaste}
             /* Read-only rather than disabled: the field seals without throwing
                a keyboard user's focus back to the top of the page. */
             readOnly={locked}
             inputMode="numeric"
-            autoComplete={i === 0 ? "one-time-code" : "off"}
-            maxLength={1}
+            /* On every box: the suggestion offers itself to whichever one has focus. */
+            autoComplete="one-time-code"
             aria-label={`Digit ${i + 1} of ${LENGTH}`}
             className={`h-[54px] w-full min-w-0 rounded-lg border text-center text-[24px] font-medium text-ds-ink caret-ds-ink transition-colors duration-200 outline-none sm:h-[60px] ${
               status === "done"

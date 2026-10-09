@@ -353,7 +353,7 @@ export const Ticket = ({
 
   return (
     <section aria-label={`${selling ? "Sell" : "Buy"} ${name}`} className="min-w-0 rounded-xl bg-white p-1">
-      <div className="px-5 pt-4">
+      <div className="px-3 sm:px-5 pt-4">
         <RailHead
           title={`${selling ? "Sell" : "Buy"} ${name}`}
           meta={
