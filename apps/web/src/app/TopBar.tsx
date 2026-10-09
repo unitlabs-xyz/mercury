@@ -1,9 +1,7 @@
 import { Link } from "react-router-dom";
 import { MercuryLogo } from "../ui/Logo";
-import { useSession } from "../market/hooks";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderChrome } from "./HeaderChrome";
-import { localTime } from "../ui/localTime";
 
 export type NavKey = "portfolio" | "invest" | "baskets" | "money" | "activity";
 
@@ -17,37 +15,6 @@ const NAV: Item[] = [
   { key: "money", label: "Money", to: "/money" },
   { key: "activity", label: "Activity", to: "/activity" },
 ];
-
-const STATUS_LABEL: Record<string, string> = {
-  open: "Market open",
-  premarket: "Pre-market",
-  postmarket: "After hours",
-  overnight: "Overnight",
-  halted: "Trading halted",
-};
-
-/** The exchange state, small enough to live in the bar; the time is the detail. */
-const MarketPill = () => {
-  const session = useSession();
-  const open = session.data?.isOpen === true;
-  const when = open ? session.data?.nextClose : session.data?.nextOpen;
-  const label = STATUS_LABEL[session.data?.status ?? ""] ?? "Market closed";
-  // In the reader's own zone: the exchange's hours, told by their clock.
-  const time = when ? localTime(when, { weekday: "short" }) : undefined;
-  return (
-    <span
-      className="flex h-9 items-center rounded-full bg-white/60 px-3.5 text-[13px] whitespace-nowrap"
-      title={time ? `${open ? "Closes" : "Opens"} ${time}` : "Checking the exchange calendar"}
-    >
-      <span className="font-medium text-ds-ink">{label}</span>
-      {time && (
-        <span className="hidden text-ds-muted xl:inline">
-          &nbsp;· {open ? "Closes" : "Opens"} {time}
-        </span>
-      )}
-    </span>
-  );
-};
 
 const style = (current: boolean) =>
   `shrink-0 text-[15px] font-medium whitespace-nowrap transition-colors ${
@@ -73,8 +40,8 @@ const Divider = () => <span aria-hidden className="hidden h-7 w-px bg-ds-divider
 
 /**
  * The app's one bar, to the nav design: logo, then the sections as plain text
- * 32px apart; on the right the market, the global controls and the account,
- * 12px apart with a rule between groups. Below `lg` the sections drop to a
+ * 32px apart; on the right the global controls and the account, 12px apart
+ * with a rule between them. Below `lg` the sections drop to a
  * second, scrollable row rather than hiding, so every screen stays one tap away.
  */
 export const TopBar = ({ current }: { current: NavKey }) => (
@@ -93,10 +60,6 @@ export const TopBar = ({ current }: { current: NavKey }) => (
         <Nav current={current} className="ml-12 hidden items-center gap-8 lg:flex" />
 
         <div className="ml-auto flex items-center gap-3">
-          <span className="hidden md:contents">
-            <MarketPill />
-            <Divider />
-          </span>
           <HeaderChrome />
           <Divider />
           <AccountMenu />
