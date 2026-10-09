@@ -9,6 +9,15 @@ export interface FillContext {
   readonly decimals: number;
   /** Shares per token. The lot records shares as they were at acquisition. */
   readonly multiplier: Decimal;
+  /**
+   * The relayer, on a sponsored trade.
+   *
+   * Its USDC leg of this transaction is the charge for sponsoring, which rides
+   * in the same transaction as the swap — so without knowing who to look for,
+   * the charge is indistinguishable from money the swap spent. Absent on an
+   * unsponsored trade, where there is no charge to separate.
+   */
+  readonly relayer?: string | undefined;
   /** Used only when the node reports no block time for the slot. */
   readonly now: Date;
 }
@@ -20,8 +29,15 @@ export interface Fill {
   readonly tokens: Decimal;
   /** What those tokens are in real shares, at the multiplier in force. */
   readonly shares: Decimal;
-  /** Dollars spent on a buy, dollars received on a sell. Always positive. */
+  /**
+   * What the swap itself was worth: dollars that bought shares on a buy,
+   * dollars the shares produced on a sell. Always positive, and never includes
+   * `feeUsd` on either side — the charge bought no shares, so a cost basis or
+   * a profit computed from it would be wrong by exactly the fee.
+   */
   readonly usd: Decimal;
+  /** The relayer's charge for sponsoring, from its own leg. Zero when unsponsored. */
+  readonly feeUsd: Decimal;
   readonly pricePerShare: Decimal;
   readonly occurredAt: Date;
 }
@@ -42,6 +58,21 @@ const netFor = (tx: TransactionDetail, owner: string, mint: string): bigint =>
   sumOwned(tx.postTokens, owner, mint) - sumOwned(tx.preTokens, owner, mint);
 
 /**
+ * What the relayer took out of this transaction for sponsoring it.
+ *
+ * Read from the relayer's own balance rather than from the fee we quoted, for
+ * the same reason the rest of this file reads the wallet's: a quote is a
+ * prediction, and the transaction is the fact. Only a gain counts — a relayer
+ * whose USDC went down did not charge anything, and reading that as a negative
+ * fee would credit the trader with dollars nobody paid them.
+ */
+const chargeUsd = (tx: TransactionDetail, ctx: FillContext): Decimal => {
+  if (ctx.relayer === undefined || ctx.relayer === ctx.wallet) return ZERO;
+  const delta = netFor(tx, ctx.relayer, USDC_MINT);
+  return delta > 0n ? scaled(delta, USDC_DECIMALS) : ZERO;
+};
+
+/**
  * What a transaction actually did for this order, in shares and dollars.
  *
  * Read from the wallet's own balances before and after, never from the quote
@@ -54,6 +85,12 @@ const netFor = (tx: TransactionDetail, owner: string, mint: string): bigint =>
  * reason `movementsIn` does it: a token account created inside this very
  * transaction — which is every first purchase of a wrapper — has no `pre` entry
  * at all, and contributes zero to the pre sum, which is the right answer.
+ *
+ * The sponsorship charge is separated out rather than left in the price. A buy
+ * moves `usd + feeUsd` out of the wallet and a sell leaves `usd - feeUsd` in
+ * it, so taking the wallet's delta as the trade made the fee part of the share
+ * price: a position opened at a loss of exactly the fee, and a sale gave up its
+ * fee twice over. The fee is a cost of trading and it is reported as one.
  *
  * Pure. No database, no clock, no network.
  */
@@ -83,12 +120,24 @@ export function planFill(tx: TransactionDetail, ctx: FillContext): Fill | NotAFi
   const tokensRaw = abs(tokenDelta);
   const tokens = scaled(tokensRaw, ctx.decimals);
   const shares = tokens.mul(ctx.multiplier);
-  const usd = scaled(abs(usdcDelta), USDC_DECIMALS);
+  const feeUsd = chargeUsd(tx, ctx);
+  // The wallet's own movement, which on a buy is what the swap spent plus the
+  // charge and on a sell is what the swap made less the charge.
+  const moved = scaled(abs(usdcDelta), USDC_DECIMALS);
+  const usd = buying ? moved.sub(feeUsd) : moved.add(feeUsd);
 
   // A multiplier of zero would be a broken mint read, and dividing by it would
   // write an infinite price into the books.
   if (shares.lte(ZERO)) {
     return { kind: "not_a_fill", detail: "That transaction moved no shares." };
+  }
+
+  // A buy whose whole movement was the charge bought nothing, and a zero price
+  // per share in the books is a position that reports its entire value as
+  // profit. It cannot happen on a trade that filled, so it is a refusal rather
+  // than a figure.
+  if (usd.lte(ZERO)) {
+    return { kind: "not_a_fill", detail: "That transaction moved no dollars into shares." };
   }
 
   return {
@@ -97,6 +146,7 @@ export function planFill(tx: TransactionDetail, ctx: FillContext): Fill | NotAFi
     tokens,
     shares,
     usd,
+    feeUsd,
     pricePerShare: usd.div(shares),
     occurredAt: tx.blockTime === null ? ctx.now : new Date(tx.blockTime * 1000),
   };

@@ -99,6 +99,13 @@
       "when": 1791374251607,
       "tag": "0013_basket_portfolio_value",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791566804319,
+      "tag": "0014_pnl_stacked",
+      "breakpoints": true
     }
   ]
 }

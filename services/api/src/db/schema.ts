@@ -200,8 +200,32 @@ export const lots = pgTable(
     tokenQty: bigint("token_qty", { mode: "bigint" }).notNull(),
     /** token_qty x multiplier AT ACQUISITION. Never recomputed. */
     shares: usd("shares").notNull(),
-    /** Cost per share, not per token. */
+    /**
+     * Cost per share, not per token, and not including `feeUsd`.
+     *
+     * What the swap itself charged for one share. The sponsorship fee used to
+     * be in here, because the lot was written from the wallet's whole USDC
+     * delta — which opened every position at a loss of exactly the fee.
+     */
     unitCostUsd: usd("unit_cost_usd").notNull(),
+    /**
+     * The charge for sponsoring the trade that wrote this lot.
+     *
+     * A cost of trading, kept apart from the price so that the two can be
+     * reported as the separate things they are. Zero on an unsponsored trade
+     * and on a dividend lot, which nobody was charged for.
+     */
+    feeUsd: usd("fee_usd").notNull().default("0"),
+    /**
+     * What one real share was quoted at when this lot was acquired.
+     *
+     * The underlying equity's price, which is the same scale the portfolio is
+     * marked in — so `shares x (mark - reference)` is what the stock did, and
+     * everything else between that and the dollars paid is a cost of trading.
+     * Null on a lot written before this was recorded, where the execution
+     * price stands in for it and the premium reads as zero.
+     */
+    referencePriceUsd: usd("reference_price_usd"),
     acquiredAt: timestamp("acquired_at", { withTimezone: true }).notNull().defaultNow(),
     source: text("source", { enum: ["buy", "transfer_in", "dividend", "basket"] }).notNull(),
     /** True when we inferred the cost. The UI has to say so. */
@@ -231,6 +255,16 @@ export const positions = pgTable(
      */
     sharesWithBasis: usd("shares_with_basis").notNull().default("0"),
     costBasisUsd: usd("cost_basis_usd").notNull(),
+    /**
+     * What those same shares were quoted at when they were acquired, summed.
+     *
+     * The other half of a stacked return: measured against the mark it gives
+     * what the stock did, and its distance from `costBasisUsd` is the premium
+     * and spread that were paid to get in.
+     */
+    referenceBasisUsd: usd("reference_basis_usd").notNull().default("0"),
+    /** Sponsorship fees paid to acquire the shares still held. */
+    feeUsd: usd("fee_usd").notNull().default("0"),
     avgUnitCostUsd: usd("avg_unit_cost_usd").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -274,6 +308,17 @@ export const orders = pgTable(
       enum: ["pending", "executing", "filled", "queued", "cancelled", "refused"],
     }).notNull(),
     txSignature: text("tx_signature"),
+    /** What the relayer charged to sponsor this order, read off the chain. */
+    feeUsd: usd("fee_usd"),
+    /**
+     * What a sell made against the basis it removed, before its own fee.
+     *
+     * Recorded because it is otherwise unrecoverable: it was computed at
+     * settlement, printed into a feed subtitle and thrown away, so selling a
+     * position erased its whole profit from every figure on the page. Null on
+     * a buy, and on a sell of shares we hold no basis for.
+     */
+    realisedPnlUsd: usd("realised_pnl_usd"),
     triggerOrderAccount: text("trigger_order_account"),
     filledAt: timestamp("filled_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
