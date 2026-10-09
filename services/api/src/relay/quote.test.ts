@@ -3,7 +3,7 @@ import { D } from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { PriceBoard, TokenPrice } from "@mercury/market";
 import { USDC_MINT } from "@mercury/chain";
-import { quoteFee } from "./quote.js";
+import { quoteFee, quoteTransferFee } from "./quote.js";
 
 const SOL = "So11111111111111111111111111111111111111112";
 const SPCX = "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8";
@@ -117,5 +117,40 @@ describe("quoteFee, selling", () => {
       receivingMint: USDC_MINT,
     });
     expect(fee.usdc.toString()).toBe("0.25");
+  });
+});
+
+const RECIPIENT = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+
+describe("quoteTransferFee", () => {
+  /*
+   * The question is about the recipient, not the sender. The sender holds the
+   * USDC they are sending, so their account exists by definition; it is the
+   * recipient's that may have to be opened. Reading the sender's balances —
+   * which is what `quoteFee` would do — answers zero every single time.
+   */
+  it("charges rent when the recipient has never held USDC", async () => {
+    const fee = await quoteTransferFee(deps([], "119.39"), { destination: RECIPIENT });
+    expect(fee.usdc.toString()).toBe("0.25");
+  });
+
+  it("charges nothing when the recipient already holds USDC", async () => {
+    const fee = await quoteTransferFee(deps([held(USDC_MINT)], "119.39"), { destination: RECIPIENT });
+    expect(fee.usdc.toString()).toBe("0");
+  });
+
+  it("treats a recipient's emptied USDC account as still existing", async () => {
+    const fee = await quoteTransferFee(deps([held(USDC_MINT, 0n)], "119.39"), { destination: RECIPIENT });
+    expect(fee.usdc.toString()).toBe("0");
+  });
+
+  it("does not let some other token the recipient holds excuse the USDC rent", async () => {
+    const fee = await quoteTransferFee(deps([held(SPCX)], "119.39"), { destination: RECIPIENT });
+    expect(fee.usdc.toString()).toBe("0.25");
+  });
+
+  it("charges nothing when SOL has no price, rather than guessing one", async () => {
+    const fee = await quoteTransferFee(deps([], null), { destination: RECIPIENT });
+    expect(fee.usdc.toString()).toBe("0");
   });
 });

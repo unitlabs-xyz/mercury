@@ -1,17 +1,41 @@
 import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import { sendUsdc, type SendIntent, type SendReceipt } from "@mercury/view";
+import { sendUsdc, type SendIntent, type SendQuote, type SendReceipt } from "@mercury/view";
 import { refreshAfterChain } from "./settle";
 
 /* The sequence and its uncertainty rule are shared with the phone: @mercury/view's send.ts. */
 export {
+  maxSendable,
+  NO_SEND_QUOTE,
   sendUsdc,
   SendSubmissionUncertain,
   type SendIntent,
   type SendIo,
+  type SendQuote,
   type SendReceipt,
 } from "@mercury/view";
+
+/**
+ * What sending to this address costs, asked as soon as the address is valid.
+ *
+ * Before the amount, because the answer is what "Max" means. It turns only on
+ * the recipient — whether they already hold USDC — so it neither needs nor
+ * reacts to the amount being typed beside it.
+ */
+export const useSendQuote = (to: string | null) =>
+  useQuery<SendQuote>({
+    queryKey: ["send-quote", to],
+    enabled: to !== null,
+    // The recipient either holds USDC or does not, and that does not change
+    // while a transfer is being typed.
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<SendQuote>("/v1/money/send/quote", {
+        method: "POST",
+        body: JSON.stringify({ to }),
+      }),
+  });
 
 const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));

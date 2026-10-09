@@ -1,7 +1,8 @@
 import { D } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
-import { networkFee, type Fee } from "./fee.js";
+import { USDC_MINT } from "@mercury/chain";
+import { networkFee, transferFee, type Fee } from "./fee.js";
 
 /** Native SOL trades under the wrapped-SOL mint, which is how it is priced. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -60,4 +61,31 @@ export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promis
    */
   const holds = balances.some((b) => b.mint === input.receivingMint);
   return networkFee({ needsTokenAccount: !holds, solPriceUsd: sol });
+};
+
+/**
+ * What sponsoring a USDC transfer will cost us that we ask for back.
+ *
+ * The question is about the recipient, not the sender. The sender holds USDC —
+ * that is what they are sending — so their account exists; it is the
+ * recipient's that may have to be opened, and rent is charged once per account
+ * whoever ends up paying it. Asking `quoteFee` instead would read the sender's
+ * balances and answer zero every time.
+ */
+export const quoteTransferFee = async (
+  deps: FeeQuoteDeps,
+  input: { readonly destination: string },
+): Promise<Fee> => {
+  const [balances, prices] = await Promise.all([
+    deps.chain.tokenBalances(input.destination),
+    deps.prices.pricesFor([SOL_MINT]),
+  ]);
+
+  const sol = prices.get(SOL_MINT)?.usdPricePerToken;
+  // No price, no charge — the same rule as a trade. The transfer is fine
+  // either way; it is only the repayment that cannot be priced.
+  if (sol === undefined || sol.lte(0)) return NO_FEE;
+
+  const holds = balances.some((b) => b.mint === USDC_MINT);
+  return transferFee({ needsTokenAccount: !holds, solPriceUsd: sol });
 };

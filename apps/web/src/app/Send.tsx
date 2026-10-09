@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMoney } from "../api/hooks";
-import { SendSubmissionUncertain, useSendAction } from "../api/send";
+import {
+  maxSendable,
+  NO_SEND_QUOTE,
+  SendSubmissionUncertain,
+  useSendAction,
+  useSendQuote,
+} from "../api/send";
 import { D } from "@mercury/core";
 import { Button } from "../ui/Button";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
@@ -42,12 +48,31 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
     resetAction();
   }, [open, resetAction]);
 
+  const recipient = to.trim();
+  const addressValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(recipient);
+  const addressLooksWrong = to.length > 0 && !addressValid;
+
+  /*
+   * The charge is asked for as soon as the address is, because it decides what
+   * Max means and it depends only on the recipient. Nothing is owed unless
+   * their USDC account has to be opened, which is the uncommon case.
+   */
+  const quoteQuery = useSendQuote(addressValid ? recipient : null);
+  const quote = quoteQuery.data ?? NO_SEND_QUOTE;
+  const fee = Number(quote.feeUsd);
+  const sendable = maxSendable(money.data?.balanceUsd, quote);
+  /* Never offer review against a fee we have not been told yet. */
+  const quoted = !addressValid || quoteQuery.data !== undefined || quoteQuery.isError;
+
   const validAmount = /^\d+(?:\.\d{1,6})?$/.test(amount);
   const value = validAmount ? Number(amount) : 0;
   const amountLooksWrong = amount.length > 0 && !validAmount;
-  const overdrawn = validAmount && D(amount).gt(money.data?.balanceUsd ?? "0");
-  const addressLooksWrong = to.length > 0 && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(to.trim());
-  const ready = validAmount && value > 0 && !overdrawn && to.trim().length > 0 && !addressLooksWrong;
+  const overdrawn =
+    validAmount &&
+    D(amount)
+      .add(D(quote.feeUsd))
+      .gt(money.data?.balanceUsd ?? "0");
+  const ready = validAmount && value > 0 && !overdrawn && addressValid && quoted;
 
   const close = () => {
     if (!action.isPending) onClose();
@@ -112,12 +137,33 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
               <span className="text-ds-muted">You send</span>
               <span className="font-medium text-ds-ink">{usd(value)} USDC</span>
             </div>
+            {quote.sponsored && (
+              <div className="mt-2.5 flex justify-between gap-3">
+                <span className="text-ds-muted">Network fee</span>
+                <span className={fee > 0 ? "text-ds-ink" : "text-ds-up"}>
+                  {fee > 0 ? usd(fee) : "We cover it"}
+                </span>
+              </div>
+            )}
+            {fee > 0 && (
+              <>
+                <div className="mt-2.5 flex justify-between gap-3 border-t border-black/5 pt-2.5">
+                  <span className="text-ds-muted">Total from your cash</span>
+                  <span className="font-medium text-ds-ink">{usd(value + fee)}</span>
+                </div>
+                <p className="mt-1.5 text-[12px] leading-[1.45] text-ds-muted">
+                  This wallet has never held USDC. The fee opens an account for it, once.
+                </p>
+              </>
+            )}
             <p className="mt-4 text-ds-muted">To this Solana wallet</p>
             <p className="mt-1 break-all font-mono text-[12px] text-ds-ink">{to.trim()}</p>
           </div>
           <div className="mt-4">
             <Note tone="warn">
-              Check the address carefully. Sending is final, and your wallet pays the Solana network fee.
+              {quote.sponsored
+                ? "Check the address carefully. Sending is final, and nobody can reverse it."
+                : "Check the address carefully. Sending is final, and your wallet pays the Solana network fee."}
             </Note>
           </div>
           {action.isError && (
@@ -169,7 +215,7 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
               />
               <button
                 type="button"
-                onClick={() => setAmount(money.data?.balanceUsd ?? "")}
+                onClick={() => setAmount(sendable)}
                 className="h-[26px] shrink-0 rounded-full border border-black/10 bg-linear-to-b from-white to-[#eeeeee] px-3 text-[12px] leading-none text-ds-ink"
               >
                 Max
@@ -177,12 +223,18 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
               <span className="shrink-0 text-[12px] text-ds-muted">USDC</span>
             </label>
             <p className="px-3 pt-2.5 pb-2 text-[12px] leading-[1.4] text-ds-muted">
-              {usd(available)} available to send
+              {fee > 0
+                ? `${usd(sendable)} available, after ${usd(fee)} to open their USDC account`
+                : `${usd(available)} available to send`}
             </p>
           </div>
           {overdrawn && (
             <div className="mt-2">
-              <Note tone="down">More than you have. {usd(available)} available.</Note>
+              <Note tone="down">
+                {fee > 0
+                  ? `More than you can send. ${usd(sendable)} available, after ${usd(fee)} to open their USDC account.`
+                  : `More than you have. ${usd(available)} available.`}
+              </Note>
             </div>
           )}
           {amountLooksWrong && (
@@ -224,7 +276,11 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
           </div>
 
           <Button type="submit" variant="primary" size="lg" disabled={!ready} className="mt-6 w-full">
-            {value > 0 && !overdrawn ? `Review send of ${usd(value)}` : "Review send"}
+            {!quoted
+              ? "Checking fee…"
+              : value > 0 && !overdrawn
+                ? `Review send of ${usd(value)}`
+                : "Review send"}
           </Button>
         </form>
       )}

@@ -342,7 +342,10 @@ export function buildReadDeps(
   return {
     basketTemplates: new BasketService({
       store: basketStore,
-      funding: new SolanaBasketFunding(config.solanaRpcUrl),
+      funding: new SolanaBasketFunding(
+        config.solanaRpcUrl,
+        relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
+      ),
       history: deps.history,
       ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
     }),
@@ -399,6 +402,10 @@ export function buildReadDeps(
       record: (planned, input) => recordLoanEvents(db, planned, input),
       ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
-    send: { rpcUrl: config.solanaRpcUrl, ...(relay === undefined ? {} : { relay }) },
+    send: {
+      rpcUrl: config.solanaRpcUrl,
+      fees: { chain: deps.chain, prices: deps.prices },
+      ...(relay === undefined ? {} : { relay }),
+    },
   };
 }

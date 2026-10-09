@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import { SIGNATURE_LAMPORTS, TOKEN_ACCOUNT_RENT_LAMPORTS, investable, networkFee } from "./fee.js";
+import {
+  SIGNATURE_LAMPORTS,
+  TOKEN_ACCOUNT_RENT_LAMPORTS,
+  investable,
+  networkFee,
+  transferFee,
+} from "./fee.js";
 
 const SOL = D("119.39");
 
@@ -62,5 +68,36 @@ describe("investable", () => {
 
   it("leaves the amount alone when nothing is owed", () => {
     expect(investable(D("5"), { usdc: D(0), lamports: 0 }).toString()).toBe("5");
+  });
+});
+
+describe("transferFee", () => {
+  /*
+   * A transfer absorbs the signature and charges only rent. The signature is a
+   * tenth of a cent — less than the rounding on any charge we could make for
+   * it — and a sender being told "Mercury covers the network fee" is worth
+   * more than recovering it.
+   */
+  it("charges nothing when the recipient already holds USDC", () => {
+    expect(transferFee({ needsTokenAccount: false, solPriceUsd: D("119.39") }).usdc.toString()).toBe("0");
+  });
+
+  it("charges the rent when the recipient's account has to be opened", () => {
+    const fee = transferFee({ needsTokenAccount: true, solPriceUsd: D("119.39") });
+    expect(fee.usdc.toString()).toBe("0.25");
+    expect(fee.lamports).toBe(TOKEN_ACCOUNT_RENT_LAMPORTS);
+  });
+
+  it("leaves the signature out of what it charges, unlike a trade", () => {
+    const sol = D("119.39");
+    const trade = networkFee({ needsTokenAccount: true, solPriceUsd: sol });
+    const transfer = transferFee({ needsTokenAccount: true, solPriceUsd: sol });
+    expect(trade.lamports - transfer.lamports).toBe(SIGNATURE_LAMPORTS);
+  });
+
+  it("rounds the rent up to the cent, like every other charge", () => {
+    // Rent at this SOL price is $0.2039…, and a charge quoted a hair short is
+    // a transfer that fails at the relayer for the price of a rounding error.
+    expect(transferFee({ needsTokenAccount: true, solPriceUsd: D("100") }).usdc.toString()).toBe("0.21");
   });
 });
