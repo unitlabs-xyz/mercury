@@ -60,7 +60,13 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
       const row = rows[next++];
       if (row === undefined) return;
       try {
-        const input = await capacityInputFor(deps, row.address, await deps.chain.tokenBalances(row.address));
+        // Finalized: a dropped block would alarm a borrower who was fine, and
+        // the record of having told them outlives it.
+        const input = await capacityInputFor(
+          deps,
+          row.address,
+          await deps.chain.tokenBalances(row.address, "finalized"),
+        );
         if (input.position === null || input.position.debtUsd.isZero()) continue;
         loans += 1;
 

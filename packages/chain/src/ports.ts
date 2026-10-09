@@ -186,11 +186,22 @@ export interface MintConfig {
 }
 
 /**
+ * How settled a reading has to be. `confirmed` can still be dropped;
+ * `finalized` trails it by around thirteen seconds and cannot.
+ *
+ * Reads default to `confirmed`: sending already answers at that point, so a
+ * balance still denying it is wrong on screen. Jobs that persist what they
+ * read ask for `finalized`, because a dropped block would leave behind a lot,
+ * a snapshot or a margin warning for something that never happened.
+ */
+export type Commitment = "confirmed" | "finalized";
+
+/**
  * What we read from Solana without ever holding a key. Two calls, both public:
  * a wallet's token accounts, and a mint's Token-2022 extensions.
  */
 export interface ChainReader {
-  tokenBalances(owner: string): Promise<readonly TokenBalance[]>;
+  tokenBalances(owner: string, commitment?: Commitment): Promise<readonly TokenBalance[]>;
   /** Null when the account does not exist or is not a Token-2022 mint. */
   mintConfig(mint: string): Promise<MintConfig | null>;
   /**

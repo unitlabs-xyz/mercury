@@ -34,9 +34,9 @@ export function withPledged(chain: ChainReader, lending: LendingSource): ChainRe
   return {
     mintConfig: (mint) => chain.mintConfig(mint),
     ...(many === undefined ? {} : { mintConfigs: many }),
-    tokenBalances: async (owner) => {
+    tokenBalances: async (owner, commitment) => {
       const [wallet, pledged] = await Promise.all([
-        chain.tokenBalances(owner),
+        chain.tokenBalances(owner, commitment),
         pledgedByMint(lending, owner),
       ]);
       const merged = new Map<string, TokenBalance>();

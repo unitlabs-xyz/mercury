@@ -75,7 +75,9 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
 
         const [board, balances] = await Promise.all([
           deps.prices.pricesFor(held.flatMap((h) => h.wrappers.map((w) => w.mint))),
-          deps.chain.tokenBalances(row.address),
+          // Finalized: an hourly reading is kept forever and has no use for
+          // the fresher answer.
+          deps.chain.tokenBalances(row.address, "finalized"),
         ]);
         const value = valuePortfolio(
           held,
