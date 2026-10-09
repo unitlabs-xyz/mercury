@@ -195,6 +195,9 @@ function PortfolioScreen() {
             )}
             <View style={s.columns}>
               <Column
+                tint={ALLOC.stocks}
+                share={share(stocksUsd)}
+                masked={hidden}
                 label="Stocks"
                 value={figure(stocksUsd)}
                 sub={holdings.length === 1 ? "1 position" : `${holdings.length} positions`}
@@ -203,6 +206,9 @@ function PortfolioScreen() {
               />
               {basketUsd > 0 && (
                 <Column
+                  tint={ALLOC.baskets}
+                  share={share(basketUsd)}
+                  masked={hidden}
                   label="Baskets"
                   value={figure(basketUsd)}
                   sub={baskets.length === 1 ? "1 basket" : `${baskets.length} baskets`}
@@ -211,6 +217,9 @@ function PortfolioScreen() {
                 />
               )}
               <Column
+                tint={ALLOC.cash}
+                share={share(cashUsd)}
+                masked={hidden}
                 label="Cash"
                 value={figure(cashUsd)}
                 sub={money.data ? `${pct(apr, 1)} a year` : "In your account"}
@@ -219,6 +228,9 @@ function PortfolioScreen() {
               />
               {debtUsd > 0 && (
                 <Column
+                  tint={color.warn}
+                  share={null}
+                  masked={hidden}
                   label="Borrowed"
                   value={hidden ? MASK : `−${usd(debtUsd)}`}
                   sub={borrowedLine(p?.debtIsStale === true, borrow.data)}
@@ -388,6 +400,9 @@ const SectionHead = ({
 
 /** One part of the total as a plain column: its name, what it is worth, one line under it. */
 const Column = ({
+  tint,
+  share,
+  masked,
   label,
   value,
   sub,
@@ -395,6 +410,11 @@ const Column = ({
   loading,
   onPress,
 }: {
+  /** Its colour in the bar above, as a dot by its name. */
+  tint: string;
+  /** 0–1 of the whole; null for something outside it, like a loan. */
+  share: number | null;
+  masked: boolean;
   label: string;
   value: string;
   sub: string;
@@ -403,7 +423,15 @@ const Column = ({
   onPress: () => void;
 }) => (
   <PressableScale style={s.column} activeScale={0.97} onPress={onPress} accessibilityRole="button">
-    <RNText style={s.columnLabel}>{label}</RNText>
+    <View style={s.columnHead}>
+      <View style={[s.columnDot, { backgroundColor: tint }]} />
+      <RNText style={s.columnLabel}>
+        {label}
+        {share !== null && !masked && !loading ? (
+          <RNText style={s.columnShare}>{`  ${pct(share * 100, 0)}`}</RNText>
+        ) : null}
+      </RNText>
+    </View>
     {loading ? (
       <Skeleton width="70%" height={18} style={s.columnSkeleton} />
     ) : (
@@ -494,21 +522,18 @@ const s = StyleSheet.create({
   label: { fontFamily: font.medium, fontSize: 14, color: color.ink },
   worth: { fontFamily: font.medium, fontSize: 40, letterSpacing: -1.4, lineHeight: 46, color: color.ink },
 
-  split: {
-    marginHorizontal: 16,
-    marginBottom: 14,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.divider,
-    gap: 14,
-  },
-  line: { flexDirection: "row", height: 2, borderRadius: 1, overflow: "hidden", gap: 2 },
+  /* One bar, then the columns it splits into: no rule above it, so it reads as one line, not two. */
+  split: { marginHorizontal: 16, marginBottom: 18, marginTop: 8, gap: 18 },
+  line: { flexDirection: "row", height: 6, borderRadius: 3, overflow: "hidden", gap: 3 },
   columns: { flexDirection: "row", gap: space.md },
   column: { flex: 1, minWidth: 0, gap: 3 },
+  columnHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  columnDot: { width: 7, height: 7, borderRadius: 3.5 },
   columnLabel: { fontFamily: font.regular, fontSize: 12.5, color: color.muted },
+  columnShare: { fontFamily: font.medium, color: color.ink },
   columnValue: { fontFamily: font.medium, fontSize: 18, letterSpacing: -0.36, color: color.ink },
   columnSkeleton: { marginVertical: 2 },
-  columnSub: { fontFamily: font.regular, fontSize: 11.5, color: color.faint },
+  columnSub: { fontFamily: font.regular, fontSize: 11.5, color: color.muted },
 
   sectionHead: {
     flexDirection: "row",
