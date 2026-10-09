@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useInstruments, useMarketStatus, type MarketStatus } from "../api";
-import { color, font, radius, space } from "../theme";
+import { font, radius, space } from "../theme";
 import { Icon, PressableScale, Skeleton, StockLogo } from "../ui";
 import { Band, ON_BAND } from "./band";
 
@@ -63,7 +63,7 @@ export const MarketPulse = () => {
         <View style={s.session}>
           <View style={[s.dot, status.data?.isOpen === true && s.live]} />
           {status.data === undefined ? (
-            <Skeleton dark width={170} height={12} />
+            <Skeleton width={170} height={12} />
           ) : (
             <RNText style={s.sessionText}>{sessionLine(status.data, now)}</RNText>
           )}
@@ -120,7 +120,7 @@ const s = StyleSheet.create({
   session: { flexDirection: "row", alignItems: "center", gap: 8 },
   dot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: MUTED },
   live: { backgroundColor: UP },
-  sessionText: { fontFamily: font.medium, fontSize: 13, letterSpacing: -0.2, color: color.onBand },
+  sessionText: { fontFamily: font.medium, fontSize: 13, letterSpacing: -0.2, color: ON_BAND.ink },
   all: { flexDirection: "row", alignItems: "center", gap: 4 },
   allText: { fontFamily: font.medium, fontSize: 13, color: MUTED },
   chips: { gap: space.sm, paddingHorizontal: space.screen },
@@ -137,6 +137,6 @@ const s = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.06)",
   },
   chipSkeleton: { borderRadius: radius.pill },
-  ticker: { fontFamily: font.medium, fontSize: 13, lineHeight: 16, color: color.onBand },
+  ticker: { fontFamily: font.medium, fontSize: 13, lineHeight: 16, color: ON_BAND.ink },
   pct: { fontFamily: font.medium, fontSize: 12, lineHeight: 15 },
 });

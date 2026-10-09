@@ -3,19 +3,21 @@ import { StyleSheet, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { color, radius, space } from "../theme";
 
-/* On the ink: the web's gain and fall, lifted so they hold their colour on black. */
+/* The band's palette. It used to be a dark card; it is a white one now, so these
+   are the page's own gain, fall and muted, kept under the old names. */
 export const ON_BAND = {
-  up: "#5AB35C",
-  down: "#E3776F",
-  warn: "#E2B866",
-  muted: "rgba(255,255,255,0.55)",
-  faint: "rgba(255,255,255,0.08)",
-  edge: "rgba(255,255,255,0.06)",
+  ink: color.ink,
+  up: color.up,
+  down: color.fall,
+  warn: color.warn,
+  muted: color.muted,
+  faint: color.tile,
+  edge: "transparent",
 } as const;
 
 /**
- * The smart band: one dark card among the white ones, the part of home that
- * changes with the account. Whatever it holds fades in, so the band changing
+ * The smart band: the card on home that changes with the account — a loan to
+ * look at, the first step, or how today went. Whatever it holds fades in, so the band changing
  * what it says reads as it updating, not jumping.
  */
 export const Band = ({ id, children }: { id: string; children: ReactNode }) => (
@@ -30,7 +32,7 @@ const s = StyleSheet.create({
   band: {
     marginHorizontal: space.screen,
     borderRadius: radius.xl,
-    backgroundColor: color.band,
+    backgroundColor: color.surface,
     paddingVertical: 16,
     overflow: "hidden",
   },

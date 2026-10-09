@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ScrollView, StyleSheet, Text as RNText, View } from "react-native";
+import { StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
 import type { Portfolio } from "@mercury/types";
 import { pct, toEvent, usd, usdSigned } from "@mercury/view";
@@ -46,7 +46,7 @@ export const SmartBand = ({ masked }: { masked: boolean }) => {
 export const LoadingBand = () => (
   <Band id="loading">
     <View style={s.pad}>
-      <Skeleton dark width={150} height={12} />
+      <Skeleton width={150} height={12} />
     </View>
     <View style={[s.pad, s.row]}>
       {[0, 1, 2].map((i) => (
@@ -183,41 +183,68 @@ export const YourDayView = ({
     [portfolio.holdings],
   );
 
+  const lead = movers[0];
+  const most = Math.max(...movers.map((m) => Math.abs(m.usd)), 0.0001);
+  const tone = (v: number) => (masked ? ON_BAND.muted : v >= 0 ? ON_BAND.up : ON_BAND.down);
+
   return (
     <Band id="day">
-      <View style={[s.pad, s.head]}>
-        <RNText style={s.kicker}>Your day</RNText>
-        {/* Hidden means hidden: the colour alone would say which way the day went. */}
-        <RNText style={[s.headFigure, { color: masked ? ON_BAND.muted : up ? ON_BAND.up : ON_BAND.down }]}>
-          {masked ? "••••" : `${usdSigned(change)} · ${up ? "+" : "−"}${pct(num(portfolio.changePct))}`}
-        </RNText>
+      {/* What happened, in a sentence, before the numbers that say it. */}
+      <View style={[s.pad, s.dayHead]}>
+        <View style={s.fill}>
+          <RNText style={s.kicker}>Today</RNText>
+          <RNText style={s.daySentence}>
+            {masked
+              ? "Your stocks moved today."
+              : `${up ? "Up" : "Down"} ${usd(Math.abs(change))} today${
+                  lead !== undefined && Math.abs(lead.usd) >= 0.005 ? `, led by ${lead.h.ticker}` : ""
+                }.`}
+          </RNText>
+        </View>
+        <View
+          style={[
+            s.dayChip,
+            { backgroundColor: masked ? ON_BAND.faint : up ? color.upChip : color.fallChip },
+          ]}
+        >
+          <Icon name={up ? "arrowUp" : "arrowDown"} size={11} color={tone(change)} strokeWidth={2.6} />
+          <RNText style={[s.dayChipText, { color: tone(change) }]}>
+            {masked ? "••" : pct(Math.abs(num(portfolio.changePct)))}
+          </RNText>
+        </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[s.pad, s.row]}>
-        {movers.map(({ h, usd: move, pct: p }) => {
-          const gain = p > -0.005;
+      {/* Each holding's share of the day, as a bar from the middle: gains run right, falls left. */}
+      <View style={[s.pad, s.contrib]}>
+        {movers.slice(0, 4).map(({ h, usd: move }) => {
+          const width = `${Math.max(4, (Math.abs(move) / most) * 100)}%` as const;
           return (
             <PressableScale
               key={h.ticker}
               onPress={() => router.push({ pathname: "/stock/[ticker]", params: { ticker: h.ticker } })}
-              activeScale={0.95}
-              style={s.chip}
+              activeScale={0.98}
+              style={s.contribRow}
               accessibilityRole="button"
-              accessibilityLabel={`${h.name}, ${gain ? "up" : "down"} ${Math.abs(p).toFixed(2)} percent today`}
+              accessibilityLabel={`${h.name}, ${move >= 0 ? "up" : "down"} ${usd(Math.abs(move))} today`}
             >
-              <StockLogo ticker={h.ticker} size={26} />
-              <View>
-                <RNText style={s.ticker}>{h.ticker}</RNText>
-                <RNText
-                  style={[s.move, { color: masked ? ON_BAND.muted : gain ? ON_BAND.up : ON_BAND.down }]}
-                >
-                  {masked ? "••••" : usdSigned(move)}
-                </RNText>
+              <StockLogo ticker={h.ticker} size={24} />
+              <RNText style={s.contribTicker}>{h.ticker}</RNText>
+              <View style={s.track}>
+                <View style={[s.half, s.left]}>
+                  {move < 0 && <View style={[s.fillBar, { width, backgroundColor: tone(move) }]} />}
+                </View>
+                <View style={s.axis} />
+                <View style={s.half}>
+                  {move >= 0 && <View style={[s.fillBar, { width, backgroundColor: tone(move) }]} />}
+                </View>
               </View>
+              <RNText style={[s.contribValue, { color: tone(move) }]}>
+                {masked ? "••••" : usdSigned(move)}
+              </RNText>
             </PressableScale>
           );
         })}
-      </ScrollView>
+      </View>
 
       {dividend !== null && (
         <PressableScale
@@ -225,7 +252,9 @@ export const YourDayView = ({
           haptic={false}
           style={[s.pad, s.dividend]}
         >
-          <Icon name="refresh" size={14} color={ON_BAND.up} strokeWidth={1.8} />
+          <View style={s.dividendMark}>
+            <Icon name="refresh" size={13} color={ON_BAND.up} strokeWidth={1.8} />
+          </View>
           <RNText style={s.dividendText} numberOfLines={1}>
             {dividend.count > 1
               ? `${dividend.count} dividends added shares this month`
@@ -256,8 +285,8 @@ const BandButton = ({
     accessibilityRole="button"
     style={[s.button, primary === true ? s.buttonPrimary : s.buttonQuiet]}
   >
-    <Icon name={icon} size={16} color={primary === true ? color.ink : color.onBand} strokeWidth={1.7} />
-    <RNText style={[s.buttonText, { color: primary === true ? color.ink : color.onBand }]}>{label}</RNText>
+    <Icon name={icon} size={16} color={primary === true ? color.onBand : ON_BAND.ink} strokeWidth={1.7} />
+    <RNText style={[s.buttonText, { color: primary === true ? color.onBand : ON_BAND.ink }]}>{label}</RNText>
   </PressableScale>
 );
 
@@ -276,7 +305,7 @@ const s = StyleSheet.create({
     fontSize: 20,
     lineHeight: 24,
     letterSpacing: -0.4,
-    color: color.onBand,
+    color: ON_BAND.ink,
     marginTop: 4,
   },
   title: { fontFamily: font.medium, fontSize: 15, lineHeight: 20, letterSpacing: -0.3 },
@@ -297,10 +326,54 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: ON_BAND.edge,
   },
-  ticker: { fontFamily: font.medium, fontSize: 13, lineHeight: 16, color: color.onBand },
+  ticker: { fontFamily: font.medium, fontSize: 13, lineHeight: 16, color: ON_BAND.ink },
   move: { fontFamily: font.medium, fontSize: 12, lineHeight: 15 },
-  dividend: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dividendText: { flex: 1, fontFamily: font.regular, fontSize: 13, color: color.onBand },
+  dividend: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    backgroundColor: ON_BAND.faint,
+  },
+  dividendMark: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: color.upChip,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayHead: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
+  daySentence: {
+    marginTop: 4,
+    fontFamily: font.medium,
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: -0.34,
+    color: ON_BAND.ink,
+  },
+  dayChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+  },
+  dayChipText: { fontFamily: font.medium, fontSize: 12.5 },
+  contrib: { gap: 10 },
+  contribRow: { flexDirection: "row", alignItems: "center", gap: 10, height: 28 },
+  contribTicker: { width: 46, fontFamily: font.medium, fontSize: 13, color: ON_BAND.ink },
+  track: { flex: 1, flexDirection: "row", alignItems: "center", height: 8 },
+  half: { flex: 1, height: 8, justifyContent: "center" },
+  left: { alignItems: "flex-end" },
+  axis: { width: 1, height: 14, backgroundColor: color.divider },
+  fillBar: { height: 8, borderRadius: 4 },
+  contribValue: { width: 62, textAlign: "right", fontFamily: font.medium, fontSize: 13 },
+  dividendText: { flex: 1, fontFamily: font.regular, fontSize: 13, color: ON_BAND.ink },
   button: {
     flex: 1,
     height: 44,
@@ -310,7 +383,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
   },
-  buttonPrimary: { backgroundColor: color.surface },
+  buttonPrimary: { backgroundColor: color.ink },
   buttonQuiet: { backgroundColor: ON_BAND.faint, borderWidth: 1, borderColor: ON_BAND.edge },
   buttonText: { fontFamily: font.medium, fontSize: 14, letterSpacing: -0.28 },
 });

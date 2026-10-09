@@ -20,7 +20,6 @@ import {
   type IconName,
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio, type Borrow } from "../../src/api";
-import { useActions } from "../../src/actions/Actions";
 import { SmartBand } from "../../src/home/SmartBand";
 import { usePrefs } from "../../src/prefs";
 import { EventRow, EventRowSkeleton } from "../../src/activity/EventRow";
@@ -52,7 +51,6 @@ const MASK = "••••";
 function PortfolioScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const openActions = useActions();
   const prefs = usePrefs();
   /* Starts as Settings says, and follows it if it changes; the eye still flips it for now. */
   const [hidden, setHidden] = useState(prefs.hideBalances);
@@ -165,65 +163,59 @@ function PortfolioScreen() {
                 )}
               </>
             )}
+          </View>
 
-            {/* The four things somebody opens the app to do, as round actions under the figure. */}
-            <View style={s.actions}>
-              <Action icon="trend" label="Invest" primary onPress={() => router.navigate("/invest")} />
-              <Action icon="plus" label="Add cash" onPress={() => openActions("addCash")} />
-              <Action icon="arrowUp" label="Send" rotate onPress={() => router.push("/send")} />
-              <Action icon="key" label="Borrow" onPress={() => router.push("/borrow")} />
-            </View>
+          {/*
+           * What the total is made of, in the hero itself: one bar for where the
+           * money sits, then a row for each part with its colour, its count and
+           * where it goes. The things to do with it live behind the + button.
+           */}
+          <View style={s.panel}>
+            {!waiting && !hidden && stocksUsd + basketUsd + cashUsd > 0 && (
+              <Allocation stocks={stocksUsd} baskets={basketUsd} cash={cashUsd} />
+            )}
+            <Part
+              tint={ALLOC.stocks}
+              label="Stocks"
+              sub={holdings.length === 1 ? "1 position" : `${holdings.length} positions`}
+              value={figure(stocksUsd)}
+              loading={waiting}
+              onPress={toYours}
+            />
+            {basketUsd > 0 && (
+              <Part
+                tint={ALLOC.baskets}
+                label="Baskets"
+                sub={baskets.length === 1 ? "1 basket" : `${baskets.length} baskets`}
+                value={figure(basketUsd)}
+                loading={waiting}
+                onPress={() => router.push("/baskets")}
+              />
+            )}
+            <Part
+              tint={ALLOC.cash}
+              label="Cash"
+              sub={money.data ? `Earning ${pct(apr, 1)} a year` : "In your account"}
+              value={figure(cashUsd)}
+              loading={waiting}
+              onPress={() => router.navigate("/money")}
+            />
+            {debtUsd > 0 && (
+              <Part
+                tint={color.warn}
+                label="Borrowed"
+                sub={borrowedLine(p?.debtIsStale === true, borrow.data)}
+                value={hidden ? MASK : `−${usd(debtUsd)}`}
+                warn={borrow.data !== undefined && borrow.data.health !== "healthy"}
+                loading={waiting}
+                onPress={() => router.push("/borrow")}
+              />
+            )}
           </View>
         </View>
 
         {/* ── The smart band: the part of home that changes with the account ── */}
         <SmartBand masked={hidden} />
-
-        {/* ── What it is made of ─────────────────────────────────────────── */}
-        <View style={s.card}>
-          <SectionHead title="Your money" action="Money" onAction={() => router.navigate("/money")} />
-          {/* What the total is made of, on the grey panel, as the web's header figures sit. */}
-          <View style={s.panel}>
-            <View style={s.figures}>
-              <Figure
-                label="Holdings"
-                value={figure(stocksUsd)}
-                sub={holdings.length === 1 ? "1 position" : `${holdings.length} positions`}
-                loading={waiting}
-                {...(holdings.length > 0 ? { onPress: toYours } : {})}
-              />
-              <Figure
-                label="Cash"
-                value={figure(cashUsd)}
-                sub={money.data ? `Earning ${pct(apr, 1)} a year` : "In your account"}
-                loading={waiting}
-                onPress={() => router.navigate("/money")}
-              />
-              {basketUsd > 0 && (
-                <Figure
-                  label="Baskets"
-                  value={figure(basketUsd)}
-                  sub={baskets.length === 1 ? "1 basket" : `${baskets.length} baskets`}
-                  loading={waiting}
-                  onPress={() => router.push("/baskets")}
-                />
-              )}
-              {debtUsd > 0 && (
-                <Figure
-                  label="Borrowed"
-                  value={hidden ? MASK : `−${usd(debtUsd)}`}
-                  sub={borrowedLine(p?.debtIsStale === true, borrow.data)}
-                  warn={borrow.data !== undefined && borrow.data.health !== "healthy"}
-                  loading={waiting}
-                  onPress={() => router.push("/borrow")}
-                />
-              )}
-            </View>
-            {!waiting && !hidden && stocksUsd + basketUsd + cashUsd > 0 && (
-              <Allocation stocks={stocksUsd} baskets={basketUsd} cash={cashUsd} />
-            )}
-          </View>
-        </View>
 
         {/* ── What you hold ──────────────────────────────────────────────── */}
         {(waiting || holdings.length > 0 || baskets.length > 0) && (
@@ -366,65 +358,55 @@ const SectionHead = ({
   </View>
 );
 
-/** One of the figures the total is made of: the web's `HeaderFigure`. */
-const Figure = ({
+/** One part of the total: its colour from the bar, what it is, and what it is worth. */
+const Part = ({
+  tint,
   label,
-  value,
   sub,
+  value,
   warn = false,
   loading,
   onPress,
 }: {
+  tint: string;
   label: string;
-  value: string;
   sub: string;
+  value: string;
   warn?: boolean;
   loading: boolean;
-  onPress?: () => void;
+  onPress: () => void;
 }) => (
-  <PressableScale style={s.figure} activeScale={0.98} disabled={onPress === undefined} onPress={onPress}>
-    <RNText style={s.figureLabel}>{label}</RNText>
-    {loading ? (
-      <Skeleton width="70%" height={20} style={s.figureSkeleton} />
-    ) : (
-      <RNText style={[s.figureValue, warn && s.warnInk]} numberOfLines={1}>
-        {value}
+  <PressableScale style={s.part} activeScale={0.985} onPress={onPress} accessibilityRole="button">
+    <View style={[s.swatch, { backgroundColor: tint }]} />
+    <View style={s.mid}>
+      <RNText style={s.partLabel}>{label}</RNText>
+      <RNText style={s.sub} numberOfLines={1}>
+        {sub}
       </RNText>
+    </View>
+    {loading ? (
+      <Skeleton width={64} height={15} />
+    ) : (
+      <RNText style={[s.partValue, warn && s.warnInk]}>{value}</RNText>
     )}
-    <RNText style={s.figureSub} numberOfLines={1}>
-      {sub}
-    </RNText>
+    <Icon name="chevronRight" size={13} color={color.faint} />
   </PressableScale>
 );
 
 /** Where the money sits, as one bar: stocks, baskets, cash — the web's allocation, at a glance. */
-const Allocation = ({ stocks, baskets, cash }: { stocks: number; baskets: number; cash: number }) => {
-  const total = stocks + baskets + cash;
-  const parts = [
-    { key: "Stocks", value: stocks, tint: ALLOC.stocks },
-    { key: "Baskets", value: baskets, tint: ALLOC.baskets },
-    { key: "Cash", value: cash, tint: ALLOC.cash },
-  ].filter((part) => part.value > 0);
-  return (
-    <View style={s.alloc}>
-      <View style={s.bar}>
-        {parts.map((part) => (
-          <View key={part.key} style={{ flex: part.value, backgroundColor: part.tint }} />
-        ))}
-      </View>
-      <View style={s.legend}>
-        {parts.map((part) => (
-          <View key={part.key} style={s.legendItem}>
-            <View style={[s.swatch, { backgroundColor: part.tint }]} />
-            <RNText style={s.legendText}>
-              {part.key} <RNText style={s.legendPct}>{pct((part.value / total) * 100, 0)}</RNText>
-            </RNText>
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-};
+const Allocation = ({ stocks, baskets, cash }: { stocks: number; baskets: number; cash: number }) => (
+  <View style={s.bar}>
+    {[
+      { key: "stocks", value: stocks, tint: ALLOC.stocks },
+      { key: "baskets", value: baskets, tint: ALLOC.baskets },
+      { key: "cash", value: cash, tint: ALLOC.cash },
+    ]
+      .filter((part) => part.value > 0)
+      .map((part) => (
+        <View key={part.key} style={{ flex: part.value, backgroundColor: part.tint }} />
+      ))}
+  </View>
+);
 
 /** A tinted round mark for a row with no logo of its own. */
 const Glyph = ({ icon }: { icon: IconName }) => (
@@ -442,41 +424,6 @@ const greeting = () => {
 /** "Friday, 9 October". */
 const today = () =>
   new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
-
-/** A round action with its word under it: the shape a phone's home uses for what you came to do. */
-const Action = ({
-  icon,
-  label,
-  primary = false,
-  rotate = false,
-  onPress,
-}: {
-  icon: IconName;
-  label: string;
-  primary?: boolean;
-  /* Send's arrow leans out, as the web's does. */
-  rotate?: boolean;
-  onPress: () => void;
-}) => (
-  <PressableScale
-    style={s.action}
-    activeScale={0.94}
-    onPress={onPress}
-    accessibilityRole="button"
-    accessibilityLabel={label}
-  >
-    <View style={[s.actionCircle, primary && s.actionPrimary]}>
-      <Icon
-        name={icon}
-        size={20}
-        color={primary ? color.onBand : color.ink}
-        strokeWidth={1.8}
-        style={rotate ? s.lean : undefined}
-      />
-    </View>
-    <RNText style={s.actionLabel}>{label}</RNText>
-  </PressableScale>
-);
 
 /** The web's borrowed line: once something is owed, the cushion is the number that matters. */
 const borrowedLine = (stale: boolean, b: Borrow | undefined): string => {
@@ -537,35 +484,29 @@ const s = StyleSheet.create({
   account: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 18, gap: 10 },
   label: { fontFamily: font.medium, fontSize: 14, color: color.ink },
   worth: { fontFamily: font.medium, fontSize: 40, letterSpacing: -1.4, lineHeight: 46, color: color.ink },
-  actions: { flexDirection: "row", justifyContent: "space-between", marginTop: space.md },
-  action: { alignItems: "center", gap: 7, width: 72 },
-  actionCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: color.tile,
+
+  panel: { borderRadius: radius.lg, backgroundColor: color.tile, padding: space.sm, paddingTop: 14, gap: 2 },
+  part: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: space.md,
+    minHeight: 52,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.md,
   },
-  actionPrimary: { backgroundColor: color.ink },
-  actionLabel: { fontFamily: font.medium, fontSize: 12.5, color: color.ink },
-  lean: { transform: [{ rotate: "45deg" }] },
+  partLabel: { fontFamily: font.medium, fontSize: 14.5, letterSpacing: -0.29, color: color.ink },
+  partValue: { fontFamily: font.medium, fontSize: 15, letterSpacing: -0.3, color: color.ink },
 
-  panel: { borderRadius: radius.lg, backgroundColor: color.tile, padding: 16, gap: 16 },
-  figures: { flexDirection: "row", flexWrap: "wrap", rowGap: 16 },
-  figure: { width: "50%", gap: 4, paddingRight: space.sm },
-  figureLabel: { fontFamily: font.regular, fontSize: 12.5, color: color.muted },
-  figureValue: { fontFamily: font.medium, fontSize: 19, letterSpacing: -0.4, color: color.ink },
-  figureSkeleton: { marginVertical: 3 },
-  figureSub: { fontFamily: font.regular, fontSize: 11.5, color: color.muted },
-
-  alloc: { gap: 10 },
-  bar: { flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", gap: 2 },
-  legend: { flexDirection: "row", flexWrap: "wrap", columnGap: space.md, rowGap: 4 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
-  swatch: { width: 8, height: 8, borderRadius: 2 },
-  legendText: { fontFamily: font.regular, fontSize: 12, color: color.muted },
-  legendPct: { fontFamily: font.medium, color: color.ink },
+  bar: {
+    flexDirection: "row",
+    height: 8,
+    borderRadius: 4,
+    overflow: "hidden",
+    gap: 2,
+    marginHorizontal: space.sm,
+    marginBottom: 6,
+  },
+  swatch: { width: 4, height: 28, borderRadius: 2 },
 
   sectionHead: {
     flexDirection: "row",
