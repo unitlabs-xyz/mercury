@@ -344,6 +344,7 @@ export const AuthModal = () => {
     const t = setTimeout(() => {
       setStep("email");
       reset();
+      setEmail("");
       setCode("");
       setInvalid(false);
       setResent(false);

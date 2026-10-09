@@ -119,6 +119,14 @@ export const BuySheet = ({
     order.walletReady &&
     !order.isPending;
 
+  /* A re-price answers the amount it was for. A different amount asks again,
+     and the fresh quote for it is the one to show. */
+  const edit = () => {
+    if (moved === null) return;
+    setMoved(null);
+    order.reset();
+  };
+
   const buy = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setMoved(null);
@@ -174,6 +182,7 @@ export const BuySheet = ({
                 label="Amount"
                 value={text}
                 onChange={(next) => {
+                  edit();
                   setMax(false);
                   setText(next.slice(0, 9));
                 }}
@@ -201,6 +210,7 @@ export const BuySheet = ({
                         selected={f === 1 ? max : !max && value !== "" && text === value}
                         onPress={() => {
                           if (value === "") return;
+                          edit();
                           setMax(f === 1);
                           setText(value);
                         }}
@@ -212,7 +222,10 @@ export const BuySheet = ({
                       key={p}
                       label={`$${p}`}
                       selected={amount === p}
-                      onPress={() => setText(String(p))}
+                      onPress={() => {
+                        edit();
+                        setText(String(p));
+                      }}
                     />
                   ))}
             </View>

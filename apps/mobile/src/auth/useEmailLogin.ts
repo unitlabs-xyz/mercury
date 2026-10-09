@@ -62,5 +62,10 @@ export const useEmailLogin = () => {
     [loginWithCode, wallet],
   );
 
-  return { send, submit, pending, rejected };
+  const reset = useCallback(() => {
+    setPending(null);
+    setRejected(null);
+  }, []);
+
+  return { send, submit, reset, pending, rejected };
 };

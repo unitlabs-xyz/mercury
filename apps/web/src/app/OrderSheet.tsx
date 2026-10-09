@@ -590,7 +590,10 @@ export const OrderSheet = ({
    */
   const cta = moved ? `${selling ? "Sell" : "Buy"} at the new price` : selling ? "Sell now" : "Buy now";
 
+  /* Not while the order is in flight: resetting would drop its result, and the
+     ticket would never hear that it went through. */
   const close = () => {
+    if (working) return;
     buy.reset();
     if (placed) onPlaced?.();
     onClose();
@@ -708,7 +711,7 @@ export const OrderSheet = ({
             {/* The design system's buttons. These were hand-rolled: a teal
                 rectangle at h-11 for the primary action, where every other
                 button in the app is a near-black pill at h-10. */}
-            <Button size="lg" onClick={close} className="flex-1">
+            <Button size="lg" onClick={close} disabled={working} className="flex-1">
               Cancel
             </Button>
             <Button

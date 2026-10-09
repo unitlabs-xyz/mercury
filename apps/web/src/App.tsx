@@ -1,6 +1,7 @@
+import { usePrivy } from "@privy-io/react-auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
-import { Suspense, lazy, useLayoutEffect } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
 import { Login, RequireAuth } from "./auth/Login";
 import { EASE } from "./motion/config";
@@ -50,10 +51,28 @@ const ScrollToTop = () => {
   return null;
 };
 
+/**
+ * Forgets the account when its owner signs out. The account reads are keyed by
+ * what they are, not whose, so without this the next person to sign in on the
+ * same browser is shown the last one's balance, holdings and deposit address
+ * until their own reads come back.
+ */
+const ForgetOnSignOut = () => {
+  const { ready, authenticated } = usePrivy();
+  const signedIn = useRef(false);
+  useEffect(() => {
+    if (!ready) return;
+    if (signedIn.current && !authenticated) queryClient.clear();
+    signedIn.current = authenticated;
+  }, [ready, authenticated]);
+  return null;
+};
+
 export const App = () => (
   // reducedMotion="user" makes every Motion animation honour the OS setting.
   <MotionConfig reducedMotion="user" transition={{ duration: 0.4, ease: EASE }}>
     <QueryClientProvider client={queryClient}>
+      <ForgetOnSignOut />
       <BrowserRouter>
         <ScrollToTop />
         <Suspense fallback={<RouteFallback />}>

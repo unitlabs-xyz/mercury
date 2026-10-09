@@ -73,6 +73,10 @@ export const BorrowSheet = ({
   const { intent, max, preview, blocked, presets, paused, inTokens } = planBorrow(b, tab, row, value);
 
   const busy = action.isPending;
+  /* Not mid-transaction: reopening resets the action, which would drop its result. */
+  const close = () => {
+    if (!busy) onClose();
+  };
   const canSubmit = !!intent && value > 0 && !typing && !blocked && !busy && !paused && action.walletReady;
   const unit = inTokens ? `${row?.ticker ?? ""}x` : "USD";
 
@@ -88,12 +92,12 @@ export const BorrowSheet = ({
           : "Take collateral back";
 
   return (
-    <SidePanel open={open} onClose={onClose} labelledBy="borrow-title">
+    <SidePanel open={open} onClose={close} labelledBy="borrow-title">
       <PanelHeader
         id="borrow-title"
         title={title}
         sub="USDC from Kamino, up to 80% of its limit, so a normal dip does not trigger a liquidation."
-        onClose={onClose}
+        onClose={close}
       />
 
       <div className="px-6 pt-1 pb-6">

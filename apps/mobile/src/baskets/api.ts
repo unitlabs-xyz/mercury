@@ -172,6 +172,11 @@ export const trackOperation = (portfolioId: string, op: TrackedOperation) => {
   tracked = { ...tracked, [portfolioId]: op };
   listeners.forEach((l) => l());
 };
+/** On sign-out: the next account has no business seeing this one's operations. */
+export const forgetTrackedOperations = () => {
+  tracked = {};
+  listeners.forEach((l) => l());
+};
 export const useTrackedOperation = (portfolioId: string | undefined) =>
   useSyncExternalStore(subscribe, () => (portfolioId === undefined ? undefined : tracked[portfolioId]));
 /** Every operation started this session, by portfolio: what the Baskets landing lists. */

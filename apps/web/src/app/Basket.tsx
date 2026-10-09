@@ -522,6 +522,9 @@ export const Basket = () => {
   const closeInvest = () => {
     if (enrollmentBusy || fundingAction.isPending) return;
     setInvestOpen(false);
+    /* The money went in, so the ticket starts over rather than offering the
+       same sum out of cash that no longer holds it. */
+    if (fundingAction.data) setFundingAmount("100");
     enrollAction.reset();
     fundingAction.reset();
   };
