@@ -230,18 +230,21 @@ export const Holdings = ({
    * that silently stops listing what someone owns is worse than a long one.
    */
   const shown = showAll ? rows : rows.slice(0, 3);
+  /* Baskets but no wallet stocks: the card is only its title row, and needs
+     the same space under it as above, or the text sits on the bottom edge. */
+  const headerOnly = !(!m || failed || rows.length > 0 || basketRows.length === 0);
   const hidden = rows.length - shown.length;
 
   return (
     <>
       <section aria-label="Holdings" className="min-w-0 rounded-xl bg-white p-1">
-        <div className="px-3 sm:px-5 pt-4">
+        <div className={`px-3 pt-4 sm:px-5 ${headerOnly ? "pb-4" : ""}`}>
           <RailHead
             title="Holdings"
             meta={
               m
                 ? rows.length
-                  ? `${rows.length} positions, largest first`
+                  ? `${rows.length} ${rows.length === 1 ? "position" : "positions"}`
                   : basketRows.length
                     ? "No wallet holdings"
                     : "Nothing yet"
@@ -252,7 +255,7 @@ export const Holdings = ({
           />
         </div>
 
-        {(!m || failed || rows.length > 0 || basketRows.length === 0) && (
+        {!headerOnly && (
           <div className="mt-[11px] overflow-x-auto rounded-lg bg-ds-panel p-1">
             {m && rows.length > 0 && (
               <div className="min-w-[830px]">
@@ -336,7 +339,7 @@ export const Holdings = ({
           <div className="px-3 sm:px-5 pt-4">
             <RailHead
               title="Basket holdings"
-              meta={`${basketRows.length} ${basketRows.length === 1 ? "basket" : "baskets"}, largest first`}
+              meta={`${basketRows.length} ${basketRows.length === 1 ? "basket" : "baskets"}`}
               to="/baskets"
               linkLabel="Manage baskets"
             />
