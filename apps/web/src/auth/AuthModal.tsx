@@ -334,6 +334,7 @@ export const AuthModal = () => {
   const [code, setCode] = useState("");
   const [seconds, setSeconds] = useState(RESEND_SECONDS);
   const [resent, setResent] = useState(false);
+  const [resendFailed, setResendFailed] = useState(false);
   const [height, setHeight] = useState<number | "auto">("auto");
   const [resizing, setResizing] = useState(false);
   const emailField = useRef<HTMLInputElement>(null);
@@ -348,6 +349,7 @@ export const AuthModal = () => {
       setCode("");
       setInvalid(false);
       setResent(false);
+      setResendFailed(false);
       setHeight("auto");
     }, 250);
     return () => clearTimeout(t);
@@ -393,6 +395,7 @@ export const AuthModal = () => {
   /* Six digits is the submit. Privy decides what happens next, not a timer. */
   useEffect(() => {
     if (step !== "code" || pending || code.length !== 6) return;
+    setResendFailed(false);
     void submit(code).then((ok) => {
       if (ok) setStep("ready");
       else setCode("");
@@ -421,6 +424,22 @@ export const AuthModal = () => {
   useEffect(() => {
     if (notInvited) setStep("beta");
   }, [notInvited]);
+
+  /*
+   * The stale digits go first, and a rejected code does not hide this: an
+   * expired code is exactly when someone needs another, and the error used to
+   * take the link's place until the page was closed.
+   */
+  const resend = () => {
+    setCode("");
+    setResendFailed(false);
+    void send(email, true).then((ok) => {
+      setResendFailed(!ok);
+      if (!ok) return;
+      setSeconds(RESEND_SECONDS);
+      setResent(true);
+    });
+  };
 
   const sending = pending === "sending";
   const reading = pending === "checking" || pending === "creating";
@@ -595,43 +614,47 @@ export const AuthModal = () => {
                               {pending === "checking" ? "Checking your code" : "Creating your wallet"}
                             </p>
                           </motion.div>
-                        ) : rejected ? (
-                          <p role="alert" className="flex items-start gap-2 text-[14px] text-ds-down">
-                            <Alert className="mt-0.5 size-[15px] shrink-0" />
-                            That code didn't work. Check it and enter it again.
-                          </p>
-                        ) : resent ? (
-                          <p className="flex items-center gap-2 text-[14px] text-ds-up">
-                            <Check className="size-[15px] shrink-0" />A new code is on its way
-                          </p>
-                        ) : pending === "resending" ? (
-                          <p className="flex items-center gap-2 text-[14px] text-ds-muted">
-                            <Clock className="size-[15px] shrink-0 text-ds-muted" />
-                            Sending a new code
-                          </p>
                         ) : (
-                          <p className="flex items-center gap-2">
-                            <Clock className="size-[15px] shrink-0 text-ds-muted" />
-                            {seconds > 0 ? (
-                              <span className="text-[14px] text-ds-muted">
-                                Didn't get a code? Resend in {seconds}s
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void send(email, true).then((ok) => {
-                                    if (!ok) return;
-                                    setSeconds(RESEND_SECONDS);
-                                    setResent(true);
-                                  });
-                                }}
-                                className="text-[14px] font-medium text-ds-link transition-opacity hover:opacity-80"
+                          <>
+                            {rejected && (
+                              <p
+                                role="alert"
+                                className="mb-3 flex items-start gap-2 text-[14px] text-ds-down"
                               >
-                                Resend the code
-                              </button>
+                                <Alert className="mt-0.5 size-[15px] shrink-0" />
+                                {resendFailed
+                                  ? "We couldn't send a new code. Try again in a moment."
+                                  : "That code didn't work. Check it, or send a new one."}
+                              </p>
                             )}
-                          </p>
+                            {resent ? (
+                              <p className="flex items-center gap-2 text-[14px] text-ds-up">
+                                <Check className="size-[15px] shrink-0" />A new code is on its way
+                              </p>
+                            ) : pending === "resending" ? (
+                              <p className="flex items-center gap-2 text-[14px] text-ds-muted">
+                                <Clock className="size-[15px] shrink-0 text-ds-muted" />
+                                Sending a new code
+                              </p>
+                            ) : (
+                              <p className="flex items-center gap-2">
+                                <Clock className="size-[15px] shrink-0 text-ds-muted" />
+                                {seconds > 0 ? (
+                                  <span className="text-[14px] text-ds-muted">
+                                    Didn't get a code? Resend in {seconds}s
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={resend}
+                                    className="text-[14px] font-medium text-ds-link transition-opacity hover:opacity-80"
+                                  >
+                                    Resend the code
+                                  </button>
+                                )}
+                              </p>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

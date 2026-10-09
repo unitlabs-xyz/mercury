@@ -47,7 +47,9 @@ export const CodeInput = ({ value, onChange, length = 6, editable = true, onFill
         style={s.hidden}
         value={value}
         onChangeText={(raw) => {
-          const next = raw.replace(/\D/g, "").slice(0, length);
+          /* An autofill or paste over a full field arrives appended to it; the
+             newest digits are the code, so keep the end, not the start. */
+          const next = raw.replace(/\D/g, "").slice(-length);
           onChange(next);
           if (next.length === length) onFilled?.(next);
         }}

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useLoginWithEmail, useEmbeddedSolanaWallet } from "@privy-io/expo";
 
-export type Pending = "sending" | "checking" | "creating" | null;
+export type Pending = "sending" | "resending" | "checking" | "creating" | null;
 
 /**
  * Email, a code, a wallet.
@@ -24,9 +24,9 @@ export const useEmailLogin = () => {
   const [rejected, setRejected] = useState<string | null>(null);
 
   const send = useCallback(
-    async (email: string): Promise<boolean> => {
+    async (email: string, resend = false): Promise<boolean> => {
       setRejected(null);
-      setPending("sending");
+      setPending(resend ? "resending" : "sending");
       try {
         await sendCode({ email });
         return true;
