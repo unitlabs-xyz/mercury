@@ -3,13 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMoney, usePortfolio, useSignedIn } from "../api/hooks";
 import { useAuthModal } from "../auth/AuthContext";
-import { Check, ChevronDown, Copy, Mail, SignOut } from "../ui/icons";
+import { Check, ChevronDown, Copy, Message, SignOut } from "../ui/icons";
+import { openFeedback } from "./Feedback";
 import { usd } from "@mercury/view";
 
 const short = (a: string) => (a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
-
-/** The one channel we have. app.trymercury.xyz is the app's own domain. */
-const SUPPORT = "mailto:support@trymercury.xyz";
 
 /**
  * The account. The bar carries who you are and nothing else, so the header
@@ -141,12 +139,18 @@ export const AccountMenu = () => {
                 a place to go. Sign out stays muted, so the pair does not read as
                 two equal offers. */}
             <div className="flex flex-col gap-px rounded-lg bg-ds-panel p-1">
-              {/* An envelope rather than a lifebuoy: this opens a mail client, and
-                  the icon should say so before the click does. */}
-              <a href={SUPPORT} onClick={() => setOpen(false)} className={`${row} text-ds-ink`}>
-                <Mail className="size-4 shrink-0 text-ds-muted" />
+              {/* Opens the feedback panel: a message and screenshots, straight to the team. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  openFeedback();
+                }}
+                className={`${row} text-ds-ink`}
+              >
+                <Message className="size-4 shrink-0 text-ds-muted [stroke-width:1.5]" />
                 Support
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={() => {

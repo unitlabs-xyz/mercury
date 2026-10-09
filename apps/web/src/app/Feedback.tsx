@@ -17,6 +17,11 @@ const base64Bytes = (data: string) => Math.floor((data.length * 3) / 4);
 const tooLarge = (names: string[]) =>
   `${names.length === 1 ? `"${names[0]}" is` : `${names.length} images are`} too large to send. Compress ${names.length === 1 ? "it" : "them"} or take a smaller screenshot, then add again.`;
 
+const OPEN_EVENT = "mercury:feedback";
+
+/** Opens the feedback panel from anywhere, e.g. Support in the account menu. */
+export const openFeedback = () => window.dispatchEvent(new Event(OPEN_EVENT));
+
 type Shot = FeedbackImage & { readonly key: string };
 
 /**
@@ -82,6 +87,15 @@ export const Feedback = () => {
       if (picker.current) picker.current.value = "";
     }
   };
+
+  useEffect(() => {
+    const show = () => {
+      if (state === "sent") restart();
+      setOpen(true);
+    };
+    window.addEventListener(OPEN_EVENT, show);
+    return () => window.removeEventListener(OPEN_EVENT, show);
+  }, [state]);
 
   /* A drag that ends anywhere else, or is cancelled, never sends our dragleave. */
   useEffect(() => {
