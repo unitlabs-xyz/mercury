@@ -1,7 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { USDC_MINT, type ChainHistory, type SignatureRef } from "@mercury/chain";
 import type { Db } from "../db/client.js";
-import { activities, users, walletStreams, wallets } from "../db/schema.js";
+import {
+  activities,
+  basketAccounts as basketAccounts_,
+  users,
+  walletStreams,
+  wallets,
+} from "../db/schema.js";
 import { movementsIn, type Movement } from "./movements.js";
 import { walkStream } from "./walk.js";
 import { reconcileBasketExits } from "../baskets/glider/reconcile.js";
@@ -120,6 +126,17 @@ async function syncWallet(
     a.slot === b.slot ? a.signature.localeCompare(b.signature) : a.slot - b.slot,
   );
 
+  // One query, not one per transaction: a wallet has at most a handful of
+  // these and most have none.
+  const basketAccounts = new Map(
+    (
+      await db
+        .select({ address: basketAccounts_.address, portfolioId: basketAccounts_.portfolioId })
+        .from(basketAccounts_)
+        .where(eq(basketAccounts_.userId, userId))
+    ).map((row) => [row.address, row.portfolioId]),
+  );
+
   const moved: Movement[] = [];
   const now = new Date();
   for (const sig of ordered) {
@@ -127,7 +144,9 @@ async function syncWallet(
     // Stopping costs a retry. Skipping would advance a cursor past a movement
     // and lose it permanently.
     if (tx === null) throw new Error(`transaction ${sig.signature} could not be read`);
-    moved.push(...movementsIn(tx, { wallet: address, now, lendingProgram: deps.lendingProgram }));
+    moved.push(
+      ...movementsIn(tx, { wallet: address, now, lendingProgram: deps.lendingProgram, basketAccounts }),
+    );
   }
 
   return db.transaction(async (tx) => {
@@ -143,6 +162,7 @@ async function syncWallet(
             title: m.title,
             subtitle: m.subtitle,
             amountUsd: m.amountUsd === null ? null : fixed(m.amountUsd),
+            ...(m.basketPortfolioId === undefined ? {} : { basketPortfolioId: m.basketPortfolioId }),
             txSignature: m.signature,
             mint: m.mint,
           })),

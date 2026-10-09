@@ -480,6 +480,11 @@ export class BasketService {
           409,
           "The withdrawal authorization expired. Review it again.",
         );
+      await this.deps.store.rememberBasketAccount({
+        ownerAccountId,
+        portfolioId: portfolio.portfolioId,
+        address: addressOf(smartAccount.accountId),
+      });
       const latest = await this.deps.history.signatures(addressOf(smartAccount.accountId), { limit: 1 });
       const payload: ExitIntentPayload = {
         mode,
@@ -572,6 +577,14 @@ export class BasketService {
         409,
         "No verified Solana funding account is available for this portfolio.",
       );
+    // Before the transfer is even built, so the wallet-events job can recognise
+    // the money when it moves rather than reading it as cash leaving the account.
+    await this.deps.store.rememberBasketAccount({
+      ownerAccountId,
+      portfolioId: portfolio.portfolioId,
+      address: addressOf(destinationAccountId),
+    });
+
     let prepared;
     try {
       prepared = await this.deps.funding.prepare(ownerAccountId, destinationAccountId, amountRaw);

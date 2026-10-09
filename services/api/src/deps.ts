@@ -50,7 +50,13 @@ import type { FeedbackDeps } from "./routes/feedback.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
-import { readFlows, readHoldings, readLatestDebt, readSnapshots } from "./portfolio/queries.js";
+import {
+  readBasketMovements,
+  readFlows,
+  readHoldings,
+  readLatestDebt,
+  readSnapshots,
+} from "./portfolio/queries.js";
 import { basketReturnsReader, basketValueReader } from "./portfolio/baskets.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
@@ -360,6 +366,7 @@ export function buildReadDeps(
       baskets,
       basketReturns: basketReturnsReader(deps.basketProvider),
       flows: (userId, from) => readFlows(db, userId, from),
+      basketMovements: (userId) => readBasketMovements(db, userId),
     },
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },

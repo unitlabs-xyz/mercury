@@ -238,7 +238,11 @@ export const Position = ({
   const value = walletValue + basketValue;
   const cost = Number(h?.costBasisUsd ?? 0);
   const ret = Number(h?.unrealisedPnlUsd ?? 0);
-  const retPct = cost > 0 ? (ret / cost) * 100 : 0;
+  // What the stock did, and what being in it cost, rather than one figure that
+  // reported a loss on a stock sitting exactly where it was bought.
+  const tradingCost = Number(h?.tradingCostUsd ?? 0);
+  const move = h?.marketPnlUsd === undefined ? ret : Number(h.marketPnlUsd);
+  const movePct = cost - tradingCost > 0 ? (move / (cost - tradingCost)) * 100 : 0;
   const pledged = Number(h?.pledgedShares ?? 0);
   const today = h ? Number(h.changePct24h) : stockTodayPct;
   return (
@@ -260,14 +264,30 @@ export const Position = ({
       <dl className="mt-3 grid flex-1 grid-cols-2 content-center gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5">
         <Fact k="Wallet & pledged">{h ? usd(walletValue) : "—"}</Fact>
         <Fact k="In baskets">{basketValue > 0 ? usd(basketValue) : "—"}</Fact>
-        <Fact k="Wallet return">
+        <Fact k="Share price move">
           {h && cost > 0 ? (
-            <span className={ret < 0 ? "text-ds-loss" : "text-ds-up"}>
-              {usdSigned(ret)}{" "}
+            <span className={move < 0 ? "text-ds-loss" : "text-ds-up"}>
+              {usdSigned(move)}{" "}
               <span className="text-[12px] font-normal text-ds-muted">
-                {ret >= 0 ? "+" : "−"}
-                {Math.abs(retPct).toFixed(2)}%
+                {move >= 0 ? "+" : "−"}
+                {Math.abs(movePct).toFixed(2)}%
               </span>
+            </span>
+          ) : (
+            "—"
+          )}
+        </Fact>
+        <Fact k="Fees & spread">
+          {h && cost > 0 ? (
+            // A title rather than an InfoTip: this panel is rendered to a
+            // string in tests, and the tip portals into document.body.
+            <span title="What it cost to take the position: the sponsorship fee, plus whatever the fill was above the share's own quote. It is not the stock falling, which is why it has its own figure.">
+              {tradingCost >= 0.005
+                ? `−${usd(tradingCost)}`
+                : tradingCost <= -0.005
+                  ? usd(-tradingCost)
+                  : usd(0)}{" "}
+              <span className="text-[12px] font-normal text-ds-muted">{usdSigned(ret)} net</span>
             </span>
           ) : (
             "—"
@@ -278,7 +298,6 @@ export const Position = ({
             <MoveChip value={today} light />
           </span>
         </Fact>
-        <Fact k="Wallet average cost">{shares > 0 && cost > 0 ? usd(cost / shares) : "—"}</Fact>
         <Fact k="Wallet cost basis">{h && cost > 0 ? usd(cost) : "—"}</Fact>
       </dl>
       {/* One stock to the reader, but two tokens underneath, and only one of them

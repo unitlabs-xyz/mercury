@@ -20,6 +20,13 @@ export interface Movement {
   readonly subtitle: string | null;
   /** Null unless the asset is itself a dollar. Nothing here invents a price. */
   readonly amountUsd: Decimal | null;
+  /**
+   * Set when the money moved between this wallet and one of its own Glider
+   * smart accounts. The row still reads as a transfer in the feed — it is one,
+   * from the wallet's side — but it is not cash crossing the account's edge,
+   * and `readFlows` leaves it out of the performance line because of this.
+   */
+  readonly basketPortfolioId?: string;
   readonly signature: string;
   readonly occurredAt: Date;
 }
@@ -33,6 +40,18 @@ export interface MovementContext {
    * and `POST /v1/borrow/confirm` writes the row for it.
    */
   readonly lendingProgram: string;
+  /**
+   * This wallet's own Glider smart accounts, by address, to the portfolio each
+   * belongs to.
+   *
+   * Without them, funding a basket is indistinguishable from sending money
+   * away: USDC leaves and nothing else in the wallet moves. Counted as a
+   * withdrawal it printed a gain on the performance chart equal to the amount
+   * funded, because net worth did not drop — the money came back as basket
+   * value. The funding and exit reconcilers fix the row afterwards, but
+   * afterwards is a race, and never at all for a funding nobody confirmed.
+   */
+  readonly basketAccounts?: ReadonlyMap<string, string>;
 }
 
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
@@ -60,6 +79,23 @@ const sumOwned = (entries: readonly TokenBalanceEntry[], owner: string, mint: st
  * sum, which is the right answer. A wallet holding two accounts for one mint
  * falls out of the same sum.
  */
+/**
+ * The portfolio behind the basket account whose USDC moved here, if one did.
+ *
+ * Only an account whose own USDC balance changed counts. A smart account can
+ * appear in a transaction's keys without taking part in its cash, and matching
+ * on that would mark an ordinary deposit as internal.
+ */
+const basketFor = (tx: TransactionDetail, ctx: MovementContext): string | undefined => {
+  if (ctx.basketAccounts === undefined) return undefined;
+  for (const [address, portfolioId] of ctx.basketAccounts) {
+    if (address === ctx.wallet) continue;
+    const delta = sumOwned(tx.postTokens, address, USDC_MINT) - sumOwned(tx.preTokens, address, USDC_MINT);
+    if (delta !== 0n) return portfolioId;
+  }
+  return undefined;
+};
+
 export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readonly Movement[] {
   const occurredAt = tx.blockTime === null ? ctx.now : new Date(tx.blockTime * 1000);
   const moved: Movement[] = [];
@@ -105,13 +141,25 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
   if (tx.accountKeys.includes(ctx.lendingProgram)) return moved;
 
   if (usdc !== 0n) {
+    // Which of this wallet's own basket accounts was on the other end, if any.
+    // Read from the balances rather than the account keys: a smart account is
+    // named in plenty of transactions it took no money in.
+    const basket = basketFor(tx, ctx);
     moved.push({
       mint: USDC_MINT,
       kind: usdc > 0n ? "transfer_in" : "transfer_out",
-      title: usdc > 0n ? "Added cash" : "Sent cash",
+      title:
+        basket === undefined
+          ? usdc > 0n
+            ? "Added cash"
+            : "Sent cash"
+          : usdc > 0n
+            ? "Cash from a basket"
+            : "Cash to a basket",
       subtitle: null,
       // USDC is a dollar. No price lookup, and none to be wrong about.
       amountUsd: scaled(abs(usdc), USDC_DECIMALS),
+      ...(basket === undefined ? {} : { basketPortfolioId: basket }),
       signature: tx.signature,
       occurredAt,
     });

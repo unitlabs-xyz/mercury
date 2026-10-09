@@ -35,6 +35,28 @@ export const cashFrom = (balances: readonly TokenBalance[], usdcMint: string): D
 };
 
 /**
+ * What one share of a wrapper would fetch right now, in the pool.
+ *
+ * Two prices come out of one Jupiter response and they are not the same
+ * number: `usdPricePerToken` is what the token trades at, and `pricePerShare`
+ * is the issuer's quote for the underlying equity. Measured across twenty
+ * xStocks on 9 October 2026 they differed by a median 0.49%, as far apart as
+ * 9.4%.
+ *
+ * Holdings are valued at the first, because that is what the wallet is worth
+ * and it is the currency every cost basis here is already in. The second is
+ * what a return is measured against, which is a different question — "did the
+ * stock move" — and `stackedReturn` answers it with the quote rather than with
+ * the pool.
+ *
+ * This is also `tokenQty x usdPricePerToken` rearranged, which is exactly what
+ * `/v1/portfolio/exposure/:ticker` computes: the two endpoints valued the same
+ * holding differently until now.
+ */
+export const marketPricePerShare = (price: TokenPrice): Decimal =>
+  price.multiplier.gt(ZERO) ? price.usdPricePerToken.div(price.multiplier) : (price.pricePerShare ?? ZERO);
+
+/**
  * The first of a holding's wrappers the board can price.
  *
  * Every wrapper of this company prices one share the same way, so the first
@@ -120,8 +142,11 @@ export const valuePortfolio = (
     if (row.shares.lte(ZERO)) continue; // a closed holding is not a row
 
     const priced = priceFor(row, board);
-    const perShare = priced?.pricePerShare ?? ZERO;
+    const perShare = priced === undefined ? ZERO : marketPricePerShare(priced);
     const valueUsd = row.shares.mul(perShare);
+    // The token's own 24-hour move, now applied to a value in the token's own
+    // price. It used to be applied to a value computed from the underlying
+    // quote, which put two different price scales inside one subtraction.
     const changePct24h = priced?.changePct24h ?? ZERO;
 
     // value_now = value_yesterday x (1 + pct/100), so today's move is
