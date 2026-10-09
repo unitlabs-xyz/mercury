@@ -21,6 +21,7 @@ import {
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio, type Borrow } from "../../src/api";
 import { useActions } from "../../src/actions/Actions";
+import { SmartBand } from "../../src/home/SmartBand";
 import { usePrefs } from "../../src/prefs";
 import { EventRow, EventRowSkeleton } from "../../src/activity/EventRow";
 import { color, font, radius, space } from "../../src/theme";
@@ -33,8 +34,6 @@ const KINDS_OF = (f: Filter): readonly EventKind[] => GROUPS.find((g) => g.key =
 /** A summary, not the list: the rest is a tap away on Invest and Activity. */
 const HOLDING_ROWS = 5;
 const FEED_ROWS = 4;
-/** The smallest order the server places; below it, the next step is adding cash. */
-const MIN_ORDER = 5;
 
 /* The allocation bar's colours: stocks in the buy teal, baskets in its lighter
    tint, cash in the neutral grey — the web's allocation palette. */
@@ -118,8 +117,13 @@ function PortfolioScreen() {
         {/* ── Who you are ─────────────────────────────────────────────────── */}
         <View style={s.brandRow}>
           <View style={s.brand}>
-            <Mark size={19} color={color.ink} />
-            <RNText style={s.wordmark}>Mercury</RNText>
+            <View style={s.markRing}>
+              <Mark size={18} color={color.ink} />
+            </View>
+            <View>
+              <RNText style={s.greeting}>{greeting()}</RNText>
+              <RNText style={s.date}>{today()}</RNText>
+            </View>
           </View>
           <View style={s.headButtons}>
             <IconButton
@@ -162,25 +166,22 @@ function PortfolioScreen() {
               </>
             )}
 
-            {/* The web's three: invest first, then the two ways money moves. */}
+            {/* The four things somebody opens the app to do, as round actions under the figure. */}
             <View style={s.actions}>
-              <View style={s.actionMain}>
-                <Button label="Invest" size="md" onPress={() => router.navigate("/invest")} />
-              </View>
-              <View style={s.actionWide}>
-                <Button
-                  label="Add cash"
-                  size="md"
-                  variant="secondary"
-                  onPress={() => openActions("addCash")}
-                />
-              </View>
-              <View style={s.actionNarrow}>
-                <Button label="Send" size="md" variant="secondary" onPress={() => router.push("/send")} />
-              </View>
+              <Action icon="trend" label="Invest" primary onPress={() => router.navigate("/invest")} />
+              <Action icon="plus" label="Add cash" onPress={() => openActions("addCash")} />
+              <Action icon="arrowUp" label="Send" rotate onPress={() => router.push("/send")} />
+              <Action icon="key" label="Borrow" onPress={() => router.push("/borrow")} />
             </View>
           </View>
+        </View>
 
+        {/* ── The smart band: the part of home that changes with the account ── */}
+        <SmartBand masked={hidden} />
+
+        {/* ── What it is made of ─────────────────────────────────────────── */}
+        <View style={s.card}>
+          <SectionHead title="Your money" action="Money" onAction={() => router.navigate("/money")} />
           {/* What the total is made of, on the grey panel, as the web's header figures sit. */}
           <View style={s.panel}>
             <View style={s.figures}>
@@ -223,16 +224,6 @@ function PortfolioScreen() {
             )}
           </View>
         </View>
-
-        {/* ── Something to act on, only when there is ─────────────────────── */}
-        <Nudge
-          borrow={borrow.data}
-          empty={!waiting && !failed && holdings.length === 0 && basketUsd === 0}
-          cash={cashUsd}
-          onBorrow={() => router.push("/borrow")}
-          onInvest={() => router.navigate("/invest")}
-          onAddCash={() => openActions("addCash")}
-        />
 
         {/* ── What you hold ──────────────────────────────────────────────── */}
         {(waiting || holdings.length > 0 || baskets.length > 0) && (
@@ -442,65 +433,50 @@ const Glyph = ({ icon }: { icon: IconName }) => (
   </View>
 );
 
-/**
- * One line that asks for something, and only when it should: a loan near its
- * limit, or the first step for an account that holds nothing yet. Everything
- * else on this screen is a fact; this is the one call to action.
- */
-const Nudge = ({
-  borrow,
-  empty,
-  cash,
-  onBorrow,
-  onInvest,
-  onAddCash,
-}: {
-  borrow: Borrow | undefined;
-  empty: boolean;
-  cash: number;
-  onBorrow: () => void;
-  onInvest: () => void;
-  onAddCash: () => void;
-}) => {
-  if (borrow !== undefined && borrow.debtUsd > 0 && borrow.health !== "healthy") {
-    const title =
-      borrow.health === "over_limit"
-        ? "Your loan is over target"
-        : borrow.health === "margin_call"
-          ? "Repay soon to keep your shares"
-          : "Kamino is selling collateral";
-    return (
-      <PressableScale style={[s.nudge, s.nudgeWarn]} activeScale={0.985} onPress={onBorrow}>
-        <Icon name="alert" size={18} color={color.warn} />
-        <View style={s.mid}>
-          <RNText style={[s.name, s.warnInk]}>{title}</RNText>
-          <RNText style={s.sub}>
-            {borrow.safeUntilDrop === null
-              ? `${usd(borrow.debtUsd)} borrowed`
-              : `${usd(borrow.debtUsd)} borrowed · safe until a ${pct(borrow.safeUntilDrop * 100, 0)} fall`}
-          </RNText>
-        </View>
-        <Icon name="chevronRight" size={14} color={color.muted} />
-      </PressableScale>
-    );
-  }
-  if (!empty) return null;
-  const funded = cash >= MIN_ORDER;
-  return (
-    <PressableScale style={s.nudge} activeScale={0.985} onPress={funded ? onInvest : onAddCash}>
-      <Glyph icon={funded ? "trend" : "plus"} />
-      <View style={s.mid}>
-        <RNText style={s.name}>{funded ? `${usd(cash)} ready to invest` : "Add cash to start"}</RNText>
-        <RNText style={s.sub}>
-          {funded
-            ? "Buy your first share from $5, or a basket of a whole theme."
-            : "Send USDC on Solana to your Mercury address. It lands in seconds."}
-        </RNText>
-      </View>
-      <Icon name="chevronRight" size={14} color={color.muted} />
-    </PressableScale>
-  );
+/** "Good morning", by the phone's own clock. */
+const greeting = () => {
+  const h = new Date().getHours();
+  return h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 };
+
+/** "Friday, 9 October". */
+const today = () =>
+  new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+
+/** A round action with its word under it: the shape a phone's home uses for what you came to do. */
+const Action = ({
+  icon,
+  label,
+  primary = false,
+  rotate = false,
+  onPress,
+}: {
+  icon: IconName;
+  label: string;
+  primary?: boolean;
+  /* Send's arrow leans out, as the web's does. */
+  rotate?: boolean;
+  onPress: () => void;
+}) => (
+  <PressableScale
+    style={s.action}
+    activeScale={0.94}
+    onPress={onPress}
+    accessibilityRole="button"
+    accessibilityLabel={label}
+  >
+    <View style={[s.actionCircle, primary && s.actionPrimary]}>
+      <Icon
+        name={icon}
+        size={20}
+        color={primary ? color.onBand : color.ink}
+        strokeWidth={1.8}
+        style={rotate ? s.lean : undefined}
+      />
+    </View>
+    <RNText style={s.actionLabel}>{label}</RNText>
+  </PressableScale>
+);
 
 /** The web's borrowed line: once something is owed, the cushion is the number that matters. */
 const borrowedLine = (stale: boolean, b: Borrow | undefined): string => {
@@ -538,8 +514,17 @@ const s = StyleSheet.create({
     paddingHorizontal: space.screen,
     paddingBottom: space.xs,
   },
-  brand: { flexDirection: "row", alignItems: "center", gap: 8 },
-  wordmark: { fontFamily: font.bold, fontSize: 19, letterSpacing: -0.5, color: color.ink },
+  brand: { flexDirection: "row", alignItems: "center", gap: 10 },
+  markRing: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: color.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  greeting: { fontFamily: font.medium, fontSize: 17, letterSpacing: -0.34, color: color.ink },
+  date: { fontFamily: font.regular, fontSize: 12.5, color: color.muted, marginTop: 1 },
   headButtons: { flexDirection: "row", gap: space.sm },
 
   /* A white card on the grey ground, its grey panel inset by four: the web's rail card. */
@@ -552,11 +537,19 @@ const s = StyleSheet.create({
   account: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 18, gap: 10 },
   label: { fontFamily: font.medium, fontSize: 14, color: color.ink },
   worth: { fontFamily: font.medium, fontSize: 40, letterSpacing: -1.4, lineHeight: 46, color: color.ink },
-  actions: { flexDirection: "row", gap: space.sm, marginTop: space.sm },
-  /* Sized to their words, so "Add cash" stays on one line beside the other two. */
-  actionMain: { flex: 1 },
-  actionWide: { flex: 1.25 },
-  actionNarrow: { flex: 0.85 },
+  actions: { flexDirection: "row", justifyContent: "space-between", marginTop: space.md },
+  action: { alignItems: "center", gap: 7, width: 72 },
+  actionCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: color.tile,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionPrimary: { backgroundColor: color.ink },
+  actionLabel: { fontFamily: font.medium, fontSize: 12.5, color: color.ink },
+  lean: { transform: [{ rotate: "45deg" }] },
 
   panel: { borderRadius: radius.lg, backgroundColor: color.tile, padding: 16, gap: 16 },
   figures: { flexDirection: "row", flexWrap: "wrap", rowGap: 16 },
@@ -611,18 +604,6 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   empty: { alignItems: "center", gap: 6, paddingVertical: space.xl, paddingHorizontal: space.lg },
-
-  nudge: {
-    marginHorizontal: space.screen,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: space.md,
-    borderRadius: radius.xl,
-    backgroundColor: color.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  nudgeWarn: { backgroundColor: color.warnTint },
 
   unreachable: {
     flexDirection: "row",
