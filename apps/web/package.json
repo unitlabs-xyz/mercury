@@ -18,6 +18,7 @@
     "@mercury/sdk": "workspace:*",
     "@mercury/types": "workspace:*",
     "@mercury/view": "workspace:*",
+    "@number-flow/react": "^0.6.2",
     "@privy-io/react-auth": "^3.45.0",
     "@solana-program/memo": "^0.15.0",
     "@solana-program/system": "^0.15.0",

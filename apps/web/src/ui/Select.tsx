@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { EASE } from "../motion/config";
-import { ChevronRight } from "./icons";
+import { ChevronDown, ChevronRight } from "./icons";
 
 export type Option = { value: string; label: string };
 
@@ -15,12 +15,18 @@ export const Select = ({
   options,
   onChange,
   widthClass = "w-[150px]",
+  placement = "bottom",
+  field = false,
 }: {
   label: string;
   value: string;
   options: Option[];
   onChange: (value: string) => void;
   widthClass?: string;
+  /** "top" for a trigger near the foot of a dialog, which clips its own overflow. */
+  placement?: "bottom" | "top";
+  /** Set among form inputs, where it should look like one rather than a filter. */
+  field?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
@@ -94,22 +100,34 @@ export const Select = ({
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-labelledby={`${id}-label`}
+        {...(field ? { "aria-label": label } : { "aria-labelledby": `${id}-label` })}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-full items-center justify-between gap-2 rounded-lg bg-ds-panel px-3 text-left text-[14px] leading-none transition-colors hover:bg-ds-tag max-sm:h-10"
+        className={
+          field
+            ? "flex h-11 w-full items-center justify-between gap-2 rounded-md bg-white px-3 text-left text-[14px] leading-none outline-1 outline-transparent transition-colors hover:outline-black/10 focus-visible:outline-black/20"
+            : "flex h-8 w-full items-center justify-between gap-2 rounded-lg bg-ds-panel px-3 text-left text-[14px] leading-none transition-colors hover:bg-ds-tag max-sm:h-10"
+        }
       >
         <span className="min-w-0 truncate">
-          <span id={`${id}-label`} className="text-ds-muted">
-            {label}:{" "}
-          </span>
-          <span className="text-ds-ink">{selected?.label}</span>
+          {/* As a field, the name of the thing belongs to the field, not to the
+              value: "Country: Angola" sat above two inputs reads as a heading. */}
+          {field ? (
+            <span className={value ? "text-ds-ink" : "text-ds-muted/70"}>{selected?.label}</span>
+          ) : (
+            <>
+              <span id={`${id}-label`} className="text-ds-muted">
+                {label}:{" "}
+              </span>
+              <span className="text-ds-ink">{selected?.label}</span>
+            </>
+          )}
         </span>
         <motion.span
-          animate={{ rotate: open ? 90 : 0 }}
+          animate={{ rotate: open ? (field ? 180 : 90) : 0 }}
           transition={{ duration: 0.2, ease: EASE }}
-          className="inline-flex shrink-0 text-ds-muted"
+          className="inline-flex shrink-0 text-ds-chevron"
         >
-          <ChevronRight className="size-3.5" />
+          {field ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </motion.span>
       </button>
 
@@ -118,11 +136,13 @@ export const Select = ({
           <motion.ul
             role="listbox"
             aria-label={label}
-            initial={{ opacity: 0, y: -4 }}
+            initial={{ opacity: 0, y: placement === "top" ? 4 : -4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
+            exit={{ opacity: 0, y: placement === "top" ? 4 : -4 }}
             transition={{ duration: 0.16, ease: EASE }}
-            className="absolute z-50 mt-1 max-h-[280px] w-full overflow-y-auto rounded-lg bg-white p-1 outline-1 outline-black/10"
+            className={`absolute z-50 max-h-[280px] w-full overflow-y-auto rounded-lg bg-white p-1 outline-1 outline-black/10 ${
+              placement === "top" ? "bottom-full mb-1" : "mt-1"
+            }`}
           >
             {options.map((o, i) => {
               const isSelected = o.value === value;

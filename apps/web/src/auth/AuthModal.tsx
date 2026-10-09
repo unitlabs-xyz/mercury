@@ -1,3 +1,4 @@
+import NumberFlow from "@number-flow/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
@@ -7,12 +8,232 @@ import { Dialog } from "../ui/Dialog";
 import { MercuryLogo } from "../ui/Logo";
 import { Alert, Blocks, Check, Clock, Close, Key, Lock, Mail, Sliders } from "../ui/icons";
 import { useAuthModal } from "./AuthContext";
-import { CHECK_MS, CREATE_MS, SEND_MS, useEmailLogin } from "./useEmailLogin";
+import { CHECK_MS, CREATE_MS, NOT_INVITED, SEND_MS, useEmailLogin } from "./useEmailLogin";
+import { COUNTRIES, UNCHOSEN } from "./countries";
+import { Select } from "../ui/Select";
+import { nextWave, waveClock, waveParts } from "./waves";
+import { joinWaitlist } from "../api/waitlist";
 import { CodeInput } from "./CodeInput";
 
-type Step = "email" | "code" | "ready";
+type Step = "email" | "code" | "beta" | "ready";
 
 const RESEND_SECONDS = 30;
+
+/**
+ * The countdown to the next door opening, ticking once a second.
+ *
+ * Mounted only on the beta screen, which is the only one that asks.
+ */
+const useTimeToWave = () => {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const wave = nextWave(now);
+  return { wave, left: wave.getTime() - now.getTime() };
+};
+
+/**
+ * One unit of the clock, built like the code boxes so the sheet has one box.
+ *
+ * The digits roll rather than swap. NumberFlow does the rolling — it animates
+ * only the places that changed, so the seconds move while the hours sit still,
+ * and it honours a reduced-motion preference on its own.
+ */
+const TimeBox = ({ value, unit }: { value: number; unit: string }) => (
+  <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+    <div className="grid h-[60px] w-full place-items-center overflow-hidden rounded-lg bg-ds-panel text-[26px] font-medium text-ds-ink tabular-nums">
+      <NumberFlow value={value} format={{ minimumIntegerDigits: 2 }} trend={-1} />
+    </div>
+    <span className="text-[11px] leading-none text-ds-muted">{unit}</span>
+  </div>
+);
+
+/* Its own box height, so it centres against the digits and not the labels. */
+const Colon = () => (
+  <span
+    aria-hidden
+    className="grid h-[60px] shrink-0 place-items-center text-[22px] leading-none font-medium text-ds-muted"
+  >
+    :
+  </span>
+);
+
+/**
+ * The clock, with its own state.
+ *
+ * The tick used to live in the step, so every second re-rendered the country
+ * list and both inputs, and the sheet's resize observer fired with them — the
+ * whole panel twitched once a second. Isolated here, a tick repaints digits.
+ */
+const WaveClock = () => {
+  const { wave, left } = useTimeToWave();
+  const { hours, minutes, seconds } = waveParts(left);
+  return (
+    <div className="mt-6">
+      <div className="flex items-start gap-1.5">
+        <TimeBox value={hours} unit="hours" />
+        <Colon />
+        <TimeBox value={minutes} unit="minutes" />
+        <Colon />
+        <TimeBox value={seconds} unit="seconds" />
+      </div>
+      <p className="mt-3 text-center text-[12px] leading-none text-ds-muted">
+        Next wave opens {waveClock(wave)}
+      </p>
+    </div>
+  );
+};
+
+/** A field on the beta screen, set like the email field above it. */
+const Field = ({
+  value,
+  onChange,
+  placeholder,
+  label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  label: string;
+}) => (
+  <label className="flex h-11 min-w-0 flex-1 items-center rounded-md bg-white px-3 outline-1 outline-transparent focus-within:outline-black/10">
+    <span className="sr-only">{label}</span>
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="min-w-0 flex-1 bg-transparent text-[14px] text-ds-ink outline-none placeholder:text-ds-muted/70"
+    />
+  </label>
+);
+
+/**
+ * The screen an uninvited address lands on, in place of the code step.
+ *
+ * It replaces the sheet rather than sitting under the email field because the
+ * answer is not "fix your address" — there is nothing to fix, and the next
+ * thing to do is join a queue and be told when it moves.
+ */
+const BetaStep = ({
+  email,
+  reduce,
+  onBack,
+  headingId,
+}: {
+  email: string;
+  reduce: boolean;
+  onBack: () => void;
+  headingId: string;
+}) => {
+  const [country, setCountry] = useState(UNCHOSEN);
+  const [name, setName] = useState("");
+  const [handle, setHandle] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joined, setJoined] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const join = async (e: FormEvent) => {
+    e.preventDefault();
+    if (joining || country === UNCHOSEN) return;
+    setJoining(true);
+    setFailed(null);
+    try {
+      await joinWaitlist({
+        email,
+        country,
+        ...(name.trim() ? { name: name.trim() } : {}),
+        ...(handle.trim() ? { handle: handle.trim() } : {}),
+      });
+      setJoined(true);
+    } catch (cause) {
+      setFailed(cause instanceof Error ? cause.message : "That didn't work. Try again in a moment.");
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  return (
+    <>
+      <h2 id={headingId} className="text-[20px] leading-[1.2] font-medium text-ds-ink text-balance">
+        {joined ? "You're on the list" : "Mercury is invite-only right now"}
+      </h2>
+      <p className="mt-3 text-[14px] leading-[1.5] text-ds-muted text-pretty">
+        {joined ? (
+          <>
+            We'll let <span className="text-ds-ink">{email}</span> in at the next wave. Come back then and
+            sign in with the same address.
+          </>
+        ) : (
+          <>
+            <span className="text-ds-ink">{email}</span> isn't on the list yet. Join below and you'll be let
+            in at the next wave.
+          </>
+        )}
+      </p>
+
+      <WaveClock />
+
+      {joined ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="mt-6 h-11 w-full rounded-lg bg-ds-panel text-[14px] font-medium text-ds-ink transition-colors hover:bg-ds-tag"
+        >
+          Use a different email
+        </button>
+      ) : (
+        <form onSubmit={join} className="mt-6">
+          <div className="flex flex-col gap-1 rounded-lg bg-ds-panel p-1">
+            <Select
+              label="Country"
+              value={country}
+              options={COUNTRIES}
+              onChange={setCountry}
+              widthClass="w-full"
+              placement="top"
+              field
+            />
+            {/* Optional, and last, because they only enrich the founding card. */}
+            <div className="flex flex-col gap-1 min-[380px]:flex-row">
+              <Field value={name} onChange={setName} placeholder="Name (optional)" label="Name" />
+              <Field value={handle} onChange={setHandle} placeholder="X handle (optional)" label="X handle" />
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            disabled={joining || country === UNCHOSEN}
+            aria-busy={joining}
+            className="mt-3 w-full"
+          >
+            {joining ? "Joining the waitlist" : "Join the waitlist"}
+          </Button>
+
+          <AnimatePresence initial={false}>
+            {failed && (
+              <Notice key="join-error" tone="down" reduce={reduce}>
+                <Alert className="mt-px size-3.5 shrink-0" />
+                {failed}
+              </Notice>
+            )}
+          </AnimatePresence>
+
+          <button
+            type="button"
+            onClick={onBack}
+            className="mt-3 w-full text-[13px] leading-none text-ds-muted transition-colors hover:text-ds-ink"
+          >
+            Use a different email
+          </button>
+        </form>
+      )}
+    </>
+  );
+};
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -34,6 +255,38 @@ const ASSURANCES: { icon: ReactNode; title: string; body: string }[] = [
     body: "Your email restores access. Export to another wallet whenever you like.",
   },
 ];
+
+/**
+ * A notice under the email field. `down` is something to correct; `quiet` is
+ * something to know, which is not the same and should not look alarmed.
+ */
+const Notice = ({
+  id,
+  tone,
+  reduce,
+  children,
+}: {
+  id?: string;
+  tone: "down" | "quiet";
+  reduce: boolean;
+  children: ReactNode;
+}) => (
+  <motion.div
+    {...(id ? { id } : {})}
+    role="alert"
+    initial={{ opacity: 0, y: reduce ? 0 : -4 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.18, ease: EASE }}
+    className={
+      tone === "down"
+        ? "mt-3 flex items-start gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-down"
+        : "mt-3 rounded-lg bg-ds-panel px-3.5 py-3"
+    }
+  >
+    {children}
+  </motion.div>
+);
 
 const PrivyMark = () => (
   <span className="flex items-center gap-2 text-[12px] text-ds-muted">
@@ -161,6 +414,13 @@ export const AuthModal = () => {
     });
   };
 
+  // The one refusal the person cannot fix by trying again, so it takes the
+  // whole sheet rather than sitting under the field as something to correct.
+  const notInvited = rejected?.code === NOT_INVITED;
+  useEffect(() => {
+    if (notInvited) setStep("beta");
+  }, [notInvited]);
+
   const sending = pending === "sending";
   const reading = pending === "checking" || pending === "creating";
   const heading = `auth-heading-${step}`;
@@ -227,6 +487,7 @@ export const AuthModal = () => {
                             onChange={(e) => {
                               setEmail(e.target.value);
                               if (invalid) setInvalid(false);
+                              if (rejected) reset();
                             }}
                             placeholder="you@email.com"
                             aria-label="Email address"
@@ -253,22 +514,32 @@ export const AuthModal = () => {
 
                     <AnimatePresence initial={false}>
                       {invalid && (
-                        <motion.p
-                          key="email-error"
-                          id="email-error"
-                          role="alert"
-                          initial={{ opacity: 0, y: reduce ? 0 : -4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.18, ease: EASE }}
-                          className="mt-3 flex items-center gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] text-ds-chip-down"
-                        >
-                          <Alert className="size-3.5 shrink-0" />
+                        <Notice key="email-error" id="email-error" tone="down" reduce={!!reduce}>
+                          <Alert className="mt-px size-3.5 shrink-0" />
                           That doesn't look like an email address yet. Check it for a typo.
-                        </motion.p>
+                        </Notice>
+                      )}
+
+                      {!invalid && rejected && !notInvited && (
+                        <Notice key="send-error" tone="down" reduce={!!reduce}>
+                          <Alert className="mt-px size-3.5 shrink-0" />
+                          We couldn't send a code to that address. Check it, or try again in a moment.
+                        </Notice>
                       )}
                     </AnimatePresence>
                   </>
+                )}
+
+                {step === "beta" && (
+                  <BetaStep
+                    email={email}
+                    reduce={!!reduce}
+                    headingId={heading}
+                    onBack={() => {
+                      reset();
+                      setStep("email");
+                    }}
+                  />
                 )}
 
                 {step === "code" && (
