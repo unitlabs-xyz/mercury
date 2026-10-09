@@ -3,22 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
 import { refreshAfterChain } from "./settle";
-import { forgetConfirm, rememberConfirm, usePendingConfirm } from "./pending-confirm";
+import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 import { borrowFromWire, type BorrowIntent, type BorrowWire } from "@mercury/view";
 
 /* The position's shape and its reading off the wire are shared with the phone. */
 export type { Borrow, BorrowIntent, BorrowRow, Health } from "@mercury/view";
 
-const PENDING_KEY = "borrow-confirm";
+const KIND = "loan";
 
 type SentLoan = { signature: string; action: BorrowIntent };
-
-const parseSentLoan = (raw: unknown): SentLoan | null => {
-  const claim = raw as { signature?: unknown; action?: unknown };
-  return typeof claim?.signature === "string" && typeof claim.action === "object" && claim.action !== null
-    ? { signature: claim.signature, action: claim.action as BorrowIntent }
-    : null;
-};
 
 const confirmSentLoan = (sent: SentLoan) =>
   apiFetch("/v1/borrow/confirm", { method: "POST", body: JSON.stringify(sent) });
@@ -97,10 +90,13 @@ export const useBorrowAction = () => {
        */
       const signature = signatures.at(-1);
       if (signature !== undefined) {
-        /* Kept before the attempt, so a node that is behind only delays the row. */
-        rememberConfirm(PENDING_KEY, { signature, action: intent });
+        /*
+         * Kept before the attempt and keyed by its own signature, so a borrow
+         * followed by a repay followed by a withdrawal keeps all three.
+         */
+        rememberConfirm(KIND, { signature, action: intent });
         await confirmSentLoan({ signature, action: intent })
-          .then(() => forgetConfirm(PENDING_KEY))
+          .then(() => forgetConfirm(KIND, signature))
           .catch(() => undefined);
       }
 
@@ -115,8 +111,11 @@ export const useBorrowAction = () => {
      after load, and an empty list there is not a missing wallet. */
   const walletReady = wallets[0] !== undefined;
 
-  /* A loan whose confirm the node was too slow to answer. Nothing else records one. */
-  usePendingConfirm(PENDING_KEY, parseSentLoan, confirmSentLoan, mutation.isPending);
+  /* Loans whose confirm the node was too slow to answer. Nothing else records one. */
+  usePendingConfirms<SentLoan>(KIND, confirmSentLoan, {
+    paused: mutation.isPending,
+    onSettled: () => refreshAfterChain(qc),
+  });
 
   return { ...mutation, walletReady };
 };

@@ -1,6 +1,6 @@
 import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { getBase58Decoder } from "@solana/kit";
@@ -23,6 +23,7 @@ import type { PreparedBasketFunding } from "@mercury/types";
 import { useSignedIn } from "./hooks";
 import { enrollBasket, fundBasket, type FundingReceipt } from "@mercury/view";
 import { apiFetch, ApiError } from "./client";
+import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 
 /**
  * A basket as the app reads it: GET /v1/baskets, plus what Symmetry knows
@@ -363,20 +364,28 @@ export const useBasketEnrollmentAction = (slug: string) => {
   return { ...mutation, walletReady: wallets[0] !== undefined };
 };
 
-const confirmBasketFunding = (slug: string, signature: string) =>
+const FUNDING_KIND = "funding";
+
+type SentFunding = { slug: string; signature: string };
+
+const confirmSentFunding = ({ slug, signature }: SentFunding) =>
   apiFetch(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`, {
     method: "POST",
     body: JSON.stringify({ signature }),
   });
+
+/** What a transfer changes, wherever it is recorded from. */
+const refreshBasket = (qc: ReturnType<typeof useQueryClient>, slug: string) => {
+  for (const key of ["basket-enrollment", "basket-portfolio", "basket-activity"])
+    void qc.invalidateQueries({ queryKey: ["api", key, slug] });
+  void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
+};
 
 export const useBasketFundingAction = (slug: string) => {
   const qc = useQueryClient();
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
   const [step, setStep] = useState<"preparing" | "signing" | "sending" | null>(null);
-  const [pendingReceipt, setPendingReceipt] = useState<FundingReceipt | null>(null);
-  const walletAddress = wallets[0]?.address;
-  const pendingKey = walletAddress ? `basket-funding:${slug}:${walletAddress}` : null;
   const mutation = useMutation({
     mutationFn: async ({
       amountUsd,
@@ -407,73 +416,51 @@ export const useBasketFundingAction = (slug: string) => {
           });
         },
       });
-      setPendingReceipt({ ...receipt, status: "pending" });
-      if (pendingKey) sessionStorage.setItem(pendingKey, receipt.signature);
-      // Confirmation is idempotent and waits briefly for RPC indexing.
-      for (let attempt = 0; attempt < 6; attempt++) {
-        try {
-          await confirmBasketFunding(slug, receipt.signature);
-          if (pendingKey) sessionStorage.removeItem(pendingKey);
-          setPendingReceipt(null);
-          return { ...receipt, status: "confirmed" as const };
-        } catch (error) {
-          if (!(error instanceof ApiError) || error.code !== "transaction_pending") {
-            if (error instanceof ApiError && error.code === "invalid_transaction") {
-              if (pendingKey) sessionStorage.removeItem(pendingKey);
-              setPendingReceipt(null);
-            }
-            throw error;
-          }
-          if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 2_000));
-        }
-      }
-      return { ...receipt, status: "pending" as const };
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] });
-      void qc.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
-      void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
-      void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
-    },
-  });
-  useEffect(() => {
-    if (!pendingKey || mutation.isPending) return;
-    let busy = false;
-    const retry = async () => {
-      const signature = sessionStorage.getItem(pendingKey);
-      if (!signature || busy) return;
-      setPendingReceipt({ signature, status: "pending" });
-      busy = true;
+      const claim = { slug, signature: receipt.signature };
+      rememberConfirm(FUNDING_KIND, claim);
+      /*
+       * One attempt, as a trade and a loan each make. Waiting out the node here
+       * held the mutation open for twelve seconds and paused the sweep that
+       * would have done the waiting anyway.
+       */
       try {
-        await confirmBasketFunding(slug, signature);
-        sessionStorage.removeItem(pendingKey);
-        setPendingReceipt(null);
-        void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
-        void qc.invalidateQueries({ queryKey: ["api", "basket-portfolio", slug] });
-        void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
+        await confirmSentFunding(claim);
+        forgetConfirm(FUNDING_KIND, receipt.signature);
+        return { ...receipt, status: "confirmed" as const };
       } catch (error) {
-        if (error instanceof ApiError && error.code === "invalid_transaction") {
-          sessionStorage.removeItem(pendingKey);
-          setPendingReceipt(null);
+        const pending = error instanceof ApiError && error.code === "transaction_pending";
+        if (!pending) {
+          /* An answer that will not change: stop asking, and say so. */
+          forgetConfirm(FUNDING_KIND, receipt.signature);
+          throw error;
         }
-      } finally {
-        busy = false;
+        return { ...receipt, status: "pending" as const };
       }
-    };
-    void retry();
-    const timer = window.setInterval(() => void retry(), 15_000);
-    return () => window.clearInterval(timer);
-  }, [pendingKey, mutation.isPending, qc, slug]);
+    },
+    onSettled: () => refreshBasket(qc, slug),
+  });
+  /* One claim per transfer, keyed by its signature: funding twice no longer loses the first. */
+  const outstanding = usePendingConfirms<SentFunding>(FUNDING_KIND, confirmSentFunding, {
+    paused: mutation.isPending,
+    onSettled: () => refreshBasket(qc, slug),
+  });
+  /*
+   * Still unrecorded for this basket, so the sheet keeps saying so — and stops
+   * saying it the moment the sweep records it, which a second copy of this in
+   * component state did not.
+   */
+  const stillPending = outstanding.find((claim) => claim.slug === slug);
+  const receipt: FundingReceipt | null = stillPending
+    ? { signature: stillPending.signature, status: "pending" }
+    : null;
   return {
     ...mutation,
-    data: mutation.data ?? pendingReceipt,
+    data: mutation.data ?? receipt,
     step,
     walletReady: wallets[0] !== undefined,
     reset: () => {
       mutation.reset();
       setStep(null);
-      const signature = pendingKey ? sessionStorage.getItem(pendingKey) : null;
-      setPendingReceipt(signature ? { signature, status: "pending" } : null);
     },
   };
 };

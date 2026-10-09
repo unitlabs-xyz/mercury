@@ -12,6 +12,9 @@ import {
 import type { Deps } from "./deps.js";
 import { sellableAmounts } from "./orders/sellable.js";
 
+/* High enough that no route is refused for impact once the person has accepted it. */
+const ACCEPTED_IMPACT = D(10);
+
 export interface PriceRequest {
   readonly ticker: string;
   readonly side: Side;
@@ -34,6 +37,8 @@ export interface PriceRequest {
    * against. Buys only: `decide` does not apply the floor to a sell.
    */
   readonly feeUsdc?: string;
+  /** The caller has shown the price impact and been told to go ahead regardless. */
+  readonly acceptImpact?: boolean;
   /**
    * Sell the whole position, in tokens rather than dollars.
    *
@@ -148,10 +153,14 @@ export async function priceOrder(deps: Deps, req: PriceRequest): Promise<Decisio
     candidates,
     reference,
     status: anyPaused ? "halted" : session.status,
-    policy:
-      req.feeUsdc === undefined || D(req.feeUsdc).lte(0)
-        ? DEFAULT_POLICY
-        : { ...DEFAULT_POLICY, minOrderUsd: DEFAULT_POLICY.minOrderUsd.sub(D(req.feeUsdc)) },
+    policy: {
+      ...DEFAULT_POLICY,
+      ...(req.feeUsdc !== undefined && D(req.feeUsdc).gt(0)
+        ? { minOrderUsd: DEFAULT_POLICY.minOrderUsd.sub(D(req.feeUsdc)) }
+        : {}),
+      /* The ceiling is ours to set per call, so accepting it needs no change in `decide`. */
+      ...(req.acceptImpact === true ? { maxPriceImpact: ACCEPTED_IMPACT } : {}),
+    },
     now: new Date(),
     ...(session.nextOpenAt !== null ? { marketOpensAt: session.nextOpenAt } : {}),
   });

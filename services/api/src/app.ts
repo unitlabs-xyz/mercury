@@ -47,7 +47,21 @@ const toPriceRequest = (
   ...(wallet === null ? {} : { owner: wallet }),
   ...(body.max === true ? { max: true } : {}),
   ...(pinned && body.issuer !== undefined ? { issuer: body.issuer } : {}),
+  ...(body.acceptImpact === true ? { acceptImpact: true } : {}),
 });
+
+/*
+ * Whether the decision a person was shown had already accepted the impact.
+ *
+ * The build re-prices, so the ceiling has to be the same one both times or an
+ * accepted order would be refused at the moment it is signed. Reading it off
+ * the stored decision keeps the two in step without a column that could
+ * disagree with the decision beside it.
+ */
+const acceptedImpact = (shown: ReturnType<typeof decisionToWire>) =>
+  shown.kind !== "refuse" &&
+  shown.best.priceImpact !== null &&
+  D(shown.best.priceImpact).gt(DEFAULT_POLICY.maxPriceImpact);
 
 /** For a refusal that has to name a figure. */
 const asUsd = (d: ReturnType<typeof D>) => `$${d.toFixed(2)}`;
@@ -345,6 +359,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
             owner,
             issuer,
             ...(order.max ? { max: true } : {}),
+            ...(acceptedImpact(shown) ? { acceptImpact: true } : {}),
           }
         : {
             ticker: shown.ticker,
@@ -352,6 +367,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
             amount: D(shown.amount).sub(feeUsdc).toFixed(),
             feeUsdc: feeUsdc.toFixed(),
             issuer,
+            ...(acceptedImpact(shown) ? { acceptImpact: true } : {}),
           },
     );
     if (fresh === null) return c.json(fail("not_found", "Unknown instrument."), 404);

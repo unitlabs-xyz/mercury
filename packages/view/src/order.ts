@@ -19,6 +19,8 @@ export interface OrderIntent {
   readonly max?: boolean;
   /** Trade this issuer's token rather than the best-priced one. Omitted means best price. */
   readonly issuer?: "backed" | "ondo";
+  /** The price impact was shown and accepted, so a route that moves the price is allowed. */
+  readonly acceptImpact?: boolean;
 }
 
 export interface OrderResult {
@@ -83,7 +85,8 @@ export interface OrderIo {
    * so a confirm the node was too slow to answer can be asked again later.
    */
   onSent?(sent: { orderId: string; signature: string }): void;
-  settled?(orderId: string): void;
+  /** Recorded by the server, so the claim kept at `onSent` can be dropped. */
+  onRecorded?(sent: { orderId: string; signature: string }): void;
   /** Between confirm attempts. Injected so a test does not wait in real time. */
   wait?(ms: number): Promise<void>;
 }
@@ -124,6 +127,7 @@ export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<Orde
     /* Omitted rather than false, so a buy's body is what it always was. */
     ...(intent.max === true ? { max: true } : {}),
     ...(intent.issuer ? { issuer: intent.issuer } : {}),
+    ...(intent.acceptImpact === true ? { acceptImpact: true } : {}),
   });
   if (created.decision.kind === "refuse") throw new Error(created.decision.detail);
 
@@ -178,7 +182,7 @@ export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<Orde
   }
   if (filled === null) throw new Error("The order was sent but could not be recorded.");
 
-  io.settled?.(created.orderId);
+  io.onRecorded?.({ orderId: created.orderId, signature: sent.signature });
   io.onStep("done");
   return { orderId: created.orderId, ...filled, realisedPnlUsd: filled.realisedPnlUsd ?? null };
 }
