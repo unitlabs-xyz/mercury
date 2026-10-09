@@ -5,6 +5,7 @@ import { activities, instruments, portfolioSnapshots, positions, tokens } from "
 import { USDC_MINT } from "@mercury/chain";
 import type { HoldingRow } from "../routes/portfolio.js";
 import type { Flow, Reading } from "./history.js";
+import type { BasketMovement, InKindExit } from "./basket-basis.js";
 
 /**
  * Every instrument the user has a position row for, with the wrappers that
@@ -131,4 +132,55 @@ export async function readFlows(db: Db, userId: string, from: Date): Promise<rea
       ),
     );
   return rows.map((r) => ({ at: r.at, usd: D(r.amountUsd ?? "0").mul(FLOW_SIGN[r.kind] ?? 0) }));
+}
+
+/**
+ * Which way a basket row moved the money, by kind.
+ *
+ * Both spellings of each direction, because a row is written by the
+ * wallet-events job as a plain transfer and only re-kinded once the funding or
+ * exit confirmation lands. A basis that recognised only the confirmed spelling
+ * would miss every funding nobody confirmed.
+ */
+const BASKET_INWARD: Record<string, boolean> = {
+  transfer_out: true,
+  basket_funding: true,
+  transfer_in: false,
+  liquidate_to_usdc: false,
+};
+
+/**
+ * Every dollar that crossed between this wallet and its own baskets, and
+ * whether anything ever left one in kind.
+ *
+ * One query for both: an in-kind withdrawal is a row in the same table, it
+ * just carries tokens instead of an amount, and it is what makes a basket's
+ * basis incomplete.
+ */
+export async function readBasketMovements(
+  db: Db,
+  userId: string,
+): Promise<{ movements: readonly BasketMovement[]; inKindExits: readonly InKindExit[] }> {
+  const rows = await db
+    .select({
+      kind: activities.kind,
+      amountUsd: activities.amountUsd,
+      portfolioId: activities.basketPortfolioId,
+    })
+    .from(activities)
+    .where(and(eq(activities.userId, userId), isNotNull(activities.basketPortfolioId)));
+
+  const movements: BasketMovement[] = [];
+  const inKindExits: InKindExit[] = [];
+  for (const row of rows) {
+    const portfolioId = row.portfolioId!;
+    if (row.kind === "withdraw_in_kind") {
+      inKindExits.push({ portfolioId });
+      continue;
+    }
+    const inward = BASKET_INWARD[row.kind];
+    if (inward === undefined || row.amountUsd === null) continue;
+    movements.push({ portfolioId, amountUsd: D(row.amountUsd), inward });
+  }
+  return { movements, inKindExits };
 }

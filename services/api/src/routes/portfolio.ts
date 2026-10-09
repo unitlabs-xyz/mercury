@@ -18,6 +18,8 @@ import {
   valueBasketStocks,
   valuePortfolio,
 } from "../portfolio/value.js";
+import { basketBases, basketPnl, basketReturnPct } from "../portfolio/basket-basis.js";
+import type { BasketMovement, InKindExit } from "../portfolio/basket-basis.js";
 import {
   BasketValuationError,
   type BasketReturnsReader,
@@ -75,6 +77,15 @@ export interface PortfolioDeps {
   readonly basketReturns?: BasketReturnsReader;
   /** Deposits and withdrawals since `from`, signed, so the chart can show performance without them. */
   readonly flows?: (userId: string, from: Date) => Promise<readonly Flow[]>;
+  /**
+   * Cash that crossed between the wallet and its own baskets, for a basket's
+   * cost basis. Absent, a basket reports its value and no cost — which is
+   * what it did before, and why a basket contributed nothing to the account's
+   * return however much was in it.
+   */
+  readonly basketMovements?: (
+    userId: string,
+  ) => Promise<{ movements: readonly BasketMovement[]; inKindExits: readonly InKindExit[] }>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -127,12 +138,16 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         deps.holdings(identity.userId),
         deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
         deps.debt(identity.walletAddress),
+        deps.basketMovements
+          ? deps.basketMovements(identity.userId)
+          : Promise.resolve({ movements: [], inKindExits: [] }),
       ]);
     } catch (error) {
       if (error instanceof BasketValuationError) return c.json(fail(error.code, error.message), 503);
       throw error;
     }
-    const [basketValue, rows, pledged, liveDebt] = inputs;
+    const [basketValue, rows, pledged, liveDebt, basketFlows] = inputs;
+    const bases = basketBases(basketFlows.movements, basketFlows.inKindExits);
 
     /*
      * An unreadable Kamino falls back to the last hour that was readable.
@@ -228,10 +243,28 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       changeUsd: toWire(changeUsd),
       changePct: toWire(changePct),
       holdings,
-      baskets: basketValue.baskets.map((basket) => ({
-        ...basket,
-        changePct24h: basketStocks.byPortfolio.get(basket.portfolioId)?.toString() ?? null,
-      })),
+      baskets: basketValue.baskets.map((basket) => {
+        const basis = bases.get(basket.portfolioId);
+        const valueUsd = D(basket.valueUsd);
+        return {
+          ...basket,
+          changePct24h: basketStocks.byPortfolio.get(basket.portfolioId)?.toString() ?? null,
+          /*
+           * A total, net of everything Glider charged, and said so wherever it
+           * is shown. Unlike a wallet holding there is no way to separate the
+           * stocks' move from the cost of trading them: the fills happen
+           * inside Glider and we never see one.
+           */
+          ...(basis === undefined
+            ? {}
+            : {
+                costBasisUsd: toWire(basis.investedUsd),
+                pnlUsd: toWire(basketPnl(valueUsd, basis)),
+                returnPct: basketReturnPct(valueUsd, basis)?.toString() ?? null,
+                basisIsComplete: basis.isComplete,
+              }),
+        };
+      }),
     });
   });
 

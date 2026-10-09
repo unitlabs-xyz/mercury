@@ -157,6 +157,11 @@ export type BasketHolding = {
   readonly assetCount: number;
   readonly todayPct: number | null;
   readonly returnPct: number | null;
+  /** Value against the cash that went in. Null when nothing recorded any. */
+  readonly pnlUsd?: number | null;
+  readonly costBasisUsd?: number | null;
+  /** False when something left in kind, so the cash taken out is understated. */
+  readonly basisIsComplete?: boolean;
   /** The basket's two heaviest assets, for the stacked mark. */
   readonly marks: readonly ReactNode[];
 };
@@ -164,7 +169,8 @@ export type BasketHolding = {
 /**
  * A basket, held as one position: its stocks are the basket's, not separate
  * rows, and its own page breaks them down. Today is an estimated price move;
- * MWR is Glider's money-weighted result when it has enough history.
+ * the return is value against the cash that went in, net of Glider's fees,
+ * falling back to their money-weighted percentage when we have no basis.
  */
 const BasketLine = ({ b, weight }: { b: BasketHolding; weight: number }) => (
   <Link
@@ -197,13 +203,29 @@ const BasketLine = ({ b, weight }: { b: BasketHolding; weight: number }) => (
     </span>
     <span
       className="flex items-baseline justify-end gap-[5px] whitespace-nowrap"
+      // Named as a total, because that is what it is. A holding's figure beside
+      // it is the share price's move with the fees taken off onto their own
+      // line; a basket's cannot be split that way, because the fills happen
+      // inside Glider and we never see one.
       title={
-        b.returnPct === null
-          ? "All-time return unavailable; zero is a display placeholder"
-          : "Glider money-weighted all-time return"
+        b.pnlUsd !== null && b.pnlUsd !== undefined
+          ? `Total since you funded it, net of Glider's fees${b.basisIsComplete === false ? ". Understated: something left this basket in kind, and no dollar figure was recorded for it" : ""}`
+          : b.returnPct === null
+            ? "All-time return unavailable; zero is a display placeholder"
+            : "Glider money-weighted all-time return"
       }
     >
-      {b.returnPct === null ? (
+      {b.pnlUsd !== null && b.pnlUsd !== undefined ? (
+        <>
+          <span className={`font-medium ${b.pnlUsd < 0 ? "text-ds-loss" : "text-ds-up"}`}>
+            {signed(b.pnlUsd, usd(Math.abs(b.pnlUsd)))}
+          </span>
+          <span className="text-[12px] text-ds-muted">
+            {b.returnPct === null ? "" : signed(b.pnlUsd, `${Math.abs(b.returnPct).toFixed(1)}%`)}
+            {b.basisIsComplete === false ? " partial" : ""}
+          </span>
+        </>
+      ) : b.returnPct === null ? (
         ZERO_RETURN
       ) : (
         <span className={`font-medium ${b.returnPct < 0 ? "text-ds-loss" : "text-ds-up"}`}>
@@ -363,8 +385,11 @@ export const Holdings = ({
                 </span>
                 <span className="text-right">Weight</span>
                 <span className="pr-1.5 text-right">Today</span>
-                <span className="text-right" title="Glider money-weighted all-time return">
-                  MWR
+                <span
+                  className="text-right"
+                  title="Value against the cash that went in, net of Glider's fees. Not the share price move the holdings above report: a basket's fills happen inside Glider, so there is no way to separate the two."
+                >
+                  Return
                 </span>
               </div>
               <GlideRows>

@@ -180,3 +180,66 @@ it("reports no market move on a stock sitting exactly where it was bought", () =
   expect(m.marketReturnUsd).toBe(0);
   expect(m.returnUsd).toBeCloseTo(-0.92, 6);
 });
+
+it("counts only baskets that recorded a basis, so an unwitnessed one is not all profit", () => {
+  const base = stacked();
+  const m = modelOf({
+    ...base,
+    basketUsd: "700",
+    baskets: [
+      {
+        portfolioId: "p1",
+        slug: "mag7",
+        name: "Magnificent Seven",
+        valueUsd: "550",
+        inTransitUsd: "0",
+        changePct24h: "0",
+        costBasisUsd: "500",
+        pnlUsd: "50",
+        basisIsComplete: true,
+        fetchedAt: "2026-10-09T00:00:00.000Z",
+        holdings: [],
+      },
+      {
+        // Funded by a path we never saw: no basis, so neither its value nor a
+        // zero cost may reach the figures.
+        portfolioId: "p2",
+        slug: "quantum",
+        name: "Quantum",
+        valueUsd: "150",
+        inTransitUsd: "0",
+        changePct24h: "0",
+        fetchedAt: "2026-10-09T00:00:00.000Z",
+        holdings: [],
+      },
+    ],
+  });
+  expect(m.basketCostBasis).toBe(500);
+  expect(m.basketReturnUsd).toBe(50);
+  expect(m.basketBasisIsComplete).toBe(true);
+  // And it stays out of the direct-holdings figures entirely.
+  expect(m.marketReturnUsd).toBeCloseTo(104, 6);
+});
+
+it("marks the basket basis partial when any basket paid out in kind", () => {
+  const m = modelOf({
+    ...stacked(),
+    basketUsd: "550",
+    baskets: [
+      {
+        portfolioId: "p1",
+        slug: "mag7",
+        name: "Magnificent Seven",
+        valueUsd: "550",
+        inTransitUsd: "0",
+        changePct24h: "0",
+        costBasisUsd: "500",
+        pnlUsd: "50",
+        basisIsComplete: false,
+        fetchedAt: "2026-10-09T00:00:00.000Z",
+        holdings: [],
+      },
+    ],
+  });
+  expect(m.basketBasisIsComplete).toBe(false);
+});

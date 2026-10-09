@@ -65,6 +65,23 @@ export const stockPnlSub = (m: Model): string => {
     : `${move} · ${usd(-m.tradingCostUsd)} bought below the quote`;
 };
 
+/**
+ * The line under Baskets.
+ *
+ * A total since the basket was funded, net of everything Glider charged.
+ * Deliberately not shown beside the stacked figures above as if it were the
+ * same measurement: a wallet holding's move can have its trading costs taken
+ * off onto their own line, and a basket's cannot — the fills happen inside
+ * Glider and we never see one.
+ */
+export const basketPnlSub = (m: Model): string => {
+  if (m.basketCostBasis <= 0) return "No recorded basket cost";
+  const pct = (m.basketReturnUsd / m.basketCostBasis) * 100;
+  const move = `${m.basketReturnUsd >= 0 ? "+" : "−"}${usd(Math.abs(m.basketReturnUsd))}`;
+  const partial = m.basketBasisIsComplete ? "" : ", partial";
+  return `${move} · ${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}% all in${partial}`;
+};
+
 /** Red once a fall has taken the loan somewhere the owner has to act on. */
 export const borrowedTone = (m: Model): "down" | undefined =>
   m.health === "margin_call" || m.health === "liquidation" || m.health === "over_limit" ? "down" : undefined;
@@ -192,7 +209,17 @@ export const AccountHeader = ({
         </div>
       </div>
 
-      <dl className="m-1 grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5 sm:grid-cols-3 xl:flex xl:flex-1 xl:items-center xl:justify-between xl:py-0 xl:pr-[61px] xl:pl-[85px]">
+      {/*
+       * The 85px inset is the five-figure design. A sixth figure needs 45px of
+       * it back: at 1440 the row is exactly 31px too wide for the card
+       * otherwise, and the whole page scrolls sideways. Only accounts holding
+       * a basket pay the tighter inset, and only at xl.
+       */}
+      <dl
+        className={`m-1 grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg bg-ds-panel px-5 py-5 sm:grid-cols-3 xl:flex xl:flex-1 xl:items-center xl:justify-between xl:py-0 xl:pr-[61px] ${
+          m && m.basketUsd > 0 ? "xl:pl-10" : "xl:pl-[85px]"
+        }`}
+      >
         <HeaderFigure
           label="Holdings"
           value={m ? usd(m.stocks) : "—"}
@@ -204,6 +231,16 @@ export const AccountHeader = ({
           sub={m ? stockPnlSub(m) : undefined}
           tone={m && m.costBasis > 0 ? (m.marketReturnUsd < 0 ? "down" : "up") : undefined}
         />
+        {/* Only for an account that holds one. A basket's return is a total
+            and cannot join the stacked figure beside it, so it gets its own. */}
+        {m && m.basketUsd > 0 && (
+          <HeaderFigure
+            label="Baskets"
+            value={usd(m.basketUsd)}
+            sub={basketPnlSub(m)}
+            tone={m.basketCostBasis > 0 ? (m.basketReturnUsd < 0 ? "down" : "up") : undefined}
+          />
+        )}
         <HeaderFigure
           label="Cash"
           value={m ? usd(m.cash) : "—"}

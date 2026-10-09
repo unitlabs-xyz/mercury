@@ -61,6 +61,17 @@ export type Model = {
   readonly marketReturnPct: number;
   /** And the part that was the cost of trading. Positive is a cost. */
   readonly tradingCostUsd: number;
+  /**
+   * What the baskets are up or down against the cash that went into them.
+   *
+   * A total, net of Glider's fees, and kept apart from the figures above
+   * because it cannot be split the way they can: the fills happen inside
+   * Glider and we never see one. Zero when no basket has a recorded basis.
+   */
+  readonly basketReturnUsd: number;
+  readonly basketCostBasis: number;
+  /** False when a basket paid out in kind, so its basis understates what came back. */
+  readonly basketBasisIsComplete: boolean;
   readonly rows: readonly Row[];
   readonly sectors: readonly { name: string; value: number; share: number; changePct: number | null }[];
   /** Debt plus what could still be borrowed, at the safety target. */
@@ -167,6 +178,14 @@ export const useModel = (
     const stockMove24hUsd = stocks > 0 ? Number(p.changeUsd) : null;
     const stockMove24hPct = stocks > 0 ? Number(p.changePct) : null;
 
+    // Only baskets that recorded a basis. One funded by a path we never
+    // witnessed has no cost, and counting it at zero would report the whole of
+    // its value as profit.
+    const withBasis = p.baskets.filter((b) => b.costBasisUsd !== undefined);
+    const basketCostBasis = withBasis.reduce((s, b) => s + Number(b.costBasisUsd), 0);
+    const basketReturnUsd = withBasis.reduce((s, b) => s + Number(b.pnlUsd ?? 0), 0);
+    const basketBasisIsComplete = withBasis.every((b) => b.basisIsComplete !== false);
+
     const costBasis = rows.reduce((s, r) => s + r.costBasisUsd, 0);
     const returnUsd = rows.reduce((sum, row) => sum + row.returnUsd, 0);
     const marketReturnUsd = rows.reduce((sum, row) => sum + row.marketReturnUsd, 0);
@@ -230,6 +249,9 @@ export const useModel = (
       marketReturnUsd,
       marketReturnPct: referenceBasis > 0 ? (marketReturnUsd / referenceBasis) * 100 : 0,
       tradingCostUsd,
+      basketReturnUsd,
+      basketCostBasis,
+      basketBasisIsComplete,
       rows,
       sectors,
       power,

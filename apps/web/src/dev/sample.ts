@@ -57,16 +57,53 @@ const cash = 4534.73;
 const debt = 2500;
 const stocks = holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
 
+/**
+ * Two owned baskets, with a cost basis — which is the only way the Baskets
+ * figure and the basket rows' dollar return can be looked at before a real
+ * account has one. One of them paid out in kind once, so its basis is partial.
+ */
+const sampleBaskets: Portfolio["baskets"] = [
+  {
+    portfolioId: "sample-mag7",
+    slug: "mag7",
+    name: "Magnificent Seven",
+    valueUsd: "612.40",
+    inTransitUsd: "0",
+    changePct24h: "0.84",
+    costBasisUsd: "550.00",
+    pnlUsd: "62.40",
+    returnPct: "11.35",
+    basisIsComplete: true,
+    fetchedAt: new Date().toISOString(),
+    holdings: [],
+  },
+  {
+    portfolioId: "sample-quantum",
+    slug: "quantum",
+    name: "Mercury Solana - Quantum",
+    valueUsd: "245.10",
+    inTransitUsd: "0",
+    changePct24h: "-1.20",
+    costBasisUsd: "280.00",
+    pnlUsd: "-34.90",
+    returnPct: "-12.46",
+    basisIsComplete: false,
+    fetchedAt: new Date().toISOString(),
+    holdings: [],
+  },
+];
+const basketUsd = sampleBaskets.reduce((sum, b) => sum + Number(b.valueUsd), 0);
+
 const portfolio: Portfolio = {
-  totalValueUsd: (stocks + cash - debt).toFixed(2),
+  totalValueUsd: (stocks + cash + basketUsd - debt).toFixed(2),
   cashUsd: cash.toFixed(2),
-  basketUsd: "0",
+  basketUsd: basketUsd.toFixed(2),
   debtUsd: debt.toFixed(2),
   debtIsStale: false,
   changeUsd: "39.32",
   changePct: "0.32",
   holdings,
-  baskets: [],
+  baskets: sampleBaskets,
 };
 
 const money: Money = {

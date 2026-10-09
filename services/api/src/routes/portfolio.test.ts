@@ -50,6 +50,17 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
   ...over,
 });
 
+/** One Glider basket worth `valueUsd`, holding nothing the price board must answer for. */
+const basket = (valueUsd: string) => ({
+  portfolioId: "portfolio-1",
+  slug: "nvda-tsla-50-50",
+  name: "AI & EV Leaders",
+  valueUsd,
+  inTransitUsd: "0",
+  fetchedAt: new Date().toISOString(),
+  holdings: [],
+});
+
 const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   holdings: async () => [holding()],
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) } satisfies PriceBoard,
@@ -297,6 +308,69 @@ describe("GET /v1/portfolio", () => {
     });
     const h = (await portfolioOf(await appWith(d).request("/v1/portfolio"))).holdings[0]!;
     expect(D(h.marketPnlUsd!).sub(D(h.tradingCostUsd!)).toFixed()).toBe(h.unrealisedPnlUsd);
+  });
+
+  it("gives a basket a cost basis from the cash that went into it", async () => {
+    // Without this a basket contributes value to net worth and no cost at all,
+    // so an account with $500 in baskets and $20 in one stock reported a P&L
+    // that was about the $20.
+    const d = deps({
+      baskets: async () => ({
+        totalUsd: D("542.10"),
+        fetchedAt: new Date(),
+        baskets: [basket("542.10")],
+      }),
+      basketMovements: async () => ({
+        movements: [{ portfolioId: "portfolio-1", amountUsd: D(500), inward: true }],
+        inKindExits: [],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.baskets[0]!).toMatchObject({
+      costBasisUsd: "500",
+      pnlUsd: "42.1",
+      returnPct: "8.42",
+      basisIsComplete: true,
+    });
+  });
+
+  it("takes money that came back out of a basket off its basis", async () => {
+    const d = deps({
+      baskets: async () => ({ totalUsd: D("330"), fetchedAt: new Date(), baskets: [basket("330")] }),
+      basketMovements: async () => ({
+        movements: [
+          { portfolioId: "portfolio-1", amountUsd: D(500), inward: true },
+          { portfolioId: "portfolio-1", amountUsd: D(200), inward: false },
+        ],
+        inKindExits: [],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.baskets[0]!).toMatchObject({ costBasisUsd: "300", pnlUsd: "30" });
+  });
+
+  it("says a basis is incomplete when something left the basket in kind", async () => {
+    // Tokens left, not dollars, so nothing recorded what they were worth.
+    const d = deps({
+      baskets: async () => ({ totalUsd: D("100"), fetchedAt: new Date(), baskets: [basket("100")] }),
+      basketMovements: async () => ({
+        movements: [{ portfolioId: "portfolio-1", amountUsd: D(500), inward: true }],
+        inKindExits: [{ portfolioId: "portfolio-1" }],
+      }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.baskets[0]!.basisIsComplete).toBe(false);
+  });
+
+  it("leaves a basket's basis off entirely when no money is recorded against it", async () => {
+    // Enrolled through a path we did not witness. A basis of zero would report
+    // the whole of the basket's value as profit.
+    const d = deps({
+      baskets: async () => ({ totalUsd: D("100"), fetchedAt: new Date(), baskets: [basket("100")] }),
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.baskets[0]!.costBasisUsd).toBeUndefined();
+    expect(body.baskets[0]!.pnlUsd).toBeUndefined();
   });
 
   it("says how many of the shares a cost is known for", async () => {

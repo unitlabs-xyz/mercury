@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stockPnlSub } from "./Summary";
+import { basketPnlSub, stockPnlSub } from "./Summary";
 import type { Model } from "./model";
 
 const model = (over: Partial<Model> = {}): Model =>
@@ -43,5 +43,44 @@ describe("stockPnlSub", () => {
 
   it("says there is no basis rather than claiming a return of nothing", () => {
     expect(stockPnlSub(model({ costBasis: 0 }))).toBe("+0.0% · No recorded stock cost basis");
+  });
+});
+
+/**
+ * What the Baskets figure says underneath itself.
+ *
+ * Its own figure rather than a clause on the stacked one above it, because a
+ * basket's return is a total and cannot be split: Glider's fees and rebalance
+ * spreads are inside it with nothing to separate them.
+ */
+describe("basketPnlSub", () => {
+  const withBaskets = (over: Partial<Model> = {}): Model =>
+    ({
+      basketUsd: 857.5,
+      basketCostBasis: 830,
+      basketReturnUsd: 27.5,
+      basketBasisIsComplete: true,
+      ...over,
+    }) as Model;
+
+  it("names the dollars and the percentage of what went in", () => {
+    expect(basketPnlSub(withBaskets())).toBe("+$27.50 · +3.3% all in");
+  });
+
+  it("marks a loss as a loss", () => {
+    expect(basketPnlSub(withBaskets({ basketReturnUsd: -34.9, basketCostBasis: 280 }))).toBe(
+      "−$34.90 · −12.5% all in",
+    );
+  });
+
+  it("says when a basis understates what came back out", () => {
+    // Something left in kind, so no dollar figure was recorded for it.
+    expect(basketPnlSub(withBaskets({ basketBasisIsComplete: false }))).toBe(
+      "+$27.50 · +3.3% all in, partial",
+    );
+  });
+
+  it("says there is no basis rather than claiming a return of nothing", () => {
+    expect(basketPnlSub(withBaskets({ basketCostBasis: 0 }))).toBe("No recorded basket cost");
   });
 });
