@@ -102,13 +102,25 @@ describe("CachedPriceBoard", () => {
   });
 });
 
-describe("CachedPriceBoard, the batch window", () => {
-  /** Collects the flushes rather than running them, so a test closes a batch when it chooses. */
-  const manual = () => {
-    const flushes: (() => void)[] = [];
-    return { flushes, schedule: (flush: () => void) => flushes.push(flush) };
-  };
+/**
+ * Lets every pending microtask run.
+ *
+ * A single `await` is not enough to prove a read did not answer: `pricesFor`
+ * resolves through an await and a `.then` of its own, so a test that drained
+ * one tick would see "not settled" whether it blocked or not — and pass
+ * against a board that served stale prices to a caller that asked for fresh.
+ */
+const drained = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+};
 
+/** Collects the flushes rather than running them, so a test closes a batch when it chooses. */
+const manual = () => {
+  const flushes: (() => void)[] = [];
+  return { flushes, schedule: (flush: () => void) => flushes.push(flush) };
+};
+
+describe("CachedPriceBoard, the batch window", () => {
   it("sends one request for callers asking at the same moment for different mints", async () => {
     const up = upstream();
     const clock = manual();
@@ -227,5 +239,161 @@ describe("CachedPriceBoard, a caller that wants it fresher", () => {
     // resurrect it, because nothing is being kept to serve.
     await cached.pricesFor(["A"], { maxAgeMs: 60_000 });
     expect(up.calls).toEqual([["A"], ["A"]]);
+  });
+});
+
+describe("CachedPriceBoard, serving a stale entry while it is replaced", () => {
+  /** A board holding one entry for "A", taken at time zero. */
+  const warmed = async (now: () => number) => {
+    const up = upstream();
+    const clock = manual();
+    const cached = new CachedPriceBoard(up.board, {
+      ttlMs: 1_000,
+      staleMs: 60_000,
+      now,
+      schedule: clock.schedule,
+    });
+    const first = cached.pricesFor(["A"]);
+    clock.flushes[0]!();
+    await first;
+    return { up, clock, cached };
+  };
+
+  it("hands over what it has at once, and replaces it behind the reader", async () => {
+    let now = 0;
+    const { up, clock, cached } = await warmed(() => now);
+
+    now = 2_000;
+    let settled = false;
+    const read = cached.pricesFor(["A"]).then((b) => {
+      settled = true;
+      return b;
+    });
+    await drained();
+    // Answered with no flush and no second request: the reader who happens to
+    // arrive at the moment the window turns over is exactly the one who should
+    // not pay 200ms to discover it.
+    expect(settled).toBe(true);
+    expect((await read).get("A")?.usdPricePerToken.toFixed()).toBe("10");
+    expect(up.calls).toEqual([["A"]]);
+
+    expect(clock.flushes).toHaveLength(2);
+    clock.flushes[1]!();
+    expect(up.calls).toEqual([["A"], ["A"]]);
+  });
+
+  it("waits for a fresh price when the caller names an age", async () => {
+    let now = 0;
+    const { up, clock, cached } = await warmed(() => now);
+
+    now = 2_000;
+    let settled = false;
+    const quote = cached.pricesFor(["A"], { maxAgeMs: 1_000 }).then((b) => {
+      settled = true;
+      return b;
+    });
+    await drained();
+    // Nothing yet: a price an order is checked against is not served from an
+    // entry we already know to be out of date.
+    expect(settled).toBe(false);
+
+    clock.flushes[1]!();
+    await quote;
+    expect(up.calls).toEqual([["A"], ["A"]]);
+  });
+
+  it("waits once the entry is too old to be worth showing", async () => {
+    let now = 0;
+    const { clock, cached } = await warmed(() => now);
+
+    now = 60_001;
+    let settled = false;
+    const read = cached.pricesFor(["A"]).then((b) => {
+      settled = true;
+      return b;
+    });
+    await drained();
+    expect(settled).toBe(false);
+    clock.flushes[1]!();
+    expect((await read).get("A")).toBeDefined();
+  });
+
+  it("does not queue a second refresh for a mint already being replaced", async () => {
+    let now = 0;
+    const { clock, cached } = await warmed(() => now);
+
+    now = 2_000;
+    await cached.pricesFor(["A"]);
+    await cached.pricesFor(["A"]);
+    await cached.pricesFor(["A"]);
+    // One refresh, not three. Three readers arriving on a stale entry are three
+    // readers, not three requests.
+    expect(clock.flushes).toHaveLength(2);
+  });
+
+  it("leaves the reader's answer alone when the refresh fails", async () => {
+    let fail = false;
+    let calls = 0;
+    let now = 0;
+    const clock = manual();
+    const cached = new CachedPriceBoard(
+      {
+        pricesFor: async (mints) => {
+          calls += 1;
+          if (fail) throw new Error("jupiter price/v3 returned 429");
+          return new Map(mints.map((m) => [m, price(m)]));
+        },
+      },
+      { ttlMs: 1_000, staleMs: 60_000, now: () => now, schedule: clock.schedule },
+    );
+    const first = cached.pricesFor(["A"]);
+    clock.flushes[0]!();
+    await first;
+
+    fail = true;
+    now = 2_000;
+    // Resolves with the stale price, and the failure behind it is nobody's to
+    // catch — an unhandled rejection here would take the process down.
+    expect((await cached.pricesFor(["A"])).get("A")).toBeDefined();
+    clock.flushes[1]!();
+    await Promise.resolve();
+
+    fail = false;
+    now = 2_100;
+    await cached.pricesFor(["A"]);
+    clock.flushes[2]!();
+    await Promise.resolve();
+    expect(calls).toBe(3);
+  });
+
+  it("serves the replacement to the next reader", async () => {
+    let now = 0;
+    const { clock, cached } = await warmed(() => now);
+
+    now = 2_000;
+    await cached.pricesFor(["A"]);
+    clock.flushes[1]!();
+    await Promise.resolve();
+
+    // Taken at 2_000, so at 2_500 it is inside the window again and no further
+    // refresh is due.
+    now = 2_500;
+    await cached.pricesFor(["A"]);
+    expect(clock.flushes).toHaveLength(2);
+  });
+
+  it("asks once for a reader blocking on one mint and served a stale other", async () => {
+    let now = 0;
+    const { up, clock, cached } = await warmed(() => now);
+
+    now = 2_000;
+    const read = cached.pricesFor(["A", "B"]);
+    clock.flushes[1]!();
+    const board = await read;
+    // "A" was stale and "B" was absent; both rode one request rather than
+    // opening a window each.
+    expect(up.calls).toEqual([["A"], ["B", "A"]]);
+    expect(board.get("A")).toBeDefined();
+    expect(board.get("B")).toBeDefined();
   });
 });

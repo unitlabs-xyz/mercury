@@ -182,6 +182,8 @@ describe("JupiterMarket.priceFor", () => {
     const m = new JupiterMarket({
       registry: registry([NVDAX]),
       fetch: fakeFetch({ "/price/v3": fails(502) }),
+      // A 502 is retried now, so the waiting is pinned rather than slept through.
+      sleep: async () => undefined,
     });
     await expect(m.priceFor("NVDA")).rejects.toThrow("502");
   });
@@ -226,5 +228,91 @@ describe("JupiterMarket as a MultiplierSource", () => {
       fetch: fakeFetch({ "/price/v3": priceOf(NVDAX_MINT, { usdPrice: 182 }) }),
     });
     expect([...(await m.multipliersFor([NVDAX_MINT, "NotAMint"])).keys()]).toEqual([NVDAX_MINT]);
+  });
+});
+
+describe("JupiterMarket.pricesFor, when Jupiter refuses to answer", () => {
+  /** A fetch that answers each call from a script, so a test can refuse once and then relent. */
+  const scripted = (...replies: readonly (number | Error | Record<string, unknown>)[]) => {
+    const urls: string[] = [];
+    const doFetch = ((input: Parameters<typeof fetch>[0]) => {
+      const reply = replies[urls.length] ?? replies[replies.length - 1]!;
+      urls.push(String(input));
+      if (reply instanceof Error) return Promise.reject(reply);
+      if (typeof reply === "number") return Promise.resolve(new Response(null, { status: reply }));
+      return Promise.resolve(
+        new Response(JSON.stringify(reply), { headers: { "content-type": "application/json" } }),
+      );
+    }) as typeof fetch;
+    return { doFetch, urls };
+  };
+
+  const waits: number[] = [];
+  const patient = {
+    sleep: async (ms: number) => void waits.push(ms),
+    // Pinned, so the backoff is the figure the formula gives and not a range.
+    random: () => 0,
+  };
+
+  it("comes back after a rate limit rather than failing the call", async () => {
+    waits.length = 0;
+    const net = scripted(429, priceOf(NVDAX_MINT, { usdPrice: 182, stockData: { price: 182 } }));
+    const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: net.doFetch, ...patient });
+    expect((await m.pricesFor([NVDAX_MINT])).has(NVDAX_MINT)).toBe(true);
+    expect(net.urls).toHaveLength(2);
+    // A second, not 200ms: Jupiter counts over a sliding minute and sends no
+    // Retry-After, so a quick retry lands in the same window and is refused again.
+    expect(waits).toEqual([500]);
+  });
+
+  it("waits longer each time, and gives up after its attempts", async () => {
+    waits.length = 0;
+    const net = scripted(429);
+    const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: net.doFetch, ...patient });
+    await expect(m.pricesFor([NVDAX_MINT])).rejects.toThrow("429");
+    expect(net.urls).toHaveLength(4);
+    expect(waits).toEqual([500, 1_000, 2_000]);
+  });
+
+  it("backs off in milliseconds for a server error, because a shelf is waiting", async () => {
+    waits.length = 0;
+    const net = scripted(502);
+    const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: net.doFetch, ...patient });
+    await expect(m.pricesFor([NVDAX_MINT])).rejects.toThrow("502");
+    // 0.7s in total rather than 3.5s. A rate limit is worth waiting out; an
+    // upstream that is down is not, and a read is blocked on this.
+    expect(waits).toEqual([100, 200, 400]);
+  });
+
+  it("retries a dropped connection, which is what firing four batches at once produces", async () => {
+    waits.length = 0;
+    const net = scripted(new Error("fetch failed"), priceOf(NVDAX_MINT, { usdPrice: 182 }));
+    const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: net.doFetch, ...patient });
+    expect((await m.pricesFor([NVDAX_MINT])).has(NVDAX_MINT)).toBe(true);
+    expect(net.urls).toHaveLength(2);
+  });
+
+  it("does not retry a refusal that will not change, and says what it was", async () => {
+    waits.length = 0;
+    const net = scripted(400);
+    const m = new JupiterMarket({ registry: registry([NVDAX]), fetch: net.doFetch, ...patient });
+    await expect(m.pricesFor([NVDAX_MINT])).rejects.toThrow("400");
+    expect(net.urls).toHaveLength(1);
+    expect(waits).toEqual([]);
+  });
+
+  it("fails the whole call when one batch cannot be answered, rather than reporting the rest", async () => {
+    // A mint we could not ask about must not come back looking like a mint
+    // Jupiter has no price for: the cache would write that down as "no price"
+    // and hold it, and the holding would vanish off a portfolio.
+    const net = scripted(priceOf(NVDAX_MINT, { usdPrice: 182 }), 429);
+    const m = new JupiterMarket({
+      registry: registry([NVDAX]),
+      fetch: net.doFetch,
+      attempts: 1,
+      ...patient,
+    });
+    const mints = [NVDAX_MINT, ...Array.from({ length: 60 }, (_, i) => `Mint${i}`)];
+    await expect(m.pricesFor(mints)).rejects.toThrow("429");
   });
 });

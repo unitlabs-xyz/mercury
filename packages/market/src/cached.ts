@@ -4,6 +4,20 @@ import type { PriceAsk, PriceBoard, TokenPrice } from "./ports.js";
 const DEFAULT_TTL_MS = 5_000;
 
 /**
+ * How long an entry is still worth showing while it is replaced.
+ *
+ * Past `ttlMs` a price is no longer fresh, but it is not yet wrong, and the
+ * reader who happens to arrive at that moment should not be the one who pays
+ * ~200ms to find out. Up to here they are handed what we have and the refresh
+ * happens behind them; past here there is nothing worth showing and they wait.
+ *
+ * A minute, because the alternative to a minute-old price on a shelf is a
+ * blocking request, and the figures an order turns on do not come from here —
+ * those name an age (see `PriceAsk`) and always wait.
+ */
+const DEFAULT_STALE_MS = 60_000;
+
+/**
  * How long a miss waits for company before going upstream.
  *
  * `price/v3` costs the same for one id as for fifty — measured at about 200ms
@@ -21,6 +35,8 @@ const DEFAULT_WINDOW_MS = 10;
 
 export interface CachedPriceBoardConfig {
   readonly ttlMs?: number;
+  /** Never below `ttlMs`: an entry cannot stop being fresh after it stops being worth showing. */
+  readonly staleMs?: number;
   readonly windowMs?: number;
   readonly now?: () => number;
   /** Injected so a test can close a batch by hand rather than by clock. */
@@ -53,16 +69,21 @@ interface Batch {
  * instrument read — the same few mints asked for over and over, which is how
  * the server spent Jupiter's per-minute limit on its own background work.
  *
- * Three things are shared. An answer, for `ttlMs`, including "no price": a mint
+ * Four things are shared. An answer, for `ttlMs`, including "no price": a mint
  * Jupiter cannot price is asked about again only once the entry expires. A
  * request in flight: a caller that wants a mint somebody else is already
- * fetching waits on that fetch rather than starting its own. And a request not
- * yet sent: a miss waits `windowMs` for other misses to join it, so callers who
+ * fetching waits on that fetch rather than starting its own. A request not yet
+ * sent: a miss waits `windowMs` for other misses to join it, so callers who
  * want different mints at the same moment share one request instead of paying
- * for one each. A failure is not remembered, so the next caller tries again.
+ * for one each. And an entry past its window but inside `staleMs`, which is
+ * handed over as it is while a refresh runs behind the reader — so no reader
+ * blocks on a mint anyone has asked about lately, and the request rate follows
+ * how many distinct mints are being looked at rather than how often entries
+ * expire. A failure is not remembered, so the next caller tries again.
  */
 export class CachedPriceBoard implements PriceBoard {
   private readonly ttlMs: number;
+  private readonly staleMs: number;
   private readonly windowMs: number;
   private readonly now: () => number;
   private readonly schedule: (flush: () => void, ms: number) => void;
@@ -76,6 +97,7 @@ export class CachedPriceBoard implements PriceBoard {
     config: CachedPriceBoardConfig = {},
   ) {
     this.ttlMs = config.ttlMs ?? DEFAULT_TTL_MS;
+    this.staleMs = Math.max(this.ttlMs, config.staleMs ?? DEFAULT_STALE_MS);
     this.windowMs = config.windowMs ?? DEFAULT_WINDOW_MS;
     this.now = config.now ?? Date.now;
     this.schedule = config.schedule ?? afterWindow;
@@ -85,27 +107,47 @@ export class CachedPriceBoard implements PriceBoard {
     const board = new Map<string, TokenPrice>();
     const waits = new Map<string, Promise<ReadonlyMap<string, TokenPrice>>>();
     const misses: string[] = [];
+    const behind: string[] = [];
     const at = this.now();
     // A caller may demand fresher than the window. It cannot ask for staler
     // than the board keeps, because there is nothing older here to give.
-    const window = Math.min(this.ttlMs, ask?.maxAgeMs ?? this.ttlMs);
+    const fresh = Math.min(this.ttlMs, ask?.maxAgeMs ?? this.ttlMs);
+    // Naming an age means waiting for one. A price an order is checked against
+    // is never served from something we already know to be out of date.
+    const mayServeStale = ask?.maxAgeMs === undefined;
 
     for (const mint of new Set(mints)) {
       const hit = this.entries.get(mint);
-      if (hit !== undefined && at - hit.at < window) {
+      const age = hit === undefined ? Number.POSITIVE_INFINITY : at - hit.at;
+      if (hit !== undefined && age < fresh) {
         if (hit.price !== null) board.set(mint, hit.price);
         continue;
       }
+
       // A fetch already in flight will write an entry newer than this ask
       // whatever age it demanded, so joining one always answers it.
       const pending = this.inFlight.get(mint);
+
+      if (hit !== undefined && age < this.staleMs && mayServeStale) {
+        if (hit.price !== null) board.set(mint, hit.price);
+        // Somebody is already replacing it; a second ask would buy nothing.
+        if (pending === undefined) behind.push(mint);
+        continue;
+      }
+
       if (pending !== undefined) waits.set(mint, pending);
       else misses.push(mint);
     }
 
-    if (misses.length > 0) {
-      const answer = this.enqueue(misses);
+    if (misses.length > 0 || behind.length > 0) {
+      // One batch for both, so a reader who blocks on one mint and is served a
+      // stale one for another pays a single request rather than two.
+      const answer = this.enqueue([...misses, ...behind]);
       for (const mint of misses) waits.set(mint, answer);
+      // A refresh has no caller waiting on it — the reader already has an
+      // answer — so its failure must not surface as an unhandled rejection.
+      // The entry stays as it was and the next reader asks again.
+      if (behind.length > 0) void answer.catch(() => undefined);
     }
 
     // All at once, so every pending fetch has a handler even when an earlier one fails.

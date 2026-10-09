@@ -8,7 +8,6 @@ import {
   type PriceBoard,
   type SessionSource,
   type Span,
-  type TokenPrice,
 } from "@mercury/market";
 
 export interface StockWrapperRow {
@@ -47,8 +46,6 @@ export interface InstrumentDeps {
   readonly sessions: SessionSource;
   /** Price history for the underlying share. Detail page and its chart only. */
   readonly history: HistorySource;
-  /** Injected so tests can move the clock under the price cache. */
-  readonly now?: () => number;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -85,9 +82,6 @@ export const FEATURED_LIQUIDITY_USD = D(70_000);
 /** Search answers a page, not the whole list. */
 const SEARCH_LIMIT = 50;
 
-/** Prices move every few seconds; a request should not cost a round trip per wrapper. */
-const PRICE_TTL_MS = 15_000;
-
 /**
  * About the largest order the deepest pool takes inside the impact cap. Impact
  * runs close to amount over liquidity at these sizes (the same rule of thumb that
@@ -108,31 +102,20 @@ const bestLiquidity = (row: StockRow) =>
 
 export function instrumentRoutes(deps: InstrumentDeps): Hono {
   const app = new Hono();
-  const now = deps.now ?? Date.now;
-  const cache = new Map<string, { at: number; price: TokenPrice | null }>();
 
-  /** Live prices for these mints, from cache where fresh. A mint Jupiter cannot price caches as null. */
-  const pricesFor = async (mints: readonly string[]): Promise<ReadonlyMap<string, TokenPrice>> => {
-    const t = now();
-    const stale = mints.filter((m) => {
-      const hit = cache.get(m);
-      return hit === undefined || t - hit.at > PRICE_TTL_MS;
-    });
-    if (stale.length > 0) {
-      const fresh = await deps.prices.pricesFor(stale);
-      for (const m of stale) cache.set(m, { at: t, price: fresh.get(m) ?? null });
-    }
-    const board = new Map<string, TokenPrice>();
-    for (const m of mints) {
-      const p = cache.get(m)?.price;
-      if (p) board.set(m, p);
-    }
-    return board;
-  };
-
-  /** Price the given rows. No price, no row: showing an instrument at zero would be a price. */
+  /**
+   * Price the given rows. No price, no row: showing an instrument at zero would
+   * be a price.
+   *
+   * This used to keep fifteen seconds of prices of its own, stamped with a
+   * clock read before its own fetch — so an entry was born as old as the
+   * request that filled it. `CachedPriceBoard` holds them for everybody now,
+   * serves an entry past its window while replacing it behind the reader, and
+   * collects the misses of callers who arrive together into one request. A
+   * second memory in front of that would only have made prices older.
+   */
   const price = async (rows: readonly StockRow[]): Promise<readonly Priced[]> => {
-    const board = await pricesFor(
+    const board = await deps.prices.pricesFor(
       rows.flatMap((r) => r.wrappers.filter((w) => w.hasMarket).map((w) => w.mint)),
     );
     const priced: Priced[] = [];

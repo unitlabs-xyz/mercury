@@ -40,11 +40,38 @@ interface JupPrice {
   };
 }
 
+/** A refusal to answer now, rather than an answer. Everything else is final. */
+const RETRYABLE = (status: number) => status === 429 || status >= 500;
+
+/**
+ * How long to wait before retry `n` (1-based).
+ *
+ * A rate limit gets seconds and everything else milliseconds, which is the
+ * same split `batchedRpc` makes and for the same reason on each side. Jupiter
+ * counts requests over a 60-second sliding window and sends no `Retry-After`,
+ * so a retry 200ms after a 429 lands inside the same window and is refused
+ * again. A 502 or a dropped connection is a different failure, and the short
+ * wait suits it — these calls are on the request path, where four attempts a
+ * second apart would hang a shelf for seconds before admitting the error.
+ *
+ * The jitter is so that batches refused together — which, fired four at a
+ * time, they are — do not all come back at the same instant.
+ */
+const backoffMs = (n: number, rateLimited: boolean, random: () => number): number =>
+  (rateLimited ? 1_000 : 200) * 2 ** (n - 1) * (0.5 + random() / 2);
+
+const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export interface JupiterMarketConfig {
   readonly registry: TokenRegistry;
   readonly baseUrl?: string;
   readonly fetch?: typeof fetch;
   readonly now?: () => number;
+  /** Attempts for a batch that was refused. Four: one try and three retries. */
+  readonly attempts?: number;
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** For the jitter; tests pin it. */
+  readonly random?: () => number;
 }
 
 /** Jupiter's numbers arrive as JSON floats. They become Decimal here and stay that way. */
@@ -60,11 +87,51 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
   private readonly base: string;
   private readonly doFetch: typeof fetch;
   private readonly now: () => number;
+  private readonly attempts: number;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly random: () => number;
 
   constructor(private readonly config: JupiterMarketConfig) {
     this.base = config.baseUrl ?? BASE;
     this.doFetch = config.fetch ?? defaultFetch();
     this.now = config.now ?? Date.now;
+    this.attempts = config.attempts ?? 4;
+    this.sleep = config.sleep ?? pause;
+    this.random = config.random ?? Math.random;
+  }
+
+  /**
+   * One batch of ids, retried while Jupiter is only refusing to answer yet.
+   *
+   * A batch that fails in the end takes the whole call with it, rather than
+   * the call returning what the other batches found. That is deliberate: a
+   * caller cannot tell a mint Jupiter has no price for from one we never
+   * managed to ask about, and `CachedPriceBoard` would write the second down
+   * as "no price" and hold it — turning one refused request into a holding
+   * missing from a portfolio. Throwing is remembered by nobody and retried by
+   * everybody, which is the right way round.
+   */
+  private async page(ids: readonly string[]): Promise<Record<string, JupPrice | null>> {
+    let last: Error | null = null;
+    let rateLimited = false;
+    for (let attempt = 0; attempt < this.attempts; attempt++) {
+      if (attempt > 0) await this.sleep(backoffMs(attempt, rateLimited, this.random));
+      rateLimited = false;
+      let res: Response;
+      try {
+        res = await this.doFetch(`${this.base}/price/v3?ids=${ids.join(",")}`);
+      } catch (error: unknown) {
+        // A dropped connection is what firing four batches at once produces,
+        // and it is as retryable as a 429.
+        last = error instanceof Error ? error : new Error("jupiter price/v3 failed");
+        continue;
+      }
+      if (res.ok) return (await res.json()) as Record<string, JupPrice | null>;
+      last = new Error(`jupiter price/v3 returned ${res.status}`);
+      rateLimited = res.status === 429;
+      if (!RETRYABLE(res.status)) break;
+    }
+    throw last ?? new Error("jupiter price/v3 failed");
   }
 
   async pricesFor(mints: readonly string[]): Promise<ReadonlyMap<string, TokenPrice>> {
@@ -77,11 +144,7 @@ export class JupiterMarket implements ReferenceSource, PriceBoard, MultiplierSou
     const pages: Record<string, JupPrice | null>[] = [];
     let next = 0;
     const worker = async (): Promise<void> => {
-      for (let i = next++; i < batches.length; i = next++) {
-        const res = await this.doFetch(`${this.base}/price/v3?ids=${batches[i]!.join(",")}`);
-        if (!res.ok) throw new Error(`jupiter price/v3 returned ${res.status}`);
-        pages[i] = (await res.json()) as Record<string, JupPrice | null>;
-      }
+      for (let i = next++; i < batches.length; i = next++) pages[i] = await this.page(batches[i]!);
     };
     await Promise.all(Array.from({ length: Math.min(PRICE_CONCURRENCY, batches.length) }, worker));
     const body: Record<string, JupPrice | null> = Object.assign({}, ...pages);
