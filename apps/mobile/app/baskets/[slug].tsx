@@ -3,7 +3,7 @@ import { Linking, ScrollView, StyleSheet, Text as RNText, View } from "react-nat
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ManagedBasketPortfolioSnapshot } from "@mercury/types";
+import type { ManagedBasketOperation, ManagedBasketPortfolioSnapshot } from "@mercury/types";
 import {
   BASKET_RANGES,
   USDC_ASSET_ID,
@@ -16,6 +16,7 @@ import {
   modeledRange,
   modeledRanges,
   operationActive,
+  rebalanceOutcome,
   returnLabel,
   usd,
   weightLabel,
@@ -55,7 +56,9 @@ const balance = (value: string) => {
   return Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 6 }) : "—";
 };
 
-const stateLabel = (state: string | undefined) => (state ? state.replaceAll("_", " ") : "Checking…");
+/* Glider's state in words, naming the one failure that may not be one. */
+const stateLabel = (state: ManagedBasketOperation["state"] | undefined, error: string | null = null) =>
+  state ? rebalanceOutcome(state, error).label : "Checking…";
 
 /**
  * One Glider strategy, as the web's page: what it is and how it has modeled,
@@ -295,11 +298,13 @@ export default function Basket() {
               {tracked?.kind === "rebalance" && (
                 <View style={s.opLine}>
                   <RNText style={s.small}>Manual rebalance</RNText>
-                  <RNText style={s.opState}>{stateLabel(opState)}</RNText>
+                  <RNText style={s.opState}>{stateLabel(opState, operation.data?.error ?? null)}</RNText>
                 </View>
               )}
-              {tracked?.kind === "rebalance" && operation.data?.error && (
-                <RNText style={[s.small, { color: color.chipWarn }]}>{operation.data.error}</RNText>
+              {tracked?.kind === "rebalance" && opState !== undefined && operation.data?.error && (
+                <RNText style={[s.small, { color: color.chipWarn }]}>
+                  {rebalanceOutcome(opState, operation.data.error).detail}
+                </RNText>
               )}
             </View>
             <Button
@@ -515,7 +520,7 @@ const Position = ({
   allAssets: boolean;
   toggleAll: () => void;
   address: string | undefined;
-  exitState: string | undefined;
+  exitState: ManagedBasketOperation["state"] | undefined;
   exitMode: string | undefined;
   exitError: string | null;
   busy: boolean;

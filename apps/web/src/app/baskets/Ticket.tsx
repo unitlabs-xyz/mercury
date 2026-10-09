@@ -1,3 +1,4 @@
+import { exitAssets, fullSelection, rawTokenAmount, tokenAmount } from "@mercury/view";
 import type {
   BasketExitAsset,
   BasketExitMode,
@@ -646,32 +647,6 @@ const Identity = ({
     </span>
   </div>
 );
-
-const exitAssets = (account: ManagedBasketPortfolioSnapshot) =>
-  account.assets.filter(
-    (asset) =>
-      asset.assetId.startsWith("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:") &&
-      /^[1-9]\d*$/.test(asset.balanceRaw),
-  );
-
-const tokenAmount = (raw: string, decimals: number): string => {
-  if (decimals === 0) return raw;
-  const digits = raw.padStart(decimals + 1, "0");
-  const fraction = digits.slice(-decimals).replace(/0+$/, "");
-  return `${digits.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
-};
-
-const rawTokenAmount = (amount: string, decimals: number): bigint | null => {
-  if (amount.length > 80 || !/^\d+(?:\.\d+)?$/.test(amount) || decimals < 0 || decimals > 18) return null;
-  const [whole = "", fraction = ""] = amount.split(".");
-  if (fraction.length > decimals) return null;
-  return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(fraction.padEnd(decimals, "0") || "0");
-};
-
-const fullSelection = (account: ManagedBasketPortfolioSnapshot) =>
-  Object.fromEntries(
-    exitAssets(account).map((asset) => [asset.assetId, tokenAmount(asset.balanceRaw, asset.decimals)]),
-  ) as Record<string, string>;
 
 /** The review always displays Glider's signed amounts, not the editable draft. */
 export const ExitSheet = ({

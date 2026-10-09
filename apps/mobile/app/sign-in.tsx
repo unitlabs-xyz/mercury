@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Button, CodeInput, Field, Screen, Text } from "../src/ui";
 import { useEmailLogin } from "../src/auth/useEmailLogin";
-import { space } from "../src/theme";
+import { color, radius, space } from "../src/theme";
 
 const LOOKS_LIKE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -37,22 +37,26 @@ export default function SignIn() {
         subtitle="We'll send a six-digit code. There's no password to choose and none to forget."
         footer={<Button label="Send code" busy={busy} disabled={!canSend} onPress={sendTo} />}
       >
-        <Field
-          label="EMAIL"
-          value={email}
-          onChangeText={setEmail}
-          problem={rejected}
-          placeholder="you@email.com"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          autoComplete="email"
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoFocus
-          editable={!busy}
-          returnKeyType="go"
-          onSubmitEditing={() => canSend && sendTo()}
-        />
+        {/* On a white card, as the web sets it in its dialog and Send sets its fields. */}
+        <View style={s.card}>
+          <Field
+            label="Email"
+            icon="mail"
+            value={email}
+            onChangeText={setEmail}
+            problem={rejected}
+            placeholder="you@email.com"
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+            editable={!busy}
+            returnKeyType="go"
+            onSubmitEditing={() => canSend && sendTo()}
+          />
+        </View>
       </Screen>
     );
   }
@@ -100,6 +104,7 @@ export default function SignIn() {
 }
 
 const s = StyleSheet.create({
+  card: { borderRadius: radius.lg, backgroundColor: color.surface, padding: space.md },
   code: { gap: space.sm },
   problem: { paddingHorizontal: space.xs },
   again: { textAlign: "center", paddingVertical: space.xs },

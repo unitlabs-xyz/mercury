@@ -29,6 +29,7 @@ import { Haptics } from "../../src/haptics";
 import { toggleWatch, useWatchlist } from "../../src/watchlist";
 import { BorrowCard } from "../../src/stock/BorrowCard";
 import { ExposureCard } from "../../src/stock/ExposureCard";
+import { InBaskets } from "../../src/stock/InBaskets";
 import { color, font, radius, space } from "../../src/theme";
 
 /** The web's own words for each range, so the line under the figure reads. */
@@ -57,6 +58,11 @@ export default function Stock() {
   const i = page.data?.instrument;
   const held = (portfolio.data?.holdings ?? []).find((h) => h.ticker === t);
   const exposure = useExposure(t, held !== undefined);
+  /* What you hold of this stock inside your Glider baskets, as the server values it. */
+  const basketValue = (portfolio.data?.baskets ?? []).reduce(
+    (total, b) => total + b.holdings.reduce((sum, a) => sum + (a.ticker === t ? Number(a.valueUsd) : 0), 0),
+    0,
+  );
   const saved = useWatchlist().includes(t);
 
   const points = history.data?.points ?? [];
@@ -118,6 +124,11 @@ export default function Stock() {
                   {held !== undefined && (
                     <View style={s.ownedChip}>
                       <RNText style={s.ownedLabel}>Owned</RNText>
+                    </View>
+                  )}
+                  {basketValue > 0 && (
+                    <View style={[s.ownedChip, s.basketChip]}>
+                      <RNText style={[s.ownedLabel, s.basketLabel]}>In basket</RNText>
                     </View>
                   )}
                 </View>
@@ -197,6 +208,9 @@ export default function Stock() {
 
           {/* ── What it is worth as collateral ──────────────────────────── */}
           {i !== undefined && <BorrowCard ticker={t} name={i.name} />}
+
+          {/* ── The baskets that hold it, and what you hold through them ──── */}
+          <InBaskets ticker={t} basketValue={basketValue} />
 
           {/* ── Where an order goes ─────────────────────────────────────── */}
           {i !== undefined && i.wrappers.length > 0 && (
@@ -310,6 +324,8 @@ const s = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: color.actBuyTint,
   },
+  basketChip: { backgroundColor: color.tile },
+  basketLabel: { color: color.muted },
   ownedLabel: { fontFamily: font.medium, fontSize: 10.5, letterSpacing: 0.1, color: color.actBuy },
 
   priceBlock: { marginTop: 18, gap: 10 },

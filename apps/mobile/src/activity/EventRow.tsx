@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Linking, StyleSheet, Text as RNText, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
-import type { Event, EventKind } from "@mercury/view";
-import { Icon, PressableScale, Skeleton, StatusChip, StockLogo, type IconName } from "../ui";
+import type { Event } from "@mercury/view";
+import { Icon, PressableScale, Skeleton, StatusChip, StockLogo } from "../ui";
 import { color, font, radius, space } from "../theme";
+import { KindGlyph, SolanaNotch } from "./marks";
 
 /**
  * USDC's mark, as the web's `activity-mark.tsx` picks it: the Solana token
@@ -12,33 +13,6 @@ import { color, font, radius, space } from "../theme";
  */
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const USDC_LOGO = `https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/${USDC_MINT}/logo.png`;
-
-/* The web's `--color-ds-act-*` pairs: buying in teal, income in green, money
-   going out in warm grey, and anything waiting in amber. */
-const BUY = { bg: "#E5F4F5", fg: "#007682" };
-const INCOME = { bg: "#E4F3EC", fg: "#007242" };
-const OUT = { bg: "#F4F2EC", fg: "#393830" };
-const WAIT = { bg: color.warnTint, fg: color.warn };
-
-const LOOK: Record<EventKind, { bg: string; fg: string; icon: IconName }> = {
-  buy: { ...BUY, icon: "trend" },
-  basket: { ...BUY, icon: "grid" },
-  sell: { ...OUT, icon: "arrowDown" },
-  send: { ...OUT, icon: "arrowUp" },
-  dividend: { ...INCOME, icon: "refresh" },
-  receive: { ...INCOME, icon: "arrowDown" },
-  interest: { ...INCOME, icon: "plus" },
-  queued: { ...WAIT, icon: "clock" },
-  // Money, so the same arrows cash uses. Borrowing is not a gain, so it takes
-  // the neutral ground rather than the green a dividend gets.
-  borrow: { ...OUT, icon: "arrowDown" },
-  repay: { ...OUT, icon: "arrowUp" },
-  // Collateral, not money: a lock going on and coming off.
-  pledge: { ...OUT, icon: "lock" },
-  unpledge: { ...INCOME, icon: "lock" },
-  // The only row in the feed that is asking for something to be done.
-  loan_alert: { ...WAIT, icon: "alert" },
-};
 
 /** The logo's diameter wherever one leads a row. */
 export const MARK = 36;
@@ -52,25 +26,23 @@ export const whenLabel = (isoDate: string): string => {
   return new Date(`${isoDate}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 };
 
-/** What led the row: the asset's own art with the kind on it, or the kind alone. */
+/**
+ * What led the row, as the web's `ActivityMark` draws it: the asset's own art
+ * for a trade, untouched; USDC's coin with Solana notched into it; and the
+ * kind's own glyph for anything with no asset behind it.
+ */
 export const EventMark = ({ event }: { event: Event }) => {
-  const look = LOOK[event.kind];
-  const uri = event.logo ?? (event.mint === USDC_MINT ? USDC_LOGO : undefined);
-  if (uri === undefined) {
+  if (event.mint === USDC_MINT) {
     return (
-      <View style={[s.art, { backgroundColor: look.bg }]}>
-        <Icon name={look.icon} size={16} color={look.fg} strokeWidth={1.8} />
+      <View>
+        <StockLogo ticker="$" uri={event.logo ?? USDC_LOGO} size={MARK} />
+        <SolanaNotch />
       </View>
     );
   }
-  return (
-    <View>
-      <StockLogo ticker={event.title.slice(0, 1)} uri={uri} size={MARK} />
-      <View style={[s.badge, { backgroundColor: look.bg }]}>
-        <Icon name={look.icon} size={9} color={look.fg} strokeWidth={2.4} />
-      </View>
-    </View>
-  );
+  if (event.logo !== undefined)
+    return <StockLogo ticker={event.title.slice(0, 1)} uri={event.logo} size={MARK} />;
+  return <KindGlyph kind={event.kind} size={MARK} />;
 };
 
 /** "+$12.42", "−$200.00": one true sign. Green for anything not leaving, as the web colours it. */
@@ -211,20 +183,6 @@ const s = StyleSheet.create({
   wrap: { borderRadius: radius.sm, overflow: "hidden" },
   wrapOpen: { backgroundColor: color.surface },
   row: { height: 60, flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: 16 },
-  art: { width: MARK, height: MARK, borderRadius: MARK / 2, alignItems: "center", justifyContent: "center" },
-  /* The kind, on the logo, cut out of the art by a ring of white. */
-  badge: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 17,
-    height: 17,
-    borderRadius: 8.5,
-    borderWidth: 2,
-    borderColor: color.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   mid: { flex: 1, minWidth: 0 },
   titleLine: { flexDirection: "row", alignItems: "center", gap: 5 },
   title: {

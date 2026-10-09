@@ -1,8 +1,27 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, Text as RNText, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Switch,
+  Text as RNText,
+  TextInput,
+  View,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { BasketExitMode } from "@mercury/types";
-import { FUNDING_AMOUNT, displayBasketName, fundingDestination, usd } from "@mercury/view";
+import type { BasketExitMode, ManagedBasketPortfolioSnapshot } from "@mercury/types";
+import {
+  FUNDING_AMOUNT,
+  displayBasketName,
+  exitAssets,
+  exitSelection,
+  exitValue,
+  fullSelection,
+  fundingDestination,
+  rawTokenAmount,
+  tokenAmount,
+  usd,
+} from "@mercury/view";
 import { useMoney } from "../src/api";
 import {
   trackOperation,
@@ -16,7 +35,17 @@ import {
 } from "../src/baskets/api";
 import { Fact } from "../src/baskets/ui";
 import { Haptics } from "../src/haptics";
-import { AmountWell, Button, Chip, Icon, Note, PanelHeader, Segmented, useBottomGap } from "../src/ui";
+import {
+  AmountWell,
+  Button,
+  Chip,
+  Icon,
+  Note,
+  PanelHeader,
+  PressableScale,
+  Segmented,
+  useBottomGap,
+} from "../src/ui";
 import { color, font, radius, space } from "../src/theme";
 
 type Kind = "enroll" | "fund" | "rebalance" | "exit";
@@ -73,15 +102,10 @@ export default function BasketSheet() {
             portfolioId={portfolio.data?.portfolioId}
             onClose={close}
           />
+        ) : portfolio.data ? (
+          <Exit slug={slug} name={name} account={portfolio.data} onClose={close} />
         ) : (
-          <Exit
-            slug={slug}
-            name={name}
-            value={portfolio.data?.totalValueUsd}
-            assetCount={portfolio.data?.assets.filter((a) => Number(a.balance) > 0).length ?? 0}
-            portfolioId={portfolio.data?.portfolioId}
-            onClose={close}
-          />
+          <Waiting onClose={close} title={`Withdraw from ${name}`} />
         )}
       </View>
     </KeyboardAvoidingView>
@@ -336,7 +360,7 @@ const Rebalance = ({
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     action.mutate(undefined, {
       onSuccess: (triggered) => {
-        trackOperation(portfolioId, { operationId: triggered.operationId, kind: "rebalance" });
+        trackOperation(portfolioId, { slug, name, operationId: triggered.operationId, kind: "rebalance" });
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         onClose();
       },
@@ -383,30 +407,47 @@ const MODES: readonly { key: BasketExitMode; label: string }[] = [
 const Exit = ({
   slug,
   name,
-  value,
-  assetCount,
-  portfolioId,
+  account,
   onClose,
 }: {
   slug: string;
   name: string;
-  value: string | undefined;
-  assetCount: number;
-  portfolioId: string | undefined;
+  account: ManagedBasketPortfolioSnapshot;
   onClose: () => void;
 }) => {
   const action = useBasketExitAction(slug);
   const [mode, setMode] = useState<BasketExitMode>("in_kind");
+  /* Custom: set how much of each holding to take. Off, everything goes. */
+  const [custom, setCustom] = useState(false);
+  const [selection, setSelection] = useState(() => fullSelection(account));
   const prepared = action.prepare.data;
   const error = action.submit.error ?? action.prepare.error;
+  const available = exitAssets(account);
+  const byAsset = new Map(account.assets.map((a) => [a.assetId, a]));
+  const checked = custom ? exitSelection(available, selection) : null;
 
-  const prepare = () => action.prepare.mutate(mode);
+  /* What is actually going: the signed list once there is one, else the draft. */
+  const going: readonly { assetId: string; amountRaw: string }[] = prepared
+    ? prepared.message.assets
+    : checked
+      ? checked.assets
+      : available.map((a) => ({ assetId: a.assetId, amountRaw: a.balanceRaw }));
+  const worth = going.reduce((sum, g) => sum + exitValue(byAsset.get(g.assetId), g.amountRaw), 0);
+
+  const prepare = () =>
+    action.prepare.mutate({ mode, ...(checked && checked.error === null ? { assets: checked.assets } : {}) });
   const submit = () => {
-    if (prepared === undefined || portfolioId === undefined) return;
+    if (prepared === undefined) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     action.submit.mutate(prepared, {
       onSuccess: (done) => {
-        trackOperation(portfolioId, { operationId: done.operationId, kind: "exit", mode: done.mode });
+        trackOperation(account.portfolioId, {
+          slug,
+          name,
+          operationId: done.operationId,
+          kind: "exit",
+          mode: done.mode,
+        });
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         onClose();
       },
@@ -420,33 +461,106 @@ const Exit = ({
         title={prepared ? "Review withdrawal" : `Withdraw from ${name}`}
         sub={
           prepared
-            ? "Check exactly what moves before your wallet signs."
-            : "Choose how your portfolio comes back to your wallet."
+            ? "Signed exactly as listed. Check it before your wallet signs."
+            : `${available.length} ${available.length === 1 ? "asset" : "assets"} · ${usd(account.totalValueUsd)}`
         }
         onClose={onClose}
       />
       <View style={s.body}>
         {prepared === undefined && <Segmented options={MODES} value={mode} onChange={setMode} fill />}
-        <View style={s.panel}>
-          <Fact k="Current value" v={value === undefined ? "—" : usd(value)} />
-          <Fact k="Assets in account" v={String(assetCount)} />
-          <Fact k="To your wallet" v={short(tail(prepared?.recipientAccountId))} />
-          {prepared !== undefined && (
-            <Fact
-              k={prepared.mode === "in_kind" ? "Assets to receive" : "Assets to convert"}
-              v={String(prepared.message.assets.length)}
+
+        {prepared === undefined && (
+          <PressableScale style={s.toggle} activeScale={1} onPress={() => setCustom((v) => !v)}>
+            <View style={s.fill}>
+              <RNText style={s.toggleTitle}>Choose amounts</RNText>
+              <RNText style={s.note}>
+                {custom
+                  ? "Set how much of each to take. Leave one empty to keep it."
+                  : mode === "in_kind"
+                    ? "Every asset goes at its full balance."
+                    : "Glider converts everything it can to USDC."}
+              </RNText>
+            </View>
+            <Switch
+              value={custom}
+              onValueChange={setCustom}
+              trackColor={{ true: color.ink, false: color.divider }}
             />
+          </PressableScale>
+        )}
+
+        <View style={s.assets}>
+          {(prepared ? prepared.message.assets.map((g) => g.assetId) : available.map((a) => a.assetId))
+            .slice(0, custom && !prepared ? 10 : 6)
+            .map((assetId) => {
+              const holding = byAsset.get(assetId);
+              const signedAmount = prepared?.message.assets.find((g) => g.assetId === assetId)?.amountRaw;
+              const full = holding ? tokenAmount(holding.balanceRaw, holding.decimals) : "";
+              const draft = selection[assetId] ?? "";
+              const taken = !custom || (rawTokenAmount(draft.trim(), holding?.decimals ?? 0) ?? 0n) > 0n;
+              return (
+                <View key={assetId} style={[s.asset, !taken && s.dim]}>
+                  <View style={s.fill}>
+                    <RNText style={s.assetName}>{holding?.symbol ?? "Unlisted token"}</RNText>
+                    <RNText style={s.note}>
+                      {custom && !prepared ? `Available ${full}` : usd(holding?.valueUsd ?? 0)}
+                    </RNText>
+                  </View>
+                  {custom && !prepared && holding ? (
+                    <View style={s.amountRow}>
+                      <TextInput
+                        value={draft}
+                        onChangeText={(v) =>
+                          setSelection((cur) => ({ ...cur, [assetId]: v.replace(/[^0-9.]/g, "") }))
+                        }
+                        keyboardType="decimal-pad"
+                        placeholder="0"
+                        placeholderTextColor={color.faint}
+                        style={s.amountInput}
+                      />
+                      <PressableScale
+                        activeScale={0.95}
+                        onPress={() => setSelection((cur) => ({ ...cur, [assetId]: taken ? "" : full }))}
+                      >
+                        <RNText style={s.link}>{taken ? "None" : "Max"}</RNText>
+                      </PressableScale>
+                    </View>
+                  ) : (
+                    <RNText style={s.assetName}>
+                      {holding
+                        ? tokenAmount(signedAmount ?? holding.balanceRaw, holding.decimals)
+                        : `${signedAmount ?? ""} raw`}
+                    </RNText>
+                  )}
+                </View>
+              );
+            })}
+          {!custom && !prepared && available.length > 6 && (
+            <RNText style={s.note}>and {available.length - 6} more</RNText>
           )}
+        </View>
+
+        <View style={s.panel}>
+          <Fact
+            k={mode === "in_kind" ? "You receive" : "You receive, after the swap"}
+            v={
+              mode === "in_kind"
+                ? `${going.length} ${going.length === 1 ? "token" : "tokens"} · ${usd(worth)}`
+                : `about ${usd(worth)} USDC`
+            }
+          />
+          <Fact k="To your wallet" v={short(tail(prepared?.recipientAccountId ?? account.ownerAccountId))} />
         </View>
         <RNText style={s.note}>
           {mode === "in_kind"
             ? "The tokens move to your wallet without a sale. Their value can change while it settles."
             : "Glider swaps what it can into USDC and sends it to your wallet. Prices can move, and small or illiquid balances may stay behind."}
         </RNText>
-        {error !== null && action.submit.error !== null && (
+        {checked?.error && <Note tone="warn">{checked.error}</Note>}
+        {action.submit.error !== null && (
           <Note tone="warn">
-            If you're unsure whether it went through, retry this same withdrawal rather than starting a new
-            one.
+            If you&apos;re unsure whether it went through, retry this same withdrawal rather than starting a
+            new one.
           </Note>
         )}
         <Failure error={error} />
@@ -475,7 +589,7 @@ const Exit = ({
                   : "Review withdrawal"
             }
             busy={action.prepare.isPending || action.submit.isPending}
-            disabled={!action.walletReady || portfolioId === undefined}
+            disabled={!action.walletReady || (checked !== null && checked.error !== null)}
             onPress={prepared ? submit : prepare}
           />
         </View>
@@ -517,5 +631,39 @@ const s = StyleSheet.create({
     color: color.muted,
     textAlign: "center",
   },
+  toggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    borderRadius: radius.md,
+    backgroundColor: color.tile,
+    padding: space.md,
+  },
+  toggleTitle: { fontFamily: font.medium, fontSize: 14, color: color.ink },
+  assets: { borderRadius: radius.md, backgroundColor: color.tile, padding: space.xs, gap: 2 },
+  asset: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    borderRadius: radius.sm,
+    backgroundColor: color.surface,
+    paddingHorizontal: space.md,
+    paddingVertical: 10,
+  },
+  dim: { opacity: 0.55 },
+  assetName: { fontFamily: font.medium, fontSize: 14, color: color.ink },
+  amountRow: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  amountInput: {
+    width: 110,
+    height: 34,
+    borderRadius: radius.sm,
+    backgroundColor: color.tile,
+    paddingHorizontal: 10,
+    fontFamily: font.medium,
+    fontSize: 14,
+    color: color.ink,
+    textAlign: "right",
+  },
+  link: { fontFamily: font.medium, fontSize: 13, color: color.link },
   doneActions: { alignSelf: "stretch", gap: space.sm, marginTop: space.lg },
 });

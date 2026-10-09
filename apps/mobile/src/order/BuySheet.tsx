@@ -1,18 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text as RNText,
-  TextInput,
-  View,
-} from "react-native";
+import { useEffect, useState } from "react";
+import { KeyboardAvoidingView, Platform, StyleSheet, Text as RNText, View } from "react-native";
+import Animated, { FadeInDown, ZoomIn } from "react-native-reanimated";
+import type { Issuer, PricedCandidate } from "@mercury/types";
 import { Haptics } from "../haptics";
 import { pct, refuseCopy, shares as fmtShares, usd } from "@mercury/view";
 import { useRouter } from "expo-router";
 import { PriceMoved, useMoney, useOrderAction, useQuote, type Quote } from "../api";
-import { Button, Chip, Icon, IconButton, Note, Skeleton, StockLogo, Text, useBottomGap } from "../ui";
+import {
+  AmountWell,
+  Button,
+  Chip,
+  Icon,
+  IconButton,
+  Note,
+  PressableScale,
+  Skeleton,
+  StatusChip,
+  StockLogo,
+  Text,
+  useBottomGap,
+} from "../ui";
 import { color, font, radius, space } from "../theme";
 
 /** The four a first-time buyer actually reaches for. */
@@ -21,6 +28,9 @@ const PRESETS = [50, 100, 250, 500];
 /* Fractions of the position when selling: a $50 chip does nothing on a $30
    holding. The web's ticket has the same four. */
 const SELL_PRESETS = [0.25, 0.5, 0.75, 1] as const;
+
+/** One part of the confirmation rising into place, a beat after the last. */
+const rise = (step: number) => FadeInDown.delay(120 + step * 60).duration(420);
 
 const num = (v: string | null | undefined): number | null =>
   v === null || v === undefined ? null : Number(v);
@@ -66,7 +76,6 @@ export const BuySheet = ({
      behind by a dollar figure that rounded. The amount is then only a label. */
   const [max, setMax] = useState(false);
   const [moved, setMoved] = useState<PriceMoved | null>(null);
-  const input = useRef<TextInput>(null);
 
   const amount = Number(text.replace(/[^0-9.]/g, "")) || 0;
   const order = useOrderAction();
@@ -89,6 +98,12 @@ export const BuySheet = ({
 
   const placed = order.data;
   const decision = moved?.decision ?? quote.data?.decision;
+  /* Which token to trade. Null is the best price; a pick only holds while that token is still on offer. */
+  const [picked, setPicked] = useState<string | null>(null);
+  const options = decision?.kind === "execute" ? optionsOf(decision) : [];
+  const unavailable = decision?.kind === "execute" ? unavailableOf(decision) : [];
+  const pick =
+    decision?.kind === "execute" ? (options.find((c) => c.mint === picked) ?? decision.best) : null;
   /* A figure still being typed is not a figure to quote against. */
   const typing = debounced !== amount;
   /* A sale is not spending, so the cash balance has nothing to say about it;
@@ -108,7 +123,7 @@ export const BuySheet = ({
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setMoved(null);
     order.mutate(
-      { ticker, side, usd: amount, ...(max ? { max: true } : {}) },
+      { ticker, side, usd: amount, ...(max ? { max: true } : {}), ...(pick ? { issuer: pick.issuer } : {}) },
       {
         onSuccess: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
         onError: (e) => {
@@ -153,25 +168,27 @@ export const BuySheet = ({
               <IconButton icon="close" label="Close" size={36} onPress={onClose} />
             </View>
 
-            {/* The figure is the control. Tapping anywhere on it opens the pad,
-                  which is why the real field is hidden behind it rather than
-                  drawn as a box somebody has to find. */}
-            <Pressable style={s.amountRow} onPress={() => input.current?.focus()}>
-              <RNText style={s.currency}>$</RNText>
-              <RNText style={s.amount}>{text === "" ? "0" : text}</RNText>
-              <TextInput
-                ref={input}
-                style={s.hidden}
+            {/* The web order sheet's amount: a white well on the grey panel, the presets under it. */}
+            <View style={s.well}>
+              <AmountWell
+                label="Amount"
                 value={text}
-                onChangeText={(raw) => {
+                onChange={(next) => {
                   setMax(false);
-                  setText(raw.replace(/[^0-9.]/g, "").slice(0, 9));
+                  setText(next.slice(0, 9));
                 }}
-                keyboardType="decimal-pad"
-                autoFocus
-                caretHidden
+                unit="USD"
+                {...(selling ? {} : { max: available })}
+                note={
+                  selling
+                    ? sellableUsd === null
+                      ? undefined
+                      : `${usd(sellableUsd)} you can sell`
+                    : `${usd(available)} cash available`
+                }
+                invalid={overBalance}
               />
-            </Pressable>
+            </View>
 
             <View style={s.presets}>
               {selling
@@ -233,13 +250,27 @@ export const BuySheet = ({
               ) : decision.kind === "offer_queue" ? (
                 <Queued decision={decision} amount={amount} />
               ) : (
-                <Preview
-                  decision={decision}
-                  quote={quote.data}
-                  amount={amount}
-                  moved={moved !== null}
-                  selling={selling}
-                />
+                <View style={s.choice}>
+                  {pick !== null && options.length + unavailable.length > 1 && (
+                    <TokenChoice
+                      options={options}
+                      unavailable={unavailable}
+                      picked={pick}
+                      onPick={setPicked}
+                      selling={selling}
+                      amount={amount}
+                      fee={Number(quote.data?.fee.usdc ?? 0)}
+                    />
+                  )}
+                  <Preview
+                    pick={pick}
+                    decision={decision}
+                    quote={quote.data}
+                    amount={amount}
+                    moved={moved !== null}
+                    selling={selling}
+                  />
+                </View>
               )}
 
               {order.isError && moved === null && (
@@ -296,14 +327,117 @@ export const BuySheet = ({
   );
 };
 
+/** Who issues each token, by the name a person would recognise. */
+const TOKEN_NAME: Record<Issuer, string> = { backed: "xStocks", ondo: "Ondo" };
+/* Kamino's stock reserves are xStocks mints; no Ondo token can back a loan. */
+const LENDABLE: ReadonlySet<Issuer> = new Set(["backed"]);
+
+type Execute = Extract<NonNullable<Quote["decision"]>, { kind: "execute" }>;
+
+/** Every token that fills this amount, cheapest (or best-paying) first. */
+const optionsOf = (d: Execute): PricedCandidate[] =>
+  d.candidates
+    .filter((c) => c.viable && c.pricePerShare !== null && c.filledShares !== null)
+    .sort((a, b) => {
+      const pa = num(a.pricePerShare) ?? 0;
+      const pb = num(b.pricePerShare) ?? 0;
+      return d.side === "buy" ? pa - pb : pb - pa;
+    });
+
+/** Tokens quoted but unable to fill this amount: shown, so the choice is visible, but not pickable. */
+const unavailableOf = (d: Execute): PricedCandidate[] =>
+  d.candidates.filter((c) => !(c.viable && c.pricePerShare !== null && c.filledShares !== null));
+
+const whyUnavailable = (c: PricedCandidate) =>
+  c.rejection === "impact_too_high"
+    ? `Too little liquidity for this amount${
+        c.priceImpact === null
+          ? ""
+          : ` · ${(Math.abs(num(c.priceImpact) ?? 0) * 100).toFixed(1)}% price impact`
+      }`
+    : "No route for this amount right now";
+
+/**
+ * Which token to buy or sell, when there is more than one: the web's
+ * `TokenChoice`. A row per token on the grey panel, the chosen one raised in
+ * white, with what this amount gets from it; the best price starts chosen.
+ */
+const TokenChoice = ({
+  options,
+  unavailable,
+  picked,
+  onPick,
+  selling,
+  amount,
+  fee,
+}: {
+  options: readonly PricedCandidate[];
+  unavailable: readonly PricedCandidate[];
+  picked: PricedCandidate;
+  onPick: (mint: string) => void;
+  selling: boolean;
+  amount: number;
+  fee: number;
+}) => (
+  <View style={s.tokens} accessibilityRole="radiogroup">
+    <RNText style={s.tokensLabel}>{selling ? "Sell from" : "Buy as"}</RNText>
+    {options.map((c, k) => {
+      const on = c.mint === picked.mint;
+      const price = num(c.pricePerShare) ?? 0;
+      const filled = num(c.filledShares) ?? 0;
+      return (
+        <PressableScale
+          key={c.mint}
+          activeScale={0.99}
+          haptic={false}
+          onPress={() => {
+            if (on) return;
+            void Haptics.selectionAsync();
+            onPick(c.mint);
+          }}
+          style={[s.token, on && s.tokenOn]}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: on }}
+        >
+          <View style={[s.radio, on && s.radioOn]}>{on && <View style={s.radioDot} />}</View>
+          <View style={s.fill}>
+            <View style={s.tokenName}>
+              <RNText style={s.lineValue}>{TOKEN_NAME[c.issuer]}</RNText>
+              {k === 0 && options.length > 1 && <StatusChip tone="up">Best price</StatusChip>}
+            </View>
+            <RNText style={s.tokenSub}>
+              {`${usd(price)} a share · ${LENDABLE.has(c.issuer) ? "Borrowable" : "Not borrowable"}`}
+            </RNText>
+          </View>
+          <RNText style={s.lineValue}>
+            {selling ? usd(Math.max(0, filled * price - fee)) : `${((amount - fee) / price).toFixed(4)} sh`}
+          </RNText>
+        </PressableScale>
+      );
+    })}
+    {unavailable.map((c) => (
+      <View key={c.mint} style={s.token}>
+        <View style={s.radio} />
+        <View style={s.fill}>
+          <RNText style={[s.lineValue, s.lineValueMuted]}>{TOKEN_NAME[c.issuer]}</RNText>
+          <RNText style={s.tokenSub}>{whyUnavailable(c)}</RNText>
+        </View>
+        <RNText style={s.tokenSub}>Unavailable</RNText>
+      </View>
+    ))}
+  </View>
+);
+
 /** What the money turns into, and what it costs to get there. */
 const Preview = ({
+  pick,
   decision,
   quote,
   amount,
   moved,
   selling,
 }: {
+  pick: PricedCandidate | null;
   decision: NonNullable<Quote["decision"]>;
   quote: Quote | undefined;
   amount: number;
@@ -313,9 +447,10 @@ const Preview = ({
   if (decision.kind === "refuse") return <Refused reason={decision.reason} side={decision.side} />;
   if (decision.kind === "offer_queue") return <Queued decision={decision} amount={amount} />;
 
-  const price = num(decision.best.pricePerShare) ?? 0;
-  const got = num(decision.best.filledShares);
-  const worst = num(decision.best.worstPricePerShare);
+  const chosen = pick ?? decision.best;
+  const price = num(chosen.pricePerShare) ?? 0;
+  const got = num(chosen.filledShares);
+  const worst = num(chosen.worstPricePerShare);
   const fee = Number(quote?.fee.usdc ?? 0);
   /* The charge comes out of the amount rather than being added to it, so
      somebody holding exactly $5 can still spend all of it. */
@@ -357,9 +492,9 @@ const Preview = ({
           )}
         </>
       )}
-      <Line label="Issued by" value={decision.best.issuer === "backed" ? "Backed" : "Ondo"} muted />
-      {decision.best.priceImpact !== null && (
-        <Line label="Price impact" value={pct(Number(decision.best.priceImpact) * 100)} muted />
+      <Line label="Issued by" value={TOKEN_NAME[chosen.issuer]} muted />
+      {chosen.priceImpact !== null && (
+        <Line label="Price impact" value={pct(Number(chosen.priceImpact) * 100)} muted />
       )}
 
       {decision.kind === "execute" && decision.warning !== null && (
@@ -460,17 +595,25 @@ const Filled = ({
   const pnl = result.realisedPnlUsd == null ? null : Number(result.realisedPnlUsd);
   return (
     <View style={s.done}>
-      <View style={s.doneMark}>
+      {/* The web's confirmation, in Reanimated: the mark springs in, the tick
+          lands on it a beat later, then the words and figures rise in turn. */}
+      <Animated.View entering={ZoomIn.springify().damping(16).stiffness(200)} style={s.doneMark}>
         <StockLogo ticker={ticker} uri={logoUrl} size={56} />
-        <View style={s.doneTick}>
+        <Animated.View entering={ZoomIn.delay(300).springify().damping(12)} style={s.doneTick}>
           <Icon name="check" size={13} color={color.surface} strokeWidth={3} />
-        </View>
-      </View>
-      <RNText style={s.doneKicker}>{selling ? "Sold" : "Bought"}</RNText>
-      <RNText style={s.doneTitle}>{`${fmtShares(result.shares)} shares of ${name}`}</RNText>
-      <RNText style={s.doneSub}>{`at ${usd(result.pricePerShare)} a share`}</RNText>
+        </Animated.View>
+      </Animated.View>
+      <Animated.Text entering={rise(1)} style={s.doneKicker}>
+        {selling ? "Sold" : "Bought"}
+      </Animated.Text>
+      <Animated.Text entering={rise(2)} style={s.doneTitle}>
+        {`${fmtShares(result.shares)} shares of ${name}`}
+      </Animated.Text>
+      <Animated.Text entering={rise(3)} style={s.doneSub}>
+        {selling ? "The money is in your cash." : `at ${usd(result.pricePerShare)} a share`}
+      </Animated.Text>
 
-      <View style={s.receipt}>
+      <Animated.View entering={rise(4)} style={s.receipt}>
         {selling ? (
           <Line label="Came to" value={usd(result.usd)} />
         ) : (
@@ -489,9 +632,9 @@ const Filled = ({
             tone={pnl < 0 ? "down" : "up"}
           />
         )}
-      </View>
+      </Animated.View>
 
-      <View style={s.doneActions}>
+      <Animated.View entering={rise(5)} style={s.doneActions}>
         <Button label="Done" onPress={onDone} />
         <Button
           label="See it in Activity"
@@ -501,7 +644,7 @@ const Filled = ({
             router.navigate("/activity");
           }}
         />
-      </View>
+      </Animated.View>
     </View>
   );
 };
@@ -549,12 +692,6 @@ const s = StyleSheet.create({
   title: { fontFamily: font.medium, fontSize: 16, letterSpacing: -0.32, color: color.ink },
   sub: { fontFamily: font.regular, fontSize: 12.5, letterSpacing: -0.12, color: color.muted, marginTop: 3 },
 
-  amountRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "center", paddingTop: 26 },
-  currency: { fontFamily: font.medium, fontSize: 24, color: color.muted, marginTop: 8 },
-  amount: { fontFamily: font.medium, fontSize: 52, letterSpacing: -2, color: color.ink, lineHeight: 60 },
-  /* Present and focusable, but never seen: the figure above is the field. */
-  hidden: { position: "absolute", opacity: 0, width: 1, height: 1 },
-
   presets: {
     flexDirection: "row",
     justifyContent: "center",
@@ -564,6 +701,40 @@ const s = StyleSheet.create({
   },
 
   body: { paddingHorizontal: space.screen, marginTop: 10 },
+  well: { paddingHorizontal: space.screen, paddingTop: space.lg },
+  choice: { gap: space.sm },
+  tokens: { borderRadius: radius.lg, backgroundColor: color.tile, padding: space.xs, gap: 2 },
+  tokensLabel: {
+    fontFamily: font.regular,
+    fontSize: 12,
+    color: color.muted,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    paddingBottom: 6,
+  },
+  token: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    paddingVertical: 10,
+  },
+  tokenOn: { backgroundColor: color.surface },
+  tokenName: { flexDirection: "row", alignItems: "center", gap: 6 },
+  tokenSub: { fontFamily: font.regular, fontSize: 12, color: color.muted, marginTop: 2 },
+  radio: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: color.divider,
+    backgroundColor: color.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioOn: { borderColor: color.ink },
+  radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.ink },
   hint: { paddingVertical: space.md, textAlign: "center" },
   lines: { backgroundColor: color.surface, borderRadius: radius.lg, padding: 16, gap: 11 },
   line: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
