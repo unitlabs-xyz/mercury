@@ -58,6 +58,9 @@ function PortfolioScreen() {
    * loan. That was a real defect on the web.
    */
   const stocksUsd = holdings.reduce((t, h) => t + num(h.valueUsd), 0);
+  /* Glider portfolios, valued by the server. Optional: an older server sends neither field. */
+  const baskets = p?.baskets ?? [];
+  const basketUsd = num(p?.basketUsd);
   const debtUsd = num(p?.debtUsd);
 
   const events = useMemo(() => (activity.data?.items ?? []).map(toEvent), [activity.data]);
@@ -146,6 +149,21 @@ function PortfolioScreen() {
                   }
                 : {})}
             />
+            {/* Baskets count toward net worth now, so they get a figure of their own
+                — without it the two halves stopped adding up to the total above. */}
+            {basketUsd > 0 && (
+              <>
+                <View style={s.potSplit} />
+                <Pot
+                  label="BASKETS"
+                  value={basketUsd}
+                  note={baskets.length === 1 ? "1 basket" : `${baskets.length} baskets`}
+                  masked={hidden}
+                  loading={waiting}
+                  onPress={() => router.push("/baskets")}
+                />
+              </>
+            )}
             <View style={s.potSplit} />
             <Pot
               label="CASH"
@@ -153,7 +171,9 @@ function PortfolioScreen() {
               note={
                 money.data === undefined
                   ? "In your account"
-                  : `Earning ${(num(money.data.yieldApr) * 100).toFixed(1)}% a year`
+                  : basketUsd > 0
+                    ? `${(num(money.data.yieldApr) * 100).toFixed(1)}% a year`
+                    : `Earning ${(num(money.data.yieldApr) * 100).toFixed(1)}% a year`
               }
               masked={hidden}
               loading={waiting}

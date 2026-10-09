@@ -4,3 +4,4 @@ export * from "./identity.js";
 export * from "./orders.js";
 export * from "./settle.js";
 export * from "./borrow.js";
+export * from "./send.js";

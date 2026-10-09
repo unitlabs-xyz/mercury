@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -12,7 +13,8 @@ import * as Clipboard from "expo-clipboard";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { usd } from "@mercury/view";
-import { useMoney } from "../src/api";
+import { SendSubmissionUncertain, useMoney, useSendAction } from "../src/api";
+import { Haptics } from "../src/haptics";
 import { SOLANA_ADDRESS, setScanned, useScanned } from "../src/scan";
 import { AmountWell, Button, Icon, IconButton, Note, PressableScale, Text, useBottomGap } from "../src/ui";
 import { color, font, radius, space } from "../src/theme";
@@ -22,9 +24,11 @@ import { color, font, radius, space } from "../src/theme";
  * Max beside it, the address in a matching well, the one rule that cannot be
  * undone, then the single action.
  *
- * The phone cannot send yet. Nothing on the server builds a transfer for a
- * wallet to sign — the web's panel stops at the same place — so the button
- * says the backend is coming rather than collecting an address it would drop.
+ * Three steps, as the web's: the form, a review that spells out exactly what
+ * will be signed, then the result. The server builds the transfer and checks
+ * it by simulation; the embedded wallet signs; the relay broadcasts. An
+ * unclear outcome is said as one — check Activity before sending again —
+ * because a second try could be a second transfer.
  */
 export default function Send() {
   const router = useRouter();
@@ -32,10 +36,28 @@ export default function Send() {
   const available = Number(useMoney().data?.balanceUsd ?? 0);
   const [text, setText] = useState("");
   const [to, setTo] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  const action = useSendAction();
 
   const amount = Number(text) || 0;
   const overdrawn = amount > available;
-  const badAddress = to.trim().length > 0 && !SOLANA_ADDRESS.test(to.trim());
+  const address = to.trim();
+  const badAddress = address.length > 0 && !SOLANA_ADDRESS.test(address);
+  /* The server takes at most six decimals, USDC's own precision. */
+  const validAmount = /^\d+(?:\.\d{1,6})?$/.test(text) && amount > 0;
+  const ready = validAmount && !overdrawn && address.length > 0 && !badAddress;
+  const uncertain = action.error instanceof SendSubmissionUncertain;
+
+  const send = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    action.mutate(
+      { amount: text, to: address },
+      {
+        onSuccess: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+        onError: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
+      },
+    );
+  };
 
   const paste = async () => setTo((await Clipboard.getStringAsync()).trim());
 
@@ -61,74 +83,150 @@ export default function Send() {
             showsVerticalScrollIndicator={false}
           >
             <View style={s.head}>
-              <Text variant="title">Send USDC</Text>
-              <RNText style={s.lede}>{`${usd(available)} available. Solana network only.`}</RNText>
+              <Text variant="title">
+                {action.isSuccess ? "USDC sent" : reviewing ? "Review transfer" : "Send USDC"}
+              </Text>
+              {!action.isSuccess && (
+                <RNText style={s.lede}>
+                  {reviewing
+                    ? "Check it once more. Your wallet signs when you send."
+                    : `${usd(available)} available. Solana network only.`}
+                </RNText>
+              )}
             </View>
 
-            <View style={[s.card, s.body]}>
-              <AmountWell
-                label="Amount"
-                value={text}
-                onChange={setText}
-                max={available}
-                note={`${usd(available)} available to send`}
-                invalid={overdrawn}
-              />
-              {overdrawn && <Note tone="down">{`More than you have. ${usd(available)} available.`}</Note>}
-
-              <View style={s.panel}>
-                <RNText style={s.label}>To</RNText>
-                <View style={[s.well, badAddress && s.invalid]}>
-                  <TextInput
-                    value={to}
-                    onChangeText={setTo}
-                    placeholder="Solana address"
-                    placeholderTextColor="rgba(101,101,101,0.7)"
-                    selectionColor={color.brand}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    spellCheck={false}
-                    style={s.address}
-                    accessibilityLabel="Destination Solana address"
-                  />
-                  {to.length === 0 && (
-                    <PressableScale onPress={() => void paste()} haptic={false} style={s.paste}>
-                      <RNText style={s.pasteText}>Paste</RNText>
-                    </PressableScale>
-                  )}
-                  <PressableScale
-                    onPress={() => router.push("/scan")}
-                    style={s.scan}
-                    accessibilityRole="button"
-                    accessibilityLabel="Scan a QR code"
-                  >
-                    <Icon name="scan" size={18} color={color.ink} />
-                  </PressableScale>
+            {action.isSuccess ? (
+              <View style={[s.card, s.done]}>
+                <View style={s.tick}>
+                  <Icon name="check" size={20} color={color.up} strokeWidth={2.4} />
                 </View>
-                <RNText style={s.hint}>A wallet on Solana that accepts USDC</RNText>
+                <RNText style={s.doneTitle}>
+                  {action.data.status === "confirmed" ? "Transfer confirmed" : "Transfer submitted"}
+                </RNText>
+                <RNText style={s.doneBody}>
+                  {`${usd(amount)} to ${address.slice(0, 6)}…${address.slice(-6)}`}
+                  {action.data.status === "pending" ? ". Confirmation is still pending." : "."}
+                </RNText>
+                <PressableScale
+                  activeScale={0.97}
+                  onPress={() => void Linking.openURL(`https://solscan.io/tx/${action.data.signature}`)}
+                >
+                  <RNText style={s.pasteText}>View on Solscan ›</RNText>
+                </PressableScale>
               </View>
-              {badAddress && <Note tone="down">That does not look like a Solana address.</Note>}
+            ) : reviewing ? (
+              <View style={[s.card, s.body]}>
+                <View style={s.review}>
+                  <Line k="Amount" v={`${usd(amount)} USDC`} />
+                  <Line k="To" v={address} mono />
+                  <Line k="Network" v="Solana" />
+                  <Line k="Network fee" v="A little SOL, from your wallet" />
+                </View>
+                <Note tone="warn">Sending is final. Nobody can reverse it, including us.</Note>
+                {action.error !== null && (
+                  <Note tone={uncertain ? "warn" : "down"}>{action.error.message}</Note>
+                )}
+              </View>
+            ) : (
+              <View style={[s.card, s.body]}>
+                <AmountWell
+                  label="Amount"
+                  value={text}
+                  onChange={setText}
+                  max={available}
+                  note={`${usd(available)} available to send`}
+                  invalid={overdrawn}
+                />
+                {overdrawn && <Note tone="down">{`More than you have. ${usd(available)} available.`}</Note>}
 
-              <Note tone="warn">
-                Sending is final. Check the address: nobody can reverse it, including us.
-              </Note>
-            </View>
+                <View style={s.panel}>
+                  <RNText style={s.label}>To</RNText>
+                  <View style={[s.well, badAddress && s.invalid]}>
+                    <TextInput
+                      value={to}
+                      onChangeText={setTo}
+                      placeholder="Solana address"
+                      placeholderTextColor="rgba(101,101,101,0.7)"
+                      selectionColor={color.brand}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      spellCheck={false}
+                      style={s.address}
+                      accessibilityLabel="Destination Solana address"
+                    />
+                    {to.length === 0 && (
+                      <PressableScale onPress={() => void paste()} haptic={false} style={s.paste}>
+                        <RNText style={s.pasteText}>Paste</RNText>
+                      </PressableScale>
+                    )}
+                    <PressableScale
+                      onPress={() => router.push("/scan")}
+                      style={s.scan}
+                      accessibilityRole="button"
+                      accessibilityLabel="Scan a QR code"
+                    >
+                      <Icon name="scan" size={18} color={color.ink} />
+                    </PressableScale>
+                  </View>
+                  <RNText style={s.hint}>A wallet on Solana that accepts USDC</RNText>
+                </View>
+                {badAddress && <Note tone="down">That does not look like a Solana address.</Note>}
+
+                <Note tone="warn">
+                  Sending is final. Check the address: nobody can reverse it, including us.
+                </Note>
+              </View>
+            )}
           </ScrollView>
 
           <View style={[s.footer, { paddingBottom: bottom }]}>
-            <RNText style={s.soon}>
-              Sending from the phone is not connected yet. The backend that builds the transfer comes next.
-            </RNText>
-            <Button
-              label={amount > 0 && !overdrawn ? `Review send of ${usd(amount)}` : "Review send"}
-              disabled
-            />
+            {action.isSuccess ? (
+              <Button label="Done" onPress={() => router.back()} />
+            ) : reviewing ? (
+              <View style={s.row}>
+                <View style={s.fill}>
+                  <Button
+                    label="Back"
+                    variant="secondary"
+                    disabled={action.isPending}
+                    onPress={() => {
+                      action.reset();
+                      setReviewing(false);
+                    }}
+                  />
+                </View>
+                <View style={s.wide}>
+                  <Button
+                    label={action.walletReady ? `Send ${usd(amount)}` : "Getting your wallet ready"}
+                    busy={action.isPending}
+                    /* After an uncertain submission, never offer the same transfer again. */
+                    disabled={!action.walletReady || uncertain}
+                    onPress={send}
+                  />
+                </View>
+              </View>
+            ) : (
+              <Button
+                label={ready ? `Review send of ${usd(amount)}` : "Review send"}
+                disabled={!ready}
+                onPress={() => setReviewing(true)}
+              />
+            )}
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
   );
 }
+
+const Line = ({ k, v, mono = false }: { k: string; v: string; mono?: boolean }) => (
+  <View style={s.line}>
+    <RNText style={s.lineKey}>{k}</RNText>
+    <RNText style={[s.lineValue, mono && s.mono]} selectable>
+      {v}
+    </RNText>
+  </View>
+);
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.page },
@@ -188,5 +286,34 @@ const s = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: color.divider,
   },
-  soon: { fontFamily: font.regular, fontSize: 12, lineHeight: 17, color: color.muted, textAlign: "center" },
+  row: { flexDirection: "row", gap: space.sm },
+  wide: { flex: 1.6 },
+  review: { borderRadius: radius.md, backgroundColor: color.tile, padding: space.md, gap: space.md },
+  line: { gap: 4 },
+  lineKey: { fontFamily: font.regular, fontSize: 12.5, color: color.muted },
+  lineValue: { fontFamily: font.medium, fontSize: 14.5, color: color.ink },
+  mono: { fontFamily: "Menlo", fontSize: 13, lineHeight: 19 },
+  done: { alignItems: "center", padding: space.lg, gap: space.sm },
+  tick: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: color.upChip,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doneTitle: {
+    marginTop: space.xs,
+    fontFamily: font.medium,
+    fontSize: 20,
+    letterSpacing: -0.4,
+    color: color.ink,
+  },
+  doneBody: {
+    fontFamily: font.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: color.muted,
+    textAlign: "center",
+  },
 });
