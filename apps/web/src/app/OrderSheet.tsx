@@ -485,6 +485,7 @@ export const OrderSheet = ({
   prices,
   open,
   onClose,
+  onPlaced,
   initial,
   side = "buy",
   max = false,
@@ -495,6 +496,8 @@ export const OrderSheet = ({
   prices: PriceMap | undefined;
   open: boolean;
   onClose: () => void;
+  /** The order went through and the sheet is closing: what the ticket held has been answered. */
+  onPlaced?: () => void;
   /** Carried from the ticket, where the impact was shown and accepted. */
   acceptImpact?: boolean;
   onAcceptImpact?: (accepted: boolean) => void;
@@ -589,6 +592,7 @@ export const OrderSheet = ({
 
   const close = () => {
     buy.reset();
+    if (placed) onPlaced?.();
     onClose();
   };
 
