@@ -18,6 +18,14 @@ export interface BackfillOrder {
   readonly id: string;
   readonly side: "buy" | "sell";
   readonly txSignature: string;
+  /**
+   * The wallet that traded.
+   *
+   * Needed to tell a sponsored trade from an unsponsored one: the relayer is
+   * whoever paid for the transaction, and on an unsponsored trade that is the
+   * trader themselves — whose USDC leg is the trade, not a fee.
+   */
+  readonly wallet: string;
   /** The fair price per share from the quote the user was shown, if we kept it. */
   readonly referencePrice: Decimal | null;
   /** The buy's lot. Absent on a sell, which writes none. */
@@ -55,10 +63,33 @@ const sumOwned = (
 ) =>
   entries.reduce((total, e) => (e.owner === owner && e.mint === USDC_MINT ? total + e.rawAmount : total), 0n);
 
-/** What the relayer took out of this transaction. Only a gain counts; see `planFill`. */
-const chargeIn = (tx: TransactionDetail, relayer: string): Decimal => {
-  const delta = sumOwned(tx.postTokens, relayer) - sumOwned(tx.preTokens, relayer);
+/** What an account took out of this transaction. Only a gain counts; see `planFill`. */
+const chargeIn = (tx: TransactionDetail, account: string): Decimal => {
+  const delta = sumOwned(tx.postTokens, account) - sumOwned(tx.preTokens, account);
   return delta > 0n ? scaled(delta, USDC_DECIMALS) : ZERO;
+};
+
+/**
+ * What the relayer charged, found without being told who the relayer is.
+ *
+ * `planFill` is handed the relayer's address, because the running server knows
+ * it. A backfill does not: the address is derived from a signing key that lives
+ * only where the service is deployed, and needing a production secret to read
+ * the chain and correct a column is the wrong trade.
+ *
+ * The transaction says it instead. `composeSponsored` names the relayer as fee
+ * payer, and the fee payer is the first account key — the same convention
+ * `movementsIn` already reads. A transaction the trader paid for themselves was
+ * never sponsored, so there is no charge in it, and reading their own USDC leg
+ * as one would take the whole trade off the price per share.
+ *
+ * Deriving it per transaction rather than once also survives a rotated relayer
+ * key, which a single configured address would silently get wrong.
+ */
+const chargeFor = (tx: TransactionDetail, wallet: string): Decimal => {
+  const feePayer = tx.accountKeys[0];
+  if (feePayer === undefined || feePayer === wallet) return ZERO;
+  return chargeIn(tx, feePayer);
 };
 
 /**
@@ -79,7 +110,6 @@ const chargeIn = (tx: TransactionDetail, relayer: string): Decimal => {
 export function planFeeBackfill(
   orders: readonly BackfillOrder[],
   transactions: ReadonlyMap<string, TransactionDetail>,
-  relayer: string,
 ): BackfillPlan {
   const corrections: OrderCorrection[] = [];
   const skipped: Skipped[] = [];
@@ -95,7 +125,7 @@ export function planFeeBackfill(
       continue;
     }
 
-    const feeUsd = chargeIn(tx, relayer);
+    const feeUsd = chargeFor(tx, order.wallet);
     if (order.lot === null) {
       corrections.push({ orderId: order.id, feeUsd });
       continue;

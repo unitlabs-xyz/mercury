@@ -16,31 +16,25 @@
  * rebuilds those from the lots on its own clock, which is what makes the
  * corrected figures reach the screen.
  *
- * Needs DATABASE_URL, SOLANA_RPC_URL and RELAYER_SECRET_KEY: without the last
- * one there is no relayer to look for and nothing to correct.
+ * Needs DATABASE_URL and SOLANA_RPC_URL, and no key of any kind. The relayer is
+ * read out of each transaction's own fee payer rather than derived from a
+ * signing key, so this runs wherever the database can be reached instead of
+ * only where the service holds its secret.
  */
 import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import { D } from "@mercury/core";
 import { SolanaRpc } from "@mercury/chain";
 import type { TransactionDetail } from "@mercury/chain";
 import { createDb } from "../src/db/client.js";
-import { lots, orders } from "../src/db/schema.js";
+import { lots, orders, wallets } from "../src/db/schema.js";
 import { readConfig } from "../src/deps.js";
-import { keypairRelaySigner } from "../src/relay/signer.js";
 import { planFeeBackfill, type BackfillOrder } from "../src/orders/backfill.js";
 
 const apply = process.argv.includes("--apply");
 const config = readConfig();
 
-if (config.relayerSecretKey === undefined) {
-  console.error("RELAYER_SECRET_KEY is unset, so there is no relayer leg to read a fee from.");
-  process.exit(1);
-}
-
 const db = createDb(config.databaseUrl);
 const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl });
-const relayer = (await keypairRelaySigner(config.relayerSecretKey)).address;
-console.log(`relayer: ${relayer}`);
 
 /*
  * Filled orders that never recorded a fee, with the lot each buy wrote. The
@@ -56,9 +50,14 @@ const rows = await db
     lotId: lots.id,
     lotShares: lots.shares,
     lotUnitCost: lots.unitCostUsd,
+    wallet: wallets.address,
   })
   .from(orders)
   .leftJoin(lots, eq(lots.orderId, orders.id))
+  // Inner: the trader's address is what separates a sponsored trade's fee from
+  // an unsponsored one's cost, so an order we cannot place a wallet against is
+  // one we must not guess about.
+  .innerJoin(wallets, eq(wallets.userId, orders.userId))
   .where(and(eq(orders.status, "filled"), isNotNull(orders.txSignature), isNull(orders.feeUsd)));
 
 if (rows.length === 0) {
@@ -71,6 +70,7 @@ const toBackfill: BackfillOrder[] = rows.map((row) => ({
   id: row.id,
   side: row.side,
   txSignature: row.txSignature!,
+  wallet: row.wallet,
   referencePrice: row.referencePrice === null ? null : D(row.referencePrice),
   lot:
     row.lotId === null
@@ -86,7 +86,7 @@ for (const [index, order] of toBackfill.entries()) {
   if ((index + 1) % 25 === 0) console.log(`  read ${index + 1}/${toBackfill.length} transactions`);
 }
 
-const plan = planFeeBackfill(toBackfill, transactions, relayer);
+const plan = planFeeBackfill(toBackfill, transactions);
 const charged = plan.corrections.filter((c) => c.feeUsd.gt(0));
 const total = charged.reduce((sum, c) => sum.add(c.feeUsd), D(0));
 

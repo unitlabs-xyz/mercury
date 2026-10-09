@@ -14,7 +14,10 @@ const bal = (owner: string, rawAmount: bigint): TokenBalanceEntry => ({
   decimals: 6,
 });
 
-/** A transaction in which the relayer's USDC went up by `fee` of a dollar. */
+/**
+ * A sponsored transaction: the relayer paid for it, so it is the first account
+ * key, and its USDC went up by `fee` of a dollar.
+ */
 const charged = (fee: bigint, over: Partial<TransactionDetail> = {}): TransactionDetail => ({
   signature: SIG,
   blockTime: 1_790_659_621,
@@ -33,13 +36,14 @@ const order = (over: Partial<BackfillOrder> = {}): BackfillOrder => ({
   id: "order-1",
   side: "buy",
   txSignature: SIG,
+  wallet: WALLET,
   referencePrice: D("19.80"),
   lot: { id: "lot-1", shares: D(1), unitCostUsd: D("20.00") },
   ...over,
 });
 
 const planOne = (o: BackfillOrder, tx: TransactionDetail | null = charged(230_000n)) =>
-  planFeeBackfill([o], tx === null ? new Map() : new Map([[SIG, tx]]), RELAYER);
+  planFeeBackfill([o], tx === null ? new Map() : new Map([[SIG, tx]]));
 
 describe("planFeeBackfill", () => {
   it("takes the fee back out of the price per share it was hidden in", () => {
@@ -85,6 +89,36 @@ describe("planFeeBackfill", () => {
     expect(planOne(order(), refunded).corrections[0]!.feeUsd.toFixed()).toBe("0");
   });
 
+  it("finds the relayer without being told, from whoever paid for the transaction", () => {
+    // A backfill has no relayer address: it is derived from a signing key that
+    // lives only where the service is deployed. The transaction names the fee
+    // payer, and `composeSponsored` makes that the relayer.
+    const other = "ReLay2wQ7Kb3BpEMnkZ9qRZbLvSoSyUZM6hXQiWsOrB";
+    const rotated = charged(0n, {
+      accountKeys: [other, WALLET],
+      preTokens: [bal(other, 0n)],
+      postTokens: [bal(other, 230_000n)],
+    });
+    expect(planOne(order(), rotated).corrections[0]!.feeUsd.toFixed(2)).toBe("0.23");
+  });
+
+  it("reads no fee from a trade the trader paid for themselves", () => {
+    // Unsponsored: the trader is the fee payer, and their USDC leg is the
+    // trade. Reading it as a fee would take the whole cost off the lot.
+    const unsponsored = charged(0n, {
+      accountKeys: [WALLET],
+      preTokens: [bal(WALLET, 0n)],
+      postTokens: [bal(WALLET, 20_000_000n)],
+    });
+    const plan = planOne(order({ side: "sell", lot: null }), unsponsored);
+    expect(plan.corrections[0]!.feeUsd.toFixed()).toBe("0");
+  });
+
+  it("reads no fee from a transaction with no accounts on it at all", () => {
+    const headless = charged(230_000n, { accountKeys: [] });
+    expect(planOne(order(), headless).corrections[0]!.feeUsd.toFixed()).toBe("0");
+  });
+
   it("skips an order whose transaction the node no longer has", () => {
     const plan = planOne(order(), null);
     expect(plan.corrections).toEqual([]);
@@ -115,7 +149,6 @@ describe("planFeeBackfill", () => {
     const plan = planFeeBackfill(
       [order(), order({ id: "order-2", txSignature: "sig-missing" })],
       new Map([[SIG, charged(230_000n)]]),
-      RELAYER,
     );
     expect(plan.corrections.map((c) => c.orderId)).toEqual(["order-1"]);
     expect(plan.skipped.map((s) => s.orderId)).toEqual(["order-2"]);
