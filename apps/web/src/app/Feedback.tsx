@@ -1,6 +1,6 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { sendFeedback, shrinkImage, type FeedbackImage } from "../api/feedback";
 import { ApiError } from "../api/client";
@@ -33,6 +33,9 @@ export const Feedback = () => {
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
+  /* Counted, not a flag: dragenter and dragleave fire for every child crossed. */
+  const [dragDepth, setDragDepth] = useState(0);
+  const dragging = dragDepth > 0;
   const panel = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -78,6 +81,47 @@ export const Feedback = () => {
       setReading(false);
       if (picker.current) picker.current.value = "";
     }
+  };
+
+  /* A drag that ends anywhere else, or is cancelled, never sends our dragleave. */
+  useEffect(() => {
+    if (!dragging) return undefined;
+    const reset = () => setDragDepth(0);
+    window.addEventListener("drop", reset);
+    window.addEventListener("dragend", reset);
+    return () => {
+      window.removeEventListener("drop", reset);
+      window.removeEventListener("dragend", reset);
+    };
+  }, [dragging]);
+
+  const carriesFiles = (e: DragEvent) => e.dataTransfer.types.includes("Files");
+  const drop = {
+    onDragEnter: (e: DragEvent) => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      setDragDepth((d) => d + 1);
+      /* Dragging onto the pill opens it, so there is somewhere to drop. */
+      if (!open) {
+        if (state === "sent") restart();
+        setOpen(true);
+      }
+    },
+    onDragOver: (e: DragEvent) => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (carriesFiles(e)) setDragDepth((d) => Math.max(0, d - 1));
+    },
+    onDrop: (e: DragEvent) => {
+      if (!carriesFiles(e)) return;
+      e.preventDefault();
+      setDragDepth(0);
+      if (state === "sent") restart();
+      void addFiles(e.dataTransfer.files);
+    },
   };
 
   const submit = async () => {
@@ -130,10 +174,25 @@ export const Feedback = () => {
         initial={false}
         animate={{ backgroundColor: open ? "#ffffff" : "#141614" }}
         style={{ borderRadius: open ? 16 : 999 }}
-        className={`pointer-events-auto overflow-hidden shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_2px_6px_rgba(0,0,0,0.06),0_16px_40px_-12px_rgba(0,0,0,0.22)] ${
+        {...drop}
+        className={`pointer-events-auto relative overflow-hidden shadow-[0_0_0_1px_rgba(0,0,0,0.06),0_2px_6px_rgba(0,0,0,0.06),0_16px_40px_-12px_rgba(0,0,0,0.22)] ${
           open ? "w-full sm:w-[360px]" : ""
         }`}
       >
+        <AnimatePresence>
+          {dragging && open && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="pointer-events-none absolute inset-1.5 z-10 flex flex-col items-center justify-center gap-2 rounded-[12px] border-[1.5px] border-dashed border-ds-ink/25 bg-white/92 text-[14px] font-medium text-ds-ink backdrop-blur-[2px]"
+            >
+              <ImageIcon className="size-5 [stroke-width:1.5]" />
+              {shots.length >= MAX_IMAGES ? `Already ${MAX_IMAGES} images` : "Drop images to attach"}
+            </motion.div>
+          )}
+        </AnimatePresence>
         <AnimatePresence mode="popLayout" initial={false}>
           {!open ? (
             <motion.button
