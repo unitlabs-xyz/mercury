@@ -71,7 +71,9 @@ if (!flag("all")) {
 }
 
 const sentFile = join(outbox, "sent.txt");
-const already = new Set(existsSync(sentFile) ? (await readFile(sentFile, "utf8")).split("\n").filter(Boolean) : []);
+const already = new Set(
+  existsSync(sentFile) ? (await readFile(sentFile, "utf8")).split("\n").filter(Boolean) : [],
+);
 const db = createDb(need("DATABASE_URL"));
 // In signup order, so the earliest positions hear first.
 const rows = await db
@@ -80,7 +82,9 @@ const rows = await db
   .orderBy(asc(waitlist.position));
 const limit = Number(option("limit") ?? Infinity);
 const todo = rows.filter((r) => !already.has(r.email.toLowerCase())).slice(0, limit);
-console.log(`waitlist: ${rows.length}, already sent: ${already.size}, this run: ${todo.length} (→ ${appUrl})`);
+console.log(
+  `waitlist: ${rows.length}, already sent: ${already.size}, this run: ${todo.length} (→ ${appUrl})`,
+);
 
 if (!flag("go")) {
   for (const r of todo.slice(0, 10)) console.log(`  #${r.position} ${r.email}`);
