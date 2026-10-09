@@ -24,6 +24,7 @@ import { useSignedIn } from "./hooks";
 import { enrollBasket, fundBasket, type FundingReceipt } from "@mercury/view";
 import { apiFetch, ApiError } from "./client";
 import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { refreshAfterChain } from "./settle";
 
 /**
  * A basket as the app reads it: GET /v1/baskets, plus what Symmetry knows
@@ -249,13 +250,16 @@ export const useBasketOperations = (requests: readonly { slug: string; operation
   });
 };
 
-export const useBasketRebalanceAction = (slug: string) =>
-  useMutation({
+export const useBasketRebalanceAction = (slug: string) => {
+  const qc = useQueryClient();
+  return useMutation({
     mutationFn: () =>
       apiFetch<TriggeredBasketRebalance>(`/v1/basket-templates/${encodeURIComponent(slug)}/rebalance`, {
         method: "POST",
       }),
+    onSettled: () => refreshAfterChain(qc),
   });
+};
 
 /** Prepare first so the review sheet shows the exact assets and recipient before signing. */
 export const useBasketExitAction = (slug: string) => {
@@ -292,9 +296,7 @@ export const useBasketExitAction = (slug: string) => {
         body: JSON.stringify({ message: prepared.message, signature, submission: prepared.submission }),
       });
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] });
-    },
+    onSettled: () => refreshAfterChain(qc),
   });
   return { prepare, submit, walletReady: wallets[0] !== undefined };
 };
@@ -356,10 +358,7 @@ export const useBasketEnrollmentAction = (slug: string) => {
         },
       });
     },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["api", "basket-enrollment", slug] });
-      void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
-    },
+    onSettled: () => refreshAfterChain(qc),
   });
   return { ...mutation, walletReady: wallets[0] !== undefined };
 };
@@ -373,15 +372,6 @@ const confirmSentFunding = ({ slug, signature }: SentFunding) =>
     method: "POST",
     body: JSON.stringify({ signature }),
   });
-
-/** What a transfer changes, wherever it is recorded from. */
-const refreshBasket = (qc: ReturnType<typeof useQueryClient>, slug: string) => {
-  for (const key of ["basket-enrollment", "basket-portfolio", "basket-activity"])
-    void qc.invalidateQueries({ queryKey: ["api", key, slug] });
-  void qc.invalidateQueries({ queryKey: ["api", "basket-portfolios"] });
-  /* Funding spends cash, and the balance beside the ticket has to follow it. */
-  void qc.invalidateQueries({ queryKey: ["api", "money"] });
-};
 
 export const useBasketFundingAction = (slug: string) => {
   const qc = useQueryClient();
@@ -439,12 +429,12 @@ export const useBasketFundingAction = (slug: string) => {
         return { ...receipt, status: "pending" as const };
       }
     },
-    onSettled: () => refreshBasket(qc, slug),
+    onSettled: () => refreshAfterChain(qc),
   });
   /* One claim per transfer, keyed by its signature: funding twice no longer loses the first. */
   const outstanding = usePendingConfirms<SentFunding>(FUNDING_KIND, confirmSentFunding, {
     paused: mutation.isPending,
-    onSettled: () => refreshBasket(qc, slug),
+    onSettled: () => refreshAfterChain(qc),
   });
   /*
    * Still unrecorded for this basket, so the sheet keeps saying so — and stops

@@ -71,7 +71,9 @@ export const useSendAction = () => {
         intent,
       );
     },
-    onSuccess: () => refreshAfterChain(qc),
+    // Settled, not success: `SendSubmissionUncertain` throws on a send that may
+    // well have landed, which is the case most in need of a fresh balance.
+    onSettled: () => refreshAfterChain(qc),
   });
 
   return { ...action, walletReady: wallets[0] !== undefined };
