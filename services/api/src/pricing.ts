@@ -84,11 +84,10 @@ export async function priceOrder(deps: Deps, req: PriceRequest): Promise<Decisio
   const selling = req.side === "sell";
   const fair = fairPricePerShare(reference);
 
-  const multipliers = new Map(
-    await Promise.all(
-      wrappers.map(async (w) => [w.mint, (await deps.multipliers.multiplierFor(w.mint)) ?? D(1)] as const),
-    ),
-  );
+  // One ask for every wrapper. A mint we could not read falls back to one,
+  // which is what `decide` then prices the candidate at.
+  const known = await deps.multipliers.multipliersFor(wrappers.map((w) => w.mint));
+  const multipliers = new Map(wrappers.map((w) => [w.mint, known.get(w.mint) ?? D(1)] as const));
 
   /*
    * What each wrapper is quoted for. One number for every wrapper on a buy;

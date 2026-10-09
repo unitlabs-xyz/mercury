@@ -278,25 +278,29 @@ describe("GET /v1/instruments, featured and search", () => {
     expect(shelf[0]!.ticker).toBe("NVDA");
   });
 
-  it("serves repeat requests from the price cache for fifteen seconds", async () => {
-    let calls = 0;
-    let clock = 0;
-    const d = wide({
-      now: () => clock,
-      prices: {
-        pricesFor: async (mints) => {
-          calls += 1;
-          return new Map(mints.map((m) => [m, price(m)]));
+  it("asks the board for the mints it needs, and holds no prices of its own", async () => {
+    const asked: string[][] = [];
+    const a = app(
+      wide({
+        prices: {
+          pricesFor: async (mints) => {
+            asked.push([...mints]);
+            return new Map(mints.map((m) => [m, price(m)]));
+          },
         },
-      },
-    });
-    const a = app(d);
+      }),
+    );
     await a.request("/v1/instruments");
     await a.request("/v1/instruments");
-    expect(calls).toBe(1);
-    clock = 15_001;
-    await a.request("/v1/instruments");
-    expect(calls).toBe(2);
+
+    // Two requests, two asks. The route used to keep fifteen seconds of prices
+    // of its own, stamped with a clock read before its own fetch — so an entry
+    // was born as old as the request that filled it. `CachedPriceBoard` holds
+    // them for every reader, and what it does with a repeat ask is its own
+    // business and its own tests; a second memory in front of it only added age.
+    expect(asked).toHaveLength(2);
+    expect(asked[0]).toEqual(asked[1]);
+    expect(asked[0]!.length).toBeGreaterThan(0);
   });
 
   it("opens a thin instrument's own page", async () => {

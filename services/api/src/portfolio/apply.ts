@@ -59,34 +59,38 @@ export async function loadHeldTokens(
   const relevant = known.filter((t) => onChain.has(t.mint) || recordedByToken.has(t.tokenId));
   if (relevant.length === 0) return [];
 
-  const board = await deps.prices.pricesFor(relevant.map((t) => t.mint));
+  const mints = relevant.map((t) => t.mint);
+  // Both reads at once, and each as one ask for every mint. This used to fetch
+  // the board and then walk the tokens asking the mint about them one at a
+  // time, which `position-sync` paid for once per wallet every two seconds.
+  const [board, multipliers] = await Promise.all([
+    deps.prices.pricesFor(mints),
+    deps.multipliers.multipliersFor(mints),
+  ]);
 
-  return Promise.all(
-    relevant.map(async (token) => {
-      const row = recordedByToken.get(token.tokenId);
-      const price = board.get(token.mint);
-      // The mint is the authority on the multiplier; the price board is the
-      // fallback; the stored value is what we last saw. Never 1 by default —
-      // that would shrink the shares of every holder of a paying token.
-      const multiplier =
-        (await deps.multipliers.multiplierFor(token.mint)) ?? price?.multiplier ?? D(token.storedMultiplier);
+  return relevant.map((token) => {
+    const row = recordedByToken.get(token.tokenId);
+    const price = board.get(token.mint);
+    // The mint is the authority on the multiplier; the price board is the
+    // fallback; the stored value is what we last saw. Never 1 by default —
+    // that would shrink the shares of every holder of a paying token.
+    const multiplier = multipliers.get(token.mint) ?? price?.multiplier ?? D(token.storedMultiplier);
 
-      return {
-        tokenId: token.tokenId,
-        instrumentId: token.instrumentId,
-        mint: token.mint,
-        symbol: token.symbol,
-        ticker: token.ticker,
-        decimals: token.decimals,
-        multiplier,
-        referencePricePerShare: price?.pricePerShare ?? null,
-        chainRawAmount: onChain.get(token.mint) ?? 0n,
-        recordedRawAmount: row === undefined ? 0n : BigInt(row.rawAmount),
-        recordedShares: row === undefined ? ZERO : D(row.shares),
-        recordedCostUsd: row === undefined ? ZERO : D(row.cost),
-      } satisfies HeldToken;
-    }),
-  );
+    return {
+      tokenId: token.tokenId,
+      instrumentId: token.instrumentId,
+      mint: token.mint,
+      symbol: token.symbol,
+      ticker: token.ticker,
+      decimals: token.decimals,
+      multiplier,
+      referencePricePerShare: price?.pricePerShare ?? null,
+      chainRawAmount: onChain.get(token.mint) ?? 0n,
+      recordedRawAmount: row === undefined ? 0n : BigInt(row.rawAmount),
+      recordedShares: row === undefined ? ZERO : D(row.shares),
+      recordedCostUsd: row === undefined ? ZERO : D(row.cost),
+    } satisfies HeldToken;
+  });
 }
 
 const fixed = (v: Decimal): string => v.toFixed(18);

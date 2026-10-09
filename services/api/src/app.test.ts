@@ -45,7 +45,11 @@ const harness = async (over: { balances?: TokenBalance[]; sponsored?: boolean } 
       }),
     },
     sessions: { current: async () => ({ status: "open", isOpen: true, nextOpenAt: null }) },
-    multipliers: { multiplierFor: async () => D(1), isPaused: async () => false },
+    multipliers: {
+      multiplierFor: async () => D(1),
+      multipliersFor: async (mints: readonly string[]) => new Map(mints.map((m) => [m, D(1)])),
+      isPaused: async () => false,
+    },
     quotes: {
       quote: async (req: { side: string; amount: { toFixed(): string } }) => {
         priced.push(req.side);

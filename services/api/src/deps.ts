@@ -15,6 +15,7 @@ import {
   type TriggerSource,
 } from "@mercury/chain";
 import {
+  BoardReference,
   CachedPriceBoard,
   JupiterMarket,
   KaminoCredit,
@@ -122,6 +123,34 @@ export interface Config {
   readonly waitlistPublicUrl?: string;
 }
 
+/**
+ * The oldest price a quote may be checked against.
+ *
+ * `decide` refuses an order whose route is too far above the reference, so
+ * this is a number an order turns on rather than one a screen shows — the
+ * board's own five seconds would check a live quote against a price that old.
+ * A second still collapses the several quotes one buy makes: the ticket
+ * prices, probes and re-prices within milliseconds of itself.
+ */
+const REFERENCE_MAX_AGE_MS = 1_000;
+
+/**
+ * How long the price board collects misses before it asks.
+ *
+ * Half a second, which is a lot of latency to accept on purpose. It buys a
+ * lower refusal rate: `price/v3` costs the same for one id as for fifty, so
+ * everything that arrives inside the window rides one request instead of one
+ * each, and the allowance is ten requests a second across every Jupiter
+ * adapter in the process. A shelf that renders 500ms later is worth a quote
+ * that is not refused.
+ *
+ * It is not paid by the paths that cannot afford it. A caller naming a
+ * `maxAgeMs` — the quote path — closes the batch and sends it immediately, and
+ * a mint anybody has read in the last minute is served from the board without
+ * waiting for anything at all.
+ */
+const PRICE_WINDOW_MS = 500;
+
 const required = (env: NodeJS.ProcessEnv, key: string): string => {
   const value = env[key];
   if (value === undefined || value.length === 0) throw new Error(`${key} is required`);
@@ -200,6 +229,8 @@ export function buildDeps(config: Config): Deps {
   const registry = new JupiterRegistry(jupiter);
   const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl });
   const market = new JupiterMarket({ registry, ...jupiter });
+  // Built here rather than inline below, because the reference reads through it.
+  const prices = new CachedPriceBoard(market, { windowMs: PRICE_WINDOW_MS });
 
   const basketProvider = config.gliderApiKey ? new GliderClient(config.gliderApiKey) : undefined;
   return {
@@ -208,12 +239,16 @@ export function buildDeps(config: Config): Deps {
     quotes: new JupiterLite(jupiter),
     triggers: new JupiterTriggersNotYet(),
     sessions: new PythSessions(),
-    reference: market,
+    // Through the shared cache, not around it. `market` answers this port too,
+    // and wiring it directly made every quote pay a fresh Jupiter request for
+    // prices a shelf read had just fetched — the one path that never hit the
+    // cache, on the endpoint whose keyless limit is thirty requests a minute.
+    reference: new BoardReference({ registry, board: prices, maxAgeMs: REFERENCE_MAX_AGE_MS }),
     // The mint is the authority. `market` implements the same port from
     // Jupiter's copy of the same numbers, and is what the browser falls back to.
     multipliers: new MintMultipliers({ chain }),
     // Every price lookup shares one short cache, so background jobs stop spending Jupiter's rate limit.
-    prices: new CachedPriceBoard(market),
+    prices,
     credit: new KaminoCredit(),
     // Unofficial, keyless, and the only equity history we can reach: Pyth
     // Benchmarks refuses equity feeds on our entitlement and serves one

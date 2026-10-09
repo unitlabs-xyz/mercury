@@ -53,7 +53,11 @@ const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
     tokenBalances: async () => [{ mint: NVDAX, rawAmount: 200_000_000n, decimals: 8 }],
     mintConfig: async () => null,
   } satisfies ChainReader,
-  multipliers: { multiplierFor: async () => D(1), isPaused: async () => false } satisfies MultiplierSource,
+  multipliers: {
+    multiplierFor: async () => D(1),
+    multipliersFor: async (mints) => new Map(mints.map((m) => [m, D(1)])),
+    isPaused: async () => false,
+  } satisfies MultiplierSource,
   usdcMint: USDC,
   pledged: async () => [],
   debt: async () => ZERO,
@@ -359,6 +363,7 @@ describe("GET /v1/portfolio/exposure/:ticker", () => {
       // fallback while pretending to test the preferred path.
       multipliers: {
         multiplierFor: async (mint) => (mint === NVDAX ? D(2) : D(1)),
+        multipliersFor: async (mints) => new Map(mints.map((m) => [m, m === NVDAX ? D(2) : D(1)])),
         isPaused: async () => false,
       },
     });

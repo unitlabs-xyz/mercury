@@ -9,6 +9,7 @@ import {
 } from "./deps.js";
 import { applyMigrations } from "./db/migrate.js";
 import { syncStocks } from "./stocks/sync.js";
+import { warmPrices } from "./prices/warm.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
@@ -109,18 +110,51 @@ const every = (name: string, ms: number, run: () => Promise<string | null>) => {
  *
  * | Job                  | Cadence | Writes                                               |
  * | -------------------- | ------- | ---------------------------------------------------- |
+ * | `prices`             | 20s     | nothing — it fills the shared price board            |
  * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`            |
  * | `position-sync`      | 2s      | `lot`, `position`, `activity` — including dividends  |
  * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers               |
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                 |
  * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email               |
  *
- * Two jobs the design called for are not here. A price cache: prices are read
- * from upstream per call instead, which every portfolio read and every
- * snapshot pass pays for. And a poller for Jupiter trigger orders: trigger
- * orders are not built, and `gateExecution` turns the decision that would
- * create one into a refusal rather than a queue nobody watches.
+ * One job the design called for is not here: a poller for Jupiter trigger
+ * orders. Trigger orders are not built, and `gateExecution` turns the decision
+ * that would create one into a refusal rather than a queue nobody watches.
+ *
+ * The other, a price cache, arrived as `prices` plus `CachedPriceBoard`
+ * between them. The board holds every price lookup in the server, collects the
+ * misses of callers who arrive together into one request, and serves an entry
+ * past its window while replacing it behind the reader; `prices` keeps the two
+ * sets somebody is about to want — holdings and the featured shelf — already
+ * in it. So no read blocks on Jupiter for a price anyone has looked at lately,
+ * and what the server spends no longer grows with the number of accounts.
  */
+/**
+ * Twenty seconds, which is not a refresh rate — it is a promise that nothing
+ * anybody is about to read has gone cold.
+ *
+ * `CachedPriceBoard` serves an entry for a minute past its window while
+ * replacing it behind the reader, so this tick only has to land inside that
+ * minute; at twenty seconds it can miss two passes and still have nobody wait.
+ * Running it as fast as the five-second freshness window would be fifteen
+ * requests a minute instead of three, and buy nothing, because a reader who
+ * finds a price four seconds old is not blocked by it.
+ *
+ * One request covers it: the featured shelf is 41 mints and holdings are few.
+ * A pass says nothing unless the set changed size — at this cadence a line
+ * every twenty seconds would bury the jobs that matter.
+ */
+let warmed = -1;
+every("prices", 20_000, async () => {
+  const s = await warmPrices(auth.db, {
+    supportedStocks: read.instruments.supportedStocks,
+    prices: deps.prices,
+  });
+  if (s.mints === warmed) return null;
+  warmed = s.mints;
+  return `${s.priced}/${s.mints} mints warm`;
+});
+
 every("stocks", 6 * 60 * 60 * 1000, async () => {
   const s = await syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices });
   return `${s.instruments} instruments, ${s.tokens} tokens`;
