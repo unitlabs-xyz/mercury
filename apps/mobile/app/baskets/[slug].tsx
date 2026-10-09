@@ -545,7 +545,6 @@ const Position = ({
       {account === null ? (
         loading ? (
           <View style={s.gap}>
-            <Skeleton width="40%" height={12} />
             <Skeleton width="55%" height={28} />
           </View>
         ) : (
@@ -557,8 +556,7 @@ const Position = ({
       ) : (
         <>
           <View>
-            <RNText style={s.meta}>Smart-account value</RNText>
-            <RNText style={s.bigValue}>{usd(account.totalValueUsd)}</RNText>
+            <RNText style={[s.bigValue, { marginTop: 0 }]}>{usd(account.totalValueUsd)}</RNText>
           </View>
           <View style={s.panel}>
             <Fact k="Available USDC" v={usdc === undefined || !Number.isFinite(usdc) ? "—" : usd(usdc)} />
