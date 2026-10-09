@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { placeOrder, type OrderIntent, type OrderResult } from "@mercury/view";
 import { apiFetch } from "./client";
 import { refreshAfterChain } from "./settle";
-import { forgetConfirm, rememberConfirm, usePendingConfirm } from "./pending-confirm";
+import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 
 /**
  * The order sequence itself lives in `@mercury/view`, because the phone runs
@@ -23,16 +23,9 @@ export {
 const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
-const PENDING_KEY = "order-confirm";
+const KIND = "order";
 
 type SentOrder = { orderId: string; signature: string };
-
-const parseSent = (raw: unknown): SentOrder | null => {
-  const claim = raw as { orderId?: unknown; signature?: unknown };
-  return typeof claim?.orderId === "string" && typeof claim.signature === "string"
-    ? { orderId: claim.orderId, signature: claim.signature }
-    : null;
-};
 
 const confirmSent = (sent: SentOrder) =>
   apiFetch(`/v1/orders/${encodeURIComponent(sent.orderId)}/confirm`, {
@@ -67,8 +60,8 @@ export const useOrderAction = () => {
            * still reports them; nothing on screen is waiting to hear.
            */
           onStep: () => undefined,
-          onSent: (sent) => rememberConfirm(PENDING_KEY, sent),
-          settled: () => forgetConfirm(PENDING_KEY),
+          onSent: (sent) => rememberConfirm(KIND, sent),
+          onRecorded: (sent) => forgetConfirm(KIND, sent.signature),
         },
         intent,
       );
@@ -88,8 +81,11 @@ export const useOrderAction = () => {
    */
   const walletReady = wallets[0] !== undefined;
 
-  /* An order whose confirm ran out of attempts, or whose tab reloaded mid-confirm. */
-  usePendingConfirm(PENDING_KEY, parseSent, confirmSent, mutation.isPending);
+  /* Orders whose confirm ran out of attempts, or whose tab reloaded mid-confirm. */
+  usePendingConfirms<SentOrder>(KIND, confirmSent, {
+    paused: mutation.isPending,
+    onSettled: () => refreshAfterChain(qc),
+  });
 
   return { ...mutation, walletReady, reset: () => mutation.reset() };
 };

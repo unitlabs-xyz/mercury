@@ -651,6 +651,36 @@ export const Basket = () => {
       Number(account?.totalValueUsd ?? 0) > 0 ||
       Number(account?.inTransitUsd ?? 0) > 0 ||
       Boolean(fundingAction.data));
+  /*
+   * A mark per holding, by asset id. The withdrawal sheet reads live balances
+   * off Glider, which name an asset by symbol; only the template knows which
+   * ticker that is, and only the instrument knows its logo.
+   */
+  const assetMarks = new Map(
+    allocations.map((asset) => [
+      asset.assetId,
+      <AssetIcon
+        key={asset.assetId}
+        asset={asset}
+        source={byTicker.get(asset.ticker)}
+        className="size-7 rounded-full bg-ds-panel object-contain"
+      />,
+    ]),
+  );
+  /* The basket's two heaviest marks at 40, as every sheet that names it shows them. */
+  const basketMark = (
+    <span className="flex items-center -space-x-3" aria-hidden="true">
+      {allocations.slice(0, 2).map((asset, index) => (
+        <span key={asset.assetId} className="relative" style={{ zIndex: 2 - index }}>
+          <AssetIcon
+            asset={asset}
+            source={byTicker.get(asset.ticker)}
+            className="size-10 rounded-full bg-ds-panel object-contain ring-2 ring-white"
+          />
+        </span>
+      ))}
+    </span>
+  );
   const rebalanceLocked = !accountLoading && !ownershipUnknown && !funded && !(enrolled && !account);
   const marketReads = [
     instruments.dataUpdatedAt,
@@ -1462,19 +1492,7 @@ export const Basket = () => {
         open={investOpen}
         name={name}
         assetCount={allocations.length}
-        mark={
-          <span className="flex items-center -space-x-3" aria-hidden="true">
-            {allocations.slice(0, 2).map((asset, index) => (
-              <span key={asset.assetId} className="relative" style={{ zIndex: 2 - index }}>
-                <AssetIcon
-                  asset={asset}
-                  source={byTicker.get(asset.ticker)}
-                  className="size-10 rounded-full bg-ds-panel object-contain ring-2 ring-white"
-                />
-              </span>
-            ))}
-          </span>
-        }
+        mark={basketMark}
         amount={fundingAmount}
         cash={money.data ? Number(money.data.balanceUsd) : null}
         portfolio={investPortfolio}
@@ -1497,6 +1515,7 @@ export const Basket = () => {
       <RebalanceSheet
         open={rebalanceOpen}
         name={name}
+        mark={basketMark}
         assetCount={allocations.length}
         busy={rebalanceAction.isPending}
         error={rebalanceAction.error?.message}
@@ -1510,6 +1529,8 @@ export const Basket = () => {
           key={account.portfolioId}
           open={exitOpen}
           name={name}
+          mark={basketMark}
+          assetMarks={assetMarks}
           mode={exitMode}
           onMode={(mode) => {
             setExitMode(mode);

@@ -399,10 +399,12 @@ export const useDecision = (
   instrument: Instrument | undefined,
   usd: number,
   _prices: PriceMap | undefined,
-  opts: { side?: "buy" | "sell"; max?: boolean } = {},
+  opts: { side?: "buy" | "sell"; max?: boolean; acceptImpact?: boolean } = {},
 ) => {
   const side = opts.side ?? "buy";
   const max = opts.max === true;
+  /* Accepting re-quotes: the ticket has to show the fill that was agreed to, not the refusal. */
+  const acceptImpact = opts.acceptImpact === true;
   const session = useSession();
   const signedIn = useSignedIn();
   const amount = Number.isFinite(usd) && usd > 0 ? usd : 0;
@@ -413,7 +415,7 @@ export const useDecision = (
     /* The side and `max` belong in the key: the same dollar figure means a
        different order on each tab, and "everything" is not a dollar figure at
        all. Sharing a cache entry would show a buy's answer on the sell tab. */
-    queryKey: ["quote", instrument?.ticker, amount.toFixed(2), side, max, signedIn],
+    queryKey: ["quote", instrument?.ticker, amount.toFixed(2), side, max, acceptImpact, signedIn],
     enabled: !!instrument && (amount > 0 || max) && !belowMinimum,
     staleTime: 10_000,
     refetchInterval: 20_000,
@@ -430,6 +432,7 @@ export const useDecision = (
           side,
           amount: amount.toFixed(2),
           ...(max ? { max: true } : {}),
+          ...(acceptImpact ? { acceptImpact: true } : {}),
         }),
       }),
   });

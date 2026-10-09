@@ -18,7 +18,7 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
   const row = borrow.data?.collateral.find((r) => r.isStock && r.ticker === ticker);
   /* Kamino takes the xStocks token of a ticker, never the Ondo one. The rows
      above are xStocks only, so the Ondo part of a position is what they miss. */
-  const { lendableShares, unlendableShares } = useHeldAs(ticker);
+  const { lendableShares, unlendableShares, unlendableUsd } = useHeldAs(ticker);
 
   if (!signedIn || !borrow.data) return null;
   if (!row) {
@@ -42,15 +42,41 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
           ? ("warn" as const)
           : ("up" as const);
 
-  // Held, but only as tokens Kamino does not take. Its terms would read as an offer this holder cannot use.
+  /*
+   * Held, but only as tokens Kamino does not take. The terms are still worth
+   * showing — as what this holding would lend if it were on xStocks, against
+   * their own figure rather than a round one. Saying only that it cannot be
+   * borrowed leaves the reader with a dead card and no sense of the stakes.
+   */
   if (!holds && unlendableShares > 0) {
+    const wouldLend = unlendableUsd * target;
     return (
-      <RailCard label="Borrow against it">
-        <RailHead title="Borrow against it" meta={`${pct(borrow.data.borrowApy * 100, 1)} a year`} />
-        <p className="mt-[15px] text-[14px] leading-[1.45] text-ds-muted">
-          Your {name} is on Ondo, and shares on Ondo aren’t borrowable. Shares on xStocks are.
-        </p>
-      </RailCard>
+      <FigureCard
+        label="Borrow against it"
+        head={<RailHead title="Borrow against it" meta={`${pct(borrow.data.borrowApy * 100, 1)} a year`} />}
+        value={usd(wouldLend)}
+        sub={`What your ${usd(unlendableUsd)} of ${name} would lend, held on xStocks`}
+        wide={3}
+      >
+        <HeaderFigure
+          size="md"
+          label="Held as"
+          value="Ondo"
+          sub={`${unlendableShares.toFixed(4)} shares, not borrowable`}
+        />
+        <HeaderFigure
+          size="md"
+          label="Kamino lends up to"
+          value={pct(row.ltv * 100, 0)}
+          sub={`We stop at ${pct(target * 100, 0)}, for headroom`}
+        />
+        <HeaderFigure
+          size="md"
+          label="Safe unless it falls"
+          value={pct(row.cushionAtTarget * 100, 0)}
+          sub={`Borrowing the full ${usd(wouldLend)}, before Kamino sells`}
+        />
+      </FigureCard>
     );
   }
 

@@ -5,7 +5,7 @@ import { Button } from "../../ui/Button";
 import { RailHead } from "../../ui/ds";
 import { Alert, Clock } from "../../ui/icons";
 import { REFUSE_COPY, refuseCopy } from "../OrderSheet";
-import { usd } from "@mercury/view";
+import { pct, usd } from "@mercury/view";
 import { RailLine } from "./Panels";
 
 type Side = "buy" | "sell";
@@ -245,6 +245,8 @@ export const Ticket = ({
   proceeds,
   max,
   onMax,
+  acceptImpact,
+  onAcceptImpact,
 }: {
   name: string;
   raw: string;
@@ -253,6 +255,9 @@ export const Ticket = ({
   settled: number;
   cash: number | null;
   decision: Decision | null;
+  /** The person has seen what this size does to the price and asked for it anyway. */
+  acceptImpact: boolean;
+  onAcceptImpact: (accepted: boolean) => void;
   quoting: boolean;
   fair: number | null;
   onReview: () => void;
@@ -274,7 +279,22 @@ export const Ticket = ({
 }) => {
   const amount = Number(raw) || 0;
   const selling = side === "sell";
-  const best = decision && decision.kind !== "refuse" ? decision.best : null;
+  /*
+   * The route the order would take. A refusal on impact still has one — the
+   * cost is the whole point of the choice — so the ticket shows what it would
+   * do rather than dashes above a warning about it.
+   */
+  const impactRefused = decision?.kind === "refuse" && decision.reason === "impact_too_high";
+  const best =
+    decision === null
+      ? null
+      : decision.kind !== "refuse"
+        ? decision.best
+        : impactRefused
+          ? ([...decision.candidates]
+              .filter((c) => c.pricePerShare !== null && c.priceImpact !== null)
+              .sort((a, b) => Number(a.priceImpact) - Number(b.priceImpact))[0] ?? null)
+          : null;
   const price = num(best?.pricePerShare) ?? fair;
   const filled = num(best?.filledShares);
   const over = selling ? sellableUsd !== null && amount > sellableUsd : cash !== null && amount > cash;
@@ -304,6 +324,15 @@ export const Ticket = ({
    * are not the amount's fault and still take the note above the button.
    */
   /* Checked here before anything is asked: under $5 no quote is fetched, so there is no refusal to wait for. */
+  /*
+   * What the move costs, from the route that would be used: the cheapest impact
+   * among the candidates that have one, which is the order the server ranks first.
+   */
+  const impacts = (decision?.candidates ?? [])
+    .map((c) => (c.priceImpact === null ? null : Number(c.priceImpact)))
+    .filter((v): v is number => v !== null && Number.isFinite(v));
+  const impactPct = impacts.length > 0 ? Math.min(...impacts) * 100 : null;
+  const impactUsd = impactPct === null || amount <= 0 ? null : (amount * impactPct) / 100;
   const tooSmall =
     (decision?.kind === "refuse" && decision.reason === "below_minimum") ||
     (!max && settled > 0 && settled < MIN_ORDER_USD);
@@ -409,31 +438,67 @@ export const Ticket = ({
           Trading above the real share price, and the US market is shut. The gap usually closes once it opens.
         </Note>
       )}
-      {decision?.kind === "refuse" && !tooSmall && (
+      {decision?.kind === "refuse" && !tooSmall && decision.reason !== "impact_too_high" && (
         <Note tone="down" icon={<Alert />}>
           <span className="font-medium">{refuseCopy(decision.reason, decision.side).title}.</span>{" "}
           {refuseCopy(decision.reason, decision.side).body}
+        </Note>
+      )}
+      {/*
+       * Moving the price is a cost, not a prohibition. Refusing outright traps
+       * anyone holding a token nobody trades, so the cost is named and the
+       * choice is theirs — taken here, in one deliberate press.
+       */}
+      {impactRefused && !tooSmall && (
+        <Note tone="warn" icon={<Alert />}>
+          <span className="font-medium">
+            {impactUsd === null
+              ? "Thin trading at this size."
+              : `Costs about ${usd(impactUsd)} in price impact.`}
+          </span>{" "}
+          {impactPct === null
+            ? `${selling ? "Selling" : "Buying"} this much pushes the price against you.`
+            : `Only ${pct(impactPct, 1)} of this order, but a smaller amount costs less.`}
+        </Note>
+      )}
+      {acceptImpact && decision?.kind !== "refuse" && impactPct !== null && (
+        <Note tone="warn" icon={<Alert />}>
+          <span className="font-medium">
+            {impactUsd === null ? "Price impact accepted." : `Paying about ${usd(impactUsd)} in impact.`}
+          </span>{" "}
+          {pct(impactPct, 1)} of this order, on top of the price above.{" "}
+          <button
+            type="button"
+            onClick={() => onAcceptImpact(false)}
+            className="font-medium text-ds-ink underline underline-offset-2 hover:opacity-80"
+          >
+            Undo
+          </button>
         </Note>
       )}
       <div className="px-5 pt-5 pb-5">
         <Button
           variant="primary"
           size="lg"
-          onClick={onReview}
+          onClick={() => {
+            /* Accepting is the press: the warning above already said what it costs. */
+            if (impactRefused) onAcceptImpact(true);
+            else onReview();
+          }}
           disabled={
             (max ? false : amount <= 0) ||
             over ||
             tooSmall ||
             allPledged ||
             fair === null ||
-            decision?.kind === "refuse" ||
+            (decision?.kind === "refuse" && !impactRefused) ||
             /* A sell never queues — `decide` sees to that — but saying so here
                keeps the rule visible at the call site rather than implied. */
             (!selling && decision?.kind === "offer_queue")
           }
           className="w-full"
         >
-          Review order
+          {impactRefused ? (selling ? "Sell anyway" : "Buy anyway") : "Review order"}
         </Button>
       </div>
     </section>
