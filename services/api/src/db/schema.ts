@@ -484,6 +484,22 @@ export const portfolioSnapshots = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     /** The top of the hour this reading belongs to, UTC. */
     capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+    /**
+     * When the balances behind it were actually read, which is anywhere up to
+     * an hour after `capturedAt`.
+     *
+     * The chart subtracts deposits and withdrawals to show what the holdings
+     * themselves did, and to do that it has to know which side of a reading a
+     * transfer fell on. Judged by `capturedAt`, a deposit at 19:30 counts as
+     * arriving after a reading stamped 19:00 that was actually taken at 19:47
+     * and already contains it — so it is subtracted from a value that already
+     * included it, and the line falls by the whole deposit.
+     *
+     * Null on rows written before this column. Those fall back to
+     * `capturedAt`, which is the old behaviour and the best that can be said
+     * about a reading whose real instant nobody recorded.
+     */
+    readAt: timestamp("read_at", { withTimezone: true }),
     /** Stocks plus cash less debt: net worth, the figure at the top of the page. */
     totalUsd: usd("total_usd").notNull(),
     stocksUsd: usd("stocks_usd").notNull(),

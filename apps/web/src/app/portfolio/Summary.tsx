@@ -295,7 +295,9 @@ export const Performance = ({
    * account that started empty and was funded today has a gain on the money
    * put in, not a percentage of zero.
    */
-  const added = Math.max(0, Number(recorded?.[recorded.length - 1]?.netFlowUsd ?? 0));
+  const added = history?.excludesTransfers
+    ? Math.max(0, Number(recorded?.[recorded.length - 1]?.netFlowUsd ?? 0))
+    : 0;
   const percent = change !== null && first !== undefined ? performancePercent(change, first + added) : null;
   /*
    * A move too small to print is not a fall. Below half a cent `usdSigned`
@@ -334,7 +336,9 @@ export const Performance = ({
                 <span className="opacity-80">{percent === null ? "—" : pct(percent)}</span>
               </span>
               <span className="translate-y-1 text-[12px] leading-none text-ds-ink/80">
-                Change excluding external transfers
+                {history?.excludesTransfers
+                  ? "Change excluding external transfers"
+                  : "Change in account value"}
               </span>
             </p>
           ) : (

@@ -5,9 +5,26 @@ export type Range = "1D" | "1W" | "1M";
 
 /** One row of `portfolio_snapshot`, as the series cares about it. */
 export interface Reading {
+  /** The hour it is drawn at. */
   readonly at: Date;
+  /**
+   * When the balances were actually read, up to an hour after `at`. Null on a
+   * row written before the column existed. See `portfolioSnapshots.readAt`.
+   */
+  readonly readAt?: Date | null;
   readonly totalUsd: Decimal;
 }
+
+/**
+ * Which flows a reading already contains.
+ *
+ * The instant it was read, not the hour it is labelled with: a deposit at
+ * 19:30 is inside a reading taken at 19:47 however it is stamped, and
+ * counting it as arriving afterwards subtracts it from a value that already
+ * holds it. That drove the line to zero on an account whose first reading in
+ * the window was its only anchor.
+ */
+const takenAt = (reading: Reading): number => (reading.readAt ?? reading.at).getTime();
 
 /**
  * Money that crossed the whole account's edge: a deposit in (positive) or a send
@@ -82,12 +99,12 @@ export const bucketSeries = (
   }
 
   const picked = [...latest.entries()].sort(([a], [b]) => a - b).map(([, reading]) => reading);
-  /* A reading taken at an hour includes every flow up to it, so a flow counts from the first reading after it. */
-  const start = picked[0]?.at.getTime() ?? 0;
+  /* Whatever the opening reading already holds is not a flow since it. */
+  const start = picked[0] === undefined ? 0 : takenAt(picked[0]);
   const counted = flows.filter((f) => f.at.getTime() > start);
   return picked.map((reading) => {
     const net = counted
-      .filter((f) => f.at.getTime() <= reading.at.getTime())
+      .filter((f) => f.at.getTime() <= takenAt(reading))
       .reduce((sum, f) => sum.add(f.usd), ZERO);
     return { at: reading.at.toISOString(), valueUsd: toWire(reading.totalUsd), netFlowUsd: toWire(net) };
   });

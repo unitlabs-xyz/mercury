@@ -25,6 +25,28 @@ export const LABEL: Record<Range, (at: Date) => string> = {
 };
 
 /**
+ * What to draw, and whether the transfers really came out of it.
+ *
+ * An account that holds money now was not worth nothing an hour ago. When
+ * subtracting the transfers says it was, the flows disagree with the values
+ * they are being taken from, and the subtraction is the part that is wrong —
+ * drawing it anyway told somebody holding $9.71 that they were down $10.02,
+ * a line to the floor that reads as every penny gone. The recorded values are
+ * always true, so fall back to them and stop claiming otherwise.
+ */
+export const drawnSeries = (
+  points: readonly { valueUsd: string; netFlowUsd?: string | undefined }[],
+): { values: readonly number[]; excludesTransfers: boolean } => {
+  const raw = points.map((p) => Number(p.valueUsd));
+  const net = points.map((p) => Number(p.netFlowUsd ?? 0));
+  const excludesTransfers = raw.every((value, i) => value - net[i]! > 0 || value <= 0);
+  return {
+    values: excludesTransfers ? raw.map((value, i) => value - net[i]!) : raw,
+    excludesTransfers,
+  };
+};
+
+/**
  * The account's value over a range, or null when there is no line to draw.
  *
  * A portfolio's history is the one thing no upstream sells — Jupiter gives
@@ -47,16 +69,16 @@ export const LABEL: Record<Range, (at: Date) => string> = {
  * Whether there is a chart at all stays the server's call: it withholds a lone
  * reading, so this never has to decide what one point means.
  */
-export const useHistory = (range: Range): { points: readonly Point[] } | null => {
+export const useHistory = (range: Range): { points: readonly Point[]; excludesTransfers: boolean } | null => {
   const recorded = usePortfolioHistory(range);
 
   const points = recorded.data?.points ?? [];
   if (points.length < 2) return null;
+  const { values, excludesTransfers } = drawnSeries(points);
+
   return {
-    points: points.map((p) => ({
-      label: LABEL[range](new Date(p.at)),
-      value: Number(p.valueUsd) - Number(p.netFlowUsd ?? 0),
-    })),
+    points: points.map((p, i) => ({ label: LABEL[range](new Date(p.at)), value: values[i]! })),
+    excludesTransfers,
   };
 };
 

@@ -85,6 +85,7 @@ export async function readSnapshots(db: Db, userId: string, from: Date): Promise
   const rows = await db
     .select({
       at: portfolioSnapshots.capturedAt,
+      readAt: portfolioSnapshots.readAt,
       totalUsd: portfolioSnapshots.totalUsd,
     })
     .from(portfolioSnapshots)
@@ -92,6 +93,7 @@ export async function readSnapshots(db: Db, userId: string, from: Date): Promise
     .orderBy(asc(portfolioSnapshots.capturedAt));
   return rows.map((r) => ({
     at: r.at,
+    readAt: r.readAt,
     totalUsd: D(r.totalUsd),
   }));
 }

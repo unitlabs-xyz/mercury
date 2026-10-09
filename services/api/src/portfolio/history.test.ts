@@ -95,4 +95,28 @@ describe("bucketSeries, with deposits and withdrawals", () => {
     ]);
     expect(out.map((p) => p.netFlowUsd)).toEqual(["0", "-30"]);
   });
+
+  /*
+   * A reading is stamped at the top of its hour but taken up to an hour later.
+   * Judged by the stamp, a deposit the opening reading already contains looks
+   * like one that arrived after it, and is subtracted from a value that
+   * already holds it. On an account whose opening reading was its only anchor
+   * that drove the drawn line to zero: $9.71 held, reported as $10.02 lost.
+   */
+  it("ignores a deposit the opening reading was taken after", () => {
+    const opening: Reading = { ...reading(2, "10.02"), readAt: new Date(NOW.getTime() - 1.2 * 3_600_000) };
+    const out = bucketSeries([opening, reading(1, "9.71")], "1D", NOW, [flow(1.5, "9.72")]);
+    expect(out.map((p) => p.netFlowUsd)).toEqual(["0", "0"]);
+  });
+
+  it("still counts a deposit that landed after the opening reading was taken", () => {
+    const opening: Reading = { ...reading(3, "10"), readAt: new Date(NOW.getTime() - 2.9 * 3_600_000) };
+    const out = bucketSeries([opening, reading(1, "60")], "1D", NOW, [flow(2, "50")]);
+    expect(out.map((p) => p.netFlowUsd)).toEqual(["0", "50"]);
+  });
+
+  it("falls back to the stamped hour for a row written before read_at existed", () => {
+    const out = bucketSeries([reading(3, "10"), reading(1, "60")], "1D", NOW, [flow(2, "50")]);
+    expect(out.map((p) => p.netFlowUsd)).toEqual(["0", "50"]);
+  });
 });

@@ -86,12 +86,12 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
           debtUsd,
           basketValue.totalUsd,
         );
-
         await db
           .insert(portfolioSnapshots)
           .values({
             userId: row.userId,
             capturedAt,
+            readAt: now,
             totalUsd: toWire(value.totalUsd),
             stocksUsd: toWire(value.stocksUsd),
             cashUsd: toWire(value.cashUsd),
@@ -103,6 +103,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
           .onConflictDoUpdate({
             target: [portfolioSnapshots.userId, portfolioSnapshots.capturedAt],
             set: {
+              readAt: now,
               totalUsd: toWire(value.totalUsd),
               stocksUsd: toWire(value.stocksUsd),
               cashUsd: toWire(value.cashUsd),
