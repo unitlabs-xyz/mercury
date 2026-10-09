@@ -1,3 +1,5 @@
+// First, before anything that might reach for a global it sets.
+import "./polyfills";
 import { Analytics } from "@vercel/analytics/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
