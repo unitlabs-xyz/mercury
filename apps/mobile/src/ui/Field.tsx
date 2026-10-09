@@ -1,46 +1,52 @@
 import { useState } from "react";
-import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
+import { StyleSheet, Text as RNText, TextInput, View, type TextInputProps } from "react-native";
 import { color, font, radius, space } from "../theme";
+import { Icon, type IconName } from "./Icon";
 import { Text } from "./Text";
 
 export interface FieldProps extends TextInputProps {
   label: string;
+  /** A mark at the start of the well, as the web's sign-in puts a mail icon there. */
+  icon?: IconName;
   /** Said under the field, in the down tone. */
   problem?: string | null;
 }
 
 /**
- * One text input, in the shape the web's forms use: a label that stays put, a
- * white ground, and a border that answers focus.
+ * One text input, as the web's forms and this app's amount wells draw it: a
+ * grey panel holding its label, and a white well inside it with the value.
+ * Focus gives the well a faint edge; a problem turns it red, and so does the
+ * icon, so the field says what is wrong before the line under it does.
  *
- * The label sits above the value rather than inside it as a placeholder. A
- * placeholder-only field loses its own label the moment somebody types, which
- * on a form you return to after a code email is the moment you need it.
+ * The label stays put above the value rather than living in it as a
+ * placeholder, which would be gone the moment somebody types — on a form you
+ * return to after a code email, the moment you need it.
  */
-export const Field = ({ label, problem, style, ...rest }: FieldProps) => {
+export const Field = ({ label, icon, problem, style, ...rest }: FieldProps) => {
   const [focused, setFocused] = useState(false);
   const bad = problem !== undefined && problem !== null && problem !== "";
-
   return (
     <View style={s.wrap}>
-      <View style={[s.box, focused && s.focused, bad && s.bad]}>
-        <Text variant="tiny" tone="muted">
-          {label}
-        </Text>
-        <TextInput
-          {...rest}
-          onFocus={(e) => {
-            setFocused(true);
-            rest.onFocus?.(e);
-          }}
-          onBlur={(e) => {
-            setFocused(false);
-            rest.onBlur?.(e);
-          }}
-          placeholderTextColor={color.faint}
-          selectionColor={color.brand}
-          style={[s.input, style]}
-        />
+      <View style={s.panel}>
+        <RNText style={s.label}>{label}</RNText>
+        <View style={[s.well, focused && s.focused, bad && s.bad]}>
+          {icon !== undefined && <Icon name={icon} size={16} color={bad ? color.down : color.muted} />}
+          <TextInput
+            {...rest}
+            onFocus={(e) => {
+              setFocused(true);
+              rest.onFocus?.(e);
+            }}
+            onBlur={(e) => {
+              setFocused(false);
+              rest.onBlur?.(e);
+            }}
+            placeholderTextColor="rgba(101,101,101,0.7)"
+            selectionColor={color.brand}
+            accessibilityLabel={rest.accessibilityLabel ?? label}
+            style={[s.input, style]}
+          />
+        </View>
       </View>
       {bad && (
         <Text variant="small" tone="down" style={s.problem}>
@@ -53,25 +59,35 @@ export const Field = ({ label, problem, style, ...rest }: FieldProps) => {
 
 const s = StyleSheet.create({
   wrap: { gap: 7 },
-  box: {
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: color.divider,
-    paddingHorizontal: 16,
-    paddingTop: 11,
-    paddingBottom: 6,
-    gap: 1,
+  panel: { borderRadius: radius.md, backgroundColor: color.tile, padding: space.xs },
+  label: {
+    fontFamily: font.regular,
+    fontSize: 14,
+    color: color.muted,
+    paddingHorizontal: space.md,
+    paddingTop: space.sm,
+    paddingBottom: 10,
   },
-  focused: { borderColor: color.brand },
+  well: {
+    height: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    borderRadius: radius.sm,
+    backgroundColor: color.surface,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  focused: { borderColor: "rgba(0,0,0,0.10)" },
   bad: { borderColor: color.down },
   input: {
-    fontFamily: font.medium,
-    fontSize: 17,
-    letterSpacing: -0.34,
+    flex: 1,
+    fontFamily: font.regular,
+    fontSize: 16,
     color: color.ink,
-    paddingVertical: 6,
     /* Android draws its own underline and its own vertical padding. */
+    paddingVertical: 0,
     paddingHorizontal: 0,
   },
   problem: { paddingHorizontal: space.xs },
