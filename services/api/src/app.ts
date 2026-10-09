@@ -22,6 +22,7 @@ import { instrumentRoutes } from "./routes/instruments.js";
 import { moneyRoutes } from "./routes/money.js";
 import { portfolioRoutes } from "./routes/portfolio.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
+import { feedbackRoutes } from "./routes/feedback.js";
 import { basketRoutes } from "./routes/basket.js";
 
 const fail = (code: ErrorCode | "not_implemented", message: string, details?: unknown) => ({
@@ -93,6 +94,9 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
 
   // The landing page's signup form. Public to write, token-guarded to read.
   app.route("/", waitlistRoutes(read.waitlist));
+
+  // The in-app feedback button. Public: signing in may be the thing that broke.
+  if (read.feedback) app.route("/", feedbackRoutes(read.feedback));
 
   app.use("/v1/*", requireAuth(auth));
 

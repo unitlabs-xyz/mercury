@@ -46,6 +46,7 @@ import type { MoneyDeps } from "./routes/money.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import { pgWaitlist, type WaitlistDeps } from "./routes/waitlist.js";
+import type { FeedbackDeps } from "./routes/feedback.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
@@ -90,6 +91,8 @@ export interface Config {
   /** Resend, for the loan watcher. Unset means it warns nobody and says so. */
   readonly resendApiKey?: string;
   readonly notifyFrom: string;
+  /** Where the in-app feedback button sends to. */
+  readonly feedbackTo: string;
   /**
    * Optional. Privy publishes the public key as a JWKS derived from the app id,
    * so this is only needed to pin a specific key instead of fetching it.
@@ -165,6 +168,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["GLIDER_API_KEY"] ? { gliderApiKey: env["GLIDER_API_KEY"] } : {}),
     ...(env["RESEND_API_KEY"] ? { resendApiKey: env["RESEND_API_KEY"] } : {}),
     notifyFrom: env["NOTIFY_FROM"] ?? "Mercury <alerts@mercury.invalid>",
+    feedbackTo: env["FEEDBACK_TO"] ?? "hello@trymercury.xyz",
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
     jupiterApiKeys: parseJupiterKeys(env["JUPITER_API_KEYS"]),
@@ -289,6 +293,8 @@ export interface ReadDeps {
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
   readonly send: SendDeps;
+  /** The in-app feedback button. Optional so a test app can leave it out. */
+  readonly feedback?: FeedbackDeps;
 }
 
 /**
@@ -320,6 +326,7 @@ export function buildReadDeps(
     | "waitlistPublicUrl"
     | "resendApiKey"
     | "notifyFrom"
+    | "feedbackTo"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
@@ -366,6 +373,13 @@ export function buildReadDeps(
           : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom }),
       ...(config.waitlistPublicUrl ? { publicBase: config.waitlistPublicUrl } : {}),
     }),
+    feedback: {
+      to: config.feedbackTo,
+      notifier:
+        config.resendApiKey === undefined
+          ? loggingNotifier()
+          : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom }),
+    },
     fills: {
       tokenRef: (mint) => tokenRefFor(db, mint),
       settle: (input) => settleOrder(db, input),

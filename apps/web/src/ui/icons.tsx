@@ -294,3 +294,17 @@ export const Droplet = (p: Icon) => (
     <path d="M12 3.5c3.2 3.4 5.5 6.2 5.5 9a5.5 5.5 0 0 1-11 0c0-2.8 2.3-5.6 5.5-9Z" />
   </svg>
 );
+
+export const Message = (p: Icon) => (
+  <svg {...base} {...p}>
+    <path d="M21 12a8 8 0 0 1-11.6 7.14L4 20l.9-4.6A8 8 0 1 1 21 12Z" />
+  </svg>
+);
+
+export const ImageIcon = (p: Icon) => (
+  <svg {...base} {...p}>
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+    <circle cx="9" cy="9" r="1.5" />
+    <path d="m21 15-4.5-4.5L6 21" />
+  </svg>
+);

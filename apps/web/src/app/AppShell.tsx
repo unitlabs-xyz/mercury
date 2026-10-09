@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AuthProvider } from "../auth/AuthContext";
 import { AuthModal } from "../auth/AuthModal";
+import { Feedback } from "./Feedback";
 import { LoanAlert } from "./LoanAlert";
 import { TopBar, type NavKey } from "./TopBar";
 
@@ -25,7 +26,8 @@ export const AppShell = ({
     <div className="min-h-dvh bg-page tracking-[-0.02em]">
       <TopBar current={current} />
 
-      <main className="px-5 pt-6 pb-8 sm:px-10">
+      {/* The bottom padding clears the floating feedback button. */}
+      <main className="px-5 pt-6 pb-24 sm:px-10">
         <div className="mx-auto w-full max-w-[1440px]">
           <LoanAlert />
           {quiet ? (
@@ -44,6 +46,7 @@ export const AppShell = ({
         </div>
       </main>
     </div>
+    <Feedback />
     <AuthModal />
   </AuthProvider>
 );
