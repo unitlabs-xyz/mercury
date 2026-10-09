@@ -166,7 +166,7 @@ export const Invest = () => {
             live={<LiveStatusChip fetching={universe.isFetching} at={universe.dataUpdatedAt} />}
           />
 
-          <div className="mt-4 grid items-start gap-4 md:mt-6 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
+          <div className="mt-4 grid grid-cols-1 items-start gap-4 md:mt-6 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
             <div className="flex min-w-0 flex-col gap-3">
               <Screener
                 rows={list}

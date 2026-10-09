@@ -322,7 +322,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
       <Chevron />
       <Skeleton className="h-4 w-36" />
     </nav>
-    <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
+    <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
       <div className="flex min-w-0 flex-col gap-4 md:gap-6">
         <section aria-label="Loading strategy overview" className="rounded-xl bg-white p-5">
           <div className="flex items-start justify-between gap-4">

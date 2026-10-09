@@ -648,14 +648,20 @@ export const OrderSheet = ({
             )}
 
             {moved && (
-              <p className="mx-5 mt-3 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn">
+              <p
+                role="alert"
+                className="mx-5 mt-3 flex gap-2 rounded-lg bg-ds-warn-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-warn"
+              >
                 <Alert className="mt-px size-3.5 shrink-0" />
                 The price moved while you were deciding, so we stopped rather than buy at it. Buying again
                 uses the price below.
               </p>
             )}
             {failed && (
-              <p className="mx-5 mt-3 flex gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-down">
+              <p
+                role="alert"
+                className="mx-5 mt-3 flex gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-down"
+              >
                 <Alert className="mt-px size-3.5 shrink-0" />
                 {failed.message}
               </p>

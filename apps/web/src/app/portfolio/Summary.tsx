@@ -79,8 +79,10 @@ export const HeaderFigure = ({
     {sub && (
       <dd
         // A 16px line so descenders (the g of "borrowing") are not clipped by the
-        // truncation; 2px less above keeps the text where it was.
-        className={`${size === "md" ? "mt-1.5" : "mt-[11px]"} truncate text-[12px] leading-4 text-ds-ink/80`}
+        // truncation; 2px less above keeps the text where it was. On a phone's
+        // two narrow columns it wraps instead: cut there, the line lost its
+        // figure ("Safe unless your shares fall 6…").
+        className={`${size === "md" ? "mt-1.5" : "mt-[11px]"} text-[12px] leading-4 text-pretty text-ds-ink/80 sm:truncate`}
       >
         {sub}
       </dd>

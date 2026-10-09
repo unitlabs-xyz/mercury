@@ -4,7 +4,8 @@ import { SITE } from "./share.js";
 /**
  * The "Mercury is live" email to the waitlist.
  * Same build as the welcome email (share.ts): tables, inline colours with a
- * dark-mode override, the wordmark as an inline attachment, one button.
+ * dark-mode override, one button. No images or attachments: it opens on the
+ * headline, which also keeps it looking like a letter rather than a campaign.
  */
 export const BETA_URL = "https://beta.trymercury.xyz";
 
@@ -47,8 +48,11 @@ const copyFor = (r: BetaRecipient): Copy => {
 const escape = (s: string) =>
   s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
-/** The email for one person. `wordmark` is the PNG from `renderWordmark()`. */
-export function betaNotice(r: BetaRecipient, wordmark: Buffer, appUrl = BETA_URL): Notice {
+/** Where replies and unsubscribe requests go. */
+const REPLY_TO = "hello@trymercury.xyz";
+
+/** The email for one person. */
+export function betaNotice(r: BetaRecipient, appUrl = BETA_URL): Notice {
   const copy = copyFor(r);
   const why = "You're receiving this because you joined the Mercury waitlist.";
   const host = appUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -116,10 +120,7 @@ ${copy.points
 <table role="presentation" class="mx-bg" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${c.bg}">
 <tr><td align="center" style="padding:24px 12px">
 <table role="presentation" class="mx-bg" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:${c.bg}">
-<tr><td style="padding:12px 20px 0">
-<a href="${SITE}" style="text-decoration:none;border:0"><img src="cid:wordmark" width="99" height="30" alt="Mercury" style="display:block;border:0;width:99px;height:30px;border-radius:8px"></a>
-</td></tr>
-<tr><td class="mx-fg" style="padding:32px 20px 4px;font-family:${font};font-size:30px;line-height:1.15;font-weight:500;letter-spacing:-0.03em;color:${c.fg}">${escape(copy.headline)}</td></tr>
+<tr><td class="mx-fg" style="padding:12px 20px 4px;font-family:${font};font-size:30px;line-height:1.15;font-weight:500;letter-spacing:-0.03em;color:${c.fg}">${escape(copy.headline)}</td></tr>
 ${copy.paragraphs.map(para).join("\n")}
 ${points}
 <tr><td style="padding:34px 20px 0">
@@ -142,6 +143,8 @@ ${escape(why)}</td></tr>
     subject: copy.subject,
     body,
     html,
-    attachments: [{ filename: "mercury.png", content: wordmark, contentId: "wordmark" }],
+    replyTo: REPLY_TO,
+    // Gmail and Yahoo file bulk mail without an unsubscribe header as spam.
+    headers: { "List-Unsubscribe": `<mailto:${REPLY_TO}?subject=unsubscribe>` },
   };
 }

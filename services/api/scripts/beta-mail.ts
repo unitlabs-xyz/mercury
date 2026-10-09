@@ -25,7 +25,6 @@ import { createDb } from "../src/db/client.js";
 import { waitlist } from "../src/db/schema.js";
 import { resendNotifier } from "../src/notify/resend.js";
 import { BETA_URL, betaNotice } from "../src/waitlist/beta.js";
-import { renderWordmark } from "../src/waitlist/card.js";
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
@@ -42,16 +41,14 @@ const need = (name: string): string => {
 const appUrl = process.env["BETA_URL"] ?? BETA_URL;
 const outbox = join(process.cwd(), ".beta-mail");
 await mkdir(outbox, { recursive: true });
-const wordmark = await renderWordmark();
 
 /** Resend's default limit is 2 requests a second; stay under it. */
 const GAP_MS = 600;
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 if (flag("preview")) {
-  const n = betaNotice({ email: "you@example.com", position: 42, name: "Alex" }, wordmark, appUrl);
-  await writeFile(join(outbox, "mercury.png"), wordmark);
-  await writeFile(join(outbox, "live.html"), n.html!.replaceAll("cid:wordmark", "mercury.png"));
+  const n = betaNotice({ email: "you@example.com", position: 42, name: "Alex" }, appUrl);
+  await writeFile(join(outbox, "live.html"), n.html!);
   console.log(`"${n.subject}" → .beta-mail/live.html`);
   process.exit(0);
 }
@@ -60,7 +57,7 @@ const send = resendNotifier({ apiKey: need("RESEND_API_KEY"), from: need("NOTIFY
 
 const test = option("test");
 if (test) {
-  const ok = await send.send(betaNotice({ email: test, position: 42, name: null }, wordmark, appUrl));
+  const ok = await send.send(betaNotice({ email: test, position: 42, name: null }, appUrl));
   console.log(ok ? `sent to ${test}` : `failed to send to ${test}`);
   process.exit(ok ? 0 : 1);
 }
@@ -97,7 +94,7 @@ let sent = 0;
 const failed: string[] = [];
 for (const r of todo) {
   const email = r.email.toLowerCase();
-  if (await send.send(betaNotice({ ...r, email }, wordmark, appUrl))) {
+  if (await send.send(betaNotice({ ...r, email }, appUrl))) {
     sent += 1;
     await appendFile(sentFile, `${email}\n`);
   } else {

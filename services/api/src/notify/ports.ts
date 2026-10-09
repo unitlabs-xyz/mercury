@@ -6,6 +6,10 @@ export interface Notice {
   readonly body: string;
   /** Optional HTML alongside the text. */
   readonly html?: string;
+  /** Where replies go, when not the sender. */
+  readonly replyTo?: string;
+  /** Extra mail headers, e.g. List-Unsubscribe. */
+  readonly headers?: Readonly<Record<string, string>>;
   readonly attachments?: readonly {
     readonly filename: string;
     readonly content: Buffer;

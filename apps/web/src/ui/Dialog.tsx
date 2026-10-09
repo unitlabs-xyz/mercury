@@ -3,9 +3,13 @@ import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 import { EASE } from "../motion/config";
 import { MercuryMark } from "./Logo";
 
+const FOCUSABLE =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 /**
- * What every overlay does while open: Escape closes it, Tab stays inside it,
- * the page stops scrolling behind it, and focus returns to whatever opened it.
+ * What every overlay does while open: focus moves into it, Escape closes it,
+ * Tab stays inside it, the page stops scrolling behind it, and focus returns
+ * to whatever opened it.
  */
 const useOverlay = (open: boolean, onClose: () => void) => {
   const panel = useRef<HTMLDivElement>(null);
@@ -20,22 +24,40 @@ const useOverlay = (open: boolean, onClose: () => void) => {
     if (!open) return undefined;
     opener.current = document.activeElement;
 
+    /*
+     * Into the panel itself, not its first control: that would open a phone's
+     * keyboard or arm a button nobody chose. A sheet that has already focused
+     * something of its own (the sign-in email field) keeps it. Without this,
+     * focus stayed on the page's "Review order" under the modal.
+     */
+    if (panel.current && !panel.current.contains(document.activeElement)) {
+      panel.current.focus({ preventScroll: true });
+    }
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         close.current();
         return;
       }
       if (e.key !== "Tab" || !panel.current) return;
-      const focusable = panel.current.querySelectorAll<HTMLElement>(
-        'a[href],button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])',
-      );
+      const focusable = panel.current.querySelectorAll<HTMLElement>(FOCUSABLE);
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (!first || !last) return;
-      if (e.shiftKey && document.activeElement === first) {
+      if (!first || !last) {
+        e.preventDefault();
+        return;
+      }
+      // From anywhere outside the controls — the page behind, or the panel
+      // itself — Tab comes back in rather than walking the page underneath.
+      const at = document.activeElement;
+      const inside = at instanceof HTMLElement && at !== panel.current && panel.current.contains(at);
+      if (!inside) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && at === first) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
+      } else if (!e.shiftKey && at === last) {
         e.preventDefault();
         first.focus();
       }
@@ -90,11 +112,12 @@ export const Dialog = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
+            tabIndex={-1}
             initial={{ opacity: 0, y: 18, scale: 0.985 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.99 }}
             transition={{ duration: 0.32, ease: EASE }}
-            className={`w-full overflow-hidden rounded-[20px] bg-white ${className}`}
+            className={`w-full overflow-hidden rounded-[20px] bg-white outline-none ${className}`}
           >
             {children}
           </motion.div>
@@ -140,11 +163,12 @@ export const SidePanel = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
+            tabIndex={-1}
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ duration: 0.34, ease: EASE }}
-            className="flex h-full w-full max-w-[460px] flex-col overflow-y-auto bg-white sm:m-2 sm:h-[calc(100%-16px)] sm:rounded-xl"
+            className="flex h-full w-full max-w-[460px] flex-col overflow-y-auto bg-white outline-none sm:m-2 sm:h-[calc(100%-16px)] sm:rounded-xl"
           >
             {children}
           </motion.div>

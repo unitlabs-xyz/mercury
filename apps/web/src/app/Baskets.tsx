@@ -421,7 +421,7 @@ export const Baskets = () => {
   };
   return (
     <AppShell current="baskets" title="Baskets" quiet>
-      <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
+      <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
         <div className="min-w-0 space-y-8 pb-6 sm:space-y-9">
           {catalog.isPending && !catalog.data ? (
             <DiscoveryLoading />
