@@ -9,12 +9,16 @@
  * the modeled-return series, and the allocation mosaic.
  */
 import type {
+  BasketExitAsset,
+  ManagedBasketOperation,
+  ManagedBasketPortfolioSnapshot,
   ManagedBasketPortfolio,
   ManagedBasketTag,
   ManagedBasketTemplate,
   PreparedBasketEnrollment,
   PreparedBasketFunding,
 } from "@mercury/types";
+import { matchesQuery } from "./activity-filters.js";
 
 /** Glider's id for Solana USDC: how a smart account's cash is told apart from its holdings. */
 export const USDC_ASSET_ID =
@@ -230,3 +234,107 @@ export async function fundBasket(
     throw new Error("Funding transaction expired. Try again.");
   return io.send(await io.sign(prepared.transaction));
 }
+
+/* ── search ──────────────────────────────────────────────────────────────── */
+
+/** Strategies matching a search by name, description, theme, ticker or company name. */
+export const searchStrategies = (
+  templates: readonly ManagedBasketTemplate[],
+  query: string,
+  companyNames: ReadonlyMap<string, string>,
+) =>
+  query.trim() === ""
+    ? [...templates]
+    : templates.filter((template) =>
+        matchesQuery(
+          [
+            template.name,
+            template.description,
+            ...template.tags.map((tag) => tag.replace("theme:", "").replace("shelf:", "")),
+            ...template.allocations.flatMap((asset) => [asset.ticker, companyNames.get(asset.ticker)]),
+          ],
+          query,
+        ),
+      );
+
+/* ── operations ──────────────────────────────────────────────────────────── */
+
+/** An operation's state in words, naming the one failure that may not be one. */
+export function rebalanceOutcome(
+  state: ManagedBasketOperation["state"],
+  error: string | null,
+): { label: string; detail: string | null } {
+  if (state === "failed" && /solana swap reconciliation timed out/i.test(error ?? ""))
+    return {
+      label: "Outcome unconfirmed",
+      detail: "Glider could not confirm the swap in time. Check your current holdings before trying again.",
+    };
+  return { label: state.charAt(0).toUpperCase() + state.slice(1).replaceAll("_", " "), detail: error };
+}
+
+export const rebalanceTerminal = (state: ManagedBasketOperation["state"] | undefined) =>
+  state === "completed" || state === "failed" || state === "cancelled";
+
+/* ── partial withdrawals ─────────────────────────────────────────────────── */
+
+type ExitHolding = ManagedBasketPortfolioSnapshot["assets"][number];
+
+/** What a smart account holds that can be withdrawn: Solana SPL tokens with a balance. */
+export const exitAssets = (account: Pick<ManagedBasketPortfolioSnapshot, "assets">) =>
+  account.assets.filter(
+    (asset) =>
+      asset.assetId.startsWith("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:") &&
+      /^[1-9]\d*$/.test(asset.balanceRaw),
+  );
+
+/** Base units to a decimal string, trailing zeros trimmed. */
+export const tokenAmount = (raw: string, decimals: number): string => {
+  if (decimals === 0) return raw;
+  const digits = raw.padStart(decimals + 1, "0");
+  const fraction = digits.slice(-decimals).replace(/0+$/, "");
+  return `${digits.slice(0, -decimals)}${fraction ? `.${fraction}` : ""}`;
+};
+
+/** A typed amount to base units, or null when it isn't one at this precision. */
+export const rawTokenAmount = (amount: string, decimals: number): bigint | null => {
+  if (amount.length > 80 || !/^\d+(?:\.\d+)?$/.test(amount) || decimals < 0 || decimals > 18) return null;
+  const [whole = "", fraction = ""] = amount.split(".");
+  if (fraction.length > decimals) return null;
+  return BigInt(whole) * 10n ** BigInt(decimals) + BigInt(fraction.padEnd(decimals, "0") || "0");
+};
+
+/** Every holding at its full balance: where a custom withdrawal starts. */
+export const fullSelection = (account: Pick<ManagedBasketPortfolioSnapshot, "assets">) =>
+  Object.fromEntries(
+    exitAssets(account).map((asset) => [asset.assetId, tokenAmount(asset.balanceRaw, asset.decimals)]),
+  ) as Record<string, string>;
+
+/**
+ * A custom withdrawal, checked: each typed amount within its balance, at least
+ * one asset, at most ten. An empty field keeps that asset; it isn't a mistake.
+ */
+export const exitSelection = (
+  available: readonly ExitHolding[],
+  selection: Readonly<Record<string, string>>,
+): { assets: BasketExitAsset[]; error: string | null } => {
+  const assets: BasketExitAsset[] = [];
+  for (const asset of available) {
+    const amount = selection[asset.assetId] ?? "";
+    if (amount.trim() === "") continue;
+    const raw = rawTokenAmount(amount.trim(), asset.decimals);
+    if (raw === null) return { assets, error: `Enter a valid ${asset.symbol} amount.` };
+    if (raw === 0n) continue;
+    if (raw > BigInt(asset.balanceRaw))
+      return { assets, error: `${asset.symbol} exceeds your portfolio balance.` };
+    assets.push({ assetId: asset.assetId, amountRaw: raw.toString() });
+  }
+  if (assets.length === 0) return { assets, error: "Enter an amount for at least one asset." };
+  if (assets.length > 10) return { assets, error: "Choose up to 10 assets per withdrawal." };
+  return { assets, error: null };
+};
+
+/** What part of a holding an amount is worth, by its share of the balance. */
+export const exitValue = (holding: ExitHolding | undefined, amountRaw: string) => {
+  const balance = Number(holding?.balanceRaw ?? 0);
+  return holding === undefined || balance <= 0 ? 0 : Number(holding.valueUsd) * (Number(amountRaw) / balance);
+};

@@ -1,5 +1,4 @@
 import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
-import { matchesQuery } from "@mercury/view";
 
 /** Shared blurred, right-revealing treatment for theme artwork. */
 const THEME_MASK = "linear-gradient(to right, transparent 0%, #000 72%)";
@@ -100,24 +99,7 @@ export const visibleStrategies = (
  * once the market read has them. The search spans the whole catalog, so a
  * ticker found on the featured shelf still turns up the strategies behind it.
  */
-export const searchStrategies = (
-  templates: readonly ManagedBasketTemplate[],
-  query: string,
-  companyNames: ReadonlyMap<string, string>,
-) =>
-  query.trim() === ""
-    ? templates
-    : templates.filter((template) =>
-        matchesQuery(
-          [
-            template.name,
-            template.description,
-            ...template.tags.map((tag) => tag.replace("theme:", "").replace("shelf:", "")),
-            ...template.allocations.flatMap((asset) => [asset.ticker, companyNames.get(asset.ticker)]),
-          ],
-          query,
-        ),
-      );
+export { searchStrategies } from "@mercury/view";
 
 /** Only ask the market API for logos that discovery currently shows. */
 export const discoveryLogoTickers = (
