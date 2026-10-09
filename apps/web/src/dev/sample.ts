@@ -34,6 +34,11 @@ const holding = (
   valueUsd: value.toFixed(2),
   costBasisUsd: cost.toFixed(2),
   unrealisedPnlUsd: (value - cost).toFixed(2),
+  // A quarter of a percent of the cost went on fees and spread, which is about
+  // what a real fill gives up. Sample mode has to show the stacked figures or
+  // the one screen built to check them cannot be checked.
+  tradingCostUsd: (cost * 0.0025).toFixed(2),
+  marketPnlUsd: (value - cost + cost * 0.0025).toFixed(2),
   changePct24h: today,
   wrapperCount,
   pledgedShares: ticker === "SPY" ? "3" : "0",

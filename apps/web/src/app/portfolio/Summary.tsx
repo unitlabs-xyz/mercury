@@ -43,6 +43,28 @@ export const borrowedSub = (m: Model): string => {
     : `Safe unless your shares fall ${pct(m.safeUntilDrop * 100, 0)}`;
 };
 
+/**
+ * The line under Stock P&L.
+ *
+ * The figure above it is what the stocks did; this says what being in them
+ * cost. They used to be one number, which meant a holder whose stock had not
+ * moved was shown a loss — the fee and the premium over the underlying quote
+ * were inside the price their shares were recorded at. Both are shown because
+ * both are true, and because they sum to the dollars.
+ */
+export const stockPnlSub = (m: Model): string => {
+  if (m.costBasis <= 0) return `+${pct(0, 1)} · No recorded stock cost basis`;
+  const move = `${m.marketReturnUsd >= 0 ? "+" : "−"}${pct(m.marketReturnPct)}`;
+  // Under half a cent of cost is not worth a clause, and rounding it to
+  // "$0.00 of fees" reads as a bug rather than as nothing.
+  if (Math.abs(m.tradingCostUsd) < 0.005) return `${move} on what you paid for them`;
+  // `usd`, not `usdCompact`: the cents are the point. A $0.23 fee on a $20 buy
+  // is the whole of what this figure exists to show, and compact rounds it away.
+  return m.tradingCostUsd > 0
+    ? `${move} · less ${usd(m.tradingCostUsd)} of fees and spread`
+    : `${move} · plus ${usd(-m.tradingCostUsd)} you bought below the quote`;
+};
+
 /** Red once a fall has taken the loan somewhere the owner has to act on. */
 export const borrowedTone = (m: Model): "down" | undefined =>
   m.health === "margin_call" || m.health === "liquidation" || m.health === "over_limit" ? "down" : undefined;
@@ -80,7 +102,11 @@ export const HeaderFigure = ({
       <dd
         // A 16px line so descenders (the g of "borrowing") are not clipped by the
         // truncation; 2px less above keeps the text where it was.
-        className={`${size === "md" ? "mt-1.5" : "mt-[11px]"} truncate text-[12px] leading-4 text-ds-ink/80`}
+        // Two lines rather than one truncated. At phone width these cells are
+        // 132px, which cuts the figure out of its own caption: "less $13.96 of
+        // fees and spread" became "less $13.9…", and the borrowed line lost
+        // the percentage that is the whole of what it says.
+        className={`${size === "md" ? "mt-1.5" : "mt-[11px]"} line-clamp-2 text-[12px] leading-4 text-ds-ink/80`}
       >
         {sub}
       </dd>
@@ -175,16 +201,10 @@ export const AccountHeader = ({
           sub={m ? `${m.rows.length} positions` : undefined}
         />
         <HeaderFigure
-          label="Tracked stock P&L"
-          value={m ? usdSigned(m.costBasis > 0 ? m.returnUsd : 0) : "—"}
-          sub={
-            m
-              ? m.costBasis > 0
-                ? `${m.returnUsd >= 0 ? "+" : "−"}${pct(m.returnPct)} on known-basis shares`
-                : `+${pct(0, 1)} · No recorded stock cost basis`
-              : undefined
-          }
-          tone={m && m.costBasis > 0 ? (m.returnUsd < 0 ? "down" : "up") : undefined}
+          label="Stock P&L"
+          value={m ? usdSigned(m.costBasis > 0 ? m.marketReturnUsd : 0) : "—"}
+          sub={m ? stockPnlSub(m) : undefined}
+          tone={m && m.costBasis > 0 ? (m.marketReturnUsd < 0 ? "down" : "up") : undefined}
         />
         <HeaderFigure
           label="Cash"

@@ -117,17 +117,29 @@ const Line = ({ r, providers }: { r: Row; providers: readonly Issuer[] | undefin
       ) : (
         <span
           className="flex items-baseline justify-end gap-[5px] whitespace-nowrap"
-          title={
-            r.returnPartial
-              ? "Partial return: only shares with recorded purchase cost"
-              : "Return on recorded purchase cost"
-          }
+          // What the stock did, as the header above reports it — the two have
+          // to agree or the rows will not add up to the figure. What it cost
+          // to be in it, and the dollars the two come to, are here.
+          title={[
+            `${signed(r.marketReturnUsd, usd(Math.abs(r.marketReturnUsd)))} of share price movement`,
+            r.tradingCostUsd >= 0.005
+              ? `less ${usd(r.tradingCostUsd)} of fees and spread`
+              : r.tradingCostUsd <= -0.005
+                ? `plus ${usd(-r.tradingCostUsd)} bought below the quote`
+                : "no fees or spread",
+            `= ${signed(r.returnUsd, usd(Math.abs(r.returnUsd)))} on what you paid`,
+            r.returnPartial ? "Shares with no recorded cost are left out" : "",
+          ]
+            .filter(Boolean)
+            .join("\n")}
         >
-          <span className={`font-medium ${r.returnUsd < 0 ? "text-ds-loss" : "text-ds-up"}`}>
-            {signed(r.returnUsd, usd(Math.abs(r.returnUsd)))}
+          <span className={`font-medium ${r.marketReturnUsd < 0 ? "text-ds-loss" : "text-ds-up"}`}>
+            {signed(r.marketReturnUsd, usd(Math.abs(r.marketReturnUsd)))}
           </span>
           <span className="text-[12px] text-ds-muted">
-            {signed(r.returnUsd, `${Math.abs(r.returnPct).toFixed(1)}%`)}
+            {r.marketReturnPct === null
+              ? ""
+              : signed(r.marketReturnUsd, `${Math.abs(r.marketReturnPct).toFixed(1)}%`)}
             {r.returnPartial ? " partial" : ""}
           </span>
         </span>
@@ -269,7 +281,7 @@ export const Holdings = ({
                   <span className="pr-1.5 text-right">Today</span>
                   <span
                     className="text-right"
-                    title="Return on wallet and pledged shares with recorded cost basis only"
+                    title="Share price movement since purchase, on wallet and pledged shares with a recorded cost basis. Fees and spread are shown on each row."
                   >
                     Return
                   </span>
