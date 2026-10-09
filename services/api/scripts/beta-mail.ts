@@ -10,17 +10,18 @@
  *   pnpm --filter @mercury/api beta-mail --all --go [--limit 50]
  *       sends, in signup order
  *
- * Every address sent to is appended to ./.beta-mail/sent.txt as it goes, and
- * skipped on the next run, so a run that dies halfway can simply be started
- * again without anyone getting it twice.
+ * `waitlist.beta_mailed_at` is stamped as each one goes, and anyone already
+ * stamped is skipped — so a run that dies halfway can simply be started
+ * again, and the scheduled job cannot mail someone this has already reached.
+ * It is in the database and not in a file here because two senders have to
+ * agree, and a sender that remembers privately agrees with nobody.
  *
  * Reads RESEND_API_KEY and NOTIFY_FROM (and DATABASE_URL for --all). BETA_URL
  * overrides where the button goes (default https://beta.trymercury.xyz).
  */
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { asc } from "drizzle-orm";
+import { asc, count, eq, isNull } from "drizzle-orm";
 import { createDb } from "../src/db/client.js";
 import { waitlist } from "../src/db/schema.js";
 import { resendNotifier } from "../src/notify/resend.js";
@@ -70,20 +71,18 @@ if (!flag("all")) {
   process.exit(1);
 }
 
-const sentFile = join(outbox, "sent.txt");
-const already = new Set(
-  existsSync(sentFile) ? (await readFile(sentFile, "utf8")).split("\n").filter(Boolean) : [],
-);
 const db = createDb(need("DATABASE_URL"));
+const [counts] = await db.select({ total: count(), mailed: count(waitlist.betaMailedAt) }).from(waitlist);
 // In signup order, so the earliest positions hear first.
 const rows = await db
-  .select({ email: waitlist.email, position: waitlist.position, name: waitlist.name })
+  .select({ id: waitlist.id, email: waitlist.email, position: waitlist.position, name: waitlist.name })
   .from(waitlist)
+  .where(isNull(waitlist.betaMailedAt))
   .orderBy(asc(waitlist.position));
 const limit = Number(option("limit") ?? Infinity);
-const todo = rows.filter((r) => !already.has(r.email.toLowerCase())).slice(0, limit);
+const todo = rows.slice(0, limit);
 console.log(
-  `waitlist: ${rows.length}, already sent: ${already.size}, this run: ${todo.length} (→ ${appUrl})`,
+  `waitlist: ${counts?.total ?? 0}, already sent: ${counts?.mailed ?? 0}, this run: ${todo.length} (→ ${appUrl})`,
 );
 
 if (!flag("go")) {
@@ -99,7 +98,8 @@ for (const r of todo) {
   const email = r.email.toLowerCase();
   if (await send.send(betaNotice({ ...r, email }, wordmark, appUrl))) {
     sent += 1;
-    await appendFile(sentFile, `${email}\n`);
+    // Stamped only once Resend has taken it, so a crash re-sends at worst one.
+    await db.update(waitlist).set({ betaMailedAt: new Date() }).where(eq(waitlist.id, r.id));
   } else {
     failed.push(email);
   }
