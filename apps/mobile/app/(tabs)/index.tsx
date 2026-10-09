@@ -20,7 +20,10 @@ import {
   type IconName,
 } from "../../src/ui";
 import { useActivityFeed, useBorrow, useMoney, usePortfolio, type Borrow } from "../../src/api";
-import { SmartBand } from "../../src/home/SmartBand";
+import { useActions } from "../../src/actions/Actions";
+import { Attention } from "../../src/home/Attention";
+import { ComingUp } from "../../src/home/ComingUp";
+import { Watching } from "../../src/home/Watching";
 import { usePrefs } from "../../src/prefs";
 import { EventRow, EventRowSkeleton } from "../../src/activity/EventRow";
 import { color, font, radius, space } from "../../src/theme";
@@ -51,6 +54,7 @@ const MASK = "••••";
 function PortfolioScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const openActions = useActions();
   const prefs = usePrefs();
   /* Starts as Settings says, and follows it if it changes; the eye still flips it for now. */
   const [hidden, setHidden] = useState(prefs.hideBalances);
@@ -214,8 +218,15 @@ function PortfolioScreen() {
           </View>
         </View>
 
-        {/* ── The smart band: the part of home that changes with the account ── */}
-        <SmartBand masked={hidden} />
+        {/* ── Something to act on, only when there is ────────────────────── */}
+        <Attention
+          borrow={borrow.data}
+          empty={!waiting && !failed && holdings.length === 0 && basketUsd === 0}
+          cash={cashUsd}
+          onBorrow={() => router.push("/borrow")}
+          onInvest={() => router.navigate("/invest")}
+          onAddCash={() => openActions("addCash")}
+        />
 
         {/* ── What you hold ──────────────────────────────────────────────── */}
         {(waiting || holdings.length > 0 || baskets.length > 0) && (
@@ -287,6 +298,10 @@ function PortfolioScreen() {
             </View>
           </View>
         )}
+
+        {/* ── What you're watching, and what's ahead ─────────────────────── */}
+        <Watching />
+        {!hidden && <ComingUp borrow={borrow.data} cashUsd={cashUsd} apr={apr} />}
 
         {/* ── What has happened ─────────────────────────────────────────── */}
         <View style={s.card}>
