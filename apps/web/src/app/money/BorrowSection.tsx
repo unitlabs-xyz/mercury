@@ -54,7 +54,7 @@ export const BorrowSection = () => {
 
   return (
     <section aria-label="Borrow" className="min-w-0 rounded-xl bg-white p-1">
-      <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 text-[14px] leading-none">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-3 sm:px-5 pt-4 text-[14px] leading-none">
         <div className="flex min-w-0 items-center gap-2.5">
           <h2 className="font-medium text-ds-ink">Borrow against your stocks</h2>
           {b && b.debtUsd > 0 && STATE[b.health] && (
@@ -66,7 +66,7 @@ export const BorrowSection = () => {
           </InfoTip>
         </div>
         {b && (
-          <div className="flex flex-wrap gap-1">
+          <div className="scroll-row flex flex-wrap gap-1 max-sm:-mx-3 max-sm:w-[calc(100%+1.5rem)] max-sm:px-3">
             <Button
               variant="primary"
               onClick={() => openSheet(b.locked ? "repay" : "borrow")}

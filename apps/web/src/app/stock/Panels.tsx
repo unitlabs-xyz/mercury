@@ -49,7 +49,7 @@ export const Stats = ({ p }: { p: Priced }) => {
 
   return (
     <section aria-label="Key stats" className="min-w-0 rounded-xl bg-white p-1">
-      <div className="px-5 pt-4">
+      <div className="px-3 sm:px-5 pt-4">
         {/* "Live from chain" was true of five of the eight figures. The ranges
             and every return come from the share's own price history, so the
             headline claimed a source for numbers that do not have it. The tip
@@ -124,7 +124,7 @@ export const FigureCard = ({
   action?: ReactNode;
 }) => (
   <section aria-label={label} className="@container flex min-w-0 flex-col rounded-xl bg-white p-1">
-    <div className="px-5 pt-4">
+    <div className="px-3 sm:px-5 pt-4">
       {head}
       <div className="mt-3">
         <RailFigure value={value} sub={sub} tone={tone} />
@@ -167,7 +167,7 @@ export const Fact = ({ k, tip, children }: { k: string; tip?: ReactNode; childre
 const HeldAsList = ({ parts }: { parts: readonly HeldPart[] }) => {
   const total = parts.reduce((s, p) => s + p.shares, 0);
   return (
-    <div className="px-5 pt-4 pb-4">
+    <div className="px-3 sm:px-5 pt-4 pb-4">
       <p className="text-[12px] leading-none text-ds-muted">Held as</p>
       {parts.length > 1 && (
         <div className="mt-3 flex h-1 gap-0.5 overflow-hidden rounded-full" aria-hidden="true">
@@ -248,7 +248,7 @@ export const Position = ({
   return (
     // A column, so the grey panel runs to 4px from the foot when the row is taller than it.
     <section aria-label="Your position" className="flex min-w-0 flex-col rounded-xl bg-white p-1">
-      <div className="px-5 pt-4">
+      <div className="px-3 sm:px-5 pt-4">
         <RailHead title="Your position" to="/portfolio" linkLabel="Portfolio" />
         <div className="mt-[15px]">
           <RailFigure
@@ -326,7 +326,7 @@ export const About = ({ i }: { i: Instrument }) => {
   ];
   return (
     <section aria-label="About" className="min-w-0 rounded-xl bg-white p-1">
-      <div className="px-5 pt-4">
+      <div className="px-3 sm:px-5 pt-4">
         <RailHead title={`About ${i.name}`} />
         {i.about && (
           <p className="mt-[13px] max-w-[72ch] text-[14px] leading-[1.55] text-ds-muted">{i.about}</p>

@@ -118,11 +118,11 @@ export const Portfolio = () => {
         {/* 2 — the account, and what you can do with it. */}
         <AccountHeader m={m} dash={dash.data} apr={apr} />
 
-        <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
+        <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
           {/* 3 — what you own, then how it has moved and where it sits. */}
           <div className="flex min-w-0 flex-col gap-4 md:gap-6">
             <Holdings m={m} signedIn={signedIn} failed={failed} baskets={baskets} />
-            <div className="grid items-stretch gap-4 md:gap-6 lg:grid-cols-2">
+            <div className="grid grid-cols-1 items-stretch gap-4 md:gap-6 lg:grid-cols-2">
               <Performance m={m} range={range} setRange={setRange} />
               <Allocation m={m} />
             </div>

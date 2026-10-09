@@ -64,7 +64,7 @@ const IndexCard = memo(
           {`${compact(r.holders)} wallets hold this`}
         </p>
 
-        <div className="flex flex-1 flex-col px-5 pt-4 pb-4">
+        <div className="flex flex-1 flex-col px-3 sm:px-5 pt-4 pb-4">
           {/* Only this block opens the stock: logo, name, description and price,
             one link with a grey sheet under the pointer. The buyers strip, the
             chart and the figures below are not links. The sheet reaches out to
@@ -186,7 +186,7 @@ export const Markets = ({
     <div className="grid gap-4 sm:grid-cols-3 md:gap-6">
       {loading
         ? [0, 1, 2].map((i) => (
-            <div key={i} className="flex h-[358px] flex-col gap-3 rounded-xl bg-white p-6">
+            <div key={i} className="flex h-[358px] flex-col gap-3 rounded-xl bg-white p-4 sm:p-6">
               <Skeleton className="size-9 rounded-full" />
               <Skeleton className="h-5 w-32" />
               <Skeleton className="h-10 w-full" />

@@ -322,7 +322,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
       <Chevron />
       <Skeleton className="h-4 w-36" />
     </nav>
-    <div className="grid items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
+    <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
       <div className="flex min-w-0 flex-col gap-4 md:gap-6">
         <section aria-label="Loading strategy overview" className="rounded-xl bg-white p-5">
           <div className="flex items-start justify-between gap-4">
@@ -342,7 +342,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
           <Skeleton className="mt-5 h-[340px] w-full rounded-lg" />
         </section>
         <section aria-label="Loading strategy composition" className="rounded-xl bg-white p-1">
-          <div className="px-5 pt-4 pb-3">
+          <div className="px-3 sm:px-5 pt-4 pb-3">
             <Skeleton className="h-5 w-44" />
             <Skeleton className="mt-2 h-4 w-64 max-w-full" />
           </div>
@@ -607,7 +607,6 @@ export const Basket = () => {
   const heldAsLabel =
     issuers.size === 0 ? "Ondo tokens" : [...issuers].map((i) => `${TOKEN_NAME[i]} tokens`).join(" and ");
   const mosaic = allocationRows(allocations);
-  const totalWeight = allocations.reduce((sum, asset) => sum + asset.weightBps, 0);
   /* The headline follows the chosen range; "All" reads as the return since the first modeled day. */
   const sinceStart = modeledSince(performance);
   const headline = {
@@ -787,7 +786,7 @@ export const Basket = () => {
               aria-label="Strategy composition"
               className="min-w-0 scroll-mt-24 overflow-hidden rounded-xl bg-white p-1"
             >
-              <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-4">
+              <div className="flex flex-wrap items-end justify-between gap-3 px-3 sm:px-5 pt-4">
                 <div>
                   <h2 className="text-[17px] font-medium text-ds-ink">Strategy composition</h2>
                   <p className="mt-1 text-[12px] text-ds-muted">
@@ -892,7 +891,7 @@ export const Basket = () => {
             </section>
 
             <section aria-label="About and allocation" className="min-w-0 rounded-xl bg-white p-1">
-              <div className="px-5 pt-4">
+              <div className="px-3 sm:px-5 pt-4">
                 <RailHead title={`About ${name}`} />
                 <p className="mt-[13px] max-w-[72ch] text-[14px] leading-[1.55] text-ds-muted">
                   Follows Glider’s target weights with tokenized assets held in your own smart account. Glider
@@ -947,22 +946,6 @@ export const Basket = () => {
                       </ul>
                     ) : (
                       <p className="mt-3 text-[12px] text-ds-muted">Sector classification is unavailable.</p>
-                    )}
-                    {(!!insights.data?.allocation?.unclassifiedCount ||
-                      !!insights.data?.allocation?.lowConfidenceCount) && (
-                      <p className="mt-4 text-[11px] text-ds-muted">
-                        {[
-                          insights.data?.allocation?.unclassifiedCount
-                            ? `${insights.data.allocation.unclassifiedCount} holdings lack a sector`
-                            : null,
-                          insights.data?.allocation?.lowConfidenceCount
-                            ? `${insights.data.allocation.lowConfidenceCount} sector labels are estimates`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                        .
-                      </p>
                     )}
                   </div>
                 </div>
@@ -1027,10 +1010,6 @@ export const Basket = () => {
                       );
                     })}
                   </div>
-                  <p className="px-2 pt-2 text-[11px] text-ds-muted">
-                    Target weights{totalWeight !== 10_000 ? ` · ${weight(totalWeight)} assigned` : ""}; not
-                    live holdings.
-                  </p>
                 </div>
               </div>
             </section>
@@ -1096,8 +1075,7 @@ export const Basket = () => {
                 />
                 {account ? (
                   <div className="mt-5">
-                    <p className="text-[12px] text-ds-muted">Smart-account value</p>
-                    <p className="mt-1 text-[28px] leading-none font-medium text-ds-ink">
+                    <p className="text-[28px] leading-none font-medium text-ds-ink">
                       {usd(account.totalValueUsd)}
                     </p>
                     <div className="mt-5 grid grid-cols-2 gap-4 border-t border-ds-divider pt-4 text-[12px]">
@@ -1332,7 +1310,7 @@ export const Basket = () => {
           </div>
           <div className="order-4 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
             <section aria-label="Rebalancing" className="min-w-0 rounded-xl bg-white p-1">
-              <div className="px-5 pt-4">
+              <div className="px-3 sm:px-5 pt-4">
                 <RailHead
                   title="Rebalancing"
                   meta={
@@ -1344,7 +1322,7 @@ export const Basket = () => {
                   }
                 />
               </div>
-              <div className="mt-[11px] rounded-lg bg-ds-panel px-5 pt-4 pb-4">
+              <div className="mt-[11px] rounded-lg bg-ds-panel px-3 sm:px-5 pt-4 pb-4">
                 {accountLoading ? (
                   <div className="min-h-[160px]" aria-label="Loading rebalance schedule">
                     <Skeleton className="h-4 w-32" />

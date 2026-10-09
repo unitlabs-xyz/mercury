@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { EASE } from "../motion/config";
 import { ChevronDown, ChevronRight } from "./icons";
 
@@ -17,6 +18,7 @@ export const Select = ({
   widthClass = "w-[150px]",
   placement = "bottom",
   field = false,
+  floating = false,
 }: {
   label: string;
   value: string;
@@ -27,11 +29,17 @@ export const Select = ({
   placement?: "bottom" | "top";
   /** Set among form inputs, where it should look like one rather than a filter. */
   field?: boolean;
+  /** Set inside a horizontally scrolling row, which would clip the list: it
+      is drawn on the body instead, pinned under the trigger, and closes when
+      anything scrolls out from under it. */
+  floating?: boolean;
 }) => {
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const [pin, setPin] = useState<{ position: "fixed"; top: number; left: number; width: number }>();
   const id = useId();
 
   const selected = options.find((o) => o.value === value) ?? options[0];
@@ -45,11 +53,31 @@ export const Select = ({
       ),
     );
     const onDown = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (root.current?.contains(target) || list.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open, options, value]);
+
+  useEffect(() => {
+    if (!open || !floating) return undefined;
+    const r = trigger.current?.getBoundingClientRect();
+    if (r) setPin({ position: "fixed", top: r.bottom + 4, left: r.left, width: Math.max(r.width, 160) });
+    const close = (e: globalThis.Event) => {
+      if (!list.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      setPin(undefined);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open, floating]);
+
+  const layer = (node: ReactNode) => (floating ? createPortal(node, document.body) : node);
 
   const commit = (next: string) => {
     onChange(next);
@@ -131,41 +159,46 @@ export const Select = ({
         </motion.span>
       </button>
 
-      <AnimatePresence>
-        {open && (
-          <motion.ul
-            role="listbox"
-            aria-label={label}
-            initial={{ opacity: 0, y: placement === "top" ? 4 : -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: placement === "top" ? 4 : -4 }}
-            transition={{ duration: 0.16, ease: EASE }}
-            className={`absolute z-50 max-h-[280px] w-full overflow-y-auto rounded-lg bg-white p-1 outline-1 outline-black/10 ${
-              placement === "top" ? "bottom-full mb-1" : "mt-1"
-            }`}
-          >
-            {options.map((o, i) => {
-              const isSelected = o.value === value;
-              return (
-                <li key={o.value} role="option" aria-selected={isSelected}>
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => commit(o.value)}
-                    onMouseEnter={() => setCursor(i)}
-                    className={`flex h-8 w-full items-center justify-between gap-2 rounded-md px-3 text-left text-[14px] leading-none transition-colors ${
-                      i === cursor ? "bg-ds-panel" : ""
-                    } ${isSelected ? "font-medium text-ds-ink" : "text-ds-ink"}`}
-                  >
-                    {o.label}
-                    {isSelected && <span className="text-ds-link">✓</span>}
-                  </button>
-                </li>
-              );
-            })}
-          </motion.ul>
-        )}
-      </AnimatePresence>
+      {layer(
+        <AnimatePresence>
+          {open && (!floating || pin) && (
+            <motion.ul
+              ref={list}
+              style={floating && pin ? pin : {}}
+              onKeyDown={floating ? onKeyDown : undefined}
+              role="listbox"
+              aria-label={label}
+              initial={{ opacity: 0, y: placement === "top" ? 4 : -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: placement === "top" ? 4 : -4 }}
+              transition={{ duration: 0.16, ease: EASE }}
+              className={`z-50 max-h-[280px] overflow-y-auto rounded-lg bg-white p-1 outline-1 outline-black/10 ${
+                floating ? "" : `absolute w-full ${placement === "top" ? "bottom-full mb-1" : "mt-1"}`
+              }`}
+            >
+              {options.map((o, i) => {
+                const isSelected = o.value === value;
+                return (
+                  <li key={o.value} role="option" aria-selected={isSelected}>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => commit(o.value)}
+                      onMouseEnter={() => setCursor(i)}
+                      className={`flex h-8 w-full items-center justify-between gap-2 rounded-md px-3 text-left text-[14px] leading-none transition-colors ${
+                        i === cursor ? "bg-ds-panel" : ""
+                      } ${isSelected ? "font-medium text-ds-ink" : "text-ds-ink"}`}
+                    >
+                      {o.label}
+                      {isSelected && <span className="text-ds-link">✓</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </motion.ul>
+          )}
+        </AnimatePresence>,
+      )}
     </div>
   );
 };

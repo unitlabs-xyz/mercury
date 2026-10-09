@@ -33,7 +33,7 @@ export const Money = () => {
     <AppShell current="money" title="Money" quiet>
       <div className="flex flex-col gap-4 md:gap-6">
         <section aria-label="Cash" className="flex flex-col rounded-xl bg-white xl:min-h-[189px] xl:flex-row">
-          <div className="shrink-0 p-6 xl:w-[395px]">
+          <div className="shrink-0 p-4 sm:p-6 xl:w-[395px]">
             <p className="text-[14px] leading-none font-medium text-ds-ink">Cash</p>
             {m ? (
               <p className="mt-[9px] text-[36px] leading-none font-medium text-ds-ink">{usd(m.balanceUsd)}</p>
@@ -46,7 +46,7 @@ export const Money = () => {
               </span>
               <span className="text-ds-ink/80">paid into this balance</span>
             </p>
-            <div className="mt-[22px] flex flex-wrap gap-2">
+            <div className="scroll-row mt-[22px] flex flex-wrap gap-2 max-sm:-mx-4 max-sm:w-[calc(100%+2rem)] max-sm:px-4">
               <ButtonLink to="/invest" variant="primary">
                 Invest
               </ButtonLink>

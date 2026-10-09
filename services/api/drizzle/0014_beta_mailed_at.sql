@@ -1,0 +1,1 @@
+ALTER TABLE "waitlist" ADD COLUMN "beta_mailed_at" timestamp with time zone;

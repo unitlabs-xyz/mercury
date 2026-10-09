@@ -353,7 +353,7 @@ export const Ticket = ({
 
   return (
     <section aria-label={`${selling ? "Sell" : "Buy"} ${name}`} className="min-w-0 rounded-xl bg-white p-1">
-      <div className="px-5 pt-4">
+      <div className="px-3 sm:px-5 pt-4">
         <RailHead
           title={`${selling ? "Sell" : "Buy"} ${name}`}
           meta={
@@ -420,62 +420,70 @@ export const Ticket = ({
         </p>
       )}
 
-      {allPledged && (
-        <Note tone="warn" icon={<Alert />}>
-          All {(pledgedShares ?? 0).toFixed(4)} of your shares are pledged to Kamino as collateral.{" "}
-          <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
-            Withdraw them
-          </Link>{" "}
-          to sell.
-        </Note>
-      )}
+      {/*
+       * Always mounted, so a note that appears is read out: these change as the
+       * amount is typed, and a region created along with its text is often
+       * missed. Polite, because an alert would cut in on every keystroke.
+       */}
+      <div aria-live="polite">
+        {allPledged && (
+          <Note tone="warn" icon={<Alert />}>
+            All {(pledgedShares ?? 0).toFixed(4)} of your shares are pledged to Kamino as collateral.{" "}
+            <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
+              Withdraw them
+            </Link>{" "}
+            to sell.
+          </Note>
+        )}
 
-      {/* Not "we can wait and place it when the price comes back": that is a
+        {/* Not "we can wait and place it when the price comes back": that is a
           trigger order, which is not built. Saying it here and then opening a
           dialog whose only button is dead spends a click to say no. */}
-      {decision?.kind === "offer_queue" && (
-        <Note tone="warn" icon={<Clock />}>
-          Trading above the real share price, and the US market is shut. The gap usually closes once it opens.
-        </Note>
-      )}
-      {decision?.kind === "refuse" && !tooSmall && decision.reason !== "impact_too_high" && (
-        <Note tone="down" icon={<Alert />}>
-          <span className="font-medium">{refuseCopy(decision.reason, decision.side).title}.</span>{" "}
-          {refuseCopy(decision.reason, decision.side).body}
-        </Note>
-      )}
-      {/*
-       * Moving the price is a cost, not a prohibition. Refusing outright traps
-       * anyone holding a token nobody trades, so the cost is named and the
-       * choice is theirs — taken here, in one deliberate press.
-       */}
-      {impactRefused && !tooSmall && (
-        <Note tone="warn" icon={<Alert />}>
-          <span className="font-medium">
-            {impactUsd === null
-              ? "Thin trading at this size."
-              : `Costs about ${usd(impactUsd)} in price impact.`}
-          </span>{" "}
-          {impactPct === null
-            ? `${selling ? "Selling" : "Buying"} this much pushes the price against you.`
-            : `Only ${pct(impactPct, 1)} of this order, but a smaller amount costs less.`}
-        </Note>
-      )}
-      {acceptImpact && decision?.kind !== "refuse" && impactPct !== null && (
-        <Note tone="warn" icon={<Alert />}>
-          <span className="font-medium">
-            {impactUsd === null ? "Price impact accepted." : `Paying about ${usd(impactUsd)} in impact.`}
-          </span>{" "}
-          {pct(impactPct, 1)} of this order, on top of the price above.{" "}
-          <button
-            type="button"
-            onClick={() => onAcceptImpact(false)}
-            className="font-medium text-ds-ink underline underline-offset-2 hover:opacity-80"
-          >
-            Undo
-          </button>
-        </Note>
-      )}
+        {decision?.kind === "offer_queue" && (
+          <Note tone="warn" icon={<Clock />}>
+            Trading above the real share price, and the US market is shut. The gap usually closes once it
+            opens.
+          </Note>
+        )}
+        {decision?.kind === "refuse" && !tooSmall && decision.reason !== "impact_too_high" && (
+          <Note tone="down" icon={<Alert />}>
+            <span className="font-medium">{refuseCopy(decision.reason, decision.side).title}.</span>{" "}
+            {refuseCopy(decision.reason, decision.side).body}
+          </Note>
+        )}
+        {/*
+         * Moving the price is a cost, not a prohibition. Refusing outright traps
+         * anyone holding a token nobody trades, so the cost is named and the
+         * choice is theirs — taken here, in one deliberate press.
+         */}
+        {impactRefused && !tooSmall && (
+          <Note tone="warn" icon={<Alert />}>
+            <span className="font-medium">
+              {impactUsd === null
+                ? "Thin trading at this size."
+                : `Costs about ${usd(impactUsd)} in price impact.`}
+            </span>{" "}
+            {impactPct === null
+              ? `${selling ? "Selling" : "Buying"} this much pushes the price against you.`
+              : `Only ${pct(impactPct, 1)} of this order, but a smaller amount costs less.`}
+          </Note>
+        )}
+        {acceptImpact && decision?.kind !== "refuse" && impactPct !== null && (
+          <Note tone="warn" icon={<Alert />}>
+            <span className="font-medium">
+              {impactUsd === null ? "Price impact accepted." : `Paying about ${usd(impactUsd)} in impact.`}
+            </span>{" "}
+            {pct(impactPct, 1)} of this order, on top of the price above.{" "}
+            <button
+              type="button"
+              onClick={() => onAcceptImpact(false)}
+              className="font-medium text-ds-ink underline underline-offset-2 hover:opacity-80"
+            >
+              Undo
+            </button>
+          </Note>
+        )}
+      </div>
       <div className="px-5 pt-5 pb-5">
         <Button
           variant="primary"

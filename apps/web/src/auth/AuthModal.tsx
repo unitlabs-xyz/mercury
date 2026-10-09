@@ -640,7 +640,9 @@ export const AuthModal = () => {
                               <p className="flex items-center gap-2">
                                 <Clock className="size-[15px] shrink-0 text-ds-muted" />
                                 {seconds > 0 ? (
-                                  <span className="text-[14px] text-ds-muted">
+                                  /* A clock, not a new value: without the opt-out the
+                                     value flash dimmed the whole line on every tick. */
+                                  <span data-no-flash className="text-[14px] text-ds-muted">
                                     Didn't get a code? Resend in {seconds}s
                                   </span>
                                 ) : (

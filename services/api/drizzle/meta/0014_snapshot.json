@@ -1,5 +1,5 @@
 {
-  "id": "47e17f3b-7d30-4630-a913-64516d7268f5",
+  "id": "5981c80a-7c58-4420-87c7-efdd9140ad11",
   "prevId": "e7207b27-888f-439b-b7ca-eaf5018bbdbc",
   "version": "7",
   "dialect": "postgresql",
@@ -733,19 +733,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "fee_usd": {
-          "name": "fee_usd",
-          "type": "numeric(38, 18)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "reference_price_usd": {
-          "name": "reference_price_usd",
-          "type": "numeric(38, 18)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "acquired_at": {
           "name": "acquired_at",
           "type": "timestamp with time zone",
@@ -1008,18 +995,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "fee_usd": {
-          "name": "fee_usd",
-          "type": "numeric(38, 18)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "realised_pnl_usd": {
-          "name": "realised_pnl_usd",
-          "type": "numeric(38, 18)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "trigger_order_account": {
           "name": "trigger_order_account",
           "type": "text",
@@ -1237,20 +1212,6 @@
           "type": "numeric(38, 18)",
           "primaryKey": false,
           "notNull": true
-        },
-        "reference_basis_usd": {
-          "name": "reference_basis_usd",
-          "type": "numeric(38, 18)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "fee_usd": {
-          "name": "fee_usd",
-          "type": "numeric(38, 18)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
         },
         "avg_unit_cost_usd": {
           "name": "avg_unit_cost_usd",
@@ -1550,6 +1511,12 @@
         "background": {
           "name": "background",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "beta_mailed_at": {
+          "name": "beta_mailed_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         }

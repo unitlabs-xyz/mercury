@@ -18,6 +18,8 @@ export const resendNotifier = (opts: { apiKey: string; from: string }): Notifier
           subject: notice.subject,
           text: notice.body,
           ...(notice.html === undefined ? {} : { html: notice.html }),
+          ...(notice.replyTo === undefined ? {} : { reply_to: notice.replyTo }),
+          ...(notice.headers === undefined ? {} : { headers: notice.headers }),
           ...(notice.attachments === undefined
             ? {}
             : {

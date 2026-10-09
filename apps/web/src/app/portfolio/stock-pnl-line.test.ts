@@ -22,12 +22,12 @@ const model = (over: Partial<Model> = {}): Model =>
  */
 describe("stockPnlSub", () => {
   it("names the move and what it cost to be there for it", () => {
-    expect(stockPnlSub(model())).toBe("+35.19% · less $4.46 of fees and spread");
+    expect(stockPnlSub(model())).toBe("+35.19% · $4.46 fees and spread");
   });
 
   it("marks a fall as a fall and still charges for the trade", () => {
     expect(stockPnlSub(model({ marketReturnUsd: -20, marketReturnPct: -6.77 }))).toBe(
-      "−6.77% · less $4.46 of fees and spread",
+      "−6.77% · $4.46 fees and spread",
     );
   });
 
@@ -38,9 +38,7 @@ describe("stockPnlSub", () => {
   });
 
   it("credits a fill that beat the quote rather than charging for it", () => {
-    expect(stockPnlSub(model({ tradingCostUsd: -2.5 }))).toBe(
-      "+35.19% · plus $2.50 you bought below the quote",
-    );
+    expect(stockPnlSub(model({ tradingCostUsd: -2.5 }))).toBe("+35.19% · $2.50 bought below the quote");
   });
 
   it("says there is no basis rather than claiming a return of nothing", () => {

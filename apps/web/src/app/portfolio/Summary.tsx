@@ -61,8 +61,8 @@ export const stockPnlSub = (m: Model): string => {
   // `usd`, not `usdCompact`: the cents are the point. A $0.23 fee on a $20 buy
   // is the whole of what this figure exists to show, and compact rounds it away.
   return m.tradingCostUsd > 0
-    ? `${move} · less ${usd(m.tradingCostUsd)} of fees and spread`
-    : `${move} · plus ${usd(-m.tradingCostUsd)} you bought below the quote`;
+    ? `${move} · ${usd(m.tradingCostUsd)} fees and spread`
+    : `${move} · ${usd(-m.tradingCostUsd)} bought below the quote`;
 };
 
 /** Red once a fall has taken the loan somewhere the owner has to act on. */
@@ -101,12 +101,10 @@ export const HeaderFigure = ({
     {sub && (
       <dd
         // A 16px line so descenders (the g of "borrowing") are not clipped by the
-        // truncation; 2px less above keeps the text where it was.
-        // Two lines rather than one truncated. At phone width these cells are
-        // 132px, which cuts the figure out of its own caption: "less $13.96 of
-        // fees and spread" became "less $13.9…", and the borrowed line lost
-        // the percentage that is the whole of what it says.
-        className={`${size === "md" ? "mt-1.5" : "mt-[11px]"} line-clamp-2 text-[12px] leading-4 text-ds-ink/80`}
+        // truncation; 2px less above keeps the text where it was. On a phone's
+        // two narrow columns it wraps instead: cut there, the line lost its
+        // figure ("Safe unless your shares fall 6…").
+        className={`${size === "md" ? "mt-1.5" : "mt-[11px]"} text-[12px] leading-4 text-pretty text-ds-ink/80 sm:truncate`}
       >
         {sub}
       </dd>
@@ -166,7 +164,7 @@ export const AccountHeader = ({
   const owes = card !== null && card !== undefined && card.statementBalanceUsd > 0;
   return (
     <section aria-label="Account" className="flex flex-col rounded-xl bg-white xl:min-h-[189px] xl:flex-row">
-      <div className="flex shrink-0 flex-col justify-center p-6 xl:w-[395px]">
+      <div className="flex shrink-0 flex-col justify-center p-4 sm:p-6 xl:w-[395px]">
         <p className="text-[14px] leading-none font-medium text-ds-ink">Net worth</p>
         {m ? (
           <p className="mt-[9px] text-[36px] leading-none font-medium text-ds-ink">{usd(m.total)}</p>
@@ -177,7 +175,7 @@ export const AccountHeader = ({
         {(!m || Math.abs(m.stockMove24hUsd ?? 0) >= 0.005) && (
           <TodayMove pctValue={m?.stockMove24hPct} usdValue={m?.stockMove24hUsd} />
         )}
-        <div className="mt-[22px] flex flex-wrap gap-2">
+        <div className="scroll-row mt-[22px] flex flex-wrap gap-2 max-sm:-mx-4 max-sm:w-[calc(100%+2rem)] max-sm:px-4">
           <ButtonLink to="/invest" variant="primary">
             Invest
           </ButtonLink>
@@ -273,7 +271,7 @@ export const Performance = ({
   return (
     <section
       aria-label="Account value history"
-      className="flex min-w-0 flex-col rounded-xl bg-white px-6 pt-5 pb-5"
+      className="flex min-w-0 flex-col rounded-xl bg-white px-4 pt-5 pb-5 sm:px-6"
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -362,7 +360,10 @@ const slicesOf = (m: Model): Slice[] => {
  * with the total beside it, the hex graph in a 208px slot, then the legend.
  */
 export const Allocation = ({ m }: { m: Model | undefined }) => (
-  <section aria-label="Allocation" className="flex min-w-0 flex-col rounded-xl bg-white px-6 pt-5 pb-[14px]">
+  <section
+    aria-label="Allocation"
+    className="flex min-w-0 flex-col rounded-xl bg-white px-4 pt-5 pb-[14px] sm:px-6"
+  >
     <RailHead title="Allocation" meta={m && m.assets > 0 ? usd(m.assets) : undefined} />
     <div className="mt-[25px]">
       {!m ? (

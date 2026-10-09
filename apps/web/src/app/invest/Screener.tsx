@@ -256,7 +256,7 @@ export const Screener = ({
 
   return (
     <section ref={top} aria-label="All stocks" className="min-w-0 scroll-mt-20 rounded-xl bg-white p-1">
-      <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 text-[14px] leading-none">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-3 sm:px-5 pt-4 text-[14px] leading-none">
         <div className="flex min-w-0 items-center gap-2.5">
           <h2 className="font-medium text-ds-ink">All Stocks</h2>
           <span className="truncate text-ds-muted">

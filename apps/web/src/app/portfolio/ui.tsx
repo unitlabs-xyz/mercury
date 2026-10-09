@@ -23,7 +23,7 @@ export const Panel = ({
     aria-label={title}
     className={`flex min-w-0 flex-col rounded-2xl border border-cardline bg-white ${className}`}
   >
-    <header className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
+    <header className="flex items-center justify-between gap-3 px-3 sm:px-5 pt-4 pb-3">
       <div className="flex min-w-0 items-baseline gap-2">
         <h2 className="text-[14px] font-semibold tracking-[-0.01em]">{title}</h2>
         {meta && <span className="truncate text-[12px] text-faint">{meta}</span>}

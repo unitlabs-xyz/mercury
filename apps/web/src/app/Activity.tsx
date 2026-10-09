@@ -206,7 +206,7 @@ export const Activity = () => {
   return (
     <AppShell current="activity" title="Activity" quiet>
       <section aria-label="Activity" className="min-w-0 rounded-xl bg-white p-1">
-        <header className="flex flex-wrap items-center justify-between gap-3 px-5 pt-4 text-[14px] leading-none">
+        <header className="flex items-center justify-between gap-3 px-3 sm:px-5 pt-4 text-[14px] leading-none">
           <div className="flex min-w-0 items-center gap-2.5">
             <h1 className="text-[20px] leading-none font-medium text-ds-ink">Activity</h1>
             <span className="text-ds-muted">
@@ -234,34 +234,46 @@ export const Activity = () => {
               trust.
             </InfoTip>
           </div>
-          <Button icon={<Download />} onClick={() => downloadCsv(filtered)} disabled={filtered.length === 0}>
-            Export CSV
+          <Button
+            icon={<Download />}
+            onClick={() => downloadCsv(filtered)}
+            disabled={filtered.length === 0}
+            className="max-sm:px-4"
+          >
+            Export<span className="max-sm:hidden">&nbsp;CSV</span>
           </Button>
         </header>
 
-        <div className="mt-3 flex flex-wrap items-center gap-1 px-5">
-          <Select
-            label="Type"
-            value={group}
-            options={TYPE_OPTIONS}
-            onChange={(v) => write({ group: v as Group })}
-            widthClass="w-[178px]"
-          />
-          <Select
-            label="Year"
-            value={year}
-            options={yearOptions(events)}
-            onChange={(v) => write({ year: v })}
-            widthClass="w-[150px]"
-          />
-          <Select
-            label="Month"
-            value={month}
-            options={MONTH_OPTIONS}
-            onChange={(v) => write({ month: v })}
-            widthClass="w-[168px]"
-          />
-          <label className="flex h-8 w-full items-center gap-2 rounded-lg bg-ds-panel px-3 text-ds-muted sm:ml-auto sm:w-[237px]">
+        {/* On a phone the pills wrapped into a ragged stack. They keep one
+            line and scroll sideways instead; search takes its own row. */}
+        <div className="mt-3 flex flex-wrap items-center gap-1 px-5 max-sm:px-3">
+          <div className="scroll-row flex gap-1 max-sm:-mx-3 max-sm:w-[calc(100%+1.5rem)] max-sm:px-3">
+            <Select
+              label="Type"
+              value={group}
+              options={TYPE_OPTIONS}
+              onChange={(v) => write({ group: v as Group })}
+              widthClass="w-[178px]"
+              floating
+            />
+            <Select
+              label="Year"
+              value={year}
+              options={yearOptions(events)}
+              onChange={(v) => write({ year: v })}
+              widthClass="w-[150px]"
+              floating
+            />
+            <Select
+              label="Month"
+              value={month}
+              options={MONTH_OPTIONS}
+              onChange={(v) => write({ month: v })}
+              widthClass="w-[168px]"
+              floating
+            />
+          </div>
+          <label className="flex h-8 w-full items-center gap-2 rounded-lg bg-ds-panel px-3 text-ds-muted max-sm:h-10 sm:ml-auto sm:w-[237px]">
             <Search className="size-3.5 shrink-0" />
             <input
               value={query}

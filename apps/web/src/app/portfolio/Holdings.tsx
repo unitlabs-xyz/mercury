@@ -247,7 +247,7 @@ export const Holdings = ({
   return (
     <>
       <section aria-label="Holdings" className="min-w-0 rounded-xl bg-white p-1">
-        <div className="px-5 pt-4">
+        <div className="px-3 sm:px-5 pt-4">
           <RailHead
             title="Holdings"
             meta={
@@ -345,7 +345,7 @@ export const Holdings = ({
 
       {m && basketRows.length > 0 && (
         <section aria-label="Basket holdings" className="min-w-0 rounded-xl bg-white p-1">
-          <div className="px-5 pt-4">
+          <div className="px-3 sm:px-5 pt-4">
             <RailHead
               title="Basket holdings"
               meta={`${basketRows.length} ${basketRows.length === 1 ? "basket" : "baskets"}, largest first`}

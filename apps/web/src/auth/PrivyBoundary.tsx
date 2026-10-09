@@ -69,6 +69,9 @@ export const PrivyBoundary = ({ children }: { children: ReactNode }) => {
           showWalletUIs: false,
         },
         solana: SOLANA,
+        // Email only, so no external wallets; the connectors are stubbed out of
+        // the bundle in vite.config.ts.
+        externalWallets: { walletConnect: { enabled: false } },
       }}
     >
       {/* Mirrors the identity token out to `apiFetch`, which cannot use a hook. */}

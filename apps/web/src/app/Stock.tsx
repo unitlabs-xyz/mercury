@@ -44,7 +44,7 @@ const SINCE: Record<Span, string> = {
 
 const Missing = ({ loading }: { loading: boolean }) => (
   <AppShell current="invest" title="Invest" quiet>
-    <section className="rounded-xl bg-white px-6 py-12 text-center">
+    <section className="rounded-xl bg-white px-4 py-12 sm:px-6 text-center">
       {loading ? (
         <div className="mx-auto flex max-w-sm flex-col items-center gap-3">
           <Skeleton className="size-12 rounded-full" />
@@ -324,7 +324,7 @@ export const Stock = () => {
 
           <div className="order-3 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
             {/* What you hold of it and what it could borrow, side by side and level; one alone takes the row. */}
-            <div className="grid items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
+            <div className="grid grid-cols-1 items-stretch gap-4 empty:hidden md:gap-6 lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
               {(holding || basketValue > 0) && (
                 <Position
                   h={holding}

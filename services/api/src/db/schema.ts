@@ -412,6 +412,17 @@ export const waitlist = pgTable(
      * chosen by position.
      */
     background: text("background"),
+    /**
+     * When the "Mercury is live" email went out, and the only record that it
+     * did. Null means it has not.
+     *
+     * In the database rather than beside whoever sent it, because two things
+     * send it now — the script by hand and the scheduled job — and a sender
+     * that remembers privately will mail someone the other has already
+     * reached. Adding to Privy's allowlist twice is free; emailing twice is
+     * not.
+     */
+    betaMailedAt: timestamp("beta_mailed_at", { withTimezone: true }),
   },
   (t) => [
     uniqueIndex("waitlist_email_idx").on(t.email),
