@@ -13,7 +13,7 @@ import type {
   ExitIntentPayload,
 } from "../core/primitives.js";
 import type { Db } from "../../db/client.js";
-import { activities, basketActions } from "../../db/schema.js";
+import { activities, basketAccounts, basketActions, wallets } from "../../db/schema.js";
 
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const LOCK_KEY = 4_919_208;
@@ -282,6 +282,32 @@ export class JsonBasketStore implements BasketStore {
       })
       .returning({ id: activities.id });
     if (saved.length === 0) throw new Error("Funding signature belongs to another activity");
+  }
+
+  /**
+   * The smart account this owner's basket money moves through.
+   *
+   * Keyed by user and address, so re-resolving the same account is a no-op and
+   * a second portfolio through the same account cannot displace the first.
+   * Silent when the owner has no wallet row: nothing here is worth failing a
+   * funding preparation over.
+   */
+  async rememberBasketAccount(input: {
+    ownerAccountId: string;
+    portfolioId: string;
+    address: string;
+  }): Promise<void> {
+    const owner = input.ownerAccountId.slice(input.ownerAccountId.lastIndexOf(":") + 1);
+    const [wallet] = await this.actionsDb()
+      .select({ userId: wallets.userId })
+      .from(wallets)
+      .where(eq(wallets.address, owner))
+      .limit(1);
+    if (wallet === undefined) return;
+    await this.actionsDb()
+      .insert(basketAccounts)
+      .values({ userId: wallet.userId, address: input.address, portfolioId: input.portfolioId })
+      .onConflictDoNothing();
   }
 
   async recentFunding(userId: string, portfolioId: string) {

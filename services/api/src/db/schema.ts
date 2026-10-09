@@ -96,6 +96,33 @@ export const basketActions = pgTable(
 );
 
 /**
+ * The Glider smart accounts a user's money goes to and comes back from.
+ *
+ * Remembered because the wallet-events job cannot otherwise tell basket
+ * funding from somebody sending their money away: both are USDC leaving the
+ * wallet with nothing else moving in it. Read as a withdrawal, funding a
+ * basket printed a gain on the performance chart equal to the amount funded,
+ * because net worth did not drop — the money reappeared as basket value.
+ *
+ * Written whenever we resolve one from Glider, which is before any money can
+ * move to it. Rows older than that are still corrected after the fact, by the
+ * funding and exit reconcilers.
+ */
+export const basketAccounts = pgTable(
+  "basket_account",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The smart account's Solana address, bare — not a CAIP account id. */
+    address: text("address").notNull(),
+    portfolioId: text("portfolio_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.address] })],
+);
+
+/**
  * One signature stream we follow for a wallet.
  *
  * A row rather than a column per stream: a wallet follows its own address for

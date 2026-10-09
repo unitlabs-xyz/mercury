@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { D, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { activities, instruments, portfolioSnapshots, positions, tokens } from "../db/schema.js";
@@ -100,9 +100,16 @@ export async function readSnapshots(db: Db, userId: string, from: Date): Promise
  * exact dollar amount, and only USDC is in the cash `totalUsd` counts. A SOL
  * transfer has no dollar figure and is not in the total either.
  *
- * In: a deposit. Out: a send. Basket funding and exit are internal now that
- * the total includes both wallet and basket value. Trades, loans and repayments
- * never reach these kinds: `movementsIn` gives them rows of their own.
+ * In: a deposit. Out: a send. Trades, loans and repayments never reach these
+ * kinds: `movementsIn` gives them rows of their own.
+ *
+ * Basket funding and exit are internal, because the total counts wallet and
+ * basket value alike — and they are excluded by the portfolio on the row
+ * rather than by the kind. The kind alone was not enough: the wallet-events
+ * job writes basket funding as a plain `transfer_out` until the funding
+ * confirmation re-kinds it, so a -$500 flow stood against an unchanged total
+ * and printed +$500 of performance, permanently for a funding nobody ever
+ * confirmed. `movementsIn` now stamps the portfolio when it writes the row.
  */
 const FLOW_SIGN: Record<string, 1 | -1> = {
   transfer_in: 1,
@@ -119,6 +126,7 @@ export async function readFlows(db: Db, userId: string, from: Date): Promise<rea
         gte(activities.occurredAt, from),
         eq(activities.mint, USDC_MINT),
         inArray(activities.kind, Object.keys(FLOW_SIGN)),
+        isNull(activities.basketPortfolioId),
         isNotNull(activities.amountUsd),
       ),
     );

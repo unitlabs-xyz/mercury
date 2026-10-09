@@ -52,6 +52,7 @@ const store = (changes: Record<string, unknown> = {}) =>
       throw new Error("unexpected exit save");
     },
     attachExitOperation: async () => undefined,
+    rememberBasketAccount: async () => undefined,
     recentActions: async () => [],
     confirmFunding: async () => undefined,
     recentFunding: async () => [],
