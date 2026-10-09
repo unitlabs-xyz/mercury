@@ -607,7 +607,6 @@ export const Basket = () => {
   const heldAsLabel =
     issuers.size === 0 ? "Ondo tokens" : [...issuers].map((i) => `${TOKEN_NAME[i]} tokens`).join(" and ");
   const mosaic = allocationRows(allocations);
-  const totalWeight = allocations.reduce((sum, asset) => sum + asset.weightBps, 0);
   /* The headline follows the chosen range; "All" reads as the return since the first modeled day. */
   const sinceStart = modeledSince(performance);
   const headline = {
@@ -948,22 +947,6 @@ export const Basket = () => {
                     ) : (
                       <p className="mt-3 text-[12px] text-ds-muted">Sector classification is unavailable.</p>
                     )}
-                    {(!!insights.data?.allocation?.unclassifiedCount ||
-                      !!insights.data?.allocation?.lowConfidenceCount) && (
-                      <p className="mt-4 text-[11px] text-ds-muted">
-                        {[
-                          insights.data?.allocation?.unclassifiedCount
-                            ? `${insights.data.allocation.unclassifiedCount} holdings lack a sector`
-                            : null,
-                          insights.data?.allocation?.lowConfidenceCount
-                            ? `${insights.data.allocation.lowConfidenceCount} sector labels are estimates`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                        .
-                      </p>
-                    )}
                   </div>
                 </div>
                 <div className="rounded-lg bg-ds-panel p-2.5">
@@ -1027,10 +1010,6 @@ export const Basket = () => {
                       );
                     })}
                   </div>
-                  <p className="px-2 pt-2 text-[11px] text-ds-muted">
-                    Target weights{totalWeight !== 10_000 ? ` · ${weight(totalWeight)} assigned` : ""}; not
-                    live holdings.
-                  </p>
                 </div>
               </div>
             </section>
