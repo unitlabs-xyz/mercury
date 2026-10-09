@@ -1,5 +1,14 @@
 import { Hono } from "hono";
-import { D, exposure, toWire, ZERO, type Decimal, type Issuer, type WrapperHolding } from "@mercury/core";
+import {
+  D,
+  exposure,
+  stackedReturn,
+  toWire,
+  ZERO,
+  type Decimal,
+  type Issuer,
+  type WrapperHolding,
+} from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import {
@@ -40,6 +49,10 @@ export interface HoldingRow {
   /** Of those shares, how many we hold a lot for. */
   readonly sharesWithBasis: Decimal;
   readonly costBasisUsd: Decimal;
+  /** The same shares at the quotes they were bought against. */
+  readonly referenceBasisUsd: Decimal;
+  /** Fees paid to acquire the shares still held. */
+  readonly feeUsd: Decimal;
   readonly avgUnitCostUsd: Decimal;
   readonly wrappers: readonly HoldingWrapper[];
 }
@@ -158,6 +171,15 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       const priced = priceFor(row, board);
       const perShare = priced?.pricePerShare ?? ZERO;
       const changePct24h = priced?.changePct24h ?? ZERO;
+      const stacked = stackedReturn(
+        {
+          sharesWithBasis: row.sharesWithBasis,
+          costBasisUsd: row.costBasisUsd,
+          referenceBasisUsd: row.referenceBasisUsd,
+          feeUsd: row.feeUsd,
+        },
+        perShare,
+      );
 
       // Pledged tokens are shares too, at the same multiplier as the wallet's.
       const pledgedShares = row.wrappers.reduce((s, w) => {
@@ -176,7 +198,13 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         // Measured over the shares a lot covers, not over the holding. Shares
         // that arrived from outside have no cost we can prove, and pretending
         // their basis is zero would report the whole of their value as profit.
-        unrealisedPnlUsd: toWire(row.sharesWithBasis.mul(perShare).sub(row.costBasisUsd)),
+        //
+        // Three figures where there was one. The total is unchanged and still
+        // the dollars; the other two say how much of it the stock did and how
+        // much of it was the cost of getting in. See `stackedReturn`.
+        unrealisedPnlUsd: toWire(stacked.totalPnlUsd),
+        marketPnlUsd: toWire(stacked.marketPnlUsd),
+        tradingCostUsd: toWire(stacked.tradingCostUsd),
         sharesWithBasis: toWire(row.sharesWithBasis),
         changePct24h: toWire(changePct24h),
         wrapperCount: row.wrappers.length,

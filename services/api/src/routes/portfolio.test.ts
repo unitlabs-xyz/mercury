@@ -41,6 +41,10 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
   shares: D(2),
   sharesWithBasis: D(2),
   costBasisUsd: D(300),
+  // Filled at the quote and free, unless a test says otherwise, so a stacked
+  // return is all market move and no cost of trading.
+  referenceBasisUsd: over.costBasisUsd ?? D(300),
+  feeUsd: ZERO,
   avgUnitCostUsd: D(150),
   wrappers: [{ mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 }],
   ...over,
@@ -254,6 +258,45 @@ describe("GET /v1/portfolio", () => {
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.holdings[0]!.valueUsd).toBe("1000"); // 5 shares at $200
     expect(body.holdings[0]!.unrealisedPnlUsd).toBe("100"); // 2 x $200 - $300
+  });
+
+  it("splits a return into what the stock did and what the trade cost", async () => {
+    // 2 shares bought for $300 when they were quoted at $296, $0.46 of fee,
+    // now worth $400. The old single figure said +$99.54 and gave no way to
+    // see that $4.46 of the move was never the stock.
+    const d = deps({
+      holdings: async () => [holding({ costBasisUsd: D(300), referenceBasisUsd: D(296), feeUsd: D("0.46") })],
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!).toMatchObject({
+      marketPnlUsd: "104", // 2 x $200 against $296 quoted
+      tradingCostUsd: "4.46", // $4 of premium and spread, plus $0.46 of fee
+      unrealisedPnlUsd: "99.54",
+    });
+  });
+
+  it("reports no market move on a stock sitting where it was bought", async () => {
+    // The symptom this exists to fix: a position whose stock has not moved at
+    // all used to report the fee and the premium as a loss.
+    const d = deps({
+      holdings: async () => [
+        holding({ costBasisUsd: D("400.46"), referenceBasisUsd: D(400), feeUsd: D("0.46") }),
+      ],
+    });
+    const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
+    expect(body.holdings[0]!).toMatchObject({
+      marketPnlUsd: "0",
+      tradingCostUsd: "0.92",
+      unrealisedPnlUsd: "-0.92",
+    });
+  });
+
+  it("keeps the two lines summing to the dollars, so the split hides nothing", async () => {
+    const d = deps({
+      holdings: async () => [holding({ costBasisUsd: D(300), referenceBasisUsd: D(296), feeUsd: D("0.46") })],
+    });
+    const h = (await portfolioOf(await appWith(d).request("/v1/portfolio"))).holdings[0]!;
+    expect(D(h.marketPnlUsd!).sub(D(h.tradingCostUsd!)).toFixed()).toBe(h.unrealisedPnlUsd);
   });
 
   it("says how many of the shares a cost is known for", async () => {

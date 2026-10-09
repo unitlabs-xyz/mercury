@@ -7,7 +7,15 @@ export const Holding = z.object({
   shares: Usd,
   valueUsd: Usd,
   costBasisUsd: Usd,
+  /** The dollars the position is up or down: `marketPnlUsd` less `tradingCostUsd`. */
   unrealisedPnlUsd: Usd,
+  /**
+   * Of that, what the stock did — today's quote against the quote it was
+   * bought against. Optional for a client reading an older server.
+   */
+  marketPnlUsd: Usd.optional(),
+  /** And what it cost to get in: premium and spread paid, plus fees. Positive is a cost. */
+  tradingCostUsd: Usd.optional(),
   /** Shares covered by recorded purchase lots; other shares have unknown basis. */
   sharesWithBasis: Usd.optional(),
   changePct24h: Ratio,

@@ -20,6 +20,8 @@ export async function readHoldings(db: Db, userId: string): Promise<readonly Hol
       shares: positions.shares,
       sharesWithBasis: positions.sharesWithBasis,
       costBasisUsd: positions.costBasisUsd,
+      referenceBasisUsd: positions.referenceBasisUsd,
+      feeUsd: positions.feeUsd,
       avgUnitCostUsd: positions.avgUnitCostUsd,
     })
     .from(positions)
@@ -45,6 +47,8 @@ export async function readHoldings(db: Db, userId: string): Promise<readonly Hol
     shares: D(row.shares),
     sharesWithBasis: D(row.sharesWithBasis),
     costBasisUsd: D(row.costBasisUsd),
+    referenceBasisUsd: D(row.referenceBasisUsd),
+    feeUsd: D(row.feeUsd),
     avgUnitCostUsd: D(row.avgUnitCostUsd),
     wrappers: wrappers
       .filter((w) => w.instrumentId === row.instrumentId)
