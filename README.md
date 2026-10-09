@@ -9,6 +9,8 @@
 
 <p align="center">The financial account built for the onchain world.</p>
 
+<p align="center"><b>Live in beta:</b> <a href="https://beta.trymercury.xyz">beta.trymercury.xyz</a></p>
+
 <p align="center">
   Hold your money, invest in stocks and ETFs, build diversified portfolios,<br>
   spend with your card, and access your wealth — all from a single wallet.
