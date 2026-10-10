@@ -138,7 +138,7 @@ export const useEmailLogin = () => {
       setPending(null);
       return true;
     },
-    [loginWithCode],
+    [loginWithCode, createWallet],
   );
 
   const reset = useCallback(() => {

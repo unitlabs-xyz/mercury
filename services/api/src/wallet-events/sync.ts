@@ -17,6 +17,11 @@ export interface WalletEventsDeps {
   readonly history: ChainHistory;
   /** Kamino's lending program, so a loan is not written here as a cash transfer. */
   readonly lendingProgram: string;
+  /**
+   * The relayer's address, when sponsorship is on, so the rent a sponsored
+   * transfer repays is not recorded as money sent. See `MovementContext`.
+   */
+  readonly relayer?: string | undefined;
   readonly exitOperations?: {
     operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
   };
@@ -145,7 +150,13 @@ async function syncWallet(
     // and lose it permanently.
     if (tx === null) throw new Error(`transaction ${sig.signature} could not be read`);
     moved.push(
-      ...movementsIn(tx, { wallet: address, now, lendingProgram: deps.lendingProgram, basketAccounts }),
+      ...movementsIn(tx, {
+        wallet: address,
+        now,
+        lendingProgram: deps.lendingProgram,
+        basketAccounts,
+        ...(deps.relayer === undefined ? {} : { relayer: deps.relayer }),
+      }),
     );
   }
 

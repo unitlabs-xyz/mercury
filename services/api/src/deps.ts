@@ -193,7 +193,13 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     feedbackTo: env["FEEDBACK_TO"] ?? "hello@trymercury.xyz",
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
-    jupiterApiKeys: parseJupiterKeys(env["JUPITER_API_KEYS"]),
+    /*
+     * The singular name as well, because it is the one everybody reaches for
+     * and a key set under it was discarded without a word: no error, no empty
+     * value, just the keyless tier's thirty requests a minute and nothing in
+     * the log tying the rate limiting back to a misspelled variable.
+     */
+    jupiterApiKeys: parseJupiterKeys(env["JUPITER_API_KEYS"] ?? env["JUPITER_API_KEY"]),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.

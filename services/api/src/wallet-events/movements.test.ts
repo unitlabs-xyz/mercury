@@ -332,3 +332,75 @@ describe("movementsIn — a basket's own smart account", () => {
     expect(movementsIn(swap, withBaskets)).toEqual([]);
   });
 });
+
+describe("movementsIn — a sponsored transfer", () => {
+  const RELAYER = "4bXpkay5mCujD5BnjtpBGXLbuAZ2rUKhbfW8QBtQxrRm";
+  const sponsored = { ...ctx, relayer: RELAYER };
+
+  /** $20 to a recipient, plus $0.25 of rent repaid to the relayer. */
+  const transferWithCharge = tx({
+    preTokens: [usdc(WALLET, 100_000_000n), usdc(RELAYER, 7_000_000n)],
+    postTokens: [usdc(WALLET, 79_750_000n), usdc(RELAYER, 7_250_000n)],
+  });
+
+  /*
+   * The charge is not money sent. Netted into the amount it reads as a $20.25
+   * transfer, which is the same mistake the share price made before `planFill`
+   * learned to take the sponsorship fee out of it.
+   */
+  it("reports the amount sent, not the amount that left the wallet", () => {
+    const m = movementsIn(transferWithCharge, sponsored);
+    expect(m).toHaveLength(1);
+    expect(m[0]!.kind).toBe("transfer_out");
+    expect(m[0]!.amountUsd!.toFixed()).toBe("20");
+    expect(m[0]!.subtitle).toBe("Plus $0.25 to open their USDC account");
+  });
+
+  it("nets the charge in when it has no relayer to recognise", () => {
+    // What the job does before the relayer is configured, and the reason the
+    // address has to be passed in rather than guessed at.
+    const m = movementsIn(transferWithCharge, ctx);
+    expect(m[0]!.amountUsd!.toFixed()).toBe("20.25");
+  });
+
+  it("says nothing about a fee on the ordinary transfer, which owes none", () => {
+    const m = movementsIn(
+      tx({
+        preTokens: [usdc(WALLET, 100_000_000n)],
+        postTokens: [usdc(WALLET, 80_000_000n)],
+      }),
+      sponsored,
+    );
+    expect(m[0]!.amountUsd!.toFixed()).toBe("20");
+    expect(m[0]!.subtitle).toBeNull();
+  });
+
+  /*
+   * Somebody sending dollars to that address on purpose is making a transfer,
+   * not paying a fee. Reporting it as $0 would be worse than the error this
+   * guard exists to prevent.
+   */
+  it("does not swallow a transfer whose whole amount went to the relayer", () => {
+    const m = movementsIn(
+      tx({
+        preTokens: [usdc(WALLET, 100_000_000n), usdc(RELAYER, 0n)],
+        postTokens: [usdc(WALLET, 80_000_000n), usdc(RELAYER, 20_000_000n)],
+      }),
+      sponsored,
+    );
+    expect(m[0]!.amountUsd!.toFixed()).toBe("20");
+    expect(m[0]!.subtitle).toBeNull();
+  });
+
+  it("leaves a deposit alone even when the relayer gained dollars too", () => {
+    const m = movementsIn(
+      tx({
+        preTokens: [usdc(WALLET, 0n), usdc(RELAYER, 7_000_000n)],
+        postTokens: [usdc(WALLET, 50_000_000n), usdc(RELAYER, 7_250_000n)],
+      }),
+      sponsored,
+    );
+    expect(m[0]!.kind).toBe("transfer_in");
+    expect(m[0]!.amountUsd!.toFixed()).toBe("50");
+  });
+});

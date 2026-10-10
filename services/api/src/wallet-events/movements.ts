@@ -52,6 +52,16 @@ export interface MovementContext {
    * afterwards is a race, and never at all for a funding nobody confirmed.
    */
   readonly basketAccounts?: ReadonlyMap<string, string>;
+  /**
+   * The relayer, when sponsorship is on.
+   *
+   * A sponsored transfer repays the relayer its rent in the same message, so
+   * the wallet's USDC falls by the amount sent *plus* that charge. Netted, the
+   * feed would report a $20 transfer as "Sent cash $20.25" — the charge read
+   * as money sent, which is the same mistake the share price used to make
+   * before `planFill` learned to take it out.
+   */
+  readonly relayer?: string;
 }
 
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
@@ -94,6 +104,23 @@ const basketFor = (tx: TransactionDetail, ctx: MovementContext): string | undefi
     if (delta !== 0n) return portfolioId;
   }
   return undefined;
+};
+
+/**
+ * What of this wallet's outgoing USDC was repayment to the relayer, not a
+ * transfer.
+ *
+ * Nothing unless the relayer gained USDC in the same transaction, which only
+ * a sponsored transfer makes it do. And nothing if the relayer's gain is the
+ * whole of what left: somebody deliberately sending dollars to that address is
+ * making a transfer, not paying a fee, and reporting it as $0 would be worse
+ * than the error this exists to fix.
+ */
+const sponsorCharge = (tx: TransactionDetail, ctx: MovementContext, movedOut: bigint): bigint => {
+  if (ctx.relayer === undefined || ctx.relayer === ctx.wallet) return 0n;
+  const gain =
+    sumOwned(tx.postTokens, ctx.relayer, USDC_MINT) - sumOwned(tx.preTokens, ctx.relayer, USDC_MINT);
+  return gain > 0n && gain < movedOut ? gain : 0n;
 };
 
 export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readonly Movement[] {
@@ -145,6 +172,11 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
     // Read from the balances rather than the account keys: a smart account is
     // named in plenty of transactions it took no money in.
     const basket = basketFor(tx, ctx);
+    // Only on the way out. The relayer gaining dollars while this wallet also
+    // gains them is not a charge on this movement, and subtracting it would
+    // understate a deposit.
+    const charge = usdc < 0n ? sponsorCharge(tx, ctx, abs(usdc)) : 0n;
+    const amount = scaled(abs(usdc) - charge, USDC_DECIMALS);
     moved.push({
       mint: USDC_MINT,
       kind: usdc > 0n ? "transfer_in" : "transfer_out",
@@ -156,9 +188,10 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
           : usdc > 0n
             ? "Cash from a basket"
             : "Cash to a basket",
-      subtitle: null,
+      subtitle:
+        charge === 0n ? null : `Plus $${trim(scaled(charge, USDC_DECIMALS), 2)} to open their USDC account`,
       // USDC is a dollar. No price lookup, and none to be wrong about.
-      amountUsd: scaled(abs(usdc), USDC_DECIMALS),
+      amountUsd: amount,
       ...(basket === undefined ? {} : { basketPortfolioId: basket }),
       signature: tx.signature,
       occurredAt,
