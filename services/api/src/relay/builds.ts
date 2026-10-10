@@ -17,6 +17,12 @@ import { createHash } from "node:crypto";
  * background jobs live inside it, so a second instance is already ruled out.
  * A build that outlives the process is a build whose blockhash has expired
  * anyway.
+ *
+ * That is a property of the container, not of this file, and it is the reason
+ * `vercel.ts` configures no relayer: across function instances `remember` and
+ * `recognises` do not see the same map, so the relayer would refuse messages
+ * this server composed. Anything that deploys sponsorship on more than one
+ * process has to replace this with a store the processes share.
  */
 export interface SponsoredBuilds {
   /** Called when the server hands a sponsored transaction to the buyer. */
