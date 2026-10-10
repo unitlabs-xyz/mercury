@@ -78,7 +78,7 @@ export type Model = {
   /** False when a basket paid out in kind, so its basis understates what came back. */
   readonly basketBasisIsComplete: boolean;
   readonly rows: readonly Row[];
-  readonly sectors: readonly { name: string; value: number; share: number; changePct: number | null }[];
+  readonly sectors: readonly { name: string; value: number; changePct: number | null }[];
   /** Debt plus what could still be borrowed, at the safety target. */
   readonly power: number;
   readonly borrowed: number;
@@ -179,8 +179,11 @@ export const useModel = (
     });
 
     // The API computes the same estimate for every client from the token quotes it already reads.
-    const stockMove24hUsd = stocks > 0 ? Number(p.changeUsd) : null;
-    const stockMove24hPct = stocks > 0 ? Number(p.changePct) : null;
+    /* Wallet and basket stocks both move, and the server's figure covers both,
+       so an account holding only baskets still has a move to show. */
+    const invested = stocks + basketUsd;
+    const stockMove24hUsd = invested > 0 ? Number(p.changeUsd) : null;
+    const stockMove24hPct = invested > 0 ? Number(p.changePct) : null;
 
     // Only baskets that recorded a basis. One funded by a path we never
     // witnessed has no cost, and counting it at zero would report the whole of
@@ -222,7 +225,6 @@ export const useModel = (
       .map(([name, { value, opening }]) => ({
         name,
         value,
-        share: stocks > 0 ? value / stocks : 0,
         changePct: opening === null ? null : opening > 0 ? ((value - opening) / opening) * 100 : 0,
       }))
       .sort((a, b) => b.value - a.value);
