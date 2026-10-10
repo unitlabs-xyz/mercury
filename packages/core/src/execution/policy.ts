@@ -28,9 +28,16 @@ import type { ExecutionPolicy } from "./types.js";
  * feed can make a Saturday price exist, so the only correct response to an old
  * reference out of hours is to widen the band, not to shut the door.
  *
- * Four days of `deadReferenceAgeSecClosed` clears a long weekend. An hour of
- * `deadReferenceAgeSecOpen` is tighter on purpose: while the market trades, an
- * hour-old price is genuinely behind rather than merely closed.
+ * Four days of `deadReferenceAgeSecClosed` clears a long weekend, but not by
+ * much, and the margin is worth writing down rather than rediscovering. An
+ * ordinary weekend is 65.5 hours, Friday's 20:00 UTC close to Monday's 13:30
+ * open. A Monday holiday — Presidents' Day, Memorial Day, Labor Day, MLK —
+ * stretches that to 89.5 hours against a 96-hour bar, so about six and a half
+ * hours spare. Both ends are pinned in `decide.test.ts`; anything that moves
+ * this number should move that test first.
+ *
+ * An hour of `deadReferenceAgeSecOpen` is tighter on purpose: while the market
+ * trades, an hour-old price is genuinely behind rather than merely closed.
  *
  * A reference that updates in seconds is still worth having, and `PythReference`
  * now reads one. It does not replace any of the above — Pyth's equity feeds

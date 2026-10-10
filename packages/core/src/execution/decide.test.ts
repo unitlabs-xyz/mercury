@@ -203,6 +203,23 @@ describe("guards", () => {
     expect(w.mul(10_000).toNumber()).toBeLessThan(50);
   });
 
+  /*
+   * The longest close the US calendar actually produces, and the reason the bar
+   * is four days rather than three: a Monday holiday runs Friday 20:00 UTC to
+   * Tuesday 13:30 UTC. Six and a half hours under the bar is thin enough to
+   * pin, so a future trim of `deadReferenceAgeSecClosed` fails here rather than
+   * on a Presidents' Day.
+   */
+  it("still trades across a holiday Monday, the longest regular close", () => {
+    const d = decide(sellInput({ reference: reference(222.365, 0, 89.5 * 3_600), status: "closed" }));
+    expect(d.kind).not.toBe("refuse");
+  });
+
+  it("abandons a reference once it is past the four-day bar", () => {
+    const d = decide(sellInput({ reference: reference(222.365, 0, 97 * 3_600), status: "closed" }));
+    expect(d.kind === "refuse" && d.reason).toBe("reference_stale");
+  });
+
   it("still refuses when it cannot tell whether the market is open", () => {
     const d = decide(buyInput({ status: "stale" }));
     expect(d.kind === "refuse" && d.reason).toBe("reference_stale");
