@@ -189,6 +189,7 @@ every("wallet-events", 30_000, async () => {
   const s = await syncAllWalletEvents(auth.db, {
     history: deps.history,
     lendingProgram: KAMINO_LENDING_PROGRAM,
+    ...(relay === undefined ? {} : { relayer: relay.signer.address }),
     ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
   });
   if (s.written === 0 && s.failed === 0) return null;
