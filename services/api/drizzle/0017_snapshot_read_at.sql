@@ -1,0 +1,1 @@
+ALTER TABLE "portfolio_snapshot" ADD COLUMN "read_at" timestamp with time zone;

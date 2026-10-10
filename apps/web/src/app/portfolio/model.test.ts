@@ -72,7 +72,10 @@ it("keeps basket value in net worth without folding its assets into direct stock
   renderToStaticMarkup(createElement(Probe));
 
   expect(model?.total).toBe(35);
-  expect(model?.stocks).toBe(30);
+  // Wallet stocks only: the basket's $20 is `basketUsd`, shown in its own
+  // figure, and counting it in both made the row exceed the account.
+  expect(model?.stocks).toBe(10);
+  expect(model!.stocks + model!.basketUsd + model!.cash).toBe(model?.total);
   expect(model?.assets).toBe(35);
   expect(model?.cash).toBe(5);
   expect(model?.basketUsd).toBe(20);
@@ -242,4 +245,46 @@ it("marks the basket basis partial when any basket paid out in kind", () => {
     ],
   });
   expect(m.basketBasisIsComplete).toBe(false);
+});
+
+/*
+ * The account in the production screenshot: one basket, no shares. Splitting
+ * baskets out of `stocks` so the header stops counting them twice also made
+ * `stocks` zero here, and anything gated on it silently went quiet.
+ */
+it("still reports a day's move for an account holding only baskets", () => {
+  const portfolio: Portfolio = {
+    totalValueUsd: "9.72",
+    cashUsd: "5.73",
+    basketUsd: "3.99",
+    debtUsd: "0",
+    debtIsStale: false,
+    changeUsd: "-0.04",
+    changePct: "-1",
+    holdings: [],
+    baskets: [
+      {
+        portfolioId: "portfolio",
+        slug: "basket",
+        name: "Basket",
+        valueUsd: "3.99",
+        inTransitUsd: "0",
+        changePct24h: "-1",
+        fetchedAt: "2026-10-10T00:00:00.000Z",
+        holdings: [{ assetId: "nvda", symbol: "NVDAon", ticker: "NVDA", balance: "1", valueUsd: "3.99" }],
+      },
+    ],
+  };
+  let model: Model | undefined;
+  const Probe = () => {
+    model = useModel(portfolio, [], undefined, undefined);
+    return null;
+  };
+  renderToStaticMarkup(createElement(Probe));
+
+  expect(model?.stockMove24hUsd).toBe(-0.04);
+  expect(model?.stocks).toBe(0);
+  expect(model?.basketUsd).toBe(3.99);
+  // The six figures partition the account rather than overlapping it.
+  expect(model!.stocks + model!.basketUsd + model!.cash - model!.debt).toBeCloseTo(model!.total, 10);
 });

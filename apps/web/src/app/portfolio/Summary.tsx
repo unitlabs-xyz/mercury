@@ -238,7 +238,11 @@ export const AccountHeader = ({
             label="Baskets"
             value={usd(m.basketUsd)}
             sub={basketPnlSub(m)}
-            tone={m.basketCostBasis > 0 ? (m.basketReturnUsd < 0 ? "down" : "up") : undefined}
+            /* No tone: this is what the baskets are worth, not what they made.
+               Tinted by the return's sign, $3.99 down four cents was printed in
+               the loss colour and read as a negative balance. The figures that
+               carry a tone are the ones that carry a sign — the line below
+               already says −$0.04. */
           />
         )}
         <HeaderFigure
@@ -295,7 +299,9 @@ export const Performance = ({
    * account that started empty and was funded today has a gain on the money
    * put in, not a percentage of zero.
    */
-  const added = Math.max(0, Number(recorded?.[recorded.length - 1]?.netFlowUsd ?? 0));
+  const added = history?.excludesTransfers
+    ? Math.max(0, Number(recorded?.[recorded.length - 1]?.netFlowUsd ?? 0))
+    : 0;
   const percent = change !== null && first !== undefined ? performancePercent(change, first + added) : null;
   /*
    * A move too small to print is not a fall. Below half a cent `usdSigned`
@@ -334,7 +340,9 @@ export const Performance = ({
                 <span className="opacity-80">{percent === null ? "—" : pct(percent)}</span>
               </span>
               <span className="translate-y-1 text-[12px] leading-none text-ds-ink/80">
-                Change excluding external transfers
+                {history?.excludesTransfers
+                  ? "Change excluding external transfers"
+                  : "Change in account value"}
               </span>
             </p>
           ) : (

@@ -41,7 +41,12 @@ export type Model = {
   readonly total: number;
   /** Wallet and pledged stocks, wallet cash, and baskets, before the loan. */
   readonly assets: number;
-  /** Wallet and pledged stocks plus basket positions. */
+  /**
+   * Wallet and pledged stocks. Baskets are `basketUsd` and are deliberately
+   * not in here: the two are shown side by side, so counting baskets in both
+   * made the row add up to more than the account — $3.99 of basket reported
+   * as "Holdings $3.99, 0 positions" next to "Baskets $3.99".
+   */
   readonly stocks: number;
   readonly basketUsd: number;
   readonly cash: number;
@@ -73,7 +78,7 @@ export type Model = {
   /** False when a basket paid out in kind, so its basis understates what came back. */
   readonly basketBasisIsComplete: boolean;
   readonly rows: readonly Row[];
-  readonly sectors: readonly { name: string; value: number; share: number; changePct: number | null }[];
+  readonly sectors: readonly { name: string; value: number; changePct: number | null }[];
   /** Debt plus what could still be borrowed, at the safety target. */
   readonly power: number;
   readonly borrowed: number;
@@ -116,11 +121,10 @@ export const useModel = (
     const cash = Number(p.cashUsd);
     const basketUsd = Number(p.basketUsd);
     const debt = Number(p.debtUsd);
-    const walletStocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
-    const stocks = walletStocks + basketUsd;
+    const stocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
     // Weights are shares of what is held, not of what is owned outright: a
     // levered account would otherwise show holdings adding up to well past 100%.
-    const assets = walletStocks + cash + basketUsd;
+    const assets = stocks + cash + basketUsd;
     // Kamino's live terms from our API first; its public rates list if that is not in yet.
     const target = borrow?.safetyTarget ?? 0.8;
     const ltvOf = (ticker: string) =>
@@ -175,8 +179,11 @@ export const useModel = (
     });
 
     // The API computes the same estimate for every client from the token quotes it already reads.
-    const stockMove24hUsd = stocks > 0 ? Number(p.changeUsd) : null;
-    const stockMove24hPct = stocks > 0 ? Number(p.changePct) : null;
+    /* Wallet and basket stocks both move, and the server's figure covers both,
+       so an account holding only baskets still has a move to show. */
+    const invested = stocks + basketUsd;
+    const stockMove24hUsd = invested > 0 ? Number(p.changeUsd) : null;
+    const stockMove24hPct = invested > 0 ? Number(p.changePct) : null;
 
     // Only baskets that recorded a basis. One funded by a path we never
     // witnessed has no cost, and counting it at zero would report the whole of
@@ -218,7 +225,6 @@ export const useModel = (
       .map(([name, { value, opening }]) => ({
         name,
         value,
-        share: stocks > 0 ? value / stocks : 0,
         changePct: opening === null ? null : opening > 0 ? ((value - opening) / opening) * 100 : 0,
       }))
       .sort((a, b) => b.value - a.value);

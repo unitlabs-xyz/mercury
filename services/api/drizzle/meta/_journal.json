@@ -120,6 +120,13 @@
       "when": 1791569285542,
       "tag": "0016_basket_account",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791579680872,
+      "tag": "0017_snapshot_read_at",
+      "breakpoints": true
     }
   ]
 }
