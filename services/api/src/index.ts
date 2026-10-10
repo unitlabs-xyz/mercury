@@ -60,6 +60,18 @@ console.log(
 );
 
 /*
+ * Which feed the quote path is actually checked against, for the same reason as
+ * the two above. The issuer's feed freezes at the close, so a deployment that
+ * believes it reads Pyth and does not would refuse orders all weekend without
+ * anything saying why.
+ */
+console.log(
+  config.pythApiKey === undefined
+    ? "reference: issuer feed only (PYTH_API_KEY unset); it stops advancing at the closing bell"
+    : "reference: Pyth first, issuer feed as fallback",
+);
+
+/*
  * The same shape as the relayer above, and for the same reason: a capability
  * that is off should say so at boot. A deployment that believes it is warning
  * borrowers and is not is worse than one that never claimed to.

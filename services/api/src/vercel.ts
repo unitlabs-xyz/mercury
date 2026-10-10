@@ -37,7 +37,45 @@ await applyMigrations(config.databaseUrl);
 await syncConfiguredCatalog(config);
 const auth = buildAuthDeps(config);
 const deps = buildDeps(config);
+/*
+ * No relayer here, deliberately, and not merely unwired.
+ *
+ * The relayer signs only messages this server composed, and it recognises them
+ * from a digest held in process memory (`relay/builds.ts`). That holds for the
+ * container because the container is one process. A function is not: prepare
+ * and confirm can land on different instances, so `recognises` would refuse a
+ * transaction this server really did build, intermittently, for a reason no
+ * log would explain. A hot key that sometimes will not sign is worse than a
+ * wallet told plainly that it pays its own network fee — which is what every
+ * sponsored route answers while `read.send.relay` is undefined, and what the
+ * app already renders. Sponsorship needs a shared store before it can live
+ * here.
+ */
 const read = buildReadDeps(auth.db, deps, config);
+
+/*
+ * What this deployment does not do, said out loud on every cold start.
+ *
+ * index.ts announces each optional capability for the same reason, and the
+ * gaps are wider here: the three jobs below run once a day rather than on a
+ * seconds-to-minutes clock, and two of the container's six do not run at all —
+ * portfolio-snapshot, so the performance chart never gains history, and
+ * loan-watch, so no borrower is warned before a liquidation. Both want a
+ * cadence Vercel Cron does not offer on this plan.
+ *
+ * So this serves the waitlist and keeps the HTTP surface deployable. Pointing
+ * an app's API base at it gets a working read path, no sponsorship, a feed up
+ * to a day behind and a flat chart. That is a reasonable thing to deploy and a
+ * poor thing to discover, so it is stated rather than left to a comment.
+ */
+console.log(
+  [
+    "vercel: HTTP surface and waitlist.",
+    "sponsorship: off (needs a shared build store, not per-instance memory).",
+    "jobs: stocks, position-sync and wallet-events daily; no snapshot, no loan alerts.",
+    "The container (index.ts) is the real home for all of it.",
+  ].join(" "),
+);
 
 const app = new Hono();
 

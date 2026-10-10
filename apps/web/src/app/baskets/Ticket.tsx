@@ -675,6 +675,7 @@ export const ExitSheet = ({
      on every refetch, so it is not a dependency. */
   useEffect(() => {
     if (open) setSelection(fullSelection(account));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `account` on purpose, per above
   }, [open]);
   const available = exitAssets(account);
   const byAsset = new Map(account.assets.map((asset) => [asset.assetId, asset]));

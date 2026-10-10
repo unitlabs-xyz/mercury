@@ -353,7 +353,7 @@ export const AuthModal = () => {
       setHeight("auto");
     }, 250);
     return () => clearTimeout(t);
-  }, [isOpen]);
+  }, [isOpen, reset]);
 
   useEffect(() => {
     if (isOpen && step === "email") emailField.current?.focus();
