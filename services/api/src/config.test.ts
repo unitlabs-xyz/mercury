@@ -41,4 +41,18 @@ describe("readConfig", () => {
     expect(readConfig(base).jupiterApiKeys).toEqual([]);
     expect(readConfig({ ...base, JUPITER_API_KEYS: "k1, k2" }).jupiterApiKeys).toEqual(["k1", "k2"]);
   });
+
+  /*
+   * The singular is the name a person writes when there is one key, and it
+   * used to buy them the keyless tier in silence.
+   */
+  it("accepts the singular JUPITER_API_KEY, which is the easy name to reach for", () => {
+    expect(readConfig({ ...base, JUPITER_API_KEY: "k1" }).jupiterApiKeys).toEqual(["k1"]);
+  });
+
+  it("prefers the plural when a deployment somehow sets both", () => {
+    expect(readConfig({ ...base, JUPITER_API_KEYS: "k1,k2", JUPITER_API_KEY: "old" }).jupiterApiKeys).toEqual(
+      ["k1", "k2"],
+    );
+  });
 });
