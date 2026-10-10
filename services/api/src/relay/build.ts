@@ -1,6 +1,6 @@
 import type { QuoteSource, RedeemableQuote } from "@mercury/chain";
 import { USDC_DECIMALS, USDC_MINT } from "@mercury/chain";
-import type { Decimal } from "@mercury/core";
+import { Decimal } from "@mercury/core";
 import type { Address, Blockhash } from "@solana/kit";
 import type { SponsoredBuilds } from "./builds.js";
 import { composeSponsored, toInstruction } from "./compose.js";
@@ -37,9 +37,18 @@ export interface SponsoredBuildInput {
   readonly side: "buy" | "sell";
 }
 
-/** USDC has six decimals, so $0.25 is 250000 of them. */
+/**
+ * USDC has six decimals, so $0.25 is 250000 of them.
+ *
+ * Rounded down, which is what the mode here has to spell out: decimal.js
+ * numbers its rounding modes, and `0` is ROUND_UP, not the round down the
+ * comment used to claim. Nothing was overcharged, because the fee arrives
+ * already rounded up to the cent and so has nothing left to round — but the
+ * comment was wrong, and copying it into `transfer.ts` is what charged a unit
+ * too many there until a test caught it.
+ */
 const toBaseUnits = (usdc: Decimal): bigint =>
-  BigInt(usdc.mul(10 ** USDC_DECIMALS).toFixed(0, 0 /* round down */));
+  BigInt(usdc.mul(10 ** USDC_DECIMALS).toFixed(0, Decimal.ROUND_DOWN));
 
 export const buildSponsored = async (
   deps: SponsoredBuildDeps,

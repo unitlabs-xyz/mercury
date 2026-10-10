@@ -157,6 +157,29 @@ describe("buildSponsored", () => {
     for (let i = data.length - 1; i >= 1; i--) n = (n << 8n) | BigInt(data[i] ?? 0);
     expect(n).toBe(250_000n);
   });
+
+  /*
+   * The quoted fee has nothing left to round, so this is the mode itself under
+   * test rather than any figure the product shows. decimal.js numbers its
+   * rounding modes and `0` is ROUND_UP, which is what the comment here used to
+   * call round down; the same literal copied into `transfer.ts` charged a unit
+   * too many. A fraction of a base unit pins which way it goes.
+   */
+  it("rounds a fractional base unit down, never up onto the sender", async () => {
+    const d = deps();
+    const { wire } = await buildSponsored(d, {
+      quote: { quoteId: "q", raw: {} },
+      owner: BUYER,
+      side: "buy" as const,
+      feeUsdc: D("0.2299999"),
+    });
+    const { message, programs } = read(wire);
+    const at = programs.indexOf(TOKEN as Address);
+    const data = message.instructions[at]?.data ?? new Uint8Array();
+    let n = 0n;
+    for (let i = data.length - 1; i >= 1; i--) n = (n << 8n) | BigInt(data[i] ?? 0);
+    expect(n).toBe(229_999n);
+  });
 });
 
 /**
