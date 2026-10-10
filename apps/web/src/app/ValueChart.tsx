@@ -2,6 +2,7 @@ import { usePortfolioHistory } from "../api/hooks";
 import type { Point } from "./DotChart";
 import { Clock } from "../ui/icons";
 import { DotChart } from "./DotChart";
+import { Skeleton } from "./portfolio/ui";
 
 export type Range = "1D" | "1W" | "1M";
 
@@ -84,6 +85,26 @@ export const useHistory = (range: Range): { points: readonly Point[]; excludesTr
 
 export const ValueChart = ({ range, onZoom }: { range: Range; onZoom?: (dir: 1 | -1) => void }) => {
   const history = useHistory(range);
+  /*
+   * Same query, already cached — this costs no extra request, and it separates
+   * the two things `useHistory` collapses into null. Without it a chart that
+   * had simply not loaded yet claimed "Not enough history yet", which is a
+   * statement about the account rather than about the request, and wrong.
+   */
+  const loading = usePortfolioHistory(range).isLoading;
+
+  if (!history && loading) {
+    return (
+      <div
+        aria-label={`Value over ${RANGE_LABEL[range]}: loading`}
+        role="img"
+        className="min-h-[200px] w-full rounded-lg bg-ds-panel p-4"
+      >
+        <Skeleton className="h-full min-h-[168px] w-full" />
+      </div>
+    );
+  }
+
   return history ? (
     <DotChart
       series={history.points}

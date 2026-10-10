@@ -133,6 +133,37 @@ export const Skeleton = ({ className = "" }: { className?: string }) => (
   <span className={`block animate-pulse rounded bg-page ${className}`} />
 );
 
+/**
+ * A list of rows while they load: the mark, the name, the figure on the right.
+ *
+ * The holdings table and the screener drew this same shape independently and
+ * had drifted apart by four pixels of right-hand width, which is visible when
+ * you move between the two screens. `figure` is the one thing they genuinely
+ * differ on — a price is wider than a value — so it stays a parameter.
+ *
+ * Activity's rows are deliberately NOT built on this: theirs carry a second
+ * line and are matched pixel-for-pixel to their own `Row`, so folding them in
+ * here would make one of the two wrong.
+ */
+export const SkeletonRows = ({
+  count,
+  figure = "w-20",
+}: {
+  count: number;
+  /** Tailwind width for the right-hand figure. */
+  figure?: string;
+}) => (
+  <div aria-hidden className="flex flex-col gap-3 p-4">
+    {Array.from({ length: count }, (_, i) => (
+      <div key={i} className="flex items-center gap-3">
+        <Skeleton className="size-9 shrink-0 rounded-full" />
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className={`ml-auto h-4 ${figure}`} />
+      </div>
+    ))}
+  </div>
+);
+
 /** "in 4 days", "tomorrow", "3 days ago" — how a due date is actually read. */
 export const relDay = (isoDate: string) => {
   const today = Date.parse(new Date().toISOString().slice(0, 10));
