@@ -54,6 +54,7 @@ export const BorrowSheet = ({
     setSettled("");
     action.reset();
     // Only on opening: the action object is new each render, so it is not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `action` on purpose, per above
   }, [open, initialTab, ticker]);
 
   const b = borrow.data;
