@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMoney, usePortfolio, useSignedIn } from "../api/hooks";
 import { useAuthModal } from "../auth/AuthContext";
-import { Check, ChevronDown, Copy, Message, SignOut } from "../ui/icons";
+import { Check, ChevronDown, Copy, Help, Message, SignOut } from "../ui/icons";
+import { Button } from "../ui/Button";
+import { useUsdcAck } from "./usdcAck";
 import { openFeedback } from "./Feedback";
 import { usd } from "@mercury/view";
 
@@ -27,6 +29,9 @@ export const AccountMenu = () => {
   const portfolio = usePortfolio();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [acked, ack] = useUsdcAck();
+  // The USDC-only note, opened from the address before it can be copied.
+  const [asking, setAsking] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,7 +79,10 @@ export const AccountMenu = () => {
     <div ref={box} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => !o);
+          setAsking(false);
+        }}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label="Account"
@@ -115,15 +123,25 @@ export const AccountMenu = () => {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] leading-none font-medium text-ds-ink">{email}</p>
+                {/* Half the address, always. Copying it waits for a yes to the
+                    USDC-only rule, the same one Add cash asks: until then the
+                    icon is an "i" that opens the rule, not a copy. */}
                 {address && (
                   <button
                     type="button"
-                    onClick={copy}
+                    onClick={acked ? copy : () => setAsking((a) => !a)}
                     className="mt-1.5 flex items-center gap-1.5 font-mono text-[12px] leading-none text-ds-muted transition-colors hover:text-ds-ink"
-                    aria-label="Copy wallet address"
+                    aria-label={acked ? "Copy wallet address" : "About this address"}
+                    aria-expanded={acked ? undefined : asking}
                   >
                     {short(address)}
-                    {copied ? <Check className="size-3 text-ds-up" /> : <Copy className="size-3" />}
+                    {!acked ? (
+                      <Help className="size-3" />
+                    ) : copied ? (
+                      <Check className="size-3 text-ds-up" />
+                    ) : (
+                      <Copy className="size-3" />
+                    )}
                   </button>
                 )}
               </div>
@@ -134,6 +152,36 @@ export const AccountMenu = () => {
                 <span className="mt-1.5 block text-[11px] leading-none text-ds-muted">cash to invest</span>
               </span>
             </div>
+
+            <AnimatePresence initial={false}>
+              {asking && !acked && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.16, ease: "easeOut" }}
+                  className="overflow-hidden"
+                >
+                  <div className="mb-1 rounded-lg bg-ds-warn-chip p-3">
+                    <p className="text-[12px] leading-[1.45] text-ds-chip-warn">
+                      This address takes USDC on Solana only. Any other token, or any other network, will not
+                      reach your balance.
+                    </p>
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        ack();
+                        setAsking(false);
+                        copy();
+                      }}
+                      className="mt-2.5 w-full"
+                    >
+                      I understand, copy address
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* What is left once the destinations go: the two things that are not
                 a place to go. Sign out stays muted, so the pair does not read as

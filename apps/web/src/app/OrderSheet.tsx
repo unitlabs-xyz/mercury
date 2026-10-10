@@ -508,7 +508,7 @@ export const OrderSheet = ({
   max?: boolean;
 }) => {
   const selling = side === "sell";
-  const available = Number(useMoney().data?.balanceUsd ?? 0);
+  const liveAvailable = Number(useMoney().data?.balanceUsd ?? 0);
   const heldAs = useHeldAs(instrument.ticker);
   const [raw, setRaw] = useState("100");
   const buy = useOrderAction();
@@ -528,11 +528,37 @@ export const OrderSheet = ({
     return () => clearTimeout(t);
   }, [amount]);
 
-  const { decision, isLoading, fee } = useDecision(open ? instrument : undefined, settled, prices, {
+  const working = buy.isPending;
+  const live = useDecision(open ? instrument : undefined, settled, prices, {
     side,
     max,
     acceptImpact,
+    paused: working,
   });
+  /*
+   * The quote that was pressed, held for as long as the order is in flight.
+   *
+   * The quote kept refreshing underneath a sale — on its own timer, and
+   * whenever the ticket behind the sheet refreshed the same cached answer. Once
+   * the shares had left the wallet but before the server said so, the fresh
+   * quote was a refusal, and the sheet flashed "You don't hold this stock" at
+   * someone whose sale was going through. What is on screen while it sends is
+   * what they agreed to. A failure lets go, and shows the quote as it is now.
+   */
+  /* The cash and the shares are held with it: both drop the moment the order lands on chain. */
+  const liveHeldShares = new Map((heldAs.parts ?? []).map((p) => [p.issuer, p.shares - p.pledged] as const));
+  const [sent, setSent] = useState<{
+    decision: typeof live.decision;
+    fee: typeof live.fee;
+    available: number;
+    heldShares: typeof liveHeldShares;
+  } | null>(null);
+  const held = working && sent !== null;
+  const decision = held ? sent.decision : live.decision;
+  const fee = held ? sent.fee : live.fee;
+  const available = held ? sent.available : liveAvailable;
+  const heldShares = held ? sent.heldShares : liveHeldShares;
+  const isLoading = held ? false : live.isLoading;
   /* Which token to trade. Null is the best price; a pick only holds while that token is still on offer. */
   const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => setPicked(null), [open, side]);
@@ -540,14 +566,12 @@ export const OrderSheet = ({
   const unavailable = decision?.kind === "execute" ? unavailableOf(decision) : [];
   const pick =
     decision?.kind === "execute" ? (options.find((c) => c.mint === picked) ?? decision.best) : null;
-  const heldShares = new Map((heldAs.parts ?? []).map((p) => [p.issuer, p.shares - p.pledged] as const));
   /* Zero unless a relayer is paying the network on this buyer's behalf. */
   const feeUsd = fee === null ? 0 : Number(fee.toString());
 
   const typing = settled !== amount;
   /* A sale is not spending, so the cash balance has nothing to say about it. */
   const overBalance = !selling && amount > available;
-  const working = buy.isPending;
   /*
    * `offer_queue` blocks the button. The decision means the market is shut and
    * the price is far enough above fair that we decline to fill it; the answer
@@ -725,7 +749,13 @@ export const OrderSheet = ({
               variant="primary"
               disabled={blocked}
               loading={working}
-              onClick={() =>
+              onClick={() => {
+                setSent({
+                  decision: live.decision,
+                  fee: live.fee,
+                  available: liveAvailable,
+                  heldShares: liveHeldShares,
+                });
                 buy.mutate({
                   ticker: instrument.ticker,
                   side,
@@ -734,8 +764,8 @@ export const OrderSheet = ({
                   /* The token reviewed, picked or best: the server fills only that one. */
                   ...(pick ? { issuer: pick.issuer } : {}),
                   ...(acceptImpact ? { acceptImpact: true } : {}),
-                })
-              }
+                });
+              }}
               className="flex-[1.6]"
             >
               {cta}

@@ -58,6 +58,7 @@ it("keeps basket value in net worth without folding its assets into direct stock
     ticker: "TSLA",
     name: "Tesla",
     sector: "Consumer",
+    logoSquare: false,
     about: "",
     wrappers: [],
     featured: false,

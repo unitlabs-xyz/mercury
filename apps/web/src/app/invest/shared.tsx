@@ -12,6 +12,13 @@ export type Row = Priced & {
   readonly saved: boolean;
 };
 
+/**
+ * The corner radius of an xStocks logo, as a share of its width so it holds at
+ * every size. Their icons are square with corner marks: a circle crops the
+ * marks off, a square edge is harsher than the logo as xStocks shows it.
+ */
+export const XSTOCKS_LOGO_RADIUS = "100%";
+
 export const Mark = ({ i, size = 28 }: { i: Instrument; size?: number }) =>
   i.logo ? (
     <img
@@ -20,8 +27,8 @@ export const Mark = ({ i, size = 28 }: { i: Instrument; size?: number }) =>
       width={size}
       height={size}
       loading="lazy"
-      style={{ width: size, height: size }}
-      className="shrink-0 rounded-full"
+      style={{ width: size, height: size, ...(i.logoSquare ? { borderRadius: XSTOCKS_LOGO_RADIUS } : {}) }}
+      className={`shrink-0 ${i.logoSquare ? "" : "rounded-full"}`}
     />
   ) : (
     <span

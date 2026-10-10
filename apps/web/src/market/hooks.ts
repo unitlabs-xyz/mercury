@@ -54,6 +54,13 @@ export type Instrument = {
   readonly sector: string;
   readonly about: string;
   readonly logo?: string;
+  /**
+   * The logo is xStocks' own token icon: a square with corner marks, which a
+   * circle crops into something that no longer looks like the logo. The server
+   * takes the xStocks icon whenever there is an xStocks token, so the same test
+   * here says which one this is.
+   */
+  readonly logoSquare: boolean;
   readonly wrappers: readonly Wrapper[];
   /** On the short shelf. Everything else is found by search. */
   readonly featured: boolean;
@@ -98,6 +105,7 @@ const toInstrument = (i: WireInstrument & { description?: string | null }): Inst
     sector: i.sector ?? "Other",
     about: i.description ?? "",
     ...(i.logoUrl ? { logo: i.logoUrl } : {}),
+    logoSquare: wrappers.some((w) => w.issuer === "backed"),
     wrappers,
     featured: i.featured,
     maxOrderUsd: Number(i.maxOrderUsd),
@@ -399,7 +407,7 @@ export const useDecision = (
   instrument: Instrument | undefined,
   usd: number,
   _prices: PriceMap | undefined,
-  opts: { side?: "buy" | "sell"; max?: boolean; acceptImpact?: boolean } = {},
+  opts: { side?: "buy" | "sell"; max?: boolean; acceptImpact?: boolean; paused?: boolean } = {},
 ) => {
   const side = opts.side ?? "buy";
   const max = opts.max === true;
@@ -416,7 +424,8 @@ export const useDecision = (
        different order on each tab, and "everything" is not a dollar figure at
        all. Sharing a cache entry would show a buy's answer on the sell tab. */
     queryKey: ["quote", instrument?.ticker, amount.toFixed(2), side, max, acceptImpact, signedIn],
-    enabled: !!instrument && (amount > 0 || max) && !belowMinimum,
+    /* Paused while an order on this quote is in flight: see OrderSheet. */
+    enabled: !!instrument && (amount > 0 || max) && !belowMinimum && opts.paused !== true,
     staleTime: 10_000,
     refetchInterval: 20_000,
     queryFn: () =>
