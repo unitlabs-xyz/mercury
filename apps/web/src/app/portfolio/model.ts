@@ -41,7 +41,12 @@ export type Model = {
   readonly total: number;
   /** Wallet and pledged stocks, wallet cash, and baskets, before the loan. */
   readonly assets: number;
-  /** Wallet and pledged stocks plus basket positions. */
+  /**
+   * Wallet and pledged stocks. Baskets are `basketUsd` and are deliberately
+   * not in here: the two are shown side by side, so counting baskets in both
+   * made the row add up to more than the account — $3.99 of basket reported
+   * as "Holdings $3.99, 0 positions" next to "Baskets $3.99".
+   */
   readonly stocks: number;
   readonly basketUsd: number;
   readonly cash: number;
@@ -116,11 +121,10 @@ export const useModel = (
     const cash = Number(p.cashUsd);
     const basketUsd = Number(p.basketUsd);
     const debt = Number(p.debtUsd);
-    const walletStocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
-    const stocks = walletStocks + basketUsd;
+    const stocks = p.holdings.reduce((s, h) => s + Number(h.valueUsd), 0);
     // Weights are shares of what is held, not of what is owned outright: a
     // levered account would otherwise show holdings adding up to well past 100%.
-    const assets = walletStocks + cash + basketUsd;
+    const assets = stocks + cash + basketUsd;
     // Kamino's live terms from our API first; its public rates list if that is not in yet.
     const target = borrow?.safetyTarget ?? 0.8;
     const ltvOf = (ticker: string) =>

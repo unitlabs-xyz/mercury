@@ -72,7 +72,10 @@ it("keeps basket value in net worth without folding its assets into direct stock
   renderToStaticMarkup(createElement(Probe));
 
   expect(model?.total).toBe(35);
-  expect(model?.stocks).toBe(30);
+  // Wallet stocks only: the basket's $20 is `basketUsd`, shown in its own
+  // figure, and counting it in both made the row exceed the account.
+  expect(model?.stocks).toBe(10);
+  expect(model!.stocks + model!.basketUsd + model!.cash).toBe(model?.total);
   expect(model?.assets).toBe(35);
   expect(model?.cash).toBe(5);
   expect(model?.basketUsd).toBe(20);

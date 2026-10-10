@@ -238,7 +238,11 @@ export const AccountHeader = ({
             label="Baskets"
             value={usd(m.basketUsd)}
             sub={basketPnlSub(m)}
-            tone={m.basketCostBasis > 0 ? (m.basketReturnUsd < 0 ? "down" : "up") : undefined}
+            /* No tone: this is what the baskets are worth, not what they made.
+               Tinted by the return's sign, $3.99 down four cents was printed in
+               the loss colour and read as a negative balance. The figures that
+               carry a tone are the ones that carry a sign — the line below
+               already says −$0.04. */
           />
         )}
         <HeaderFigure
