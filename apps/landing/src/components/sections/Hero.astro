@@ -7,6 +7,8 @@ import Media from "../Media.astro";
 import heroImage from "../../assets/ui/Hero-2x.webp";
 
 const t = useDict(Astro.url);
+/** Bump when the loop files change: they are cached for a year (vercel.json), keyed on this. */
+const LOOP_VERSION = "3";
 const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
 ---
 
@@ -56,12 +58,12 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
          cut. Decorative, so hidden from assistive tech and from search. -->
     <div class="screen" aria-hidden="true">
       <video class="loop wide" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1">
-        <source data-src="/hero/mercury-hero-loop.webm" type="video/webm" />
-        <source data-src="/hero/mercury-hero-loop.mp4" type="video/mp4" />
+        <source data-src={`/hero/mercury-hero-loop.webm?v=${LOOP_VERSION}`} type="video/webm" />
+        <source data-src={`/hero/mercury-hero-loop.mp4?v=${LOOP_VERSION}`} type="video/mp4" />
       </video>
       <video class="loop square" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1">
-        <source data-src="/hero/mercury-hero-loop-mobile.webm" type="video/webm" />
-        <source data-src="/hero/mercury-hero-loop-mobile.mp4" type="video/mp4" />
+        <source data-src={`/hero/mercury-hero-loop-mobile.webm?v=${LOOP_VERSION}`} type="video/webm" />
+        <source data-src={`/hero/mercury-hero-loop-mobile.mp4?v=${LOOP_VERSION}`} type="video/mp4" />
       </video>
     </div>
   </Media>
@@ -118,22 +120,25 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
 </style>
 
 <script>
-  // The hero loop, loaded last. Nothing is fetched until the page has finished
-  // loading and the browser is idle, and only then if the frame is on screen,
-  // motion is welcome and the connection can afford it. Only the cut that fits
-  // the screen loads; it pauses whenever it is out of view or the tab is hidden.
+  // The hero loop. It waits for the hero photo (the page's LCP) to finish, so it never competes
+  // with it, then starts straight away; nothing loads if the frame is off screen, motion is
+  // unwelcome, or the connection is 2G. Only the cut that fits the screen loads; it pauses out of
+  // view or in a hidden tab. If the browser blocks autoplay (an iPhone in Low Power Mode), it starts
+  // on the first scroll or tap instead.
   {
     const frame = document.querySelector<HTMLElement>(".hero-frame");
     const wide = frame?.querySelector<HTMLVideoElement>("video.wide");
     const square = frame?.querySelector<HTMLVideoElement>("video.square");
+    const photo = frame?.querySelector<HTMLImageElement>("img.art");
     const narrow = matchMedia("(width < 40rem)");
     const still = matchMedia("(prefers-reduced-motion: reduce)");
-    const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
-    const lean = !!conn && (conn.saveData === true || /(^|-)2g$/.test(conn.effectiveType ?? ""));
+    const conn = (navigator as Navigator & { connection?: { effectiveType?: string } }).connection;
+    const slow = !!conn && /(^|-)2g$/.test(conn.effectiveType ?? "");
 
-    if (frame && wide && square && !lean) {
+    if (frame && wide && square && !slow) {
       let visible = false;
       let started = false;
+      let blocked = false;
 
       const current = () => (narrow.matches ? square : wide);
       const other = () => (narrow.matches ? wide : square);
@@ -142,11 +147,16 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
       const arm = (v: HTMLVideoElement) => {
         if (v.dataset.armed) return;
         v.dataset.armed = "1";
+        // Set in code as well as markup: Safari only autoplays a source added later if these are true on the element.
+        v.muted = true;
+        v.defaultMuted = true;
+        v.playsInline = true;
         v.querySelectorAll<HTMLSourceElement>("source[data-src]").forEach((s) => {
           s.src = s.dataset.src!;
         });
         v.preload = "auto";
         v.addEventListener("playing", () => v.classList.add("live"), { once: true });
+        v.addEventListener("canplay", () => sync());
         v.load();
       };
 
@@ -159,10 +169,16 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
           return;
         }
         arm(v);
-        v.play().catch(() => {});
+        if (v.paused) {
+          v.play().then(
+            () => (blocked = false),
+            () => (blocked = true),
+          );
+        }
       };
 
       const start = () => {
+        if (started) return;
         started = true;
         sync();
       };
@@ -178,13 +194,14 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
       narrow.addEventListener("change", sync);
       still.addEventListener("change", sync);
       document.addEventListener("visibilitychange", sync);
+      // Autoplay refused: the first gesture is allowed to start it.
+      const nudge = () => blocked && sync();
+      for (const e of ["touchstart", "pointerdown", "scroll", "keydown"]) addEventListener(e, nudge, { passive: true });
 
-      const idle = (fn: () => void) =>
-        "requestIdleCallback" in window
-          ? (window as Window & { requestIdleCallback: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback(fn, { timeout: 2500 })
-          : setTimeout(fn, 1200);
-      if (document.readyState === "complete") idle(start);
-      else addEventListener("load", () => idle(start), { once: true });
+      // Start once the photo is in; a fallback in case its load event was missed or it never loads.
+      if (photo && !photo.complete) photo.addEventListener("load", () => setTimeout(start, 150), { once: true });
+      else setTimeout(start, 150);
+      setTimeout(start, 2500);
     }
   }
 </script>
