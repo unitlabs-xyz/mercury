@@ -1,5 +1,6 @@
 ---
 import Band from "../Band.astro";
+import { useDict } from "../../i18n";
 
 // The @3x files are built from the supplied PNGs by scripts/logos.ts — plate
 // flood-filled off, never upscaled. They display at ~30px, so the browser
@@ -41,7 +42,7 @@ const marks = logos.map((logo) => ({
 const runWidth = marks.reduce((sum, mark) => sum + mark.w, 0) + GAP * marks.length;
 const duration = Math.round(runWidth / SPEED);
 
-const caption = "Shares custodied and tokenised by";
+const caption = useDict(Astro.url).trust.caption;
 ---
 <Band space="section">
   <p data-reveal class="text-[14px] tracking-[-0.02em] text-copy">{caption}</p>

@@ -1,6 +1,7 @@
 ---
 import backed from "../../assets/brand/BackedWhiteLogo-keyed.png?url";
 import ondo from "../../assets/brand/OndoWhiteLogo-keyed.png?url";
+import { useDict } from "../../i18n";
 
 /**
  * The buy-quote card that sits on the Invest backdrop. Built to the supplied
@@ -16,11 +17,12 @@ const issuers = [
   { logo: ondo, w: 17, h: 18, label: "Ondo · NVDAon", price: "$186.90", picked: false },
 ];
 
+const t = useDict(Astro.url).buyQuote;
 const summary = [
-  { label: "You pay", value: "$500.00", hero: true },
-  { label: "Price per share", value: "$184.22" },
-  { label: "Shares", value: "2.7141" },
-  { label: "Route", value: "USDC → NVDAx" },
+  { label: t.youPay, value: "$500.00", hero: true },
+  { label: t.pricePerShare, value: "$184.22" },
+  { label: t.shares, value: "2.7141" },
+  { label: t.route, value: "USDC → NVDAx" },
 ];
 ---
 

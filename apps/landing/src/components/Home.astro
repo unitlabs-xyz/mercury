@@ -1,0 +1,37 @@
+---
+import Base from "../layouts/Base.astro";
+import { useDict } from "../i18n";
+
+import Hero from "./sections/Hero.astro";
+import Trust from "./sections/Trust.astro";
+import Everything from "./sections/Everything.astro";
+import Pillars from "./sections/Pillars.astro";
+import OneNumber from "./sections/OneNumber.astro";
+import Custody from "./sections/Custody.astro";
+import Faqs from "./sections/Faqs.astro";
+import Cta from "./sections/Cta.astro";
+
+const t = useDict(Astro.url);
+
+// The answers on the page, handed to search engines in the shape they index.
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: t.faqs.items.map((faq) => ({
+    "@type": "Question",
+    name: faq.q,
+    acceptedAnswer: { "@type": "Answer", text: faq.a },
+  })),
+};
+---
+
+<Base title={t.meta.tagline} schema={[faqSchema]}>
+  <Hero />
+  <Trust />
+  <Everything />
+  <Pillars />
+  <OneNumber />
+  <Custody />
+  <Faqs />
+  <Cta />
+</Base>

@@ -1,23 +1,23 @@
 ---
+import { site } from "../../config/site";
+import { useDict } from "../../i18n";
 import Band from "../Band.astro";
-import Waitlist from "../Waitlist.astro";
+import Button from "../Button.astro";
 import Media from "../Media.astro";
 import ctaArt from "../../assets/ui/CTA.png";
 import ctaGrain from "../../assets/textures/CTATexture.png";
 
-const content = {
-  heading: ["Be first in line", "when Mercury opens."],
-  note: "Leave your email and where you're from. We'll let you in as soon as it's ready.",
-};
+const t = useDict(Astro.url);
+const content = { ...t.cta, action: { label: t.ui.cta, href: site.app } };
 
 // The art is the full 1000 column at its own ratio.
 const FRAME = "1000 / 286";
 ---
 
-<Band id="waitlist">
+<Band id="beta">
   <Media
     data-reveal
-    label="Join the Mercury waitlist"
+    label={content.label}
     src={ctaArt}
     alt=""
     ratio={FRAME}
@@ -34,7 +34,9 @@ const FRAME = "1000 / 286";
         </h2>
         <p class="mt-3 text-[16px] leading-6 tracking-[-0.02em] text-white/80">{content.note}</p>
       </div>
-      <Waitlist />
+      <div>
+        <Button href={content.action.href} variant="onDark">{content.action.label}</Button>
+      </div>
     </div>
   </Media>
 </Band>
@@ -43,18 +45,18 @@ const FRAME = "1000 / 286";
   .cta-panel {
     position: absolute;
     inset: 0;
-    /* Above the art, its grain and the waitlist's success shimmer. */
+    /* Above the art and its grain. */
     z-index: 2;
     display: flex;
-    /* Title and note on top, the form beneath them, all on the left edge. */
+    /* Title and note on top, the button beneath them, all on the left edge. */
     flex-direction: column;
     justify-content: center;
-    gap: 44px;
+    gap: 32px;
     padding: 28px 60px;
   }
 
-  /* Below this the four fields wrap onto a second row, which the art's ratio
-     cannot hold: the frame takes its height from the content instead. */
+  /* Below this the heading wraps further than the art's ratio can hold: the
+     frame takes its height from the content instead. */
   @media (width < 64rem) {
     :global(.frame:has(> .cta-panel)) {
       --ratio: auto;

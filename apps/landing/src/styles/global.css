@@ -150,6 +150,12 @@
     outline-offset: 2px;
     border-radius: 3px;
   }
+  /* Tailwind's reset leaves buttons on the arrow; everything clickable gets the hand. */
+  button:not(:disabled),
+  [role="button"],
+  summary {
+    cursor: pointer;
+  }
   section[id] {
     scroll-margin-top: calc(var(--bar-h) + 16px);
   }

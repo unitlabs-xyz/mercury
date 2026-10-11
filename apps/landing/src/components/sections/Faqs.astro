@@ -1,11 +1,13 @@
 ---
 import Band from "../Band.astro";
-import { faqs } from "../../config/faqs";
+import { useDict } from "../../i18n";
+
+const { title, items: faqs } = useDict(Astro.url).faqs;
 ---
 
 <Band id="faqs">
   <div class="faq-grid grid">
-    <h2 data-reveal class="display-xl text-headline">FAQs</h2>
+    <h2 data-reveal class="display-xl text-headline">{title}</h2>
 
     {/* Not <details>: a closed <details> hides its content outright, so there
         is nothing to transition. A button and a panel animate properly and

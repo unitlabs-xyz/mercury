@@ -1,5 +1,6 @@
 ---
 import Band from "../Band.astro";
+import { useDict } from "../../i18n";
 import Media from "../Media.astro";
 import Check from "../Check.astro";
 import Pane from "../Pane.astro";
@@ -20,33 +21,20 @@ const COPY = [522, 426];
 const MEDIA_H = 330;
 // ─────────────────────────────────────────────────────────────────────────────
 
+const t = useDict(Astro.url).everything;
 const content = {
-  heading: ["Everything your money does,", "in one account."],
-  lead: "No brokerage account, no identity check, no fiat rails. If you can hold a stablecoin, you can hold Nvidia.",
+  heading: t.heading,
+  lead: t.lead,
   columns: [
     {
-      stamp: "HOLD",
-      title: "Your money stays in your wallet.",
-      body: "Bring a wallet you already use, or make one with an email address. Harbor is an interface, not a custodian \u2014 it can neither move nor freeze what you hold.",
-      points: [
-        "USDC on Solana, in and out, with no bank in the middle.",
-        "Send and receive at any hour, including weekends",
-        "Leaving takes one transaction and nobody\u2019s permission",
-      ],
-      media: { src: HoldArt, alt: "Adding cash: a Solana deposit address with a QR code." },
+      ...t.hold,
+      media: { src: HoldArt, alt: t.hold.alt },
       grain: HoldGrain,
       pane: { width: 416, height: 205, pad: "24px 31px", bg: HoldPane },
     },
     {
-      stamp: "INVEST",
-      title: "Turn stablecoins into real shares.",
-      body: "590 US stocks and funds, or a whole basket bought in one action and held afterwards as a single position.",
-      points: [
-        "From $5, in fractions of a share",
-        "A basket is one token you can hold and send",
-        "Set an amount to go in every week or month",
-      ],
-      media: { src: InvestArt, alt: "Buying Nvidia: two issuers quoted, with the cost broken down." },
+      ...t.invest,
+      media: { src: InvestArt, alt: t.invest.alt },
       grain: InvestGrain,
       pane: { width: 347, height: 280, pad: "23px 26.5px", bg: InvestPane },
     },

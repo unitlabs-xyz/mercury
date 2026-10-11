@@ -1,0 +1,11 @@
+---
+import Home from "../../components/Home.astro";
+import { locales, defaultLocale } from "../../i18n";
+
+// One prerendered page per language; English is the root, so it is not here.
+export function getStaticPaths() {
+  return locales.filter((l) => l !== defaultLocale).map((l) => ({ params: { lang: l.code } }));
+}
+---
+
+<Home />

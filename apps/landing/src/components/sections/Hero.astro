@@ -1,17 +1,13 @@
 ---
 import { site } from "../../config/site";
+import { useDict } from "../../i18n";
 import Band from "../Band.astro";
 import Button from "../Button.astro";
 import Media from "../Media.astro";
 import heroImage from "../../assets/ui/Hero-2x.webp";
 
-const content = {
-  eyebrow: { live: "Live in beta,", rest: "Hold. Invest. Grow. Spend." },
-  heading: ["The financial account built", "for the onchain world."],
-  lead: "Hold your money, invest in stocks and ETFs, build diversified portfolios, spend with your card, and access your wealth — all from a single wallet.",
-  primary: { label: "Try the beta", href: site.app },
-  secondary: { label: "Join the waitlist", href: site.waitlist },
-};
+const t = useDict(Astro.url);
+const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
 ---
 
 <Band space="none" class="pt-[60px] pb-[50px]">
@@ -19,11 +15,7 @@ const content = {
        so it is not capped — Artnik runs a touch wider than the drawn line and a
        520px cap would drop "built" onto a line of its own. -->
   <div>
-    <p data-enter class="flex items-center gap-[4.5px] text-[12px] leading-[18px]">
-      <span class="size-1.5 shrink-0 rounded-full bg-live"></span>
-      <span class="text-live">{content.eyebrow.live}</span>
-      <span class="text-copy">{content.eyebrow.rest}</span>
-    </p>
+    <p data-enter class="text-[12px] leading-[18px] text-copy">{content.eyebrow}</p>
 
     <h1
       data-enter
@@ -37,7 +29,6 @@ const content = {
 
     <div data-enter style="--reveal-delay:210ms" class="mt-[22px] flex flex-wrap gap-3">
       <Button href={content.primary.href}>{content.primary.label}</Button>
-      <Button href={content.secondary.href} variant="secondary">{content.secondary.label}</Button>
     </div>
   </div>
 
@@ -45,16 +36,155 @@ const content = {
   <Media
     data-enter
     style="--reveal-delay:260ms"
-    label="Hero image"
+    label={content.imageLabel}
     src={heroImage}
     alt=""
     ratio="1000 / 420"
     radius={12}
     texture
-    parallax
     quality={95}
     sizes="(min-width: 1080px) 1000px, calc(100vw - 80px)"
     priority
-    class="mt-14"
-  />
+    class="hero-frame mt-14"
+  >
+    <!-- The product loop, over the hero photo it has baked in, grain and all:
+         the grain sits on the photo only, never over the cards. The still's
+         own grain comes from the frame's texture, under the video. The photo above
+         stays the page's real image (and its LCP): the video has no poster,
+         fetches nothing until the page has loaded and the frame is on screen,
+         and fades in only once it is actually playing. Phones get the square
+         cut. Decorative, so hidden from assistive tech and from search. -->
+    <div class="screen" aria-hidden="true">
+      <video class="loop wide" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1">
+        <source data-src="/hero/mercury-hero-loop.webm" type="video/webm" />
+        <source data-src="/hero/mercury-hero-loop.mp4" type="video/mp4" />
+      </video>
+      <video class="loop square" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1">
+        <source data-src="/hero/mercury-hero-loop-mobile.webm" type="video/webm" />
+        <source data-src="/hero/mercury-hero-loop-mobile.mp4" type="video/mp4" />
+      </video>
+    </div>
+  </Media>
 </Band>
+
+<style>
+  .screen {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Hidden until it is really playing, then a soft fade over the photo it
+     carries, so the swap from still to motion cannot be seen. */
+  .loop {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 700ms var(--ease-out, ease-out);
+  }
+
+  .loop.live {
+    opacity: 1;
+  }
+
+  .square {
+    display: none;
+  }
+
+  /* Narrow screens: a square frame and the square loop, which keeps the
+     figures readable where the wide cut would shrink them to nothing. */
+  @media (width < 40rem) {
+    :global(.hero-frame) {
+      --ratio: 1 / 1;
+    }
+
+    .wide {
+      display: none;
+    }
+
+    .square {
+      display: block;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loop {
+      display: none !important;
+    }
+  }
+</style>
+
+<script>
+  // The hero loop, loaded last. Nothing is fetched until the page has finished
+  // loading and the browser is idle, and only then if the frame is on screen,
+  // motion is welcome and the connection can afford it. Only the cut that fits
+  // the screen loads; it pauses whenever it is out of view or the tab is hidden.
+  {
+    const frame = document.querySelector<HTMLElement>(".hero-frame");
+    const wide = frame?.querySelector<HTMLVideoElement>("video.wide");
+    const square = frame?.querySelector<HTMLVideoElement>("video.square");
+    const narrow = matchMedia("(width < 40rem)");
+    const still = matchMedia("(prefers-reduced-motion: reduce)");
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    const lean = !!conn && (conn.saveData === true || /(^|-)2g$/.test(conn.effectiveType ?? ""));
+
+    if (frame && wide && square && !lean) {
+      let visible = false;
+      let started = false;
+
+      const current = () => (narrow.matches ? square : wide);
+      const other = () => (narrow.matches ? wide : square);
+
+      /** Point the sources at their files the first time a cut is needed. */
+      const arm = (v: HTMLVideoElement) => {
+        if (v.dataset.armed) return;
+        v.dataset.armed = "1";
+        v.querySelectorAll<HTMLSourceElement>("source[data-src]").forEach((s) => {
+          s.src = s.dataset.src!;
+        });
+        v.preload = "auto";
+        v.addEventListener("playing", () => v.classList.add("live"), { once: true });
+        v.load();
+      };
+
+      const sync = () => {
+        if (!started) return;
+        other().pause();
+        const v = current();
+        if (still.matches || document.hidden || !visible) {
+          v.pause();
+          return;
+        }
+        arm(v);
+        v.play().catch(() => {});
+      };
+
+      const start = () => {
+        started = true;
+        sync();
+      };
+
+      new IntersectionObserver(
+        ([entry]) => {
+          visible = !!entry?.isIntersecting;
+          sync();
+        },
+        { rootMargin: "200px 0px" },
+      ).observe(frame);
+
+      narrow.addEventListener("change", sync);
+      still.addEventListener("change", sync);
+      document.addEventListener("visibilitychange", sync);
+
+      const idle = (fn: () => void) =>
+        "requestIdleCallback" in window
+          ? (window as Window & { requestIdleCallback: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback(fn, { timeout: 2500 })
+          : setTimeout(fn, 1200);
+      if (document.readyState === "complete") idle(start);
+      else addEventListener("load", () => idle(start), { once: true });
+    }
+  }
+</script>

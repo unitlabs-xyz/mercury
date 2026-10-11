@@ -1,5 +1,6 @@
 ---
 import Band from "../Band.astro";
+import { useDict, fill } from "../../i18n";
 import Media from "../Media.astro";
 import StatTile from "../cards/StatTile.astro";
 import OneAccountArt from "../../assets/ui/OneAccount.png";
@@ -14,28 +15,24 @@ const FRAME = "1001 / 303";
 const PAD = 40;
 const GAP = 24;
 
+const t = useDict(Astro.url).oneNumber;
 const content = {
-  heading: ["One number for", "everything you hold."],
-  lead: "The same company can be held through either issuer, and each token is worth a different sliver of a share. Mercury counts the shares behind the, not the tokens.",
-  total: { label: "Portfolio value", value: "$12,480.62", pill: "\u2191 10.68%", note: "+$1,204.18 all time" },
+  heading: t.heading,
+  lead: t.lead,
+  alt: t.alt,
+  total: { label: t.totalLabel, value: "$12,480.62", pill: "↑ 10.68%", note: fill(t.totalNote, { amount: "+$1,204.18" }) },
   split: [
-    { label: "Stocks", amount: 5785.49 },
-    { label: "Baskets", amount: 2150.4 },
-    { label: "Cash \u00b7 4.1%", amount: 4534.75 },
+    { label: t.stocks, amount: 5785.49 },
+    { label: t.baskets, amount: 2150.4 },
+    { label: fill(t.cash, { rate: "4.1%" }), amount: 4534.75 },
   ],
-  issuerTitle: "Nvidia, across issuers",
+  issuerTitle: t.issuerTitle,
   issuers: [
-    { label: "NVDAx \u00b7 18 tokens", value: "$5,785.49" },
-    { label: "NVDAon \u00b7 40 tokens", value: "$2,150.40" },
+    { label: `NVDAx · ${fill(t.tokens, { n: 18 })}`, value: "$5,785.49" },
+    { label: `NVDAon · ${fill(t.tokens, { n: 40 })}`, value: "$2,150.40" },
   ],
-  truePosition: { label: "True position", value: "22.00 shares" },
-  issuerNote: "Counting tokens would have said 58. Each one carries its own multiplier.",
-  holdings: [
-    { ticker: "NVDAx", name: "NVIDIA", value: "$4,206.18", change: "+2.4%" },
-    { ticker: "SPYx", name: "S&P 500", value: "$3,180.00", change: "+0.3%" },
-    { ticker: "GOOGLx", name: "Alphabet", value: "$1,842.44", change: "-0.8%" },
-    { ticker: "USDC", name: "Cash", value: "$1,752.00", change: "4.8% a year" },
-  ],
+  truePosition: { label: t.truePosition, value: fill(t.shares, { n: "22.00" }) },
+  issuerNote: t.issuerNote,
 };
 
 // The bar is three stacked fills, not three side by side: each layer runs from
@@ -64,9 +61,9 @@ const layers = [
   <Media
     data-reveal
     style="--reveal-delay:160ms"
-    label="The portfolio total, and one company counted across both issuers"
+    label={content.alt}
     src={OneAccountArt}
-    alt="The portfolio total, and one company counted across both issuers"
+    alt={content.alt}
     ratio={FRAME}
     radius={12}
     textureSrc={oneAccountGrain}

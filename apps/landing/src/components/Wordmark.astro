@@ -1,6 +1,6 @@
 ---
 import Logo from "../assets/brand/Logo.svg";
-import { site } from "../config/site";
+import { homePath, localeOf } from "../i18n";
 
 interface Props {
   class?: string;
@@ -8,13 +8,14 @@ interface Props {
   [key: string]: unknown;
 }
 const { class: className = "", ...rest } = Astro.props;
+const locale = localeOf(Astro.url);
 ---
 
 <!-- Astro inlines the SVG, so the mark costs no extra request. -->
 <a
-  href="/"
+  href={homePath(locale)}
   class:list={["inline-flex items-center text-ink", className]}
-  aria-label={`${site.name} home`}
+  aria-label={locale.dict.ui.home}
   {...rest}
 >
   <Logo height={24} width={112} aria-hidden="true" />
