@@ -163,7 +163,9 @@ export const FundFromWallet = () => {
         </p>
       </div>
 
-      {overdrawn && (
+      {/* Not when the wallet holds nothing: the note below already says so, and
+          says what to do about it. Two notes, one fact. */}
+      {overdrawn && held > 0n && (
         <div className="mt-2">
           <Note tone="down">More than this wallet holds. {usd(heldText)} available.</Note>
         </div>
