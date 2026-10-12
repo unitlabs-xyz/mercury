@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { rawTokenAmount, tokenAmount } from "@mercury/view";
 import { useMoney } from "../../api/hooks";
 import { useFundAction, useFunderUsdc } from "../../api/fund";
-import { SOLANA_CONNECT_OPTIONS, useFundingWallet } from "../../auth/embedded";
+import { SOLANA_CONNECT_OPTIONS, useFundingWallets } from "../../auth/embedded";
 import { Button } from "../../ui/Button";
 import { Alert, Check } from "../../ui/icons";
 
@@ -41,12 +41,27 @@ const short = (address: string) => `${address.slice(0, 4)}…${address.slice(-4)
 export const FundFromWallet = () => {
   const money = useMoney();
   const to = money.data?.depositAddress;
-  const { wallet, address } = useFundingWallet();
+  const { wallets } = useFundingWallets();
   const { connectWallet } = useConnectWallet();
+  /*
+   * A wallet with several accounts unlocked arrives as several entries, and
+   * which one pays is not ours to decide. Held by address rather than by index
+   * so it survives the list being reordered or one of them going away.
+   */
+  const [chosen, setChosen] = useState<string | null>(null);
+  const wallet = wallets.find((w) => w.address === chosen) ?? wallets[0];
+  const address = wallet?.address;
   const balance = useFunderUsdc(address);
   const [amount, setAmount] = useState("");
-  const action = useFundAction(to);
+  const action = useFundAction(to, wallet);
   const resetAction = action.reset;
+
+  /* One wallet and one account at a time: Disconnect means all of them, not
+     the chosen one, which only uncovered the next and looked like cycling. */
+  const disconnectAll = () => {
+    setChosen(null);
+    for (const w of wallets) void w.disconnect();
+  };
 
   /* A different wallet is a different balance, so the amount typed against the
      old one is not an amount any more. */
@@ -130,20 +145,50 @@ export const FundFromWallet = () => {
 
   return (
     <form onSubmit={submit} className="flex flex-col">
-      <div className="flex items-center justify-between gap-3 rounded-lg bg-ds-panel px-4 py-3">
-        <span className="min-w-0">
-          <span className="block text-[12px] leading-none text-ds-muted">Paying from</span>
+      <div className="rounded-lg bg-ds-panel px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12px] leading-none text-ds-muted">
+            {wallets.length > 1 ? "Pay from which account" : "Paying from"}
+          </span>
+          <button
+            type="button"
+            onClick={disconnectAll}
+            className="shrink-0 text-[12px] leading-none text-ds-muted hover:text-ds-ink hover:underline"
+          >
+            Disconnect
+          </button>
+        </div>
+
+        {/* Only a choice when there is one. A single account is a fact, and a
+            radiogroup of one invites a decision nobody has to make. */}
+        {wallets.length > 1 ? (
+          <div role="radiogroup" aria-label="Account to pay from" className="mt-2.5 flex flex-col gap-1">
+            {wallets.map((w) => {
+              const on = w.address === address;
+              return (
+                <button
+                  key={w.address}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setChosen(w.address)}
+                  className={`flex h-10 items-center justify-between gap-3 rounded-md px-3 text-left transition-colors ${
+                    on ? "bg-white outline-1 outline-black/10" : "hover:bg-white/60"
+                  }`}
+                >
+                  <span className="truncate font-mono text-[13px] leading-none text-ds-ink">
+                    {short(w.address)}
+                  </span>
+                  {on && <Check className="size-3.5 shrink-0 text-ds-up" />}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
           <span className="mt-1.5 block font-mono text-[13px] leading-none text-ds-ink">
             {short(wallet.address)}
           </span>
-        </span>
-        <button
-          type="button"
-          onClick={() => void wallet.disconnect()}
-          className="shrink-0 text-[12px] leading-none text-ds-muted hover:text-ds-ink hover:underline"
-        >
-          Disconnect
-        </button>
+        )}
       </div>
 
       <div className="mt-1 rounded-lg bg-ds-panel p-1">

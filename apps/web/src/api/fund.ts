@@ -1,7 +1,6 @@
-import { useSignAndSendTransaction } from "@privy-io/react-auth/solana";
+import { useSignAndSendTransaction, type ConnectedStandardSolanaWallet } from "@privy-io/react-auth/solana";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getBase58Decoder, type Address } from "@solana/kit";
-import { useFundingWallet } from "../auth/embedded";
 import { buildFundTransfer } from "../app/money/fund-transfer";
 import { latestBlockhash, usdcBalanceRaw } from "../solana/rpc";
 import { refreshAfterChain } from "./settle";
@@ -41,9 +40,8 @@ export interface FundReceipt {
  * starts expiring the moment it is read and the next thing to happen is a
  * wallet asking somebody to approve.
  */
-export const useFundAction = (to: string | undefined) => {
+export const useFundAction = (to: string | undefined, wallet: ConnectedStandardSolanaWallet | undefined) => {
   const qc = useQueryClient();
-  const { wallet } = useFundingWallet();
   const { signAndSendTransaction } = useSignAndSendTransaction();
 
   const action = useMutation<FundReceipt, Error, { amountRaw: bigint }>({

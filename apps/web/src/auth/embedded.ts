@@ -67,15 +67,20 @@ export const fundingOf = <T extends Pickable>(wallets: readonly T[]): readonly T
   wallets.filter((w) => !claimsPrivy(w.standardWallet));
 
 /**
- * The attached funding wallet, if there is one.
+ * Every attached funding wallet, in the order Privy reports them.
  *
- * One at a time: a second is a choice nobody asked to make, and the first is
- * the one they just connected.
+ * A list rather than one, because a wallet with several accounts unlocked
+ * arrives as several entries — one `ConnectedStandardSolanaWallet` per
+ * account, not per wallet. Taking `[0]` meant the panel silently paid from
+ * whichever Privy happened to list first, and Disconnect looked like it was
+ * cycling through accounts because it removed that one and revealed the next.
+ *
+ * Which account pays is the sender's to choose, so the choice belongs to the
+ * caller and this only reports what there is.
  */
-export const useFundingWallet = () => {
+export const useFundingWallets = () => {
   const { wallets, ready } = useWallets();
-  const wallet = fundingOf(wallets)[0];
-  return { wallet, address: wallet?.address, ready };
+  return { wallets: fundingOf(wallets), ready };
 };
 
 /**
