@@ -59,6 +59,57 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
         <source data-src={`/hero/mercury-hero-loop-mobile.webm?v=${LOOP_VERSION}`} type="video/webm" />
         <source data-src={`/hero/mercury-hero-loop-mobile.mp4?v=${LOOP_VERSION}`} type="video/mp4" />
       </video>
+      <!-- Inline, so the right cut starts downloading while the page is still being parsed, not
+           after it: the loop is the hero, so it loads first. Only the cut that fits the screen is
+           fetched. It plays itself the moment it has enough data and fades in once playing; it
+           pauses out of view or in a hidden tab. Nothing loads for reduced motion or on 2G. If the
+           browser refuses autoplay (an iPhone in Low Power Mode), the first scroll or tap starts it. -->
+      <script is:inline>
+        (() => {
+          const frame = document.currentScript && document.currentScript.closest(".hero-frame");
+          if (!frame) return;
+          const wide = frame.querySelector("video.wide");
+          const square = frame.querySelector("video.square");
+          const narrow = matchMedia("(width < 40rem)");
+          const still = matchMedia("(prefers-reduced-motion: reduce)");
+          const conn = navigator.connection;
+          if (still.matches || (conn && /(^|-)2g$/.test(conn.effectiveType || ""))) return;
+          let visible = true;
+          let blocked = false;
+          const current = () => (narrow.matches ? square : wide);
+          const other = () => (narrow.matches ? wide : square);
+          const arm = (v) => {
+            if (v.dataset.armed) return;
+            v.dataset.armed = "1";
+            v.muted = true;
+            v.defaultMuted = true;
+            v.playsInline = true;
+            v.autoplay = true;
+            v.preload = "auto";
+            v.querySelectorAll("source[data-src]").forEach((s) => (s.src = s.dataset.src));
+            v.addEventListener("playing", () => v.classList.add("live"), { once: true });
+            v.addEventListener("canplay", sync);
+            v.load();
+          };
+          function sync() {
+            other().pause();
+            const v = current();
+            arm(v);
+            if (still.matches || document.hidden || !visible) return v.pause();
+            if (v.paused) v.play().then(() => (blocked = false), () => (blocked = true));
+          }
+          sync();
+          new IntersectionObserver(([e]) => {
+            visible = !!(e && e.isIntersecting);
+            sync();
+          }, { rootMargin: "200px 0px" }).observe(frame);
+          narrow.addEventListener("change", sync);
+          still.addEventListener("change", sync);
+          document.addEventListener("visibilitychange", sync);
+          const nudge = () => blocked && sync();
+          ["touchstart", "pointerdown", "scroll", "keydown"].forEach((e) => addEventListener(e, nudge, { passive: true }));
+        })();
+      </script>
     </div>
   </Media>
 
@@ -153,89 +204,4 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
   }
 </style>
 
-<script>
-  // The hero loop. It waits for the hero photo (the page's LCP) to finish, so it never competes
-  // with it, then starts straight away; nothing loads if the frame is off screen, motion is
-  // unwelcome, or the connection is 2G. Only the cut that fits the screen loads; it pauses out of
-  // view or in a hidden tab. If the browser blocks autoplay (an iPhone in Low Power Mode), it starts
-  // on the first scroll or tap instead.
-  {
-    const frame = document.querySelector<HTMLElement>(".hero-frame");
-    const wide = frame?.querySelector<HTMLVideoElement>("video.wide");
-    const square = frame?.querySelector<HTMLVideoElement>("video.square");
-    const photo = frame?.querySelector<HTMLImageElement>("img.art");
-    const narrow = matchMedia("(width < 40rem)");
-    const still = matchMedia("(prefers-reduced-motion: reduce)");
-    const conn = (navigator as Navigator & { connection?: { effectiveType?: string } }).connection;
-    const slow = !!conn && /(^|-)2g$/.test(conn.effectiveType ?? "");
 
-    if (frame && wide && square && !slow) {
-      let visible = false;
-      let started = false;
-      let blocked = false;
-
-      const current = () => (narrow.matches ? square : wide);
-      const other = () => (narrow.matches ? wide : square);
-
-      /** Point the sources at their files the first time a cut is needed. */
-      const arm = (v: HTMLVideoElement) => {
-        if (v.dataset.armed) return;
-        v.dataset.armed = "1";
-        // Set in code as well as markup: Safari only autoplays a source added later if these are true on the element.
-        v.muted = true;
-        v.defaultMuted = true;
-        v.playsInline = true;
-        v.querySelectorAll<HTMLSourceElement>("source[data-src]").forEach((s) => {
-          s.src = s.dataset.src!;
-        });
-        v.preload = "auto";
-        v.addEventListener("playing", () => v.classList.add("live"), { once: true });
-        v.addEventListener("canplay", () => sync());
-        v.load();
-      };
-
-      const sync = () => {
-        if (!started) return;
-        other().pause();
-        const v = current();
-        if (still.matches || document.hidden || !visible) {
-          v.pause();
-          return;
-        }
-        arm(v);
-        if (v.paused) {
-          v.play().then(
-            () => (blocked = false),
-            () => (blocked = true),
-          );
-        }
-      };
-
-      const start = () => {
-        if (started) return;
-        started = true;
-        sync();
-      };
-
-      new IntersectionObserver(
-        ([entry]) => {
-          visible = !!entry?.isIntersecting;
-          sync();
-        },
-        { rootMargin: "200px 0px" },
-      ).observe(frame);
-
-      narrow.addEventListener("change", sync);
-      still.addEventListener("change", sync);
-      document.addEventListener("visibilitychange", sync);
-      // Autoplay refused: the first gesture is allowed to start it.
-      const nudge = () => blocked && sync();
-      for (const e of ["touchstart", "pointerdown", "scroll", "keydown"]) addEventListener(e, nudge, { passive: true });
-
-      // Start once the photo is in; a fallback in case its load event was missed or it never loads.
-      if (photo && !photo.complete) photo.addEventListener("load", () => setTimeout(start, 150), { once: true });
-      else setTimeout(start, 150);
-      setTimeout(start, 2500);
-    }
-  }
-</script>
