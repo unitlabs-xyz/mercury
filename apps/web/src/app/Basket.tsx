@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
-import { useWallets } from "@privy-io/react-auth/solana";
+import { useEmbeddedWallet } from "../auth/embedded";
 import type { BasketExitMode, ManagedBasketPortfolioSnapshot, ManagedBasketTemplate } from "@mercury/types";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toEvent, usd, usdCompact } from "@mercury/view";
@@ -404,7 +404,7 @@ export const Basket = () => {
   const insights = useBasketInsights(slug);
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
-  const { wallets } = useWallets();
+  const { address } = useEmbeddedWallet();
   const sessionChecking = !ready || (authenticated && identityToken === null);
   const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null);
   const enrollment = useBasketEnrollment(slug);
@@ -417,7 +417,7 @@ export const Basket = () => {
   const exitAction = useBasketExitAction(slug);
   const activity = useBasketActivity(slug, enrolled);
   const queryClient = useQueryClient();
-  const ownerContext = `${slug}:${user?.id ?? ""}:${wallets[0]?.address ?? ""}`;
+  const ownerContext = `${slug}:${user?.id ?? ""}:${address ?? ""}`;
   const previousOwnerContext = useRef(ownerContext);
   useEffect(() => {
     if (previousOwnerContext.current === ownerContext) return;

@@ -1,4 +1,5 @@
-import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
+import { useSignTransaction } from "@privy-io/react-auth/solana";
+import { useEmbeddedWallet } from "../auth/embedded";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { sendUsdc, type SendIntent, type SendQuote, type SendReceipt } from "@mercury/view";
@@ -42,12 +43,11 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
 export const useSendAction = () => {
   const qc = useQueryClient();
-  const { wallets } = useWallets();
+  const { wallet } = useEmbeddedWallet();
   const { signTransaction } = useSignTransaction();
 
   const action = useMutation<SendReceipt, Error, SendIntent>({
     mutationFn: async (intent) => {
-      const wallet = wallets[0];
       if (wallet === undefined) throw new Error("Your wallet is not ready to sign yet.");
       return sendUsdc(
         {
@@ -76,5 +76,5 @@ export const useSendAction = () => {
     onSettled: () => refreshAfterChain(qc),
   });
 
-  return { ...action, walletReady: wallets[0] !== undefined };
+  return { ...action, walletReady: wallet !== undefined };
 };

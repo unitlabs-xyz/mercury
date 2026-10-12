@@ -42,6 +42,9 @@ const decoded = async (amountRaw = 20_000_000n) => {
   });
   const { messageBytes } = getTransactionDecoder().decode(wire);
   const message = getCompiledTransactionMessageDecoder().decode(messageBytes);
+  /* Kit's decoder returns a union: the v1 variant carries config values rather
+     than instructions, and this builder never produces one. */
+  if (!("instructions" in message)) throw new Error("expected an instruction-bearing message");
   const accounts = message.staticAccounts as readonly Address[];
   return {
     feePayer: accounts[0],
