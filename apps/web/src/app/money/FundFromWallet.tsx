@@ -137,7 +137,15 @@ export const FundFromWallet = () => {
       </div>
 
       <div className="mt-1 rounded-lg bg-ds-panel p-1">
-        <p className="px-3 pt-2 pb-2.5 text-[14px] leading-none text-ds-muted">Amount</p>
+        {/* The balance sits on the label's own line: it is what the amount is
+            measured against, and it was a third line under the field saying so
+            after the fact. */}
+        <div className="flex items-baseline justify-between gap-3 px-3 pt-2 pb-2.5">
+          <p className="text-[14px] leading-none text-ds-muted">Amount</p>
+          <p className="text-[12px] leading-none text-ds-muted">
+            {balance.isPending ? "Reading your wallet…" : `${usd(heldText)} in this wallet`}
+          </p>
+        </div>
         <label
           className={`flex h-15 items-center gap-2 rounded-md bg-white px-4 outline-1 ${
             overdrawn ? "outline-ds-down" : "outline-transparent focus-within:outline-black/10"
@@ -162,14 +170,9 @@ export const FundFromWallet = () => {
           </button>
           <span className="shrink-0 text-[12px] text-ds-muted">USDC</span>
         </label>
-        <p className="px-3 pt-2.5 pb-2 text-[12px] leading-[1.4] text-ds-muted">
-          {balance.isPending ? "Reading your wallet…" : `${usd(heldText)} in this wallet`}
-        </p>
       </div>
 
-      {/* Not when the wallet holds nothing: the note below already says so, and
-          says what to do about it. Two notes, one fact. */}
-      {overdrawn && held > 0n && (
+      {overdrawn && (
         <div className="mt-2">
           <Note tone="down">More than this wallet holds. {usd(heldText)} available.</Note>
         </div>
@@ -177,13 +180,6 @@ export const FundFromWallet = () => {
       {malformed && (
         <div className="mt-2">
           <Note tone="down">Enter an amount in dollars and cents.</Note>
-        </div>
-      )}
-      {held === 0n && !balance.isPending && (
-        <div className="mt-2">
-          <Note tone="warn">
-            This wallet holds no USDC on Solana. Connect another, or send to your address instead.
-          </Note>
         </div>
       )}
       {action.isError && (
