@@ -38,8 +38,8 @@ const content = useDict(Astro.url).custody;
         <img class="layers" src={custodianLayers.src} alt="" aria-hidden="true" draggable="false" />
         <ul class="pins">
           {
-            content.pins.map((pin) => (
-              <li>
+            content.pins.map((pin, i) => (
+              <li style={`--i:${i}`}>
                 <span class="pin-line" />
                 <span>{pin}</span>
               </li>
@@ -133,6 +133,60 @@ const content = useDict(Astro.url).custody;
     line-height: 18px;
     letter-spacing: -0.02em;
     color: #fcfcff;
+  }
+
+  /* On screen, the stack floats, slowly, and each label's line draws out
+     from the layer it names, top to bottom. */
+  :global(.is-in) .layers {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    50% {
+      translate: 0 -5px;
+    }
+  }
+
+  :global(.js) .pin-line {
+    scale: 0 1;
+    transform-origin: left;
+  }
+
+  :global(.js) .pins li > span:last-child {
+    opacity: 0;
+  }
+
+  :global(.is-in) .pin-line {
+    animation: line 520ms var(--ease-out) calc(400ms + var(--i) * 140ms) forwards;
+  }
+
+  :global(.is-in) .pins li > span:last-child {
+    animation: label 400ms linear calc(620ms + var(--i) * 140ms) forwards;
+  }
+
+  @keyframes line {
+    to {
+      scale: 1 1;
+    }
+  }
+
+  @keyframes label {
+    to {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.js) .pin-line,
+    :global(.js) .pins li > span:last-child {
+      scale: 1 1;
+      opacity: 1;
+      animation: none;
+    }
+
+    :global(.is-in) .layers {
+      animation: none;
+    }
   }
 
   /* Starts at the stack's edge and runs to the label, so each one reads as

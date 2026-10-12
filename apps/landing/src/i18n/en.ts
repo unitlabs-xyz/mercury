@@ -10,7 +10,7 @@ export const en = {
   meta: {
     tagline: "The financial account built for the onchain world.",
     description:
-      "Hold stablecoins, buy tokenized US shares, spend with a card, and borrow against what you own, all from a wallet you control.",
+      "Own real global stocks from $5, invest in whole themes with baskets, and borrow against your shares instead of selling them, all from a wallet that is yours.",
     ogAlt: "Mercury, the financial account built for the onchain world.",
   },
 
@@ -22,7 +22,7 @@ export const en = {
     openMenu: "Open menu",
     closeMenu: "Close menu",
     language: "Language",
-    cta: "Try the beta",
+    cta: "Try beta",
   },
 
   nav: {
@@ -45,9 +45,8 @@ export const en = {
   },
 
   hero: {
-    eyebrow: "Invest. Borrow. Spend.",
     heading: ["The financial account built", "for the onchain world."],
-    lead: "Hold your money, invest in stocks and ETFs, build diversified portfolios, spend with your card, and access your wealth, all from a single wallet.",
+    lead: "Own real global stocks from $5, invest in whole themes with baskets, and borrow against your shares instead of selling them. All from a wallet that is yours, opened with just an email.",
     imageLabel: "Hero image",
   },
 
@@ -61,7 +60,7 @@ export const en = {
     hold: {
       stamp: "HOLD",
       title: "Your money stays in your wallet.",
-      body: "Bring a wallet you already use, or make one with an email address. Mercury is an interface, not a custodian. It can neither move nor freeze what you hold.",
+      body: "Sign in with an email and Mercury creates a wallet that is yours alone. No seed phrase, no extension.",
       points: [
         "USDC on Solana, in and out, with no bank in the middle.",
         "Send and receive at any hour, including weekends",
@@ -72,11 +71,11 @@ export const en = {
     invest: {
       stamp: "INVEST",
       title: "Turn stablecoins into real shares.",
-      body: "590 US stocks and funds, or a whole basket bought in one action and held afterwards as a single position.",
+      body: "Over 450 global stocks and ETFs. On every order we compare prices across multiple providers and choose the best one for you.",
       points: [
         "From $5, in fractions of a share",
-        "A basket is one token you can hold and send",
-        "Set an amount to go in every week or month",
+        "The best price across providers, every time",
+        "Orders far from the real share price wait or are refused",
       ],
       alt: "Buying Nvidia: two issuers quoted, with the cost broken down.",
     },
@@ -84,7 +83,7 @@ export const en = {
 
   addCash: {
     title: "Add cash",
-    lede: "Send USDC to this address. It starts earning the moment it arrives.",
+    lede: "Send USDC to this address. It lands as cash, ready to invest.",
     addressLabel: "Your Solana address",
     qrAlt: "Solana deposit address {address} as a QR code",
     copy: "Copy the address",
@@ -101,45 +100,48 @@ export const en = {
   pillars: {
     grow: {
       stamp: "Grow",
-      title: "Money works while it waits.",
-      body: "Cash sitting between decisions still earns, and the shares you own quietly become more shares.",
-      alt: "The cash balance, earning while it sits.",
-      label: "Available to invest",
-      pill: "Earning {rate}",
-      note: "paid into this balance",
-    },
-    spend: {
-      stamp: "Spend",
-      title: "Spend without selling.",
-      body: "The Mercury Visa pays from a line held against your portfolio, so buying lunch never means closing a position.",
-      alt: "A Visa card drawing on the same balance.",
-      label: "Mercury Visa · Platinum",
-      note: "Spends from cash, never from shares",
+      title: "Dividends become shares.",
+      body: "Dividends arrive as more of the share. Mercury counts the real shares behind every token, so your number stays right.",
+      alt: "A share count that rose after a dividend.",
+      label: "Nvidia, true position",
+      value: "{n} shares",
+      pill: "+{n}",
+      note: "added by dividends",
     },
     borrow: {
       stamp: "Borrow",
-      title: "Borrow against your shares.",
-      body: "Borrow against what you already own. The position stays yours, and so does everything it earns while the loan is open.",
+      title: "Cash without selling.",
+      body: "Need dollars? Borrow against your stocks instead of selling them. The cash lands in your balance, and the shares stay yours.",
       alt: "Borrowing power against the shares held.",
       label: "Borrowing power",
       note: "Against {amount} held",
     },
+    spend: {
+      stamp: "Spend · Next",
+      title: "A card for your balance.",
+      body: "The Mercury Card is next: your cash balance, spent at any shop in the world, so your investments stay invested.",
+      alt: "The Mercury Card, coming soon.",
+      label: "Mercury Card",
+      note: "Coming soon",
+    },
   },
 
-  oneNumber: {
-    heading: ["One number for", "everything you hold."],
-    lead: "The same company can be held through either issuer, and each token is worth a different sliver of a share. Mercury counts the shares behind them, not the tokens.",
-    alt: "The portfolio total, and one company counted across both issuers",
-    totalLabel: "Portfolio value",
-    totalNote: "{amount} all time",
-    stocks: "Stocks",
-    baskets: "Baskets",
-    cash: "Cash · {rate}",
-    issuerTitle: "Nvidia, across issuers",
-    tokens: "{n} tokens",
-    truePosition: "True position",
-    shares: "{n} shares",
-    issuerNote: "Counting tokens would have said 58. Each one carries its own multiplier.",
+  baskets: {
+    heading: ["A whole theme,", "in one basket."],
+    lead: "Pick a theme like the Magnificent Seven, AI or nuclear energy and fund it with one payment. It lives in your own account, is rebalanced daily, and comes back to you whenever you leave.",
+    alt: "The Magnificent Seven basket, and how a basket works",
+    kind: "Basket · Technology",
+    name: "Magnificent Seven",
+    holdings: "{n} holdings",
+    note: "Rebalanced daily",
+    weights: "Target weights",
+    howTitle: "How a basket works",
+    how: [
+      { label: "Where it lives", value: "Your own account" },
+      { label: "Pooled with others", value: "Never" },
+    ],
+    leave: { label: "Leaving", value: "In kind or as cash" },
+    howNote: "{n} baskets live, from AI to gold, plus strategies inspired by well-known investors.",
   },
 
   custody: {
@@ -150,7 +152,7 @@ export const en = {
     columns: [
       {
         title: "Backed one for one",
-        body: "Every token maps to a share held at a named custodian. Backed and Ondo issue them; we say which one you are getting before you buy.",
+        body: "Every token maps to a real share held at a named custodian, and we show which provider you are getting before you buy.",
       },
       {
         title: "Every number has its source",
@@ -171,16 +173,20 @@ export const en = {
         a: "Each token is backed one for one by a real share held by a regulated custodian. You hold the token in your own wallet, and you can move it out whenever you like.",
       },
       {
-        q: "What happens when the US market is shut?",
+        q: "What happens when the stock market is closed?",
         a: "Tokens keep trading when the exchange does not, so the price can drift from the real share. We compare the two and wait rather than buy you a share at the panic price.",
       },
       {
         q: "Do I need to verify my identity?",
-        a: "For most of what you can do here, no. Where the issuer or the card network requires it, we say so before you start rather than after.",
+        a: "No. You sign in with an email and a wallet is made for you. No documents, no forms.",
       },
       {
         q: "What does Mercury charge?",
-        a: "One spread on the trade, stated before you confirm it. No account fee, no inactivity fee, and nothing taken out of a dividend.",
+        a: "No account fee and no Mercury fee on trades. You pay the token\u2019s market price, and any premium or network cost is shown before you confirm.",
+      },
+      {
+        q: "What is a basket?",
+        a: "A ready-made portfolio around one theme, like the Magnificent Seven. One payment buys every holding at its target weight, in an account only you own, and it is rebalanced daily.",
       },
       {
         q: "Can I move my shares somewhere else?",
@@ -191,7 +197,7 @@ export const en = {
 
   cta: {
     heading: ["Mercury is open.", "Try the beta today."],
-    note: "Open your account in minutes and start holding, investing and spending from one wallet.",
+    note: "Sign in with an email and own your first share in minutes.",
     label: "Try the Mercury beta",
   },
 };

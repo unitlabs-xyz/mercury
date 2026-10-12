@@ -20,21 +20,23 @@ const FRAME = "976 / 720";
 const PANE_INSET = 20;
 
 const t = useDict(Astro.url).pillars;
+// Invest, borrow, spend: the order the story tells it in. The card is next,
+// so its stamp and note say so.
 const content = [
   {
     ...t.grow,
     media: { src: GrowArt, alt: t.grow.alt },
-    figure: { plate: GrowPlate, label: t.grow.label, value: "$4,534.73", pill: fill(t.grow.pill, { rate: "4.1%" }), note: t.grow.note },
-  },
-  {
-    ...t.spend,
-    media: { src: SpendArt, alt: t.spend.alt },
-    figure: { plate: SpendPlate, label: t.spend.label, dots: 3, value: "4417", note: t.spend.note },
+    figure: { plate: GrowPlate, label: t.grow.label, value: fill(t.grow.value, { n: "22.0412" }), pill: fill(t.grow.pill, { n: "0.0412" }), note: t.grow.note },
   },
   {
     ...t.borrow,
     media: { src: BorrowArt, alt: t.borrow.alt },
     figure: { plate: BorrowPlate, label: t.borrow.label, value: "$4,280.00", note: fill(t.borrow.note, { amount: "$12,480.62" }) },
+  },
+  {
+    ...t.spend,
+    media: { src: SpendArt, alt: t.spend.alt },
+    figure: { plate: SpendPlate, label: t.spend.label, dots: 3, value: "4417", note: t.spend.note },
   },
 ];
 ---

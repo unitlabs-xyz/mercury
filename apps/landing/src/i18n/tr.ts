@@ -4,7 +4,7 @@ export const tr: Dict = {
   meta: {
     tagline: "Zincir üstü dünya için tasarlanmış finansal hesap.",
     description:
-      "Stablecoin tut, tokenize ABD hisseleri al, kartınla harca ve sahip olduklarını teminat göstererek borç al. Hepsi kontrolü sende olan bir cüzdandan.",
+      "$5’tan başlayarak gerçek global hisselere sahip ol, sepetlerle tüm temalara yatırım yap ve hisselerini satmak yerine onlara karşı borç al. Hepsi sana ait bir cüzdandan.",
     ogAlt: "Mercury, zincir üstü dünya için tasarlanmış finansal hesap.",
   },
 
@@ -39,9 +39,8 @@ export const tr: Dict = {
   },
 
   hero: {
-    eyebrow: "Yatır. Borçlan. Harca.",
     heading: ["Zincir üstü dünya için", "tasarlanmış finansal hesap."],
-    lead: "Paranı tut, hisse ve ETF’lere yatırım yap, çeşitlendirilmiş portföyler kur, kartınla harca ve varlığına ulaş. Hepsi tek bir cüzdandan.",
+    lead: "$5’tan başlayarak gerçek global hisselere sahip ol, sepetlerle tüm temalara yatırım yap ve hisselerini satmak yerine onlara karşı borç al. Hepsi sana ait, yalnızca bir e-postayla açılan bir cüzdandan.",
     imageLabel: "Ana görsel",
   },
 
@@ -55,7 +54,7 @@ export const tr: Dict = {
     hold: {
       stamp: "TUT",
       title: "Paran cüzdanında kalır.",
-      body: "Zaten kullandığın cüzdanı bağla ya da bir e-posta adresiyle yenisini oluştur. Mercury bir arayüzdür, saklayıcı değil. Varlıklarını ne taşıyabilir ne de dondurabilir.",
+      body: "Bir e-postayla giriş yap, Mercury yalnızca sana ait bir cüzdan oluştursun. Kurtarma ifadesi yok, eklenti yok.",
       points: [
         "Solana’da USDC giriş ve çıkışı, arada banka olmadan.",
         "Hafta sonları dahil, günün her saatinde gönder ve al",
@@ -66,11 +65,11 @@ export const tr: Dict = {
     invest: {
       stamp: "YATIR",
       title: "Stablecoin’leri gerçek hisselere dönüştür.",
-      body: "590 ABD hissesi ve fonu ya da tek hamlede alınıp ardından tek bir pozisyon olarak tutulan koca bir sepet.",
+      body: "450’den fazla global hisse ve ETF. Her emirde fiyatları birden fazla sağlayıcı arasında karşılaştırır, senin için en iyisini seçeriz.",
       points: [
         "$5’tan başlayan tutarlarla, kesirli hisse",
-        "Sepet, tutup gönderebildiğin tek bir tokendır",
-        "Her hafta ya da her ay yatırılacak bir tutar belirle",
+        "Sağlayıcılar arasında her seferinde en iyi fiyat",
+        "Gerçek hisse fiyatından çok uzak emirler bekler ya da reddedilir",
       ],
       alt: "Nvidia alımı: iki ihraççıdan fiyat ve ayrıntılı maliyet dökümü.",
     },
@@ -78,7 +77,7 @@ export const tr: Dict = {
 
   addCash: {
     title: "Nakit ekle",
-    lede: "Bu adrese USDC gönder. Ulaştığı anda kazandırmaya başlar.",
+    lede: "Bu adrese USDC gönder. Nakit olarak ulaşır, yatırıma hazırdır.",
     addressLabel: "Solana adresin",
     qrAlt: "QR kod olarak Solana yatırma adresi {address}",
     copy: "Adresi kopyala",
@@ -95,45 +94,48 @@ export const tr: Dict = {
   pillars: {
     grow: {
       stamp: "Büyüt",
-      title: "Paran beklerken de çalışır.",
-      body: "Kararlar arasında bekleyen nakit kazanmaya devam eder, sahip olduğun hisseler de sessizce daha fazla hisseye dönüşür.",
-      alt: "Beklerken kazandıran nakit bakiyesi.",
-      label: "Yatırıma hazır",
-      pill: "{rate} kazanç",
-      note: "bu bakiyeye ödenir",
-    },
-    spend: {
-      stamp: "Harca",
-      title: "Satmadan harca.",
-      body: "Mercury Visa, portföyüne karşı açılan bir limitten ödeme yapar. Öğle yemeği için asla pozisyon kapatman gerekmez.",
-      alt: "Aynı bakiyeden harcayan bir Visa kart.",
-      label: "Mercury Visa · Platinum",
-      note: "Nakitten harcar, hisselerden asla",
+      title: "Temettüler hisseye dönüşür.",
+      body: "Temettüler ek hisse olarak gelir. Mercury her tokenın ardındaki gerçek hisseleri sayar, rakamın hep doğru kalır.",
+      alt: "Temettü sonrası artan hisse adedi.",
+      label: "Nvidia, gerçek pozisyon",
+      value: "{n} hisse",
+      pill: "+{n}",
+      note: "temettülerle eklendi",
     },
     borrow: {
       stamp: "Borç al",
-      title: "Hisselerine karşı borç al.",
-      body: "Zaten sahip olduklarına karşı borç al. Pozisyon senin kalır, kredi açıkken kazandığı her şey de öyle.",
+      title: "Satmadan nakit.",
+      body: "Dolara mı ihtiyacın var? Hisselerini satmak yerine onlara karşı borç al. Nakit bakiyene geçer, hisseler senin kalır.",
       alt: "Tutulan hisselere karşı borçlanma gücü.",
       label: "Borçlanma gücü",
       note: "{amount} varlığa karşı",
     },
+    spend: {
+      stamp: "Harca · Yakında",
+      title: "Bakiyen için bir kart.",
+      body: "Sırada Mercury Kart var: nakit bakiyeni dünyanın her yerindeki mağazalarda harca, yatırımların yatırımda kalsın.",
+      alt: "Mercury Kart, çok yakında.",
+      label: "Mercury Kart",
+      note: "Çok yakında",
+    },
   },
 
-  oneNumber: {
-    heading: ["Tuttuğun her şey için", "tek bir rakam."],
-    lead: "Aynı şirket iki ihraççıdan biri üzerinden tutulabilir ve her token bir hissenin farklı bir kesrine denk gelir. Mercury tokenları değil, arkalarındaki hisseleri sayar.",
-    alt: "Portföy toplamı ve iki ihraççıda birlikte sayılan tek bir şirket",
-    totalLabel: "Portföy değeri",
-    totalNote: "Tüm zamanlar {amount}",
-    stocks: "Hisseler",
-    baskets: "Sepetler",
-    cash: "Nakit · {rate}",
-    issuerTitle: "İhraççılar genelinde Nvidia",
-    tokens: "{n} token",
-    truePosition: "Gerçek pozisyon",
-    shares: "{n} hisse",
-    issuerNote: "Tokenları saysaydık 58 derdik. Her birinin kendi çarpanı var.",
+  baskets: {
+    heading: ["Koca bir tema,", "tek bir sepette."],
+    lead: "Magnificent Seven, yapay zeka ya da nükleer enerji gibi bir tema seç ve tek ödemeyle fonla. Sepet kendi hesabında durur, her gün yeniden dengelenir ve ayrıldığın anda sana geri döner.",
+    alt: "Magnificent Seven sepeti ve bir sepetin nasıl çalıştığı",
+    kind: "Sepet · Teknoloji",
+    name: "Magnificent Seven",
+    holdings: "{n} varlık",
+    note: "Her gün yeniden dengelenir",
+    weights: "Hedef ağırlıklar",
+    howTitle: "Sepet nasıl çalışır",
+    how: [
+      { label: "Nerede durur", value: "Kendi hesabında" },
+      { label: "Başkalarıyla havuzlanır mı", value: "Asla" },
+    ],
+    leave: { label: "Ayrılırken", value: "Varlık olarak ya da nakit" },
+    howNote: "Yapay zekadan altına {n} aktif sepet, ayrıca tanınmış yatırımcılardan ilham alan stratejiler.",
   },
 
   custody: {
@@ -144,7 +146,7 @@ export const tr: Dict = {
     columns: [
       {
         title: "Bire bir destekli",
-        body: "Her token, adı belli bir saklayıcıda tutulan bir hisseye karşılık gelir. Bunları Backed ve Ondo ihraç eder; hangisini aldığını satın almadan önce söyleriz.",
+        body: "Her token, adı belli bir saklayıcıda tutulan gerçek bir hisseye karşılık gelir ve hangi sağlayıcıdan aldığını satın almadan önce gösteririz.",
       },
       {
         title: "Her rakamın bir kaynağı var",
@@ -165,16 +167,20 @@ export const tr: Dict = {
         a: "Her token, düzenlemeye tabi bir saklayıcıda tutulan gerçek bir hisseyle bire bir desteklenir. Token kendi cüzdanında durur ve istediğin zaman dışarı taşıyabilirsin.",
       },
       {
-        q: "ABD piyasası kapalıyken ne olur?",
+        q: "Borsa kapalıyken ne olur?",
         a: "Borsa kapalıyken tokenlar işlem görmeye devam eder, bu yüzden fiyat gerçek hisseden sapabilir. İkisini karşılaştırır ve sana panik fiyatından hisse almak yerine bekleriz.",
       },
       {
         q: "Kimliğimi doğrulamam gerekiyor mu?",
-        a: "Burada yapabileceklerinin çoğu için hayır. İhraççının ya da kart ağının gerektirdiği yerlerde bunu sonra değil, başlamadan önce söyleriz.",
+        a: "Hayır. Bir e-postayla giriş yaparsın ve senin için bir cüzdan oluşturulur. Belge yok, form yok.",
       },
       {
         q: "Mercury ne kadar ücret alır?",
-        a: "İşlemde tek bir spread, onaylamadan önce açıkça belirtilir. Hesap ücreti yok, hareketsizlik ücreti yok, temettüden de hiçbir kesinti yok.",
+        a: "Hesap ücreti yok, işlemlerde Mercury ücreti yok. Tokenın piyasa fiyatını ödersin; varsa prim ya da ağ maliyeti onaylamadan önce gösterilir.",
+      },
+      {
+        q: "Sepet nedir?",
+        a: "Magnificent Seven gibi tek bir tema etrafında hazır bir portföy. Tek bir ödeme, her varlığı hedef ağırlığında, yalnızca sana ait bir hesapta satın alır ve sepet her gün yeniden dengelenir.",
       },
       {
         q: "Hisselerimi başka bir yere taşıyabilir miyim?",
@@ -185,7 +191,7 @@ export const tr: Dict = {
 
   cta: {
     heading: ["Mercury açıldı.", "Betayı bugün dene."],
-    note: "Hesabını dakikalar içinde aç, tek bir cüzdandan tutmaya, yatırım yapmaya ve harcamaya başla.",
+    note: "Bir e-postayla giriş yap ve dakikalar içinde ilk hisseni al.",
     label: "Mercury betasını dene",
   },
 };

@@ -4,7 +4,7 @@ export const vi: Dict = {
   meta: {
     tagline: "Tài khoản tài chính dành cho thế giới onchain.",
     description:
-      "Giữ stablecoin, mua cổ phiếu Mỹ đã token hóa, chi tiêu bằng thẻ và vay dựa trên tài sản bạn sở hữu, tất cả từ một ví do bạn kiểm soát.",
+      "Sở hữu cổ phiếu toàn cầu thật chỉ từ $5, đầu tư vào cả một chủ đề với rổ đầu tư, và vay dựa trên cổ phiếu thay vì bán chúng, tất cả từ một ví thuộc về bạn.",
     ogAlt: "Mercury, tài khoản tài chính dành cho thế giới onchain.",
   },
 
@@ -39,9 +39,8 @@ export const vi: Dict = {
   },
 
   hero: {
-    eyebrow: "Đầu tư. Vay. Chi tiêu.",
     heading: ["Tài khoản tài chính", "dành cho thế giới onchain."],
-    lead: "Giữ tiền, đầu tư vào cổ phiếu và ETF, xây dựng danh mục đa dạng, chi tiêu bằng thẻ và sử dụng tài sản của bạn, tất cả từ một ví duy nhất.",
+    lead: "Sở hữu cổ phiếu toàn cầu thật chỉ từ $5, đầu tư vào cả một chủ đề với rổ đầu tư, và vay dựa trên cổ phiếu thay vì bán chúng. Tất cả từ một ví thuộc về bạn, mở chỉ bằng một email.",
     imageLabel: "Hình ảnh chính",
   },
 
@@ -55,7 +54,7 @@ export const vi: Dict = {
     hold: {
       stamp: "GIỮ",
       title: "Tiền của bạn luôn nằm trong ví của bạn.",
-      body: "Dùng ví bạn đang có, hoặc tạo ví mới bằng địa chỉ email. Mercury là giao diện, không phải bên lưu ký. Mercury không thể di chuyển hay đóng băng tài sản của bạn.",
+      body: "Đăng nhập bằng email và Mercury tạo một ví chỉ thuộc về riêng bạn. Không cần cụm từ khôi phục, không cần tiện ích mở rộng.",
       points: [
         "USDC trên Solana, nạp và rút, không cần ngân hàng trung gian.",
         "Gửi và nhận bất cứ lúc nào, kể cả cuối tuần",
@@ -66,11 +65,11 @@ export const vi: Dict = {
     invest: {
       stamp: "ĐẦU TƯ",
       title: "Biến stablecoin thành cổ phiếu thật.",
-      body: "590 cổ phiếu và quỹ Mỹ, hoặc mua cả một rổ chỉ trong một thao tác và nắm giữ như một vị thế duy nhất.",
+      body: "Hơn 450 cổ phiếu toàn cầu và ETF. Với mỗi lệnh, chúng tôi so sánh giá giữa nhiều nhà cung cấp và chọn mức tốt nhất cho bạn.",
       points: [
         "Chỉ từ $5, mua theo phần lẻ cổ phiếu",
-        "Mỗi rổ là một token bạn có thể giữ và gửi đi",
-        "Đặt số tiền đầu tư định kỳ hằng tuần hoặc hằng tháng",
+        "Giá tốt nhất giữa các nhà cung cấp, mọi lúc",
+        "Lệnh lệch xa giá cổ phiếu thật sẽ chờ hoặc bị từ chối",
       ],
       alt: "Mua Nvidia: báo giá từ hai nhà phát hành, kèm chi tiết chi phí.",
     },
@@ -78,7 +77,7 @@ export const vi: Dict = {
 
   addCash: {
     title: "Nạp tiền",
-    lede: "Gửi USDC đến địa chỉ này. Tiền bắt đầu sinh lời ngay khi đến nơi.",
+    lede: "Gửi USDC đến địa chỉ này. Tiền về dưới dạng tiền mặt, sẵn sàng để đầu tư.",
     addressLabel: "Địa chỉ Solana của bạn",
     qrAlt: "Địa chỉ nạp Solana {address} dưới dạng mã QR",
     copy: "Sao chép địa chỉ",
@@ -95,45 +94,48 @@ export const vi: Dict = {
   pillars: {
     grow: {
       stamp: "Tăng trưởng",
-      title: "Tiền sinh lời cả khi chờ đợi.",
-      body: "Tiền mặt nằm chờ giữa các quyết định vẫn sinh lời, và cổ phiếu bạn sở hữu lặng lẽ tăng thêm số lượng.",
-      alt: "Số dư tiền mặt, sinh lời trong lúc chờ.",
-      label: "Sẵn sàng để đầu tư",
-      pill: "Lãi {rate}",
-      note: "trả thẳng vào số dư này",
-    },
-    spend: {
-      stamp: "Chi tiêu",
-      title: "Chi tiêu mà không cần bán.",
-      body: "Thẻ Mercury Visa thanh toán từ hạn mức đảm bảo bằng danh mục của bạn, nên mua bữa trưa không bao giờ buộc bạn phải đóng vị thế.",
-      alt: "Thẻ Visa dùng chung một số dư.",
-      label: "Mercury Visa · Platinum",
-      note: "Chi từ tiền mặt, không bao giờ từ cổ phiếu",
+      title: "Cổ tức thành cổ phiếu.",
+      body: "Cổ tức về dưới dạng thêm cổ phiếu. Mercury đếm số cổ phiếu thật phía sau mỗi token, nên con số của bạn luôn chính xác.",
+      alt: "Số cổ phiếu tăng lên sau khi nhận cổ tức.",
+      label: "Nvidia, vị thế thực",
+      value: "{n} cổ phiếu",
+      pill: "+{n}",
+      note: "có thêm nhờ cổ tức",
     },
     borrow: {
       stamp: "Vay",
-      title: "Vay dựa trên cổ phiếu của bạn.",
-      body: "Vay dựa trên tài sản bạn đang sở hữu. Vị thế vẫn là của bạn, và mọi khoản lợi nhuận nó tạo ra trong thời gian vay cũng vậy.",
+      title: "Có tiền mặt mà không cần bán.",
+      body: "Cần đô la? Vay dựa trên cổ phiếu thay vì bán chúng. Tiền mặt về số dư của bạn, và cổ phiếu vẫn là của bạn.",
       alt: "Hạn mức vay dựa trên số cổ phiếu đang nắm giữ.",
       label: "Hạn mức vay",
       note: "Dựa trên {amount} đang nắm giữ",
     },
+    spend: {
+      stamp: "Chi tiêu · Sắp tới",
+      title: "Một chiếc thẻ cho số dư của bạn.",
+      body: "Thẻ Mercury sắp ra mắt: chi tiêu số dư tiền mặt tại bất kỳ cửa hàng nào trên thế giới, để khoản đầu tư của bạn vẫn tiếp tục sinh lời.",
+      alt: "Thẻ Mercury, sắp ra mắt.",
+      label: "Thẻ Mercury",
+      note: "Sắp ra mắt",
+    },
   },
 
-  oneNumber: {
-    heading: ["Một con số cho", "mọi tài sản bạn nắm giữ."],
-    lead: "Cùng một công ty có thể được nắm giữ qua cả hai nhà phát hành, và mỗi token tương ứng với một phần cổ phiếu khác nhau. Mercury đếm số cổ phiếu phía sau, không phải số token.",
-    alt: "Tổng giá trị danh mục, và một công ty được tính gộp qua cả hai nhà phát hành",
-    totalLabel: "Giá trị danh mục",
-    totalNote: "{amount} từ trước đến nay",
-    stocks: "Cổ phiếu",
-    baskets: "Rổ đầu tư",
-    cash: "Tiền mặt · {rate}",
-    issuerTitle: "Nvidia, qua các nhà phát hành",
-    tokens: "{n} token",
-    truePosition: "Vị thế thực",
-    shares: "{n} cổ phiếu",
-    issuerNote: "Nếu đếm token, con số sẽ là 58. Mỗi token có hệ số nhân riêng.",
+  baskets: {
+    heading: ["Cả một chủ đề,", "trong một rổ."],
+    lead: "Chọn một chủ đề như Magnificent Seven, AI hay năng lượng hạt nhân và đầu tư chỉ với một lần thanh toán. Rổ nằm trong tài khoản của chính bạn, được tái cân bằng hằng ngày, và trở về với bạn bất cứ khi nào bạn rời đi.",
+    alt: "Rổ Magnificent Seven, và cách một rổ hoạt động",
+    kind: "Rổ · Công nghệ",
+    name: "Magnificent Seven",
+    holdings: "{n} khoản nắm giữ",
+    note: "Tái cân bằng hằng ngày",
+    weights: "Tỷ trọng mục tiêu",
+    howTitle: "Cách một rổ hoạt động",
+    how: [
+      { label: "Nằm ở đâu", value: "Tài khoản của chính bạn" },
+      { label: "Gộp chung với người khác", value: "Không bao giờ" },
+    ],
+    leave: { label: "Khi rời đi", value: "Nhận cổ phiếu hoặc tiền mặt" },
+    howNote: "{n} rổ đang hoạt động, từ AI đến vàng, cùng các chiến lược lấy cảm hứng từ những nhà đầu tư nổi tiếng.",
   },
 
   custody: {
@@ -144,7 +146,7 @@ export const vi: Dict = {
     columns: [
       {
         title: "Bảo chứng một đổi một",
-        body: "Mỗi token tương ứng với một cổ phiếu được giữ tại một tổ chức lưu ký có tên rõ ràng. Backed và Ondo phát hành chúng; chúng tôi cho bạn biết bạn nhận token của bên nào trước khi mua.",
+        body: "Mỗi token tương ứng với một cổ phiếu thật được giữ tại một tổ chức lưu ký có tên rõ ràng, và chúng tôi cho bạn biết nhà cung cấp trước khi mua.",
       },
       {
         title: "Mọi con số đều có nguồn",
@@ -165,16 +167,20 @@ export const vi: Dict = {
         a: "Mỗi token được bảo chứng một đổi một bằng cổ phiếu thật do một tổ chức lưu ký được quản lý nắm giữ. Bạn giữ token trong ví của chính mình và có thể chuyển đi bất cứ khi nào bạn muốn.",
       },
       {
-        q: "Điều gì xảy ra khi thị trường Mỹ đóng cửa?",
+        q: "Điều gì xảy ra khi thị trường chứng khoán đóng cửa?",
         a: "Token vẫn giao dịch khi sàn chứng khoán nghỉ, nên giá có thể lệch khỏi cổ phiếu thật. Chúng tôi so sánh hai mức giá và chờ đợi, thay vì mua cho bạn ở mức giá hoảng loạn.",
       },
       {
         q: "Tôi có cần xác minh danh tính không?",
-        a: "Với hầu hết những gì bạn làm ở đây thì không. Khi nhà phát hành hoặc mạng lưới thẻ yêu cầu, chúng tôi sẽ báo trước khi bạn bắt đầu, không phải sau đó.",
+        a: "Không. Bạn đăng nhập bằng email và một ví được tạo sẵn cho bạn. Không giấy tờ, không biểu mẫu.",
       },
       {
         q: "Mercury thu phí gì?",
-        a: "Một khoản chênh lệch giá (spread) trên mỗi giao dịch, được nêu rõ trước khi bạn xác nhận. Không phí tài khoản, không phí không hoạt động, và không khấu trừ gì từ cổ tức.",
+        a: "Không phí tài khoản và không phí Mercury trên giao dịch. Bạn trả giá thị trường của token, và mọi khoản chênh giá hay phí mạng đều được hiển thị trước khi bạn xác nhận.",
+      },
+      {
+        q: "Rổ đầu tư là gì?",
+        a: "Một danh mục dựng sẵn quanh một chủ đề, như Magnificent Seven. Một lần thanh toán mua mọi khoản nắm giữ theo tỷ trọng mục tiêu, trong một tài khoản chỉ bạn sở hữu, và rổ được tái cân bằng hằng ngày.",
       },
       {
         q: "Tôi có thể chuyển cổ phiếu sang nơi khác không?",
@@ -185,7 +191,7 @@ export const vi: Dict = {
 
   cta: {
     heading: ["Mercury đã mở cửa.", "Dùng thử bản beta ngay hôm nay."],
-    note: "Mở tài khoản trong vài phút và bắt đầu nắm giữ, đầu tư, chi tiêu từ một ví duy nhất.",
+    note: "Đăng nhập bằng email và sở hữu cổ phiếu đầu tiên chỉ trong vài phút.",
     label: "Dùng thử Mercury beta",
   },
 };

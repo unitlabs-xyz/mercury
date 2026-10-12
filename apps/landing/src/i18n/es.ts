@@ -4,7 +4,7 @@ export const es: Dict = {
   meta: {
     tagline: "La cuenta financiera creada para el mundo onchain.",
     description:
-      "Guarda stablecoins, compra acciones estadounidenses tokenizadas, paga con tarjeta y pide prestado contra lo que tienes, todo desde una wallet que tú controlas.",
+      "Ten acciones globales reales desde $5, invierte en temas completos con canastas y pide prestado contra tus acciones en lugar de venderlas, todo desde una wallet que es tuya.",
     ogAlt: "Mercury, la cuenta financiera creada para el mundo onchain.",
   },
 
@@ -39,9 +39,8 @@ export const es: Dict = {
   },
 
   hero: {
-    eyebrow: "Invierte. Pide prestado. Gasta.",
     heading: ["La cuenta financiera creada", "para el mundo onchain."],
-    lead: "Guarda tu dinero, invierte en acciones y ETFs, arma portafolios diversificados, paga con tu tarjeta y accede a tu patrimonio, todo desde una sola wallet.",
+    lead: "Ten acciones globales reales desde $5, invierte en temas completos con canastas y pide prestado contra tus acciones en lugar de venderlas. Todo desde una wallet que es tuya, abierta solo con un correo.",
     imageLabel: "Imagen principal",
   },
 
@@ -55,7 +54,7 @@ export const es: Dict = {
     hold: {
       stamp: "GUARDA",
       title: "Tu dinero se queda en tu wallet.",
-      body: "Usa la wallet que ya tienes o crea una con tu correo. Mercury es una interfaz, no un custodio. No puede mover ni congelar lo que tienes.",
+      body: "Inicia sesión con un correo y Mercury crea una wallet que es solo tuya. Sin frase semilla, sin extensiones.",
       points: [
         "USDC en Solana, entra y sale sin un banco de por medio.",
         "Envía y recibe a cualquier hora, incluso los fines de semana",
@@ -66,11 +65,11 @@ export const es: Dict = {
     invest: {
       stamp: "INVIERTE",
       title: "Convierte stablecoins en acciones reales.",
-      body: "590 acciones y fondos de EE. UU., o una canasta completa comprada en un solo paso y guardada después como una sola posición.",
+      body: "Más de 450 acciones globales y ETFs. En cada orden comparamos precios entre varios proveedores y elegimos el mejor para ti.",
       points: [
         "Desde $5, en fracciones de acción",
-        "Una canasta es un solo token que puedes guardar y enviar",
-        "Define un monto para invertir cada semana o cada mes",
+        "El mejor precio entre proveedores, siempre",
+        "Las órdenes lejos del precio real de la acción esperan o se rechazan",
       ],
       alt: "Comprar Nvidia: dos emisores cotizados, con el costo desglosado.",
     },
@@ -78,7 +77,7 @@ export const es: Dict = {
 
   addCash: {
     title: "Agregar fondos",
-    lede: "Envía USDC a esta dirección. Empieza a generar rendimiento en cuanto llega.",
+    lede: "Envía USDC a esta dirección. Llega como efectivo, listo para invertir.",
     addressLabel: "Tu dirección de Solana",
     qrAlt: "Dirección de depósito en Solana {address} como código QR",
     copy: "Copiar la dirección",
@@ -95,45 +94,48 @@ export const es: Dict = {
   pillars: {
     grow: {
       stamp: "Crece",
-      title: "Tu dinero trabaja mientras espera.",
-      body: "El efectivo que espera tu próxima decisión sigue generando rendimiento, y tus acciones se convierten poco a poco en más acciones.",
-      alt: "El saldo en efectivo, generando rendimiento mientras espera.",
-      label: "Disponible para invertir",
-      pill: "Generando {rate}",
-      note: "abonado a este saldo",
-    },
-    spend: {
-      stamp: "Gasta",
-      title: "Gasta sin vender.",
-      body: "La Mercury Visa paga con una línea respaldada por tu portafolio, así que pagar el almuerzo nunca implica cerrar una posición.",
-      alt: "Una tarjeta Visa que usa el mismo saldo.",
-      label: "Mercury Visa · Platinum",
-      note: "Gasta del efectivo, nunca de tus acciones",
+      title: "Los dividendos se vuelven acciones.",
+      body: "Los dividendos llegan en forma de más acciones. Mercury cuenta las acciones reales detrás de cada token, así tu número siempre es correcto.",
+      alt: "Un número de acciones que subió tras un dividendo.",
+      label: "Nvidia, posición real",
+      value: "{n} acciones",
+      pill: "+{n}",
+      note: "sumadas por dividendos",
     },
     borrow: {
       stamp: "Pide prestado",
-      title: "Pide prestado contra tus acciones.",
-      body: "Pide prestado contra lo que ya tienes. La posición sigue siendo tuya, igual que todo lo que genera mientras el préstamo está abierto.",
-      alt: "Capacidad de préstamo respaldada por tus acciones.",
+      title: "Efectivo sin vender.",
+      body: "¿Necesitas dólares? Pide prestado contra tus acciones en lugar de venderlas. El efectivo llega a tu saldo y las acciones siguen siendo tuyas.",
+      alt: "Capacidad de préstamo contra las acciones que tienes.",
       label: "Capacidad de préstamo",
       note: "Contra {amount} en tenencia",
     },
+    spend: {
+      stamp: "Gasta · Pronto",
+      title: "Una tarjeta para tu saldo.",
+      body: "La Tarjeta Mercury es lo que sigue: tu saldo en efectivo, para gastar en cualquier comercio del mundo, así tus inversiones siguen invertidas.",
+      alt: "La Tarjeta Mercury, muy pronto.",
+      label: "Tarjeta Mercury",
+      note: "Muy pronto",
+    },
   },
 
-  oneNumber: {
-    heading: ["Un solo número para", "todo lo que tienes."],
-    lead: "Una misma empresa puede tenerse a través de cualquiera de los dos emisores, y cada token vale una fracción distinta de una acción. Mercury cuenta las acciones detrás de ellos, no los tokens.",
-    alt: "El total del portafolio, y una empresa contada entre ambos emisores",
-    totalLabel: "Valor del portafolio",
-    totalNote: "{amount} desde el inicio",
-    stocks: "Acciones",
-    baskets: "Canastas",
-    cash: "Efectivo · {rate}",
-    issuerTitle: "Nvidia, entre emisores",
-    tokens: "{n} tokens",
-    truePosition: "Posición real",
-    shares: "{n} acciones",
-    issuerNote: "Contando tokens habrían sido 58. Cada uno tiene su propio multiplicador.",
+  baskets: {
+    heading: ["Un tema completo,", "en una canasta."],
+    lead: "Elige un tema como los Magnificent Seven, IA o energía nuclear y fondéalo con un solo pago. Vive en tu propia cuenta, se rebalancea a diario y vuelve a ti cuando decidas salir.",
+    alt: "La canasta Magnificent Seven y cómo funciona una canasta",
+    kind: "Canasta · Tecnología",
+    name: "Magnificent Seven",
+    holdings: "{n} posiciones",
+    note: "Rebalanceo diario",
+    weights: "Pesos objetivo",
+    howTitle: "Cómo funciona una canasta",
+    how: [
+      { label: "Dónde vive", value: "En tu propia cuenta" },
+      { label: "Mezclada con otros", value: "Nunca" },
+    ],
+    leave: { label: "Al salir", value: "En especie o en efectivo" },
+    howNote: "{n} canastas activas, de la IA al oro, además de estrategias inspiradas en inversionistas reconocidos.",
   },
 
   custody: {
@@ -144,7 +146,7 @@ export const es: Dict = {
     columns: [
       {
         title: "Respaldo uno a uno",
-        body: "Cada token corresponde a una acción en un custodio identificado. Backed y Ondo los emiten; te decimos cuál recibes antes de comprar.",
+        body: "Cada token corresponde a una acción real en un custodio identificado, y te mostramos qué proveedor recibes antes de comprar.",
       },
       {
         title: "Cada número tiene su fuente",
@@ -165,16 +167,20 @@ export const es: Dict = {
         a: "Cada token está respaldado uno a uno por una acción real en manos de un custodio regulado. Tú guardas el token en tu propia wallet y puedes sacarlo cuando quieras.",
       },
       {
-        q: "¿Qué pasa cuando el mercado de EE. UU. está cerrado?",
+        q: "¿Qué pasa cuando la bolsa está cerrada?",
         a: "Los tokens siguen cotizando cuando la bolsa no, así que el precio puede alejarse del de la acción real. Comparamos ambos y preferimos esperar antes que comprarte una acción a precio de pánico.",
       },
       {
         q: "¿Necesito verificar mi identidad?",
-        a: "Para casi todo lo que puedes hacer aquí, no. Cuando el emisor o la red de la tarjeta lo exigen, te lo decimos antes de empezar, no después.",
+        a: "No. Inicias sesión con un correo y se crea una wallet para ti. Sin documentos ni formularios.",
       },
       {
         q: "¿Cuánto cobra Mercury?",
-        a: "Un solo spread en la operación, indicado antes de que la confirmes. Sin comisión por cuenta, sin comisión por inactividad y sin descuentos sobre tus dividendos.",
+        a: "Sin comisión por cuenta y sin comisión de Mercury en las operaciones. Pagas el precio de mercado del token, y cualquier prima o costo de red se muestra antes de que confirmes.",
+      },
+      {
+        q: "¿Qué es una canasta?",
+        a: "Un portafolio listo en torno a un tema, como los Magnificent Seven. Un solo pago compra cada posición en su peso objetivo, en una cuenta que solo es tuya, y se rebalancea a diario.",
       },
       {
         q: "¿Puedo mover mis acciones a otro lugar?",
@@ -185,7 +191,7 @@ export const es: Dict = {
 
   cta: {
     heading: ["Mercury ya está abierto.", "Prueba la beta hoy."],
-    note: "Abre tu cuenta en minutos y empieza a guardar, invertir y gastar desde una sola wallet.",
+    note: "Inicia sesión con un correo y ten tu primera acción en minutos.",
     label: "Prueba la beta de Mercury",
   },
 };

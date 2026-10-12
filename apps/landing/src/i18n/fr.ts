@@ -4,7 +4,7 @@ export const fr: Dict = {
   meta: {
     tagline: "Le compte financier conçu pour le monde onchain.",
     description:
-      "Détenez des stablecoins, achetez des actions américaines tokenisées, payez par carte et empruntez sur ce que vous possédez, le tout depuis un wallet que vous contrôlez.",
+      "Détenez de vraies actions internationales dès $5, investissez dans des thèmes entiers avec les paniers et empruntez sur vos actions au lieu de les vendre, le tout depuis un wallet qui vous appartient.",
     ogAlt: "Mercury, le compte financier conçu pour le monde onchain.",
   },
 
@@ -39,9 +39,8 @@ export const fr: Dict = {
   },
 
   hero: {
-    eyebrow: "Investir. Emprunter. Dépenser.",
     heading: ["Le compte financier conçu", "pour le monde onchain."],
-    lead: "Gardez votre argent, investissez en actions et en ETF, construisez des portefeuilles diversifiés, payez avec votre carte et accédez à votre patrimoine, le tout depuis un seul wallet.",
+    lead: "Détenez de vraies actions internationales dès $5, investissez dans des thèmes entiers avec les paniers et empruntez sur vos actions au lieu de les vendre. Le tout depuis un wallet qui vous appartient, ouvert avec une simple adresse e-mail.",
     imageLabel: "Image principale",
   },
 
@@ -55,7 +54,7 @@ export const fr: Dict = {
     hold: {
       stamp: "DÉTENIR",
       title: "Votre argent reste dans votre wallet.",
-      body: "Utilisez le wallet que vous avez déjà, ou créez-en un avec une adresse e-mail. Mercury est une interface, pas un dépositaire. Elle ne peut ni déplacer ni geler ce que vous détenez.",
+      body: "Connectez-vous avec une adresse e-mail et Mercury crée un wallet qui n’appartient qu’à vous. Pas de phrase de récupération, pas d’extension.",
       points: [
         "De l’USDC sur Solana, en entrée comme en sortie, sans banque au milieu.",
         "Envoyez et recevez à toute heure, week-ends compris",
@@ -66,11 +65,11 @@ export const fr: Dict = {
     invest: {
       stamp: "INVESTIR",
       title: "Transformez vos stablecoins en vraies actions.",
-      body: "590 actions et fonds américains, ou un panier entier acheté en une seule opération et détenu ensuite comme une position unique.",
+      body: "Plus de 450 actions et ETF internationaux. À chaque ordre, nous comparons les prix de plusieurs fournisseurs et choisissons le meilleur pour vous.",
       points: [
         "Dès $5, en fractions d’action",
-        "Un panier est un seul token que vous pouvez détenir et envoyer",
-        "Programmez un montant à investir chaque semaine ou chaque mois",
+        "Le meilleur prix parmi les fournisseurs, à chaque fois",
+        "Les ordres trop éloignés du prix réel de l’action attendent ou sont refusés",
       ],
       alt: "Acheter Nvidia : deux émetteurs cotés, avec le détail des coûts.",
     },
@@ -78,7 +77,7 @@ export const fr: Dict = {
 
   addCash: {
     title: "Ajouter des fonds",
-    lede: "Envoyez de l’USDC à cette adresse. Il commence à rapporter dès son arrivée.",
+    lede: "Envoyez de l’USDC à cette adresse. Il arrive en cash, prêt à être investi.",
     addressLabel: "Votre adresse Solana",
     qrAlt: "Adresse de dépôt Solana {address} sous forme de QR code",
     copy: "Copier l’adresse",
@@ -95,45 +94,48 @@ export const fr: Dict = {
   pillars: {
     grow: {
       stamp: "Faire fructifier",
-      title: "Votre argent travaille pendant qu’il attend.",
-      body: "Le cash qui attend votre prochaine décision continue de rapporter, et vos actions se transforment discrètement en davantage d’actions.",
-      alt: "Le solde en cash, qui rapporte pendant qu’il attend.",
-      label: "Disponible pour investir",
-      pill: "Rapporte {rate}",
-      note: "versé sur ce solde",
-    },
-    spend: {
-      stamp: "Dépenser",
-      title: "Dépensez sans vendre.",
-      body: "La Mercury Visa paie via une ligne de crédit adossée à votre portefeuille : payer un déjeuner ne vous oblige jamais à clôturer une position.",
-      alt: "Une carte Visa qui puise dans le même solde.",
-      label: "Mercury Visa · Platinum",
-      note: "Puise dans le cash, jamais dans les actions",
+      title: "Les dividendes deviennent des actions.",
+      body: "Les dividendes arrivent en actions. Mercury compte les actions réelles derrière chaque token : votre chiffre reste juste.",
+      alt: "Un nombre d’actions en hausse après un dividende.",
+      label: "Nvidia, position réelle",
+      value: "{n} actions",
+      pill: "+{n}",
+      note: "ajoutées par les dividendes",
     },
     borrow: {
       stamp: "Emprunter",
-      title: "Empruntez sur vos actions.",
-      body: "Empruntez sur ce que vous possédez déjà. La position reste à vous, tout comme ce qu’elle rapporte pendant la durée du prêt.",
+      title: "Du cash sans vendre.",
+      body: "Besoin de dollars ? Empruntez sur vos actions au lieu de les vendre. Le cash arrive sur votre solde, et les actions restent à vous.",
       alt: "La capacité d’emprunt adossée aux actions détenues.",
       label: "Capacité d’emprunt",
       note: "Sur {amount} détenus",
     },
+    spend: {
+      stamp: "Dépenser · Bientôt",
+      title: "Une carte pour votre solde.",
+      body: "La Carte Mercury arrive : votre solde en cash, utilisable dans n’importe quel commerce du monde, pour que vos investissements restent investis.",
+      alt: "La Carte Mercury, bientôt disponible.",
+      label: "Carte Mercury",
+      note: "Bientôt disponible",
+    },
   },
 
-  oneNumber: {
-    heading: ["Un seul chiffre pour", "tout ce que vous détenez."],
-    lead: "Une même entreprise peut être détenue via l’un ou l’autre émetteur, et chaque token vaut une fraction d’action différente. Mercury compte les actions derrière les tokens, pas les tokens eux-mêmes.",
-    alt: "La valeur totale du portefeuille, et une entreprise comptée sur les deux émetteurs",
-    totalLabel: "Valeur du portefeuille",
-    totalNote: "{amount} depuis le début",
-    stocks: "Actions",
-    baskets: "Paniers",
-    cash: "Cash · {rate}",
-    issuerTitle: "Nvidia, tous émetteurs confondus",
-    tokens: "{n} tokens",
-    truePosition: "Position réelle",
-    shares: "{n} actions",
-    issuerNote: "En comptant les tokens, on aurait obtenu 58. Chacun a son propre multiplicateur.",
+  baskets: {
+    heading: ["Tout un thème,", "dans un panier."],
+    lead: "Choisissez un thème comme les Magnificent Seven, l’IA ou l’énergie nucléaire et financez-le en un seul paiement. Il reste dans votre propre compte, est rééquilibré chaque jour et vous revient dès que vous partez.",
+    alt: "Le panier Magnificent Seven, et le fonctionnement d’un panier",
+    kind: "Panier · Technologie",
+    name: "Magnificent Seven",
+    holdings: "{n} positions",
+    note: "Rééquilibré chaque jour",
+    weights: "Pondérations cibles",
+    howTitle: "Comment fonctionne un panier",
+    how: [
+      { label: "Où il se trouve", value: "Votre propre compte" },
+      { label: "Mutualisé avec d’autres", value: "Jamais" },
+    ],
+    leave: { label: "En partant", value: "En titres ou en cash" },
+    howNote: "{n} paniers disponibles, de l’IA à l’or, ainsi que des stratégies inspirées d’investisseurs célèbres.",
   },
 
   custody: {
@@ -144,7 +146,7 @@ export const fr: Dict = {
     columns: [
       {
         title: "Adossé à un pour un",
-        body: "Chaque token correspond à une action conservée chez un dépositaire identifié. Backed et Ondo les émettent ; nous vous disons lequel vous recevez avant l’achat.",
+        body: "Chaque token correspond à une vraie action conservée chez un dépositaire identifié, et nous vous indiquons le fournisseur avant l’achat.",
       },
       {
         title: "Chaque chiffre a sa source",
@@ -165,16 +167,20 @@ export const fr: Dict = {
         a: "Chaque token est adossé à un pour un à une action réelle conservée par un dépositaire régulé. Le token est dans votre propre wallet, et vous pouvez le transférer quand vous le souhaitez.",
       },
       {
-        q: "Que se passe-t-il quand le marché américain est fermé ?",
+        q: "Que se passe-t-il quand la Bourse est fermée ?",
         a: "Les tokens continuent de s’échanger quand la Bourse est fermée, donc leur prix peut s’écarter de celui de l’action réelle. Nous comparons les deux et préférons attendre plutôt que de vous acheter une action au prix de la panique.",
       },
       {
         q: "Dois-je vérifier mon identité ?",
-        a: "Pour l’essentiel de ce que vous faites ici, non. Lorsque l’émetteur ou le réseau de la carte l’exige, nous vous le disons avant de commencer, pas après.",
+        a: "Non. Vous vous connectez avec une adresse e-mail et un wallet est créé pour vous. Pas de documents, pas de formulaires.",
       },
       {
         q: "Combien coûte Mercury ?",
-        a: "Un seul spread sur la transaction, affiché avant que vous ne la confirmiez. Pas de frais de tenue de compte, pas de frais d’inactivité, et rien de prélevé sur vos dividendes.",
+        a: "Pas de frais de tenue de compte ni de frais Mercury sur les transactions. Vous payez le prix de marché du token, et toute prime ou tout coût de réseau est affiché avant que vous ne confirmiez.",
+      },
+      {
+        q: "Qu’est-ce qu’un panier ?",
+        a: "Un portefeuille clé en main autour d’un thème, comme les Magnificent Seven. Un seul paiement achète chaque position à sa pondération cible, dans un compte qui n’appartient qu’à vous, et il est rééquilibré chaque jour.",
       },
       {
         q: "Puis-je transférer mes actions ailleurs ?",
@@ -185,7 +191,7 @@ export const fr: Dict = {
 
   cta: {
     heading: ["Mercury est ouvert.", "Essayez la bêta aujourd’hui."],
-    note: "Ouvrez votre compte en quelques minutes et commencez à détenir, investir et dépenser depuis un seul wallet.",
+    note: "Connectez-vous avec une adresse e-mail et détenez votre première action en quelques minutes.",
     label: "Essayer la bêta de Mercury",
   },
 };

@@ -114,6 +114,48 @@ const t = useDict(Astro.url).addCash;
     user-select: none;
   }
 
+  /* A scan line that passes down the code now and then, so the card reads as
+     waiting for a deposit rather than as a picture of one. */
+  .qr::after {
+    content: "";
+    position: absolute;
+    inset-inline: -4px;
+    top: 0;
+    height: 14px;
+    background: linear-gradient(to bottom, transparent, rgb(255 255 255 / 0.55) 50%, transparent);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :global(.is-in) .qr::after {
+    animation: scan 3.6s ease-in-out 0.8s infinite;
+  }
+
+  @keyframes scan {
+    0% {
+      top: 0;
+      opacity: 0;
+    }
+    8% {
+      opacity: 1;
+    }
+    42% {
+      top: 92px;
+      opacity: 1;
+    }
+    50%,
+    100% {
+      top: 92px;
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .qr::after {
+      display: none;
+    }
+  }
+
   /* Deliberately not blended: it carries a dark mark on white, which `lighten`
      would erase. */
   .qr-mark {

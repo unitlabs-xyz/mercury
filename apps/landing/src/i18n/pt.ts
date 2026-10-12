@@ -4,7 +4,7 @@ export const pt: Dict = {
   meta: {
     tagline: "A conta financeira feita para o mundo onchain.",
     description:
-      "Guarde stablecoins, compre ações americanas tokenizadas, pague com cartão e tome crédito com base no que você tem, tudo a partir de uma carteira que você controla.",
+      "Tenha ações globais reais a partir de $5, invista em temas inteiros com cestas e tome crédito com suas ações em vez de vendê-las, tudo a partir de uma carteira que é sua.",
     ogAlt: "Mercury, a conta financeira feita para o mundo onchain.",
   },
 
@@ -39,9 +39,8 @@ export const pt: Dict = {
   },
 
   hero: {
-    eyebrow: "Invista. Tome crédito. Gaste.",
     heading: ["A conta financeira feita", "para o mundo onchain."],
-    lead: "Guarde seu dinheiro, invista em ações e ETFs, monte carteiras diversificadas, pague com seu cartão e acesse seu patrimônio, tudo a partir de uma única carteira.",
+    lead: "Tenha ações globais reais a partir de $5, invista em temas inteiros com cestas e tome crédito com suas ações em vez de vendê-las. Tudo a partir de uma carteira que é sua, aberta só com um e-mail.",
     imageLabel: "Imagem principal",
   },
 
@@ -55,7 +54,7 @@ export const pt: Dict = {
     hold: {
       stamp: "GUARDE",
       title: "Seu dinheiro fica na sua carteira.",
-      body: "Use a carteira que você já tem ou crie uma com seu e-mail. A Mercury é uma interface, não uma custodiante. Ela não pode mover nem congelar o que é seu.",
+      body: "Entre com um e-mail e a Mercury cria uma carteira que é só sua. Sem frase-semente, sem extensão.",
       points: [
         "USDC na Solana, entrando e saindo sem banco no meio.",
         "Envie e receba a qualquer hora, inclusive nos fins de semana",
@@ -66,11 +65,11 @@ export const pt: Dict = {
     invest: {
       stamp: "INVISTA",
       title: "Transforme stablecoins em ações de verdade.",
-      body: "590 ações e fundos americanos, ou uma cesta inteira comprada em uma só ação e mantida depois como uma única posição.",
+      body: "Mais de 450 ações globais e ETFs. Em cada ordem comparamos preços entre vários provedores e escolhemos o melhor para você.",
       points: [
         "A partir de $5, em frações de ação",
-        "Uma cesta é um único token que você pode guardar e enviar",
-        "Defina um valor para investir toda semana ou todo mês",
+        "O melhor preço entre provedores, sempre",
+        "Ordens longe do preço real da ação esperam ou são recusadas",
       ],
       alt: "Comprando Nvidia: dois emissores cotados, com o custo detalhado.",
     },
@@ -78,7 +77,7 @@ export const pt: Dict = {
 
   addCash: {
     title: "Adicionar saldo",
-    lede: "Envie USDC para este endereço. Ele começa a render assim que chega.",
+    lede: "Envie USDC para este endereço. Ele chega como saldo, pronto para investir.",
     addressLabel: "Seu endereço Solana",
     qrAlt: "Endereço de depósito Solana {address} em QR code",
     copy: "Copiar o endereço",
@@ -94,46 +93,49 @@ export const pt: Dict = {
 
   pillars: {
     grow: {
-      stamp: "Renda",
-      title: "Seu dinheiro trabalha enquanto espera.",
-      body: "O saldo parado entre uma decisão e outra continua rendendo, e as ações que você tem viram, aos poucos, mais ações.",
-      alt: "O saldo em caixa, rendendo enquanto espera.",
-      label: "Disponível para investir",
-      pill: "Rendendo {rate}",
-      note: "creditado neste saldo",
-    },
-    spend: {
-      stamp: "Gaste",
-      title: "Gaste sem vender.",
-      body: "O Mercury Visa paga com uma linha de crédito garantida pela sua carteira, então pagar o almoço nunca significa fechar uma posição.",
-      alt: "Um cartão Visa usando o mesmo saldo.",
-      label: "Mercury Visa · Platinum",
-      note: "Gasta do saldo, nunca das ações",
+      stamp: "Cresça",
+      title: "Dividendos viram ações.",
+      body: "Dividendos chegam como mais ações. A Mercury conta as ações reais por trás de cada token, e seu número fica certo.",
+      alt: "Uma quantidade de ações que subiu depois de um dividendo.",
+      label: "Nvidia, posição real",
+      value: "{n} ações",
+      pill: "+{n}",
+      note: "somadas pelos dividendos",
     },
     borrow: {
       stamp: "Crédito",
-      title: "Tome crédito com suas ações.",
-      body: "Use o que você já tem como garantia. A posição continua sua, assim como tudo o que ela rende enquanto o empréstimo estiver aberto.",
+      title: "Dinheiro sem vender.",
+      body: "Precisa de dólares? Tome crédito com suas ações em vez de vendê-las. O dinheiro cai no seu saldo, e as ações continuam suas.",
       alt: "Limite de crédito garantido pelas ações que você tem.",
       label: "Limite de crédito",
       note: "Com {amount} em garantia",
     },
+    spend: {
+      stamp: "Gaste · Em breve",
+      title: "Um cartão para o seu saldo.",
+      body: "O Cartão Mercury vem aí: seu saldo, para gastar em qualquer loja do mundo, enquanto seus investimentos continuam investidos.",
+      alt: "O Cartão Mercury, em breve.",
+      label: "Cartão Mercury",
+      note: "Em breve",
+    },
   },
 
-  oneNumber: {
-    heading: ["Um só número para", "tudo o que você tem."],
-    lead: "A mesma empresa pode ser mantida por qualquer um dos emissores, e cada token vale uma fração diferente de uma ação. A Mercury conta as ações por trás deles, não os tokens.",
-    alt: "O total da carteira, e uma empresa somada entre os dois emissores",
-    totalLabel: "Valor da carteira",
-    totalNote: "{amount} desde o início",
-    stocks: "Ações",
-    baskets: "Cestas",
-    cash: "Saldo · {rate}",
-    issuerTitle: "Nvidia, entre emissores",
-    tokens: "{n} tokens",
-    truePosition: "Posição real",
-    shares: "{n} ações",
-    issuerNote: "Contando tokens, daria 58. Cada um tem seu próprio multiplicador.",
+  baskets: {
+    heading: ["Um tema inteiro,", "em uma cesta."],
+    lead: "Escolha um tema como as Magnificent Seven, IA ou energia nuclear e invista com um único pagamento. A cesta fica na sua própria conta, é rebalanceada todo dia e volta para você quando quiser sair.",
+    alt: "A cesta Magnificent Seven e como uma cesta funciona",
+    kind: "Cesta · Tecnologia",
+    name: "Magnificent Seven",
+    holdings: "{n} ativos",
+    note: "Rebalanceada todo dia",
+    weights: "Pesos-alvo",
+    howTitle: "Como uma cesta funciona",
+    how: [
+      { label: "Onde fica", value: "Na sua própria conta" },
+      { label: "Misturada com outros", value: "Nunca" },
+    ],
+    leave: { label: "Ao sair", value: "Em ativos ou em dinheiro" },
+    howNote: "{n} cestas ativas, de IA a ouro, além de estratégias inspiradas em investidores conhecidos.",
   },
 
   custody: {
@@ -144,7 +146,7 @@ export const pt: Dict = {
     columns: [
       {
         title: "Lastro um para um",
-        body: "Cada token corresponde a uma ação mantida em um custodiante identificado. Backed e Ondo emitem os tokens; dizemos qual você vai receber antes da compra.",
+        body: "Cada token corresponde a uma ação real mantida em um custodiante identificado, e mostramos qual provedor você vai receber antes da compra.",
       },
       {
         title: "Todo número tem fonte",
@@ -165,16 +167,20 @@ export const pt: Dict = {
         a: "Cada token é lastreado um para um por uma ação real mantida por um custodiante regulado. O token fica na sua própria carteira, e você pode transferi-lo quando quiser.",
       },
       {
-        q: "O que acontece quando o mercado americano está fechado?",
+        q: "O que acontece quando a bolsa está fechada?",
         a: "Os tokens continuam sendo negociados quando a bolsa não está, então o preço pode se descolar da ação real. Comparamos os dois e preferimos esperar a comprar uma ação para você a preço de pânico.",
       },
       {
         q: "Preciso verificar minha identidade?",
-        a: "Para quase tudo o que você faz aqui, não. Quando o emissor ou a bandeira do cartão exige, avisamos antes de você começar, não depois.",
+        a: "Não. Você entra com um e-mail e uma carteira é criada para você. Sem documentos, sem formulários.",
       },
       {
         q: "Quanto a Mercury cobra?",
-        a: "Um único spread na operação, informado antes de você confirmar. Sem tarifa de conta, sem tarifa de inatividade e nada descontado dos seus dividendos.",
+        a: "Sem tarifa de conta e sem taxa da Mercury nas operações. Você paga o preço de mercado do token, e qualquer ágio ou custo de rede aparece antes de você confirmar.",
+      },
+      {
+        q: "O que é uma cesta?",
+        a: "Um portfólio pronto em torno de um tema, como as Magnificent Seven. Um único pagamento compra cada ativo no seu peso-alvo, em uma conta só sua, e a cesta é rebalanceada todo dia.",
       },
       {
         q: "Posso levar minhas ações para outro lugar?",
@@ -185,7 +191,7 @@ export const pt: Dict = {
 
   cta: {
     heading: ["A Mercury está aberta.", "Teste a beta hoje."],
-    note: "Abra sua conta em minutos e comece a guardar, investir e gastar a partir de uma única carteira.",
+    note: "Entre com um e-mail e tenha sua primeira ação em minutos.",
     label: "Teste a beta da Mercury",
   },
 };

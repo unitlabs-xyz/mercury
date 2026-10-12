@@ -12,18 +12,12 @@ const LOOP_VERSION = "3";
 const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
 ---
 
-<Band space="none" class="pt-[60px] pb-[50px]">
+<Band space="none" class="hero-band pt-[60px] pb-[50px]">
   <!-- Steps measured off the design. The headline sets its own breaks with <br>,
        so it is not capped — Artnik runs a touch wider than the drawn line and a
        520px cap would drop "built" onto a line of its own. -->
   <div>
-    <p data-enter class="text-[12px] leading-[18px] text-copy">{content.eyebrow}</p>
-
-    <h1
-      data-enter
-      style="--reveal-delay:80ms"
-      class="mt-[10px] display-xl text-headline"
-    >
+    <h1 data-enter class="display-xl text-headline">
       {content.heading[0]}{" "}<br />{content.heading[1]}
     </h1>
 
@@ -67,6 +61,35 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
       </video>
     </div>
   </Media>
+
+  {/* Brave on desktop only: its toolbars leave a shorter window, which put the
+      bottom of the hero card below the fold. Tighten the spacing, and if the
+      frame still runs past the bottom, narrow it (centred, ratio kept) until it
+      fits, so nothing inside is cropped. Inline, so it lands before first paint;
+      offsets are summed by hand because the entrance animation translates the
+      frame and would throw getBoundingClientRect off. */}
+  <script is:inline>
+    (() => {
+      if (!navigator.brave) return;
+      const root = document.documentElement;
+      root.classList.add("brave");
+      const frame = document.querySelector(".hero-frame");
+      if (!frame) return;
+      const desktop = matchMedia("(width >= 64rem)");
+      const fit = () => {
+        frame.style.maxWidth = "";
+        if (!desktop.matches) return;
+        let top = 0;
+        for (let el = frame; el; el = el.offsetParent) top += el.offsetTop;
+        const room = innerHeight - top - 32;
+        const natural = (frame.offsetWidth * 420) / 1000;
+        if (room < natural) frame.style.maxWidth = `${Math.max(640, Math.floor((room * 1000) / 420))}px`;
+      };
+      fit();
+      addEventListener("resize", fit);
+      addEventListener("load", fit);
+    })();
+  </script>
 </Band>
 
 <style>
@@ -109,6 +132,17 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
 
     .square {
       display: block;
+    }
+  }
+
+  @media (width >= 64rem) {
+    :global(.brave .hero-frame) {
+      margin-top: 36px;
+      margin-inline: auto;
+    }
+
+    :global(.brave .hero-band) {
+      padding-top: 36px;
     }
   }
 

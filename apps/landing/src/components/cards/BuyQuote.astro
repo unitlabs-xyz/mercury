@@ -183,6 +183,63 @@ const summary = [
     font-weight: 500;
   }
 
+  /* Alive once it is on screen: the tick draws itself onto the better quote,
+     and a soft light keeps passing over that row, as if it were still being
+     priced. Both live inside the card; nothing about the layout moves. */
+  .picked {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .picked::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.16) 50%, transparent 70%);
+    translate: -100% 0;
+    pointer-events: none;
+  }
+
+  :global(.is-in) .picked::after {
+    animation: sweep 4.8s ease-in-out 1.2s infinite;
+  }
+
+  @keyframes sweep {
+    0% {
+      translate: -100% 0;
+    }
+    35%,
+    100% {
+      translate: 100% 0;
+    }
+  }
+
+  :global(.js) .tick path {
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+  }
+
+  :global(.is-in) .tick path {
+    animation: draw 520ms var(--ease-out) 600ms forwards;
+  }
+
+  @keyframes draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .picked::after {
+      display: none;
+    }
+
+    :global(.js) .tick path {
+      stroke-dashoffset: 0;
+      animation: none;
+    }
+  }
+
   /* The one figure the card is actually about. Not named `lead`: that is a
      global utility in global.css and would quietly restyle this to 17px. */
   .line dd.hero {
