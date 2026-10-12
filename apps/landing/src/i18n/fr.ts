@@ -135,7 +135,8 @@ export const fr: Dict = {
       { label: "Mutualisé avec d’autres", value: "Jamais" },
     ],
     leave: { label: "En partant", value: "En titres ou en cash" },
-    howNote: "{n} paniers disponibles, de l’IA à l’or, ainsi que des stratégies inspirées d’investisseurs célèbres.",
+    howNote:
+      "{n} paniers disponibles, de l’IA à l’or, ainsi que des stratégies inspirées d’investisseurs célèbres.",
   },
 
   custody: {

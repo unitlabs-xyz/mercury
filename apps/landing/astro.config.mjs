@@ -6,8 +6,18 @@ import { site } from "./src/config/site.ts";
 
 // Kept in step with src/i18n/index.ts: URL code to hreflang tag.
 const locales = {
-  en: "en", es: "es", pt: "pt-BR", tr: "tr", vi: "vi", id: "id",
-  ko: "ko", ja: "ja", zh: "zh-CN", hi: "hi", fr: "fr", de: "de",
+  en: "en",
+  es: "es",
+  pt: "pt-BR",
+  tr: "tr",
+  vi: "vi",
+  id: "id",
+  ko: "ko",
+  ja: "ja",
+  zh: "zh-CN",
+  hi: "hi",
+  fr: "fr",
+  de: "de",
 };
 
 // Static output on purpose: every route is prerendered HTML, which is what the

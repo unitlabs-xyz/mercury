@@ -135,7 +135,8 @@ export const es: Dict = {
       { label: "Mezclada con otros", value: "Nunca" },
     ],
     leave: { label: "Al salir", value: "En especie o en efectivo" },
-    howNote: "{n} canastas activas, de la IA al oro, además de estrategias inspiradas en inversionistas reconocidos.",
+    howNote:
+      "{n} canastas activas, de la IA al oro, además de estrategias inspiradas en inversionistas reconocidos.",
   },
 
   custody: {
