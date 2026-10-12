@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { rawTokenAmount, tokenAmount, usd } from "@mercury/view";
 import { useMoney } from "../../api/hooks";
 import { useFundAction, useFunderUsdc } from "../../api/fund";
-import { useFundingWallet } from "../../auth/embedded";
+import { SOLANA_CONNECT_OPTIONS, useFundingWallet } from "../../auth/embedded";
 import { Button } from "../../ui/Button";
 import { Alert, Check } from "../../ui/icons";
 
@@ -107,7 +107,11 @@ export const FundFromWallet = () => {
           Phantom, Backpack, Solflare — anything on Solana. You approve one transfer in your own wallet and
           the USDC arrives here. Nothing to copy, and no chance of sending the wrong token.
         </p>
-        <Button variant="primary" onClick={() => connectWallet()} className="mt-4 w-full">
+        <Button
+          variant="primary"
+          onClick={() => connectWallet({ ...SOLANA_CONNECT_OPTIONS })}
+          className="mt-4 w-full"
+        >
           Connect a wallet
         </Button>
       </div>

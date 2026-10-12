@@ -1,3 +1,4 @@
+import type { ConnectWalletModalOptions } from "@privy-io/react-auth";
 import { useStandardWallets, useWallets } from "@privy-io/react-auth/solana";
 
 /** Only what picking reads, so the pure half needs no Privy class to test. */
@@ -92,3 +93,26 @@ export const useFundingWalletAvailable = (): boolean => {
   const { wallets } = useStandardWallets();
   return wallets.some((w) => !claimsPrivy(w));
 };
+
+/**
+ * What Privy's connect modal is told to offer.
+ *
+ * Both halves matter, and leaving them out is what broke this once already.
+ * `walletChainType` resolves to `"ethereum-only"` when nothing sets it —
+ * neither the per-call option nor `appearance.walletChainType` — so an
+ * argument-less `connectWallet()` opens a modal with every Solana wallet
+ * filtered out of it. Solflare could not be found by searching for it, and
+ * anything connected there would have been an Ethereum wallet, which never
+ * reaches the Solana `useWallets()` this reads. Two symptoms, this one line.
+ *
+ * `detected_solana_wallets` first, so whatever is actually installed leads.
+ * The three named after it are the ones the panel's own copy promises, and
+ * they still appear with an install link when they are not installed yet.
+ *
+ * Passed per call rather than set on `appearance`, so sign-in is untouched:
+ * it is email-only and has no wallet list to get wrong.
+ */
+export const SOLANA_CONNECT_OPTIONS = {
+  walletChainType: "solana-only",
+  walletList: ["detected_solana_wallets", "phantom", "solflare", "backpack"],
+} satisfies ConnectWalletModalOptions;
