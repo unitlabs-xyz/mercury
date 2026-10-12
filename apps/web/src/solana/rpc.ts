@@ -1,28 +1,75 @@
 import { address, createSolanaRpc, type Address, type Blockhash } from "@solana/kit";
+import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { USDC_MINT } from "@mercury/chain";
 
 /**
- * The browser's own read path, for the two things a connected wallet needs
- * that our API cannot answer.
+ * The endpoint to fall back to, hardcoded because a fallback that has to be
+ * configured is not one.
  *
- * Our API reads the Mercury wallet. It has no business reading somebody's
- * Phantom — that wallet is not an account we keep, nobody has asked us to
- * watch it, and routing the read through the server would mean telling the
- * server about a wallet whose only involvement is paying once and leaving.
+ * Not `api.mainnet-beta.solana.com`, which is the obvious choice and does not
+ * work: it answers the CORS preflight with an allow and then returns 403 to
+ * any request carrying an Origin header, so it fails in a browser and only in
+ * a browser. Measured again on 12 October 2026, along with Ankr (403 without a
+ * key), dRPC (400, chain not on the free tier) and BlockEden (402). This one
+ * answered 200 with `access-control-allow-origin: *`.
  *
- * Same endpoint Privy signs through, for the reason given in `PrivyBoundary`:
- * Solana's public RPC answers the CORS preflight and then 403s anything with
- * an Origin header, so there is no keyless default that works in a browser.
+ * Its limit is that indexed methods — `getTokenAccountsByOwner` and friends —
+ * are refused without a token, which is why the balance below is read through
+ * `getAccountInfo` on a derived account instead. Everything here has to stay
+ * inside that restriction to be worth having.
  */
-const RPC_URL = import.meta.env["VITE_SOLANA_RPC_URL"] as string | undefined;
+export const PUBLIC_SOLANA_RPC_URL = "https://solana-rpc.publicnode.com";
 
-/* Built once. A client per render would open a connection per render. */
-let client: ReturnType<typeof createSolanaRpc> | null = null;
+const CONFIGURED = import.meta.env["VITE_SOLANA_RPC_URL"] as string | undefined;
 
-const rpc = () => {
-  if (RPC_URL === undefined) throw new Error("VITE_SOLANA_RPC_URL is not set");
-  client ??= createSolanaRpc(RPC_URL);
-  return client;
+/**
+ * Tried in order, de-duplicated so a deployment that configures the public
+ * endpoint does not ask it twice before giving up.
+ */
+const ENDPOINTS: readonly string[] = [
+  ...new Set([CONFIGURED, PUBLIC_SOLANA_RPC_URL].filter((url): url is string => Boolean(url))),
+];
+
+/**
+ * What the app signs through, and what it reads through first.
+ *
+ * `VITE_SOLANA_RPC_URL` is no longer required. It is still strongly wanted: the
+ * public endpoint is rate limited, shared with everyone, and refuses indexed
+ * methods, so it is a floor rather than a plan.
+ */
+export const SOLANA_RPC_URL: string = ENDPOINTS[0]!;
+
+/* One client per endpoint, built once. A client per render would open a connection per render. */
+const clients = new Map<string, ReturnType<typeof createSolanaRpc>>();
+const clientFor = (url: string) => {
+  const existing = clients.get(url);
+  if (existing !== undefined) return existing;
+  const made = createSolanaRpc(url);
+  clients.set(url, made);
+  return made;
+};
+
+/**
+ * The same call against each endpoint in turn.
+ *
+ * Written after a configured Alchemy key hit its monthly limit and answered 429
+ * to everything, which left a connected wallet reading as empty. A key can run
+ * out, a provider can have an afternoon, and neither is a reason for the app to
+ * be wrong about somebody's balance.
+ *
+ * The last failure is what surfaces, because the last endpoint is the one with
+ * no excuse left. A call that succeeds anywhere never raises anything.
+ */
+const viaRpc = async <T>(run: (rpc: ReturnType<typeof createSolanaRpc>) => Promise<T>): Promise<T> => {
+  let last: unknown = new Error("No Solana RPC endpoint is configured");
+  for (const url of ENDPOINTS) {
+    try {
+      return await run(clientFor(url));
+    } catch (error: unknown) {
+      last = error;
+    }
+  }
+  throw last instanceof Error ? last : new Error(String(last));
 };
 
 export interface Lifetime {
@@ -35,37 +82,45 @@ export interface Lifetime {
  * 60 to 90 seconds, and the clock runs while somebody reads their wallet's
  * confirmation screen.
  */
-export const latestBlockhash = async (): Promise<Lifetime> => {
-  const { value } = await rpc().getLatestBlockhash({ commitment: "confirmed" }).send();
-  return { blockhash: value.blockhash, lastValidBlockHeight: value.lastValidBlockHeight };
-};
+export const latestBlockhash = (): Promise<Lifetime> =>
+  viaRpc(async (rpc) => {
+    const { value } = await rpc.getLatestBlockhash({ commitment: "confirmed" }).send();
+    return { blockhash: value.blockhash, lastValidBlockHeight: value.lastValidBlockHeight };
+  });
+
+/** The parsed shape of a token account, which is all this reads of it. */
+interface ParsedTokenAccount {
+  readonly parsed?: { readonly info?: { readonly tokenAmount?: { readonly amount?: string } } };
+}
 
 /**
  * What a wallet holds in USDC, in USDC's own units.
  *
- * Asked by owner and mint rather than by deriving the account and reading its
- * balance, because of what the two do when there is nothing to report.
- * `getTokenAccountBalance` *throws* for an account that does not exist — the
- * same way it throws when the RPC is out of quota, or refuses the method, or
- * cannot be reached — so catching that to answer zero makes a wallet nobody
- * could read indistinguishable from a wallet holding nothing. It showed
- * "Balance: 0" for a wallet with 5.69 USDC in it, against an RPC that was
- * answering 429 to everything, and said nothing about why.
+ * Read with `getAccountInfo` on the derived account, for two reasons that both
+ * came from getting it wrong. `getTokenAccountBalance` *throws* for an account
+ * that does not exist, exactly as it throws when the RPC refuses the call, so
+ * catching that to answer zero made a wallet nobody could read look like a
+ * wallet holding nothing — it showed "Balance: 0" against a wallet holding
+ * 5.69 USDC. And `getTokenAccountsByOwner`, which answers an empty list
+ * instead, is an indexed method that the public endpoint will not serve.
  *
- * This answers an empty list instead, which is a real zero and not an error at
- * all. Everything that is an error now throws, reaches react-query, and is
+ * `getAccountInfo` is neither: a missing account is `null` rather than an
+ * error, and a plain account lookup is served by every endpoint. So an empty
+ * wallet reads as zero, and everything that is a failure stays one and is
  * shown as what it is.
- *
- * Summing is not defensive padding: USDC usually sits in the associated
- * account, but nothing stops a wallet holding several, and the figure Max
- * offers should be what the wallet can actually send.
  */
 export const usdcBalanceRaw = async (owner: string): Promise<bigint> => {
-  const { value } = await rpc()
-    .getTokenAccountsByOwner(address(owner), { mint: USDC_MINT as Address }, { encoding: "jsonParsed" })
-    .send();
-  return value.reduce(
-    (sum, account) => sum + BigInt(account.account.data.parsed.info.tokenAmount.amount),
-    0n,
-  );
+  const [ata] = await findAssociatedTokenPda({
+    owner: address(owner),
+    mint: USDC_MINT as Address,
+    tokenProgram: TOKEN_PROGRAM_ADDRESS,
+  });
+  return viaRpc(async (rpc) => {
+    const { value } = await rpc.getAccountInfo(ata, { encoding: "jsonParsed" }).send();
+    /* Never held USDC, which is a balance of zero and not a failure to read one. */
+    if (value === null) return 0n;
+    const amount = (value.data as ParsedTokenAccount).parsed?.info?.tokenAmount?.amount;
+    /* An account at that address that is not a USDC account: not ours to read. */
+    return amount === undefined ? 0n : BigInt(amount);
+  });
 };
