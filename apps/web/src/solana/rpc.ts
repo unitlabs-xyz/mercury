@@ -1,5 +1,4 @@
 import { address, createSolanaRpc, type Address, type Blockhash } from "@solana/kit";
-import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { USDC_MINT } from "@mercury/chain";
 
 /**
@@ -44,21 +43,29 @@ export const latestBlockhash = async (): Promise<Lifetime> => {
 /**
  * What a wallet holds in USDC, in USDC's own units.
  *
- * Zero for a wallet that has never held any: `getTokenAccountBalance` fails
- * rather than answering zero for an account that does not exist, and "no
- * account" and "an empty account" are the same answer to the only question
- * being asked here.
+ * Asked by owner and mint rather than by deriving the account and reading its
+ * balance, because of what the two do when there is nothing to report.
+ * `getTokenAccountBalance` *throws* for an account that does not exist — the
+ * same way it throws when the RPC is out of quota, or refuses the method, or
+ * cannot be reached — so catching that to answer zero makes a wallet nobody
+ * could read indistinguishable from a wallet holding nothing. It showed
+ * "Balance: 0" for a wallet with 5.69 USDC in it, against an RPC that was
+ * answering 429 to everything, and said nothing about why.
+ *
+ * This answers an empty list instead, which is a real zero and not an error at
+ * all. Everything that is an error now throws, reaches react-query, and is
+ * shown as what it is.
+ *
+ * Summing is not defensive padding: USDC usually sits in the associated
+ * account, but nothing stops a wallet holding several, and the figure Max
+ * offers should be what the wallet can actually send.
  */
 export const usdcBalanceRaw = async (owner: string): Promise<bigint> => {
-  const [ata] = await findAssociatedTokenPda({
-    owner: address(owner),
-    mint: USDC_MINT as Address,
-    tokenProgram: TOKEN_PROGRAM_ADDRESS,
-  });
-  try {
-    const { value } = await rpc().getTokenAccountBalance(ata).send();
-    return BigInt(value.amount);
-  } catch {
-    return 0n;
-  }
+  const { value } = await rpc()
+    .getTokenAccountsByOwner(address(owner), { mint: USDC_MINT as Address }, { encoding: "jsonParsed" })
+    .send();
+  return value.reduce(
+    (sum, account) => sum + BigInt(account.account.data.parsed.info.tokenAmount.amount),
+    0n,
+  );
 };

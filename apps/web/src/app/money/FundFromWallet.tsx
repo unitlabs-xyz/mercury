@@ -55,11 +55,21 @@ export const FundFromWallet = () => {
     resetAction();
   }, [address, resetAction]);
 
-  const held = balance.data ?? 0n;
-  const heldText = tokenAmount(held.toString(), USDC_DECIMALS);
+  /*
+   * `undefined` is a balance nobody could read, and it is not zero. Treating
+   * the two alike is what showed "Balance: 0" against a wallet holding 5.69
+   * while the RPC answered 429 to everything.
+   */
+  const held = balance.data;
+  const heldText = tokenAmount((held ?? 0n).toString(), USDC_DECIMALS);
   const raw = rawTokenAmount(amount, USDC_DECIMALS);
   const malformed = amount.length > 0 && raw === null;
-  const overdrawn = raw !== null && raw > held;
+  const overdrawn = held !== undefined && raw !== null && raw > held;
+  /*
+   * An unreadable balance does not block the send. We cannot say the amount is
+   * too much, and the wallet checks before it signs anyway — the same reason
+   * the no-SOL case is left to it.
+   */
   const ready = raw !== null && raw > 0n && !overdrawn && action.walletReady && to !== undefined;
 
   const submit = (e: FormEvent) => {
@@ -143,7 +153,11 @@ export const FundFromWallet = () => {
         <div className="flex items-baseline justify-between gap-3 px-3 pt-2 pb-2.5">
           <p className="text-[14px] leading-none text-ds-muted">Amount</p>
           <p className="text-[12px] leading-none text-ds-muted">
-            {balance.isPending ? "Reading your wallet…" : `Balance: ${heldText}`}
+            {balance.isPending
+              ? "Reading your wallet…"
+              : held === undefined
+                ? "Balance unavailable"
+                : `Balance: ${heldText}`}
           </p>
         </div>
         <label
@@ -161,13 +175,17 @@ export const FundFromWallet = () => {
             aria-invalid={overdrawn}
             className="w-full min-w-0 bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none placeholder:text-ds-muted/50"
           />
-          <button
-            type="button"
-            onClick={() => setAmount(heldText)}
-            className="h-[26px] shrink-0 rounded-full border border-black/10 bg-linear-to-b from-white to-[#eeeeee] px-3 text-[12px] leading-none text-ds-ink"
-          >
-            Max
-          </button>
+          {/* Nothing to offer when the balance could not be read, and offering
+              zero would be a number we made up. */}
+          {held !== undefined && (
+            <button
+              type="button"
+              onClick={() => setAmount(heldText)}
+              className="h-[26px] shrink-0 rounded-full border border-black/10 bg-linear-to-b from-white to-[#eeeeee] px-3 text-[12px] leading-none text-ds-ink"
+            >
+              Max
+            </button>
+          )}
           <span className="shrink-0 text-[12px] text-ds-muted">USDC</span>
         </label>
       </div>
