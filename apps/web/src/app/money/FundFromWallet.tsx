@@ -1,6 +1,6 @@
 import { useConnectWallet } from "@privy-io/react-auth";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { rawTokenAmount, tokenAmount, usd } from "@mercury/view";
+import { rawTokenAmount, tokenAmount } from "@mercury/view";
 import { useMoney } from "../../api/hooks";
 import { useFundAction, useFunderUsdc } from "../../api/fund";
 import { SOLANA_CONNECT_OPTIONS, useFundingWallet } from "../../auth/embedded";
@@ -75,7 +75,7 @@ export const FundFromWallet = () => {
         </span>
         <p className="mt-4 text-[20px] font-medium text-ds-ink">Sent from your wallet</p>
         <p className="mt-3 text-[14px] text-ds-muted">
-          {usd(amount)} USDC. It lands in your balance within a few seconds.
+          {amount} USDC. It lands in your balance within a few seconds.
         </p>
         <a
           href={`https://solscan.io/tx/${encodeURIComponent(action.data.signature)}`}
@@ -143,7 +143,7 @@ export const FundFromWallet = () => {
         <div className="flex items-baseline justify-between gap-3 px-3 pt-2 pb-2.5">
           <p className="text-[14px] leading-none text-ds-muted">Amount</p>
           <p className="text-[12px] leading-none text-ds-muted">
-            {balance.isPending ? "Reading your wallet…" : `${usd(heldText)} in this wallet`}
+            {balance.isPending ? "Reading your wallet…" : `Balance: ${heldText}`}
           </p>
         </div>
         <label
@@ -174,7 +174,9 @@ export const FundFromWallet = () => {
 
       {overdrawn && (
         <div className="mt-2">
-          <Note tone="down">More than this wallet holds. {usd(heldText)} available.</Note>
+          {/* The same figure Max fills and the balance above shows. Rounded to
+              cents it would read as more than the wallet can actually send. */}
+          <Note tone="down">More than this wallet holds. {heldText} USDC available.</Note>
         </div>
       )}
       {malformed && (
@@ -198,11 +200,6 @@ export const FundFromWallet = () => {
       >
         {action.isPending ? "Waiting for your wallet…" : "Approve in your wallet"}
       </Button>
-      {/* Their wallet pays it, it is a fraction of a cent, and naming a number
-          we do not control would be the wrong kind of precise. */}
-      <p className="mt-2.5 text-center text-[12px] leading-[1.4] text-ds-muted">
-        Your wallet pays the Solana network fee.
-      </p>
     </form>
   );
 };
