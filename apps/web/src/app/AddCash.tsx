@@ -5,6 +5,8 @@ import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { StatusChip } from "../ui/ds";
 import { ChevronDown } from "../ui/icons";
 import { DepositAddress } from "./Receive";
+import { FundFromWallet } from "./money/FundFromWallet";
+import { useFundingWalletAvailable } from "../auth/embedded";
 
 type Method = {
   key: string;
@@ -140,7 +142,23 @@ const SolanaGlyph = () => {
   );
 };
 
+/** A wallet, in the line-icon set the other methods use. */
+const WalletGlyph = () => (
+  <Glyph>
+    <rect x="2" y="4" width="12" height="8.5" rx="1.5" />
+    <path d="M11 8.25h1.5" />
+  </Glyph>
+);
+
 const METHODS: readonly Method[] = [
+  {
+    key: "wallet",
+    title: "From your wallet",
+    sub: "Phantom, Backpack or Solflare",
+    figure: "Instant",
+    note: "No fee",
+    icon: <WalletGlyph />,
+  },
   {
     key: "solana",
     title: "USDC on Solana",
@@ -203,7 +221,19 @@ const SOON = METHODS.filter((m) => m.soon);
  * them, the details of the chosen way (for Solana, the address and its code).
  */
 export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
-  const [pick, setPick] = useState("solana");
+  const hasWallet = useFundingWalletAvailable();
+  const [pick, setPick] = useState("wallet");
+  /*
+   * The wallet row is hidden rather than disabled where no wallet is
+   * installed, so a browser without one sees exactly the panel it saw before.
+   * `chosen` is what that costs: the default points at the better method, and
+   * falls back on its own rather than needing an effect to correct it.
+   *
+   * Injected wallets register at page load and this panel opens on a click
+   * long after, so in practice the fallback resolves before anybody sees it.
+   */
+  const live = LIVE.filter((m) => m.key !== "wallet" || hasWallet);
+  const chosen = pick === "wallet" && !hasWallet ? "solana" : pick;
   return (
     <SidePanel open={open} onClose={onClose} labelledBy="add-cash-heading">
       <PanelHeader
@@ -218,8 +248,8 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
           aria-label="How to add cash"
           className="flex flex-col gap-1 rounded-lg bg-ds-panel p-1"
         >
-          {LIVE.map((m) => {
-            const on = pick === m.key;
+          {live.map((m) => {
+            const on = chosen === m.key;
             return (
               <button
                 key={m.key}
@@ -239,7 +269,13 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
           <OtherMethods methods={SOON} />
         </div>
 
-        {pick === "solana" && (
+        {chosen === "wallet" && (
+          <div className="mt-6">
+            <FundFromWallet />
+          </div>
+        )}
+
+        {chosen === "solana" && (
           <div className="mt-6">
             {/* Not "Send USDC to this address": the note directly beneath it
                 names the token and the network, and says what happens to

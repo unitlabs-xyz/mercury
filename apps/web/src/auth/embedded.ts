@@ -1,4 +1,4 @@
-import { useWallets } from "@privy-io/react-auth/solana";
+import { useStandardWallets, useWallets } from "@privy-io/react-auth/solana";
 
 /** Only what picking reads, so the pure half needs no Privy class to test. */
 interface Pickable {
@@ -52,4 +52,43 @@ export const useEmbeddedWallet = () => {
   const { wallets, ready } = useWallets();
   const wallet = embeddedOf(wallets);
   return { wallet, address: wallet?.address, ready };
+};
+
+/**
+ * Everything connected that is not the account: wallets somebody attached to
+ * fund with.
+ *
+ * The same filter read the other way, and deliberately the same file — "which
+ * wallet is this" is one question, and answering half of it somewhere else is
+ * how the two drift back together.
+ */
+export const fundingOf = <T extends Pickable>(wallets: readonly T[]): readonly T[] =>
+  wallets.filter((w) => !claimsPrivy(w.standardWallet));
+
+/**
+ * The attached funding wallet, if there is one.
+ *
+ * One at a time: a second is a choice nobody asked to make, and the first is
+ * the one they just connected.
+ */
+export const useFundingWallet = () => {
+  const { wallets, ready } = useWallets();
+  const wallet = fundingOf(wallets)[0];
+  return { wallet, address: wallet?.address, ready };
+};
+
+/**
+ * Whether this browser has a wallet somebody could fund from at all.
+ *
+ * Add cash hides the method when it does not. A row that opens a panel saying
+ * "install Phantom" is a choice that cannot be taken, and the file it sits in
+ * already makes that argument about its own greyed-out rows: a disabled
+ * control invites the click that does nothing.
+ *
+ * These are the wallets present, not connected — Privy's own is among them,
+ * and it is not something anybody funds from.
+ */
+export const useFundingWalletAvailable = (): boolean => {
+  const { wallets } = useStandardWallets();
+  return wallets.some((w) => !claimsPrivy(w));
 };

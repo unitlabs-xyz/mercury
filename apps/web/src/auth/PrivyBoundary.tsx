@@ -1,4 +1,5 @@
 import { PrivyProvider } from "@privy-io/react-auth";
+import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import type { ReactNode } from "react";
 import { IdentityTokenSync } from "./identity";
@@ -69,9 +70,25 @@ export const PrivyBoundary = ({ children }: { children: ReactNode }) => {
           showWalletUIs: false,
         },
         solana: SOLANA,
-        // Email only, so no external wallets; the connectors are stubbed out of
-        // the bundle in vite.config.ts.
-        externalWallets: { walletConnect: { enabled: false } },
+        /*
+         * Sign-in is still email only. These connectors exist so somebody can
+         * attach a wallet they already hold and push USDC into their account
+         * with it — a funding source, never the account. `useEmbeddedWallet`
+         * is what keeps the two apart everywhere a key signs.
+         *
+         * `shouldAutoConnect` defaults to true, which would reach for a
+         * previously-attached wallet on page load. Off: an account is reached
+         * by email, and the only moment we have any business touching
+         * somebody's Phantom is the moment they press Connect in Add cash.
+         *
+         * WalletConnect and the EVM connectors stay off and stay stubbed out
+         * of the bundle in vite.config.ts — Solana wallets are reached through
+         * the Wallet Standard and need neither.
+         */
+        externalWallets: {
+          walletConnect: { enabled: false },
+          solana: { connectors: toSolanaWalletConnectors({ shouldAutoConnect: false }) },
+        },
       }}
     >
       {/* Mirrors the identity token out to `apiFetch`, which cannot use a hook. */}
