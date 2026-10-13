@@ -8,6 +8,7 @@ import {
   useSendQuote,
 } from "../api/send";
 import { D } from "@mercury/core";
+import { Skeleton } from "./portfolio/ui";
 import { Button } from "../ui/Button";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { Alert, Check } from "../ui/icons";
@@ -64,10 +65,20 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
   /* Never offer review against a fee we have not been told yet. */
   const quoted = !addressValid || quoteQuery.data !== undefined || quoteQuery.isError;
 
+  /*
+   * The balance is not known yet. Every figure on this panel is derived from
+   * it, and `?? 0` made all of them read as an empty account: the header said
+   * "$0.00 available", Max filled in nothing, and typing any amount at all
+   * tripped "More than you have." A person who opened this while the query was
+   * in flight was told, three ways, that they had no money.
+   */
+  const unknownBalance = money.data === undefined;
+
   const validAmount = /^\d+(?:\.\d{1,6})?$/.test(amount);
   const value = validAmount ? Number(amount) : 0;
   const amountLooksWrong = amount.length > 0 && !validAmount;
   const overdrawn =
+    !unknownBalance &&
     validAmount &&
     D(amount)
       .add(D(quote.feeUsd))
@@ -100,7 +111,13 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
       <PanelHeader
         id="send-heading"
         title={action.isSuccess ? "USDC sent" : reviewing ? "Review transfer" : "Send USDC"}
-        sub={action.isSuccess ? undefined : `${usd(money.data?.balanceUsd)} available. Solana network only.`}
+        sub={
+          action.isSuccess
+            ? undefined
+            : unknownBalance
+              ? "Solana network only."
+              : `${usd(money.data?.balanceUsd)} available. Solana network only.`
+        }
         onClose={close}
       />
 
@@ -215,18 +232,29 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
               />
               <button
                 type="button"
+                disabled={unknownBalance}
                 onClick={() => setAmount(sendable)}
-                className="h-[26px] shrink-0 rounded-full border border-black/10 bg-linear-to-b from-white to-[#eeeeee] px-3 text-[12px] leading-none text-ds-ink"
+                className="h-[26px] shrink-0 rounded-full border border-black/10 bg-linear-to-b from-white to-[#eeeeee] px-3 text-[12px] leading-none text-ds-ink disabled:opacity-50"
               >
                 Max
               </button>
               <span className="shrink-0 text-[12px] text-ds-muted">USDC</span>
             </label>
-            <p className="px-3 pt-2.5 pb-2 text-[12px] leading-[1.4] text-ds-muted">
-              {fee > 0
-                ? `${usd(sendable)} available, after ${usd(fee)} to open their USDC account`
-                : `${usd(available)} available to send`}
-            </p>
+            <div className="px-3 pt-2.5 pb-2">
+              {/* Loading pulses; a failed read says nothing rather than pulsing
+                  forever or claiming a balance of zero. */}
+              {unknownBalance ? (
+                money.isError ? null : (
+                  <Skeleton className="h-[17px] w-44" />
+                )
+              ) : (
+                <p className="text-[12px] leading-[1.4] text-ds-muted">
+                  {fee > 0
+                    ? `${usd(sendable)} available, after ${usd(fee)} to open their USDC account`
+                    : `${usd(available)} available to send`}
+                </p>
+              )}
+            </div>
           </div>
           {overdrawn && (
             <div className="mt-2">
