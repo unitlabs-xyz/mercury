@@ -133,6 +133,14 @@ is recorded as [ADR 0014](../../adr/0014-relay-funding.md).
    transfer_in. The webhook enriches that row.
 ```
 
+**Every chain Relay supports is offered**, decided on 13 October — all 61
+rather than a curated eight. That is a picker decision, not a backend one:
+sixty-one rows is a worse list than eight, so `/v1/money/fund/sources` returns
+the whole set and the interface leads with the handful somebody is likely to
+want, then searches the rest by chain and token name. The alternative — a short
+hardcoded list — means a user holding the sixty-first thing is told Mercury
+cannot take their money when it can.
+
 **Why this path is built first.** Bitcoin forces it — see §4 — and once it
 exists it covers all 61 chains with no signing code written. It is also the only
 path that reaches the BTC on Coinbase and in hardware wallets, which no
@@ -243,11 +251,28 @@ It is also where the credential belongs: `POST /quote/v2` requires an
 13 October still succeeded without one, so enforcement is incomplete — that is
 not something to build on.
 
-**The integration point to verify before committing:** that the Relay SDK's
-`execute()` accepts a pre-fetched quote object rather than insisting on
-fetching its own. The whole design rests on it. If it does not, the client
-executes steps from our stored quote by hand, which is more work but not a
-different architecture.
+**The SDK supports this directly.** Read from
+`@relayprotocol/relay-sdk` 8.0.4 on 13 October: `execute()` takes
+`{ quote: Execute, wallet, onProgress }` with the quote as a **required**
+parameter, so nothing obliges the client to have fetched it. And `getQuote()`
+takes a third `headers` argument, which is where `x-api-key` goes — so the same
+typed client mints quotes on our server and executes them in the browser,
+rather than us hand-rolling one half of it.
+
+**`AdaptedWallet` is the seam, and it is small.** Seven methods — `vmType`,
+`getChainId`, `address`, `switchChain`, `handleSignMessageStep`,
+`handleSendTransactionStep`, `handleConfirmTransactionStep` — over a plain
+object. `ChainVM` spans `evm`, `svm`, `bvm`, `tvm`, `hypevm`, `lvm`, `tonvm`,
+`xrpvm` and `hederavm`.
+
+That makes Relay's prebuilt adapters in §4.2 a convenience rather than a
+requirement: an AppKit-connected wallet of any VM can be adapted in one small
+file per VM, which is also the honest place to put per-wallet quirks. Take the
+prebuilt ones where they fit — Bitcoin especially, where PSBT finalisation is
+the fiddly part — and write our own where they do not.
+
+`onProgress` reports `currentStep`, `currentStepItem` and `txHashes`, which is
+what the per-chain status UI in phase 4 renders.
 
 ---
 
@@ -348,8 +373,21 @@ the DEX fee plus a bridge relayer fee, _plus_ destination gas charged to our gas
 credits — this is comparable to the user and strictly cheaper to us, because
 none of it is ours.
 
-`appFees` is zero at launch. It exists, it is basis points, and it is where a
-funding revenue line would go; that is a separate decision and not this spec's.
+**A first deposit costs more, and the difference is visible.** Quoting the
+same route to a Solana address that has never held USDC — so with no token
+account to receive into — was accepted, and `relayerGas` rose from $0.0041 to
+$0.1919. That $0.188 is the token-account rent, which Relay pays and prices in.
+All-in went **0.34% to 1.01%** on a $25 deposit.
+
+Two things follow. Every quote must be minted against the user's real Privy
+wallet and never a reference address, or we would under-quote exactly the
+deposit most likely to be someone's first. And on the $10 floor that rent is
+1.9% of the deposit, so the fee breakdown is shown rather than summarised — a
+first deposit is the worst moment to look like we are skimming.
+
+`appFees` is zero at launch, by decision on 13 October. It exists, it is basis
+points, and it is where a funding revenue line would go; that is a separate
+decision and not this spec's.
 
 ---
 
@@ -361,15 +399,25 @@ wallet as its sender, so an automatic refund aimed at "the depositor" is gone.
 Setting `refundTo` to the user's address is therefore wrong for precisely the
 users §3 exists to serve.
 
-So we need a refund wallet for EVM, one for Solana and one for Bitcoin, plus
+So we need a refund address for EVM, one for Solana and one for Bitcoin, plus
 `recoveryAddress` for withdrawing from the depository when Relay can neither
-fill nor refund — and a human process for returning those funds to the right
-user. `funding_intent` is what makes that answerable: the row names the user,
-the origin, the amount and the failure.
+fill nor refund.
 
-This is the only genuinely unpleasant part of the design. It is an operational
-commitment, not code, and it should be written down before launch rather than
-discovered by the first failed deposit.
+**Decided on 13 October: the addresses come from the environment and the
+process is deferred.** Six variables — `RELAY_REFUND_ADDRESS_{EVM,SVM,BVM}` and
+`RELAY_RECOVERY_ADDRESS_{EVM,SVM,BVM}` — read at boot and absent from the
+client. Recovery may hold the same value as refund for now; they stay separate
+variables because the roles differ, which makes splitting them later a config
+change rather than a code one. Relay's one constraint is that
+`recoveryAddress` must not be the native-currency sentinel address.
+
+What is deferred is the human loop that returns those funds to the right user.
+`funding_intent` is what will make it answerable — the row names the user, the
+origin, the amount and the failure — so the data is captured from day one even
+though nobody is yet on the hook for acting on it. That is a deliberate debt
+and it should be paid before this is in front of people who are not us: a
+refund sitting in a company wallet with no process attached is somebody's money
+that we have and they do not.
 
 **Amount edge cases on an open deposit address.** An exact match reuses the
 quote. An overpayment regenerates the quote for the larger amount under a new
@@ -380,25 +428,34 @@ and need no logic of ours.
 **Tokens we must never offer.** Non-solver tokens and NFTs sent to a deposit
 address are, per Relay, unrecoverable. The picker is therefore driven entirely
 by `solverCurrencies` from `GET /chains` and never accepts free text. Relay also
-does not sweep deposits worth $0.05 or less; our own floor should sit well
-above that, high enough that the fees in §7 are not most of the deposit.
+does not sweep deposits worth $0.05 or less; **our floor is $10**, decided on
+13 October, which keeps the first-deposit rent in §7 under 2%.
 
 ---
 
-## 9 · Open questions
+## 9 · Answered, and still open
 
-1. **Does `execute()` take a pre-fetched quote?** §5 depends on it. Verify
-   against `@relayprotocol/relay-sdk` 8.0.4 before writing the plan.
-2. **Who pays the destination ATA rent?** The Privy wallet may hold no USDC
-   account yet. Relay has a deprecated `subsidizeRent` parameter, which implies
-   solvers handle it, but a first deposit failing is the worst possible first
-   deposit. Probe on testnet.
-3. **Is `x-api-key` enforced?** It did not appear to be on 13 October. Assume it
-   will be.
-4. **What does AppKit actually cost the bundle?** The 20% figure in
-   `no-evm-connectors.ts` is about Privy's connectors, not AppKit's. Measure
-   after install, and confirm the chunk sits behind the Add cash route rather
-   than in the entry bundle.
+Three of the four questions this spec opened were closed the same day.
+
+**Answered · `execute()` takes a pre-fetched quote.** Required parameter. The
+server mints, the client executes. §5 has the detail, including the
+`AdaptedWallet` seam it exposed, which shrinks §4.2's dependency on Relay's
+prebuilt adapters.
+
+**Answered · Relay pays the destination account rent and prices it in.** A
+quote to an address that has never held USDC is accepted, with `relayerGas`
+carrying the $0.188. See §7 — this one changed the product, not just the
+estimate.
+
+**Answered · `x-api-key` is not yet enforced.** Probes on 13 October succeeded
+without it, against a requirement dated 2 October. We hold a key and send it
+regardless; building on the gap would be building on someone else's rollout
+schedule.
+
+**Still open · what AppKit costs the bundle.** The 20% figure in
+`no-evm-connectors.ts` measures Privy's connectors, not AppKit's. Measure after
+install, and confirm the chunk sits behind the Add cash route rather than in the
+entry bundle. This gates nothing in phase 1 and is the first task of phase 2.
 
 ---
 
@@ -416,6 +473,17 @@ Each phase is shippable and leaves the product better than it found it.
 Phase 1 stands alone. Phases 2–4 are an upgrade on a flow that already works,
 which is the property worth protecting: at no point between here and the end is
 the feature broken, and at no point does a slip take funding with it.
+
+Each phase gets its own implementation plan, written when the one before it
+lands. Planning all four now would be planning phases 3 and 4 against what
+phase 2 is guessed to have produced.
+
+**This work stacks on PR #63** rather than waiting for it to merge, by decision
+on 13 October: `feat/relay-funding` is cut from `feat/fund-from-wallet`, and
+phase 2 replaces that PR's connector layer while keeping its amount field, its
+balance handling and its transfer builder. The USDC-on-Solana path it shipped
+stays as the fast lane — a same-asset, same-chain transfer is not a swap and
+has no business being quoted as one.
 
 ---
 
