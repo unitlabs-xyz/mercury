@@ -28,12 +28,13 @@ export interface BasketProvider {
   validate(basket: BasketDefinition): Promise<void>;
   create(basket: BasketDefinition): Promise<string>;
   get(id: string): Promise<ProviderBasket>;
+  /** The new active allocation; portfolios rebalance to it on their next run. No
+   *  counterpart for the name, because Glider holds the slug and that never changes. */
+  publishAllocation(id: string, assets: BasketDefinition["assets"]): Promise<void>;
   strategyPerformance(id: string): Promise<StrategyPerformance>;
   /** Glider's all-time money-weighted return, absent until enough history exists. */
   portfolioReturn(id: string): Promise<string | null>;
-  allocationBreakdown(
-    assets: BasketDefinition["assets"],
-  ): Promise<NonNullable<BasketInsights["allocation"]>>;
+  allocationBreakdown(assets: BasketDefinition["assets"]): Promise<NonNullable<BasketInsights["allocation"]>>;
   effectiveSwapFeeBps(id: string): Promise<number | null>;
   portfolios(ownerAccountId: string, strategyId: string): Promise<readonly ProviderPortfolio[]>;
   portfoliosForOwner(ownerAccountId: string): Promise<readonly ProviderPortfolio[]>;
@@ -99,40 +100,24 @@ export class BasketRebalanceCooldownError extends Error {
 }
 
 /**
- * Where the list of holdable assets comes from.
- *
- * Its own port rather than another method on `BasketProvider`. That port is
- * Glider's documented v2 REST API, authenticated with our key; this is the
- * unversioned tRPC route its own front end browses with, public and
- * undocumented. Two different contracts with two different stability
- * guarantees, and keeping them apart means the risky one can be swapped,
- * stubbed or dropped without touching the path that moves money.
+ * Apart from `BasketProvider` because it is a different contract: that one is
+ * Glider's documented v2 API, this is the undocumented route its front end
+ * browses with. The risky one stays swappable without touching money.
  */
 export interface BasketAssetSource {
   list(): Promise<readonly BasketAsset[]>;
 }
 
 /**
- * Where that list is kept between refreshes.
- *
- * Apart from `BasketStore`, which holds enrollment intents, exit nonces and
- * funding records — a user's in-flight business. This is a catalogue: the same
- * rows for everybody, replaced wholesale once a day. Nothing that reads one
- * needs the other, and a store faked for an enrollment test should not have to
- * pretend to hold an asset list.
+ * Apart from `BasketStore`, which holds a user's in-flight business. This is a
+ * catalogue: the same rows for everybody, replaced whole once a day.
  */
 export interface BasketAssetStore {
   /** The catalogue, in ticker order. */
   all(): Promise<readonly BasketAsset[]>;
   /** How many are on offer, for deciding whether a fresh list can be believed. */
   count(): Promise<number>;
-  /**
-   * Swap the catalogue for this one, dropping whatever is not in it.
-   *
-   * All of it or none: a picker half-written is worse than one a day old.
-   * Whether the new list is worth believing is not decided here — that is a
-   * rule, and it lives in the service.
-   */
+  /** All of it or none: a picker half-written is worse than one a day old. */
   replace(assets: readonly BasketAsset[]): Promise<number>;
 }
 

@@ -32,8 +32,7 @@ export function basketRoutes(service: BasketService): Hono {
   const app = new Hono();
 
   const handle = (error: unknown, action = "enrollment") => {
-    if (error instanceof BasketError)
-      return { status: error.status, body: fail(error.code, error.message) };
+    if (error instanceof BasketError) return { status: error.status, body: fail(error.code, error.message) };
     console.error(`Basket ${action} failed:`, error);
     return {
       status: 502 as const,

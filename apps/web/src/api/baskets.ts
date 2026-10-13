@@ -92,18 +92,13 @@ export const useBasketInsights = (slug: string) =>
   useQuery({
     queryKey: ["api", "baskets", slug, "insights"],
     queryFn: async () =>
-      (
-        await apiFetch<{ insights: BasketInsights }>(
-          `${basketPath(slug)}/insights`,
-        )
-      ).insights,
+      (await apiFetch<{ insights: BasketInsights }>(`${basketPath(slug)}/insights`)).insights,
     enabled: slug.length > 0,
     retry: false,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
   });
-
 
 export const basketEnrollmentEnabled = (ready: boolean, authenticated: boolean, hasIdentityToken: boolean) =>
   SAMPLE_NO_LOGIN || (ready && authenticated && hasIdentityToken);
@@ -259,11 +254,7 @@ export const useBasketActivity = (slug: string, enrolled: boolean) => {
   return useQuery({
     queryKey: ["api", "basket-activity", slug, user?.id, wallets[0]?.address],
     queryFn: async () =>
-      (
-        await apiFetch<{ activity: BasketActivity[] }>(
-          `${basketPath(slug)}/activity`,
-        )
-      ).activity,
+      (await apiFetch<{ activity: BasketActivity[] }>(`${basketPath(slug)}/activity`)).activity,
     enabled:
       enrolled &&
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
@@ -330,22 +321,16 @@ export const useBasketFundingAction = (slug: string) => {
   const { signTransaction } = useSignTransaction();
   const [step, setStep] = useState<"preparing" | "signing" | "sending" | null>(null);
   const mutation = useMutation({
-    mutationFn: async ({
-      amountUsd,
-      portfolio,
-    }: {
-      amountUsd: string;
-      portfolio: BasketPortfolio;
-    }) => {
+    mutationFn: async ({ amountUsd, portfolio }: { amountUsd: string; portfolio: BasketPortfolio }) => {
       const wallet = wallets[0];
       if (!wallet) throw new Error("Your Solana wallet is still loading.");
       setStep("preparing");
       const receipt = await fundBasket(amountUsd, portfolio, {
         prepare: (amount) =>
-          apiFetch<PreparedBasketFunding>(
-            `${basketPath(slug)}/funding/prepare`,
-            { method: "POST", body: JSON.stringify({ amountUsd: amount }) },
-          ),
+          apiFetch<PreparedBasketFunding>(`${basketPath(slug)}/funding/prepare`, {
+            method: "POST",
+            body: JSON.stringify({ amountUsd: amount }),
+          }),
         sign: async (wire) => {
           setStep("signing");
           const result = await signTransaction({ transaction: toBytes(wire), wallet });

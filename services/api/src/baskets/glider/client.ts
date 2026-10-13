@@ -126,16 +126,17 @@ function toBasket(remote: z.infer<typeof remoteStrategy>): ProviderBasket {
   };
 }
 
+/** Glider takes a percentage string to two places; we keep basis points. */
+const toWeight = ({ assetId, weightBps }: BasketDefinition["assets"][number]) => ({
+  assetId,
+  weight: (weightBps / 100).toFixed(2),
+});
+
 function toCreatePayload(basket: BasketDefinition): components["schemas"]["CreateStrategyRequest"] {
   return {
     name: basket.name,
     description: basket.description,
-    allocation: {
-      assets: basket.assets.map(({ assetId, weightBps }) => ({
-        assetId,
-        weight: (weightBps / 100).toFixed(2),
-      })),
-    },
+    allocation: { assets: basket.assets.map(toWeight) },
     schedule: basket.schedule,
     isPublic: false,
   };
@@ -167,7 +168,10 @@ export class GliderClient implements BasketProvider {
     return await this.portfoliosForOwner(ownerAccountId, strategyId);
   }
 
-  async portfoliosForOwner(ownerAccountId: string, strategyId?: string): Promise<readonly ProviderPortfolio[]> {
+  async portfoliosForOwner(
+    ownerAccountId: string,
+    strategyId?: string,
+  ): Promise<readonly ProviderPortfolio[]> {
     const found: ProviderPortfolio[] = [];
     let cursor: string | null = null;
     const seen = new Set<string>();
@@ -399,6 +403,14 @@ export class GliderClient implements BasketProvider {
       .object({ data: z.object({ strategyId: z.string().min(1) }) })
       .parse(this.checked(result, "/strategies"));
     return response.data.strategyId;
+  }
+
+  async publishAllocation(id: string, assets: BasketDefinition["assets"]): Promise<void> {
+    const result = await this.client.POST("/strategies/{strategyId}/versions", {
+      params: { path: { strategyId: id } },
+      body: { allocation: { assets: assets.map(toWeight) } },
+    });
+    this.checked(result, `/strategies/${encodeURIComponent(id)}/versions`);
   }
 
   async get(id: string): Promise<ProviderBasket> {

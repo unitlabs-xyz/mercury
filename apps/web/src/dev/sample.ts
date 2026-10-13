@@ -328,7 +328,6 @@ export const SAMPLE_HISTORY: Record<string, { at: string; valueUsd: string }[]> 
   "1M": series(60, 12 * 3_600_000),
 };
 
-
 /** The API reads this answers. Anything else goes to the real API. */
 /**
  * GET /v1/portfolio/exposure/:ticker, wallet only (pledged shares are not in it).

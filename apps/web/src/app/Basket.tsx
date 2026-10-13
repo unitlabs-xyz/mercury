@@ -1370,12 +1370,7 @@ export const BasketDetail = () => {
                   <Button
                     size="lg"
                     className="mt-5 w-full"
-                    disabled={
-                      !account ||
-                      operationActive ||
-                      exitActive ||
-                      rebalanceAction.isPending
-                    }
+                    disabled={!account || operationActive || exitActive || rebalanceAction.isPending}
                     onClick={() => {
                       rebalanceAction.reset();
                       setRebalanceOpen(true);

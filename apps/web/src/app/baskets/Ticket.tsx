@@ -76,7 +76,7 @@ export const EnrollmentRail = ({
         ? "Connect a Solana wallet to invest."
         : !signedIn
           ? "Sign in to invest."
-            : (error ?? null);
+          : (error ?? null);
   return (
     <section aria-label={`Invest in ${name}`} className="min-w-0 rounded-xl bg-white p-1">
       <div className="px-3 sm:px-5 pt-4">

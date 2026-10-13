@@ -68,7 +68,9 @@ describe("problemWith", () => {
   it("allows fifty stocks and refuses fifty-one", () => {
     const all = new Set(fifty(51).map((a) => a.assetId));
     const at = fifty(50);
-    expect(problemWith(draft({ assets: [...at.slice(0, 49), { ...at[49]!, weightBps: 9951 }] }), all)).toBeNull();
+    expect(
+      problemWith(draft({ assets: [...at.slice(0, 49), { ...at[49]!, weightBps: 9951 }] }), all),
+    ).toBeNull();
     expect(problemWith(draft({ assets: fifty(51) }), all)).toBe("too_many_assets");
   });
 

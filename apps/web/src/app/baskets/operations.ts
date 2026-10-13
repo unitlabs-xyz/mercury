@@ -44,8 +44,7 @@ export type BasketOperationRow = {
 const ACTIVE: ReadonlySet<string> = new Set(["accepted", "running", "retrying", "awaiting_user"]);
 
 /** A state Glider has not reported yet is still work in flight, not a finished run. */
-const isActive = (state: BasketOperation["state"] | undefined) =>
-  state === undefined || ACTIVE.has(state);
+const isActive = (state: BasketOperation["state"] | undefined) => state === undefined || ACTIVE.has(state);
 
 /* Work in flight first, then the most recent result, so a finished run is still confirmable. */
 export const sortOperationRows = (rows: readonly BasketOperationRow[]): readonly BasketOperationRow[] =>

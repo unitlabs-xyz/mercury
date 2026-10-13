@@ -113,9 +113,7 @@ describe("reading a basket somebody wrote", () => {
    */
   it("marks the caller's own baskets apart from the curated ones", async () => {
     const listed = await service([basket()], []).list(MINE);
-    expect(listed.filter((item) => item.source === "curated").length).toBe(
-      catalogJson.strategies.length,
-    );
+    expect(listed.filter((item) => item.source === "curated").length).toBe(catalogJson.strategies.length);
     expect(listed.filter((item) => item.source === "mine").map((item) => item.slug)).toEqual([
       "my-ai-bet-7fq2kx9m",
     ]);

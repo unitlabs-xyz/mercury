@@ -85,7 +85,13 @@ describe("creating a basket somebody wrote", () => {
     const { service: svc, custom } = service({
       create: () => Promise.resolve("strategy-1"),
       get: (id: string) =>
-        Promise.resolve(remote(id, custom.rows[0]!.slug, DRAFT.assets.map((a) => ({ ...a })))),
+        Promise.resolve(
+          remote(
+            id,
+            custom.rows[0]!.slug,
+            DRAFT.assets.map((a) => ({ ...a })),
+          ),
+        ),
     });
     const made = await svc.create(MINE, DRAFT);
 
@@ -94,22 +100,24 @@ describe("creating a basket somebody wrote", () => {
     expect(made.slug).toMatch(/^my-ai-bet-[0-9a-z]{8}$/);
   });
 
-  /* The picker sends an id; what that stock is called is the catalogue's to say. */
+  // The picker sends an id; the name is the catalogue's to say.
   it("takes tickers from the catalogue, not from the request", async () => {
     const { service: svc, custom } = service({
       create: () => Promise.resolve("strategy-1"),
       get: (id: string) =>
-        Promise.resolve(remote(id, custom.rows[0]!.slug, DRAFT.assets.map((a) => ({ ...a })))),
+        Promise.resolve(
+          remote(
+            id,
+            custom.rows[0]!.slug,
+            DRAFT.assets.map((a) => ({ ...a })),
+          ),
+        ),
     });
     await svc.create(MINE, { ...DRAFT, assets: DRAFT.assets.map((a) => ({ ...a, ticker: "WRONG" })) });
     expect(custom.rows[0]!.assets.map((a) => a.ticker)).toEqual(["NVDA", "TSLA"]);
   });
 
-  /*
-   * The whole reason Glider is told the slug rather than the name. Two people
-   * can both write "My AI Bet"; recovery finds a strategy again by name, so
-   * adopting by display name would hand one of them the other's strategy.
-   */
+  // Recovery finds a strategy by name, and two people will both write "My AI Bet".
   it("names the strategy by slug, which is unique, and never by what the author typed", async () => {
     const sent: { name: string; assets: ProviderBasket["assets"] }[] = [];
     const { service: svc, custom } = service({
@@ -119,18 +127,20 @@ describe("creating a basket somebody wrote", () => {
       },
       create: () => Promise.resolve("strategy-1"),
       get: (id: string) =>
-        Promise.resolve(remote(id, custom.rows[0]!.slug, DRAFT.assets.map((a) => ({ ...a })))),
+        Promise.resolve(
+          remote(
+            id,
+            custom.rows[0]!.slug,
+            DRAFT.assets.map((a) => ({ ...a })),
+          ),
+        ),
     });
     await svc.create(MINE, DRAFT);
     expect(asSent(sent).name).toBe(custom.rows[0]!.slug);
     expect(asSent(sent).name).not.toBe("My AI Bet");
   });
 
-  /*
-   * A create whose connection dies may still have been accepted. Adopting the
-   * one matching namesake is what keeps a blip from orphaning a strategy on a
-   * tenant that cannot delete them.
-   */
+  // A dead connection may still have been accepted, on a tenant that cannot delete.
   it("adopts the strategy a failed create had already made", async () => {
     const custom = customStore();
     const { service: svc } = service(
@@ -139,10 +149,20 @@ describe("creating a basket somebody wrote", () => {
         list: () =>
           Promise.resolve([
             remote("strategy-other", "someone-elses-aaaaaaaa", []),
-            remote("strategy-1", custom.rows[0]!.slug, DRAFT.assets.map((a) => ({ ...a }))),
+            remote(
+              "strategy-1",
+              custom.rows[0]!.slug,
+              DRAFT.assets.map((a) => ({ ...a })),
+            ),
           ]),
         get: (id: string) =>
-          Promise.resolve(remote(id, custom.rows[0]!.slug, DRAFT.assets.map((a) => ({ ...a })))),
+          Promise.resolve(
+            remote(
+              id,
+              custom.rows[0]!.slug,
+              DRAFT.assets.map((a) => ({ ...a })),
+            ),
+          ),
       },
       custom,
     );
@@ -171,9 +191,9 @@ describe("creating a basket somebody wrote", () => {
     const { service: svc, custom } = service({
       create: () => Promise.resolve("strategy-1"),
       get: (id: string) =>
-        Promise.resolve(remote(id, "a-different-basket-aaaaaaaa", [
-          { assetId: assetIdFor(NVDA), weightBps: 10_000 },
-        ])),
+        Promise.resolve(
+          remote(id, "a-different-basket-aaaaaaaa", [{ assetId: assetIdFor(NVDA), weightBps: 10_000 }]),
+        ),
     });
     await expect(svc.create(MINE, DRAFT)).rejects.toThrow(/stored a different basket/);
     expect(custom.rows[0]!.providerId).toBeNull();

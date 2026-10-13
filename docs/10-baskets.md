@@ -59,7 +59,7 @@ from historical prices. It is never presented as realized or user performance.
 
 | Step      | Route                                                                   | What happens                                                                                                                                     |
 | --------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Discover  | `GET /v1/baskets`, `/:slug`, `/:slug/insights`                          | The curated shelf plus the caller's own baskets, each marked `source`. Weights, modeled performance, sector breakdown, Glider's swap fee          |
+| Discover  | `GET /v1/baskets`, `/:slug`, `/:slug/insights`                          | The curated shelf plus the caller's own baskets, each marked `source`. Weights, modeled performance, sector breakdown, Glider's swap fee         |
 | Enroll    | `POST /:slug/enrollment/prepare`, then `/:slug/enrollment/submit`       | Glider issues a challenge; the user signs a message (or a transaction on the sub-account path). Creates the portfolio. No USDC moves             |
 | Fund      | `POST /:slug/funding/prepare`, then `/:slug/funding/confirm`            | Server builds an owner-paid USDC transfer to the smart account and simulates it; the user signs; the server verifies the debit equals the credit |
 | Invest    | Glider                                                                  | Glider's agent buys toward the target weights at the next rebalance. Until then, USDC can sit uninvested, and the product says so                |

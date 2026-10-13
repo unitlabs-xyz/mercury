@@ -7,6 +7,7 @@ import type {
   BasketInsights,
   Basket,
 } from "@mercury/types";
+import { D, ZERO } from "@mercury/core";
 import { USDC_MINT, USDC_DECIMALS, type ChainHistory, type TransactionDetail } from "@mercury/chain";
 import {
   BasketFundingPreflightError,
@@ -20,7 +21,14 @@ import {
   type BasketStore,
 } from "./deps.js";
 import { Expiring } from "./cache.js";
-import { DESCRIPTION_MAX, assetIdFor, problemWith, randomSuffix, slugFor } from "./primitives.js";
+import {
+  DESCRIPTION_MAX,
+  assetIdFor,
+  nameProblem,
+  problemWith,
+  randomSuffix,
+  slugFor,
+} from "./primitives.js";
 import type {
   AssetSyncResult,
   BasketDefinition,
@@ -95,15 +103,10 @@ export function verifiedBasketFunding(
 
 function usdcRaw(amount: string): bigint {
   if (!/^(?:0|[1-9]\d{0,8})(?:\.\d{1,6})?$/.test(amount))
-    throw new BasketError(
-      "invalid_amount",
-      400,
-      "Enter a valid USDC amount (up to six decimal places).",
-    );
+    throw new BasketError("invalid_amount", 400, "Enter a valid USDC amount (up to six decimal places).");
   const [whole = "0", fraction = ""] = amount.split(".");
   const raw = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0") || "0");
-  if (raw === 0n)
-    throw new BasketError("invalid_amount", 400, "Enter an amount greater than zero.");
+  if (raw === 0n) throw new BasketError("invalid_amount", 400, "Enter an amount greater than zero.");
   return raw;
 }
 
@@ -134,14 +137,10 @@ export class BasketService {
     },
   ) {}
 
-  /**
-   * The curated catalogue first, then this owner's own baskets.
-   *
-   * Curated wins, which is what the slug suffix in `slugFor` makes safe: no
-   * custom slug can shadow one. One null covers every way a slug can fail to
-   * name a basket this caller may act on — unknown, somebody else's, or a
-   * draft with no strategy behind it yet. Telling those apart on the wire
-   * would answer whether a stranger's slug exists.
+  /*
+   * Curated first; the slug suffix is what stops a custom one shadowing it.
+   * One null for unknown, somebody else's, and still-a-draft alike, because
+   * telling them apart would answer whether a stranger's slug exists.
    */
   private async resolve(slug: string, userId: string): Promise<LiveBasket | null> {
     const curated = (await this.deps.store.load()).find((item) => item.slug === slug);
@@ -153,8 +152,7 @@ export class BasketService {
   private async basketFor(slug: string, userId: string) {
     const basket = await this.resolve(slug, userId);
     if (!basket) throw new BasketError("not_found", 404, "No such basket.");
-    if (!this.deps.provider)
-      throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
+    if (!this.deps.provider) throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
     return { basket, provider: this.deps.provider };
   }
 
@@ -257,29 +255,17 @@ export class BasketService {
     const portfolio = portfolios[0];
     if (!portfolio) return null;
     if (portfolio.ownerAccountId !== ownerAccountId || portfolio.strategyId !== basket.providerId)
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "Portfolio is unavailable for this wallet.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "Portfolio is unavailable for this wallet.");
     const detail = await provider.portfolio(portfolio.portfolioId);
     if (
       detail.portfolioId !== portfolio.portfolioId ||
       detail.ownerAccountId !== ownerAccountId ||
       detail.strategyId !== basket.providerId
     )
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "Portfolio is unavailable for this wallet.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "Portfolio is unavailable for this wallet.");
     const positions = await provider.positions(portfolio.portfolioId);
     if (positions.portfolioId !== portfolio.portfolioId)
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "Portfolio is unavailable for this wallet.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "Portfolio is unavailable for this wallet.");
     return { ...detail, ...positions };
   }
 
@@ -291,18 +277,10 @@ export class BasketService {
       portfolio.ownerAccountId !== ownerAccountId ||
       portfolio.strategyId !== basket.providerId
     )
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "Portfolio is unavailable for this wallet.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "Portfolio is unavailable for this wallet.");
     const operation = await provider.operation(portfolio.portfolioId, operationId);
     if (operation.portfolioId !== portfolio.portfolioId || operation.operationId !== operationId)
-      throw new BasketError(
-        "operation_unavailable",
-        409,
-        "Operation is unavailable for this wallet.",
-      );
+      throw new BasketError("operation_unavailable", 409, "Operation is unavailable for this wallet.");
     return operation;
   }
 
@@ -314,22 +292,14 @@ export class BasketService {
       portfolio.ownerAccountId !== ownerAccountId ||
       portfolio.strategyId !== basket.providerId
     )
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "Portfolio is unavailable for this wallet.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "Portfolio is unavailable for this wallet.");
     const detail = await provider.portfolio(portfolio.portfolioId);
     if (
       detail.portfolioId !== portfolio.portfolioId ||
       detail.ownerAccountId !== ownerAccountId ||
       detail.strategyId !== basket.providerId
     )
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "Portfolio is unavailable for this wallet.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "Portfolio is unavailable for this wallet.");
     try {
       const triggered = await provider.triggerRebalance(portfolio.portfolioId);
       if (userId)
@@ -374,18 +344,10 @@ export class BasketService {
       detail.strategyId !== basket.providerId ||
       !detail.smartAccounts.some((item) => SOLANA_ACCOUNT.test(item.accountId))
     )
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "The Solana portfolio could not be verified.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "The Solana portfolio could not be verified.");
     const smartAccount = detail.smartAccounts.find((item) => SOLANA_ACCOUNT.test(item.accountId));
     if (!smartAccount)
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "The Solana portfolio could not be verified.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "The Solana portfolio could not be verified.");
     return { basket, provider, portfolio, smartAccount };
   }
 
@@ -401,11 +363,7 @@ export class BasketService {
     const { provider, portfolio } = await this.exitPortfolio(slug, userId, ownerAccountId);
     const positions = await provider.positions(portfolio.portfolioId);
     if (positions.portfolioId !== portfolio.portfolioId)
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "Portfolio balances could not be verified.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "Portfolio balances could not be verified.");
     if ((mode === "in_kind" || requestedAssets) && positions.warnings.length > 0)
       throw new BasketError(
         "positions_incomplete",
@@ -508,11 +466,7 @@ export class BasketService {
       (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC) ||
       (mode === "in_kind" && message.settlementAssetId !== undefined)
     )
-      throw new BasketError(
-        "invalid_exit",
-        400,
-        "Exit terms do not match this wallet and portfolio.",
-      );
+      throw new BasketError("invalid_exit", 400, "Exit terms do not match this wallet and portfolio.");
     if (message.assets.some((item) => !item.assetId.startsWith(SOLANA_ASSET)))
       throw new BasketError("invalid_exit", 400, "Exit contains an asset on another chain.");
     if (!this.deps.history)
@@ -667,11 +621,7 @@ export class BasketService {
 
   async confirmFunding(slug: string, userId: string, ownerAccountId: string, signature: string) {
     if (!SIGNATURE.test(signature))
-      throw new BasketError(
-        "invalid_signature",
-        400,
-        "Enter a valid Solana transaction signature.",
-      );
+      throw new BasketError("invalid_signature", 400, "Enter a valid Solana transaction signature.");
     if (!this.deps.history)
       throw new BasketError("funding_unavailable", 503, "Solana history is not configured.");
     const { basket, provider } = await this.basketFor(slug, userId);
@@ -681,18 +631,10 @@ export class BasketService {
     const account = portfolio?.smartAccounts.find((item) => SOLANA_ACCOUNT.test(item.accountId));
     const destinationAccountId = account?.depositAccountId ?? account?.accountId;
     if (!portfolio || !destinationAccountId || !SOLANA_ACCOUNT.test(destinationAccountId))
-      throw new BasketError(
-        "portfolio_unavailable",
-        409,
-        "No verified funding account is available.",
-      );
+      throw new BasketError("portfolio_unavailable", 409, "No verified funding account is available.");
     const tx = await this.deps.history.transaction(signature);
     if (!tx)
-      throw new BasketError(
-        "transaction_pending",
-        409,
-        "Transaction is not settled yet. Try again shortly.",
-      );
+      throw new BasketError("transaction_pending", 409, "Transaction is not settled yet. Try again shortly.");
     if (tx.signature !== signature)
       throw new BasketError("invalid_transaction", 422, "Transaction signature did not match.");
     const amountRaw = verifiedBasketFunding(tx, addressOf(ownerAccountId), addressOf(destinationAccountId));
@@ -827,11 +769,7 @@ export class BasketService {
       intent.strategyId !== basket.providerId ||
       intent.expiresAt.getTime() <= Date.now()
     )
-      throw new BasketError(
-        "authorization_invalid",
-        403,
-        "Enrollment authorization is invalid or expired.",
-      );
+      throw new BasketError("authorization_invalid", 403, "Enrollment authorization is invalid or expired.");
     if (intent.portfolioId) {
       const existing = (await provider.portfolios(ownerAccountId, intent.strategyId)).find(
         (p) => p.portfolioId === intent.portfolioId,
@@ -855,16 +793,9 @@ export class BasketService {
     return this.deps.customBaskets;
   }
 
-  /**
-   * What we ask Glider to hold, for a basket somebody wrote.
-   *
-   * The slug goes in as the strategy name, not what the author called it.
-   * Recovery after a failed create finds the strategy again by name, and two
-   * people may well both write a "My AI Bet" — adopting by display name would
-   * hand one of them the other's strategy, and then an edit to either would
-   * rewrite both. Slugs are unique by construction, which is what the suffix
-   * in `slugFor` is for. Nothing shows this name: every surface reads the
-   * author's own from our row.
+  /*
+   * Glider gets the slug as the name. Recovery finds a strategy by name, and
+   * two people will both write a "My AI Bet"; slugs are unique, names are not.
    */
   private static definitionFor(basket: CustomBasket): BasketDefinition {
     return {
@@ -877,14 +808,7 @@ export class BasketService {
     };
   }
 
-  /**
-   * Give a basket a strategy at Glider, and record which one.
-   *
-   * Steps three to five are `sync()`'s, including its recovery: a create whose
-   * connection dies may still have been accepted, so a failure is checked
-   * against the tenant's own list before it is believed, and whatever comes
-   * back is read again and compared before the id is written down.
-   */
+  /** `sync()`'s steps, recovery included: a dead connection may still have created it. */
   private async publish(basket: CustomBasket, provider: BasketProvider): Promise<string> {
     const definition = BasketService.definitionFor(basket);
     await provider.validate(definition);
@@ -897,23 +821,14 @@ export class BasketService {
       strategyId = namesakes[0]!.id;
     }
     const readback = await provider.get(strategyId);
-    /* Plain, so the route logs it and answers `provider_error`: a readback
-       that disagrees means Glider holds something we did not ask for, and
-       that is worth a stack trace rather than a tidy code. */
+    // Plain, so the route logs it: Glider holds something we did not ask for.
     if (readback.id !== strategyId || !matches(definition, readback))
       throw new Error(`Glider stored a different basket for ${definition.slug}`);
     await this.customBasketStore().attachStrategy(basket.id, strategyId);
     return strategyId;
   }
 
-  /**
-   * Write a basket somebody composed, and give it a strategy.
-   *
-   * The row lands before Glider is called, so a create that fails halfway
-   * leaves a draft its author can see and retry rather than nothing at all.
-   * Tickers are resolved here rather than taken from the request: the client
-   * picked an asset, and what that asset is called is the catalogue's to say.
-   */
+  /** The row lands first, so a half-failed create leaves a draft to retry. */
   async create(userId: string, draft: BasketDraft): Promise<CustomBasket> {
     const catalogue = await this.assetStore().all();
     const byAssetId = new Map(catalogue.map((asset) => [assetIdFor(asset.mint), asset]));
@@ -931,9 +846,97 @@ export class BasketService {
         weightBps,
       })),
     });
-    if (!this.deps.provider)
-      throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
+    if (!this.deps.provider) throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
     return { ...basket, providerId: await this.publish(basket, this.deps.provider) };
+  }
+
+  /** Resolve one of the caller's own, or say why not. Curated slugs are not theirs to edit. */
+  private async mine(slug: string, userId: string): Promise<CustomBasket> {
+    const curated = (await this.deps.store.load()).some((item) => item.slug === slug);
+    if (curated) throw new BasketError("not_yours", 403, "This basket is not yours to change.");
+    const basket = await this.customBasketStore().bySlug(userId, slug);
+    if (basket === null) throw new BasketError("not_found", 404, "No such basket.");
+    return basket;
+  }
+
+  /**
+   * A write at Glider, believed only once it reads back.
+   *
+   * A dropped connection may still have applied it, and our row must not
+   * drift: the next edit compares against what we think is published.
+   */
+  private async confirmed(
+    strategyId: string,
+    definition: BasketDefinition,
+    provider: BasketProvider,
+    write: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await write();
+    } catch (error) {
+      if (!matches(definition, await provider.get(strategyId))) throw error;
+      return;
+    }
+    if (!matches(definition, await provider.get(strategyId)))
+      throw new Error(`Glider stored a different basket for ${definition.slug}`);
+  }
+
+  /** Local: Glider holds the slug, fixed at creation, so there is nothing there to change. */
+  async rename(userId: string, slug: string, name: string, description: string): Promise<CustomBasket> {
+    const basket = await this.mine(slug, userId);
+    const problem = nameProblem(name);
+    if (problem !== null) throw new BasketError(problem, 422, DRAFT_MESSAGES[problem]);
+    const next = { name: name.trim(), description: description.trim().slice(0, DESCRIPTION_MAX) };
+    await this.customBasketStore().rename(basket.id, next.name, next.description);
+    return { ...basket, ...next };
+  }
+
+  /**
+   * No money moves: every portfolio rebalances to it on its next run, and the
+   * detail page already offers a manual one for anyone impatient.
+   */
+  async reviseAssets(userId: string, slug: string, assets: BasketDraft["assets"]): Promise<CustomBasket> {
+    const basket = await this.mine(slug, userId);
+    const catalogue = await this.assetStore().all();
+    const byAssetId = new Map(catalogue.map((asset) => [assetIdFor(asset.mint), asset]));
+    const problem = problemWith({ ...basket, assets }, new Set(byAssetId.keys()));
+    if (problem !== null) throw new BasketError(problem, 422, DRAFT_MESSAGES[problem]);
+
+    const next = assets.map(({ assetId, weightBps }) => ({
+      assetId,
+      ticker: byAssetId.get(assetId)!.ticker,
+      weightBps,
+    }));
+    // A draft has no strategy yet; whatever it holds goes up when it is created.
+    if (basket.providerId !== null) {
+      if (!this.deps.provider)
+        throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
+      const provider = this.deps.provider;
+      const strategyId = basket.providerId;
+      const definition = BasketService.definitionFor({ ...basket, assets: next });
+      await this.confirmed(strategyId, definition, provider, () =>
+        provider.publishAllocation(strategyId, definition.assets),
+      );
+    }
+    await this.customBasketStore().reviseAssets(basket.id, next);
+    return { ...basket, assets: next };
+  }
+
+  /**
+   * Refused while funded, in-transit included: Glider cannot delete a
+   * strategy, so money left behind sits where the app no longer shows it.
+   */
+  async remove(userId: string, slug: string, ownerAccountId: string): Promise<void> {
+    const basket = await this.mine(slug, userId);
+    if (basket.providerId !== null && this.deps.provider) {
+      const portfolio = (await this.deps.provider.portfolios(ownerAccountId, basket.providerId))[0];
+      if (portfolio) {
+        const held = await this.deps.provider.positions(portfolio.portfolioId);
+        if (D(held.totalValueUsd).gt(ZERO) || D(held.inTransitUsd).gt(ZERO))
+          throw new BasketError("basket_funded", 409, "Withdraw everything before deleting a basket.");
+      }
+    }
+    await this.customBasketStore().remove(basket.id);
   }
 
   /** Glider holds the mint inside the asset id; every client wants it on its own. */
@@ -976,13 +979,7 @@ export class BasketService {
     };
   }
 
-  /**
-   * The shelf, then this caller's own baskets.
-   *
-   * One list rather than two requests, because every consumer that matches a
-   * portfolio back to the basket behind it has to look in both — and `source`
-   * is already on the wire for the clients that render the difference.
-   */
+  /** One list, not two requests: matching a portfolio to its basket has to look in both. */
   async list(userId: string): Promise<readonly Basket[]> {
     const [catalog, mine] = await Promise.all([
       this.deps.store.load(),
@@ -994,11 +991,7 @@ export class BasketService {
   async detail(slug: string, userId: string): Promise<Basket | null> {
     const curated = (await this.deps.store.load()).find((item) => item.slug === slug);
     const mine = curated ? null : await this.deps.customBaskets?.bySlug(userId, slug);
-    const basket = curated
-      ? BasketService.curatedWire(curated)
-      : mine
-        ? BasketService.mineWire(mine)
-        : null;
+    const basket = curated ? BasketService.curatedWire(curated) : mine ? BasketService.mineWire(mine) : null;
     if (basket === null) return null;
     const performance = await this.strategyPerformance(basket.strategyId);
     return {
@@ -1057,14 +1050,7 @@ export class BasketService {
     }
   }
 
-  /**
-   * What a custom basket may hold, as the picker reads it.
-   *
-   * The whole catalogue in one answer — a few hundred rows that change once a
-   * day — so typing filters a list already in the browser rather than putting
-   * a request, and an undocumented third-party endpoint, behind every
-   * keystroke.
-   */
+  /** A few hundred rows, changed once a day, so typing filters the browser's copy. */
   private assetStore(): BasketAssetStore {
     if (this.deps.assetStore === undefined) throw new Error("Basket asset store is not configured");
     return this.deps.assetStore;
@@ -1080,18 +1066,10 @@ export class BasketService {
     }));
   }
 
-  /**
-   * Refresh the catalogue, unless the answer looks like an outage.
-   *
-   * A pass removes assets as well as adding them, because a mint Ondo delists
-   * has to stop being offered. That is what makes a short answer dangerous: a
-   * half-failed page would empty the picker underneath somebody mid-way
-   * through choosing. Below four fifths of what we already hold the previous
-   * catalogue stands, and the caller is told it held rather than being left to
-   * infer it from a count.
-   *
-   * The floor is a judgement about trust, not about storage, which is why it
-   * is here and not in the store.
+  /*
+   * A pass removes as well as adds, so a half-failed page would empty the
+   * picker under somebody mid-choice. Below four fifths, the old rows stand.
+   * A judgement about trust rather than storage, which is why it is not in the store.
    */
   async syncAssets(): Promise<AssetSyncResult> {
     if (this.deps.assetSource === undefined) throw new Error("Basket asset source is not configured");

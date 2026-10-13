@@ -191,13 +191,13 @@ Deleting removes a draft outright and soft-deletes a created basket. Glider has 
 
 ### 5 · Routes
 
-|          |                      |                                                       |
-| -------- | -------------------- | ----------------------------------------------------- |
-| `GET`    | `/v1/baskets`        | the curated shelf plus the caller's own, each `source` |
-| `POST`   | `/v1/baskets`        | create one of mine                                     |
-| `PATCH`  | `/v1/baskets/:slug`  | rename or re-weight mine; `403` on a curated slug      |
-| `DELETE` | `/v1/baskets/:slug`  | refused while funded                                   |
-| `GET`    | `/v1/basket-assets`  | the picker's universe, from `basket_asset`             |
+|          |                     |                                                        |
+| -------- | ------------------- | ------------------------------------------------------ |
+| `GET`    | `/v1/baskets`       | the curated shelf plus the caller's own, each `source` |
+| `POST`   | `/v1/baskets`       | create one of mine                                     |
+| `PATCH`  | `/v1/baskets/:slug` | rename or re-weight mine; `403` on a curated slug      |
+| `DELETE` | `/v1/baskets/:slug` | refused while funded                                   |
+| `GET`    | `/v1/basket-assets` | the picker's universe, from `basket_asset`             |
 
 Custom baskets share the curated routes rather than getting their own prefix: one slug namespace,
 one resolver, and `source` on the wire for the clients that render the difference. A basket

@@ -135,8 +135,7 @@ export class MercuryClient {
       z.object({ portfolio: BasketPortfolioSnapshot.nullable() }),
     );
 
-  basketAssets = () =>
-    this.call("/v1/basket-assets", z.object({ assets: z.array(PickableBasketAsset) }));
+  basketAssets = () => this.call("/v1/basket-assets", z.object({ assets: z.array(PickableBasketAsset) }));
 
   basketPortfolios = () =>
     this.call("/v1/basket-portfolios", z.object({ portfolios: BasketPortfolioSummary.array() }));
@@ -153,11 +152,9 @@ export class MercuryClient {
     });
 
   prepareBasketEnrollment = (slug: string) =>
-    this.call(
-      `/v1/baskets/${encodeURIComponent(slug)}/enrollment/prepare`,
-      PreparedBasketEnrollment,
-      { method: "POST" },
-    );
+    this.call(`/v1/baskets/${encodeURIComponent(slug)}/enrollment/prepare`, PreparedBasketEnrollment, {
+      method: "POST",
+    });
 
   submitBasketEnrollment = (slug: string, body: z.infer<typeof SubmitBasketEnrollment>) =>
     this.call(

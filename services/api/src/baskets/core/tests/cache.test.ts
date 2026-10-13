@@ -15,11 +15,7 @@ describe("Expiring", () => {
     expect(cache.get("a")).toBeUndefined();
   });
 
-  /*
-   * The reason the cap exists. Keys are Glider strategy ids, and a person
-   * mints one every time they write a basket, so without this the map grows
-   * for as long as the process lives.
-   */
+  // Why the cap exists: a person mints a strategy id every time they write a basket.
   it("never holds more than its capacity", () => {
     const cache = new Expiring<number>(3);
     for (let i = 0; i < 50; i++) cache.set(`k${i}`, i, 60_000);

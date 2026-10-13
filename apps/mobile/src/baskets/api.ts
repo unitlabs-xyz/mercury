@@ -91,8 +91,7 @@ export const useBasketEnrollment = (slug: string) => {
   return useQuery({
     queryKey: ["api", "basket-enrollment", slug, owner.address],
     queryFn: async () =>
-      (await apiFetch<{ portfolio: BasketPortfolio | null }>(`${basketPath(slug)}/portfolio`))
-        .portfolio,
+      (await apiFetch<{ portfolio: BasketPortfolio | null }>(`${basketPath(slug)}/portfolio`)).portfolio,
     enabled: owner.ready && slug.length > 0,
     retry: false,
     staleTime: 15_000,
@@ -106,8 +105,11 @@ export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
   return useQuery({
     queryKey: ["api", "basket-portfolio", slug, owner.address],
     queryFn: async () =>
-      (await apiFetch<{ portfolio: BasketPortfolioSnapshot | null }>(`${basketPath(slug)}/portfolio/positions`))
-        .portfolio,
+      (
+        await apiFetch<{ portfolio: BasketPortfolioSnapshot | null }>(
+          `${basketPath(slug)}/portfolio/positions`,
+        )
+      ).portfolio,
     enabled: enrolled && owner.ready,
     retry: false,
     staleTime: 15_000,

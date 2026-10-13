@@ -1,11 +1,6 @@
 import { customAlphabet } from "nanoid";
 import slugify from "slugify";
-import type {
-  BasketExitMessage,
-  BasketExitMode,
-  BasketExitSubmission,
-  BasketTag,
-} from "@mercury/types";
+import type { BasketExitMessage, BasketExitMode, BasketExitSubmission, BasketTag } from "@mercury/types";
 
 export interface BasketDefinition {
   slug: string;
@@ -18,12 +13,8 @@ export interface BasketDefinition {
 }
 
 /**
- * One tokenised equity a basket may be built from.
- *
- * Narrower than the universe this product trades. Glider's registry classifies
- * xStocks as crypto and will not hold it inside a strategy, so this is Ondo's
- * equities and nothing else — a distinction invisible on the Invest page and
- * decisive here.
+ * One tokenised equity a basket may be built from: Ondo's, and nothing else.
+ * Glider classifies xStocks as crypto and will not hold them in a strategy.
  */
 export interface BasketAsset {
   /** The Solana mint, and the natural key: Glider is addressed by it. */
@@ -56,21 +47,17 @@ export interface CustomBasket {
   readonly updatedAt: Date;
 }
 
-/** What somebody typed into the authoring panel, before any of it is believed. */
 export interface BasketDraft {
   readonly name: string;
   readonly description: string;
-  /** Tickers are not read: they are resolved from the catalogue by `assetId`. */
+  /** No ticker: it is the catalogue's to say, resolved by `assetId`. */
   readonly assets: readonly { assetId: string; weightBps: number }[];
 }
 
 /**
- * The one thing wrong with a draft, or null.
- *
- * Glider's own limits, measured rather than read off a page: 1–50 assets and
- * weights totalling exactly 100.00. `unknown_asset` is ours — Glider's
- * `validate` accepts a strategy holding BONK, so it is not an asset gate, and
- * the catalogue is the only signal we have that a mint can actually be traded.
+ * Glider's measured limits: 1–50 assets, weights totalling exactly 100.00.
+ * `unknown_asset` is ours — its `validate` accepts a strategy holding BONK,
+ * so the catalogue is the only tradability signal we have.
  */
 export type DraftProblem =
   | "name_required"
@@ -86,10 +73,14 @@ export const DESCRIPTION_MAX = 280;
 const ASSETS_MAX = 50;
 const TOTAL_BPS = 10_000;
 
-/** Pure, so the rules are a table rather than a database. `holdable` is the catalogue's asset ids. */
+/** On its own because a rename must not re-check assets that are already stored. */
+export const nameProblem = (name: string): DraftProblem | null =>
+  name.trim() === "" ? "name_required" : name.trim().length > NAME_MAX ? "name_too_long" : null;
+
+/** Pure, so the rules are a table rather than a database. */
 export const problemWith = (draft: BasketDraft, holdable: ReadonlySet<string>): DraftProblem | null => {
-  if (draft.name.trim() === "") return "name_required";
-  if (draft.name.trim().length > NAME_MAX) return "name_too_long";
+  const named = nameProblem(draft.name);
+  if (named !== null) return named;
   if (draft.assets.length === 0) return "no_assets";
   if (draft.assets.length > ASSETS_MAX) return "too_many_assets";
   const ids = draft.assets.map((asset) => asset.assetId);

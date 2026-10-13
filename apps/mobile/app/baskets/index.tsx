@@ -361,9 +361,7 @@ export default function Baskets() {
                         </View>
                         <View style={s.strategyFoot}>
                           <AssetStack template={t} instruments={instruments} limit={5} size={24} />
-                          <RNText style={s.sub}>
-                            {t.allocations.length} assets · Daily
-                          </RNText>
+                          <RNText style={s.sub}>{t.allocations.length} assets · Daily</RNText>
                         </View>
                       </PressableScale>
                     ))

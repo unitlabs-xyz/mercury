@@ -1,14 +1,7 @@
 /**
- * A small cache that forgets, by age and by size.
- *
- * Both basket caches are keyed by Glider strategy id, and anybody can mint
- * strategy ids by writing baskets — so a plain `Map` is a leak whose size a
- * user controls. Capacity is the fix; the TTL is what the callers already
- * wanted.
- *
- * `Map` keeps insertion order, which is the whole of the eviction policy:
- * re-inserting on a hit moves a key to the end, so the first key is always
- * the least recently used.
+ * Keys are Glider strategy ids, which anybody can mint by writing a basket, so
+ * a plain `Map` is a leak whose size a user controls. `Map` keeps insertion
+ * order, which is the whole eviction policy.
  */
 export class Expiring<T> {
   private readonly entries = new Map<string, { until: number; value: T }>();

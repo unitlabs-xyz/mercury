@@ -29,6 +29,9 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   validate: async () => {
     throw new Error("unexpected validate");
   },
+  publishAllocation: async () => {
+    throw new Error("unexpected publishAllocation");
+  },
   create: async () => {
     throw new Error("unexpected create");
   },

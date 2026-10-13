@@ -421,10 +421,7 @@ export const Baskets = () => {
   }, [query]);
   const searching = term !== "";
   // The shelf is the curated catalogue; a basket somebody wrote is not on it.
-  const templates = useMemo(
-    () => (catalog.data ? shelfOf(catalog.data) : EMPTY_TEMPLATES),
-    [catalog.data],
-  );
+  const templates = useMemo(() => (catalog.data ? shelfOf(catalog.data) : EMPTY_TEMPLATES), [catalog.data]);
   const shelves = useMemo(() => curatedShelves(templates), [templates]);
   const tickers = useMemo(() => {
     /* A search reads every holding's company name, so it needs the whole catalog's instruments. */
