@@ -480,58 +480,43 @@ Then add to the exported types at the bottom of the file, beside `Wallet`:
 export type FundingIntent = typeof fundingIntents.$inferSelect;
 ```
 
-- [ ] **Step 2: Write the migration**
+- [ ] **Step 2: Generate the migration with drizzle-kit, do not hand-write it**
 
-```sql
--- services/api/drizzle/0018_funding_intent.sql
-CREATE TABLE IF NOT EXISTS "funding_intent" (
-  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-  "user_id" uuid NOT NULL,
-  "relay_request_id" text NOT NULL,
-  "deposit_address" text NOT NULL,
-  "origin_chain_id" integer NOT NULL,
-  "origin_currency" text NOT NULL,
-  "recipient_address" text NOT NULL,
-  "quoted_out_raw" text,
-  "status" text DEFAULT 'waiting' NOT NULL,
-  "in_tx_hash" text,
-  "out_tx_hash" text,
-  "fail_reason" text,
-  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-DO $$ BEGIN
- ALTER TABLE "funding_intent" ADD CONSTRAINT "funding_intent_user_id_user_id_fk"
-   FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;
-EXCEPTION
- WHEN duplicate_object THEN null;
-END $$;
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "funding_intent_user_created_idx" ON "funding_intent" ("user_id","created_at");
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "funding_intent_deposit_address_idx" ON "funding_intent" ("deposit_address");
---> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "funding_intent_address_in_tx_idx" ON "funding_intent" ("deposit_address","in_tx_hash");
+```bash
+cd services/api && DATABASE_URL="postgres://unused" npx drizzle-kit generate --name funding_intent
 ```
 
-- [ ] **Step 3: Register it in the journal**
+`generate` diffs the schema against the last snapshot and writes **three**
+things: `drizzle/0018_funding_intent.sql`, the journal entry, and
+`drizzle/meta/0018_snapshot.json`. Hand-writing the SQL produces the first two
+and silently omits the third — which `src/db/migrate.test.ts` asserts on, for
+the good reason that drizzle diffs the next migration against it. A missing
+snapshot makes the migration after this one wrong.
 
-Append to `entries` in `services/api/drizzle/meta/_journal.json`. **A migration that is not in the journal is silently never applied** — this step is not bookkeeping.
-
-```json
-{
-  "idx": 18,
-  "version": "7",
-  "when": 1792000000000,
-  "tag": "0018_funding_intent",
-  "breakpoints": true
-}
-```
+No live database is needed; the URL is read by `drizzle.config.ts` and unused by
+`generate`. Read the generated SQL before moving on — it should create the table,
+the foreign key and the three indexes, and nothing else. If it carries an
+unrelated change, the schema had drifted from the snapshots before you started
+and that is worth stopping for.
 
 - [ ] **Step 4: Write the failing store test**
 
-Read `services/api/src/db/testing.ts` first and follow the pattern the other store tests use.
+Read `services/api/src/db/testing.ts` first. The harness is `testDb()` — it
+returns a `Db` backed by PGlite with the real migrations applied — and there is
+no `withDb` wrapper. Each test boots its own database and inserts its own user:
+
+```ts
+const setup = async (privyUserId = "did:privy:funder") => {
+  const db = await testDb();
+  const [user] = await db.insert(users).values({ privyUserId }).returning();
+  return { db, store: createFundingStore(db), userId: user!.id };
+};
+```
+
+Follow `src/baskets/glider/tests/store.test.ts`, which does exactly this. Note
+what it buys: these tests run against the migration written in Step 2, so a
+passing suite proves the SQL and the journal entry work rather than asserting
+our belief about them.
 
 ```ts
 // services/api/src/funding/store.test.ts
