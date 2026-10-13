@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
 import { Link } from "react-router-dom";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
-import { useWallets } from "@privy-io/react-auth/solana";
+import { useEmbeddedWallet } from "../auth/embedded";
 import { basketEnrollmentEnabled, useBasketTemplates, useOwnedBasketPortfolios } from "../api/baskets";
 import { useInstruments, type Instrument } from "../market/hooks";
 import { GlideTable, SearchField } from "../ui/ds";
@@ -414,7 +414,7 @@ const StrategyTable = ({
 export const Baskets = () => {
   const { ready, authenticated, login } = usePrivy();
   const { identityToken } = useIdentityToken();
-  const { wallets } = useWallets();
+  const { address } = useEmbeddedWallet();
   const catalog = useBasketTemplates();
   const owned = useOwnedBasketPortfolios();
   const [selected, setSelected] = useState<ManagedBasketTag | null>(null);
@@ -457,7 +457,7 @@ export const Baskets = () => {
         : visibleStrategies(templates, selected, showAll),
     [templates, selected, showAll, searching, term, companyNames],
   );
-  const walletReady = Boolean(wallets[0]?.address);
+  const walletReady = Boolean(address);
   const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null) && walletReady;
   const seeAll = () => {
     setSelected(null);

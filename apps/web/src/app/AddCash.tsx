@@ -5,6 +5,10 @@ import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { StatusChip } from "../ui/ds";
 import { ChevronDown } from "../ui/icons";
 import { DepositAddress } from "./Receive";
+import { FundFromWallet } from "./money/FundFromWallet";
+import { FundFromChain } from "./money/FundFromChain";
+import { useFundingWalletAvailable } from "../auth/embedded";
+import { useFundSources } from "../api/fund-sources";
 
 type Method = {
   key: string;
@@ -140,7 +144,23 @@ const SolanaGlyph = () => {
   );
 };
 
+/** A wallet, in the line-icon set the other methods use. */
+const WalletGlyph = () => (
+  <Glyph>
+    <rect x="2" y="4" width="12" height="8.5" rx="1.5" />
+    <path d="M11 8.25h1.5" />
+  </Glyph>
+);
+
 const METHODS: readonly Method[] = [
+  {
+    key: "wallet",
+    title: "From your wallet",
+    sub: "Phantom, Backpack or Solflare",
+    figure: "Instant",
+    note: "No fee",
+    icon: <WalletGlyph />,
+  },
   {
     key: "solana",
     title: "USDC on Solana",
@@ -178,11 +198,10 @@ const METHODS: readonly Method[] = [
   },
   {
     key: "networks",
-    title: "USDC on another network",
-    sub: "Ethereum, Base or Arbitrum, moved to Solana for you",
+    title: "From another chain",
+    sub: "Any token on 60+ chains, swapped to USDC for you",
     figure: "Minutes",
-    note: "Coming soon",
-    soon: true,
+    note: "Network fee",
     icon: (
       <Glyph>
         <circle cx="5" cy="8" r="2.5" />
@@ -203,7 +222,29 @@ const SOON = METHODS.filter((m) => m.soon);
  * them, the details of the chosen way (for Solana, the address and its code).
  */
 export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
-  const [pick, setPick] = useState("solana");
+  const hasWallet = useFundingWalletAvailable();
+  /*
+   * Whether the server has Relay configured at all. The routes are not mounted
+   * without it, so the query fails rather than answering empty — and the row
+   * is hidden rather than disabled, for the reason this file already gives
+   * about its greyed-out rows: a control that cannot be taken invites the
+   * click that does nothing.
+   */
+  const chains = useFundSources();
+  const hasChains = chains.isSuccess;
+  const [pick, setPick] = useState("wallet");
+  /*
+   * The wallet row is hidden rather than disabled where no wallet is
+   * installed, so a browser without one sees exactly the panel it saw before.
+   * `chosen` is what that costs: the default points at the better method, and
+   * falls back on its own rather than needing an effect to correct it.
+   *
+   * Injected wallets register at page load and this panel opens on a click
+   * long after, so in practice the fallback resolves before anybody sees it.
+   */
+  const live = LIVE.filter((m) => (m.key !== "wallet" || hasWallet) && (m.key !== "networks" || hasChains));
+  const unavailable = (key: string) => (key === "wallet" && !hasWallet) || (key === "networks" && !hasChains);
+  const chosen = unavailable(pick) ? "solana" : pick;
   return (
     <SidePanel open={open} onClose={onClose} labelledBy="add-cash-heading">
       <PanelHeader
@@ -218,8 +259,8 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
           aria-label="How to add cash"
           className="flex flex-col gap-1 rounded-lg bg-ds-panel p-1"
         >
-          {LIVE.map((m) => {
-            const on = pick === m.key;
+          {live.map((m) => {
+            const on = chosen === m.key;
             return (
               <button
                 key={m.key}
@@ -239,7 +280,19 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
           <OtherMethods methods={SOON} />
         </div>
 
-        {pick === "solana" && (
+        {chosen === "wallet" && (
+          <div className="mt-6">
+            <FundFromWallet />
+          </div>
+        )}
+
+        {chosen === "networks" && (
+          <div className="mt-6">
+            <FundFromChain />
+          </div>
+        )}
+
+        {chosen === "solana" && (
           <div className="mt-6">
             {/* Not "Send USDC to this address": the note directly beneath it
                 names the token and the network, and says what happens to

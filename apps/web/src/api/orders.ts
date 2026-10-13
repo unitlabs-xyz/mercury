@@ -1,4 +1,5 @@
-import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
+import { useSignTransaction } from "@privy-io/react-auth/solana";
+import { useEmbeddedWallet } from "../auth/embedded";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { placeOrder, type OrderIntent, type OrderResult } from "@mercury/view";
 import { apiFetch } from "./client";
@@ -36,12 +37,11 @@ const confirmSent = (sent: SentOrder) =>
 /** `placeOrder` with this app's plumbing behind it, and a step to render. */
 export const useOrderAction = () => {
   const qc = useQueryClient();
-  const { wallets } = useWallets();
+  const { wallet } = useEmbeddedWallet();
   const { signTransaction } = useSignTransaction();
 
   const mutation = useMutation<OrderResult, Error, OrderIntent>({
     mutationFn: async (intent) => {
-      const wallet = wallets[0];
       if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
       return await placeOrder(
         {
@@ -76,7 +76,7 @@ export const useOrderAction = () => {
    * "connect a wallet", when the wallet is ours and is simply not ready yet.
    * The sheet waits for this instead.
    */
-  const walletReady = wallets[0] !== undefined;
+  const walletReady = wallet !== undefined;
 
   /* Orders whose confirm ran out of attempts, or whose tab reloaded mid-confirm. */
   usePendingConfirms<SentOrder>(KIND, confirmSent, {

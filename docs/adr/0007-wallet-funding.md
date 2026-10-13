@@ -47,3 +47,88 @@ offered last in the interface, not first.
 
 **Work required.** Configuration in the Privy dashboard, the `useFiatOnramp` hook, and a funding
 screen that presents the three options in order of speed. Roughly a day.
+
+---
+
+## Amendment · 12 October 2026
+
+Two corrections and one addition, after reading Privy's current documentation
+and building the first path.
+
+### Addition: connect a wallet, and build the transfer ourselves
+
+**Decision 3 above is split in two.** "Plain receive" stays — the address and a
+QR code. Beside it, a person can now attach a wallet they already hold and push
+USDC in from it, with the transaction built in the browser and signed by that
+wallet. Nothing of Privy's funding machinery is involved.
+
+This was not what the original decision assumed, because the original decision
+assumed Privy's crypto path was a connect-and-sign flow. It is not: Privy
+generates an intermediate deposit address and the user goes to their wallet and
+sends to it, which is the same job as "plain receive" with an extra account in
+the middle. A connected wallet is strictly better for Solana-native USDC —
+one signature, no copying, nothing to switch apps for.
+
+It is also better than the address for a reason the address cannot fix. People
+sent SOL to it, which is why `useUsdcAck` now makes somebody agree to a rule
+before it will show them their address at all. A transaction we build cannot
+have the wrong mint or the wrong network, because it is not the sender who
+chooses them.
+
+**This does not contradict [ADR 0003](0003-custody.md).** That decision removed
+the external wallet as _the account_. Custody is unchanged: the embedded wallet
+is still the account, and an attached wallet signs one transfer and leaves. It
+holds nothing of ours, and nothing of ours is held for it.
+
+**It did cost one thing worth recording.** Seventeen places read
+`useWallets().wallets[0]`, six of them to pick the key that signs a buy, sell,
+send or loan. That was safe only because external wallets were switched off, so
+there has only ever been one connected wallet. `useEmbeddedWallet` now names the
+wallet instead of indexing for it, and fails closed. Any future decision to let
+a wallet connect for any reason inherits that requirement.
+
+### Correction: "no fees or minimums charged to us" is not supportable
+
+The original text says card purchases carry no fees or minimums charged to us.
+Privy's card-onramp and deposit-modal pages no longer state fees at all; both
+now say to contact sales. Two costs the original decision did not account for:
+
+- **Privy takes up to 0.25% of the input amount on any swap**, included in the
+  rate, plus the underlying DEX protocol fee and, cross-chain, a bridge relayer
+  fee. That applies to decision 1 — the universal deposit address — which is the
+  one called "the important one".
+- **Crypto deposits require app-pays gas sponsorship**, charged to our gas
+  credits. Privy's own docs list its absence as an error case. So the
+  destination-side gas for every crypto deposit is ours, not the user's.
+
+The Solana-native path added above has neither, because a same-asset same-chain
+transfer is not a swap and no Privy machinery touches it.
+
+### Correction: the hook named in "Work required" is twice deprecated
+
+`useFiatOnramp` is now `useFundWallet` → `useAddFunds` → `useDepositFunds`, and
+the two current hooks are marked `@experimental`. That churn, not the fee, is
+the reason to keep the path that depends on none of them.
+
+---
+
+## Amendment · 13 October 2026
+
+**Decision 1 is superseded by [ADR 0014](0014-relay-funding.md).** The universal
+deposit address stays — it was the right decision and is still called the
+important one — but it is Relay's rather than Privy's, and the quote behind it is
+minted by our server so that every deposit has a record before the user sees an
+address.
+
+The 12 October correction above is why. Privy's crypto path charges up to 0.25%
+of the input, puts the destination gas on our gas credits, and is reached through
+a hook renamed three times and currently `@experimental`. A measured Relay quote
+on 13 October — 0.01 ETH on Base into USDC on Solana — came back at 0.34% all-in
+across 61 chains with nothing charged to us, and with a signed webhook that is
+the record Privy's path cannot give.
+
+Decision 2 (the card onramp) and decision 3 (plain receive, and the connected
+Solana wallet added on 12 October) are unchanged. ADR 0014 also moves the
+funding connector off Privy's, which retires the `isPrivyWallet` check the
+12 October amendment introduced — the requirement it recorded is met more
+strongly by two separate systems than by naming a wallet inside one list.

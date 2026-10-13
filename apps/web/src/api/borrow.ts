@@ -1,4 +1,5 @@
-import { useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
+import { useSignTransaction } from "@privy-io/react-auth/solana";
+import { useEmbeddedWallet } from "../auth/embedded";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
@@ -39,12 +40,11 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
  */
 export const useBorrowAction = () => {
   const qc = useQueryClient();
-  const { wallets } = useWallets();
+  const { wallet } = useEmbeddedWallet();
   const { signTransaction } = useSignTransaction();
 
   const mutation = useMutation({
     mutationFn: async (intent: BorrowIntent) => {
-      const wallet = wallets[0];
       if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
       const built = await apiFetch<{ transactions: string[]; firstTime: boolean }>(
         "/v1/borrow/transactions",
@@ -109,7 +109,7 @@ export const useBorrowAction = () => {
 
   /* Same race the buy sheet waits out: Privy fills the wallet list a beat
      after load, and an empty list there is not a missing wallet. */
-  const walletReady = wallets[0] !== undefined;
+  const walletReady = wallet !== undefined;
 
   /* Loans whose confirm the node was too slow to answer. Nothing else records one. */
   usePendingConfirms<SentLoan>(KIND, confirmSentLoan, {

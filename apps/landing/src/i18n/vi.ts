@@ -135,7 +135,8 @@ export const vi: Dict = {
       { label: "Gộp chung với người khác", value: "Không bao giờ" },
     ],
     leave: { label: "Khi rời đi", value: "Nhận cổ phiếu hoặc tiền mặt" },
-    howNote: "{n} rổ đang hoạt động, từ AI đến vàng, cùng các chiến lược lấy cảm hứng từ những nhà đầu tư nổi tiếng.",
+    howNote:
+      "{n} rổ đang hoạt động, từ AI đến vàng, cùng các chiến lược lấy cảm hứng từ những nhà đầu tư nổi tiếng.",
   },
 
   custody: {

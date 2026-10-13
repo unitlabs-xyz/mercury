@@ -1,0 +1,27 @@
+{
+  "name": "@mercury/keys",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./evm": "./src/evm.ts",
+    "./svm": "./src/svm.ts",
+    "./bvm": "./src/bvm.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.0",
+    "@noble/hashes": "^1.8.0",
+    "@scure/btc-signer": "^1.5.0",
+    "@solana/kit": "2.3.0"
+  },
+  "devDependencies": {
+    "@mercury/tsconfig": "workspace:*",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
