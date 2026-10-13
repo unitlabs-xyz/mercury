@@ -1,3 +1,5 @@
+import { customAlphabet } from "nanoid";
+import slugify from "slugify";
 import type {
   BasketExitMessage,
   BasketExitMode,
@@ -38,6 +40,37 @@ export const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
 /** The id a strategy holds an asset by, derived so the mint is written down once. */
 export const assetIdFor = (mint: string): string => `${SOLANA}/spl:${mint}`;
+
+/** A basket somebody wrote for themselves. Private to its author. */
+export interface CustomBasket {
+  readonly id: string;
+  readonly userId: string;
+  readonly slug: string;
+  readonly name: string;
+  readonly description: string;
+  readonly assets: readonly { assetId: string; ticker: string; weightBps: number }[];
+  /** Null while a draft: the row is written before Glider is called. */
+  readonly providerId: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+/** No i/l/o/u: the slug goes in a URL people read aloud and retype. */
+const suffix = customAlphabet("0123456789abcdefghjkmnpqrstvwxyz", 8);
+
+const STEM_MAX = 40;
+
+export const randomSuffix = (): string => suffix();
+
+/**
+ * Custom and curated baskets share one slug namespace, because every basket
+ * route resolves `/:slug` through a single lookup. The suffix is what stops a
+ * basket named "Magnificent Seven" addressing the curated one.
+ */
+export const slugFor = (name: string, suffix: string): string => {
+  const stem = slugify(name, { lower: true, strict: true, trim: true }).slice(0, STEM_MAX).replace(/-+$/, "");
+  return `${stem || "basket"}-${suffix}`;
+};
 
 /** Catalog metadata stays with the definition so sync and discovery read one source. */
 export interface BasketTemplate extends BasketDefinition {

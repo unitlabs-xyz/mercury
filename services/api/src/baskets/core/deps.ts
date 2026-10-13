@@ -12,6 +12,7 @@ import type {
 import type {
   BasketAsset,
   BasketDefinition,
+  CustomBasket,
   BasketTemplate,
   ProviderBasket,
   StrategyPerformance,
@@ -133,6 +134,27 @@ export interface BasketAssetStore {
    * rule, and it lives in the service.
    */
   replace(assets: readonly BasketAsset[]): Promise<number>;
+}
+
+/** Baskets people wrote for themselves. Every read is owner-scoped: that is the privacy. */
+export interface CustomBasketStore {
+  /** Everything this owner has, newest first, drafts included. */
+  mine(userId: string): Promise<readonly CustomBasket[]>;
+  /** Null when the slug is unknown, deleted, or somebody else's. */
+  bySlug(userId: string, slug: string): Promise<CustomBasket | null>;
+  /** Throws on a slug already taken; the unique index decides. */
+  draft(input: {
+    userId: string;
+    slug: string;
+    name: string;
+    description: string;
+    assets: CustomBasket["assets"];
+  }): Promise<CustomBasket>;
+  attachStrategy(id: string, providerId: string): Promise<void>;
+  reviseAssets(id: string, assets: CustomBasket["assets"]): Promise<void>;
+  rename(id: string, name: string, description: string): Promise<void>;
+  /** Soft: Glider cannot delete a strategy, so the slug stays spent. */
+  remove(id: string): Promise<void>;
 }
 
 export interface BasketStore {

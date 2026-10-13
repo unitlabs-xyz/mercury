@@ -626,3 +626,28 @@ export const basketAssets = pgTable(
 );
 
 export type BasketAsset = typeof basketAssets.$inferSelect;
+
+/** A basket somebody wrote for themselves. Slugs share a namespace with the curated catalogue; see `slugFor`. */
+export const customBaskets = pgTable(
+  "custom_basket",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    /** `[{ assetId, ticker, weightBps }]`, summing to 10000. */
+    assets: jsonb("assets").notNull(),
+    /** Null while a draft: written before Glider is called, which is not transactional. */
+    gliderStrategyId: text("glider_strategy_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set rather than deleted: Glider has no way to remove a strategy. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("custom_basket_slug_idx").on(t.slug), index("custom_basket_user_idx").on(t.userId)],
+);
+
+export type CustomBasketRow = typeof customBaskets.$inferSelect;

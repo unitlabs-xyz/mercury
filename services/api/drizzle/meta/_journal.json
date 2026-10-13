@@ -134,6 +134,13 @@
       "when": 1791888829595,
       "tag": "0018_basket_asset",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791891622775,
+      "tag": "0019_custom_basket",
+      "breakpoints": true
     }
   ]
 }
