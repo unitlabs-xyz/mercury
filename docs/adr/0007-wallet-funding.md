@@ -109,3 +109,26 @@ transfer is not a swap and no Privy machinery touches it.
 `useFiatOnramp` is now `useFundWallet` → `useAddFunds` → `useDepositFunds`, and
 the two current hooks are marked `@experimental`. That churn, not the fee, is
 the reason to keep the path that depends on none of them.
+
+---
+
+## Amendment · 13 October 2026
+
+**Decision 1 is superseded by [ADR 0014](0014-relay-funding.md).** The universal
+deposit address stays — it was the right decision and is still called the
+important one — but it is Relay's rather than Privy's, and the quote behind it is
+minted by our server so that every deposit has a record before the user sees an
+address.
+
+The 12 October correction above is why. Privy's crypto path charges up to 0.25%
+of the input, puts the destination gas on our gas credits, and is reached through
+a hook renamed three times and currently `@experimental`. A measured Relay quote
+on 13 October — 0.01 ETH on Base into USDC on Solana — came back at 0.34% all-in
+across 61 chains with nothing charged to us, and with a signed webhook that is
+the record Privy's path cannot give.
+
+Decision 2 (the card onramp) and decision 3 (plain receive, and the connected
+Solana wallet added on 12 October) are unchanged. ADR 0014 also moves the
+funding connector off Privy's, which retires the `isPrivyWallet` check the
+12 October amendment introduced — the requirement it recorded is met more
+strongly by two separate systems than by naming a wallet inside one list.
