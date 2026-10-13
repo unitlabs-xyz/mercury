@@ -10,6 +10,7 @@ import type {
   SubmittedBasketExit,
 } from "@mercury/types";
 import type {
+  BasketAsset,
   BasketDefinition,
   BasketTemplate,
   ProviderBasket,
@@ -94,6 +95,44 @@ export class BasketRebalanceCooldownError extends Error {
   constructor(readonly retryAfterSeconds: number | null) {
     super("Glider rebalance cooldown is active.");
   }
+}
+
+/**
+ * Where the list of holdable assets comes from.
+ *
+ * Its own port rather than another method on `BasketProvider`. That port is
+ * Glider's documented v2 REST API, authenticated with our key; this is the
+ * unversioned tRPC route its own front end browses with, public and
+ * undocumented. Two different contracts with two different stability
+ * guarantees, and keeping them apart means the risky one can be swapped,
+ * stubbed or dropped without touching the path that moves money.
+ */
+export interface BasketAssetSource {
+  list(): Promise<readonly BasketAsset[]>;
+}
+
+/**
+ * Where that list is kept between refreshes.
+ *
+ * Apart from `BasketStore`, which holds enrollment intents, exit nonces and
+ * funding records — a user's in-flight business. This is a catalogue: the same
+ * rows for everybody, replaced wholesale once a day. Nothing that reads one
+ * needs the other, and a store faked for an enrollment test should not have to
+ * pretend to hold an asset list.
+ */
+export interface BasketAssetStore {
+  /** The catalogue, in ticker order. */
+  all(): Promise<readonly BasketAsset[]>;
+  /** How many are on offer, for deciding whether a fresh list can be believed. */
+  count(): Promise<number>;
+  /**
+   * Swap the catalogue for this one, dropping whatever is not in it.
+   *
+   * All of it or none: a picker half-written is worse than one a day old.
+   * Whether the new list is worth believing is not decided here — that is a
+   * rule, and it lives in the service.
+   */
+  replace(assets: readonly BasketAsset[]): Promise<number>;
 }
 
 export interface BasketStore {

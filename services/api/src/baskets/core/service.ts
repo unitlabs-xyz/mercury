@@ -12,13 +12,18 @@ import {
   BasketFundingPreflightError,
   BasketExitUnsupportedError,
   BasketRebalanceCooldownError,
+  type BasketAssetSource,
+  type BasketAssetStore,
   type BasketFunding,
   type BasketProvider,
   type BasketStore,
 } from "./deps.js";
+import { assetIdFor } from "./primitives.js";
 import type {
+  AssetSyncResult,
   BasketDefinition,
   ExitIntentPayload,
+  PickableAsset,
   ProviderBasket,
   StrategyPerformance,
   SyncResult,
@@ -36,6 +41,9 @@ export class BasketEnrollmentError extends Error {
     super(message);
   }
 }
+
+/** A catalogue refresh offering less than this much of what we hold is not believed. */
+const ASSET_SHRINK_FLOOR = 0.8;
 
 const SOLANA_ACCOUNT = /^solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SOLANA_ASSET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:";
@@ -91,6 +99,9 @@ export class BasketService {
     private readonly deps: {
       provider?: BasketProvider;
       store: BasketStore;
+      /** Optional: without it the catalogue is whatever was last synced. */
+      assetSource?: BasketAssetSource;
+      assetStore?: BasketAssetStore;
       funding?: BasketFunding;
       history?: ChainHistory;
     },
@@ -872,6 +883,53 @@ export class BasketService {
       this.performanceCache.set(id, { until: now + 30_000, value: null });
       return null;
     }
+  }
+
+  /**
+   * What a custom basket may hold, as the picker reads it.
+   *
+   * The whole catalogue in one answer — a few hundred rows that change once a
+   * day — so typing filters a list already in the browser rather than putting
+   * a request, and an undocumented third-party endpoint, behind every
+   * keystroke.
+   */
+  private assetStore(): BasketAssetStore {
+    if (this.deps.assetStore === undefined) throw new Error("Basket asset store is not configured");
+    return this.deps.assetStore;
+  }
+
+  async pickableAssets(): Promise<readonly PickableAsset[]> {
+    const assets = await this.assetStore().all();
+    return assets.map(({ ticker, name, mint, logoUrl }) => ({
+      ticker,
+      name,
+      assetId: assetIdFor(mint),
+      logoUrl,
+    }));
+  }
+
+  /**
+   * Refresh the catalogue, unless the answer looks like an outage.
+   *
+   * A pass removes assets as well as adding them, because a mint Ondo delists
+   * has to stop being offered. That is what makes a short answer dangerous: a
+   * half-failed page would empty the picker underneath somebody mid-way
+   * through choosing. Below four fifths of what we already hold the previous
+   * catalogue stands, and the caller is told it held rather than being left to
+   * infer it from a count.
+   *
+   * The floor is a judgement about trust, not about storage, which is why it
+   * is here and not in the store.
+   */
+  async syncAssets(): Promise<AssetSyncResult> {
+    if (this.deps.assetSource === undefined) throw new Error("Basket asset source is not configured");
+    const store = this.assetStore();
+    const offered = await this.deps.assetSource.list();
+    const held = await store.count();
+    if (held > 0 && offered.length < held * ASSET_SHRINK_FLOOR) {
+      return { written: 0, offered: offered.length, held: true };
+    }
+    return { written: await store.replace(offered), offered: offered.length, held: false };
   }
 
   async sync(): Promise<SyncResult> {

@@ -24,6 +24,7 @@ import { portfolioRoutes } from "./routes/portfolio.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { basketRoutes } from "./routes/basket.js";
+import { customBasketRoutes } from "./routes/custom-basket.js";
 
 const fail = (code: ErrorCode | "not_implemented", message: string, details?: unknown) => ({
   error: { code, message, ...(details === undefined ? {} : { details }) },
@@ -111,6 +112,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", portfolioRoutes(read.portfolio));
   app.route("/", moneyRoutes(read.money));
   app.route("/", activityRoutes(read.activity));
+  app.route("/", customBasketRoutes(read.customBaskets));
   app.route("/", borrowRoutes(read.borrow));
   app.route("/", sendRoutes(read.send));
 

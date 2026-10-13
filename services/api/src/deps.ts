@@ -42,6 +42,9 @@ import { KaminoLending } from "./lending/kamino.js";
 import { debtFrom } from "./lending/debt.js";
 import { recordLoanEvents } from "./lending/record.js";
 import { pledgedByMint, withPledged } from "./lending/pledged.js";
+import type { CustomBasketDeps } from "./routes/custom-basket.js";
+import { PgBasketAssetStore } from "./baskets/glider/asset-store.js";
+import { GliderAssets } from "./baskets/glider/assets.js";
 import type { LendingSource } from "./lending/ports.js";
 import type { InstrumentDeps } from "./routes/instruments.js";
 import type { MoneyDeps } from "./routes/money.js";
@@ -329,6 +332,7 @@ export interface ReadDeps {
   readonly portfolio: PortfolioDeps;
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
+  readonly customBaskets: CustomBasketDeps;
   readonly orders: OrderStore;
   readonly waitlist: WaitlistDeps;
   readonly fills: FillDeps;
@@ -374,16 +378,20 @@ export function buildReadDeps(
 ): ReadDeps {
   const basketStore = new JsonBasketStore(config.databaseUrl, undefined, db);
   const baskets = basketValueReader(deps.basketProvider, basketStore);
+  const basketTemplates = new BasketService({
+    store: basketStore,
+    assetSource: new GliderAssets(),
+    assetStore: new PgBasketAssetStore(db),
+    funding: new SolanaBasketFunding(
+      config.solanaRpcUrl,
+      relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
+    ),
+    history: deps.history,
+    ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
+  });
   return {
-    basketTemplates: new BasketService({
-      store: basketStore,
-      funding: new SolanaBasketFunding(
-        config.solanaRpcUrl,
-        relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
-      ),
-      history: deps.history,
-      ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
-    }),
+    basketTemplates,
+    customBaskets: { assets: () => basketTemplates.pickableAssets() },
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),

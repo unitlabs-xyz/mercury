@@ -14,6 +14,31 @@ export interface BasketDefinition {
   schedule: { type: "interval"; frequency: "daily" };
 }
 
+/**
+ * One tokenised equity a basket may be built from.
+ *
+ * Narrower than the universe this product trades. Glider's registry classifies
+ * xStocks as crypto and will not hold it inside a strategy, so this is Ondo's
+ * equities and nothing else — a distinction invisible on the Invest page and
+ * decisive here.
+ */
+export interface BasketAsset {
+  /** The Solana mint, and the natural key: Glider is addressed by it. */
+  readonly mint: string;
+  /** The company, as somebody searching would type it: NVDA, not NVDAon. */
+  readonly ticker: string;
+  readonly name: string;
+  readonly symbol: string;
+  readonly decimals: number;
+  readonly logoUrl: string | null;
+}
+
+/** Solana, in CAIP-2, as every `assetId` in a definition is written. */
+export const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+
+/** The id a strategy holds an asset by, derived so the mint is written down once. */
+export const assetIdFor = (mint: string): string => `${SOLANA}/spl:${mint}`;
+
 /** Catalog metadata stays with the definition so sync and discovery read one source. */
 export interface BasketTemplate extends BasketDefinition {
   sourceStrategyId: string;
@@ -94,6 +119,22 @@ export interface ExitIntent {
   operationId: string | null;
   submittedAt: Date | null;
   createdAt: Date;
+}
+
+/** One asset as the picker shows it: the ticker, and the id a strategy holds it by. */
+export interface PickableAsset {
+  readonly ticker: string;
+  readonly name: string;
+  readonly assetId: string;
+  readonly logoUrl: string | null;
+}
+
+/** What a catalogue refresh did, including deciding not to. */
+export interface AssetSyncResult {
+  readonly written: number;
+  readonly offered: number;
+  /** True when the answer was too thin to believe and the catalogue stands. */
+  readonly held: boolean;
 }
 
 export interface SyncResult {

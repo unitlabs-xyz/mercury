@@ -596,3 +596,33 @@ export const loanAlerts = pgTable("loan_alert", {
   notifiedAt: timestamp("notified_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type LoanAlert = typeof loanAlerts.$inferSelect;
+
+/**
+ * What a custom basket may hold.
+ *
+ * Narrower than `token`, which is everything this product trades. Glider's
+ * registry classifies xStocks as crypto and refuses it inside a strategy, so
+ * the set a basket can be built from is Ondo's tokenised equities and nothing
+ * else. Conflating the two would let the picker offer a stock the basket
+ * cannot actually hold.
+ *
+ * Filled nightly from Glider, which is the only place the list exists — see
+ * `baskets/glider/assets.ts`.
+ */
+export const basketAssets = pgTable(
+  "basket_asset",
+  {
+    /** The Solana mint, and the natural key: Glider is addressed by it. */
+    mint: text("mint").primaryKey(),
+    /** The company, as somebody searching would type it: NVDA, not NVDAon. */
+    ticker: text("ticker").notNull(),
+    name: text("name").notNull(),
+    symbol: text("symbol").notNull(),
+    decimals: integer("decimals").notNull(),
+    logoUrl: text("logo_url"),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("basket_asset_ticker_idx").on(t.ticker)],
+);
+
+export type BasketAsset = typeof basketAssets.$inferSelect;
