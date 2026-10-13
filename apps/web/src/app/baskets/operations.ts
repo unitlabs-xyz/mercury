@@ -1,4 +1,4 @@
-import type { BasketExitMode, ManagedBasketOperation, ManagedBasketPortfolioSummary } from "@mercury/types";
+import type { BasketExitMode, BasketOperation, BasketPortfolioSummary } from "@mercury/types";
 
 /*
  * The rebalances and withdrawals a person started in this browser session.
@@ -33,10 +33,10 @@ export const readPortfolioOperations = (portfolioId: string) => ({
 /** One operation a person started this session, against the basket it belongs to. */
 export type BasketOperationRow = {
   key: string;
-  portfolio: ManagedBasketPortfolioSummary;
+  portfolio: BasketPortfolioSummary;
   name: string;
   label: string;
-  state: ManagedBasketOperation["state"] | undefined;
+  state: BasketOperation["state"] | undefined;
   unavailable: boolean;
   occurredAt: string | null;
 };
@@ -44,7 +44,7 @@ export type BasketOperationRow = {
 const ACTIVE: ReadonlySet<string> = new Set(["accepted", "running", "retrying", "awaiting_user"]);
 
 /** A state Glider has not reported yet is still work in flight, not a finished run. */
-const isActive = (state: ManagedBasketOperation["state"] | undefined) =>
+const isActive = (state: BasketOperation["state"] | undefined) =>
   state === undefined || ACTIVE.has(state);
 
 /* Work in flight first, then the most recent result, so a finished run is still confirmable. */

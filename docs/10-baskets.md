@@ -57,19 +57,21 @@ from historical prices. It is never presented as realized or user performance.
 
 ## The lifecycle
 
-| Step      | Route                                                              | What happens                                                                                                                                     |
-| --------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Discover  | `GET /v1/basket-templates`, `/:slug`, `/:slug/insights`            | Public. Strategy, weights, modeled performance, sector breakdown, Glider's swap fee                                                              |
-| Enroll    | `POST /:slug/enrollment/prepare`, then `/:slug/enrollment`         | Glider issues a challenge; the user signs a message (or a transaction on the sub-account path). Creates the portfolio. No USDC moves             |
-| Fund      | `POST /:slug/funding/prepare`, then `/:slug/funding/confirm`       | Server builds an owner-paid USDC transfer to the smart account and simulates it; the user signs; the server verifies the debit equals the credit |
-| Invest    | Glider                                                             | Glider's agent buys toward the target weights at the next rebalance. Until then, USDC can sit uninvested, and the product says so                |
-| Rebalance | `POST /:slug/rebalance`                                            | Manual trigger on top of the daily schedule. Glider enforces a cooldown, surfaced as `rebalance_cooldown`                                        |
-| Exit      | `POST /:slug/exit/:mode/prepare`, then `/:slug/exit/:mode`         | `in_kind` returns the assets themselves; `liquidate_usdc` sells to USDC. The user signs; the recipient is always the owner. Dust can remain      |
-| Track     | `GET /:slug/portfolio`, `/:slug/activity`, `/v1/basket-portfolios` | Live positions and schedule from Glider; Mercury's own record of enrollments, fundings, rebalances and exits                                     |
+| Step      | Route                                                                   | What happens                                                                                                                                     |
+| --------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Discover  | `GET /v1/baskets`, `/:slug`, `/:slug/insights`                          | The curated shelf plus the caller's own baskets, each marked `source`. Weights, modeled performance, sector breakdown, Glider's swap fee          |
+| Enroll    | `POST /:slug/enrollment/prepare`, then `/:slug/enrollment/submit`       | Glider issues a challenge; the user signs a message (or a transaction on the sub-account path). Creates the portfolio. No USDC moves             |
+| Fund      | `POST /:slug/funding/prepare`, then `/:slug/funding/confirm`            | Server builds an owner-paid USDC transfer to the smart account and simulates it; the user signs; the server verifies the debit equals the credit |
+| Invest    | Glider                                                                  | Glider's agent buys toward the target weights at the next rebalance. Until then, USDC can sit uninvested, and the product says so                |
+| Rebalance | `POST /:slug/rebalance`                                                 | Manual trigger on top of the daily schedule. Glider enforces a cooldown, surfaced as `rebalance_cooldown`                                        |
+| Exit      | `POST /:slug/exit/:mode/prepare`, then `/:slug/exit/:mode/submit`       | `in_kind` returns the assets themselves; `liquidate_usdc` sells to USDC. The user signs; the recipient is always the owner. Dust can remain      |
+| Track     | `GET /:slug/portfolio`, `/:slug/portfolio/positions`, `/:slug/activity` | Whether this wallet is in; then the live snapshot from Glider; then Mercury's own record of enrollments, fundings, rebalances and exits          |
 
-All routes are under `/v1/basket-templates` unless shown. Write routes need a signed-in wallet.
-Without `GLIDER_API_KEY`, discovery still works and provider-backed routes return
-`provider_unavailable`.
+All routes are under `/v1/baskets` unless shown, and all of them need a signed-in wallet.
+`GET /v1/basket-portfolios` lists every basket portfolio the wallet owns, and
+`GET /v1/basket-assets` is the universe a basket may be written from. Every two-phase write is
+`prepare` then a named second step, never a bare `POST` to the noun. Without `GLIDER_API_KEY`,
+discovery still works and provider-backed routes return `provider_unavailable`.
 
 ## What Mercury stores
 

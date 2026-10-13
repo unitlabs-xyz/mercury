@@ -10,11 +10,11 @@
  */
 import type {
   BasketExitAsset,
-  ManagedBasketOperation,
-  ManagedBasketPortfolioSnapshot,
-  ManagedBasketPortfolio,
-  ManagedBasketTag,
-  ManagedBasketTemplate,
+  BasketOperation,
+  BasketPortfolioSnapshot,
+  BasketPortfolio,
+  BasketTag,
+  Basket,
   PreparedBasketEnrollment,
   PreparedBasketFunding,
 } from "@mercury/types";
@@ -30,7 +30,7 @@ export const solanaAccountId = (address: string) => `solana:5eykt4UsFv8P8NJdTREp
 /** "Mercury Solana – AI Leaders" → "AI Leaders". */
 export const displayBasketName = (name: string) => name.replace(/^Mercury Solana\s*[-–]\s*/, "");
 
-export const BASKET_THEMES: readonly { tag: ManagedBasketTag; title: string; description: string }[] = [
+export const BASKET_THEMES: readonly { tag: BasketTag; title: string; description: string }[] = [
   {
     tag: "theme:technology",
     title: "Technology",
@@ -52,17 +52,21 @@ export const BASKET_INVESTORS = [
   "leopold-aschenbrenner-tracker",
 ] as const;
 
-export const themeTitle = (tag: ManagedBasketTag) =>
+export const themeTitle = (tag: BasketTag) =>
   BASKET_THEMES.find((t) => t.tag === tag)?.title ?? tag.replace("theme:", "");
 
-/** What a template's status means to someone deciding whether to enroll. */
-export const basketStatusLabel = (status: ManagedBasketTemplate["status"]) =>
-  status === "enabled" ? "Available" : status === "candidate" ? "Enrollment pilot" : "Preview";
+/** The shelf, which is curated only: a basket somebody wrote is private to them. */
+export type ShelfBasket = Extract<Basket, { source: "curated" }>;
+export type OwnBasket = Extract<Basket, { source: "mine" }>;
+export const shelfOf = (baskets: readonly Basket[]): readonly ShelfBasket[] =>
+  baskets.filter((item): item is ShelfBasket => item.source === "curated");
+export const ownedBy = (baskets: readonly Basket[]): readonly OwnBasket[] =>
+  baskets.filter((item): item is OwnBasket => item.source === "mine");
 
 /** Featured by default; a theme narrows it; "all" widens it. */
 export const visibleStrategies = (
-  templates: readonly ManagedBasketTemplate[],
-  selected: ManagedBasketTag | null,
+  templates: readonly ShelfBasket[],
+  selected: BasketTag | null,
   showAll: boolean,
 ) =>
   selected
@@ -107,7 +111,7 @@ export const modeledSeries = (points: readonly { date: string; percentChange: st
     .filter((point) => Number.isFinite(point.value));
 };
 
-type Performance = ManagedBasketTemplate["performance"];
+type Performance = Basket["performance"];
 type ModeledWindow = NonNullable<Performance>["windows"][number]["window"];
 
 /**
@@ -182,13 +186,13 @@ export const operationActive = (state: string | undefined) =>
 
 export interface EnrollmentIo {
   prepare: () => Promise<PreparedBasketEnrollment>;
-  submit: (body: { intentId: string; signed: string }) => Promise<ManagedBasketPortfolio>;
+  submit: (body: { intentId: string; signed: string }) => Promise<BasketPortfolio>;
   signMessage: (text: string) => Promise<string>;
   signTransaction: (base64: string) => Promise<string>;
 }
 
 /** One challenge, one wallet signature, one submission; Glider never receives a client-held API key. */
-export async function enrollBasket(_slug: string, io: EnrollmentIo): Promise<ManagedBasketPortfolio> {
+export async function enrollBasket(_slug: string, io: EnrollmentIo): Promise<BasketPortfolio> {
   const prepared = await io.prepare();
   const signed =
     prepared.authorization.kind === "solana-message"
@@ -208,7 +212,7 @@ export interface FundingIo {
 export const FUNDING_AMOUNT = /^(?:0|[1-9]\d{0,8})(?:\.\d{1,6})?$/;
 
 /** Where a portfolio takes USDC: its Solana smart account's deposit address. */
-export const fundingDestination = (portfolio: Pick<ManagedBasketPortfolio, "smartAccounts">) => {
+export const fundingDestination = (portfolio: Pick<BasketPortfolio, "smartAccounts">) => {
   const account = portfolio.smartAccounts.find((item) => item.accountId.startsWith("solana:"));
   return account ? (account.depositAccountId ?? account.accountId) : null;
 };
@@ -216,7 +220,7 @@ export const fundingDestination = (portfolio: Pick<ManagedBasketPortfolio, "smar
 /** Recheck the prepared amount and recipient before handing bytes to the wallet. */
 export async function fundBasket(
   amountUsd: string,
-  portfolio: ManagedBasketPortfolio,
+  portfolio: BasketPortfolio,
   io: FundingIo,
 ): Promise<FundingReceipt> {
   if (!FUNDING_AMOUNT.test(amountUsd)) throw new Error("Enter a valid USDC amount.");
@@ -238,11 +242,11 @@ export async function fundBasket(
 /* ── search ──────────────────────────────────────────────────────────────── */
 
 /** Strategies matching a search by name, description, theme, ticker or company name. */
-export const searchStrategies = (
-  templates: readonly ManagedBasketTemplate[],
+export const searchStrategies = <T extends Basket>(
+  templates: readonly T[],
   query: string,
   companyNames: ReadonlyMap<string, string>,
-) =>
+): readonly T[] =>
   query.trim() === ""
     ? [...templates]
     : templates.filter((template) =>
@@ -250,7 +254,9 @@ export const searchStrategies = (
           [
             template.name,
             template.description,
-            ...template.tags.map((tag) => tag.replace("theme:", "").replace("shelf:", "")),
+            ...(template.source === "curated"
+              ? template.tags.map((tag) => tag.replace("theme:", "").replace("shelf:", ""))
+              : []),
             ...template.allocations.flatMap((asset) => [asset.ticker, companyNames.get(asset.ticker)]),
           ],
           query,
@@ -261,7 +267,7 @@ export const searchStrategies = (
 
 /** An operation's state in words, naming the one failure that may not be one. */
 export function rebalanceOutcome(
-  state: ManagedBasketOperation["state"],
+  state: BasketOperation["state"],
   error: string | null,
 ): { label: string; detail: string | null } {
   if (state === "failed" && /solana swap reconciliation timed out/i.test(error ?? ""))
@@ -272,15 +278,15 @@ export function rebalanceOutcome(
   return { label: state.charAt(0).toUpperCase() + state.slice(1).replaceAll("_", " "), detail: error };
 }
 
-export const rebalanceTerminal = (state: ManagedBasketOperation["state"] | undefined) =>
+export const rebalanceTerminal = (state: BasketOperation["state"] | undefined) =>
   state === "completed" || state === "failed" || state === "cancelled";
 
 /* ── partial withdrawals ─────────────────────────────────────────────────── */
 
-type ExitHolding = ManagedBasketPortfolioSnapshot["assets"][number];
+type ExitHolding = BasketPortfolioSnapshot["assets"][number];
 
 /** What a smart account holds that can be withdrawn: Solana SPL tokens with a balance. */
-export const exitAssets = (account: Pick<ManagedBasketPortfolioSnapshot, "assets">) =>
+export const exitAssets = (account: Pick<BasketPortfolioSnapshot, "assets">) =>
   account.assets.filter(
     (asset) =>
       asset.assetId.startsWith("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:") &&
@@ -304,7 +310,7 @@ export const rawTokenAmount = (amount: string, decimals: number): bigint | null 
 };
 
 /** Every holding at its full balance: where a custom withdrawal starts. */
-export const fullSelection = (account: Pick<ManagedBasketPortfolioSnapshot, "assets">) =>
+export const fullSelection = (account: Pick<BasketPortfolioSnapshot, "assets">) =>
   Object.fromEntries(
     exitAssets(account).map((asset) => [asset.assetId, tokenAmount(asset.balanceRaw, asset.decimals)]),
   ) as Record<string, string>;

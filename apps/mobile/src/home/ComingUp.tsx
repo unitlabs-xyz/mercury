@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueries } from "@tanstack/react-query";
-import type { ManagedBasketPortfolioSnapshot } from "@mercury/types";
+import type { BasketPortfolioSnapshot } from "@mercury/types";
 import { displayBasketName, pct, usd, type EventKind } from "@mercury/view";
 import { apiFetch, useMarketStatus, type Borrow } from "../api";
 import { useOwnedBasketPortfolios } from "../baskets/api";
@@ -64,8 +64,8 @@ export const ComingUp = ({
         queryKey: ["api", "basket-portfolio", p.slug, "coming-up"],
         queryFn: async () =>
           (
-            await apiFetch<{ portfolio: ManagedBasketPortfolioSnapshot | null }>(
-              `/v1/basket-templates/${encodeURIComponent(p.slug)}/portfolio`,
+            await apiFetch<{ portfolio: BasketPortfolioSnapshot | null }>(
+              `/v1/baskets/${encodeURIComponent(p.slug)}/portfolio/positions`,
             )
           ).portfolio,
         staleTime: 60_000,

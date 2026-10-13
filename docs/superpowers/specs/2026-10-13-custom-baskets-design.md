@@ -100,8 +100,8 @@ custom_basket
   created_at, updated_at, deleted_at timestamptz
 ```
 
-Slugs are globally unique by construction. Every basket route is `/v1/basket-templates/:slug/…`
-and resolves through one lookup; if a custom slug could collide with a curated one, naming yours
+Slugs are globally unique by construction. Every basket route is `/v1/baskets/:slug/…` and
+resolves through one lookup; if a custom slug could collide with a curated one, naming yours
 `magnificent-seven` would silently address somebody else's basket. A suffix removes the ambiguity
 and keeps a single namespace, so no existing route changes.
 
@@ -191,16 +191,18 @@ Deleting removes a draft outright and soft-deletes a created basket. Glider has 
 
 ### 5 · Routes
 
-|          |                             |                                            |
-| -------- | --------------------------- | ------------------------------------------ |
-| `GET`    | `/v1/custom-baskets`        | the caller's own, never anybody else's     |
-| `POST`   | `/v1/custom-baskets`        |                                            |
-| `PATCH`  | `/v1/custom-baskets/:slug`  |                                            |
-| `DELETE` | `/v1/custom-baskets/:slug`  | refused while funded                       |
-| `GET`    | `/v1/custom-baskets/assets` | the picker's universe, from `basket_asset` |
+|          |                      |                                                       |
+| -------- | -------------------- | ----------------------------------------------------- |
+| `GET`    | `/v1/baskets`        | the curated shelf plus the caller's own, each `source` |
+| `POST`   | `/v1/baskets`        | create one of mine                                     |
+| `PATCH`  | `/v1/baskets/:slug`  | rename or re-weight mine; `403` on a curated slug      |
+| `DELETE` | `/v1/baskets/:slug`  | refused while funded                                   |
+| `GET`    | `/v1/basket-assets`  | the picker's universe, from `basket_asset`             |
 
-`listTemplates()` and `/v1/basket-templates` stay curated-only, so a private basket cannot leak
-into a public catalogue. Every other basket route serves custom slugs unchanged.
+Custom baskets share the curated routes rather than getting their own prefix: one slug namespace,
+one resolver, and `source` on the wire for the clients that render the difference. A basket
+somebody wrote is never returned to anybody else, so nothing private reaches a public shelf —
+every shelf filters on `source === "curated"`.
 
 ### 6 · The authoring panel
 
@@ -217,7 +219,7 @@ enrolls and funds through the existing `Ticket`. No new funding UI.
 ## Tasks
 
 1. `basket_asset` table, migration, and the nightly Glider catalogue sync
-2. `GET /v1/custom-baskets/assets`
+2. `GET /v1/basket-assets`
 3. `custom_basket` table and migration
 4. `EnrollableBasket`, and `templateForRead` resolving custom slugs
 5. The custom-basket store and service: create, with readback and recovery

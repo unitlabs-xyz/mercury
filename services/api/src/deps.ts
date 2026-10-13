@@ -4,9 +4,7 @@ import {
   jupiterAccess,
   parseJupiterKeys,
   SolanaRpc,
-  SymmetryVenue,
   USDC_MINT,
-  type BasketVenue,
   type SupportedStocks,
   type ChainHistory,
   type ChainReader,
@@ -42,8 +40,8 @@ import { KaminoLending } from "./lending/kamino.js";
 import { debtFrom } from "./lending/debt.js";
 import { recordLoanEvents } from "./lending/record.js";
 import { pledgedByMint, withPledged } from "./lending/pledged.js";
-import type { CustomBasketDeps } from "./routes/custom-basket.js";
 import { PgBasketAssetStore } from "./baskets/glider/asset-store.js";
+import { PgCustomBasketStore } from "./baskets/glider/custom-store.js";
 import { GliderAssets } from "./baskets/glider/assets.js";
 import type { LendingSource } from "./lending/ports.js";
 import type { InstrumentDeps } from "./routes/instruments.js";
@@ -92,7 +90,6 @@ export interface Deps {
   readonly chain: ChainReader;
   /** The same adapter, asked what happened rather than what is held. */
   readonly history: ChainHistory;
-  readonly baskets: BasketVenue;
   /** Kamino's xStocks market through the klend SDK: reads, and unsigned transactions. */
   readonly lending: LendingSource;
   /** Optional Glider capability shared by routes and the wallet-events exit reconciler. */
@@ -256,8 +253,8 @@ export function buildAuthDeps(config: Config): AuthDeps {
  * Jupiter needs no key: its keyless endpoints both price an order and build the
  * transaction that fills it, which is the whole of execution. `JUPITER_API_KEYS`
  * only moves every Jupiter call to the paid host, for its rate limits.
- * Triggers are the one piece still missing, and baskets are blocked on the
- * Symmetry spike — both are present so the object is whole, and both throw.
+ * Triggers are the one piece still missing; the stub is present so the object
+ * is whole, and it throws.
  */
 export function buildDeps(config: Config): Deps {
   // One rotation shared by every Jupiter adapter, so the keys take turns across all of them.
@@ -304,7 +301,6 @@ export function buildDeps(config: Config): Deps {
     priceHistory: new YahooHistory(),
     chain,
     history: chain,
-    baskets: new SymmetryVenue({ rpcUrl: config.solanaRpcUrl }),
     lending: new KaminoLending({
       rpcUrl: config.solanaRpcUrl,
       ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
@@ -327,12 +323,11 @@ class JupiterTriggersNotYet implements TriggerSource {
 }
 
 export interface ReadDeps {
-  readonly basketTemplates: BasketService;
+  readonly baskets: BasketService;
   readonly instruments: InstrumentDeps;
   readonly portfolio: PortfolioDeps;
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
-  readonly customBaskets: CustomBasketDeps;
   readonly orders: OrderStore;
   readonly waitlist: WaitlistDeps;
   readonly fills: FillDeps;
@@ -377,11 +372,13 @@ export function buildReadDeps(
   relay?: SendDeps["relay"],
 ): ReadDeps {
   const basketStore = new JsonBasketStore(config.databaseUrl, undefined, db);
-  const baskets = basketValueReader(deps.basketProvider, basketStore);
-  const basketTemplates = new BasketService({
+  const customBasketStore = new PgCustomBasketStore(db);
+  const basketValue = basketValueReader(deps.basketProvider, basketStore, customBasketStore);
+  const baskets = new BasketService({
     store: basketStore,
     assetSource: new GliderAssets(),
     assetStore: new PgBasketAssetStore(db),
+    customBaskets: customBasketStore,
     funding: new SolanaBasketFunding(
       config.solanaRpcUrl,
       relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
@@ -390,8 +387,7 @@ export function buildReadDeps(
     ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
   });
   return {
-    basketTemplates,
-    customBaskets: { assets: () => basketTemplates.pickableAssets() },
+    baskets,
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),
@@ -409,7 +405,7 @@ export function buildReadDeps(
       debt: (wallet) => debtFrom(deps.lending, wallet),
       lastKnownDebt: (userId) => readLatestDebt(db, userId),
       snapshots: (userId, from) => readSnapshots(db, userId, from),
-      baskets,
+      baskets: basketValue,
       basketReturns: basketReturnsReader(deps.basketProvider),
       flows: (userId, from) => readFlows(db, userId, from),
       basketMovements: (userId) => readBasketMovements(db, userId),

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
-import type { BasketExitMode, ManagedBasketPortfolioSnapshot, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketExitMode, BasketPortfolioSnapshot, Basket } from "@mercury/types";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toEvent, usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
@@ -20,7 +20,7 @@ import {
   useBasketOperation,
   useBasketPortfolio,
   useBasketRebalanceAction,
-  useBasketTemplate,
+  useBasket,
 } from "../api/baskets";
 import { useHistories, useInstruments, usePrices, type Instrument } from "../market/hooks";
 import {
@@ -32,7 +32,6 @@ import {
   RailFigure,
   RailHead,
   RangeSwitch,
-  StatusChip,
 } from "../ui/ds";
 import { AppShell } from "./AppShell";
 import { LiveStatusChip, PriceError } from "./LiveStatus";
@@ -100,7 +99,7 @@ const RebalanceTimer = ({
   schedule,
   hasAccount,
 }: {
-  schedule: ManagedBasketPortfolioSnapshot["schedule"] | undefined;
+  schedule: BasketPortfolioSnapshot["schedule"] | undefined;
   hasAccount: boolean;
 }) => {
   const [clock, setClock] = useState(() => Date.now());
@@ -222,7 +221,7 @@ const IconCluster = ({
   instruments,
   onClick,
 }: {
-  template: ManagedBasketTemplate;
+  template: Basket;
   instruments: ReadonlyMap<string, Instrument>;
   onClick: () => void;
 }) => {
@@ -375,7 +374,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
   </AppShell>
 );
 
-export const Basket = () => {
+export const BasketDetail = () => {
   const { slug = "" } = useParams();
   const [range, setRange] = useState<Range>("1Y");
   const [investOpen, setInvestOpen] = useState(false);
@@ -400,7 +399,7 @@ export const Basket = () => {
   const fundingRequestActive = useRef(false);
   const rebalanceRequestActive = useRef(false);
   const exitRequestActive = useRef(false);
-  const result = useBasketTemplate(slug);
+  const result = useBasket(slug);
   const insights = useBasketInsights(slug);
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
@@ -559,7 +558,7 @@ export const Basket = () => {
   };
 
   if (!template && result.isPending) {
-    const cachedCatalog = queryClient.getQueryData<ManagedBasketTemplate[]>(["api", "basket-templates"]);
+    const cachedCatalog = queryClient.getQueryData<Basket[]>(["api", "baskets"]);
     const assetCount = cachedCatalog?.find((item) => item.slug === slug)?.allocations.length ?? 7;
     return <DetailLoading assetCount={assetCount} />;
   }
@@ -712,13 +711,6 @@ export const Basket = () => {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="text-[20px] leading-tight font-medium text-ds-ink">{name}</h1>
-                    <StatusChip tone={template.status === "enabled" ? "up" : "neutral"} size="md">
-                      {template.status === "enabled"
-                        ? "Available"
-                        : template.status === "candidate"
-                          ? "Enrollment pilot"
-                          : "Preview"}
-                    </StatusChip>
                   </div>
                   <p className="mt-2 text-[13px] text-ds-muted">Glider strategy · Solana</p>
                 </div>
@@ -1029,7 +1021,6 @@ export const Basket = () => {
               walletMissing={walletMissing}
               checking={sessionChecking || (signedIn && !walletMissing && enrollment.isPending)}
               lookupFailed={signedIn && enrollment.isError && !enrollment.data}
-              blocked={template.status === "disabled"}
               busy={enrollmentBusy}
               error={
                 enrollment.isError && enrollment.data
@@ -1381,7 +1372,6 @@ export const Basket = () => {
                     className="mt-5 w-full"
                     disabled={
                       !account ||
-                      template.status === "disabled" ||
                       operationActive ||
                       exitActive ||
                       rebalanceAction.isPending

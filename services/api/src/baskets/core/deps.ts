@@ -1,7 +1,7 @@
 import type {
-  ManagedBasketInsights,
-  ManagedBasketOperation,
-  ManagedBasketPortfolioSnapshot,
+  BasketInsights,
+  BasketOperation,
+  BasketPortfolioSnapshot,
   TriggeredBasketRebalance,
   BasketExitMessage,
   BasketExitMode,
@@ -13,10 +13,10 @@ import type {
   BasketAsset,
   BasketDefinition,
   CustomBasket,
-  BasketTemplate,
+  CuratedBasket,
   ProviderBasket,
   StrategyPerformance,
-  BasketPortfolio,
+  ProviderPortfolio,
   EnrollmentChallenge,
   EnrollmentIntent,
   ExitIntent,
@@ -33,15 +33,15 @@ export interface BasketProvider {
   portfolioReturn(id: string): Promise<string | null>;
   allocationBreakdown(
     assets: BasketDefinition["assets"],
-  ): Promise<NonNullable<ManagedBasketInsights["allocation"]>>;
+  ): Promise<NonNullable<BasketInsights["allocation"]>>;
   effectiveSwapFeeBps(id: string): Promise<number | null>;
-  portfolios(ownerAccountId: string, strategyId: string): Promise<readonly BasketPortfolio[]>;
-  portfoliosForOwner(ownerAccountId: string): Promise<readonly BasketPortfolio[]>;
+  portfolios(ownerAccountId: string, strategyId: string): Promise<readonly ProviderPortfolio[]>;
+  portfoliosForOwner(ownerAccountId: string): Promise<readonly ProviderPortfolio[]>;
   portfolio(
     id: string,
   ): Promise<
     Pick<
-      ManagedBasketPortfolioSnapshot,
+      BasketPortfolioSnapshot,
       "portfolioId" | "ownerAccountId" | "strategyId" | "smartAccounts" | "schedule"
     >
   >;
@@ -49,11 +49,11 @@ export interface BasketProvider {
     id: string,
   ): Promise<
     Pick<
-      ManagedBasketPortfolioSnapshot,
+      BasketPortfolioSnapshot,
       "portfolioId" | "totalValueUsd" | "inTransitUsd" | "fetchedAt" | "assets" | "warnings"
     >
   >;
-  operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
+  operation(portfolioId: string, operationId: string): Promise<BasketOperation>;
   triggerRebalance(portfolioId: string): Promise<TriggeredBasketRebalance>;
   prepareExit(
     portfolioId: string,
@@ -76,7 +76,7 @@ export interface BasketProvider {
     challenge: EnrollmentChallenge,
     signed: string,
     name: string,
-  ): Promise<BasketPortfolio>;
+  ): Promise<ProviderPortfolio>;
 }
 
 export interface BasketFunding {
@@ -158,7 +158,7 @@ export interface CustomBasketStore {
 }
 
 export interface BasketStore {
-  load(): Promise<readonly BasketTemplate[]>;
+  load(): Promise<readonly CuratedBasket[]>;
   withSyncLock<T>(work: () => Promise<T>): Promise<T>;
   saveEnrollmentIntent(intent: Omit<EnrollmentIntent, "id" | "portfolioId">): Promise<string>;
   enrollmentIntent(id: string): Promise<EnrollmentIntent | null>;

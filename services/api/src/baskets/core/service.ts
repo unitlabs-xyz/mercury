@@ -4,8 +4,8 @@ import type {
   BasketExitMessage,
   BasketExitMode,
   BasketExitSubmission,
-  ManagedBasketInsights,
-  ManagedBasketTemplate,
+  BasketInsights,
+  Basket,
 } from "@mercury/types";
 import { USDC_MINT, USDC_DECIMALS, type ChainHistory, type TransactionDetail } from "@mercury/chain";
 import {
@@ -14,14 +14,19 @@ import {
   BasketRebalanceCooldownError,
   type BasketAssetSource,
   type BasketAssetStore,
+  type CustomBasketStore,
   type BasketFunding,
   type BasketProvider,
   type BasketStore,
 } from "./deps.js";
+import { Expiring } from "./cache.js";
 import { assetIdFor } from "./primitives.js";
 import type {
   AssetSyncResult,
   BasketDefinition,
+  CuratedBasket,
+  CustomBasket,
+  LiveBasket,
   ExitIntentPayload,
   PickableAsset,
   ProviderBasket,
@@ -32,10 +37,10 @@ import type {
 const allocations = (assets: readonly { assetId: string; weightBps: number }[]) =>
   assets.map(({ assetId, weightBps }) => `${assetId}:${weightBps}`).sort();
 
-export class BasketEnrollmentError extends Error {
+export class BasketError extends Error {
   constructor(
     readonly code: string,
-    readonly status: 400 | 403 | 409 | 410 | 422 | 429 | 503,
+    readonly status: 400 | 403 | 404 | 409 | 410 | 422 | 429 | 503,
     message: string,
   ) {
     super(message);
@@ -44,6 +49,12 @@ export class BasketEnrollmentError extends Error {
 
 /** A catalogue refresh offering less than this much of what we hold is not believed. */
 const ASSET_SHRINK_FLOOR = 0.8;
+
+/** How long a good answer from Glider stands, and how soon a failed one is retried. */
+const FRESH_MS = 300_000;
+const RETRY_MS = 30_000;
+/** Enough for the whole curated shelf many times over; the cap is against unbounded growth. */
+const CACHE_ENTRIES = 512;
 
 const SOLANA_ACCOUNT = /^solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SOLANA_ASSET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:";
@@ -71,7 +82,7 @@ export function verifiedBasketFunding(
 
 function usdcRaw(amount: string): bigint {
   if (!/^(?:0|[1-9]\d{0,8})(?:\.\d{1,6})?$/.test(amount))
-    throw new BasketEnrollmentError(
+    throw new BasketError(
       "invalid_amount",
       400,
       "Enter a valid USDC amount (up to six decimal places).",
@@ -79,7 +90,7 @@ function usdcRaw(amount: string): bigint {
   const [whole = "0", fraction = ""] = amount.split(".");
   const raw = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0") || "0");
   if (raw === 0n)
-    throw new BasketEnrollmentError("invalid_amount", 400, "Enter an amount greater than zero.");
+    throw new BasketError("invalid_amount", 400, "Enter an amount greater than zero.");
   return raw;
 }
 
@@ -92,8 +103,10 @@ function matches(expected: BasketDefinition, actual: ProviderBasket): boolean {
 }
 
 export class BasketService {
-  private readonly performanceCache = new Map<string, { until: number; value: StrategyPerformance | null }>();
-  private readonly insightsCache = new Map<string, { until: number; value: ManagedBasketInsights }>();
+  /* Keyed by Glider strategy id, and a person can mint those by writing
+     baskets. Bounded for that reason, not because the catalogue is large. */
+  private readonly performanceCache = new Expiring<StrategyPerformance | null>(CACHE_ENTRIES);
+  private readonly insightsCache = new Expiring<BasketInsights>(CACHE_ENTRIES);
 
   constructor(
     private readonly deps: {
@@ -102,43 +115,60 @@ export class BasketService {
       /** Optional: without it the catalogue is whatever was last synced. */
       assetSource?: BasketAssetSource;
       assetStore?: BasketAssetStore;
+      customBaskets?: CustomBasketStore;
       funding?: BasketFunding;
       history?: ChainHistory;
     },
   ) {}
 
-  private async templateForRead(slug: string) {
-    const template = (await this.deps.store.load()).find((item) => item.slug === slug);
-    if (!template?.providerId)
-      throw new BasketEnrollmentError("enrollment_unavailable", 409, "Basket enrollment is unavailable.");
+  /**
+   * The curated catalogue first, then this owner's own baskets.
+   *
+   * Curated wins, which is what the slug suffix in `slugFor` makes safe: no
+   * custom slug can shadow one. One null covers every way a slug can fail to
+   * name a basket this caller may act on — unknown, somebody else's, or a
+   * draft with no strategy behind it yet. Telling those apart on the wire
+   * would answer whether a stranger's slug exists.
+   */
+  private async resolve(slug: string, userId: string): Promise<LiveBasket | null> {
+    const curated = (await this.deps.store.load()).find((item) => item.slug === slug);
+    const basket = curated ?? (await this.deps.customBaskets?.bySlug(userId, slug));
+    if (!basket?.providerId) return null;
+    return { slug, name: basket.name, providerId: basket.providerId, assets: basket.assets };
+  }
+
+  private async basketFor(slug: string, userId: string) {
+    const basket = await this.resolve(slug, userId);
+    if (!basket) throw new BasketError("not_found", 404, "No such basket.");
     if (!this.deps.provider)
-      throw new BasketEnrollmentError("provider_unavailable", 503, "Glider is not configured.");
-    return { template, provider: this.deps.provider };
+      throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
+    return { basket, provider: this.deps.provider };
   }
 
-  private async templateForEnrollment(slug: string) {
-    const resolved = await this.templateForRead(slug);
-    if (resolved.template.status === "disabled")
-      throw new BasketEnrollmentError("enrollment_unavailable", 409, "Basket enrollment is unavailable.");
-    return resolved;
-  }
-
-  async enrollment(slug: string, ownerAccountId: string) {
-    const { template, provider } = await this.templateForRead(slug);
-    return (await provider.portfolios(ownerAccountId, template.providerId!))[0] ?? null;
+  /** Whether this wallet already has a portfolio here, and which one. */
+  async portfolio(slug: string, userId: string, ownerAccountId: string) {
+    const { basket, provider } = await this.basketFor(slug, userId);
+    return (await provider.portfolios(ownerAccountId, basket.providerId))[0] ?? null;
   }
 
   async ownedPortfolios(userId: string, ownerAccountId: string) {
     const provider = this.deps.provider;
-    if (!provider) throw new BasketEnrollmentError("provider_unavailable", 503, "Glider is not configured.");
-    const [catalog, providerPortfolios, enrollments] = await Promise.all([
+    if (!provider) throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
+    const [catalog, mine, providerPortfolios, enrollments] = await Promise.all([
       this.deps.store.load(),
+      this.deps.customBaskets?.mine(userId) ?? [],
       provider.portfoliosForOwner(ownerAccountId),
       this.deps.store.completedEnrollments(userId, ownerAccountId),
     ]);
-    const byStrategy = new Map(
-      catalog.filter((item) => item.providerId).map((item) => [item.providerId!, item]),
-    );
+    /* Curated and this owner's own alike: a portfolio whose strategy is in
+       neither is not ours to describe, and stays filtered out below. */
+    const byStrategy = new Map<
+      string,
+      { slug: string; name: string; assets: readonly { assetId: string }[] }
+    >([
+      ...catalog.filter((item) => item.providerId).map((item) => [item.providerId!, item] as const),
+      ...mine.filter((item) => item.providerId).map((item) => [item.providerId!, item] as const),
+    ]);
     const enrolledAt = new Map<string, number>();
     for (const item of enrollments) {
       const key = `${item.strategyId}:${item.portfolioId}`;
@@ -208,13 +238,13 @@ export class BasketService {
     return summaries;
   }
 
-  async portfolioSnapshot(slug: string, ownerAccountId: string) {
-    const { template, provider } = await this.templateForRead(slug);
-    const portfolios = await provider.portfolios(ownerAccountId, template.providerId!);
+  async positions(slug: string, userId: string, ownerAccountId: string) {
+    const { basket, provider } = await this.basketFor(slug, userId);
+    const portfolios = await provider.portfolios(ownerAccountId, basket.providerId);
     const portfolio = portfolios[0];
     if (!portfolio) return null;
-    if (portfolio.ownerAccountId !== ownerAccountId || portfolio.strategyId !== template.providerId)
-      throw new BasketEnrollmentError(
+    if (portfolio.ownerAccountId !== ownerAccountId || portfolio.strategyId !== basket.providerId)
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "Portfolio is unavailable for this wallet.",
@@ -223,16 +253,16 @@ export class BasketService {
     if (
       detail.portfolioId !== portfolio.portfolioId ||
       detail.ownerAccountId !== ownerAccountId ||
-      detail.strategyId !== template.providerId
+      detail.strategyId !== basket.providerId
     )
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "Portfolio is unavailable for this wallet.",
       );
     const positions = await provider.positions(portfolio.portfolioId);
     if (positions.portfolioId !== portfolio.portfolioId)
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "Portfolio is unavailable for this wallet.",
@@ -240,22 +270,22 @@ export class BasketService {
     return { ...detail, ...positions };
   }
 
-  async operation(slug: string, ownerAccountId: string, operationId: string) {
-    const { template, provider } = await this.templateForRead(slug);
-    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!))[0];
+  async operation(slug: string, userId: string, ownerAccountId: string, operationId: string) {
+    const { basket, provider } = await this.basketFor(slug, userId);
+    const portfolio = (await provider.portfolios(ownerAccountId, basket.providerId))[0];
     if (
       !portfolio ||
       portfolio.ownerAccountId !== ownerAccountId ||
-      portfolio.strategyId !== template.providerId
+      portfolio.strategyId !== basket.providerId
     )
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "Portfolio is unavailable for this wallet.",
       );
     const operation = await provider.operation(portfolio.portfolioId, operationId);
     if (operation.portfolioId !== portfolio.portfolioId || operation.operationId !== operationId)
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "operation_unavailable",
         409,
         "Operation is unavailable for this wallet.",
@@ -263,15 +293,15 @@ export class BasketService {
     return operation;
   }
 
-  async rebalance(slug: string, ownerAccountId: string, userId?: string) {
-    const { template, provider } = await this.templateForEnrollment(slug);
-    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!))[0];
+  async rebalance(slug: string, userId: string, ownerAccountId: string) {
+    const { basket, provider } = await this.basketFor(slug, userId);
+    const portfolio = (await provider.portfolios(ownerAccountId, basket.providerId))[0];
     if (
       !portfolio ||
       portfolio.ownerAccountId !== ownerAccountId ||
-      portfolio.strategyId !== template.providerId
+      portfolio.strategyId !== basket.providerId
     )
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "Portfolio is unavailable for this wallet.",
@@ -280,9 +310,9 @@ export class BasketService {
     if (
       detail.portfolioId !== portfolio.portfolioId ||
       detail.ownerAccountId !== ownerAccountId ||
-      detail.strategyId !== template.providerId
+      detail.strategyId !== basket.providerId
     )
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "Portfolio is unavailable for this wallet.",
@@ -294,7 +324,7 @@ export class BasketService {
           userId,
           slug,
           ownerAccountId,
-          strategyId: template.providerId!,
+          strategyId: basket.providerId,
           portfolioId: portfolio.portfolioId,
           operationId: triggered.operationId,
           submittedAt: triggered.submittedAt,
@@ -302,7 +332,7 @@ export class BasketService {
       return triggered;
     } catch (error) {
       if (error instanceof BasketRebalanceCooldownError)
-        throw new BasketEnrollmentError(
+        throw new BasketError(
           "rebalance_cooldown",
           429,
           error.retryAfterSeconds
@@ -313,13 +343,13 @@ export class BasketService {
     }
   }
 
-  private async exitPortfolio(slug: string, ownerAccountId: string) {
-    const { template, provider } = await this.templateForRead(slug);
-    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!)).find(
-      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
+  private async exitPortfolio(slug: string, userId: string, ownerAccountId: string) {
+    const { basket, provider } = await this.basketFor(slug, userId);
+    const portfolio = (await provider.portfolios(ownerAccountId, basket.providerId)).find(
+      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === basket.providerId,
     );
     if (!portfolio)
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "No portfolio belongs to this wallet and strategy.",
@@ -328,42 +358,43 @@ export class BasketService {
     if (
       detail.portfolioId !== portfolio.portfolioId ||
       detail.ownerAccountId !== ownerAccountId ||
-      detail.strategyId !== template.providerId ||
+      detail.strategyId !== basket.providerId ||
       !detail.smartAccounts.some((item) => SOLANA_ACCOUNT.test(item.accountId))
     )
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "The Solana portfolio could not be verified.",
       );
     const smartAccount = detail.smartAccounts.find((item) => SOLANA_ACCOUNT.test(item.accountId));
     if (!smartAccount)
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "The Solana portfolio could not be verified.",
       );
-    return { template, provider, portfolio, smartAccount };
+    return { basket, provider, portfolio, smartAccount };
   }
 
   async prepareExit(
     slug: string,
+    userId: string,
     ownerAccountId: string,
     mode: BasketExitMode,
     requestedAssets?: readonly BasketExitAsset[],
   ) {
     if (!SOLANA_ACCOUNT.test(ownerAccountId))
-      throw new BasketEnrollmentError("wallet_required", 400, "A Solana wallet is required to exit.");
-    const { provider, portfolio } = await this.exitPortfolio(slug, ownerAccountId);
+      throw new BasketError("wallet_required", 400, "A Solana wallet is required to exit.");
+    const { provider, portfolio } = await this.exitPortfolio(slug, userId, ownerAccountId);
     const positions = await provider.positions(portfolio.portfolioId);
     if (positions.portfolioId !== portfolio.portfolioId)
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "Portfolio balances could not be verified.",
       );
     if ((mode === "in_kind" || requestedAssets) && positions.warnings.length > 0)
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "positions_incomplete",
         409,
         "Refresh complete portfolio balances before withdrawing assets.",
@@ -375,9 +406,9 @@ export class BasketService {
       mode === "liquidate_usdc" && !requestedAssets ? "liquidate_all" : "withdraw";
     const assets = requestedAssets ? [...requestedAssets] : available;
     if (assets.length === 0)
-      throw new BasketEnrollmentError("empty_portfolio", 409, "Choose at least one asset to withdraw.");
+      throw new BasketError("empty_portfolio", 409, "Choose at least one asset to withdraw.");
     if (submission === "withdraw" && assets.length > 10)
-      throw new BasketEnrollmentError("too_many_assets", 400, "Choose up to 10 assets per withdrawal.");
+      throw new BasketError("too_many_assets", 400, "Choose up to 10 assets per withdrawal.");
     if (submission === "withdraw") {
       const balances = new Map(available.map((asset) => [asset.assetId, BigInt(asset.amountRaw)]));
       const selected = new Set<string>();
@@ -389,7 +420,7 @@ export class BasketService {
           !/^[1-9]\d*$/.test(asset.amountRaw) ||
           BigInt(asset.amountRaw) > balance
         )
-          throw new BasketEnrollmentError(
+          throw new BasketError(
             "invalid_exit_amount",
             409,
             "Selected asset amounts are invalid or exceed the current portfolio balance. Review them again.",
@@ -417,7 +448,7 @@ export class BasketService {
         Date.parse(prepared.expiresAt) <= Date.now() + 5_000 ||
         message.expiresAt * 1000 <= Date.now() + 5_000
       )
-        throw new BasketEnrollmentError(
+        throw new BasketError(
           "authorization_expired",
           409,
           "The withdrawal authorization expired. Try again.",
@@ -437,7 +468,7 @@ export class BasketService {
       };
     } catch (error) {
       if (error instanceof BasketExitUnsupportedError)
-        throw new BasketEnrollmentError("unsupported_authorization", 409, error.message);
+        throw new BasketError("unsupported_authorization", 409, error.message);
       throw error;
     }
   }
@@ -451,7 +482,11 @@ export class BasketService {
     signature: string,
     submission: BasketExitSubmission = mode === "in_kind" ? "withdraw" : "liquidate_all",
   ) {
-    const { template, provider, portfolio, smartAccount } = await this.exitPortfolio(slug, ownerAccountId);
+    const { basket, provider, portfolio, smartAccount } = await this.exitPortfolio(
+      slug,
+      userId,
+      ownerAccountId,
+    );
     if (
       message.portfolioId !== portfolio.portfolioId ||
       message.recipientAccountId !== ownerAccountId ||
@@ -460,33 +495,33 @@ export class BasketService {
       (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC) ||
       (mode === "in_kind" && message.settlementAssetId !== undefined)
     )
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "invalid_exit",
         400,
         "Exit terms do not match this wallet and portfolio.",
       );
     if (message.assets.some((item) => !item.assetId.startsWith(SOLANA_ASSET)))
-      throw new BasketEnrollmentError("invalid_exit", 400, "Exit contains an asset on another chain.");
+      throw new BasketError("invalid_exit", 400, "Exit contains an asset on another chain.");
     if (!this.deps.history)
-      throw new BasketEnrollmentError("provider_unavailable", 503, "Solana history is not configured.");
+      throw new BasketError("provider_unavailable", 503, "Solana history is not configured.");
     const authorizedAssets = message.assets.map(({ assetId, amountRaw }) => ({
       mint: assetId.slice(SOLANA_ASSET.length),
       amountRaw,
     }));
     if (new Set(authorizedAssets.map((item) => item.mint)).size !== authorizedAssets.length)
-      throw new BasketEnrollmentError("invalid_exit", 400, "Exit contains a repeated asset.");
+      throw new BasketError("invalid_exit", 400, "Exit contains a repeated asset.");
     const expectedTransfers: ExitIntentPayload["expectedTransfers"] =
       mode === "liquidate_usdc"
         ? [{ mint: USDC_MINT, symbol: "USDC", amountRaw: null }]
         : authorizedAssets.map(({ mint, amountRaw }) => ({
             mint,
-            symbol: template.assets.find((item) => item.assetId === `${SOLANA_ASSET}${mint}`)?.ticker ?? mint,
+            symbol: basket.assets.find((item) => item.assetId === `${SOLANA_ASSET}${mint}`)?.ticker ?? mint,
             amountRaw,
           }));
     let intent = await this.deps.store.exitIntent(userId, message.nonce);
     if (!intent) {
       if (message.expiresAt * 1000 <= Date.now())
-        throw new BasketEnrollmentError(
+        throw new BasketError(
           "authorization_expired",
           409,
           "The withdrawal authorization expired. Review it again.",
@@ -506,13 +541,13 @@ export class BasketService {
         authorization: { message, signature },
         authorizedAssets,
         expectedTransfers,
-        templateName: template.name,
+        templateName: basket.name,
       };
       intent = await this.deps.store.saveExitIntent({
         userId,
         slug,
         ownerAccountId,
-        strategyId: template.providerId!,
+        strategyId: basket.providerId,
         portfolioId: portfolio.portfolioId,
         nonce: message.nonce,
         expiresAt: new Date(message.expiresAt * 1000),
@@ -527,7 +562,7 @@ export class BasketService {
       authorization: { message, signature },
       authorizedAssets,
       expectedTransfers,
-      templateName: template.name,
+      templateName: basket.name,
     };
     const savedComparable = {
       mode: intent.payload.mode,
@@ -546,7 +581,7 @@ export class BasketService {
       intent.portfolioId !== portfolio.portfolioId ||
       !isDeepStrictEqual(savedComparable, expectedPayload)
     )
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "invalid_exit",
         409,
         "This withdrawal authorization was already used with different terms.",
@@ -558,7 +593,7 @@ export class BasketService {
         mode,
       };
     if (message.expiresAt * 1000 <= Date.now())
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "authorization_expired",
         409,
         "The withdrawal authorization expired. Review it again.",
@@ -572,18 +607,18 @@ export class BasketService {
     return { ...submitted, mode };
   }
 
-  async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string) {
+  async prepareFunding(slug: string, userId: string, ownerAccountId: string, amountUsd: string) {
     const amountRaw = usdcRaw(amountUsd);
-    const { template, provider } = await this.templateForEnrollment(slug);
+    const { basket, provider } = await this.basketFor(slug, userId);
     if (!this.deps.funding)
-      throw new BasketEnrollmentError("funding_unavailable", 503, "Solana funding is not configured.");
-    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!)).find(
-      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
+      throw new BasketError("funding_unavailable", 503, "Solana funding is not configured.");
+    const portfolio = (await provider.portfolios(ownerAccountId, basket.providerId)).find(
+      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === basket.providerId,
     );
     const account = portfolio?.smartAccounts.find((item) => SOLANA_ACCOUNT.test(item.accountId));
     const destinationAccountId = account?.depositAccountId ?? account?.accountId;
     if (!portfolio || !destinationAccountId || !SOLANA_ACCOUNT.test(destinationAccountId))
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "funding_unavailable",
         409,
         "No verified Solana funding account is available for this portfolio.",
@@ -601,7 +636,7 @@ export class BasketService {
       prepared = await this.deps.funding.prepare(ownerAccountId, destinationAccountId, amountRaw);
     } catch (error) {
       if (error instanceof BasketFundingPreflightError)
-        throw new BasketEnrollmentError(
+        throw new BasketError(
           "funding_preflight_failed",
           422,
           "The USDC transfer could not be simulated. Check your USDC and SOL balances.",
@@ -619,37 +654,37 @@ export class BasketService {
 
   async confirmFunding(slug: string, userId: string, ownerAccountId: string, signature: string) {
     if (!SIGNATURE.test(signature))
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "invalid_signature",
         400,
         "Enter a valid Solana transaction signature.",
       );
     if (!this.deps.history)
-      throw new BasketEnrollmentError("funding_unavailable", 503, "Solana history is not configured.");
-    const { template, provider } = await this.templateForRead(slug);
-    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!)).find(
-      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
+      throw new BasketError("funding_unavailable", 503, "Solana history is not configured.");
+    const { basket, provider } = await this.basketFor(slug, userId);
+    const portfolio = (await provider.portfolios(ownerAccountId, basket.providerId)).find(
+      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === basket.providerId,
     );
     const account = portfolio?.smartAccounts.find((item) => SOLANA_ACCOUNT.test(item.accountId));
     const destinationAccountId = account?.depositAccountId ?? account?.accountId;
     if (!portfolio || !destinationAccountId || !SOLANA_ACCOUNT.test(destinationAccountId))
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "portfolio_unavailable",
         409,
         "No verified funding account is available.",
       );
     const tx = await this.deps.history.transaction(signature);
     if (!tx)
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "transaction_pending",
         409,
         "Transaction is not settled yet. Try again shortly.",
       );
     if (tx.signature !== signature)
-      throw new BasketEnrollmentError("invalid_transaction", 422, "Transaction signature did not match.");
+      throw new BasketError("invalid_transaction", 422, "Transaction signature did not match.");
     const amountRaw = verifiedBasketFunding(tx, addressOf(ownerAccountId), addressOf(destinationAccountId));
     if (amountRaw === null)
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "invalid_transaction",
         422,
         "Transaction did not transfer USDC from your wallet to this portfolio's smart account.",
@@ -658,7 +693,7 @@ export class BasketService {
       userId,
       slug,
       portfolioId: portfolio.portfolioId,
-      title: `Funded ${template.name}`,
+      title: `Funded ${basket.name}`,
       signature,
       mint: USDC_MINT,
       amountRaw,
@@ -668,9 +703,9 @@ export class BasketService {
   }
 
   async activity(slug: string, userId: string, ownerAccountId: string) {
-    const { template, provider } = await this.templateForRead(slug);
-    const portfolio = (await provider.portfolios(ownerAccountId, template.providerId!)).find(
-      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === template.providerId,
+    const { basket, provider } = await this.basketFor(slug, userId);
+    const portfolio = (await provider.portfolios(ownerAccountId, basket.providerId)).find(
+      (item) => item.ownerAccountId === ownerAccountId && item.strategyId === basket.providerId,
     );
     if (!portfolio) return [];
     const [actions, funding, settlements] = await Promise.all([
@@ -696,11 +731,11 @@ export class BasketService {
           occurredAt: action.createdAt.toISOString(),
           title:
             action.kind === "enroll"
-              ? `Enrolled in ${template.name}`
+              ? `Enrolled in ${basket.name}`
               : action.kind === "withdraw_in_kind"
-                ? `Withdrew ${template.name} assets`
+                ? `Withdrew ${basket.name} assets`
                 : action.kind === "liquidate_to_usdc"
-                  ? `Exited ${template.name} to USDC`
+                  ? `Exited ${basket.name} to USDC`
                   : "Manual rebalance",
           subtitle: action.kind === "enroll" ? "Portfolio created" : (state ?? "Status unavailable"),
           amountUsd: null,
@@ -737,20 +772,20 @@ export class BasketService {
   }
 
   async prepareEnrollment(slug: string, userId: string, ownerAccountId: string) {
-    const { template, provider } = await this.templateForEnrollment(slug);
-    if ((await provider.portfolios(ownerAccountId, template.providerId!)).length > 0)
-      throw new BasketEnrollmentError(
+    const { basket, provider } = await this.basketFor(slug, userId);
+    if ((await provider.portfolios(ownerAccountId, basket.providerId)).length > 0)
+      throw new BasketError(
         "already_enrolled",
         409,
         "This wallet already has a portfolio for this strategy.",
       );
-    const challenge = await provider.prepareEnrollment(ownerAccountId, template.providerId!);
+    const challenge = await provider.prepareEnrollment(ownerAccountId, basket.providerId);
     const expiresAt = new Date(Date.now() + (challenge.solanaTransaction ? 90_000 : 10 * 60_000));
     const intentId = await this.deps.store.saveEnrollmentIntent({
       userId,
       slug,
       ownerAccountId,
-      strategyId: template.providerId!,
+      strategyId: basket.providerId,
       challenge,
       expiresAt,
     });
@@ -769,17 +804,17 @@ export class BasketService {
     intentId: string,
     signed: string,
   ) {
-    const { template, provider } = await this.templateForEnrollment(slug);
+    const { basket, provider } = await this.basketFor(slug, userId);
     const intent = await this.deps.store.enrollmentIntent(intentId);
     if (
       !intent ||
       intent.userId !== userId ||
       intent.slug !== slug ||
       intent.ownerAccountId !== ownerAccountId ||
-      intent.strategyId !== template.providerId ||
+      intent.strategyId !== basket.providerId ||
       intent.expiresAt.getTime() <= Date.now()
     )
-      throw new BasketEnrollmentError(
+      throw new BasketError(
         "authorization_invalid",
         403,
         "Enrollment authorization is invalid or expired.",
@@ -795,41 +830,79 @@ export class BasketService {
       intent.strategyId,
       intent.challenge,
       signed,
-      template.name,
+      basket.name,
     );
     await this.deps.store.completeEnrollmentIntent(intentId, portfolio.portfolioId);
     return portfolio;
   }
 
-  async listTemplates(): Promise<readonly ManagedBasketTemplate[]> {
-    const catalog = await this.deps.store.load();
-    return catalog.map((template) => ({
-      slug: template.slug,
-      kind: "managed_portfolio" as const,
-      provider: "glider" as const,
-      status: template.status,
-      tags: [...template.tags],
-      canEnroll: template.status !== "disabled" && template.providerId !== undefined,
-      name: template.name,
-      description: template.description,
-      strategyId: template.providerId ?? null,
-      sourceStrategyId: template.sourceStrategyId,
-      performance: null,
-      schedule: template.schedule,
-      allocations: template.assets.map(({ ticker, assetId, weightBps }) => {
-        const mint = assetId.split("/spl:")[1];
-        if (mint === undefined) throw new Error(`Invalid Solana asset ID: ${assetId}`);
-        return { ticker, mint, assetId, weightBps };
-      }),
-    }));
+  /** Glider holds the mint inside the asset id; every client wants it on its own. */
+  private static allocations(
+    assets: readonly { ticker: string; assetId: string; weightBps: number }[],
+  ): Basket["allocations"] {
+    return assets.map(({ ticker, assetId, weightBps }) => {
+      const mint = assetId.split("/spl:")[1];
+      if (mint === undefined) throw new Error(`Invalid Solana asset ID: ${assetId}`);
+      return { ticker, mint, assetId, weightBps };
+    });
   }
 
-  async getTemplate(slug: string): Promise<ManagedBasketTemplate | null> {
-    const template = (await this.listTemplates()).find((item) => item.slug === slug);
-    if (template === undefined) return null;
-    const performance = await this.strategyPerformance(template.strategyId);
+  private static curatedWire(basket: CuratedBasket): Basket {
     return {
-      ...template,
+      source: "curated",
+      tags: [...basket.tags],
+      slug: basket.slug,
+      name: basket.name,
+      description: basket.description,
+      strategyId: basket.providerId,
+      schedule: basket.schedule,
+      allocations: BasketService.allocations(basket.assets),
+      performance: null,
+    };
+  }
+
+  private static mineWire(basket: CustomBasket): Basket {
+    return {
+      source: "mine",
+      createdAt: basket.createdAt.toISOString(),
+      updatedAt: basket.updatedAt.toISOString(),
+      slug: basket.slug,
+      name: basket.name,
+      description: basket.description,
+      strategyId: basket.providerId,
+      schedule: { type: "interval", frequency: "daily" },
+      allocations: BasketService.allocations(basket.assets),
+      performance: null,
+    };
+  }
+
+  /**
+   * The shelf, then this caller's own baskets.
+   *
+   * One list rather than two requests, because every consumer that matches a
+   * portfolio back to the basket behind it has to look in both — and `source`
+   * is already on the wire for the clients that render the difference.
+   */
+  async list(userId: string): Promise<readonly Basket[]> {
+    const [catalog, mine] = await Promise.all([
+      this.deps.store.load(),
+      this.deps.customBaskets?.mine(userId) ?? [],
+    ]);
+    return [...catalog.map(BasketService.curatedWire), ...mine.map(BasketService.mineWire)];
+  }
+
+  async detail(slug: string, userId: string): Promise<Basket | null> {
+    const curated = (await this.deps.store.load()).find((item) => item.slug === slug);
+    const mine = curated ? null : await this.deps.customBaskets?.bySlug(userId, slug);
+    const basket = curated
+      ? BasketService.curatedWire(curated)
+      : mine
+        ? BasketService.mineWire(mine)
+        : null;
+    if (basket === null) return null;
+    const performance = await this.strategyPerformance(basket.strategyId);
+    return {
+      ...basket,
       performance:
         performance === null
           ? null
@@ -842,45 +915,44 @@ export class BasketService {
     };
   }
 
-  async getInsights(slug: string): Promise<ManagedBasketInsights | null> {
-    const definition = (await this.deps.store.load()).find((item) => item.slug === slug);
-    if (definition === undefined) return null;
-    const empty: ManagedBasketInsights = { allocation: null, integratorSwapFeeBps: null };
-    if (this.deps.provider === undefined || definition.providerId === undefined) return empty;
-    const cached = this.insightsCache.get(definition.providerId);
-    if (cached && Date.now() < cached.until) return cached.value;
+  async insights(slug: string, userId: string): Promise<BasketInsights | null> {
+    const curated = (await this.deps.store.load()).find((item) => item.slug === slug);
+    const basket = curated ?? (await this.deps.customBaskets?.bySlug(userId, slug)) ?? null;
+    if (basket === null) return null;
+    const empty: BasketInsights = { allocation: null, integratorSwapFeeBps: null };
+    if (this.deps.provider === undefined || basket.providerId === null) return empty;
+    const cached = this.insightsCache.get(basket.providerId);
+    if (cached !== undefined) return cached;
     const provider = this.deps.provider;
     const [allocation, fee] = await Promise.allSettled([
-      provider.allocationBreakdown(definition.assets),
-      provider.effectiveSwapFeeBps(definition.providerId),
+      provider.allocationBreakdown(basket.assets),
+      provider.effectiveSwapFeeBps(basket.providerId),
     ]);
-    const value: ManagedBasketInsights = {
+    const value: BasketInsights = {
       allocation: allocation.status === "fulfilled" ? allocation.value : null,
       integratorSwapFeeBps: fee.status === "fulfilled" ? fee.value : null,
     };
     if (allocation.status === "rejected")
       console.warn("Glider allocation breakdown unavailable:", slug, allocation.reason);
     if (fee.status === "rejected") console.warn("Glider strategy fee unavailable:", slug, fee.reason);
-    this.insightsCache.set(definition.providerId, {
-      until:
-        Date.now() + (allocation.status === "fulfilled" && fee.status === "fulfilled" ? 300_000 : 30_000),
-      value,
-    });
+    const complete = allocation.status === "fulfilled" && fee.status === "fulfilled";
+    this.insightsCache.set(basket.providerId, value, complete ? FRESH_MS : RETRY_MS);
     return value;
   }
 
   private async strategyPerformance(id: string | null): Promise<StrategyPerformance | null> {
     if (this.deps.provider === undefined || id === null) return null;
-    const now = Date.now();
+    /* `undefined` is a miss; a cached `null` is Glider having no curve for
+       this strategy, which is worth remembering for the shorter while. */
     const cached = this.performanceCache.get(id);
-    if (cached !== undefined && now < cached.until) return cached.value;
+    if (cached !== undefined) return cached;
     try {
       const value = await this.deps.provider.strategyPerformance(id);
-      this.performanceCache.set(id, { until: now + 300_000, value });
+      this.performanceCache.set(id, value, FRESH_MS);
       return value;
     } catch (error) {
       console.warn("Glider strategy performance unavailable:", id, error);
-      this.performanceCache.set(id, { until: now + 30_000, value: null });
+      this.performanceCache.set(id, null, RETRY_MS);
       return null;
     }
   }
@@ -936,7 +1008,7 @@ export class BasketService {
     if (this.deps.provider === undefined) throw new Error("Glider provider is not configured");
     const provider = this.deps.provider;
     const catalog = await this.deps.store.load();
-    if (catalog.every((basket) => basket.providerId !== undefined)) {
+    if (catalog.every((basket) => basket.providerId !== null)) {
       return {
         strategyIds: Object.fromEntries(catalog.map((basket) => [basket.slug, basket.providerId!])),
         recorded: catalog.length,
@@ -952,7 +1024,7 @@ export class BasketService {
       let reused = 0;
       let created = 0;
       for (const definition of definitions) {
-        if (definition.providerId !== undefined) {
+        if (definition.providerId !== null) {
           strategyIds[definition.slug] = definition.providerId;
           recorded++;
           continue;

@@ -1,6 +1,5 @@
 export * from "./ports.js";
 export * from "./usdc.js";
-export * from "./symmetry/venue.js";
 export * from "./jupiter/registry.js";
 export * from "./jupiter/lite.js";
 export * from "./jupiter/keys.js";

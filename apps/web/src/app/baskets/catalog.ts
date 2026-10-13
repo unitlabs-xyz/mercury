@@ -1,4 +1,5 @@
-import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketTag } from "@mercury/types";
+import { visibleStrategies, type ShelfBasket } from "@mercury/view";
 
 /** Shared blurred, right-revealing treatment for theme artwork. */
 const THEME_MASK = "linear-gradient(to right, transparent 0%, #000 72%)";
@@ -11,7 +12,7 @@ export const THEME_ART_TREATMENT = {
 } as const;
 
 export const themes: readonly {
-  tag: ManagedBasketTag;
+  tag: BasketTag;
   title: string;
   description: string;
   image: string;
@@ -70,28 +71,19 @@ export const investors = [
 /* Shared with the phone: @mercury/view's baskets.ts. */
 export { displayBasketName } from "@mercury/view";
 
-export const curatedShelves = (templates: readonly ManagedBasketTemplate[]) => ({
+export const curatedShelves = (templates: readonly ShelfBasket[]) => ({
   themes: themes.map((theme) => ({
     ...theme,
     count: templates.filter((template) => template.tags.includes(theme.tag)).length,
   })),
   pros: investors
     .map((investor) => ({ ...investor, template: templates.find((item) => item.slug === investor.slug) }))
-    .filter((item): item is typeof item & { template: ManagedBasketTemplate } => item.template !== undefined)
+    .filter((item): item is typeof item & { template: ShelfBasket } => item.template !== undefined)
     .map((item) => ({ ...item.template, image: item.image })),
   featured: templates.filter((template) => template.tags.includes("shelf:featured")),
 });
 
-export const visibleStrategies = (
-  templates: readonly ManagedBasketTemplate[],
-  selected: ManagedBasketTag | null,
-  showAll: boolean,
-) =>
-  selected
-    ? templates.filter((item) => item.tags.includes(selected))
-    : showAll
-      ? templates
-      : templates.filter((item) => item.tags.includes("shelf:featured"));
+export { visibleStrategies };
 
 /**
  * A strategy matches on anything a person might type for it: its own name and
@@ -103,8 +95,8 @@ export { searchStrategies } from "@mercury/view";
 
 /** Only ask the market API for logos that discovery currently shows. */
 export const discoveryLogoTickers = (
-  templates: readonly ManagedBasketTemplate[],
-  selected: ManagedBasketTag | null,
+  templates: readonly ShelfBasket[],
+  selected: BasketTag | null,
   showAll: boolean,
 ) => [
   ...new Set(

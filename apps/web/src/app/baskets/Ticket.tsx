@@ -2,8 +2,8 @@ import { exitAssets, fullSelection, rawTokenAmount, tokenAmount } from "@mercury
 import type {
   BasketExitAsset,
   BasketExitMode,
-  ManagedBasketPortfolio,
-  ManagedBasketPortfolioSnapshot,
+  BasketPortfolio,
+  BasketPortfolioSnapshot,
   PreparedBasketExit,
   SubmittedBasketExit,
 } from "@mercury/types";
@@ -27,13 +27,12 @@ const short = (address: string | undefined) =>
 interface EnrollmentRailProps {
   name: string;
   assetCount: number;
-  portfolio: Pick<ManagedBasketPortfolio, "portfolioId" | "smartAccounts"> | null;
+  portfolio: Pick<BasketPortfolio, "portfolioId" | "smartAccounts"> | null;
   signedIn: boolean;
   walletMissing?: boolean | undefined;
   busy: boolean;
   checking?: boolean | undefined;
   lookupFailed?: boolean | undefined;
-  blocked?: boolean | undefined;
   error?: string | undefined;
   amount: string;
   onAmount: (amount: string) => void;
@@ -56,7 +55,6 @@ export const EnrollmentRail = ({
   busy,
   checking = false,
   lookupFailed = false,
-  blocked = false,
   error,
   amount,
   onAmount,
@@ -64,7 +62,6 @@ export const EnrollmentRail = ({
   onReview,
   onRetry,
 }: EnrollmentRailProps) => {
-  const enrolled = portfolio !== null;
   const address = portfolio?.smartAccounts
     .find((account) => account.accountId.startsWith("solana:"))
     ?.accountId.split(":")
@@ -79,8 +76,6 @@ export const EnrollmentRail = ({
         ? "Connect a Solana wallet to invest."
         : !signedIn
           ? "Sign in to invest."
-          : blocked && !enrolled
-            ? "This strategy isn't open to new portfolios right now."
             : (error ?? null);
   return (
     <section aria-label={`Invest in ${name}`} className="min-w-0 rounded-xl bg-white p-1">
@@ -135,7 +130,6 @@ export const EnrollmentRail = ({
             walletMissing ||
             busy ||
             checking ||
-            (blocked && !lookupFailed) ||
             (!lookupFailed && (!valid || overCash || cash === null))
           }
           className="w-full"
@@ -434,7 +428,7 @@ interface FundingStepProps {
   firstDeposit: boolean;
   amount: string;
   cash: number | null;
-  portfolio: ManagedBasketPortfolio;
+  portfolio: BasketPortfolio;
   busy: boolean;
   walletReady: boolean;
   receipt: { signature: string; status: "confirmed" | "pending" } | null;
@@ -545,7 +539,7 @@ interface InvestSheetProps {
   amount: string;
   cash: number | null;
   /** The user's portfolio once set up; until then the sheet is on step 1. */
-  portfolio: ManagedBasketPortfolio | null;
+  portfolio: BasketPortfolio | null;
   /** Opened before set-up: the transfer is step 2 of 2. */
   firstDeposit: boolean;
   receipt: FundingStepProps["receipt"];
@@ -615,7 +609,7 @@ interface ExitSheetProps {
   assetMarks: ReadonlyMap<string, ReactNode>;
   mode: BasketExitMode;
   onMode: (mode: BasketExitMode) => void;
-  account: ManagedBasketPortfolioSnapshot;
+  account: BasketPortfolioSnapshot;
   prepared: PreparedBasketExit | null;
   submitted: SubmittedBasketExit | null;
   busy: boolean;

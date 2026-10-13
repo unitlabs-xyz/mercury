@@ -5,15 +5,15 @@ import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { getBase58Decoder } from "@solana/kit";
 import type {
-  ManagedBasketInsights,
-  ManagedBasketTemplate,
-  ManagedBasketPortfolio,
-  ManagedBasketPortfolioSnapshot,
-  ManagedBasketPortfolioSummary,
-  ManagedBasketOperation,
+  BasketInsights,
+  Basket,
+  BasketPortfolio,
+  BasketPortfolioSnapshot,
+  BasketPortfolioSummary,
+  BasketOperation,
   TriggeredBasketRebalance,
   PreparedBasketEnrollment,
-  ManagedBasketActivity,
+  BasketActivity,
   BasketExitMode,
   BasketExitAsset,
   PreparedBasketExit,
@@ -25,48 +25,6 @@ import { enrollBasket, fundBasket, type FundingReceipt } from "@mercury/view";
 import { apiFetch, ApiError } from "./client";
 import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 import { refreshAfterChain } from "./settle";
-
-/**
- * A basket as the app reads it: GET /v1/baskets, plus what Symmetry knows
- * about the vault behind it. The vault fields are optional because our own
- * curated baskets have no vault until they are launched.
- */
-export interface Basket {
-  readonly slug: string;
-  readonly name: string;
-  readonly description: string;
-  /** Charged on the way in. Symmetry has no yearly fee; see docs/10. */
-  readonly depositFeeBps?: number;
-  readonly withdrawFeeBps?: number;
-  /** The API's single fee, for a basket that has no vault yet. */
-  readonly feeBps: number;
-  readonly minimumUsd: string;
-  readonly capUsd: string | null;
-  readonly venue: "symmetry";
-  readonly constituents: readonly { readonly ticker: string; readonly weightBps: number }[];
-  readonly vault?: {
-    /** The vault account, and the basket token it mints. */
-    readonly address: string;
-    readonly mint: string;
-    readonly symbol: string;
-    readonly creator: string;
-    /** Unix seconds. The basket token started at $1.00 then. */
-    readonly createdAt: number;
-    readonly startPrice: number;
-  };
-  /** What you hold of it, if anything. */
-  readonly position?: { readonly tokens: number; readonly costUsd: number } | null;
-}
-
-export const useBaskets = () => {
-  const signedIn = useSignedIn();
-  return useQuery({
-    queryKey: ["api", "baskets"],
-    queryFn: async () => (await apiFetch<{ baskets: Basket[] }>("/v1/baskets")).baskets,
-    enabled: signedIn,
-    staleTime: 5 * 60_000,
-  });
-};
 
 /** Glider MWR is read separately so the live portfolio value never waits for its curve. */
 export const useBasketReturns = (enabled: boolean) => {
@@ -85,15 +43,13 @@ export const useBasketReturns = (enabled: boolean) => {
   });
 };
 
-/** Where anyone can see, and withdraw from, the vault without us. */
-export const symmetryUrl = (mint: string) => `https://beta.symmetry.fi/dashboard/view/${mint}`;
+const basketPath = (slug: string) => `/v1/baskets/${encodeURIComponent(slug)}`;
 
-/** Glider templates are managed portfolios, not the pooled Symmetry baskets above. */
-export const useBasketTemplates = () =>
+/** The curated shelf and the caller's own baskets, in one list, each marked `source`. */
+export const useBaskets = () =>
   useQuery({
-    queryKey: ["api", "basket-templates"],
-    queryFn: async () =>
-      (await apiFetch<{ templates: ManagedBasketTemplate[] }>("/v1/basket-templates")).templates,
+    queryKey: ["api", "baskets"],
+    queryFn: async () => (await apiFetch<{ baskets: Basket[] }>("/v1/baskets")).baskets,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
@@ -108,7 +64,7 @@ export const useOwnedBasketPortfolios = () => {
   return useQuery({
     queryKey: ["api", "basket-portfolios", user?.id, walletAddress],
     queryFn: async () =>
-      (await apiFetch<{ portfolios: ManagedBasketPortfolioSummary[] }>("/v1/basket-portfolios")).portfolios,
+      (await apiFetch<{ portfolios: BasketPortfolioSummary[] }>("/v1/basket-portfolios")).portfolios,
     enabled:
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
       (SAMPLE_NO_LOGIN || Boolean(walletAddress)),
@@ -119,15 +75,11 @@ export const useOwnedBasketPortfolios = () => {
   });
 };
 
-export const useBasketTemplate = (slug: string) =>
+export const useBasket = (slug: string) =>
   useQuery({
-    queryKey: ["api", "basket-templates", slug],
+    queryKey: ["api", "baskets", slug],
     queryFn: async () =>
-      (
-        await apiFetch<{ template: ManagedBasketTemplate }>(
-          `/v1/basket-templates/${encodeURIComponent(slug)}`,
-        )
-      ).template,
+      (await apiFetch<{ basket: Basket }>(`/v1/baskets/${encodeURIComponent(slug)}`)).basket,
     enabled: slug.length > 0,
     retry: false,
     // Glider's modeled-performance response is cached by our API for five minutes.
@@ -138,11 +90,11 @@ export const useBasketTemplate = (slug: string) =>
 
 export const useBasketInsights = (slug: string) =>
   useQuery({
-    queryKey: ["api", "basket-templates", slug, "insights"],
+    queryKey: ["api", "baskets", slug, "insights"],
     queryFn: async () =>
       (
-        await apiFetch<{ insights: ManagedBasketInsights }>(
-          `/v1/basket-templates/${encodeURIComponent(slug)}/insights`,
+        await apiFetch<{ insights: BasketInsights }>(
+          `${basketPath(slug)}/insights`,
         )
       ).insights,
     enabled: slug.length > 0,
@@ -152,7 +104,6 @@ export const useBasketInsights = (slug: string) =>
     refetchOnWindowFocus: true,
   });
 
-const enrollmentPath = (slug: string) => `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`;
 
 export const basketEnrollmentEnabled = (ready: boolean, authenticated: boolean, hasIdentityToken: boolean) =>
   SAMPLE_NO_LOGIN || (ready && authenticated && hasIdentityToken);
@@ -165,7 +116,7 @@ export const useBasketEnrollment = (slug: string) => {
   return useQuery({
     queryKey: ["api", "basket-enrollment", slug, user?.id, walletAddress],
     queryFn: async () =>
-      (await apiFetch<{ portfolio: ManagedBasketPortfolio | null }>(enrollmentPath(slug))).portfolio,
+      (await apiFetch<{ portfolio: BasketPortfolio | null }>(`${basketPath(slug)}/portfolio`)).portfolio,
     enabled:
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
       (SAMPLE_NO_LOGIN || Boolean(walletAddress)) &&
@@ -185,8 +136,8 @@ export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
     queryKey: ["api", "basket-portfolio", slug, user?.id, wallets[0]?.address],
     queryFn: async () =>
       (
-        await apiFetch<{ portfolio: ManagedBasketPortfolioSnapshot | null }>(
-          `/v1/basket-templates/${encodeURIComponent(slug)}/portfolio`,
+        await apiFetch<{ portfolio: BasketPortfolioSnapshot | null }>(
+          `${basketPath(slug)}/portfolio/positions`,
         )
       ).portfolio,
     enabled:
@@ -222,8 +173,8 @@ const basketOperationQuery = (slug: string, operationId: string | null, enabled:
     queryKey: ["api", "basket-operation", slug, viewer.userId, viewer.address, operationId],
     queryFn: async () =>
       (
-        await apiFetch<{ operation: ManagedBasketOperation }>(
-          `/v1/basket-templates/${encodeURIComponent(slug)}/operations/${encodeURIComponent(operationId!)}`,
+        await apiFetch<{ operation: BasketOperation }>(
+          `${basketPath(slug)}/operations/${encodeURIComponent(operationId!)}`,
         )
       ).operation,
     enabled: enabled && Boolean(operationId) && viewer.signedIn,
@@ -254,7 +205,7 @@ export const useBasketRebalanceAction = (slug: string) => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      apiFetch<TriggeredBasketRebalance>(`/v1/basket-templates/${encodeURIComponent(slug)}/rebalance`, {
+      apiFetch<TriggeredBasketRebalance>(`${basketPath(slug)}/rebalance`, {
         method: "POST",
       }),
     onSettled: () => refreshAfterChain(qc),
@@ -266,7 +217,7 @@ export const useBasketExitAction = (slug: string) => {
   const qc = useQueryClient();
   const { wallets } = useWallets();
   const { signMessage } = useSignMessage();
-  const path = `/v1/basket-templates/${encodeURIComponent(slug)}/exit`;
+  const path = `${basketPath(slug)}/exit`;
   const prepare = useMutation({
     mutationFn: ({ mode, assets }: { mode: BasketExitMode; assets?: BasketExitAsset[] }) =>
       apiFetch<PreparedBasketExit>(`${path}/${mode}/prepare`, {
@@ -291,7 +242,7 @@ export const useBasketExitAction = (slug: string) => {
         wallet,
       });
       const signature = getBase58Decoder().decode(signed.signature);
-      return apiFetch<SubmittedBasketExit>(`${path}/${prepared.mode}`, {
+      return apiFetch<SubmittedBasketExit>(`${path}/${prepared.mode}/submit`, {
         method: "POST",
         body: JSON.stringify({ message: prepared.message, signature, submission: prepared.submission }),
       });
@@ -309,8 +260,8 @@ export const useBasketActivity = (slug: string, enrolled: boolean) => {
     queryKey: ["api", "basket-activity", slug, user?.id, wallets[0]?.address],
     queryFn: async () =>
       (
-        await apiFetch<{ activity: ManagedBasketActivity[] }>(
-          `/v1/basket-templates/${encodeURIComponent(slug)}/activity`,
+        await apiFetch<{ activity: BasketActivity[] }>(
+          `${basketPath(slug)}/activity`,
         )
       ).activity,
     enabled:
@@ -338,12 +289,12 @@ export const useBasketEnrollmentAction = (slug: string) => {
     mutationFn: async () => {
       const wallet = wallets[0];
       if (!wallet) throw new Error("Your Solana wallet is still loading.");
-      const path = enrollmentPath(slug);
+      const path = `${basketPath(slug)}/enrollment`;
       return enrollBasket(slug, {
         prepare: () => apiFetch<PreparedBasketEnrollment>(`${path}/prepare`, { method: "POST" }),
         submit: async (body) =>
           (
-            await apiFetch<{ portfolio: ManagedBasketPortfolio }>(path, {
+            await apiFetch<{ portfolio: BasketPortfolio }>(`${path}/submit`, {
               method: "POST",
               body: JSON.stringify(body),
             })
@@ -368,7 +319,7 @@ const FUNDING_KIND = "funding";
 type SentFunding = { slug: string; signature: string };
 
 const confirmSentFunding = ({ slug, signature }: SentFunding) =>
-  apiFetch(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`, {
+  apiFetch(`${basketPath(slug)}/funding/confirm`, {
     method: "POST",
     body: JSON.stringify({ signature }),
   });
@@ -384,7 +335,7 @@ export const useBasketFundingAction = (slug: string) => {
       portfolio,
     }: {
       amountUsd: string;
-      portfolio: ManagedBasketPortfolio;
+      portfolio: BasketPortfolio;
     }) => {
       const wallet = wallets[0];
       if (!wallet) throw new Error("Your Solana wallet is still loading.");
@@ -392,7 +343,7 @@ export const useBasketFundingAction = (slug: string) => {
       const receipt = await fundBasket(amountUsd, portfolio, {
         prepare: (amount) =>
           apiFetch<PreparedBasketFunding>(
-            `/v1/basket-templates/${encodeURIComponent(slug)}/funding/prepare`,
+            `${basketPath(slug)}/funding/prepare`,
             { method: "POST", body: JSON.stringify({ amountUsd: amount }) },
           ),
         sign: async (wire) => {

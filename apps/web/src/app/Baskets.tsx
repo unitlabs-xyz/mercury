@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketTag } from "@mercury/types";
+import { shelfOf, type ShelfBasket } from "@mercury/view";
 import { Link } from "react-router-dom";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
-import { basketEnrollmentEnabled, useBasketTemplates, useOwnedBasketPortfolios } from "../api/baskets";
+import { basketEnrollmentEnabled, useBaskets, useOwnedBasketPortfolios } from "../api/baskets";
 import { useInstruments, type Instrument } from "../market/hooks";
 import { GlideTable, SearchField } from "../ui/ds";
 import { ArrowRight } from "../ui/icons";
@@ -22,8 +23,8 @@ import {
 import { BasketsRail } from "./baskets/rail";
 
 type Instruments = ReadonlyMap<string, Instrument>;
-const EMPTY_TEMPLATES: readonly ManagedBasketTemplate[] = [];
-const STRATEGY_COLS = "grid-cols-[minmax(220px,1.5fr)_minmax(165px,1fr)_56px_90px_85px_20px] gap-x-3";
+const EMPTY_TEMPLATES: readonly ShelfBasket[] = [];
+const STRATEGY_COLS = "grid-cols-[minmax(220px,1.5fr)_minmax(165px,1fr)_56px_90px_20px] gap-x-3";
 const Arrow = ({ left = false }: { left?: boolean }) => (
   <ArrowRight className={`size-4 ${left ? "rotate-180" : ""}`} aria-hidden />
 );
@@ -99,7 +100,7 @@ const Holdings = ({
   instruments,
   limit = 5,
 }: {
-  template: ManagedBasketTemplate;
+  template: ShelfBasket;
   instruments: Instruments;
   limit?: number;
 }) => {
@@ -223,7 +224,7 @@ const ThemeShelf = ({
   select,
 }: {
   shelves: ReturnType<typeof curatedShelves>["themes"];
-  select: (tag: ManagedBasketTag) => void;
+  select: (tag: BasketTag) => void;
 }) => (
   <Shelf
     id="themes"
@@ -304,9 +305,9 @@ const StrategyTable = ({
   query,
   setQuery,
 }: {
-  templates: readonly ManagedBasketTemplate[];
+  templates: readonly ShelfBasket[];
   instruments: Instruments;
-  selected: ManagedBasketTag | null;
+  selected: BasketTag | null;
   clear: () => void;
   showAll: boolean;
   setShowAll: (value: boolean) => void;
@@ -363,14 +364,13 @@ const StrategyTable = ({
         ) : (
           <GlideTable
             columns={STRATEGY_COLS}
-            minWidth="min-w-[760px]"
+            minWidth="min-w-[680px]"
             headings={
               <>
                 <span>Name</span>
                 <span>Top holdings</span>
                 <span className="text-right">Assets</span>
                 <span className="text-right">Rebalance</span>
-                <span className="text-right">Availability</span>
                 <span />
               </>
             }
@@ -393,13 +393,6 @@ const StrategyTable = ({
                   <Holdings template={template} instruments={instruments} />
                   <span className="text-right text-ds-muted">{template.allocations.length}</span>
                   <span className="text-right text-ds-muted">Daily</span>
-                  <span className="text-right text-ds-muted">
-                    {template.status === "enabled"
-                      ? "Available"
-                      : template.status === "candidate"
-                        ? "Enrollment pilot"
-                        : "Preview"}
-                  </span>
                   <Arrow />
                 </Link>
               </li>
@@ -415,9 +408,9 @@ export const Baskets = () => {
   const { ready, authenticated, login } = usePrivy();
   const { identityToken } = useIdentityToken();
   const { wallets } = useWallets();
-  const catalog = useBasketTemplates();
+  const catalog = useBaskets();
   const owned = useOwnedBasketPortfolios();
-  const [selected, setSelected] = useState<ManagedBasketTag | null>(null);
+  const [selected, setSelected] = useState<BasketTag | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
   const [term, setTerm] = useState("");
@@ -427,7 +420,11 @@ export const Baskets = () => {
     return () => clearTimeout(timer);
   }, [query]);
   const searching = term !== "";
-  const templates = catalog.data ?? EMPTY_TEMPLATES;
+  // The shelf is the curated catalogue; a basket somebody wrote is not on it.
+  const templates = useMemo(
+    () => (catalog.data ? shelfOf(catalog.data) : EMPTY_TEMPLATES),
+    [catalog.data],
+  );
   const shelves = useMemo(() => curatedShelves(templates), [templates]);
   const tickers = useMemo(() => {
     /* A search reads every holding's company name, so it needs the whole catalog's instruments. */

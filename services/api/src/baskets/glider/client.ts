@@ -7,19 +7,19 @@ import {
 } from "../core/deps.js";
 import {
   BasketExitMessage,
-  ManagedBasketOperation,
-  ManagedBasketPortfolioSnapshot,
+  BasketOperation,
+  BasketPortfolioSnapshot,
   TriggeredBasketRebalance,
   SubmittedBasketExit,
   type BasketExitMode,
   type BasketExitSubmission,
-  type ManagedBasketInsights,
+  type BasketInsights,
 } from "@mercury/types";
 import type {
   BasketDefinition,
   ProviderBasket,
   StrategyPerformance,
-  BasketPortfolio,
+  ProviderPortfolio,
   EnrollmentChallenge,
 } from "../core/primitives.js";
 import type { components, paths } from "./generated.js";
@@ -93,15 +93,15 @@ const portfolio = z.object({
 });
 const portfolioDetail = portfolio.extend({
   ownerAccountId: z.string(),
-  schedule: ManagedBasketPortfolioSnapshot.shape.schedule,
+  schedule: BasketPortfolioSnapshot.shape.schedule,
 });
 const positions = z.object({
   portfolioId: z.string(),
   totalValueUsd: z.string(),
   inTransit: z.object({ totalUsd: z.string() }),
   fetchedAt: z.string(),
-  assets: ManagedBasketPortfolioSnapshot.shape.assets,
-  warnings: ManagedBasketPortfolioSnapshot.shape.warnings,
+  assets: BasketPortfolioSnapshot.shape.assets,
+  warnings: BasketPortfolioSnapshot.shape.warnings,
 });
 const enrollmentChallenge = z.object({
   flowId: z.string(),
@@ -163,12 +163,12 @@ export class GliderClient implements BasketProvider {
     throw new Error(`Glider strategy request failed: ${result.response.status} /v2${path}${detail}`);
   }
 
-  async portfolios(ownerAccountId: string, strategyId: string): Promise<readonly BasketPortfolio[]> {
+  async portfolios(ownerAccountId: string, strategyId: string): Promise<readonly ProviderPortfolio[]> {
     return await this.portfoliosForOwner(ownerAccountId, strategyId);
   }
 
-  async portfoliosForOwner(ownerAccountId: string, strategyId?: string): Promise<readonly BasketPortfolio[]> {
-    const found: BasketPortfolio[] = [];
+  async portfoliosForOwner(ownerAccountId: string, strategyId?: string): Promise<readonly ProviderPortfolio[]> {
+    const found: ProviderPortfolio[] = [];
     let cursor: string | null = null;
     const seen = new Set<string>();
     do {
@@ -233,7 +233,7 @@ export class GliderClient implements BasketProvider {
     const result = await this.client.GET("/portfolios/{portfolioId}/operations/{operationId}", {
       params: { path: { portfolioId, operationId } },
     });
-    return ManagedBasketOperation.parse(
+    return BasketOperation.parse(
       this.checked(
         result,
         `/portfolios/${encodeURIComponent(portfolioId)}/operations/${encodeURIComponent(operationId)}`,
@@ -341,7 +341,7 @@ export class GliderClient implements BasketProvider {
     challenge: EnrollmentChallenge,
     signed: string,
     name: string,
-  ): Promise<BasketPortfolio> {
+  ): Promise<ProviderPortfolio> {
     const result = await this.client.POST("/enroll", {
       body: {
         ownerAccountId,
@@ -439,7 +439,7 @@ export class GliderClient implements BasketProvider {
 
   async allocationBreakdown(
     assets: BasketDefinition["assets"],
-  ): Promise<NonNullable<ManagedBasketInsights["allocation"]>> {
+  ): Promise<NonNullable<BasketInsights["allocation"]>> {
     const result = await this.client.POST("/assets/allocation-breakdown", {
       body: {
         dimensions: ["sector", "gliderTheme"],

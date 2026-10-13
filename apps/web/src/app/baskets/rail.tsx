@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { usd } from "@mercury/view";
-import type { ManagedBasketPortfolioSummary, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketPortfolioSummary, Basket } from "@mercury/types";
 import type { Instrument } from "../../market/hooks";
 import { ArrowRight } from "../../ui/icons";
 import { GlideRows, RailCard, RailHead } from "../../ui/ds";
@@ -27,13 +27,13 @@ type RailProps = {
   signedIn: boolean;
   loading: boolean;
   error: boolean;
-  portfolios: readonly ManagedBasketPortfolioSummary[];
-  templates: readonly ManagedBasketTemplate[];
+  portfolios: readonly BasketPortfolioSummary[];
+  templates: readonly Basket[];
   instruments: ReadonlyMap<string, Instrument>;
 };
 
 /** The two heaviest holdings mark a basket wherever it is listed. */
-const topAssets = (template: ManagedBasketTemplate | undefined) =>
+const topAssets = (template: Basket | undefined) =>
   [...(template?.allocations ?? [])].sort((a, b) => b.weightBps - a.weightBps).slice(0, 2);
 
 /** A basket's marks and name, shared by every rail row so the lists stay identical. */

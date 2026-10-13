@@ -328,137 +328,6 @@ export const SAMPLE_HISTORY: Record<string, { at: string; valueUsd: string }[]> 
   "1M": series(60, 12 * 3_600_000),
 };
 
-/**
- * Four stock vaults that exist on Symmetry today, read from chain on 28
- * September 2026 with @symmetry-hq/sdk: their weights, fees, addresses and
- * creation dates are Symmetry's own. The vaults hold almost nothing yet, so the
- * value of each is worked out in the app from its stocks' price histories, from
- * $1.00 on the day it was created. The one position is sample.
- */
-const vault = (address: string, mint: string, symbol: string, creator: string, createdAt: number) => ({
-  address,
-  mint,
-  symbol,
-  creator,
-  createdAt,
-  startPrice: 1,
-});
-const baskets = [
-  {
-    slug: "not-insider-trading",
-    name: "Not Insider Trading",
-    description:
-      "Eight US tech names, from chips to cloud security, weighted by the creator rather than by size.",
-    feeBps: 0,
-    depositFeeBps: 0,
-    withdrawFeeBps: 50,
-    minimumUsd: "25",
-    capUsd: null,
-    venue: "symmetry",
-    constituents: [
-      { ticker: "GOOGL", weightBps: 1600 },
-      { ticker: "NVDA", weightBps: 1500 },
-      { ticker: "AVGO", weightBps: 1400 },
-      { ticker: "AMZN", weightBps: 1200 },
-      { ticker: "AAPL", weightBps: 1100 },
-      { ticker: "MSFT", weightBps: 1100 },
-      { ticker: "META", weightBps: 1100 },
-      { ticker: "CRWD", weightBps: 1000 },
-    ],
-    vault: vault(
-      "G54nsrBx9a59YVqiqk2Sg3yX9wQauRz5MEugdWDjvmsf",
-      "FXcxe5f3AwkJZRaoYFuGME7rEXS4NmBxZPYKVh3Q4bnD",
-      "NIT",
-      "4RLo2SCDEbFFWU9R1Pw5ogz7YHevxv1gLevZ3RyMEFFL",
-      1777467071,
-    ),
-    position: { tokens: 430.2, costUsd: 420 },
-  },
-  {
-    slug: "mag-7",
-    name: "Mag 7",
-    description:
-      "The seven companies that have driven most of the US market's gains, in equal parts. The simplest way to own all of them.",
-    feeBps: 0,
-    depositFeeBps: 0,
-    withdrawFeeBps: 0,
-    minimumUsd: "25",
-    capUsd: null,
-    venue: "symmetry",
-    constituents: [
-      { ticker: "AAPL", weightBps: 1432 },
-      { ticker: "MSFT", weightBps: 1428 },
-      { ticker: "NVDA", weightBps: 1428 },
-      { ticker: "GOOGL", weightBps: 1428 },
-      { ticker: "AMZN", weightBps: 1428 },
-      { ticker: "META", weightBps: 1428 },
-      { ticker: "TSLA", weightBps: 1428 },
-    ],
-    vault: vault(
-      "Dzuo8qSiMH5KjoVhqj9gd1g7PbB9FotqhgrLEYj3qUZT",
-      "3yej5SrC6vr5rLVvYPVBs2fo33zSsU4nHNyRHYTu9zUx",
-      "MAG7",
-      "9YiGcJN4DMoQoWBSs51vUpFMBsPeKLWrFnDhah5bocFL",
-      1789593739,
-    ),
-    position: null,
-  },
-  {
-    slug: "mag-7-caucus",
-    name: "Mag7 Caucus",
-    description:
-      "The same seven, weighted toward Microsoft and Apple and away from Tesla. Steadier than equal weights, with less upside from the fastest movers.",
-    feeBps: 25,
-    depositFeeBps: 25,
-    withdrawFeeBps: 0,
-    minimumUsd: "25",
-    capUsd: null,
-    venue: "symmetry",
-    constituents: [
-      { ticker: "MSFT", weightBps: 3448 },
-      { ticker: "AAPL", weightBps: 2740 },
-      { ticker: "GOOGL", weightBps: 1424 },
-      { ticker: "AMZN", weightBps: 1151 },
-      { ticker: "NVDA", weightBps: 854 },
-      { ticker: "META", weightBps: 322 },
-      { ticker: "TSLA", weightBps: 61 },
-    ],
-    vault: vault(
-      "AwDFvjEPPwdF1YgXV8asNt6LeEFDduinYneCn6mHDAsh",
-      "9ihGfswnUZ6MysSR3KgmrZ57FXDVAiAQ6sEHwLuWwzJ4",
-      "IITMAGCA",
-      "H6pLh8nFv1teY9G6JAVQuZQxeUvGfwYf1aPXHkDPDRph",
-      1789652010,
-    ),
-    position: null,
-  },
-  {
-    slug: "bald-founder-index",
-    name: "Bald Founder Index",
-    description:
-      "Four companies run by their founders, across online retail, software and crypto. Concentrated, and it moves with Bitcoin.",
-    feeBps: 0,
-    depositFeeBps: 0,
-    withdrawFeeBps: 50,
-    minimumUsd: "25",
-    capUsd: null,
-    venue: "symmetry",
-    constituents: [
-      { ticker: "AMZN", weightBps: 3100 },
-      { ticker: "COIN", weightBps: 2700 },
-      { ticker: "MSFT", weightBps: 2200 },
-      { ticker: "GLXY", weightBps: 2000 },
-    ],
-    vault: vault(
-      "EPE5SRsPYUUgYefm7sSns4BYfi5HxMdPuNDfchoYzN9s",
-      "9TUeXbEgrS4ohSkEUjnRbRuSQv3zaryYMWs64M6cCeD",
-      "BFI",
-      "4RLo2SCDEbFFWU9R1Pw5ogz7YHevxv1gLevZ3RyMEFFL",
-      1777919670,
-    ),
-    position: null,
-  },
-];
 
 /** The API reads this answers. Anything else goes to the real API. */
 /**
@@ -641,12 +510,12 @@ const basketRoute = (route: string) => {
       })),
     };
   }
-  const m = /^\/v1\/basket-templates\/([^/]+)\/(enrollment|portfolio|activity)$/.exec(route);
+  const m = /^\/v1\/baskets\/([^/]+)\/(portfolio\/positions|portfolio|activity)$/.exec(route);
   if (!m) return undefined;
   const [, slug = "", what] = m;
   const owned = OWNED_BASKETS.some((b) => b.slug === slug);
-  if (what === "enrollment") return { portfolio: owned ? basketPortfolio(slug) : null };
-  if (what === "portfolio") return { portfolio: owned ? basketSnapshot(slug) : null };
+  if (what === "portfolio") return { portfolio: owned ? basketPortfolio(slug) : null };
+  if (what === "portfolio/positions") return { portfolio: owned ? basketSnapshot(slug) : null };
   return { activity: [] };
 };
 
@@ -660,7 +529,6 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
   if (basket !== undefined) return basket;
   if (route.startsWith("/v1/portfolio/exposure/"))
     return exposure(decodeURIComponent(route.split("/").at(-1) ?? ""));
-  if (route === "/v1/baskets") return { baskets };
   if (route === "/v1/activity") return { items: [], nextCursor: null };
   if (route === "/v1/portfolio/history") {
     const range = new URLSearchParams(path.split("?")[1] ?? "").get("range") ?? "1D";

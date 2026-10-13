@@ -1,12 +1,14 @@
 import { z } from "zod";
 import {
+  Basket,
+  PickableBasketAsset,
   ApiError,
   Decision,
   MarketStatus,
-  ManagedBasketPortfolio,
-  ManagedBasketPortfolioSnapshot,
-  ManagedBasketPortfolioSummary,
-  ManagedBasketOperation,
+  BasketPortfolio,
+  BasketPortfolioSnapshot,
+  BasketPortfolioSummary,
+  BasketOperation,
   TriggeredBasketRebalance,
   PreparedBasketEnrollment,
   SubmitBasketEnrollment,
@@ -14,7 +16,7 @@ import {
   PreparedBasketFunding,
   ConfirmBasketFunding,
   ConfirmedBasketFunding,
-  ManagedBasketActivity,
+  BasketActivity,
 } from "@mercury/types";
 
 export class MercuryError extends Error {
@@ -69,25 +71,6 @@ const InstrumentList = z.object({
 
 const CreateOrder = z.object({ orderId: z.string(), decision: Decision });
 const Unsigned = z.object({ transactions: z.array(z.string()), expiresAt: z.string() });
-const BasketList = z.object({
-  baskets: z.array(
-    z.object({
-      slug: z.string(),
-      name: z.string(),
-      description: z.string(),
-      feeBps: z.number(),
-      minimumUsd: z.string(),
-      capUsd: z.string().nullable(),
-      venue: z.string(),
-      constituents: z.array(z.object({ ticker: z.string(), weightBps: z.number() })),
-    }),
-  ),
-});
-const BasketPreview = z.object({
-  legs: z.array(z.object({ ticker: z.string(), usdAmount: z.string(), decision: Decision.nullable() })),
-  refusedLegs: z.array(z.string()),
-  overall: z.enum(["executable", "partial", "refused"]),
-});
 
 /** A thin typed client. Every response is parsed, so nothing untyped reaches a component. */
 export class MercuryClient {
@@ -133,68 +116,71 @@ export class MercuryClient {
   executeOrder = (orderId: string) =>
     this.call(`/v1/orders/${orderId}/execute`, Unsigned, { method: "POST" });
 
-  baskets = () => this.call("/v1/baskets", BasketList);
-  previewBasket = (slug: string, usdAmount: string) =>
-    this.call(`/v1/baskets/${slug}/preview`, BasketPreview, {
-      method: "POST",
-      body: JSON.stringify({ usdAmount, acceptQueued: false }),
-    });
+  /** The curated shelf and the caller's own baskets, each marked `source`. */
+  baskets = () => this.call("/v1/baskets", z.object({ baskets: Basket.array() }));
 
-  basketEnrollment = (slug: string) =>
-    this.call(
-      `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
-      z.object({ portfolio: ManagedBasketPortfolio.nullable() }),
-    );
+  basket = (slug: string) =>
+    this.call(`/v1/baskets/${encodeURIComponent(slug)}`, z.object({ basket: Basket }));
 
+  /** Whether this wallet has a portfolio here. Cheap; `basketPositions` is the full read. */
   basketPortfolio = (slug: string) =>
     this.call(
-      `/v1/basket-templates/${encodeURIComponent(slug)}/portfolio`,
-      z.object({ portfolio: ManagedBasketPortfolioSnapshot.nullable() }),
+      `/v1/baskets/${encodeURIComponent(slug)}/portfolio`,
+      z.object({ portfolio: BasketPortfolio.nullable() }),
     );
 
+  basketPositions = (slug: string) =>
+    this.call(
+      `/v1/baskets/${encodeURIComponent(slug)}/portfolio/positions`,
+      z.object({ portfolio: BasketPortfolioSnapshot.nullable() }),
+    );
+
+  basketAssets = () =>
+    this.call("/v1/basket-assets", z.object({ assets: z.array(PickableBasketAsset) }));
+
   basketPortfolios = () =>
-    this.call("/v1/basket-portfolios", z.object({ portfolios: ManagedBasketPortfolioSummary.array() }));
+    this.call("/v1/basket-portfolios", z.object({ portfolios: BasketPortfolioSummary.array() }));
 
   basketOperation = (slug: string, operationId: string) =>
     this.call(
-      `/v1/basket-templates/${encodeURIComponent(slug)}/operations/${encodeURIComponent(operationId)}`,
-      z.object({ operation: ManagedBasketOperation }),
+      `/v1/baskets/${encodeURIComponent(slug)}/operations/${encodeURIComponent(operationId)}`,
+      z.object({ operation: BasketOperation }),
     );
 
   triggerBasketRebalance = (slug: string) =>
-    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/rebalance`, TriggeredBasketRebalance, {
+    this.call(`/v1/baskets/${encodeURIComponent(slug)}/rebalance`, TriggeredBasketRebalance, {
       method: "POST",
     });
 
   prepareBasketEnrollment = (slug: string) =>
     this.call(
-      `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment/prepare`,
+      `/v1/baskets/${encodeURIComponent(slug)}/enrollment/prepare`,
       PreparedBasketEnrollment,
       { method: "POST" },
     );
 
   submitBasketEnrollment = (slug: string, body: z.infer<typeof SubmitBasketEnrollment>) =>
     this.call(
-      `/v1/basket-templates/${encodeURIComponent(slug)}/enrollment`,
-      z.object({ portfolio: ManagedBasketPortfolio }),
+      `/v1/baskets/${encodeURIComponent(slug)}/enrollment/submit`,
+      z.object({ portfolio: BasketPortfolio }),
       { method: "POST", body: JSON.stringify(SubmitBasketEnrollment.parse(body)) },
     );
 
   prepareBasketFunding = (slug: string, amountUsd: string) =>
-    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/prepare`, PreparedBasketFunding, {
+    this.call(`/v1/baskets/${encodeURIComponent(slug)}/funding/prepare`, PreparedBasketFunding, {
       method: "POST",
       body: JSON.stringify(PrepareBasketFunding.parse({ amountUsd })),
     });
 
   confirmBasketFunding = (slug: string, signature: string) =>
-    this.call(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`, ConfirmedBasketFunding, {
+    this.call(`/v1/baskets/${encodeURIComponent(slug)}/funding/confirm`, ConfirmedBasketFunding, {
       method: "POST",
       body: JSON.stringify(ConfirmBasketFunding.parse({ signature })),
     });
 
   basketActivity = (slug: string) =>
     this.call(
-      `/v1/basket-templates/${encodeURIComponent(slug)}/activity`,
-      z.object({ activity: ManagedBasketActivity.array() }),
+      `/v1/baskets/${encodeURIComponent(slug)}/activity`,
+      z.object({ activity: BasketActivity.array() }),
     );
 }

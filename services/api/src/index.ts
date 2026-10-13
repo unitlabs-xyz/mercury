@@ -176,7 +176,7 @@ every("prices", 20_000, async () => {
  * waits on this: the picker reads the table it fills.
  */
 every("basket-assets", 24 * 60 * 60 * 1000, async () => {
-  const s = await read.basketTemplates.syncAssets();
+  const s = await read.baskets.syncAssets();
   if (s.held) return `held: ${s.offered} offered against a larger catalogue, keeping what we had`;
   return `${s.written} assets`;
 });

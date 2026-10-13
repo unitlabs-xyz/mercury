@@ -9,7 +9,7 @@ import { Borrowing } from "./portfolio/Borrowing";
 import { CardPanel } from "./portfolio/CardPanel";
 import { Recent, Upcoming } from "./portfolio/Feed";
 import { Holdings, type BasketHolding } from "./portfolio/Holdings";
-import { useBasketReturns, useBasketTemplates } from "../api/baskets";
+import { useBasketReturns, useBaskets } from "../api/baskets";
 import { USDC_ASSET_ID } from "@mercury/view";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { displayBasketName } from "./baskets/catalog";
@@ -39,7 +39,7 @@ export const Portfolio = () => {
   const money = useMoney();
   const dash = useDashboard();
   // The backend owns basket valuation; templates only supply the two marks.
-  const templates = useBasketTemplates();
+  const templates = useBaskets();
   const basketTemplates = (portfolio.data?.baskets ?? []).flatMap((b) => {
     const t = templates.data?.find((x) => x.slug === b.slug);
     const value = Number(b.valueUsd);

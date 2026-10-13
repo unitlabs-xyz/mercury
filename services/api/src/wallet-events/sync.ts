@@ -11,7 +11,7 @@ import {
 import { movementsIn, type Movement } from "./movements.js";
 import { walkStream } from "./walk.js";
 import { reconcileBasketExits } from "../baskets/glider/reconcile.js";
-import type { ManagedBasketOperation } from "@mercury/types";
+import type { BasketOperation } from "@mercury/types";
 
 export interface WalletEventsDeps {
   readonly history: ChainHistory;
@@ -23,7 +23,7 @@ export interface WalletEventsDeps {
    */
   readonly relayer?: string | undefined;
   readonly exitOperations?: {
-    operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
+    operation(portfolioId: string, operationId: string): Promise<BasketOperation>;
   };
 }
 

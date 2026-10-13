@@ -4,12 +4,13 @@ import type {
   BasketExitMessage,
   BasketExitMode,
   BasketExitSubmission,
-  ManagedBasketTag,
+  BasketTag,
 } from "@mercury/types";
 
 export interface BasketDefinition {
   slug: string;
-  providerId?: string;
+  /** Null until Glider holds the strategy. The same spelling on both kinds of basket. */
+  providerId: string | null;
   name: string;
   description: string;
   assets: readonly { assetId: string; weightBps: number }[];
@@ -72,11 +73,22 @@ export const slugFor = (name: string, suffix: string): string => {
   return `${stem || "basket"}-${suffix}`;
 };
 
+/**
+ * What enrolling, funding, rebalancing or exiting needs of a basket, whoever
+ * wrote it. Resolution has already proved Glider holds the strategy, so
+ * `providerId` is not optional here.
+ */
+export interface LiveBasket {
+  readonly slug: string;
+  readonly name: string;
+  readonly providerId: string;
+  readonly assets: readonly { assetId: string; ticker: string; weightBps: number }[];
+}
+
 /** Catalog metadata stays with the definition so sync and discovery read one source. */
-export interface BasketTemplate extends BasketDefinition {
+export interface CuratedBasket extends BasketDefinition {
   sourceStrategyId: string;
-  status: "candidate" | "disabled" | "enabled";
-  tags: readonly ManagedBasketTag[];
+  tags: readonly BasketTag[];
   assets: readonly (BasketDefinition["assets"][number] & { ticker: string })[];
 }
 
@@ -95,7 +107,7 @@ export type ProviderBasket = Omit<BasketDefinition, "slug" | "providerId" | "sch
   schedule: unknown;
 };
 
-export interface BasketPortfolio {
+export interface ProviderPortfolio {
   portfolioId: string;
   ownerAccountId: string;
   strategyId: string;

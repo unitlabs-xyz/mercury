@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { allocate, D, DEFAULT_POLICY, toWire } from "@mercury/core";
-import { ConfirmOrderRequest, CreateOrderRequest, InvestBasketRequest, type ErrorCode } from "@mercury/types";
+import { D, DEFAULT_POLICY, toWire } from "@mercury/core";
+import { ConfirmOrderRequest, CreateOrderRequest, type ErrorCode } from "@mercury/types";
 import type { Deps } from "./deps.js";
 import { priceOrder, type PriceRequest } from "./pricing.js";
 import { gateExecution } from "./orders/gate.js";
@@ -12,7 +12,6 @@ import { buildSponsored } from "./relay/build.js";
 import { rpcLookupTables } from "./relay/lookups.js";
 import { createSolanaRpc } from "@solana/kit";
 import { USDC_MINT } from "@mercury/chain";
-import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
@@ -24,7 +23,6 @@ import { portfolioRoutes } from "./routes/portfolio.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { basketRoutes } from "./routes/basket.js";
-import { customBasketRoutes } from "./routes/custom-basket.js";
 
 const fail = (code: ErrorCode | "not_implemented", message: string, details?: unknown) => ({
   error: { code, message, ...(details === undefined ? {} : { details }) },
@@ -91,7 +89,6 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   // and a visitor browsing before signing in should see prices. Registered ahead
   // of the auth middleware, which only guards the routes after it.
   app.route("/", instrumentRoutes(read.instruments));
-  app.route("/", basketRoutes(read.basketTemplates, requireAuth(auth)));
 
   // The landing page's signup form. Public to write, token-guarded to read.
   app.route("/", waitlistRoutes(read.waitlist));
@@ -111,8 +108,8 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.get("/v1/me", (c) => c.json(c.get("identity")));
   app.route("/", portfolioRoutes(read.portfolio));
   app.route("/", moneyRoutes(read.money));
+  app.route("/", basketRoutes(read.baskets));
   app.route("/", activityRoutes(read.activity));
-  app.route("/", customBasketRoutes(read.customBaskets));
   app.route("/", borrowRoutes(read.borrow));
   app.route("/", sendRoutes(read.send));
 
@@ -578,61 +575,6 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       feeUsd: toWire(fill.feeUsd),
       realisedPnlUsd:
         settled.kind === "settled" && settled.realisedPnlUsd !== null ? toWire(settled.realisedPnlUsd) : null,
-    });
-  });
-
-  app.get("/v1/baskets", (c) =>
-    c.json({
-      baskets: BASKETS.map((b) => ({
-        slug: b.slug,
-        name: b.name,
-        description: b.description,
-        feeBps: b.feeBps,
-        minimumUsd: b.minimumUsd,
-        capUsd: b.capUsd,
-        venue: "symmetry",
-        constituents: b.constituents,
-      })),
-    }),
-  );
-
-  /**
-   * Run the full decision on every leg without executing. This is what makes the
-   * all-or-nothing rule visible before the user commits. See docs/04.
-   */
-  app.post("/v1/baskets/:slug/preview", async (c) => {
-    const basket = BASKETS.find((b) => b.slug === c.req.param("slug"));
-    if (basket === undefined) return c.json(fail("not_found", "Unknown basket."), 404);
-
-    const parsed = InvestBasketRequest.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
-
-    const legs = allocate(D(parsed.data.usdAmount), basket.constituents);
-    const priced = await Promise.all(
-      legs.map(async (leg) => {
-        const decision = await priceOrder(market(), {
-          ticker: leg.ticker,
-          side: "buy",
-          amount: toWire(leg.usdAmount),
-        });
-        return {
-          ticker: leg.ticker,
-          usdAmount: toWire(leg.usdAmount),
-          decision: decision ? decisionToWire(decision) : null,
-        };
-      }),
-    );
-
-    const refusedLegs = priced
-      .filter((l) => l.decision === null || l.decision.kind === "refuse")
-      .map((l) => l.ticker);
-    const queued = priced.filter((l) => l.decision?.kind === "offer_queue").length;
-
-    return c.json({
-      legs: priced,
-      refusedLegs,
-      // Any refused leg fails the whole basket. We never silently rebalance. docs/04.
-      overall: refusedLegs.length > 0 ? "refused" : queued > 0 ? "partial" : "executable",
     });
   });
 
