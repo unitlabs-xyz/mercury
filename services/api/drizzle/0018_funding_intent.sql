@@ -5,6 +5,8 @@ CREATE TABLE "funding_intent" (
 	"deposit_address" text NOT NULL,
 	"origin_chain_id" integer NOT NULL,
 	"origin_currency" text NOT NULL,
+	"origin_chain_name" text NOT NULL,
+	"origin_currency_symbol" text NOT NULL,
 	"recipient_address" text NOT NULL,
 	"quoted_out_raw" text,
 	"status" text DEFAULT 'waiting' NOT NULL,

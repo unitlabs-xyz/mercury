@@ -191,6 +191,8 @@ describe("fundRoutes · address", () => {
       depositAddress: "0xdeposit",
       originChainId: 8453,
       originCurrency: "0x0",
+      originChainName: "base",
+      originCurrencySymbol: "ETH",
       recipientAddress: "PrivyWallet111",
       quotedOutRaw: "9990000",
     });

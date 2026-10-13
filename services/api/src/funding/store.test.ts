@@ -16,6 +16,8 @@ const intent = (userId: string, over: Partial<NewFundingIntent> = {}): NewFundin
   depositAddress: "0xdeposit",
   originChainId: 8453,
   originCurrency: "0x0000000000000000000000000000000000000000",
+  originChainName: "base",
+  originCurrencySymbol: "ETH",
   recipientAddress: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
   quotedOutRaw: "24846825",
   ...over,
@@ -67,7 +69,9 @@ describe("createFundingStore", () => {
     const rows = await store.forUser(userId);
     expect(rows.map((r) => r.inTxHash).sort()).toEqual(["0xfirst", "0xsecond"]);
     /* The second deposit inherits the route and the user, which the webhook does not carry. */
-    expect(rows.every((r) => r.userId === userId && r.originChainId === 8453)).toBe(true);
+    expect(
+      rows.every((r) => r.userId === userId && r.originChainId === 8453 && r.originChainName === "base"),
+    ).toBe(true);
   });
 
   it("is idempotent for a redelivered webhook", async () => {

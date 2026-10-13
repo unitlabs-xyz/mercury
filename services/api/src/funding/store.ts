@@ -9,6 +9,9 @@ export interface NewFundingIntent {
   readonly depositAddress: string;
   readonly originChainId: number;
   readonly originCurrency: string;
+  /** As named to the user, so the feed can describe the deposit later. */
+  readonly originChainName: string;
+  readonly originCurrencySymbol: string;
   readonly recipientAddress: string;
   readonly quotedOutRaw: string | null;
 }
@@ -114,6 +117,8 @@ export const createFundingStore = (db: Db): FundingStore => {
           depositAddress: address,
           originChainId: previous.originChainId,
           originCurrency: previous.originCurrency,
+          originChainName: previous.originChainName,
+          originCurrencySymbol: previous.originCurrencySymbol,
           recipientAddress: previous.recipientAddress,
           /* Not the first deposit's figure: that was quoted for a different amount. */
           quotedOutRaw: null,

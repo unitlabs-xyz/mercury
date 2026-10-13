@@ -1,5 +1,5 @@
 {
-  "id": "1303aab8-4662-427f-9fc7-faf522dda3c8",
+  "id": "6af11786-0655-4c13-ade3-08fdf6340826",
   "prevId": "10c144fe-176c-4ded-ac8f-50b386f78080",
   "version": "7",
   "dialect": "postgresql",
@@ -507,6 +507,18 @@
         },
         "origin_currency": {
           "name": "origin_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origin_chain_name": {
+          "name": "origin_chain_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origin_currency_symbol": {
+          "name": "origin_currency_symbol",
           "type": "text",
           "primaryKey": false,
           "notNull": true

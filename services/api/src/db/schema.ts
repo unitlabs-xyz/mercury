@@ -623,6 +623,18 @@ export const fundingIntents = pgTable(
     depositAddress: text("deposit_address").notNull(),
     originChainId: integer("origin_chain_id").notNull(),
     originCurrency: text("origin_currency").notNull(),
+    /**
+     * The chain and token as they were named to the user, not as Relay names
+     * them today.
+     *
+     * Stored rather than looked up, for the reason `order.decision` is stored:
+     * the feed has to be able to say "from Base" a month later, and Relay's
+     * chain list is theirs to change. A row that has to call an upstream to
+     * describe itself is a row that reads differently depending on when you
+     * read it.
+     */
+    originChainName: text("origin_chain_name").notNull(),
+    originCurrencySymbol: text("origin_currency_symbol").notNull(),
     /** The Privy wallet, as quoted. Stored so a changed wallet is visible rather than assumed. */
     recipientAddress: text("recipient_address").notNull(),
     /** USDC base units. Indicative at mint time, and never updated. */

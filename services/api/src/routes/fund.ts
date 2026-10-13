@@ -131,6 +131,8 @@ export function fundRoutes(deps: FundDeps): Hono {
         depositAddress: quote.depositAddress,
         originChainId: chain.chainId,
         originCurrency: currency.address,
+        originChainName: chain.name,
+        originCurrencySymbol: currency.symbol,
         recipientAddress: wallet,
         quotedOutRaw: quote.quotedOutRaw,
       });
