@@ -1,0 +1,1 @@
+{ "extends": "@mercury/tsconfig/node.json", "include": ["src"], "compilerOptions": { "noEmit": true } }
