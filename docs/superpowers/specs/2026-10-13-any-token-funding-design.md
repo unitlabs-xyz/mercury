@@ -414,6 +414,24 @@ updated — and Relay will honour every one of them. The failure is silent at
 configuration time and surfaces when somebody else's refund lands somewhere
 nobody can spend from.
 
+**And three keys do not cover 61 chains.** Running the client against the live
+`GET /chains` on 13 October: 61 deposit-enabled chains across **eight** VM
+families — `evm` (52), `svm` (2), `lvm` (2), and one each of `bvm`, `hypevm`,
+`tvm`, `tonvm`, `xrpvm`. An address is only meaningful inside its own family.
+Hyperliquid's EVM takes an `0x` address, so three keys reach 55 chains; Tron,
+XRP, TON and the two `lvm` chains are not reachable by any of them.
+
+For those six, `refundTo` is **omitted** rather than guessed — Relay permits
+that on an open deposit address, at the cost of automatic refunds, and a
+failure then goes to their support. The route reports `autoRefund: false` so the
+interface can say so before somebody sends. The alternative, handing Tron an
+`0x` address, has Relay refund into nothing and tell nobody.
+
+Tron is the one worth closing: USDT on Tron is a major route and Tron derives
+from the same secp256k1 key as EVM — keccak, last twenty bytes, `0x41` prefix,
+base58check. That is one more function in `packages/keys`, not another key to
+hold. It is not in phase 1.
+
 So `services/treasury` reads a private key per VM family and derives the
 address. The API asks it for addresses over an internal endpoint and never sees
 a key. Derivation is a public key and a hash; it costs nothing and it makes the

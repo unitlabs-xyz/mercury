@@ -28,6 +28,7 @@ Tasks 1–5 in parallel with it and let them meet at Task 6.
 - **Every chain Relay reports is offered.** No curated allowlist.
 - Only currencies Relay will actually solve. A non-solver token sent to a deposit address is unrecoverable.
 - `refundTo` and `recoveryAddress` are **derived from keys held by `services/treasury`**, per VM family, never configured as addresses and never a user address. See ADR 0015 and `docs/superpowers/plans/2026-10-13-treasury-service.md`.
+- **Never send an address from the wrong VM family.** Relay reports eight families across the 61 deposit-enabled chains; we hold three keys. Where there is no key, omit `refundTo` and tell the interface with `autoRefund: false`. An omitted refund address means Relay's support handles a failure; a wrong-format one means Relay refunds into nothing, silently.
 - The webhook matches on `data.depositAddress.address`, **never** on the quote-time `requestId`.
 - No secret is ever logged. No wallet address is ever logged — `wallet-events/sync.ts` logs the user id for exactly this reason.
 - Conventional commits (`feat` / `fix` / `refactor` / `chore`); UI polish is `chore`.
@@ -1059,6 +1060,51 @@ describe("fundRoutes", () => {
     expect(depositAddressQuote.mock.calls[0]![0].recipient).toBe("PrivyWallet111");
   });
 
+  it("sends no refund address for a family we hold no key for", async () => {
+    const TRON: RelaySource = {
+      chainId: 728126428,
+      name: "tron",
+      vmType: "tvm",
+      currencies: [{ id: "usdt", symbol: "USDT", name: "USDT", address: "TR7NHq", decimals: 6 }],
+    };
+    const { app, depositAddressQuote } = harness({
+      relay: {
+        chains: vi.fn().mockResolvedValue([TRON]),
+        depositAddressQuote: vi
+          .fn()
+          .mockResolvedValue({ requestId: "0xreq", depositAddress: "Tdep", quotedOutRaw: null }),
+        status: vi.fn(),
+      },
+    });
+
+    const res = await post(app, { chainId: 728126428, currency: "TR7NHq" });
+
+    expect(depositAddressQuote.mock.calls[0]![0]).not.toHaveProperty("refundTo");
+    expect(await res.json()).toMatchObject({ autoRefund: false });
+  });
+
+  it("treats Hyperliquid's EVM as EVM", async () => {
+    const HYPE: RelaySource = {
+      chainId: 999,
+      name: "hyperliquid",
+      vmType: "hypevm",
+      currencies: [{ id: "usdc", symbol: "USDC", name: "USD Coin", address: "0xusdc", decimals: 6 }],
+    };
+    const { app, depositAddressQuote } = harness({
+      relay: {
+        chains: vi.fn().mockResolvedValue([HYPE]),
+        depositAddressQuote: vi
+          .fn()
+          .mockResolvedValue({ requestId: "0xreq", depositAddress: "0xdep", quotedOutRaw: null }),
+        status: vi.fn(),
+      },
+    });
+
+    await post(app, { chainId: 999, currency: "0xusdc" });
+
+    expect(depositAddressQuote.mock.calls[0]![0].refundTo).toBe(ADDRESSES.evm);
+  });
+
   it("picks the refund address by VM family, not by chain id", async () => {
     const { app, depositAddressQuote } = harness();
 
@@ -1220,7 +1266,20 @@ export function fundRoutes(deps: FundDeps): Hono {
     const currency = chain.currencies.find((cur) => cur.address === parsed.data.currency);
     if (currency === undefined) return c.json(fail("validation_failed", "We cannot accept that token."), 400);
 
-    const family = chain.vmType === "svm" ? "svm" : chain.vmType === "bvm" ? "bvm" : "evm";
+    /*
+     * Only a family we hold a key for. Relay reports eight across the 61
+     * chains it accepts deposits from and we hold three keys, so the rest
+     * get no `refundTo` at all — automatic refunds off, a failure handled by
+     * Relay's support. Bad, but an address from the wrong family would have
+     * Relay refund into nothing, which is worse and silent.
+     *
+     * `hypevm` is Hyperliquid's EVM and uses `0x` addresses, so it maps to
+     * the EVM key. `lvm`, `tvm`, `tonvm` and `xrpvm` do not: Tron is base58
+     * `T…`, XRP is `r…`, TON is its own, and `lvm` is unverified — so it
+     * stays out until somebody confirms what it is.
+     */
+    const FAMILIES = { evm: "evm", hypevm: "evm", svm: "svm", bvm: "bvm" } as const;
+    const family = FAMILIES[chain.vmType as keyof typeof FAMILIES] ?? null;
 
     try {
       const quote = await deps.relay.depositAddressQuote({
@@ -1229,8 +1288,7 @@ export function fundRoutes(deps: FundDeps): Hono {
         /* From the token Privy signed, never from the body. A caller that could
            name a recipient could name somebody else's wallet. */
         recipient: wallet,
-        refundTo: deps.refund[family],
-        recoveryAddress: deps.recovery[family],
+        ...(family === null ? {} : { refundTo: deps.refund[family], recoveryAddress: deps.recovery[family] }),
       });
 
       await deps.store.create({
@@ -1249,6 +1307,10 @@ export function fundRoutes(deps: FundDeps): Hono {
         chain: { id: chain.chainId, name: chain.name, vmType: chain.vmType },
         currency,
         minimumUsd: String(deps.minimumUsd),
+        /* The interface has to be able to say so. A deposit that cannot be
+           auto-refunded is still worth offering; letting somebody make one
+           without knowing is not. */
+        autoRefund: family !== null,
       });
     } catch (err) {
       /* Logged for us, summarised for them: Relay's errors are not user-facing copy. */
