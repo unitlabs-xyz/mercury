@@ -6,9 +6,7 @@ import { StatusChip } from "../ui/ds";
 import { ChevronDown } from "../ui/icons";
 import { DepositAddress } from "./Receive";
 import { FundFromWallet } from "./money/FundFromWallet";
-import { FundFromChain } from "./money/FundFromChain";
 import { useFundingWalletAvailable } from "../auth/embedded";
-import { useFundSources } from "../api/fund-sources";
 
 type Method = {
   key: string;
@@ -198,10 +196,11 @@ const METHODS: readonly Method[] = [
   },
   {
     key: "networks",
-    title: "From another chain",
-    sub: "Any token on 60+ chains, swapped to USDC for you",
+    title: "USDC on another network",
+    sub: "Ethereum, Base or Arbitrum, moved to Solana for you",
     figure: "Minutes",
-    note: "Network fee",
+    note: "Coming soon",
+    soon: true,
     icon: (
       <Glyph>
         <circle cx="5" cy="8" r="2.5" />
@@ -223,15 +222,6 @@ const SOON = METHODS.filter((m) => m.soon);
  */
 export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
   const hasWallet = useFundingWalletAvailable();
-  /*
-   * Whether the server has Relay configured at all. The routes are not mounted
-   * without it, so the query fails rather than answering empty — and the row
-   * is hidden rather than disabled, for the reason this file already gives
-   * about its greyed-out rows: a control that cannot be taken invites the
-   * click that does nothing.
-   */
-  const chains = useFundSources();
-  const hasChains = chains.isSuccess;
   const [pick, setPick] = useState("wallet");
   /*
    * The wallet row is hidden rather than disabled where no wallet is
@@ -242,9 +232,8 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
    * Injected wallets register at page load and this panel opens on a click
    * long after, so in practice the fallback resolves before anybody sees it.
    */
-  const live = LIVE.filter((m) => (m.key !== "wallet" || hasWallet) && (m.key !== "networks" || hasChains));
-  const unavailable = (key: string) => (key === "wallet" && !hasWallet) || (key === "networks" && !hasChains);
-  const chosen = unavailable(pick) ? "solana" : pick;
+  const live = LIVE.filter((m) => m.key !== "wallet" || hasWallet);
+  const chosen = pick === "wallet" && !hasWallet ? "solana" : pick;
   return (
     <SidePanel open={open} onClose={onClose} labelledBy="add-cash-heading">
       <PanelHeader
@@ -283,12 +272,6 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
         {chosen === "wallet" && (
           <div className="mt-6">
             <FundFromWallet />
-          </div>
-        )}
-
-        {chosen === "networks" && (
-          <div className="mt-6">
-            <FundFromChain />
           </div>
         )}
 

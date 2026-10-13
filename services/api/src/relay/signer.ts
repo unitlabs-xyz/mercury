@@ -1,7 +1,7 @@
-import { parseSolanaSecretKey } from "@mercury/keys/svm";
 import {
   createKeyPairSignerFromBytes,
   createKeyPairSignerFromPrivateKeyBytes,
+  getBase58Encoder,
   getBase64Decoder,
   getBase64Encoder,
   getTransactionDecoder,
@@ -25,15 +25,42 @@ export interface RelaySigner {
 }
 
 /**
- * Re-exported under its original name so this module's callers and tests are
- * untouched by the move.
+ * A Solana secret key as people actually store one.
  *
- * The parser itself now lives in `@mercury/keys/svm`, because
- * `services/treasury` holds a Solana key too and two copies of "which formats
- * does a Solana key arrive in" is how the two drift apart. The label keeps the
- * relayer's own wording in the relayer's own errors.
+ * `solana-keygen` writes a JSON array of 64 bytes; wallets export the same 64
+ * bytes as base58; some tools hand out the 32-byte seed alone. All three are
+ * accepted because the alternative is a deploy that fails on a format nobody
+ * documented, with a stack trace instead of a sentence.
  */
-export const parseSecretKey = (raw: string): Uint8Array => parseSolanaSecretKey(raw, "relayer secret key");
+export const parseSecretKey = (raw: string): Uint8Array => {
+  const text = raw.trim();
+  if (text.length === 0) throw new Error("The relayer secret key is empty.");
+
+  let bytes: Uint8Array;
+  if (text.startsWith("[")) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("The relayer secret key looks like a JSON array but does not parse.");
+    }
+    if (!Array.isArray(parsed) || parsed.some((n) => typeof n !== "number")) {
+      throw new Error("The relayer secret key must be an array of numbers.");
+    }
+    bytes = Uint8Array.from(parsed as number[]);
+  } else {
+    try {
+      bytes = new Uint8Array(getBase58Encoder().encode(text));
+    } catch {
+      throw new Error("The relayer secret key is neither a JSON array nor base58.");
+    }
+  }
+
+  if (bytes.length !== 64 && bytes.length !== 32) {
+    throw new Error(`The relayer secret key is ${bytes.length} bytes; expected 64 or 32.`);
+  }
+  return bytes;
+};
 
 export const keypairRelaySigner = async (raw: string): Promise<RelaySigner> => {
   const bytes = parseSecretKey(raw);

@@ -3,15 +3,11 @@ import {
   buildAuthDeps,
   buildDeps,
   buildReadDeps,
-  type ReadDeps,
   buildReconcileDeps,
   readConfig,
   syncConfiguredCatalog,
 } from "./deps.js";
 import { applyMigrations } from "./db/migrate.js";
-import { createRelayClient } from "./funding/relay.js";
-import { createFundingStore } from "./funding/store.js";
-import { fetchTreasuryAddresses } from "./funding/treasury.js";
 import { syncStocks } from "./stocks/sync.js";
 import { warmPrices } from "./prices/warm.js";
 import { syncAllPositions } from "./portfolio/sync.js";
@@ -90,56 +86,7 @@ console.log(
     : `loan alerts: emailed from ${config.notifyFrom}`,
 );
 
-/*
- * Funding from any chain, if Relay and the treasury are both there.
- *
- * Built at boot because the treasury's addresses arrive over HTTP, and held
- * because they are derived from keys that do not change. A refund address that
- * depends on a live call is a deposit that fails for a reason the user cannot
- * act on.
- *
- * All three or nothing: no key, no treasury, or a treasury that will not
- * answer, and the routes are simply not mounted. The interface then hides the
- * method rather than offering one that cannot work — the same way sponsorship
- * degrades when RELAYER_SECRET_KEY is unset.
- */
-const fund = await (async (): Promise<ReadDeps["fund"]> => {
-  const missing = (
-    [
-      ["RELAY_API_KEY", config.relayApiKey],
-      ["TREASURY_URL", config.treasuryUrl],
-      ["TREASURY_SECRET", config.treasurySecret],
-    ] as const
-  )
-    .filter(([, value]) => value === undefined)
-    .map(([name]) => name);
-  if (missing.length > 0 || config.relayApiKey === undefined) {
-    /* Names, never values. */
-    console.log(`funding: off (${missing.join(", ")} unset); add cash from another chain is hidden`);
-    return undefined;
-  }
-
-  try {
-    const addresses = await fetchTreasuryAddresses(config.treasuryUrl!, config.treasurySecret!);
-    console.log("funding: on, refunds to");
-    for (const [family, address] of Object.entries(addresses)) console.log(`  ${family}  ${address}`);
-    return {
-      relay: createRelayClient({ apiKey: config.relayApiKey }),
-      store: createFundingStore(auth.db),
-      refund: addresses,
-      /* The same values for now; separate fields so splitting them later is
-         configuration rather than code. See ADR 0015. */
-      recovery: addresses,
-      minimumUsd: config.fundMinimumUsd,
-      webhookSecret: config.relayApiKey,
-    };
-  } catch (error: unknown) {
-    console.error("funding: off, the treasury could not be reached", error);
-    return undefined;
-  }
-})();
-
-const read = buildReadDeps(auth.db, deps, config, relay, fund);
+const read = buildReadDeps(auth.db, deps, config, relay);
 
 /**
  * A background job, on its own clock.
@@ -256,7 +203,6 @@ every("wallet-events", 30_000, async () => {
     lendingProgram: KAMINO_LENDING_PROGRAM,
     ...(relay === undefined ? {} : { relayer: relay.signer.address }),
     ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
-    ...(fund === undefined ? {} : { fundingDeposits: true }),
   });
   if (s.written === 0 && s.failed === 0) return null;
   return (

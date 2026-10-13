@@ -45,7 +45,6 @@ import { pledgedByMint, withPledged } from "./lending/pledged.js";
 import type { LendingSource } from "./lending/ports.js";
 import type { InstrumentDeps } from "./routes/instruments.js";
 import type { MoneyDeps } from "./routes/money.js";
-import type { FundDeps } from "./routes/fund.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import { pgWaitlist, type WaitlistDeps } from "./routes/waitlist.js";
@@ -122,26 +121,6 @@ export interface Config {
    * stay on the keyless free tier.
    */
   readonly jupiterApiKeys: readonly string[];
-  /**
-   * Optional. Relay, for funding from any chain. Absent, the funding method is
-   * not offered at all.
-   *
-   * The same value is the secret Relay signs its webhooks with — their choice,
-   * not ours.
-   */
-  readonly relayApiKey?: string;
-  /**
-   * Optional. `services/treasury`, which holds the refund keys and derives
-   * their addresses. This API never sees a key.
-   *
-   * Deliberately a URL and a secret rather than three addresses: a configured
-   * address can be one we hold no key for, and nothing would catch it until a
-   * refund landed somewhere unspendable. See ADR 0015.
-   */
-  readonly treasuryUrl?: string;
-  readonly treasurySecret?: string;
-  /** What we will not quote a deposit below. Decided at $10; see ADR 0014. */
-  readonly fundMinimumUsd: number;
   /**
    * Optional. The key that pays for sponsored transactions.
    *
@@ -221,10 +200,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
      * the log tying the rate limiting back to a misspelled variable.
      */
     jupiterApiKeys: parseJupiterKeys(env["JUPITER_API_KEYS"] ?? env["JUPITER_API_KEY"]),
-    ...(env["RELAY_API_KEY"] ? { relayApiKey: env["RELAY_API_KEY"] } : {}),
-    ...(env["TREASURY_URL"] ? { treasuryUrl: env["TREASURY_URL"] } : {}),
-    ...(env["TREASURY_SECRET"] ? { treasurySecret: env["TREASURY_SECRET"] } : {}),
-    fundMinimumUsd: Number(env["FUND_MINIMUM_USD"] ?? 10),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
@@ -361,16 +336,6 @@ export interface ReadDeps {
   readonly send: SendDeps;
   /** The in-app feedback button. Optional so a test app can leave it out. */
   readonly feedback?: FeedbackDeps;
-  /**
-   * Funding from any chain, or nothing.
-   *
-   * Absent — no Relay key, or a treasury that could not be reached at boot —
-   * the routes are not mounted, `/v1/money/fund/sources` 404s, and the
-   * interface hides the method. The same shape `AddCash.tsx` already uses to
-   * hide a method whose precondition is unmet, and the same way
-   * `routes/send.ts` degrades without a relayer.
-   */
-  readonly fund?: FundDeps & { readonly webhookSecret: string };
 }
 
 /**
@@ -406,8 +371,6 @@ export function buildReadDeps(
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
-  /** Built at boot too: the treasury's addresses arrive over HTTP. */
-  fund?: ReadDeps["fund"],
 ): ReadDeps {
   const basketStore = new JsonBasketStore(config.databaseUrl, undefined, db);
   const baskets = basketValueReader(deps.basketProvider, basketStore);
@@ -466,7 +429,6 @@ export function buildReadDeps(
       tokenRef: (mint) => tokenRefFor(db, mint),
       settle: (input) => settleOrder(db, input),
     },
-    ...(fund === undefined ? {} : { fund }),
     borrow: {
       lending: deps.lending,
       chain: deps.chain,
