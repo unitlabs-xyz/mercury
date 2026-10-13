@@ -1,23 +1,258 @@
 ---
 import GlobeIcon from "../assets/brand/GlobeIcon.svg";
+import { locales, localeOf, homePath } from "../i18n";
 
 /**
- * Language control. A button until there is more than one locale to switch to —
- * `site.locale` is the only one today, so this opens nothing yet.
+ * Language control. Each language is its own prerendered page (`/`, `/es`,
+ * `/ja`, …), so every option is a plain link: it works without JavaScript,
+ * and search engines can follow it.
  */
 interface Props {
   class?: string;
+  /** `down` in the bar; `up` in the menu sheet, where it sits at the bottom. */
+  side?: "down" | "up";
 }
-const { class: className = "" } = Astro.props;
+const { class: className = "", side = "down" } = Astro.props;
 
-const current = { code: "en", label: "English" };
+const current = localeOf(Astro.url);
 ---
 
-<button
-  type="button"
-  class:list={["inline-flex h-9 items-center gap-1.5", className]}
-  aria-label={`Language: ${current.label}`}
->
-  <span class="uppercase">{current.code}</span>
-  <GlobeIcon width={14} height={14} class="text-current" aria-hidden="true" />
-</button>
+<div class="picker" data-lang data-side={side}>
+  <button
+    type="button"
+    class:list={["inline-flex h-9 cursor-pointer items-center gap-1.5", className]}
+    aria-label={`${current.dict.ui.language}: ${current.label}`}
+    aria-haspopup="menu"
+    aria-expanded="false"
+    data-lang-toggle
+  >
+    <span class="uppercase">{current.code}</span>
+    <GlobeIcon width={14} height={14} class="text-current" aria-hidden="true" />
+  </button>
+
+  {/* The card clips, the list scrolls inside it. The fades sit over the list
+      and only show on the side that has more to scroll to. */}
+  <div class="menu" data-lang-menu>
+    <ul class="list" role="menu" aria-label={current.dict.ui.language} data-lang-list>
+      {
+        locales.map((locale) => (
+          <li role="none">
+            <a
+              href={homePath(locale)}
+              role="menuitemradio"
+              aria-checked={locale === current ? "true" : "false"}
+              hreflang={locale.htmlLang}
+              lang={locale.htmlLang}
+              class="option"
+              data-lang-option
+            >
+              <span>{locale.label}</span>
+              {locale === current ? (
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M2.5 6.2 5 8.5l4.5-5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              ) : (
+                <span class="code">{locale.code}</span>
+              )}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+    <span class="fade top" aria-hidden="true"></span>
+    <span class="fade bottom" aria-hidden="true"></span>
+  </div>
+</div>
+
+<style>
+  .picker {
+    position: relative;
+  }
+
+  /* Closed, it stays laid out but invisible and inert, so opening and closing
+     are both one transition rather than a pop. Visibility waits out the fade
+     on the way out. */
+  .menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 50;
+    width: 216px;
+    overflow: hidden;
+    border: 1px solid #e6e6e6;
+    border-radius: 12px;
+    background: #fff;
+    opacity: 0;
+    visibility: hidden;
+    translate: 0 -6px;
+    scale: 0.98;
+    transform-origin: top right;
+    transition:
+      opacity 160ms linear,
+      translate 160ms ease-in,
+      scale 160ms ease-in,
+      visibility 0s linear 160ms;
+  }
+
+  [data-side="up"] .menu {
+    top: auto;
+    bottom: calc(100% + 6px);
+    left: 0;
+    right: auto;
+    translate: 0 6px;
+    transform-origin: bottom left;
+  }
+
+  [data-open] .menu {
+    opacity: 1;
+    visibility: visible;
+    translate: 0 0;
+    scale: 1;
+    transition:
+      opacity 180ms linear,
+      translate 320ms var(--ease-out),
+      scale 320ms var(--ease-out),
+      visibility 0s;
+  }
+
+  /* Scrolls, but shows no bar: the fade says there is more. */
+  .list {
+    max-height: min(296px, 55vh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px;
+    scrollbar-width: none;
+  }
+
+  .list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .fade {
+    position: absolute;
+    inset-inline: 0;
+    height: 44px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms linear;
+  }
+
+  .fade.top {
+    top: 0;
+    height: 28px;
+    background: linear-gradient(to bottom, #fff, rgb(255 255 255 / 0));
+  }
+
+  .fade.bottom {
+    bottom: 0;
+    background: linear-gradient(to top, #fff 15%, rgb(255 255 255 / 0));
+  }
+
+  [data-more-above] .fade.top,
+  [data-more-below] .fade.bottom {
+    opacity: 1;
+  }
+
+  .option {
+    display: flex;
+    height: 36px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    letter-spacing: -0.02em;
+    color: var(--color-headline);
+    cursor: pointer;
+    transition: background-color 150ms linear;
+  }
+
+  .option:hover,
+  .option:focus-visible {
+    background: var(--color-shell);
+    outline: none;
+  }
+
+  .option[aria-checked="true"] {
+    font-weight: 500;
+  }
+
+  .code {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--color-copy);
+    opacity: 0.7;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .menu,
+    [data-open] .menu {
+      translate: 0 0;
+      scale: 1;
+    }
+  }
+</style>
+
+<script>
+  const pickers = document.querySelectorAll<HTMLElement>("[data-lang]");
+
+  const close = (picker: HTMLElement) => {
+    picker.removeAttribute("data-open");
+    picker.querySelector("[data-lang-toggle]")?.setAttribute("aria-expanded", "false");
+  };
+
+  pickers.forEach((picker) => {
+    const toggle = picker.querySelector<HTMLButtonElement>("[data-lang-toggle]")!;
+    const menu = picker.querySelector<HTMLElement>("[data-lang-menu]")!;
+    const list = picker.querySelector<HTMLElement>("[data-lang-list]")!;
+    const options = [...picker.querySelectorAll<HTMLAnchorElement>("[data-lang-option]")];
+
+    // Which ends still have options past them; the fades follow.
+    const edges = () => {
+      menu.toggleAttribute("data-more-above", list.scrollTop > 2);
+      menu.toggleAttribute("data-more-below", list.scrollTop + list.clientHeight < list.scrollHeight - 2);
+    };
+    list.addEventListener("scroll", edges, { passive: true });
+
+    // Lenis takes the wheel for the page; the list scrolls itself.
+    list.setAttribute("data-lenis-prevent", "");
+
+    toggle.addEventListener("click", () => {
+      const open = !picker.hasAttribute("data-open");
+      pickers.forEach(close);
+      if (!open) return;
+      picker.setAttribute("data-open", "");
+      toggle.setAttribute("aria-expanded", "true");
+      const checked = options.find((o) => o.getAttribute("aria-checked") === "true");
+      checked?.scrollIntoView({ block: "nearest" });
+      checked?.focus({ preventScroll: true });
+      edges();
+    });
+
+    picker.addEventListener("keydown", (event) => {
+      if (!picker.hasAttribute("data-open")) return;
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close(picker);
+        toggle.focus();
+        return;
+      }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const at = options.indexOf(document.activeElement as HTMLAnchorElement);
+      options[(at + step + options.length) % options.length].focus();
+    });
+
+    picker.addEventListener("focusout", (event) => {
+      if (!picker.contains(event.relatedTarget as Node | null)) close(picker);
+    });
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    pickers.forEach((picker) => {
+      if (!picker.contains(event.target as Node)) close(picker);
+    });
+  });
+</script>

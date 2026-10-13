@@ -1,6 +1,7 @@
 ---
 import "../styles/global.css";
 import { site } from "../config/site";
+import { locales, localeOf, homePath, defaultLocale } from "../i18n";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import SmoothScroll from "../components/SmoothScroll.astro";
@@ -20,12 +21,16 @@ interface Props {
   schema?: Record<string, unknown>[];
 }
 
-const { title, description = site.description, schema = [] } = Astro.props;
+const locale = localeOf(Astro.url);
+const t = locale.dict;
+const { title, description = t.meta.description, schema = [] } = Astro.props;
 
 const canonical = new URL(Astro.url.pathname.replace(/\/$/, "") || "/", site.url).href;
 // A new banner gets a new filename: X and LinkedIn cache previews by URL.
 const ogImage = new URL("/og-mercury-v2.png", site.url).href;
-const isHome = Astro.url.pathname === "/";
+const isHome = Astro.url.pathname.replace(/\/$/, "") === homePath(locale).replace(/\/$/, "");
+// Every language version of this page, for search engines to pair them up.
+const alternates = locales.map((l) => ({ hreflang: l.htmlLang, href: new URL(homePath(l), site.url).href }));
 
 const baseSchema: Record<string, unknown>[] = [
   {
@@ -34,7 +39,7 @@ const baseSchema: Record<string, unknown>[] = [
     name: site.name,
     url: site.url,
     logo: new URL("/icon-512.png", site.url).href,
-    description: site.description,
+    description: t.meta.description,
     sameAs: site.socials.map((s) => s.href),
   },
   {
@@ -47,7 +52,7 @@ const baseSchema: Record<string, unknown>[] = [
 ---
 
 <!doctype html>
-<html lang={site.locale}>
+<html lang={locale.htmlLang}>
   <head>
     {/* Set before first paint, so anything the scripts animate starts hidden
         without a flash — and stays visible if the scripts never run. */}
@@ -59,6 +64,8 @@ const baseSchema: Record<string, unknown>[] = [
     <title>{isHome ? site.name : `${title} — ${site.name}`}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {alternates.map((alt) => <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />)}
+    <link rel="alternate" hreflang="x-default" href={new URL(homePath(defaultLocale), site.url).href} />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="theme-color" content="#f3f3f3" />
 
@@ -78,16 +85,17 @@ const baseSchema: Record<string, unknown>[] = [
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={locale.htmlLang.replace("-", "_")} />
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Mercury — the financial account built for the on-chain world." />
+    <meta property="og:image:alt" content={t.meta.ogAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content={site.twitter} />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
-    <meta name="twitter:image:alt" content="Mercury — the financial account built for the on-chain world." />
+    <meta name="twitter:image:alt" content={t.meta.ogAlt} />
 
     {
       [...baseSchema, ...schema].map((block) => (
@@ -100,7 +108,7 @@ const baseSchema: Record<string, unknown>[] = [
       href="#main"
       class="sr-only focus:not-sr-only focus:fixed focus:left-5 focus:top-5 focus:z-50 focus:rounded-[9px] focus:bg-ink focus:px-4 focus:py-2 focus:text-sm focus:text-white"
     >
-      Skip to content
+      {t.ui.skip}
     </a>
     <SmoothScroll />
     <Sound />

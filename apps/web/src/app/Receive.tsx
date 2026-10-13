@@ -4,6 +4,7 @@ import { qrPath } from "@mercury/view";
 import { useMoney } from "../api/hooks";
 import { Button } from "../ui/Button";
 import { Alert, Check, Copy } from "../ui/icons";
+import { useUsdcAck } from "./usdcAck";
 
 /*
  * The encoder lives in `@mercury/view`, so the phone draws the same code. Re-exported
@@ -142,12 +143,37 @@ const ShareAddress = () => {
  */
 export const DepositAddress = () => {
   const address = useMoney().data?.depositAddress;
+  const [acked, ack] = useUsdcAck();
   return (
     <>
       <p className="flex items-start gap-2 rounded-lg bg-ds-warn-chip px-4 py-3 text-[12px] leading-[1.45] text-ds-chip-warn">
         <Alert className="mt-px size-3.5 shrink-0" />
         Solana network only, and USDC only. Anything sent on another network, or in another token, is lost.
       </p>
+      {/* The address waits for a yes to the rule above it. Shown beside it, the
+          rule went unread: someone copied the address and sent SOL. */}
+      {!acked ? (
+        <div className="mt-1 rounded-lg bg-ds-panel p-4">
+          <p className="text-[14px] leading-none font-medium text-ds-ink">Only USDC, only on Solana</p>
+          <p className="mt-2 text-[12px] leading-[1.45] text-ds-muted">
+            Mercury shows and moves USDC on Solana. Any other token, or any other network, will not reach
+            your balance.
+          </p>
+          <Button variant="primary" onClick={ack} className="mt-4 w-full">
+            I understand, show my address
+          </Button>
+        </div>
+      ) : (
+        <AddressBody address={address} />
+      )}
+    </>
+  );
+};
+
+/** The address, its code, and the two ways to hand it over: what the rule unlocks. */
+const AddressBody = ({ address }: { address: string | undefined }) => {
+  return (
+    <>
       <div className="mt-1 flex items-center gap-4 rounded-lg bg-ds-panel p-4">
         <QrBlock value={address} />
         <div className="min-w-0 flex-1">

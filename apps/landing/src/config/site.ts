@@ -6,49 +6,36 @@ export const site = {
   name: "Mercury",
   // The landing domain. It feeds canonical URLs, OG tags and the sitemap.
   url: "https://trymercury.xyz",
-  // The web app, open in beta. The hero and the bar send people here first;
-  // the waitlist stays for anyone not yet let in.
+  // The web app, open in beta. Every call to action on the page sends people here.
   app: "https://beta.trymercury.xyz",
   // The API the waitlist form posts to. Set PUBLIC_API_URL on the Vercel project;
   // unset, it is the API running locally.
   api: (import.meta.env.PUBLIC_API_URL ?? "http://localhost:8787").replace(/\/$/, ""),
-  // Where every "join" button scrolls to: the form in the closing band.
-  waitlist: "#waitlist",
-  tagline: "The financial account built for the onchain world.",
-  description:
-    "Hold stablecoins, buy tokenized US shares, spend with a card, and borrow against what you own — all from a wallet you control.",
-  locale: "en",
+  // The tagline, description and every other word live in src/i18n, per language.
   twitter: "@trymercury_",
   socials: [{ label: "X", href: "https://x.com/trymercury_" }],
 };
 
+// Labels are keys into the dictionary's `nav` and `footer`, so the links are
+// defined once and read in every language.
 export const nav = [
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Baskets", href: "#baskets" },
-  { label: "Card", href: "#card" },
-  { label: "FAQs", href: "#faqs" },
+  { key: "howItWorks", href: "#how-it-works" },
+  { key: "baskets", href: "#baskets" },
+  { key: "card", href: "#card" },
+  { key: "faqs", href: "#faqs" },
 ] as const;
 
 // Links without an href are pages that do not exist yet: shown, not clickable.
-export const footerNav: readonly { heading: string; links: readonly { label: string; href?: string }[] }[] = [
+export const footerNav = [
   {
-    heading: "Explore",
+    heading: "explore",
     links: [
-      { label: "How it works", href: "#how-it-works" },
-      { label: "Baskets", href: "#baskets" },
-      { label: "FAQs", href: "#faqs" },
+      { key: "howItWorks", href: "#how-it-works" },
+      { key: "baskets", href: "#baskets" },
+      { key: "faqs", href: "#faqs" },
     ],
   },
-  {
-    heading: "Company",
-    links: [{ label: "About" }, { label: "Contact" }],
-  },
-  {
-    heading: "Follow",
-    links: site.socials,
-  },
-  {
-    heading: "Legal",
-    links: [{ label: "Terms" }, { label: "Privacy" }],
-  },
-];
+  { heading: "company", links: [{ key: "about" }, { key: "contact" }] },
+  { heading: "follow", links: site.socials.map((s) => ({ label: s.label, href: s.href })) },
+  { heading: "legal", links: [{ key: "terms" }, { key: "privacy" }] },
+] as const;

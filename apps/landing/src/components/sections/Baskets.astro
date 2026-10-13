@@ -1,0 +1,321 @@
+---
+import Band from "../Band.astro";
+import { useDict, fill } from "../../i18n";
+import Media from "../Media.astro";
+import StatTile from "../cards/StatTile.astro";
+import OneAccountArt from "../../assets/ui/OneAccount.png";
+import oneAccountGrain from "../../assets/textures/OneAccountTextures.png";
+import basketPlate from "../../assets/ui/PortfolioInside.png";
+import howPlate from "../../assets/ui/NvidiaInside.png";
+
+// The frame is 1000x303 with 40 of padding, which leaves exactly the 223 the
+// two plates are cut to. 511 + 24 + 386 overruns that by a pixel, so the
+// columns take the 511:386 ratio and the gap stays at a true 24.
+const FRAME = "1001 / 303";
+const PAD = 40;
+const GAP = 24;
+
+// The Magnificent Seven as the app holds it: seven names at equal target
+// weight. Laid out like the app's "Target allocation" mosaic, four over three.
+const HOLDINGS = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"];
+const WEIGHT = "14.3%";
+const rows = [HOLDINGS.slice(0, 4), HOLDINGS.slice(4)];
+// Live strategies in services/api/catalog.json.
+const LIVE = 22;
+
+const t = useDict(Astro.url).baskets;
+---
+
+<Band id="baskets">
+  <h2 data-reveal class="display-xl text-headline">
+    {t.heading[0]}{" "}<br />{t.heading[1]}
+  </h2>
+  <p data-reveal style="--reveal-delay:80ms" class="mt-3 max-w-[min(620px,100%)] text-[16px] leading-6 tracking-[-0.02em] text-copy">{t.lead}</p>
+
+  <Media
+    data-reveal
+    style="--reveal-delay:160ms"
+    label={t.alt}
+    src={OneAccountArt}
+    alt={t.alt}
+    ratio={FRAME}
+    radius={12}
+    textureSrc={oneAccountGrain}
+    parallax
+    quality={95}
+    fit={[1000, 303]}
+    sizes="(min-width: 1080px) 1000px, calc(100vw - 80px)"
+    class="mt-6"
+  >
+    <div class="split" style={`padding:${PAD}px;gap:${GAP}px`}>
+      <div class="plate col" style={`background-image:url(${basketPlate.src})`}>
+        <StatTile
+          label={t.kind}
+          value={t.name}
+          pill={fill(t.holdings, { n: HOLDINGS.length })}
+          note={t.note}
+        />
+
+        <div class="mosaic" aria-label={t.weights}>
+          {
+            rows.map((row, r) => (
+              <div class="mosaic-row">
+                {row.map((ticker, i) => (
+                  <div class="tile" style={`--i:${r * 4 + i}`}>
+                    <span class="tile-ticker">{ticker}</span>
+                    <span class="tile-weight">{WEIGHT}</span>
+                  </div>
+                ))}
+              </div>
+            ))
+          }
+        </div>
+      </div>
+
+      <div class="plate col" style={`background-image:url(${howPlate.src})`}>
+        {/* Same treatment as the basket's label on the left plate. */}
+        <p class="text-[14px] font-bold leading-[18px] tracking-[-0.02em] text-white">{t.howTitle}</p>
+
+        {/* Rules and rows alternate on one 10px rhythm. */}
+        <div class="rows how">
+          <div class="hair" />
+          {
+            t.how.map((line) => (
+              <div class="row">
+                <span>{line.label}</span>
+                <span>{line.value}</span>
+              </div>
+            ))
+          }
+          <div class="hair" />
+          <div class="row">
+            <span>{t.leave.label}</span>
+            <span class="strong">{t.leave.value}</span>
+          </div>
+        </div>
+
+        <p class="note">{fill(t.howNote, { n: LIVE })}</p>
+      </div>
+    </div>
+  </Media>
+</Band>
+
+<style>
+  .split {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    /* Scaled to the frame down to the breakpoint below, where it stacks. */
+    scale: var(--fit, 1);
+    /* Not 511px and 386px: those plus the gap are a pixel wider than the
+       padded frame, so the ratio holds and the gap stays exact. */
+    grid-template-columns: 511fr 386fr;
+  }
+
+  /* Side by side, each plate is too narrow to hold its rows. One above the
+     other instead, in a frame tall enough to take them at full size. */
+  @media (width < 56.25rem) {
+    /* No ratio can hold here: the rows are a fixed height whatever the
+       width, so the frame has to take its height from them. */
+    :global(.frame:has(> .split)) {
+      --ratio: auto;
+    }
+
+    .split {
+      /* Relative, not static: the art and its grain are both out of flow, so
+         an unpositioned slot would be painted underneath them. */
+      position: relative;
+      z-index: 2;
+      grid-template-columns: 1fr;
+      scale: 1;
+      padding: 24px;
+      gap: 16px;
+    }
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 12px;
+    color: #fff;
+    letter-spacing: -0.02em;
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .row > :first-child {
+    opacity: 0.8;
+  }
+
+  .row > :last-child {
+    font-weight: 700;
+  }
+
+  /* On the right plate the answers sit at the same weight as their labels;
+     only the last one is picked out. */
+  .how {
+    gap: 10px;
+  }
+
+  .how .row > :last-child {
+    font-weight: 400;
+    opacity: 0.8;
+  }
+
+  .how .row > .strong {
+    font-weight: 700;
+    opacity: 1;
+  }
+
+  /* The app's "Target allocation" mosaic in glass: one tile per holding,
+     sized by weight, so equal weights make equal tiles. */
+  .mosaic {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 14px;
+  }
+
+  .mosaic-row {
+    display: flex;
+    flex: 1;
+    gap: 6px;
+  }
+
+  .tile {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgb(255 255 255 / 0.14);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    letter-spacing: -0.02em;
+  }
+
+  /* On screen, the tiles rise in one after another, then a light passes
+     across them in order every few seconds, like the daily rebalance
+     touching each holding. */
+  .tile {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tile::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 25%, rgb(255 255 255 / 0.22) 50%, transparent 75%);
+    translate: -110% 0;
+    pointer-events: none;
+  }
+
+  :global(.js) .tile {
+    opacity: 0;
+    translate: 0 6px;
+  }
+
+  :global(.is-in) .tile {
+    animation: tile-in 520ms var(--ease-out) calc(380ms + var(--i) * 70ms) forwards;
+  }
+
+  :global(.is-in) .tile::after {
+    animation: tile-sweep 6s ease-in-out calc(1.6s + var(--i) * 120ms) infinite;
+  }
+
+  @keyframes tile-in {
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes tile-sweep {
+    0% {
+      translate: -110% 0;
+    }
+    18%,
+    100% {
+      translate: 110% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.js) .tile {
+      opacity: 1;
+      translate: none;
+      animation: none;
+    }
+
+    .tile::after {
+      display: none;
+    }
+  }
+
+  .tile-ticker {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 16px;
+  }
+
+  .tile-weight {
+    font-size: 11px;
+    line-height: 14px;
+    opacity: 0.8;
+  }
+
+  .hair {
+    height: 1px;
+    background: rgb(255 255 255 / 0.1);
+  }
+
+  .col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Takes whatever height is left under the rows. */
+  .note {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    margin-top: 10px;
+    padding: 0 12px;
+    border-radius: 6px;
+    background: rgb(255 255 255 / 0.14);
+    backdrop-filter: blur(8px);
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: -0.02em;
+    color: #fff;
+    opacity: 0.8;
+  }
+
+  /* At full width the box stretches into whatever the plate has left over, so
+     it needs no padding of its own. Narrower, it is only as tall as its two
+     lines and sits tight against them. */
+  @media (width < 67.5rem) {
+    .note {
+      padding: 12px 14px;
+    }
+  }
+
+  /* The plates are rectangular — their alpha is an overall translucency, not a
+     rounded cut-out — so the corners have to come from here. */
+  .plate {
+    padding: 20px;
+    border-radius: 12px;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+  }
+</style>

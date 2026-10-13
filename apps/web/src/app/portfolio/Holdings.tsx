@@ -5,6 +5,7 @@ import { GlideRows, MoveChip, RailHead, StatusChip } from "../../ui/ds";
 import { pct, usd, usdSigned } from "@mercury/view";
 import type { Model, Row } from "./model";
 import { SkeletonRows } from "./ui";
+import { XSTOCKS_LOGO_RADIUS } from "../invest/shared";
 import { TOKEN_NAME, useProviders } from "../stock/heldAs";
 import type { Issuer } from "@mercury/types";
 
@@ -38,7 +39,8 @@ const Logo = ({ row }: { row: Row }) =>
       width={36}
       height={36}
       loading="lazy"
-      className="size-9 shrink-0 rounded-full"
+      style={row.logoSquare ? { borderRadius: XSTOCKS_LOGO_RADIUS } : undefined}
+      className={`size-9 shrink-0 ${row.logoSquare ? "" : "rounded-full"}`}
     />
   ) : (
     <span className="grid size-9 shrink-0 place-items-center rounded-full bg-ds-avatar text-[14px] font-medium text-ds-ink">

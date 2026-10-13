@@ -1,30 +1,12 @@
 ---
 import Band from "../Band.astro";
+import { useDict } from "../../i18n";
 import Media from "../Media.astro";
 import custodianArt from "../../assets/ui/Custodian.png";
 import custodianGrain from "../../assets/textures/CustodianTextures.png";
 import custodianLayers from "../../assets/brand/CustodianLayers.png";
 
-const content = {
-  heading: ["Held by custodians.", "Controlled by you."],
-  lead: "Every token you hold is backed one for one by a real share at a regulated custodian. We never hold your keys, and no part of this product can move your money without you.",
-  media: { alt: "A share at a custodian, mirrored as a token on Solana, held in your wallet" },
-  pins: ["Your wallet", "Token on Solana", "Share at a custodian"],
-  columns: [
-    {
-      title: "Backed one for one",
-      body: "Every token maps to a share held at a named custodian. Backed and Ondo issue them; we say which one you are getting before you buy.",
-    },
-    {
-      title: "Every number has its source",
-      body: "Prices say where they were read and when. A figure with no provenance is a figure we would not show you.",
-    },
-    {
-      title: "Refused, not filled badly",
-      body: "When the token costs more than the share is worth, the order waits or is refused. A bad fill is worse than no fill.",
-    },
-  ],
-};
+const content = useDict(Astro.url).custody;
 ---
 
 <Band>
@@ -39,9 +21,9 @@ const content = {
     <Media
       data-reveal
       style="--reveal-delay:140ms"
-      label={content.media.alt}
+      label={content.alt}
       src={custodianArt}
-      alt={content.media.alt}
+      alt={content.alt}
       ratio="500 / 235"
       radius={12}
       textureSrc={custodianGrain}
@@ -56,8 +38,8 @@ const content = {
         <img class="layers" src={custodianLayers.src} alt="" aria-hidden="true" draggable="false" />
         <ul class="pins">
           {
-            content.pins.map((pin) => (
-              <li>
+            content.pins.map((pin, i) => (
+              <li style={`--i:${i}`}>
                 <span class="pin-line" />
                 <span>{pin}</span>
               </li>
@@ -151,6 +133,60 @@ const content = {
     line-height: 18px;
     letter-spacing: -0.02em;
     color: #fcfcff;
+  }
+
+  /* On screen, the stack floats, slowly, and each label's line draws out
+     from the layer it names, top to bottom. */
+  :global(.is-in) .layers {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    50% {
+      translate: 0 -5px;
+    }
+  }
+
+  :global(.js) .pin-line {
+    scale: 0 1;
+    transform-origin: left;
+  }
+
+  :global(.js) .pins li > span:last-child {
+    opacity: 0;
+  }
+
+  :global(.is-in) .pin-line {
+    animation: line 520ms var(--ease-out) calc(400ms + var(--i) * 140ms) forwards;
+  }
+
+  :global(.is-in) .pins li > span:last-child {
+    animation: label 400ms linear calc(620ms + var(--i) * 140ms) forwards;
+  }
+
+  @keyframes line {
+    to {
+      scale: 1 1;
+    }
+  }
+
+  @keyframes label {
+    to {
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.js) .pin-line,
+    :global(.js) .pins li > span:last-child {
+      scale: 1 1;
+      opacity: 1;
+      animation: none;
+    }
+
+    :global(.is-in) .layers {
+      animation: none;
+    }
   }
 
   /* Starts at the stack's edge and runs to the label, so each one reads as

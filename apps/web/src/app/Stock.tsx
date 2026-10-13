@@ -115,7 +115,9 @@ export const Stock = () => {
     instrument,
     Math.max(settled, 1),
     prices.data,
-    { side, max, acceptImpact },
+    /* Paused under the open sheet, which quotes for itself: refreshed mid-sale,
+       this ticket would announce behind it that the shares are gone. */
+    { side, max, acceptImpact, paused: buying },
   );
 
   // Already anchored server-side onto the live share price, so the line ends

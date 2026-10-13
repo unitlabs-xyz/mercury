@@ -37,7 +37,7 @@ const { label, value, dots, pill, note, class: className = "" } = Astro.props;
         </span>
       ) : null
     }
-    <span>{value}</span>
+    <span data-count={/\d/.test(value) && !dots ? "" : undefined}>{value}</span>
   </p>
   {
     pill || note ? (

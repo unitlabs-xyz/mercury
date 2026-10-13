@@ -33,6 +33,8 @@ export type Row = {
    */
   readonly lendableValue: number | null;
   readonly logo: string | undefined;
+  /** See `Instrument.logoSquare`. */
+  readonly logoSquare: boolean;
   readonly sector: string;
 };
 
@@ -174,6 +176,7 @@ export const useModel = (
         borrowable: (lendableValue ?? 0) * ltv * target,
         lendableValue,
         logo: inst?.logo,
+        logoSquare: inst?.logoSquare ?? false,
         sector: inst?.sector ?? "Other",
       };
     });

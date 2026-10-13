@@ -1,6 +1,17 @@
 ---
 import { site, footerNav } from "../config/site";
+import { useDict } from "../i18n";
 import Wordmark from "./Wordmark.astro";
+
+const t = useDict(Astro.url);
+// Keyed links read their label from the dictionary; socials carry their own.
+const groups = footerNav.map((group) => ({
+  heading: t.footer[group.heading],
+  links: group.links.map((link) => ({
+    label: "key" in link ? ({ ...t.nav, ...t.footer } as Record<string, string>)[link.key] : link.label,
+    href: "href" in link ? link.href : undefined,
+  })),
+}));
 
 const year = new Date().getFullYear();
 ---
@@ -10,12 +21,12 @@ const year = new Date().getFullYear();
     <div class="flex flex-col justify-between gap-10 md:flex-row">
       <div>
         <Wordmark />
-        <p class="mt-3 whitespace-nowrap text-[13px] text-muted">{site.tagline}</p>
+        <p class="mt-3 whitespace-nowrap text-[13px] text-muted">{t.meta.tagline}</p>
       </div>
 
       <div class="grid grid-cols-2 gap-10 sm:grid-cols-4 md:gap-16">
         {
-          footerNav.map((group) => (
+          groups.map((group) => (
             <div>
               <h2 class="text-[13px] font-semibold text-ink">{group.heading}</h2>
               <ul class="mt-3 space-y-2">
@@ -42,7 +53,7 @@ const year = new Date().getFullYear();
     </div>
 
     <p class="mt-12 border-t border-hair pt-6 text-[12px] text-faint">
-      © {year} {site.name} · Global · All rights reserved.
+      © {year} {site.name} · {t.footer.rights}
     </p>
   </div>
 </footer>

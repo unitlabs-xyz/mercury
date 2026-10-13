@@ -1,35 +1,26 @@
 ---
 import { site } from "../../config/site";
+import { useDict } from "../../i18n";
 import Band from "../Band.astro";
 import Button from "../Button.astro";
 import Media from "../Media.astro";
 import heroImage from "../../assets/ui/Hero-2x.webp";
 
-const content = {
-  eyebrow: { live: "Live in beta,", rest: "Hold. Invest. Grow. Spend." },
-  heading: ["The financial account built", "for the onchain world."],
-  lead: "Hold your money, invest in stocks and ETFs, build diversified portfolios, spend with your card, and access your wealth — all from a single wallet.",
-  primary: { label: "Try the beta", href: site.app },
-  secondary: { label: "Join the waitlist", href: site.waitlist },
-};
+const t = useDict(Astro.url);
+/** Bump when the loop files change: they are cached for a year (vercel.json), keyed on this. */
+const LOOP_VERSION = "3";
+/* MP4 (H.264, fast-start) only: on a slower connection Chromium-based browsers sat on the VP9
+   WebM at "metadata only" with seconds already buffered and never started, while the MP4
+   starts within about a second everywhere. */
+const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
 ---
 
-<Band space="none" class="pt-[60px] pb-[50px]">
+<Band space="none" class="hero-band pt-[60px] pb-[50px]">
   <!-- Steps measured off the design. The headline sets its own breaks with <br>,
        so it is not capped — Artnik runs a touch wider than the drawn line and a
        520px cap would drop "built" onto a line of its own. -->
   <div>
-    <p data-enter class="flex items-center gap-[4.5px] text-[12px] leading-[18px]">
-      <span class="size-1.5 shrink-0 rounded-full bg-live"></span>
-      <span class="text-live">{content.eyebrow.live}</span>
-      <span class="text-copy">{content.eyebrow.rest}</span>
-    </p>
-
-    <h1
-      data-enter
-      style="--reveal-delay:80ms"
-      class="mt-[10px] display-xl text-headline"
-    >
+    <h1 data-enter class="display-xl text-headline">
       {content.heading[0]}{" "}<br />{content.heading[1]}
     </h1>
 
@@ -37,7 +28,6 @@ const content = {
 
     <div data-enter style="--reveal-delay:210ms" class="mt-[22px] flex flex-wrap gap-3">
       <Button href={content.primary.href}>{content.primary.label}</Button>
-      <Button href={content.secondary.href} variant="secondary">{content.secondary.label}</Button>
     </div>
   </div>
 
@@ -45,16 +35,174 @@ const content = {
   <Media
     data-enter
     style="--reveal-delay:260ms"
-    label="Hero image"
+    label={content.imageLabel}
     src={heroImage}
     alt=""
     ratio="1000 / 420"
     radius={12}
     texture
-    parallax
     quality={95}
     sizes="(min-width: 1080px) 1000px, calc(100vw - 80px)"
     priority
-    class="mt-14"
-  />
+    class="hero-frame mt-14"
+  >
+    <!-- The product loop, over the hero photo it has baked in, grain and all:
+         the grain sits on the photo only, never over the cards. The still's
+         own grain comes from the frame's texture, under the video. The photo above
+         stays the page's real image (and its LCP): the video has no poster,
+         fetches nothing until the page has loaded and the frame is on screen,
+         and fades in only once it is actually playing. Phones get the square
+         cut. Decorative, so hidden from assistive tech and from search. -->
+    <div class="screen" aria-hidden="true">
+      <video class="loop wide" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1">
+        <source data-src={`/hero/mercury-hero-loop.mp4?v=${LOOP_VERSION}`} type="video/mp4" />
+      </video>
+      <video class="loop square" muted loop playsinline preload="none" disablepictureinpicture disableremoteplayback tabindex="-1">
+        <source data-src={`/hero/mercury-hero-loop-mobile.mp4?v=${LOOP_VERSION}`} type="video/mp4" />
+      </video>
+      <!-- Inline, so the right cut starts downloading while the page is still being parsed, not
+           after it: the loop is the hero, so it loads first. Only the cut that fits the screen is
+           fetched. It plays itself the moment it has enough data and fades in once playing; it
+           pauses out of view or in a hidden tab. Nothing loads for reduced motion or on 2G. If the
+           browser refuses autoplay (an iPhone in Low Power Mode), the first scroll or tap starts it. -->
+      <script is:inline>
+        (() => {
+          const frame = document.currentScript && document.currentScript.closest(".hero-frame");
+          if (!frame) return;
+          const wide = frame.querySelector("video.wide");
+          const square = frame.querySelector("video.square");
+          const narrow = matchMedia("(width < 40rem)");
+          const still = matchMedia("(prefers-reduced-motion: reduce)");
+          const conn = navigator.connection;
+          if (still.matches || (conn && /(^|-)2g$/.test(conn.effectiveType || ""))) return;
+          let visible = true;
+          let blocked = false;
+          const current = () => (narrow.matches ? square : wide);
+          const other = () => (narrow.matches ? wide : square);
+          const arm = (v) => {
+            if (v.dataset.armed) return;
+            v.dataset.armed = "1";
+            v.muted = true;
+            v.defaultMuted = true;
+            v.playsInline = true;
+            v.autoplay = true;
+            v.preload = "auto";
+            v.querySelectorAll("source[data-src]").forEach((s) => (s.src = s.dataset.src));
+            v.addEventListener("playing", () => v.classList.add("live"), { once: true });
+            v.addEventListener("canplay", sync);
+            v.load();
+          };
+          function sync() {
+            other().pause();
+            const v = current();
+            arm(v);
+            if (still.matches || document.hidden || !visible) return v.pause();
+            if (v.paused) v.play().then(() => (blocked = false), () => (blocked = true));
+          }
+          sync();
+          new IntersectionObserver(([e]) => {
+            visible = !!(e && e.isIntersecting);
+            sync();
+          }, { rootMargin: "200px 0px" }).observe(frame);
+          narrow.addEventListener("change", sync);
+          still.addEventListener("change", sync);
+          document.addEventListener("visibilitychange", sync);
+          const nudge = () => blocked && sync();
+          ["touchstart", "pointerdown", "scroll", "keydown"].forEach((e) => addEventListener(e, nudge, { passive: true }));
+        })();
+      </script>
+    </div>
+  </Media>
+
+  {/* Brave on desktop only: its toolbars leave a shorter window, which put the
+      bottom of the hero card below the fold. Tighten the spacing, and if the
+      frame still runs past the bottom, narrow it (centred, ratio kept) until it
+      fits, so nothing inside is cropped. Inline, so it lands before first paint;
+      offsets are summed by hand because the entrance animation translates the
+      frame and would throw getBoundingClientRect off. */}
+  <script is:inline>
+    (() => {
+      if (!navigator.brave) return;
+      const root = document.documentElement;
+      root.classList.add("brave");
+      const frame = document.querySelector(".hero-frame");
+      if (!frame) return;
+      const desktop = matchMedia("(width >= 64rem)");
+      const fit = () => {
+        frame.style.maxWidth = "";
+        if (!desktop.matches) return;
+        let top = 0;
+        for (let el = frame; el; el = el.offsetParent) top += el.offsetTop;
+        const room = innerHeight - top - 32;
+        const natural = (frame.offsetWidth * 420) / 1000;
+        if (room < natural) frame.style.maxWidth = `${Math.max(640, Math.floor((room * 1000) / 420))}px`;
+      };
+      fit();
+      addEventListener("resize", fit);
+      addEventListener("load", fit);
+    })();
+  </script>
 </Band>
+
+<style>
+  .screen {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Hidden until it is really playing, then a soft fade over the photo it
+     carries, so the swap from still to motion cannot be seen. */
+  .loop {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 700ms var(--ease-out, ease-out);
+  }
+
+  .loop.live {
+    opacity: 1;
+  }
+
+  .square {
+    display: none;
+  }
+
+  /* Narrow screens: a square frame and the square loop, which keeps the
+     figures readable where the wide cut would shrink them to nothing. */
+  @media (width < 40rem) {
+    :global(.hero-frame) {
+      --ratio: 1 / 1;
+    }
+
+    .wide {
+      display: none;
+    }
+
+    .square {
+      display: block;
+    }
+  }
+
+  @media (width >= 64rem) {
+    :global(.brave .hero-frame) {
+      margin-top: 36px;
+      margin-inline: auto;
+    }
+
+    :global(.brave .hero-band) {
+      padding-top: 36px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loop {
+      display: none !important;
+    }
+  }
+</style>
+
+

@@ -1,6 +1,7 @@
 ---
 import qrcode from "../../assets/brand/QRCode-keyed.png?url";
 import qrMark from "../../assets/brand/QrLogoIcon.svg?url";
+import { useDict, fill } from "../../i18n";
 
 /**
  * The "Add cash" card that sits on the Hold backdrop. Built to the supplied
@@ -10,11 +11,12 @@ import qrMark from "../../assets/brand/QrLogoIcon.svg?url";
  * 94 and 116; the QR is 106x106 at y=48; the address column starts at x=116.
  */
 const address = "7xQmF4d8Vn...Mq1NdP4Rk9";
+const t = useDict(Astro.url).addCash;
 ---
 
 <div class="card">
-  <p class="title">Add cash</p>
-  <p class="lede">Send USDC to this address. It starts earning the moment it arrives.</p>
+  <p class="title">{t.title}</p>
+  <p class="lede">{t.lede}</p>
 
   <div class="row">
     <div class="qr">
@@ -23,7 +25,7 @@ const address = "7xQmF4d8Vn...Mq1NdP4Rk9";
         src={qrcode}
         width="106"
         height="106"
-        alt={`Solana deposit address ${address} as a QR code`}
+        alt={fill(t.qrAlt, { address })}
         loading="lazy"
         decoding="async"
         draggable="false"
@@ -34,10 +36,10 @@ const address = "7xQmF4d8Vn...Mq1NdP4Rk9";
     </div>
 
     <div class="address">
-      <p class="label">Your Solana address</p>
+      <p class="label">{t.addressLabel}</p>
       <p class="value">
         <span>{address}</span>
-        <button type="button" class="copy" data-address={address} aria-label="Copy the address">
+        <button type="button" class="copy" data-address={address} data-copied={t.copied} aria-label={t.copy}>
           {/* Kept on the SVG's own coordinates so the geometry is exactly as drawn. */}
           <svg viewBox="270.667 106.625 10.75 10.75" width="11" height="11" fill="none" aria-hidden="true">
             <path
@@ -112,6 +114,48 @@ const address = "7xQmF4d8Vn...Mq1NdP4Rk9";
     user-select: none;
   }
 
+  /* A scan line that passes down the code now and then, so the card reads as
+     waiting for a deposit rather than as a picture of one. */
+  .qr::after {
+    content: "";
+    position: absolute;
+    inset-inline: -4px;
+    top: 0;
+    height: 14px;
+    background: linear-gradient(to bottom, transparent, rgb(255 255 255 / 0.55) 50%, transparent);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  :global(.is-in) .qr::after {
+    animation: scan 3.6s ease-in-out 0.8s infinite;
+  }
+
+  @keyframes scan {
+    0% {
+      top: 0;
+      opacity: 0;
+    }
+    8% {
+      opacity: 1;
+    }
+    42% {
+      top: 92px;
+      opacity: 1;
+    }
+    50%,
+    100% {
+      top: 92px;
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .qr::after {
+      display: none;
+    }
+  }
+
   /* Deliberately not blended: it carries a dark mark on white, which `lighten`
      would erase. */
   .qr-mark {
@@ -161,7 +205,7 @@ const address = "7xQmF4d8Vn...Mq1NdP4Rk9";
       if (!address) return;
       try {
         await navigator.clipboard.writeText(address);
-        button.setAttribute("aria-label", "Address copied");
+        button.setAttribute("aria-label", button.dataset.copied ?? "");
       } catch {
         /* Clipboard blocked — leave the address on screen to select by hand. */
       }

@@ -19,7 +19,7 @@
      and finishes visible on its own, so the first screen can never be held
      blank waiting for a script. No `.js` gate — it needs none. */
   [data-enter] {
-    animation: enter 640ms var(--ease-out) var(--reveal-delay, 0ms) both;
+    animation: enter 560ms var(--ease-out) var(--reveal-delay, 0ms) both;
   }
 
   @keyframes enter {
@@ -38,8 +38,8 @@
     opacity: 0;
     translate: 0 14px;
     transition:
-      opacity 640ms var(--ease-out),
-      translate 640ms var(--ease-out);
+      opacity 520ms var(--ease-out),
+      translate 520ms var(--ease-out);
     transition-delay: var(--reveal-delay, 0ms);
     /* Only while the observer has yet to arrive: if the script never lands,
        show it anyway rather than leave a hole. The moment the script starts it
@@ -96,10 +96,10 @@
               seen.unobserve(entry.target);
             }
           },
-          // Fire once the element is properly on screen, not as it grazes the
-          // bottom edge: the trigger line sits 18% of the viewport up from the
-          // bottom, so the movement plays where it can be watched.
-          { rootMargin: "0px 0px -18% 0px", threshold: 0 },
+          // Fire just before the element scrolls in, so it is already rising
+          // as it appears. Waiting until it was well on screen left a blank
+          // band at the bottom of the window that read as the page lagging.
+          { rootMargin: "0px 0px 8% 0px", threshold: 0 },
         );
         targets.forEach((el) => seen.observe(el));
       }
@@ -115,6 +115,52 @@
       setTimeout(() => arts.forEach(ready), 4000);
 
       fit();
+      count();
+    };
+
+    // Figures marked `data-count` roll up from zero the first time they come
+    // into view, keeping their own format: prefix, suffix, commas, decimals.
+    const count = () => {
+      const figures = Array.from(document.querySelectorAll("[data-count]"));
+      if (!figures.length || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (!("IntersectionObserver" in window)) return;
+      const run = (el) => {
+        const text = el.textContent || "";
+        const match = text.match(/\d[\d,]*(\.\d+)?/);
+        if (!match) return;
+        const target = parseFloat(match[0].replace(/,/g, ""));
+        const decimals = match[1] ? match[1].length - 1 : 0;
+        const commas = match[0].includes(",");
+        const fmt = (n) => {
+          const fixed = n.toFixed(decimals);
+          if (!commas) return fixed;
+          const [whole, frac] = fixed.split(".");
+          return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (frac ? "." + frac : "");
+        };
+        const before = text.slice(0, match.index);
+        const after = text.slice(match.index + match[0].length);
+        const t0 = performance.now();
+        const ms = 1100;
+        const tick = (now) => {
+          const p = Math.min(1, (now - t0) / ms);
+          const eased = 1 - Math.pow(1 - p, 3);
+          el.textContent = before + fmt(target * eased) + after;
+          if (p < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      };
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            io.unobserve(entry.target);
+            // A beat after the card itself lands.
+            setTimeout(() => run(entry.target), 280);
+          }
+        },
+        { rootMargin: "0px 0px -6% 0px" },
+      );
+      figures.forEach((el) => io.observe(el));
     };
 
     // Some frames hold a composition laid out in absolute pixels — a card at

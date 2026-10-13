@@ -3,6 +3,9 @@ import { nav, site } from "../config/site";
 import Wordmark from "./Wordmark.astro";
 import Button from "./Button.astro";
 import LanguagePicker from "./LanguagePicker.astro";
+import { useDict } from "../i18n";
+
+const t = useDict(Astro.url);
 
 // One step for every item in the bar: 14px, -2% tracking.
 const item = "text-[14px] tracking-[-0.02em] text-muted transition-colors duration-200 hover:text-ink";
@@ -14,8 +17,8 @@ const item = "text-[14px] tracking-[-0.02em] text-muted transition-colors durati
 
     <!-- Logo aside, the bar is one right-aligned run. -->
     <div class="flex items-center gap-5 lg:gap-9" data-enter style="--reveal-delay:90ms">
-      <nav aria-label="Main" class="hidden items-center gap-9 lg:flex">
-        {nav.map((link) => <a href={link.href} class={item}>{link.label}</a>)}
+      <nav aria-label={t.ui.mainNav} class="hidden items-center gap-9 lg:flex">
+        {nav.map((link) => <a href={link.href} class={item}>{t.nav[link.key]}</a>)}
       </nav>
 
       {/* Both move into the sheet below the breakpoint, so the bar keeps to
@@ -27,13 +30,15 @@ const item = "text-[14px] tracking-[-0.02em] text-muted transition-colors durati
       </div>
 
       <div class="hidden lg:block">
-        <Button href={site.app} size="sm">Try the beta</Button>
+        <Button href={site.app} size="sm">{t.ui.cta}</Button>
       </div>
 
       <button
         type="button"
         class="toggle lg:hidden"
-        aria-label="Open menu"
+        aria-label={t.ui.openMenu}
+        data-label-open={t.ui.openMenu}
+        data-label-close={t.ui.closeMenu}
         aria-expanded="false"
         aria-controls="menu-sheet"
         data-menu-toggle
@@ -51,19 +56,19 @@ const item = "text-[14px] tracking-[-0.02em] text-muted transition-colors durati
 
 <div id="menu-sheet" class="sheet lg:hidden" data-menu-sheet hidden>
   <div class="column sheet-inner">
-    <nav aria-label="Menu" class="contents">
+    <nav aria-label={t.ui.menuNav} class="contents">
       {
         nav.map((link, i) => (
           <a href={link.href} class="sheet-link" style={`--i:${i}`} data-menu-link>
-            {link.label}
+            {t.nav[link.key]}
           </a>
         ))
       }
     </nav>
 
     <div class="sheet-foot" style={`--i:${nav.length}`}>
-      <LanguagePicker class="text-[14px] tracking-[-0.02em] text-muted" />
-      <Button href={site.app} size="sm" data-menu-link>Try the beta</Button>
+      <LanguagePicker class="text-[14px] tracking-[-0.02em] text-muted" side="up" />
+      <Button href={site.app} size="sm" data-menu-link>{t.ui.cta}</Button>
     </div>
   </div>
 </div>
@@ -286,7 +291,7 @@ const item = "text-[14px] tracking-[-0.02em] text-muted transition-colors durati
       }
 
       toggle.setAttribute("aria-expanded", String(open));
-      toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+      toggle.setAttribute("aria-label", open ? toggle.dataset.labelClose : toggle.dataset.labelOpen);
 
       // Lenis owns the wheel and touch handlers, so stopping it is the whole
       // lock. Deliberately NOT `body { overflow: hidden }`: that makes the

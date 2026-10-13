@@ -1,5 +1,6 @@
 ---
 import Band from "../Band.astro";
+import { useDict, fill } from "../../i18n";
 import Media from "../Media.astro";
 import Pane from "../Pane.astro";
 import StatTile from "../cards/StatTile.astro";
@@ -18,27 +19,24 @@ const FRAME = "976 / 720";
 // height from its content plus 20 of padding. The plates stretch to fit.
 const PANE_INSET = 20;
 
+const t = useDict(Astro.url).pillars;
+// Invest, borrow, spend: the order the story tells it in. The card is next,
+// so its stamp and note say so.
 const content = [
   {
-    stamp: "Grow",
-    title: "Money works while it waits.",
-    body: "Cash sitting between decisions still earns, and the shares you own quietly become more shares.",
-    media: { src: GrowArt, alt: "The cash balance, earning while it sits." },
-    figure: { plate: GrowPlate, w: 285, h: 120, label: "Available to invest", value: "$4,534.73", pill: "Earning 4.1%", note: "paid into this balance" },
+    ...t.grow,
+    media: { src: GrowArt, alt: t.grow.alt },
+    figure: { plate: GrowPlate, label: t.grow.label, value: fill(t.grow.value, { n: "22.0412" }), pill: fill(t.grow.pill, { n: "0.0412" }), note: t.grow.note },
   },
   {
-    stamp: "Spend",
-    title: "Spend without selling.",
-    body: "The Mercury Visa pays from a line held against your portfolio, so buying lunch never means closing a position.",
-    media: { src: SpendArt, alt: "A Visa card drawing on the same balance." },
-    figure: { plate: SpendPlate, w: 285, h: 114, label: "Mercury Visa · Platinum", dots: 3, value: "4417", note: "Spends from cash, never from shares" },
+    ...t.borrow,
+    media: { src: BorrowArt, alt: t.borrow.alt },
+    figure: { plate: BorrowPlate, label: t.borrow.label, value: "$4,280.00", note: fill(t.borrow.note, { amount: "$12,480.62" }) },
   },
   {
-    stamp: "Borrow",
-    title: "Borrow against your shares.",
-    body: "Borrow against what you already own. The position stays yours, and so does everything it earns while the loan is open.",
-    media: { src: BorrowArt, alt: "Borrowing power against the shares held." },
-    figure: { plate: BorrowPlate, w: 285, h: 114, label: "Borrowing power", value: "$4,280.00", note: "Against $12,480.62 held" },
+    ...t.spend,
+    media: { src: SpendArt, alt: t.spend.alt },
+    figure: { plate: SpendPlate, label: t.spend.label, dots: 3, value: "4417", note: t.spend.note },
   },
 ];
 ---
