@@ -20,12 +20,14 @@ import {
   type BasketStore,
 } from "./deps.js";
 import { Expiring } from "./cache.js";
-import { assetIdFor } from "./primitives.js";
+import { DESCRIPTION_MAX, assetIdFor, problemWith, randomSuffix, slugFor } from "./primitives.js";
 import type {
   AssetSyncResult,
   BasketDefinition,
+  BasketDraft,
   CuratedBasket,
   CustomBasket,
+  DraftProblem,
   LiveBasket,
   ExitIntentPayload,
   PickableAsset,
@@ -55,6 +57,17 @@ const FRESH_MS = 300_000;
 const RETRY_MS = 30_000;
 /** Enough for the whole curated shelf many times over; the cap is against unbounded growth. */
 const CACHE_ENTRIES = 512;
+
+/** What a rejected draft says. The code is the contract; this is for a person. */
+const DRAFT_MESSAGES: Record<DraftProblem, string> = {
+  name_required: "Give your basket a name.",
+  name_too_long: "That name is too long.",
+  no_assets: "Add at least one stock.",
+  too_many_assets: "A basket holds at most 50 stocks.",
+  duplicate_asset: "Each stock can only appear once.",
+  unknown_asset: "One of those stocks cannot be held in a basket.",
+  weights_must_total_10000: "Weights have to add up to 100%.",
+};
 
 const SOLANA_ACCOUNT = /^solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SOLANA_ASSET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:";
@@ -834,6 +847,93 @@ export class BasketService {
     );
     await this.deps.store.completeEnrollmentIntent(intentId, portfolio.portfolioId);
     return portfolio;
+  }
+
+  private customBasketStore(): CustomBasketStore {
+    if (this.deps.customBaskets === undefined)
+      throw new BasketError("provider_unavailable", 503, "Custom baskets are not configured.");
+    return this.deps.customBaskets;
+  }
+
+  /**
+   * What we ask Glider to hold, for a basket somebody wrote.
+   *
+   * The slug goes in as the strategy name, not what the author called it.
+   * Recovery after a failed create finds the strategy again by name, and two
+   * people may well both write a "My AI Bet" — adopting by display name would
+   * hand one of them the other's strategy, and then an edit to either would
+   * rewrite both. Slugs are unique by construction, which is what the suffix
+   * in `slugFor` is for. Nothing shows this name: every surface reads the
+   * author's own from our row.
+   */
+  private static definitionFor(basket: CustomBasket): BasketDefinition {
+    return {
+      slug: basket.slug,
+      providerId: basket.providerId,
+      name: basket.slug,
+      description: basket.description,
+      assets: basket.assets.map(({ assetId, weightBps }) => ({ assetId, weightBps })),
+      schedule: { type: "interval", frequency: "daily" },
+    };
+  }
+
+  /**
+   * Give a basket a strategy at Glider, and record which one.
+   *
+   * Steps three to five are `sync()`'s, including its recovery: a create whose
+   * connection dies may still have been accepted, so a failure is checked
+   * against the tenant's own list before it is believed, and whatever comes
+   * back is read again and compared before the id is written down.
+   */
+  private async publish(basket: CustomBasket, provider: BasketProvider): Promise<string> {
+    const definition = BasketService.definitionFor(basket);
+    await provider.validate(definition);
+    let strategyId: string;
+    try {
+      strategyId = await provider.create(definition);
+    } catch (error) {
+      const namesakes = (await provider.list()).filter((item) => item.name === definition.name);
+      if (namesakes.length !== 1 || !matches(definition, namesakes[0]!)) throw error;
+      strategyId = namesakes[0]!.id;
+    }
+    const readback = await provider.get(strategyId);
+    /* Plain, so the route logs it and answers `provider_error`: a readback
+       that disagrees means Glider holds something we did not ask for, and
+       that is worth a stack trace rather than a tidy code. */
+    if (readback.id !== strategyId || !matches(definition, readback))
+      throw new Error(`Glider stored a different basket for ${definition.slug}`);
+    await this.customBasketStore().attachStrategy(basket.id, strategyId);
+    return strategyId;
+  }
+
+  /**
+   * Write a basket somebody composed, and give it a strategy.
+   *
+   * The row lands before Glider is called, so a create that fails halfway
+   * leaves a draft its author can see and retry rather than nothing at all.
+   * Tickers are resolved here rather than taken from the request: the client
+   * picked an asset, and what that asset is called is the catalogue's to say.
+   */
+  async create(userId: string, draft: BasketDraft): Promise<CustomBasket> {
+    const catalogue = await this.assetStore().all();
+    const byAssetId = new Map(catalogue.map((asset) => [assetIdFor(asset.mint), asset]));
+    const problem = problemWith(draft, new Set(byAssetId.keys()));
+    if (problem !== null) throw new BasketError(problem, 422, DRAFT_MESSAGES[problem]);
+
+    const basket = await this.customBasketStore().draft({
+      userId,
+      slug: slugFor(draft.name, randomSuffix()),
+      name: draft.name.trim(),
+      description: draft.description.trim().slice(0, DESCRIPTION_MAX),
+      assets: draft.assets.map(({ assetId, weightBps }) => ({
+        assetId,
+        ticker: byAssetId.get(assetId)!.ticker,
+        weightBps,
+      })),
+    });
+    if (!this.deps.provider)
+      throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
+    return { ...basket, providerId: await this.publish(basket, this.deps.provider) };
   }
 
   /** Glider holds the mint inside the asset id; every client wants it on its own. */

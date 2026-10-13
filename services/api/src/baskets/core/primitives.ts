@@ -56,6 +56,49 @@ export interface CustomBasket {
   readonly updatedAt: Date;
 }
 
+/** What somebody typed into the authoring panel, before any of it is believed. */
+export interface BasketDraft {
+  readonly name: string;
+  readonly description: string;
+  /** Tickers are not read: they are resolved from the catalogue by `assetId`. */
+  readonly assets: readonly { assetId: string; weightBps: number }[];
+}
+
+/**
+ * The one thing wrong with a draft, or null.
+ *
+ * Glider's own limits, measured rather than read off a page: 1–50 assets and
+ * weights totalling exactly 100.00. `unknown_asset` is ours — Glider's
+ * `validate` accepts a strategy holding BONK, so it is not an asset gate, and
+ * the catalogue is the only signal we have that a mint can actually be traded.
+ */
+export type DraftProblem =
+  | "name_required"
+  | "name_too_long"
+  | "no_assets"
+  | "too_many_assets"
+  | "duplicate_asset"
+  | "unknown_asset"
+  | "weights_must_total_10000";
+
+export const NAME_MAX = 60;
+export const DESCRIPTION_MAX = 280;
+const ASSETS_MAX = 50;
+const TOTAL_BPS = 10_000;
+
+/** Pure, so the rules are a table rather than a database. `holdable` is the catalogue's asset ids. */
+export const problemWith = (draft: BasketDraft, holdable: ReadonlySet<string>): DraftProblem | null => {
+  if (draft.name.trim() === "") return "name_required";
+  if (draft.name.trim().length > NAME_MAX) return "name_too_long";
+  if (draft.assets.length === 0) return "no_assets";
+  if (draft.assets.length > ASSETS_MAX) return "too_many_assets";
+  const ids = draft.assets.map((asset) => asset.assetId);
+  if (new Set(ids).size !== ids.length) return "duplicate_asset";
+  if (ids.some((id) => !holdable.has(id))) return "unknown_asset";
+  const total = draft.assets.reduce((sum, asset) => sum + asset.weightBps, 0);
+  return total === TOTAL_BPS ? null : "weights_must_total_10000";
+};
+
 /** No i/l/o/u: the slug goes in a URL people read aloud and retype. */
 const suffix = customAlphabet("0123456789abcdefghjkmnpqrstvwxyz", 8);
 
