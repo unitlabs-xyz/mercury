@@ -90,14 +90,31 @@ describe("renaming a basket somebody wrote", () => {
   // Glider holds the slug, so there is nothing out there a rename could change.
   it("writes only our own row, and never calls Glider", async () => {
     const { service: svc, custom } = service([basket()]);
-    const after = await svc.rename(MINE, "my-ai-bet-7fq2kx9m", "  All In  ", "  one stock  ");
+    const after = await svc.rename(MINE, "my-ai-bet-7fq2kx9m", {
+      name: "  All In  ",
+      description: "  one stock  ",
+    });
     expect(after).toMatchObject({ name: "All In", description: "one stock" });
     expect(custom.wrote).toEqual([{ op: "rename", args: ["basket-1", "All In", "one stock"] }]);
   });
 
+  // PATCH: an omitted field means leave it alone, not blank it.
+  it.each([
+    { name: "a new name on its own", changes: { name: "All In" }, kept: ["All In", "two names"] },
+    {
+      name: "a new blurb on its own",
+      changes: { description: "one stock" },
+      kept: ["My AI Bet", "one stock"],
+    },
+  ])("keeps what $name does not mention", async ({ changes, kept: [name, description] }) => {
+    const { service: svc, custom } = service([basket({ description: "two names" })]);
+    await svc.rename(MINE, "my-ai-bet-7fq2kx9m", changes);
+    expect(custom.wrote).toEqual([{ op: "rename", args: ["basket-1", name, description] }]);
+  });
+
   it("refuses an empty name without writing", async () => {
     const { service: svc, custom } = service([basket()]);
-    await expect(svc.rename(MINE, "my-ai-bet-7fq2kx9m", "   ", "")).rejects.toMatchObject({
+    await expect(svc.rename(MINE, "my-ai-bet-7fq2kx9m", { name: "   " })).rejects.toMatchObject({
       code: "name_required",
     });
     expect(custom.wrote).toEqual([]);
@@ -109,7 +126,7 @@ describe("renaming a basket somebody wrote", () => {
       assets: [{ assetId: assetIdFor("mint-gone"), ticker: "GONE", weightBps: 10_000 }],
     });
     const { service: svc } = service([stale]);
-    await expect(svc.rename(MINE, stale.slug, "All In", "")).resolves.toMatchObject({ name: "All In" });
+    await expect(svc.rename(MINE, stale.slug, { name: "All In" })).resolves.toMatchObject({ name: "All In" });
   });
 });
 
@@ -126,10 +143,13 @@ describe("changing what a basket holds", () => {
     const after = await svc.reviseAssets(MINE, "my-ai-bet-7fq2kx9m", SPLIT);
 
     expect(asked).toEqual([["strategy-1", SPLIT]]);
-    expect(after.assets).toEqual([
-      { assetId: NVDA, ticker: "NVDA", weightBps: 6000 },
-      { assetId: TSLA, ticker: "TSLA", weightBps: 4000 },
-    ]);
+    expect(after).toMatchObject({
+      source: "mine",
+      allocations: [
+        { assetId: NVDA, ticker: "NVDA", mint: "mint-nvda", weightBps: 6000 },
+        { assetId: TSLA, ticker: "TSLA", mint: "mint-tsla", weightBps: 4000 },
+      ],
+    });
     expect(custom.wrote[0]!.op).toBe("reviseAssets");
   });
 
@@ -222,7 +242,7 @@ describe("whose basket it is", () => {
   it.each(["rename", "reviseAssets", "remove"] as const)("%s refuses a curated slug", async (op) => {
     const { service: svc, custom } = service([basket()], {});
     const call = {
-      rename: () => svc.rename(MINE, "magnificent-seven", "Mine now", ""),
+      rename: () => svc.rename(MINE, "magnificent-seven", { name: "Mine now" }),
       reviseAssets: () => svc.reviseAssets(MINE, "magnificent-seven", SPLIT),
       remove: () => svc.remove(MINE, "magnificent-seven", OWNER),
     }[op];
@@ -234,7 +254,7 @@ describe("whose basket it is", () => {
     const theirs = basket({ userId: "user-2" });
     const { service: svc, custom } = service([theirs], {});
     const call = {
-      rename: () => svc.rename(MINE, theirs.slug, "Mine now", ""),
+      rename: () => svc.rename(MINE, theirs.slug, { name: "Mine now" }),
       reviseAssets: () => svc.reviseAssets(MINE, theirs.slug, SPLIT),
       remove: () => svc.remove(MINE, theirs.slug, OWNER),
     }[op];

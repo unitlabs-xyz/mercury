@@ -15,7 +15,9 @@ import {
   ConfirmedBasketFunding,
   BasketActivity,
   BasketExitMode,
+  CreateBasket,
   PickableBasketAsset,
+  UpdateBasket,
   PrepareBasketExit,
   PreparedBasketExit,
   SubmitBasketExit,
@@ -72,6 +74,58 @@ export function basketRoutes(service: BasketService): Hono {
     const basket = await service.detail(c.req.param("slug"), c.get("identity").userId);
     if (basket === null) return c.json(fail("not_found", "No such basket."), 404);
     return c.json({ basket: Basket.parse(basket) });
+  });
+
+  app.post("/v1/baskets", async (c) => {
+    const parsed = CreateBasket.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", "Check the basket you sent."), 400);
+    try {
+      const basket = await service.create(c.get("identity").userId, parsed.data);
+      return c.json({ basket: Basket.parse(basket) }, 201);
+    } catch (error) {
+      const result = handle(error, "creation");
+      return c.json(result.body, result.status);
+    }
+  });
+
+  /*
+   * One PATCH for both halves, because the panel saves a whole basket. The
+   * allocation goes first: it is the half that talks to Glider and can fail,
+   * and a rename after it has landed is a local write that will not.
+   */
+  app.patch("/v1/baskets/:slug", async (c) => {
+    const parsed = UpdateBasket.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", "Check the changes you sent."), 400);
+    const { userId } = c.get("identity");
+    const slug = c.req.param("slug");
+    const { name, description, assets } = parsed.data;
+    try {
+      const revised = assets === undefined ? null : await service.reviseAssets(userId, slug, assets);
+      const renamed =
+        name === undefined && description === undefined
+          ? null
+          : await service.rename(userId, slug, { name, description });
+      const basket = renamed ?? revised;
+      if (basket === null) return c.json(fail("validation_failed", "Nothing to change."), 400);
+      return c.json({ basket: Basket.parse(basket) });
+    } catch (error) {
+      const result = handle(error, "update");
+      return c.json(result.body, result.status);
+    }
+  });
+
+  app.delete("/v1/baskets/:slug", async (c) => {
+    const identity = c.get("identity");
+    const owner = ownerFor(identity.walletAddress);
+    if (!owner)
+      return c.json(fail("wallet_required", "Sign in with a Solana wallet to delete a basket."), 401);
+    try {
+      await service.remove(identity.userId, c.req.param("slug"), owner);
+      return c.body(null, 204);
+    } catch (error) {
+      const result = handle(error, "deletion");
+      return c.json(result.body, result.status);
+    }
   });
 
   app.get("/v1/baskets/:slug/insights", async (c) => {

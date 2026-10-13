@@ -158,3 +158,75 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
     [{ assetId: "solana:asset", amountRaw: "1" }],
   ]);
 });
+
+describe("writing a basket somebody owns", () => {
+  const identity = { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" };
+
+  it("creates for the signed-in user, never a requested one", async () => {
+    let observed: unknown;
+    const app = signedIn(
+      {
+        create: async (...args: unknown[]) => {
+          observed = args;
+          return {
+            source: "mine",
+            slug: "my-ai-bet-7fq2kx9m",
+            name: "My AI Bet",
+            description: "",
+            strategyId: "strategy-1",
+            createdAt: "2026-10-13T00:00:00.000Z",
+            updatedAt: "2026-10-13T00:00:00.000Z",
+            schedule: { type: "interval", frequency: "daily" },
+            allocations: [{ ticker: "NVDA", mint: "m", assetId: "solana:x/spl:m", weightBps: 10_000 }],
+            performance: null,
+          };
+        },
+      } as unknown as BasketService,
+      identity,
+    );
+    const response = await app.request("/v1/baskets", {
+      method: "POST",
+      body: JSON.stringify({
+        userId: "user-2",
+        name: "My AI Bet",
+        assets: [{ assetId: "solana:x/spl:m", weightBps: 10_000 }],
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(observed).toEqual([
+      "user-1",
+      { name: "My AI Bet", description: "", assets: [{ assetId: "solana:x/spl:m", weightBps: 10_000 }] },
+    ]);
+  });
+
+  // Deleting checks what the basket still holds, and that read is wallet-scoped.
+  it("deletes against the verified wallet, never a requested owner", async () => {
+    let observed: unknown;
+    const app = signedIn(
+      {
+        remove: async (...args: unknown[]) => {
+          observed = args;
+        },
+      } as unknown as BasketService,
+      identity,
+    );
+    const response = await app.request("/v1/baskets/mine-7fq2kx9m?ownerAccountId=AttackerWallet", {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(204);
+    expect(observed).toEqual([
+      "user-1",
+      "mine-7fq2kx9m",
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet",
+    ]);
+  });
+
+  it("refuses a change that changes nothing", async () => {
+    const app = signedIn({} as BasketService, identity);
+    const response = await app.request("/v1/baskets/mine-7fq2kx9m", {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(400);
+  });
+});

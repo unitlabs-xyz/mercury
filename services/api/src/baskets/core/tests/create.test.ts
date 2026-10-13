@@ -95,7 +95,7 @@ describe("creating a basket somebody wrote", () => {
     });
     const made = await svc.create(MINE, DRAFT);
 
-    expect(made.providerId).toBe("strategy-1");
+    expect(made).toMatchObject({ source: "mine", strategyId: "strategy-1" });
     expect(custom.rows[0]).toMatchObject({ userId: MINE, name: "My AI Bet", providerId: "strategy-1" });
     expect(made.slug).toMatch(/^my-ai-bet-[0-9a-z]{8}$/);
   });
@@ -166,7 +166,7 @@ describe("creating a basket somebody wrote", () => {
       },
       custom,
     );
-    expect((await svc.create(MINE, DRAFT)).providerId).toBe("strategy-1");
+    expect(await svc.create(MINE, DRAFT)).toMatchObject({ strategyId: "strategy-1" });
   });
 
   it("re-throws rather than adopting a namesake holding something else", async () => {

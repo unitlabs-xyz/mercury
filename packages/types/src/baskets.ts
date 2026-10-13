@@ -61,6 +61,31 @@ export const Basket = z.discriminatedUnion("source", [
 export type Basket = z.infer<typeof Basket>;
 
 /**
+ * A basket as somebody composed it. Bounds here are abuse guards only: the
+ * real rules answer with their own codes, so the client can say which broke.
+ */
+const DraftAsset = z.object({
+  assetId: z.string().min(1).max(200),
+  weightBps: z.number().int().min(1).max(10_000),
+});
+export const CreateBasket = z.object({
+  name: z.string().max(500),
+  description: z.string().max(2000).default(""),
+  assets: z.array(DraftAsset).max(200),
+});
+
+/** Every field optional, but not all of them at once. */
+export const UpdateBasket = z
+  .object({
+    name: z.string().max(500).optional(),
+    description: z.string().max(2000).optional(),
+    assets: z.array(DraftAsset).max(200).optional(),
+  })
+  .refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: "Nothing to change.",
+  });
+
+/**
  * One tokenised equity a basket may be written from.
  *
  * Narrower than the universe this product trades: Glider classifies xStocks as

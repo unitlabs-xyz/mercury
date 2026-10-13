@@ -67,6 +67,11 @@ from historical prices. It is never presented as realized or user performance.
 | Exit      | `POST /:slug/exit/:mode/prepare`, then `/:slug/exit/:mode/submit`       | `in_kind` returns the assets themselves; `liquidate_usdc` sells to USDC. The user signs; the recipient is always the owner. Dust can remain      |
 | Track     | `GET /:slug/portfolio`, `/:slug/portfolio/positions`, `/:slug/activity` | Whether this wallet is in; then the live snapshot from Glider; then Mercury's own record of enrollments, fundings, rebalances and exits          |
 
+`POST /v1/baskets` writes one of your own, `PATCH /v1/baskets/:slug` renames or re-weights it,
+and `DELETE /v1/baskets/:slug` retires it — the last refused while it still holds anything. A
+curated slug answers 403 to all three; somebody else's answers 404, the same as one that does not
+exist.
+
 All routes are under `/v1/baskets` unless shown, and all of them need a signed-in wallet.
 `GET /v1/basket-portfolios` lists every basket portfolio the wallet owns, and
 `GET /v1/basket-assets` is the universe a basket may be written from. Every two-phase write is

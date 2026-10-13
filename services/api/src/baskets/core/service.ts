@@ -829,7 +829,7 @@ export class BasketService {
   }
 
   /** The row lands first, so a half-failed create leaves a draft to retry. */
-  async create(userId: string, draft: BasketDraft): Promise<CustomBasket> {
+  async create(userId: string, draft: BasketDraft): Promise<Basket> {
     const catalogue = await this.assetStore().all();
     const byAssetId = new Map(catalogue.map((asset) => [assetIdFor(asset.mint), asset]));
     const problem = problemWith(draft, new Set(byAssetId.keys()));
@@ -847,7 +847,8 @@ export class BasketService {
       })),
     });
     if (!this.deps.provider) throw new BasketError("provider_unavailable", 503, "Glider is not configured.");
-    return { ...basket, providerId: await this.publish(basket, this.deps.provider) };
+    const providerId = await this.publish(basket, this.deps.provider);
+    return BasketService.mineWire({ ...basket, providerId });
   }
 
   /** Resolve one of the caller's own, or say why not. Curated slugs are not theirs to edit. */
@@ -882,20 +883,28 @@ export class BasketService {
   }
 
   /** Local: Glider holds the slug, fixed at creation, so there is nothing there to change. */
-  async rename(userId: string, slug: string, name: string, description: string): Promise<CustomBasket> {
+  async rename(
+    userId: string,
+    slug: string,
+    changes: { name?: string | undefined; description?: string | undefined },
+  ): Promise<Basket> {
     const basket = await this.mine(slug, userId);
+    const name = (changes.name ?? basket.name).trim();
     const problem = nameProblem(name);
     if (problem !== null) throw new BasketError(problem, 422, DRAFT_MESSAGES[problem]);
-    const next = { name: name.trim(), description: description.trim().slice(0, DESCRIPTION_MAX) };
+    const next = {
+      name,
+      description: (changes.description ?? basket.description).trim().slice(0, DESCRIPTION_MAX),
+    };
     await this.customBasketStore().rename(basket.id, next.name, next.description);
-    return { ...basket, ...next };
+    return BasketService.mineWire({ ...basket, ...next });
   }
 
   /**
    * No money moves: every portfolio rebalances to it on its next run, and the
    * detail page already offers a manual one for anyone impatient.
    */
-  async reviseAssets(userId: string, slug: string, assets: BasketDraft["assets"]): Promise<CustomBasket> {
+  async reviseAssets(userId: string, slug: string, assets: BasketDraft["assets"]): Promise<Basket> {
     const basket = await this.mine(slug, userId);
     const catalogue = await this.assetStore().all();
     const byAssetId = new Map(catalogue.map((asset) => [assetIdFor(asset.mint), asset]));
@@ -919,7 +928,7 @@ export class BasketService {
       );
     }
     await this.customBasketStore().reviseAssets(basket.id, next);
-    return { ...basket, assets: next };
+    return BasketService.mineWire({ ...basket, assets: next });
   }
 
   /**
