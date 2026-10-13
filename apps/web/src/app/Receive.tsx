@@ -156,8 +156,8 @@ export const DepositAddress = () => {
         <div className="mt-1 rounded-lg bg-ds-panel p-4">
           <p className="text-[14px] leading-none font-medium text-ds-ink">Only USDC, only on Solana</p>
           <p className="mt-2 text-[12px] leading-[1.45] text-ds-muted">
-            Mercury shows and moves USDC on Solana. Any other token, or any other network, will not reach
-            your balance.
+            Mercury shows and moves USDC on Solana. Any other token, or any other network, will not reach your
+            balance.
           </p>
           <Button variant="primary" onClick={ack} className="mt-4 w-full">
             I understand, show my address
