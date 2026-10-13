@@ -11,6 +11,7 @@ import {
 import { movementsIn, type Movement } from "./movements.js";
 import { walkStream } from "./walk.js";
 import { reconcileBasketExits } from "../baskets/glider/reconcile.js";
+import { reconcileFundingDeposits } from "../funding/enrich.js";
 import type { ManagedBasketOperation } from "@mercury/types";
 
 export interface WalletEventsDeps {
@@ -25,6 +26,15 @@ export interface WalletEventsDeps {
   readonly exitOperations?: {
     operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
   };
+  /**
+   * Name the deposits that landed, on the rows this pass just wrote.
+   *
+   * Here rather than in the webhook because Relay reports `success` the moment
+   * it fills, which is before this has looked at the chain — so enrichment
+   * from the webhook almost always finds no row. Optional so a test of the
+   * walk itself does not have to care. See funding/enrich.ts.
+   */
+  readonly fundingDeposits?: boolean;
 }
 
 export interface EventsSummary {
@@ -230,6 +240,16 @@ export async function syncAllWalletEvents(db: Db, deps: WalletEventsDeps): Promi
       // The user, never the address: an address in a log is a person's
       // holdings in a log.
       console.error(`wallet-events: wallet for user ${row.userId} failed`, error);
+    }
+  }
+
+  if (deps.fundingDeposits === true) {
+    try {
+      /* Counted with the rest: a named deposit is a row that changed. One
+         reconciler failing must not fail the pass, as below. */
+      written += await reconcileFundingDeposits(db);
+    } catch (error) {
+      console.error("funding-deposit reconciliation pass failed", error);
     }
   }
 
