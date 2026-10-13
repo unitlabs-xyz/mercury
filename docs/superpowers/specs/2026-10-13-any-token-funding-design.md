@@ -463,16 +463,25 @@ entry bundle. This gates nothing in phase 1 and is the first task of phase 2.
 
 Each phase is shippable and leaves the product better than it found it.
 
-| #   | phase                                                                                                                     | delivers                                                        | days |
-| --- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---- |
-| 1   | Backbone — server Relay client, `funding_intent`, `/sources` + `/address`, webhook with verification, activity enrichment | any token, any chain, including BTC. No signing paths.          | 2.5  |
-| 2   | AppKit connection layer — provider, three adapters, Mercury-styled connect UI, lazy chunk, retire `embedded.ts`           | wallets connect across all three VMs                            | 3    |
-| 3   | Relay execution — adapters wired to server-minted quotes, step sequencing, per-VM error taxonomy                          | sign-and-go deposits                                            | 2    |
-| 4   | Multi-chain picker and per-chain status UI                                                                                | a 40-minute BTC pending state that does not look like a failure | 2    |
+| #   | phase                                                                                                                                                         | delivers                                                        | days |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---- |
+| 1   | Backbone — server Relay client, `funding_intent`, `/sources` + `/address` + `/intents`, webhook with verification, activity enrichment, and a plain interface | any token, any chain, including BTC. No signing paths.          | 4    |
+| 2   | AppKit connection layer — provider, three adapters, Mercury-styled connect UI, lazy chunk, retire `embedded.ts`                                               | wallets connect across all three VMs                            | 3    |
+| 3   | Relay execution — adapters wired to server-minted quotes, step sequencing, per-VM error taxonomy                                                              | sign-and-go deposits                                            | 2    |
+| 4   | Designing the picker and the per-chain status properly                                                                                                        | a 40-minute BTC pending state that does not look like a failure | 2    |
 
-Phase 1 stands alone. Phases 2–4 are an upgrade on a flow that already works,
-which is the property worth protecting: at no point between here and the end is
-the feature broken, and at no point does a slip take funding with it.
+Phase 1 stands alone, and that is a requirement rather than an observation. An
+earlier draft of this table put the whole interface in phase 4, which would have
+made phase 1 an API nobody could reach — and the claim that a slip still leaves
+"deposit any token from any chain" would have been false. So phase 1 carries
+`/intents` and an interface plain enough to ship: a searchable picker, an
+address, a QR, and a list of what is in flight. Phase 4 designs that properly
+rather than building it for the first time.
+
+With that, phases 2–4 are each an upgrade on a flow that already works, which is
+the property worth protecting: at no point between here and the end is the
+feature broken, and at no point does a slip take funding with it. Roughly eleven
+days in total, of which the first four are the ones that matter.
 
 Each phase gets its own implementation plan, written when the one before it
 lands. Planning all four now would be planning phases 3 and 4 against what
