@@ -10,7 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-13-any-token-funding-design.md`
 
-**ADR:** `docs/adr/0014-relay-funding.md`
+**ADR:** `docs/adr/0014-relay-funding.md`, and `docs/adr/0015-treasury-service.md` for where the refund keys live.
+
+**Prerequisite:** Task 6 — and only Task 6 — depends on `services/treasury`
+existing, because that is where the refund and recovery addresses come from.
+Run `docs/superpowers/plans/2026-10-13-treasury-service.md` first, or run
+Tasks 1–5 in parallel with it and let them meet at Task 6.
 
 ## Global Constraints
 
@@ -22,7 +27,7 @@
 - Minimum deposit is **$10**. Relay does not sweep ≤$0.05; this floor is ours.
 - **Every chain Relay reports is offered.** No curated allowlist.
 - Only currencies Relay will actually solve. A non-solver token sent to a deposit address is unrecoverable.
-- `refundTo` and `recoveryAddress` come from the environment, per VM family, and are **never** a user address.
+- `refundTo` and `recoveryAddress` are **derived from keys held by `services/treasury`**, per VM family, never configured as addresses and never a user address. See ADR 0015 and `docs/superpowers/plans/2026-10-13-treasury-service.md`.
 - The webhook matches on `data.depositAddress.address`, **never** on the quote-time `requestId`.
 - No secret is ever logged. No wallet address is ever logged — `wallet-events/sync.ts` logs the user id for exactly this reason.
 - Conventional commits (`feat` / `fix` / `refactor` / `chore`); UI polish is `chore`.
@@ -1128,7 +1133,13 @@ import type { FundingStore } from "../funding/store.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 
-/** An address we control, per VM family. Never a user's. See ADR 0014. */
+/**
+ * An address we control, per VM family. Never a user's.
+ *
+ * Derived by `services/treasury` from a key it holds and fetched at boot — not
+ * configured. A configured address can be one we have no key for, and nothing
+ * would catch it until a refund landed somewhere unspendable. See ADR 0015.
+ */
 export interface VmAddresses {
   readonly evm: string;
   readonly svm: string;
@@ -1565,9 +1576,9 @@ Nothing above is reachable yet. This task mounts it and decides what happens whe
 
 - [ ] **Step 1: Decide the degraded path, and write the test for it**
 
-Follow the precedent in `routes/send.ts`: `relay` and `fees` are optional there, and their absence degrades a feature rather than failing a boot. Funding does the same — **no `RELAY_API_KEY` means the routes are not mounted at all**, so `/v1/money/fund/sources` 404s and the interface hides the method, exactly as `AddCash.tsx` already hides a method whose precondition is unmet.
+Follow the precedent in `routes/send.ts`: `relay` and `fees` are optional there, and their absence degrades a feature rather than failing a boot. Funding does the same — **no `RELAY_API_KEY`, or no reachable treasury, means the routes are not mounted at all**, so `/v1/money/fund/sources` 404s and the interface hides the method, exactly as `AddCash.tsx` already hides a method whose precondition is unmet.
 
-Do not default the refund addresses. A refund address that silently falls back to something is a refund sent somewhere nobody chose.
+**Never default or fall back on an address.** Not to a constant, not to an empty string, not to another family's. A refund sent somewhere nobody chose is worse than a deposit method that is briefly unavailable, and these are the only values in this system where being absent is strictly safer than being wrong.
 
 ```ts
 // the shape in deps.ts
@@ -1581,7 +1592,14 @@ readonly fund?: {
 } | undefined;
 ```
 
-Build it only when **all** of `RELAY_API_KEY`, `RELAY_REFUND_ADDRESS_{EVM,SVM,BVM}` and `RELAY_RECOVERY_ADDRESS_{EVM,SVM,BVM}` are set. Log once at boot, naming the variables that are missing **by name only, never by value**, and carry on.
+Build it only when `RELAY_API_KEY`, `TREASURY_URL` and `TREASURY_SECRET` are all set **and** the treasury answers with all three address families. Log once at boot, naming what is missing **by name only, never by value**, and carry on.
+
+The addresses are fetched once at boot and held, not fetched per request: they
+are derived from keys that do not change, and a refund address that depends on
+an HTTP call succeeding is a deposit that fails for a reason the user cannot
+act on. A treasury that is unreachable at boot means the funding method is not
+offered that run — which is the safe direction, because the alternative is
+minting a deposit address whose refund path we could not confirm.
 
 - [ ] **Step 2: Mount the routes**
 
@@ -1607,20 +1625,18 @@ if (read.fund) app.route("/", fundRoutes(read.fund));
 # Relay, for funding from any chain. Absent, the funding method is not offered.
 # The key is also the secret Relay signs its webhooks with.
 RELAY_API_KEY=
-# Addresses WE control, one per VM family. Never a user's address: a deposit
-# withdrawn from an exchange has the exchange's hot wallet as its sender, so an
-# automatic refund aimed at "the depositor" is gone. See ADR 0014.
-RELAY_REFUND_ADDRESS_EVM=
-RELAY_REFUND_ADDRESS_SVM=
-RELAY_REFUND_ADDRESS_BVM=
-# For withdrawing from Relay's depository when they can neither fill nor refund.
-# May hold the same value as the refund address for now; separate variables so
-# splitting them later is configuration rather than code. Must not be the
-# native-currency sentinel address.
-RELAY_RECOVERY_ADDRESS_EVM=
-RELAY_RECOVERY_ADDRESS_SVM=
-RELAY_RECOVERY_ADDRESS_BVM=
+
+# The treasury service, which holds the refund keys and derives their addresses.
+# This API never sees a key — it asks for addresses and gets addresses. Reached
+# on the internal network only; the treasury has no public ingress. Absent or
+# unreachable at boot, the funding method is not offered. See ADR 0015.
+TREASURY_URL=http://treasury:8080
+TREASURY_SECRET=
 ```
+
+**No address appears in this file, and that is the point.** If you find yourself
+adding one, the question to ask is "do we hold the key for it, and what would
+tell us if we did not" — the answer is the treasury service.
 
 - [ ] **Step 4: Verify the whole suite and the boot path**
 

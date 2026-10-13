@@ -403,19 +403,37 @@ So we need a refund address for EVM, one for Solana and one for Bitcoin, plus
 `recoveryAddress` for withdrawing from the depository when Relay can neither
 fill nor refund.
 
-**Decided on 13 October: the addresses come from the environment and the
-process is deferred.** Six variables — `RELAY_REFUND_ADDRESS_{EVM,SVM,BVM}` and
-`RELAY_RECOVERY_ADDRESS_{EVM,SVM,BVM}` — read at boot and absent from the
-client. Recovery may hold the same value as refund for now; they stay separate
-variables because the roles differ, which makes splitting them later a config
-change rather than a code one. Relay's one constraint is that
-`recoveryAddress` must not be the native-currency sentinel address.
+**Decided on 13 October: no address is configuration. A separate service holds
+the keys and derives them.** See [ADR 0015](../../adr/0015-treasury-service.md).
 
-What is deferred is the human loop that returns those funds to the right user.
-`funding_intent` is what will make it answerable — the row names the user, the
-origin, the amount and the failure — so the data is captured from day one even
-though nobody is yet on the hook for acting on it. That is a deliberate debt
-and it should be paid before this is in front of people who are not us: a
+The first draft of this section put six addresses in the API's environment. That
+was wrong in a way worth recording, because nothing would have checked it: a
+configured address can be an address we do not hold the key for — a typo, a
+value copied from the wrong wallet, a rotated key whose address was never
+updated — and Relay will honour every one of them. The failure is silent at
+configuration time and surfaces when somebody else's refund lands somewhere
+nobody can spend from.
+
+So `services/treasury` reads a private key per VM family and derives the
+address. The API asks it for addresses over an internal endpoint and never sees
+a key. Derivation is a public key and a hash; it costs nothing and it makes the
+mismatch impossible rather than unlikely — the same argument `relay/builds.ts`
+makes about remembering a message instead of parsing one back.
+
+Recovery and refund stay separate values so the roles can diverge later, and
+Relay's one constraint still applies: `recoveryAddress` must not be the
+native-currency sentinel address, which a derived address never is.
+
+What is deferred is **settling** — the loop that returns those funds to the
+right user. Receiving needs nothing running: an address receives whether or not
+a service is up, which is why the treasury's v1 is only keys, derivation and one
+route. Sending is where the hard parts live, Bitcoin UTXO selection and fee
+estimation most of all, and it gets its own design.
+
+`funding_intent` is what will make settling answerable — the row names the user,
+the origin, the amount and the failure — so the data is captured from day one
+even though nobody is yet on the hook for acting on it. That is a deliberate
+debt and it should be paid before this is in front of people who are not us: a
 refund sitting in a company wallet with no process attached is somebody's money
 that we have and they do not.
 

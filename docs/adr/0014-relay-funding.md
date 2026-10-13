@@ -45,9 +45,11 @@ server mints every quote.**
 Settled with it, on 13 October: every chain Relay supports is offered rather
 than a curated few, so the picker searches rather than lists. `appFees` is zero.
 The minimum deposit is $10, which keeps the destination account rent on a first
-deposit — $0.188, measured — under 2% of it. Refund and recovery addresses come
-from the environment, one pair per VM family, and the human process for
-returning failed deposits is deferred.
+deposit — $0.188, measured — under 2% of it. Refund and recovery addresses are
+**derived from private keys held by a separate service**, one pair per VM
+family, rather than configured as addresses — see
+[ADR 0015](0015-treasury-service.md). The loop that returns a failed deposit to
+its user is deferred.
 
 Design: [`docs/superpowers/specs/2026-10-13-any-token-funding-design.md`](../superpowers/specs/2026-10-13-any-token-funding-design.md).
 
@@ -125,12 +127,14 @@ sender, so an automatic refund aimed at the depositor is gone. We therefore hold
 a refund address per VM family, plus a `recoveryAddress`, and somebody has to
 return failed deposits to the right user.
 
-The addresses are configured from the start; the process is deferred, knowingly.
-`funding_intent` captures what a refund needs to be attributed — user, origin,
-amount, failure reason — so the debt is recorded rather than lost. It still has
-to be paid before this reaches people who are not us. A refund sitting in a
-company wallet with nobody responsible for it is somebody's money that we have
-and they do not, and no amount of captured data fixes that.
+The addresses are derived rather than configured, which removes the worst
+version of this — a `refundTo` we cannot spend from — by construction rather
+than by care. ADR 0015 covers that. What stays deferred, knowingly, is
+settling: `funding_intent` captures what a refund needs to be attributed to a
+user — origin, amount, failure reason — so the debt is recorded rather than
+lost, but it still has to be paid before this reaches people who are not us. A
+refund sitting in a company wallet with nobody responsible for it is somebody's
+money that we have and they do not, and no amount of captured data fixes that.
 
 **Also bad.** Two wallet systems in one app, which needs a rule stated and
 enforced: Privy is the account, AppKit is never the account. A bundle cost for
