@@ -1323,6 +1323,23 @@ git commit -m "feat(api): offer every Relay source and mint a deposit address"
 
 The deposit's only inbound edge, and the one place this phase writes to `activities`.
 
+> **Revised during implementation.** Enrichment does **not** run from the
+> webhook. Relay reports `success` the moment it fills, which is before
+> `wallet-events` has looked at the chain — so enrichment called from the
+> webhook almost always finds no row to name. It runs at the end of the
+> wallet-events pass instead, exactly where `reconcileBasketExits` already
+> runs, as `reconcileFundingDeposits(db)`. Task 6 must wire that into
+> `syncAllWalletEvents`, which the original Step 2 of Task 6 did not mention.
+>
+> Enrichment is also **update-only**. The delivered amount is knowable only
+> from the chain and the quote we minted is indicative, so inserting a row
+> would put an unverified figure into something `portfolio/queries.ts:118`
+> reads as money in.
+>
+> And `funding_intent` gained `origin_chain_name` and `origin_currency_symbol`:
+> the row has to be able to describe itself — "USDT from tron" — a month later
+> without asking Relay what it calls things now.
+
 **Files:**
 
 - Create: `services/api/src/routes/relay-webhook.ts`
@@ -1651,6 +1668,12 @@ minting a deposit address whose refund path we could not confirm.
 - [ ] **Step 2: Mount the routes**
 
 In `app.ts`, the webhook goes **above** `app.use("/v1/*", requireAuth(auth))` and the funding routes below it. Getting this backwards puts a session requirement on Relay, which has none, or removes one from the user's routes.
+
+And wire `reconcileFundingDeposits(db)` into `syncAllWalletEvents`
+(`wallet-events/sync.ts`), beside the `reconcileBasketExits` call at the end of
+the pass and inside its own try/catch for the same reason: one reconciler
+failing must not fail the pass. Without this the feed is never named, and the
+deposit shows as a plain "Added cash" for ever.
 
 ```ts
 // app.ts — beside the other public routes, before the auth middleware
