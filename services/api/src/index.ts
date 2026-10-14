@@ -24,6 +24,14 @@ import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
 import { keypairRelaySigner } from "./relay/signer.js";
+import { exitOnUncaught, oneLineErrors } from "./log.js";
+
+/*
+ * First, so that nothing after it, a bad config included, logs a stack trace.
+ * See `log.ts`; LOG_STACKS=1 turns both off.
+ */
+oneLineErrors();
+exitOnUncaught();
 
 const config = readConfig();
 const port = Number(process.env.PORT ?? 8787);
