@@ -10,7 +10,7 @@ const SEEN = "harbor.welcome.seen";
 const STEPS = [
   {
     title: "Add cash",
-    body: "Send USDC on Solana. It starts earning 4.1% the moment it lands, and keeps earning until you buy something.",
+    body: "Send USDC on Solana. It starts earning the moment it lands, and keeps earning until you buy something.",
   },
   {
     title: "Pick what to hold",
