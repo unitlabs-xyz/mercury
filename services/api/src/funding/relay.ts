@@ -28,7 +28,35 @@ export interface RelaySource {
   readonly chainId: number;
   readonly name: string;
   readonly vmType: string;
+  /** Relay's own chain mark, served from their CDN. Null if they stop sending one. */
+  readonly iconUrl: string | null;
   readonly currencies: readonly RelayCurrency[];
+}
+
+/**
+ * A token somebody can deposit, as `/currencies/v2` describes it.
+ *
+ * A different endpoint from `/chains`, and the difference matters: `/chains`
+ * carries a short solver list with no artwork, while this one is the index
+ * Relay's own picker searches and the only place `logoUrl` exists.
+ */
+export interface RelayToken {
+  readonly chainId: number;
+  readonly address: string;
+  readonly symbol: string;
+  readonly name: string;
+  readonly decimals: number;
+  readonly vmType: string;
+  readonly logoUrl: string | null;
+}
+
+export interface RelayTokenQuery {
+  readonly chainIds: readonly number[];
+  /** A symbol or a name. Absent, Relay returns what is most held on each chain. */
+  readonly term?: string;
+  /** An exact contract address, which `term` does not match on. */
+  readonly address?: string;
+  readonly limit?: number;
 }
 
 /** Relay's own vocabulary, carried through rather than mapped. */
@@ -76,6 +104,16 @@ export interface FundQuoteInput {
 export interface RelayClient {
   chains(): Promise<readonly RelaySource[]>;
   /**
+   * Tokens, searched or resolved by address.
+   *
+   * Verified only, and that is a safety decision rather than a tidying one.
+   * Searching "USDC" on Base returns five verified rows and seven unverified
+   * ones, among them a token whose symbol is `USDC` and whose name is `USDC`
+   * at an address that is not Circle's. Relay will quote it, because it has
+   * liquidity. Showing it would be our picker handing somebody an impostor.
+   */
+  currencies(query: RelayTokenQuery): Promise<readonly RelayToken[]>;
+  /**
    * An executable quote for a wallet somebody has connected.
    *
    * Solana and EVM alike. A Bitcoin origin would come back as a PSBT and is
@@ -88,10 +126,22 @@ export interface RelayClient {
 interface WireChain {
   readonly id?: number;
   readonly name?: string;
+  readonly displayName?: string;
   readonly vmType?: string;
   readonly depositEnabled?: boolean;
+  readonly iconUrl?: string;
   readonly currency?: (RelayCurrency & { readonly supportsBridging?: boolean }) | undefined;
   readonly solverCurrencies?: readonly RelayCurrency[];
+}
+
+interface WireToken {
+  readonly chainId?: number;
+  readonly address?: string;
+  readonly symbol?: string;
+  readonly name?: string;
+  readonly decimals?: number;
+  readonly vmType?: string;
+  readonly metadata?: { readonly logoURI?: string; readonly verified?: boolean };
 }
 
 /**
@@ -148,11 +198,54 @@ export const createRelayClient = (config: {
         .filter((c): c is WireChain & { id: number } => c.depositEnabled === true && typeof c.id === "number")
         .map((c) => ({
           chainId: c.id,
-          name: c.name ?? String(c.id),
+          /* `displayName` is the cased one — "BNB Chain" against `name`'s "bsc". */
+          name: c.displayName ?? c.name ?? String(c.id),
           vmType: c.vmType ?? "evm",
+          iconUrl: c.iconUrl ?? null,
           currencies: currenciesOf(c),
         }))
         .filter((c) => c.currencies.length > 0);
+    },
+
+    async currencies(query) {
+      const body = (await call("/currencies/v2", {
+        method: "POST",
+        body: JSON.stringify({
+          chainIds: [...query.chainIds],
+          ...(query.term === undefined ? {} : { term: query.term }),
+          ...(query.address === undefined ? {} : { address: query.address }),
+          limit: query.limit ?? 30,
+          verifiedOnly: true,
+        }),
+      })) as readonly WireToken[] | null;
+
+      return (body ?? [])
+        .filter(
+          (t): t is WireToken & { chainId: number; address: string; symbol: string; decimals: number } =>
+            typeof t.chainId === "number" &&
+            typeof t.address === "string" &&
+            typeof t.symbol === "string" &&
+            typeof t.decimals === "number" &&
+            /*
+             * This is the filter that works, not a second opinion on
+             * `verifiedOnly`. Measured 14 October: `verifiedOnly: true` is
+             * honoured for a `term` search and ignored for an `address`
+             * lookup — asking for the impostor USDC at 0x584fbca… by address
+             * returns it, flagged `verified: false`. Since resolving by
+             * address is exactly what /fund/swap does before quoting, dropping
+             * this line would reopen the hole the flag appears to close.
+             */
+            t.metadata?.verified === true,
+        )
+        .map((t) => ({
+          chainId: t.chainId,
+          address: t.address,
+          symbol: t.symbol,
+          name: t.name ?? t.symbol,
+          decimals: t.decimals,
+          vmType: t.vmType ?? "evm",
+          logoUrl: t.metadata?.logoURI ?? null,
+        }));
     },
 
     async fundQuote(input) {

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { address as toAddress } from "@solana/kit";
 import type { RelayClient, RelaySource } from "../funding/relay.js";
+import { chainRank, isSupportedChain, SUPPORTED_CHAIN_IDS } from "../funding/chains.js";
 import type { FundingStore } from "../funding/store.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
@@ -42,30 +43,121 @@ export function fundRoutes(deps: FundDeps): Hono {
     const now = Date.now();
     if (cached !== null && now - cached.at < CHAINS_TTL_MS) return cached.sources;
     /*
-     * Bitcoin is left out. Relay will take a BTC deposit, but only to an
-     * address — a connected wallet would answer with a PSBT and nothing here
-     * signs one. Offering a row that cannot be taken is worse than not
-     * offering it.
+     * Relay reports 61 chains; funding/chains.ts decides which we offer, and
+     * the filter is here rather than in the browser so the set can be changed
+     * by deploying the server. Bitcoin falls out of it by being absent from
+     * that list — Relay will take a BTC deposit, but only to an address, and a
+     * connected wallet would answer with a PSBT that nothing here signs.
      */
-    const fresh = (await deps.relay.chains()).filter((c) => c.vmType !== "bvm");
+    const fresh = (await deps.relay.chains())
+      .filter((c) => isSupportedChain(c.chainId))
+      .sort((a, b) => chainRank(a.chainId) - chainRank(b.chainId));
     cached = { at: now, sources: fresh };
     return fresh;
   };
 
+  /** The chain a token sits on, for naming it in a record and in the interface. */
+  const chainOf = async (chainId: number): Promise<RelaySource | undefined> =>
+    (await sources()).find((s) => s.chainId === chainId);
+
   /*
-   * Every chain Relay reports, less Bitcoin. The client filters again by what
-   * it can actually connect a wallet on — see apps/web/src/wallet/chains.ts.
-   * Two honest halves: the server says what Relay accepts, the client says
-   * what it can sign.
+   * The chains we offer, for the filter row. One list, decided here — the
+   * browser renders what it is given rather than holding a second opinion.
+   *
+   * Tokens are no longer part of this: they come from `/tokens` below, which
+   * searches Relay's whole index instead of the short solver list `/chains`
+   * carries, and is the only source that has artwork.
    */
   app.get("/v1/money/fund/sources", async (c) => {
     if (c.get("identity").walletAddress === null) {
       return c.json(fail("unauthorized", "No wallet on this session."), 401);
     }
     try {
-      return c.json({ chains: await sources(), minimumUsd: String(deps.minimumUsd) });
+      const chains = (await sources()).map((s) => ({
+        chainId: s.chainId,
+        name: s.name,
+        vmType: s.vmType,
+        iconUrl: s.iconUrl,
+        /*
+         * Kept for the frontend that is deployed right now, which builds its
+         * token list out of this and would throw on `undefined.map` without
+         * it. The one replacing it reads /tokens instead and ignores this.
+         *
+         * Remove it once that build is live — a second list of tokens, served
+         * beside the searchable one and shorter than it, is exactly the kind
+         * of thing that is still here in a year.
+         */
+        currencies: s.currencies,
+      }));
+      return c.json({ chains, minimumUsd: String(deps.minimumUsd) });
     } catch (err) {
       console.error("fund: could not read Relay's chains", err);
+      return c.json(fail("fund_unavailable", "Deposit options are unavailable right now."), 503);
+    }
+  });
+
+  /**
+   * Tokens to deposit, searched.
+   *
+   * Server-side because the answer is not small — Relay indexes thousands,
+   * against the 56 the `/chains` solver lists happened to name — and because
+   * the API key stays here. `q` empty is a real query and not an error: Relay
+   * answers it with what is most held on each chain, which is the list to open
+   * on.
+   */
+  app.get("/v1/money/fund/tokens", async (c) => {
+    if (c.get("identity").walletAddress === null) {
+      return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    }
+
+    const raw = c.req.query("chainId");
+    const only = raw === undefined ? null : Number(raw);
+    if (only !== null && (!Number.isInteger(only) || !isSupportedChain(only))) {
+      return c.json(fail("validation_failed", "We do not take deposits from that chain."), 400);
+    }
+
+    /* Trimmed, and capped well above any symbol so a long string cannot become
+       a long upstream query. */
+    const term = (c.req.query("q") ?? "").trim().slice(0, 64);
+
+    try {
+      const [chains, tokens] = await Promise.all([
+        sources(),
+        deps.relay.currencies({
+          chainIds: only === null ? SUPPORTED_CHAIN_IDS : [only],
+          ...(term.length === 0 ? {} : { term }),
+          limit: 50,
+        }),
+      ]);
+
+      const named = new Map(chains.map((s) => [s.chainId, s]));
+      const rows = tokens
+        /* Relay may answer with a chain we do not offer even when asked about
+           ours. What we show has to be what we accept, or the row fails at the
+           quote after somebody has chosen it. */
+        .flatMap((t) => {
+          const chain = named.get(t.chainId);
+          return chain === undefined
+            ? []
+            : [
+                {
+                  chainId: t.chainId,
+                  chainName: chain.name,
+                  chainIconUrl: chain.iconUrl,
+                  vmType: chain.vmType,
+                  address: t.address,
+                  symbol: t.symbol,
+                  name: t.name,
+                  decimals: t.decimals,
+                  logoUrl: t.logoUrl,
+                },
+              ];
+        })
+        .sort((a, b) => chainRank(a.chainId) - chainRank(b.chainId));
+
+      return c.json({ tokens: rows });
+    } catch (err) {
+      console.error("fund: could not search Relay's currencies", err);
       return c.json(fail("fund_unavailable", "Deposit options are unavailable right now."), 503);
     }
   });
@@ -86,21 +178,46 @@ export function fundRoutes(deps: FundDeps): Hono {
     const parsed = SwapBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", "Pick a token and an amount."), 400);
 
-    let available: readonly RelaySource[];
+    if (!isSupportedChain(parsed.data.chainId)) {
+      return c.json(fail("validation_failed", "We do not take deposits from that chain."), 400);
+    }
+
+    /*
+     * The token is resolved against Relay rather than trusted from the body,
+     * and resolved here rather than taken from whatever the picker displayed.
+     *
+     * Two things turn on it. The first is that `symbol` and `decimals` end up
+     * in a record somebody will later read to understand where their money
+     * came from, and a client that could name them could write "USDC" over a
+     * deposit of something else. The second is the filter: `currencies()` asks
+     * for verified tokens only, so an address Relay knows but has not verified
+     * resolves to nothing here and is refused — which is the whole defence
+     * against a token whose symbol says USDC and whose issuer is not Circle.
+     *
+     * What this deliberately no longer does is require the token to appear in
+     * `/chains`'s solver list. That list names 56 tokens and Relay routes far
+     * past it — SQDGN and DGENAI, neither listed, both quote. The old comment
+     * here called the list "the only safe list" because an unsolvable deposit
+     * was unrecoverable once sent, and that was true of the deposit-address
+     * flow this replaced. With a connected wallet the quote is the gate: an
+     * unroutable token comes back 400 INVALID_INPUT_CURRENCY and nothing has
+     * been signed.
+     */
+    let chain: RelaySource | undefined;
+    let currency: { readonly address: string; readonly symbol: string } | undefined;
     try {
-      available = await sources();
+      chain = await chainOf(parsed.data.chainId);
+      const found = await deps.relay.currencies({
+        chainIds: [parsed.data.chainId],
+        address: parsed.data.currency,
+        limit: 1,
+      });
+      currency = found.find((t) => t.address.toLowerCase() === parsed.data.currency.toLowerCase());
     } catch (err) {
-      console.error("fund: could not read Relay's chains", err);
+      console.error("fund: could not resolve the token", err);
       return c.json(fail("fund_unavailable", "Deposit options are unavailable right now."), 503);
     }
 
-    const chain = available.find((s) => s.chainId === parsed.data.chainId);
-    /*
-     * The currency has to be one Relay will solve. Not input tidying: a token
-     * Relay does not solve is, by their own documentation, unrecoverable once
-     * sent, so the only safe list is the one they gave us.
-     */
-    const currency = chain?.currencies.find((cur) => cur.address === parsed.data.currency);
     if (chain === undefined || currency === undefined) {
       return c.json(fail("validation_failed", "We cannot accept that token."), 400);
     }

@@ -1,26 +1,41 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { fundRoutes, type FundDeps } from "./fund.js";
-import type { RelaySource } from "../funding/relay.js";
+import type { RelaySource, RelayToken } from "../funding/relay.js";
 
 const SOLANA: RelaySource = {
   chainId: 792703809,
-  name: "solana",
+  name: "Solana",
   vmType: "svm",
+  iconUrl: "https://assets.relay.link/icons/792703809/light.png",
   currencies: [{ id: "usdt", symbol: "USDT", name: "USDT", address: "Es9vMFrz", decimals: 6 }],
 };
 const BASE: RelaySource = {
   chainId: 8453,
-  name: "base",
+  name: "Base",
   vmType: "evm",
+  iconUrl: "https://assets.relay.link/icons/8453/light.png",
   currencies: [{ id: "eth", symbol: "ETH", name: "Ether", address: "0x0", decimals: 18 }],
 };
 const BITCOIN: RelaySource = {
   chainId: 8253038,
-  name: "bitcoin",
+  name: "Bitcoin",
   vmType: "bvm",
+  iconUrl: null,
   currencies: [{ id: "btc", symbol: "BTC", name: "Bitcoin", address: "bc1qq", decimals: 8 }],
 };
+
+/** What `/currencies/v2` gives back, which is what the token list is built from. */
+const token = (over: Partial<RelayToken> = {}): RelayToken => ({
+  chainId: 8453,
+  address: "0x0",
+  symbol: "ETH",
+  name: "Ether",
+  decimals: 18,
+  vmType: "evm",
+  logoUrl: "https://coin-images.coingecko.com/eth.png",
+  ...over,
+});
 
 const SOL_WALLET = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
 const EVM_WALLET = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
@@ -50,13 +65,25 @@ const store = (over: Partial<FundDeps["store"]> = {}): FundDeps["store"] => ({
 });
 
 const harness = (
-  over: { chains?: readonly RelaySource[]; deps?: Partial<FundDeps> } = {},
+  over: {
+    chains?: readonly RelaySource[];
+    tokens?: readonly RelayToken[];
+    deps?: Partial<FundDeps>;
+  } = {},
   wallet: string | null = "PrivyWallet111",
 ) => {
   const chains = vi.fn().mockResolvedValue(over.chains ?? [SOLANA, BASE]);
+  const currencies = vi
+    .fn()
+    .mockResolvedValue(
+      over.tokens ?? [
+        token(),
+        token({ chainId: 792703809, address: "Es9vMFrz", symbol: "USDT", vmType: "svm" }),
+      ],
+    );
   const fundQuote = vi.fn().mockResolvedValue({ details: DETAILS, quote: { requestId: "0xreq" } });
   const deps: FundDeps = {
-    relay: { chains, fundQuote, status: vi.fn() },
+    relay: { chains, currencies, fundQuote, status: vi.fn() },
     store: store(),
     minimumUsd: 10,
     ...over.deps,
@@ -67,7 +94,7 @@ const harness = (
     await next();
   });
   app.route("/", fundRoutes(deps));
-  return { app, chains, fundQuote, deps };
+  return { app, chains, currencies, fundQuote, deps };
 };
 
 const post = (app: Hono, path: string, body: unknown) =>
@@ -96,16 +123,19 @@ describe("fundRoutes · sources", () => {
     expect(body.minimumUsd).toBe("10");
   });
 
-  it("does not offer Bitcoin, which has no wallet this app can sign with", async () => {
+  it("offers only the chains funding/chains.ts names, Bitcoin among the ones it does not", async () => {
     const { app } = harness({ chains: [SOLANA, BITCOIN] });
 
     const body = (await (await app.request("/v1/money/fund/sources")).json()) as {
-      chains: { name: string }[];
+      chains: { name: string; iconUrl: string | null }[];
     };
 
     /* Relay would take a BTC deposit, but only to an address — a connected
-       wallet answers with a PSBT and nothing here signs one. */
-    expect(body.chains.map((c) => c.name)).toEqual(["solana"]);
+       wallet answers with a PSBT and nothing here signs one. It is absent from
+       SUPPORTED_CHAIN_IDS, which is the one place that decides. */
+    expect(body.chains.map((c) => c.name)).toEqual(["Solana"]);
+    /* The chip needs artwork, so the mark has to survive the trip. */
+    expect(body.chains[0]?.iconUrl).toContain("assets.relay.link");
   });
 
   it("refuses a session with no wallet", async () => {
@@ -118,12 +148,84 @@ describe("fundRoutes · sources", () => {
       deps: {
         relay: {
           chains: vi.fn().mockRejectedValue(new Error("relay /chains failed: 500")),
+          currencies: vi.fn(),
           fundQuote: vi.fn(),
           status: vi.fn(),
         },
       },
     });
     expect((await app.request("/v1/money/fund/sources")).status).toBe(503);
+  });
+});
+
+describe("fundRoutes · tokens", () => {
+  it("returns a searchable list with artwork for the token and its chain", async () => {
+    const { app } = harness();
+
+    const body = (await (await app.request("/v1/money/fund/tokens?q=usdt")).json()) as {
+      tokens: { symbol: string; logoUrl: string | null; chainName: string; chainIconUrl: string | null }[];
+    };
+
+    const row = body.tokens.find((t) => t.symbol === "USDT");
+    expect(row).toBeDefined();
+    expect(row!.logoUrl).toContain("coin-images.coingecko.com");
+    expect(row!.chainName).toBe("Solana");
+    expect(row!.chainIconUrl).toContain("assets.relay.link");
+  });
+
+  it("passes the search term and the supported chains upstream", async () => {
+    const { app, currencies } = harness();
+
+    await app.request("/v1/money/fund/tokens?q=%20peng%20");
+
+    /* Trimmed, because a trailing space is not part of what somebody meant. */
+    expect(currencies.mock.calls[0]![0]).toMatchObject({ term: "peng" });
+    expect(currencies.mock.calls[0]![0].chainIds).toContain(792703809);
+  });
+
+  it("treats an empty query as a real one rather than an error", async () => {
+    const { app, currencies } = harness();
+
+    const res = await app.request("/v1/money/fund/tokens");
+
+    expect(res.status).toBe(200);
+    /* No term at all, which is how Relay is asked for what is most held. */
+    expect(currencies.mock.calls[0]![0].term).toBeUndefined();
+  });
+
+  it("narrows to one chain when asked", async () => {
+    const { app, currencies } = harness();
+
+    await app.request("/v1/money/fund/tokens?chainId=8453");
+
+    expect(currencies.mock.calls[0]![0].chainIds).toEqual([8453]);
+  });
+
+  it("refuses a chain we do not take deposits from", async () => {
+    const { app, currencies } = harness();
+
+    const res = await app.request("/v1/money/fund/tokens?chainId=8253038");
+
+    expect(res.status).toBe(400);
+    expect(currencies).not.toHaveBeenCalled();
+  });
+
+  it("drops a token on a chain we do not offer, whatever Relay answers with", async () => {
+    /* Asking about our chains does not guarantee only our chains come back,
+       and a row we show has to be a row we accept — otherwise it fails at the
+       quote, after the user has chosen it. */
+    const { app } = harness({ tokens: [token({ chainId: 8253038, symbol: "BTC" }), token()] });
+
+    const body = (await (await app.request("/v1/money/fund/tokens")).json()) as {
+      tokens: { symbol: string }[];
+    };
+
+    expect(body.tokens.map((t) => t.symbol)).toEqual(["ETH"]);
+  });
+
+  it("refuses a session with no wallet", async () => {
+    const { app } = harness({}, null);
+    expect((await app.request("/v1/money/fund/tokens")).status).toBe(401);
   });
 });
 
@@ -173,7 +275,7 @@ describe("fundRoutes · swap", () => {
       userId: "user-1",
       relayRequestId: "0xreq",
       originChainId: 792703809,
-      originChainName: "solana",
+      originChainName: "Solana",
       originCurrencySymbol: "USDT",
       recipientAddress: "PrivyWallet111",
     });
@@ -222,12 +324,58 @@ describe("fundRoutes · swap", () => {
     expect((await post(app, "/v1/money/fund/swap", swap)).status).toBe(401);
   });
 
+  it("refuses a token Relay will not vouch for, and quotes nothing", async () => {
+    /*
+     * The defence against an impostor. `currencies()` keeps only what Relay
+     * marks verified, so an unverified address resolves to an empty list here
+     * — which matters because `verifiedOnly` is ignored on address lookups,
+     * and a token calling itself USDC would otherwise reach a quote.
+     */
+    const { app, fundQuote, deps } = harness({ tokens: [] });
+
+    const res = await post(app, "/v1/money/fund/swap", { ...swap, currency: "0xImpostor" });
+
+    expect(res.status).toBe(400);
+    expect(fundQuote).not.toHaveBeenCalled();
+    expect(deps.store.create).not.toHaveBeenCalled();
+  });
+
+  it("resolves the token by address rather than trusting the body", async () => {
+    const { app, currencies } = harness();
+
+    await post(app, "/v1/money/fund/swap", swap);
+
+    expect(currencies.mock.calls[0]![0]).toMatchObject({
+      chainIds: [792703809],
+      address: "Es9vMFrz",
+    });
+  });
+
+  it("records the symbol Relay gave, not one the caller chose", async () => {
+    /* The record is what somebody reads months later to understand a deposit.
+       A client that could name the symbol could write USDC over anything. */
+    const { app, deps } = harness({
+      tokens: [token({ chainId: 792703809, address: "Es9vMFrz", symbol: "USDT", vmType: "svm" })],
+    });
+
+    await post(app, "/v1/money/fund/swap", { ...swap, symbol: "USDC" });
+
+    expect(vi.mocked(deps.store.create).mock.calls[0]![0]).toMatchObject({
+      originCurrencySymbol: "USDT",
+    });
+  });
+
   it("answers 503 on an upstream failure without leaking its text", async () => {
     const { app } = harness({
       chains: [SOLANA],
       deps: {
         relay: {
           chains: vi.fn().mockResolvedValue([SOLANA]),
+          currencies: vi
+            .fn()
+            .mockResolvedValue([
+              token({ chainId: 792703809, address: "Es9vMFrz", symbol: "USDT", vmType: "svm" }),
+            ]),
           fundQuote: vi.fn().mockRejectedValue(new Error("relay /quote/v2 failed: 500 x-api-key abc")),
           status: vi.fn(),
         },
@@ -319,7 +467,7 @@ describe("fundRoutes · intents", () => {
       id: "a",
       status: "success",
       originChainId: 792703809,
-      originChainName: "solana",
+      originChainName: "Solana",
       originCurrencySymbol: "USDT",
       quotedOutRaw: "9990651",
       inTxHash: "sig",
@@ -355,5 +503,22 @@ describe("fundRoutes · intents", () => {
   it("refuses an unauthenticated read of deposits", async () => {
     const { app } = harness({}, null);
     expect((await app.request("/v1/money/fund/intents")).status).toBe(401);
+  });
+});
+
+describe("fundRoutes · sources, while two frontends are live", () => {
+  it("still carries the token list the deployed build reads", async () => {
+    /*
+     * The old picker builds its rows from `chains[].currencies` and would
+     * throw on `undefined.map`. Keeping the field is what lets this deploy
+     * on its own instead of having to land with a frontend release.
+     */
+    const { app } = harness();
+
+    const body = (await (await app.request("/v1/money/fund/sources")).json()) as {
+      chains: { currencies?: { symbol: string }[] }[];
+    };
+
+    expect(body.chains[0]?.currencies?.map((c) => c.symbol)).toEqual(["USDT"]);
   });
 });
