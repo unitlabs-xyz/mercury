@@ -479,7 +479,7 @@ export const Baskets = () => {
             <>
               {catalog.isError && (
                 <PriceError
-                  message="Could not refresh strategies. Showing the last available catalog."
+                  message="Could not refresh strategies. Showing the last available data."
                   onRetry={() => void catalog.refetch()}
                 />
               )}
