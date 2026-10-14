@@ -325,7 +325,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
     </nav>
     <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
       <div className="flex min-w-0 flex-col gap-4 md:gap-6">
-        <section aria-label="Loading strategy overview" className="rounded-xl bg-white p-5">
+        <section aria-label="Loading basket overview" className="rounded-xl bg-white p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <Skeleton className="h-7 w-52 max-w-full" />
@@ -342,7 +342,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
           <Skeleton className="mt-7 h-9 w-28" />
           <Skeleton className="mt-5 h-[340px] w-full rounded-lg" />
         </section>
-        <section aria-label="Loading strategy composition" className="rounded-xl bg-white p-1">
+        <section aria-label="Loading basket composition" className="rounded-xl bg-white p-1">
           <div className="px-3 sm:px-5 pt-4 pb-3">
             <Skeleton className="h-5 w-44" />
             <Skeleton className="mt-2 h-4 w-64 max-w-full" />
@@ -567,10 +567,7 @@ export const Basket = () => {
     return (
       <AppShell current="baskets" title={name} quiet>
         <div className="rounded-xl bg-white p-5">
-          <PriceError
-            message="This strategy is unavailable right now."
-            onRetry={() => void result.refetch()}
-          />
+          <PriceError message="This basket is unavailable right now." onRetry={() => void result.refetch()} />
           <Link to="/baskets" className="mt-4 inline-block text-[13px] text-ds-link hover:underline">
             Back to baskets
           </Link>
@@ -696,7 +693,7 @@ export const Basket = () => {
       {result.isError && (
         <PriceError
           className="mb-4 md:mb-6"
-          message="Could not refresh this strategy. Showing the last available data."
+          message="Could not refresh this basket. Showing the last available data."
           onRetry={() => void result.refetch()}
         />
       )}
@@ -704,7 +701,7 @@ export const Basket = () => {
       <div className="flex flex-col gap-4 md:gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_416px] xl:items-start">
         <div className="contents xl:flex xl:min-w-0 xl:flex-col xl:gap-6">
           <section
-            aria-label="Strategy overview and modeled performance"
+            aria-label="Basket overview and modeled performance"
             className="order-1 min-w-0 rounded-xl bg-white p-1 xl:order-none"
           >
             <div className="px-5 pt-5 pb-4">
@@ -720,7 +717,7 @@ export const Basket = () => {
                           : "Preview"}
                     </StatusChip>
                   </div>
-                  <p className="mt-2 text-[13px] text-ds-muted">Glider strategy · Solana</p>
+                  <p className="mt-2 text-[13px] text-ds-muted">Glider basket · Solana</p>
                 </div>
                 <IconCluster
                   template={template}
@@ -771,12 +768,12 @@ export const Basket = () => {
           <div className="order-3 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
             <section
               id="composition"
-              aria-label="Strategy composition"
+              aria-label="Basket composition"
               className="min-w-0 scroll-mt-24 overflow-hidden rounded-xl bg-white p-1"
             >
               <div className="flex flex-wrap items-end justify-between gap-3 px-3 sm:px-5 pt-4">
                 <div>
-                  <h2 className="text-[17px] font-medium text-ds-ink">Strategy composition</h2>
+                  <h2 className="text-[17px] font-medium text-ds-ink">Basket composition</h2>
                   <p className="mt-1 text-[12px] text-ds-muted">
                     Target weights; actual holdings can drift between rebalances.
                   </p>
@@ -1012,8 +1009,8 @@ export const Basket = () => {
               <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
                 These are tokenized assets held in a Glider basket account that is yours, not shares in a
                 pooled basket token. Prices, available liquidity, swap costs and actual execution can differ
-                from the modeled strategy. Funding with USDC does not automatically buy the target assets;
-                USDC can remain uninvested until a rebalance executes.
+                from the model. Funding with USDC does not automatically buy the target assets; USDC can
+                remain uninvested until a rebalance executes.
               </p>
             </details>
           </div>
@@ -1454,7 +1451,7 @@ export const Basket = () => {
               </RailList>
             )}
             <Link to="/baskets" className="text-[13px] font-medium text-ds-link hover:underline">
-              Explore more strategies →
+              Explore more baskets →
             </Link>
           </div>
         </aside>

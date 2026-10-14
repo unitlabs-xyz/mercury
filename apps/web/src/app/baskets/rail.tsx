@@ -15,7 +15,7 @@ import { readPortfolioOperations, sortOperationRows, type BasketOperationRow } f
 import { useBasketOperations } from "../../api/baskets";
 
 const steps = [
-  ["Choose a strategy", "Each template sets target weights for Solana tokenized assets."],
+  ["Choose a basket", "Each basket sets target weights for Solana tokenized assets."],
   ["You own the assets", "The holdings live in an account of your own, not in one pooled basket token."],
   ["Glider rebalances daily", "Glider works toward the target weights as market prices move."],
 ] as const;
@@ -112,7 +112,7 @@ const BasketList = ({
       ? "Your basket accounts will appear here after you sign in."
       : error
         ? "We couldn't load your basket accounts. Your assets are still in them."
-        : "Explore a strategy to create your first basket account.";
+        : "Pick a basket to create your first basket account.";
     return (
       <div className="flex min-h-[182px] flex-col items-center justify-center px-6 py-5 text-center">
         <p className="text-[14px] font-medium text-ds-ink">{title}</p>
@@ -122,7 +122,7 @@ const BasketList = ({
           onClick={!signedIn ? onSignIn : error ? onRetry : onExplore}
           className="mt-4 rounded-full border border-ds-divider bg-white px-4 py-2 text-[12px] font-medium text-ds-ink hover:bg-ds-panel"
         >
-          {!signedIn ? "Sign in" : error ? "Try again" : "Explore strategies"}
+          {!signedIn ? "Sign in" : error ? "Try again" : "Explore baskets"}
         </button>
       </div>
     );
@@ -320,7 +320,7 @@ export const BasketsRail = (props: RailProps) => (
     />
 
     <section
-      aria-label="Explore strategies"
+      aria-label="Explore baskets"
       className="relative min-h-[214px] overflow-hidden rounded-xl border-[3px] border-white bg-[#eef6ff] px-6 py-7 shadow-sm"
     >
       <img
@@ -341,7 +341,7 @@ export const BasketsRail = (props: RailProps) => (
         onClick={props.onExplore}
         className="relative mt-5 inline-flex items-center gap-2 rounded-full bg-ds-ink px-5 py-2 text-[12px] font-medium text-white hover:bg-black"
       >
-        Explore strategies <ArrowRight className="size-3.5" />
+        Explore baskets <ArrowRight className="size-3.5" />
       </button>
     </section>
   </aside>

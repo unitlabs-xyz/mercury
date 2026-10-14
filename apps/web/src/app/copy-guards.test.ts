@@ -41,6 +41,11 @@ const copyFiles = (): { file: string; copy: string[] }[] =>
     .filter((f) => !f.includes(".test.") && !f.startsWith("dev/"))
     .map((f) => ({ file: f, copy: copyIn(readFileSync(join(SRC, f), "utf8")) }));
 
+const basketSurfaces = (): { file: string; copy: string[] }[] =>
+  copyFiles().filter(
+    ({ file }) => file.startsWith("app/baskets/") || file === "app/Basket.tsx" || file === "app/Baskets.tsx",
+  );
+
 /*
  * The yield is live data. It arrives on `/v1/money` as `yieldApr` and the
  * Money tab renders it; a screen that cannot read it must not quote it.
@@ -113,13 +118,29 @@ describe("words the reader does not have", () => {
     expect(found).toEqual([]);
   });
 
+  it("calls a basket a basket, not a strategy or a template", () => {
+    /*
+     * Three nouns named one object. `baskets/rail.tsx` managed two of them in
+     * one file — "Choose a strategy" and "Explore strategies" beside "Your
+     * baskets" and "How baskets work" — and leaked the third in its own
+     * explainer: "Each template sets target weights". The discovery page said
+     * strategies nine times and baskets never, under a nav tab called Baskets.
+     *
+     * Scoped to the basket surfaces, and it has to be: `market/meta.ts`
+     * describes "Strategy Preferred", which is a real company's real preferred
+     * stock. A guard that read the whole app would rename a ticker.
+     */
+    const found = basketSurfaces().flatMap(({ file, copy }) =>
+      copy.filter((s) => /strateg|template/i.test(s)).map((s) => `${relative(".", file)}: ${s}`),
+    );
+
+    expect(found).toEqual([]);
+  });
+
   it("does not call a basket account a portfolio, which is the tab's name", () => {
     /* Scoped to the basket surfaces: the Portfolio tab and its own panels are
        entitled to the word, and this is about the sheets that borrowed it. */
-    const baskets = copyFiles().filter(
-      ({ file }) => file.startsWith("app/baskets/") || file === "app/Basket.tsx",
-    );
-    const found = baskets.flatMap(({ file, copy }) =>
+    const found = basketSurfaces().flatMap(({ file, copy }) =>
       copy.filter((s) => /\bportfolios?\b/i.test(s)).map((s) => `${relative(".", file)}: ${s}`),
     );
 

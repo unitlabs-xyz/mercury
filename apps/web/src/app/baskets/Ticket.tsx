@@ -80,7 +80,7 @@ export const EnrollmentRail = ({
         : !signedIn
           ? "Sign in to invest."
           : blocked && !enrolled
-            ? "This strategy isn't open to new accounts right now."
+            ? "This basket isn't open to new accounts right now."
             : (error ?? null);
   return (
     <section aria-label={`Invest in ${name}`} className="min-w-0 rounded-xl bg-white p-1">

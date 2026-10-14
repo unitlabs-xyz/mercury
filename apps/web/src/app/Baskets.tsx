@@ -51,7 +51,7 @@ const TextAction = ({ children, onClick }: { children: ReactNode; onClick: () =>
 
 /** Keep the discovery page's three sections in place during its first catalog read. */
 const DiscoveryLoading = () => (
-  <div aria-label="Loading basket strategies" className="space-y-8 sm:space-y-9">
+  <div aria-label="Loading baskets" className="space-y-8 sm:space-y-9">
     <section>
       <Skeleton className="h-6 w-40 !bg-white" />
       <Skeleton className="mt-2 h-4 w-64 max-w-full !bg-white" />
@@ -225,11 +225,7 @@ const ThemeShelf = ({
   shelves: ReturnType<typeof curatedShelves>["themes"];
   select: (tag: ManagedBasketTag) => void;
 }) => (
-  <Shelf
-    id="themes"
-    title="Explore by theme"
-    subtitle="Find strategies that match your interests and outlook."
-  >
+  <Shelf id="themes" title="Explore by theme" subtitle="Find baskets that match your interests and outlook.">
     {shelves.map((theme) => (
       <button
         key={theme.tag}
@@ -250,7 +246,7 @@ const ThemeShelf = ({
           {theme.description}
         </span>
         <span className="absolute bottom-4 left-4 z-10 inline-flex items-center gap-2 text-[12px] font-medium text-ds-ink">
-          {theme.count} {theme.count === 1 ? "strategy" : "strategies"}
+          {theme.count} {theme.count === 1 ? "basket" : "baskets"}
           <Arrow />
         </span>
       </button>
@@ -317,31 +313,27 @@ const StrategyTable = ({
   const title = searching
     ? "Search results"
     : selected
-      ? `${selected.replace("theme:", "").replace(/\b\w/g, (letter) => letter.toUpperCase())} strategies`
+      ? `${selected.replace("theme:", "").replace(/\b\w/g, (letter) => letter.toUpperCase())} baskets`
       : showAll
-        ? "All strategies"
-        : "Featured strategies";
+        ? "All baskets"
+        : "Featured baskets";
   return (
-    <section
-      id="strategies"
-      aria-label="Basket strategies"
-      className="min-w-0 scroll-mt-24 rounded-xl bg-white p-1"
-    >
+    <section id="strategies" aria-label="Baskets" className="min-w-0 scroll-mt-24 rounded-xl bg-white p-1">
       <header className="flex flex-wrap items-center justify-between gap-3 px-3 sm:px-5 pt-4">
         <div>
           <h2 className="text-[16px] font-medium text-ds-ink">{title}</h2>
           <p className="mt-1 text-[12px] text-ds-muted">
             {searching
-              ? `${templates.length} ${templates.length === 1 ? "strategy" : "strategies"} matching “${query.trim()}”.`
-              : "Explore curated Glider strategies on Solana."}
+              ? `${templates.length} ${templates.length === 1 ? "basket" : "baskets"} matching “${query.trim()}”.`
+              : "Explore curated Glider baskets on Solana."}
           </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:shrink-0">
           <SearchField
             value={query}
             onChange={setQuery}
-            placeholder="Search by strategy, company or ticker"
-            label="Search strategies"
+            placeholder="Search by basket, company or ticker"
+            label="Search baskets"
           />
           <TextAction
             onClick={() => {
@@ -351,14 +343,14 @@ const StrategyTable = ({
               } else setShowAll(!showAll);
             }}
           >
-            {selected || !showAll ? "See all strategies" : "Show featured"}
+            {selected || !showAll ? "See all baskets" : "Show featured"}
           </TextAction>
         </div>
       </header>
       <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
         {templates.length === 0 ? (
           <p className="px-4 py-8 text-center text-[13px] text-ds-muted">
-            {searching ? `No strategy matches “${query.trim()}”.` : "No strategies in this theme yet."}
+            {searching ? `No basket matches “${query.trim()}”.` : "No baskets in this theme yet."}
           </p>
         ) : (
           <GlideTable
@@ -472,14 +464,14 @@ export const Baskets = () => {
             <DiscoveryLoading />
           ) : catalog.isError && !catalog.data ? (
             <PriceError
-              message="Strategies are temporarily unavailable."
+              message="Baskets are temporarily unavailable."
               onRetry={() => void catalog.refetch()}
             />
           ) : (
             <>
               {catalog.isError && (
                 <PriceError
-                  message="Could not refresh strategies. Showing the last available data."
+                  message="Could not refresh baskets. Showing the last available data."
                   onRetry={() => void catalog.refetch()}
                 />
               )}
@@ -505,7 +497,7 @@ export const Baskets = () => {
           )}
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-slate-500">
             <p>
-              Strategies are provided by Glider. Assets stay in your own basket account. Past or modeled
+              Baskets are provided by Glider. Assets stay in your own basket account. Past or modeled
               performance does not guarantee future results.
             </p>
             <a
