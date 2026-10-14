@@ -24,8 +24,16 @@ export const SOLANA_CHAIN_ID = 792703809;
 /**
  * Which Relay chain ids this client can sign for.
  *
- * Used twice: to build AppKit's network list, and to filter the deposit picker
- * so it never shows a chain whose wallet nobody here can reach.
+ * It no longer filters the deposit picker — the server decides what we offer,
+ * in services/api/src/funding/chains.ts, so that the set can be changed
+ * without a frontend release. This is the other half of that: what a
+ * *connected wallet* may be on, used to read a funder's chain and to build
+ * AppKit's network list.
+ *
+ * The two must agree, and nothing at runtime makes them: a chain the server
+ * offers that is missing here is a row that fails after somebody picks it.
+ * `services/api/src/funding/chains.test.ts` reads this file and holds them
+ * together.
  */
 export const CONNECTABLE_CHAIN_IDS: ReadonlySet<number> = new Set<number>([
   ...EVM_NETWORKS.map((c) => c.id),

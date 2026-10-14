@@ -650,6 +650,139 @@ const basketRoute = (route: string) => {
   return { activity: [] };
 };
 
+/**
+ * The deposit picker, which otherwise cannot be looked at without a backend
+ * that has a Relay key.
+ *
+ * The artwork urls are the real ones — the chain marks come from Relay's CDN
+ * and the token logos from CoinGecko, both public — because the thing most
+ * worth checking here is how real logos sit at this size, and placeholders
+ * would check the placeholder path instead. One token deliberately has none,
+ * so the lettered fallback is on screen rather than only in a test.
+ */
+const relayIcon = (chainId: number) => `https://assets.relay.link/icons/${chainId}/light.png`;
+const coin = (id: string) => `https://coin-images.coingecko.com/coins/images/${id}`;
+
+const SAMPLE_CHAINS = [
+  { chainId: 792703809, name: "Solana", vmType: "svm" },
+  { chainId: 8453, name: "Base", vmType: "evm" },
+  { chainId: 1, name: "Ethereum", vmType: "evm" },
+  { chainId: 42161, name: "Arbitrum", vmType: "evm" },
+  { chainId: 10, name: "Optimism", vmType: "evm" },
+  { chainId: 137, name: "Polygon", vmType: "evm" },
+  { chainId: 56, name: "BNB Chain", vmType: "evm" },
+  { chainId: 43114, name: "Avalanche", vmType: "evm" },
+  { chainId: 130, name: "Unichain", vmType: "evm" },
+].map((c) => ({ ...c, iconUrl: relayIcon(c.chainId) }));
+
+const sampleToken = (
+  chainId: number,
+  address: string,
+  symbol: string,
+  name: string,
+  decimals: number,
+  logoUrl: string | null,
+) => {
+  const chain = SAMPLE_CHAINS.find((c) => c.chainId === chainId)!;
+  return {
+    chainId,
+    chainName: chain.name,
+    chainIconUrl: chain.iconUrl,
+    vmType: chain.vmType,
+    address,
+    symbol,
+    name,
+    decimals,
+    logoUrl,
+  };
+};
+
+const SAMPLE_TOKENS = [
+  sampleToken(792703809, USDC, "USDC", "USD Coin", 6, coin("6319/large/usdc.png?1696506694")),
+  sampleToken(792703809, SOL, "SOL", "Solana", 9, coin("4128/large/solana.png?1718769756")),
+  sampleToken(
+    792703809,
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "USDT",
+    "Tether",
+    6,
+    coin("325/large/Tether.png?1696501661"),
+  ),
+  sampleToken(
+    8453,
+    "0x0000000000000000000000000000000000000000",
+    "ETH",
+    "Ether",
+    18,
+    coin("279/large/ethereum.png?1696501628"),
+  ),
+  sampleToken(
+    8453,
+    "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+    "USDC",
+    "USD Coin",
+    6,
+    coin("6319/large/usdc.png?1696506694"),
+  ),
+  sampleToken(8453, "0x4ed4e862860bed51a9570b96d89af5e1b0efefed", "DEGEN", "Degen", 18, null),
+  sampleToken(
+    1,
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "USDC",
+    "USD Coin",
+    6,
+    coin("6319/large/usdc.png?1696506694"),
+  ),
+  sampleToken(
+    1,
+    "0x0000000000000000000000000000000000000000",
+    "ETH",
+    "Ether",
+    18,
+    coin("279/large/ethereum.png?1696501628"),
+  ),
+  sampleToken(
+    42161,
+    "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
+    "USDC",
+    "USD Coin",
+    6,
+    coin("6319/large/usdc.png?1696506694"),
+  ),
+  sampleToken(
+    137,
+    "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+    "USDC",
+    "USD Coin",
+    6,
+    coin("6319/large/usdc.png?1696506694"),
+  ),
+  sampleToken(
+    56,
+    "0x55d398326f99059ff775485246999027b3197955",
+    "USDT",
+    "Tether",
+    18,
+    coin("325/large/Tether.png?1696501661"),
+  ),
+];
+
+/** The same search the server does, so the panel behaves as it will in production. */
+const sampleTokens = (path: string) => {
+  const params = new URLSearchParams(path.split("?")[1] ?? "");
+  const q = (params.get("q") ?? "").trim().toLowerCase();
+  const chainId = params.get("chainId");
+  const tokens = SAMPLE_TOKENS.filter(
+    (t) =>
+      (chainId === null || t.chainId === Number(chainId)) &&
+      (q.length === 0 ||
+        t.symbol.toLowerCase().includes(q) ||
+        t.name.toLowerCase().includes(q) ||
+        t.chainName.toLowerCase().includes(q)),
+  );
+  return { tokens };
+};
+
 export const sampleResponse = (path: string, body?: string): unknown | undefined => {
   const route = path.split("?")[0] ?? path;
   if (route === "/v1/portfolio") return portfolio;
@@ -662,6 +795,9 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
     return exposure(decodeURIComponent(route.split("/").at(-1) ?? ""));
   if (route === "/v1/baskets") return { baskets };
   if (route === "/v1/activity") return { items: [], nextCursor: null };
+  if (route === "/v1/money/fund/sources") return { chains: SAMPLE_CHAINS, minimumUsd: "10" };
+  if (route === "/v1/money/fund/tokens") return sampleTokens(path);
+  if (route === "/v1/money/fund/intents") return { intents: [] };
   if (route === "/v1/portfolio/history") {
     const range = new URLSearchParams(path.split("?")[1] ?? "").get("range") ?? "1D";
     return { range, points: SAMPLE_HISTORY[range] ?? SAMPLE_HISTORY["1D"] };

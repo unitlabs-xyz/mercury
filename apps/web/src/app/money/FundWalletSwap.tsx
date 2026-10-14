@@ -1,10 +1,17 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { rawTokenAmount, tokenAmount } from "@mercury/view";
-import { NATIVE_SOL, useFunderBalance, useFundSwapAction } from "../../api/fund-swap";
+import {
+  NATIVE_EVM,
+  NATIVE_SOL,
+  useFunderBalance,
+  useFunderGas,
+  useFundSwapAction,
+} from "../../api/fund-swap";
 import { useFunder } from "../../wallet/useFunder";
 import { Button } from "../../ui/Button";
 import { Alert, Check } from "../../ui/icons";
-import type { FundOption } from "./fund-chain";
+import type { FundToken } from "../../api/fund-tokens";
+import { fundErrorCopy } from "./fund-error";
 
 /**
  * Swapping a token the connected wallet holds into cash in the account.
@@ -33,20 +40,19 @@ const Note = ({ tone, children }: { tone: "warn" | "down"; children: ReactNode }
 );
 
 /** Native SOL is nine decimals; an SPL or ERC-20 token says so in the Relay listing. */
-const decimalsOf = (option: FundOption) =>
-  option.currency.address === NATIVE_SOL ? 9 : option.currency.decimals;
+const decimalsOf = (token: FundToken) => (token.address === NATIVE_SOL ? 9 : token.decimals);
 
-const explorer = (option: FundOption, hash: string) =>
-  option.vmType === "svm"
+const explorer = (token: FundToken, hash: string) =>
+  token.vmType === "svm"
     ? `https://solscan.io/tx/${encodeURIComponent(hash)}`
     : `https://relay.link/transaction/${encodeURIComponent(hash)}`;
 
-export const FundWalletSwap = ({ option }: { option: FundOption }) => {
+export const FundWalletSwap = ({ token }: { token: FundToken }) => {
   const funder = useFunder();
-  const decimals = decimalsOf(option);
-  /* Solana only — see the note above. */
-  const readable = option.vmType === "svm";
-  const balance = useFunderBalance(funder?.address, option.currency.address, readable);
+  const decimals = decimalsOf(token);
+  /* Both VMs read now; the hook knows which chain it is on. */
+  const balance = useFunderBalance(funder?.address, token.address, token.vmType, token.chainId);
+  const gas = useFunderGas(funder?.address, token.vmType, token.chainId);
   const action = useFundSwapAction();
   const resetAction = action.reset;
   const [amount, setAmount] = useState("");
@@ -56,36 +62,74 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
   useEffect(() => {
     setAmount("");
     resetAction();
-  }, [option.currency.address, funder?.address, resetAction]);
+  }, [token.address, funder?.address, resetAction]);
+
+  /*
+   * Read the wallet again once the deposit has gone.
+   *
+   * The money has left by then and the number beside the field is the number
+   * from before it, which reads as the deposit not having happened. The
+   * mutation cannot do this itself: it clears its own query keys, and wagmi's
+   * reads are keyed by wagmi — so the refetch has to be asked for by whoever
+   * holds both, which is here.
+   */
+  const refetchBalance = balance.refetch;
+  const refetchGas = gas.refetch;
+  const settled = action.isSuccess;
+  useEffect(() => {
+    if (!settled) return;
+    refetchBalance();
+    refetchGas();
+  }, [settled, refetchBalance, refetchGas]);
 
   /*
    * `undefined` is a balance nobody could read, and it is not zero. Treating
    * the two alike is what showed "Balance: 0" against a wallet holding 5.69.
    */
-  const held = readable ? balance.data : undefined;
+  const held = balance.data;
   const heldText = tokenAmount((held ?? 0n).toString(), decimals);
   const raw = rawTokenAmount(amount, decimals);
   const malformed = amount.length > 0 && raw === null;
   const overdrawn = held !== undefined && raw !== null && raw > held;
 
   /*
-   * Native SOL cannot be sent down to zero: the wallet still has to pay for
-   * this transaction, and a Max that spent the lot would produce a signature
-   * the network refuses for a fee the user can no longer cover.
+   * A chain's own coin cannot be sent down to zero: the wallet still has to
+   * pay for this transaction, and a Max that spent the lot would produce a
+   * signature the network refuses for a fee the user can no longer cover.
+   *
+   * The amounts are reserves, not estimates. 0.01 SOL covers a Solana fee many
+   * times over. On EVM an approve and a deposit is roughly 300k gas, which is
+   * about 0.003 ETH at 10 gwei on mainnet and a small fraction of that on an
+   * L2 — so mainnet gets ten times the reserve the rollups do. Erring high
+   * costs somebody a few cents of unspent balance; erring low costs them a
+   * reverted transaction and the gas it burned.
    */
-  const spendable =
-    held === undefined ? undefined : option.currency.address === NATIVE_SOL ? held - 10_000_000n : held;
+  const reserve =
+    token.address === NATIVE_SOL
+      ? 10_000_000n
+      : token.address === NATIVE_EVM
+        ? token.chainId === 1
+          ? 3_000_000_000_000_000n
+          : 300_000_000_000_000n
+        : 0n;
+  const spendable = held === undefined ? undefined : held - reserve;
   const maxText = tokenAmount(
     (spendable !== undefined && spendable > 0n ? spendable : 0n).toString(),
     decimals,
   );
 
-  const ready = raw !== null && raw > 0n && !overdrawn && action.walletReady;
+  /* Read, and actually zero — `undefined` is a balance nobody could read and
+     must not disable anything. */
+  const noGas = gas.data === 0n;
+  /* The wallet is somewhere else. Not a blocker any more — the deposit brings
+     it across — but the button should say so before the prompt appears. */
+  const wrongChain = funder !== null && funder.chainId !== token.chainId;
+  const ready = raw !== null && raw > 0n && !overdrawn && !noGas && action.walletReady;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (ready && !action.isPending) {
-      action.mutate({ currency: option.currency.address, amountRaw: raw.toString() });
+      action.mutate({ chainId: token.chainId, currency: token.address, amountRaw: raw.toString() });
     }
   };
 
@@ -98,12 +142,12 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
         </span>
         <p className="mt-4 text-[20px] font-medium text-ds-ink">Deposit sent</p>
         <p className="mt-3 text-[14px] text-ds-muted">
-          About ${action.data.outFormatted} from {amount} {option.currency.symbol}. It lands in your balance
-          once the swap settles.
+          About ${action.data.outFormatted} from {amount} {token.symbol}. It lands in your balance once the
+          swap settles.
         </p>
         {hash !== null && (
           <a
-            href={explorer(option, hash)}
+            href={explorer(token, hash)}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-4 text-[13px] text-ds-link hover:underline"
@@ -129,8 +173,8 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
     <form onSubmit={submit} className="flex flex-col">
       <div className="rounded-lg bg-ds-panel p-1">
         <div className="flex items-baseline justify-between gap-3 px-3 pt-2 pb-2.5">
-          <p className="text-[14px] leading-none text-ds-muted">{option.currency.symbol} to send</p>
-          {readable && (
+          <p className="text-[14px] leading-none text-ds-muted">{token.symbol} to send</p>
+          {
             <p className="text-[12px] leading-none text-ds-muted">
               {balance.isPending
                 ? "Reading your wallet…"
@@ -138,7 +182,7 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
                   ? "Balance unavailable"
                   : `Balance: ${heldText}`}
             </p>
-          )}
+          }
         </div>
         <label
           className={`flex h-15 items-center gap-2 rounded-md bg-white px-4 outline-1 ${
@@ -150,7 +194,7 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
             onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
             inputMode="decimal"
             placeholder="0.00"
-            aria-label={`Amount in ${option.currency.symbol}`}
+            aria-label={`Amount in ${token.symbol}`}
             aria-invalid={overdrawn}
             className="w-full min-w-0 bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none placeholder:text-ds-muted/50"
           />
@@ -165,14 +209,14 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
               Max
             </button>
           )}
-          <span className="shrink-0 text-[12px] text-ds-muted">{option.currency.symbol}</span>
+          <span className="shrink-0 text-[12px] text-ds-muted">{token.symbol}</span>
         </label>
       </div>
 
       {overdrawn && (
         <div className="mt-2">
           <Note tone="down">
-            More than this wallet holds. {heldText} {option.currency.symbol} available.
+            More than this wallet holds. {heldText} {token.symbol} available.
           </Note>
         </div>
       )}
@@ -181,24 +225,65 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
           <Note tone="down">Enter an amount.</Note>
         </div>
       )}
-      {option.currency.address === NATIVE_SOL && (
+      {token.address === NATIVE_SOL && (
         <div className="mt-2">
           <Note tone="warn">Keep a little SOL back — your wallet pays the network fee.</Note>
         </div>
       )}
-      {option.vmType === "evm" && (
+      {/*
+       * The other half of a revert.
+       *
+       * A wallet holding the token and none of the chain's coin signs a
+       * transaction that cannot be mined. Zero rather than a threshold,
+       * because what a fee costs varies by chain and by minute, and a guess
+       * that read too high would block a deposit that would have worked.
+       */}
+      {noGas && (
         <div className="mt-2">
-          {/* Two signatures on most ERC-20 routes: an approval, then the
-              deposit. Saying so beforehand stops the second one looking like
-              something went wrong. */}
-          <Note tone="warn">Your wallet may ask twice — once to approve the token, once to send it.</Note>
+          <Note tone="warn">
+            This wallet has no {token.chainName} gas coin, so it cannot pay the network fee. Send a little to
+            it first.
+          </Note>
         </div>
       )}
-      {action.isError && (
-        <div className="mt-2" role="alert">
-          <Note tone="down">{action.error.message}</Note>
-        </div>
-      )}
+      {action.isError &&
+        (() => {
+          /* Never `action.error.message` straight out: viem wraps a wallet
+             rejection in an error whose `message` is blank, which rendered an
+             alert with nothing in it. */
+          const { message, rejected } = fundErrorCopy(action.error);
+          return (
+            <div className="mt-2" role="alert">
+              {/* A cancellation is not a fault. Red for it would tell somebody
+                  their own decision went wrong. */}
+              <Note tone={rejected ? "warn" : "down"}>
+                {message}
+                {/*
+                 * The receipt, when the failure had one.
+                 *
+                 * "Transaction Reverted" is all the SDK throws — it drops the
+                 * receipt — and a revert is the one failure whose reason is
+                 * written down publicly. Linking it is the difference between
+                 * telling somebody their money did not move and showing them
+                 * the call that stopped it.
+                 */}
+                {action.failedTxHash !== null && (
+                  <>
+                    {" "}
+                    <a
+                      href={explorer(token, action.failedTxHash)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2"
+                    >
+                      See what happened
+                    </a>
+                  </>
+                )}
+              </Note>
+            </div>
+          );
+        })()}
 
       <Button
         type="submit"
@@ -208,7 +293,14 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
         disabled={!ready}
         className="mt-4 w-full"
       >
-        {action.isPending ? "Waiting for your wallet…" : "Approve in your wallet"}
+        {action.isPending
+          ? "Waiting for your wallet…"
+          : /* Says the switch is coming rather than springing it. The wallet
+               was always going to ask twice here; the label is what stops the
+               first prompt looking like the wrong one. */
+            wrongChain
+            ? `Switch to ${token.chainName} and send`
+            : "Approve in your wallet"}
       </Button>
     </form>
   );
