@@ -6,7 +6,8 @@ import type { RelayStatus } from "./relay.js";
 export interface NewFundingIntent {
   readonly userId: string;
   readonly relayRequestId: string;
-  readonly depositAddress: string;
+  /** Absent on the connected-wallet path, which has no address to send to. */
+  readonly depositAddress?: string | undefined;
   readonly originChainId: number;
   readonly originCurrency: string;
   /** As named to the user, so the feed can describe the deposit later. */
@@ -29,6 +30,9 @@ export interface FundingStore {
   byDepositAddress(address: string): Promise<FundingIntent | null>;
   advance(address: string, patch: FundingAdvance): Promise<FundingIntent | null>;
   forUser(userId: string): Promise<readonly FundingIntent[]>;
+  /** The connected-wallet path, which is confirmed by id rather than webhook. */
+  byId(userId: string, id: string): Promise<FundingIntent | null>;
+  settleById(userId: string, id: string, patch: FundingAdvance): Promise<FundingIntent | null>;
 }
 
 export const createFundingStore = (db: Db): FundingStore => {
@@ -137,6 +141,42 @@ export const createFundingStore = (db: Db): FundingStore => {
         .from(fundingIntents)
         .where(eq(fundingIntents.userId, userId))
         .orderBy(desc(fundingIntents.createdAt));
+    },
+
+    async byId(userId, id) {
+      const [row] = await db
+        .select()
+        .from(fundingIntents)
+        .where(and(eq(fundingIntents.id, id), eq(fundingIntents.userId, userId)))
+        .limit(1);
+      return row ?? null;
+    },
+
+    /**
+     * Settle a connected-wallet deposit, which has no webhook behind it.
+     *
+     * A Solana-origin swap is one transaction the funder signs and broadcasts,
+     * so its signature is the receipt — there is no solver to wait on and
+     * nothing to reconcile. Scoped by user as well as id: the id comes from a
+     * request body, and a row is only ever this caller's to settle.
+     *
+     * Safe to call twice. The second call writes the same values over the same
+     * row, which is what a client retrying a confirm it already made should
+     * cost us.
+     */
+    async settleById(userId, id, patch) {
+      const [row] = await db
+        .update(fundingIntents)
+        .set({
+          status: patch.status,
+          updatedAt: new Date(),
+          ...(patch.inTxHash === undefined ? {} : { inTxHash: patch.inTxHash }),
+          ...(patch.outTxHash === undefined ? {} : { outTxHash: patch.outTxHash }),
+          ...(patch.failReason === undefined ? {} : { failReason: patch.failReason }),
+        })
+        .where(and(eq(fundingIntents.id, id), eq(fundingIntents.userId, userId)))
+        .returning();
+      return row ?? null;
     },
   };
 };

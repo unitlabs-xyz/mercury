@@ -1,4 +1,5 @@
 import { defaultFetch } from "@mercury/chain";
+import type { RelayWireInstruction } from "./compose.js";
 
 /**
  * Relay, as the funding path uses it.
@@ -64,9 +65,43 @@ export interface DepositAddressInput {
   readonly recoveryAddress?: string | undefined;
 }
 
+export interface SwapQuoteInput {
+  /** The connected wallet. Signs and pays its own network fee. */
+  readonly user: string;
+  /** The Privy wallet the USDC lands in. Ours to set, never the page's. */
+  readonly recipient: string;
+  readonly originChainId: number;
+  readonly originCurrency: string;
+  /** In the origin token's own smallest unit. */
+  readonly amountRaw: string;
+}
+
+export interface SwapQuote {
+  readonly requestId: string;
+  /** Solana only. Composed into one transaction the funder signs. */
+  readonly instructions: readonly RelayWireInstruction[];
+  readonly lookupTables: readonly string[];
+  readonly inFormatted: string;
+  readonly outRaw: string;
+  readonly outFormatted: string;
+  /** Signed percentage, as Relay reports it. Negative is a loss to the user. */
+  readonly impactPct: string | null;
+  readonly vmType: "svm";
+}
+
 export interface RelayClient {
   chains(): Promise<readonly RelaySource[]>;
   depositAddressQuote(input: DepositAddressInput): Promise<DepositAddressQuote>;
+  /**
+   * An executable quote for a wallet somebody has connected.
+   *
+   * Solana origin only, and the refusal is explicit rather than a surprise
+   * further down: Relay answers an EVM origin with calldata and a Bitcoin one
+   * with a PSBT, neither of which this server can compose or submit. Those
+   * need a wallet stack in the browser, which is a later phase; until then
+   * they go through a deposit address, which needs no wallet at all.
+   */
+  swapQuote(input: SwapQuoteInput): Promise<SwapQuote>;
   status(requestId: string): Promise<RelayStatus | null>;
 }
 
@@ -178,6 +213,60 @@ export const createRelayClient = (config: {
         requestId: body.requestId,
         depositAddress,
         quotedOutRaw: body.details?.currencyOut?.amount ?? null,
+      };
+    },
+
+    async swapQuote(input) {
+      const body = (await call("/quote/v2", {
+        method: "POST",
+        body: JSON.stringify({
+          user: input.user,
+          recipient: input.recipient,
+          originChainId: input.originChainId,
+          originCurrency: input.originCurrency,
+          destinationChainId: SOLANA_CHAIN_ID,
+          destinationCurrency: SOLANA_USDC,
+          amount: input.amountRaw,
+          tradeType: "EXACT_INPUT",
+        }),
+      })) as {
+        readonly requestId?: string;
+        readonly steps?: readonly {
+          readonly id?: string;
+          readonly items?: readonly {
+            readonly data?: {
+              readonly instructions?: readonly RelayWireInstruction[];
+              readonly addressLookupTableAddresses?: readonly string[];
+            };
+          }[];
+        }[];
+        readonly details?: {
+          readonly currencyIn?: { readonly amountFormatted?: string };
+          readonly currencyOut?: { readonly amount?: string; readonly amountFormatted?: string };
+          readonly totalImpact?: { readonly percent?: string };
+        };
+      };
+
+      const data = body.steps?.flatMap((step) => step.items ?? []).find((it) => it.data?.instructions);
+      const instructions = data?.data?.instructions;
+      /*
+       * No instructions means Relay answered in another VM's idiom — calldata
+       * for an EVM origin, a PSBT for Bitcoin. Refusing here keeps the failure
+       * legible; composing it would produce a transaction with nothing in it.
+       */
+      if (body.requestId === undefined || instructions === undefined || instructions.length === 0) {
+        throw new Error("relay returned no Solana instructions for this route");
+      }
+
+      return {
+        requestId: body.requestId,
+        instructions,
+        lookupTables: data?.data?.addressLookupTableAddresses ?? [],
+        inFormatted: body.details?.currencyIn?.amountFormatted ?? input.amountRaw,
+        outRaw: body.details?.currencyOut?.amount ?? "0",
+        outFormatted: body.details?.currencyOut?.amountFormatted ?? "0",
+        impactPct: body.details?.totalImpact?.percent ?? null,
+        vmType: "svm",
       };
     },
 

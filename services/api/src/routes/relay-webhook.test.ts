@@ -35,7 +35,14 @@ const payload = (over: Record<string, unknown> = {}) =>
 const harness = (advanceResult: unknown = { userId: "user-1", status: "success", outTxHash: "0xout" }) => {
   const advance = vi.fn().mockResolvedValue(advanceResult);
   const app = relayWebhookRoutes({
-    store: { create: vi.fn(), byDepositAddress: vi.fn(), advance, forUser: vi.fn() },
+    store: {
+      create: vi.fn(),
+      byDepositAddress: vi.fn(),
+      advance,
+      forUser: vi.fn(),
+      byId: vi.fn(),
+      settleById: vi.fn(),
+    },
     secret: SECRET,
   });
   return { app, advance };

@@ -27,8 +27,20 @@ const base = {
 };
 
 const fund = {
-  relay: { chains: vi.fn().mockResolvedValue([]), depositAddressQuote: vi.fn(), status: vi.fn() },
-  store: { create: vi.fn(), byDepositAddress: vi.fn(), advance: vi.fn(), forUser: vi.fn() },
+  relay: {
+    chains: vi.fn().mockResolvedValue([]),
+    depositAddressQuote: vi.fn(),
+    swapQuote: vi.fn(),
+    status: vi.fn(),
+  },
+  store: {
+    create: vi.fn(),
+    byDepositAddress: vi.fn(),
+    advance: vi.fn(),
+    forUser: vi.fn(),
+    byId: vi.fn(),
+    settleById: vi.fn(),
+  },
   refund: { evm: "0xe", svm: "S", bvm: "bc1q" },
   recovery: { evm: "0xe", svm: "S", bvm: "bc1q" },
   minimumUsd: 10,

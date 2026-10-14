@@ -149,3 +149,74 @@ describe("createFundingStore", () => {
     expect(rows[0]!.depositAddress).toBe("0xdeposit");
   });
 });
+
+describe("createFundingStore, the connected-wallet path", () => {
+  const swap = (userId: string): NewFundingIntent => ({
+    userId,
+    relayRequestId: "0xswap",
+    originChainId: 792703809,
+    originCurrency: "Es9vMFrz",
+    originChainName: "solana",
+    originCurrencySymbol: "USDT",
+    recipientAddress: "PrivyWallet111",
+    quotedOutRaw: "9990651",
+  });
+
+  it("writes a row with no deposit address", async () => {
+    const { store, userId } = await setup();
+
+    const saved = await store.create(swap(userId));
+
+    expect(saved.depositAddress).toBeNull();
+    expect(saved.status).toBe("waiting");
+  });
+
+  it("settles by id once the funder's transaction lands", async () => {
+    const { store, userId } = await setup();
+    const saved = await store.create(swap(userId));
+
+    const settled = await store.settleById(userId, saved.id, {
+      status: "success",
+      inTxHash: "sig",
+      outTxHash: "sig",
+    });
+
+    expect(settled).toMatchObject({ status: "success", outTxHash: "sig" });
+  });
+
+  it("is idempotent, because a client may retry a confirm it already made", async () => {
+    const { store, userId } = await setup();
+    const saved = await store.create(swap(userId));
+
+    await store.settleById(userId, saved.id, { status: "success", outTxHash: "sig" });
+    await store.settleById(userId, saved.id, { status: "success", outTxHash: "sig" });
+
+    expect(await store.forUser(userId)).toHaveLength(1);
+  });
+
+  it("will not settle another user's row", async () => {
+    const { db, store, userId } = await setup();
+    const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();
+    const saved = await store.create(swap(userId));
+
+    /* The id arrives in a request body. Scoping by user is what makes that safe. */
+    expect(await store.settleById(other!.id, saved.id, { status: "success" })).toBeNull();
+    expect((await store.byId(userId, saved.id))?.status).toBe("waiting");
+  });
+
+  it("will not read another user's row", async () => {
+    const { db, store, userId } = await setup();
+    const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();
+    const saved = await store.create(swap(userId));
+
+    expect(await store.byId(other!.id, saved.id)).toBeNull();
+  });
+
+  it("keeps two connected-wallet deposits apart", async () => {
+    const { store, userId } = await setup();
+    await store.create(swap(userId));
+    await store.create({ ...swap(userId), relayRequestId: "0xsecond" });
+
+    expect(await store.forUser(userId)).toHaveLength(2);
+  });
+});

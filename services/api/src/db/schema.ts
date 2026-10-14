@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * The read model, per docs/05. Two rules hold throughout and have no exceptions:
@@ -620,7 +621,14 @@ export const fundingIntents = pgTable(
      * necessarily what happened. `deposit_address` is the identity.
      */
     relayRequestId: text("relay_request_id").notNull(),
-    depositAddress: text("deposit_address").notNull(),
+    /**
+     * Null on the connected-wallet path, which has no address: the funder
+     * signs one transaction and there is nothing to send anywhere.
+     *
+     * The spec said so from the start and the first migration did not, which
+     * is the sort of thing only building the second path finds.
+     */
+    depositAddress: text("deposit_address"),
     originChainId: integer("origin_chain_id").notNull(),
     originCurrency: text("origin_currency").notNull(),
     /**
@@ -657,6 +665,18 @@ export const fundingIntents = pgTable(
      * somebody's second deposit into their first.
      */
     uniqueIndex("funding_intent_address_in_tx_idx").on(t.depositAddress, t.inTxHash),
+    /**
+     * The connected-wallet path's own identity.
+     *
+     * Partial, because the index above cannot serve it: Postgres treats NULLs
+     * as distinct, so every row with a null address would be unique on
+     * `(null, hash)` no matter how many times a confirm was retried. One quote
+     * is one transaction on this path — the amount is fixed by a signature, so
+     * Relay never regenerates it — which makes the request id the right key.
+     */
+    uniqueIndex("funding_intent_request_idx")
+      .on(t.relayRequestId)
+      .where(sql`${t.depositAddress} is null`),
   ],
 );
 export type FundingIntent = typeof fundingIntents.$inferSelect;

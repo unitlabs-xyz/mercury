@@ -9,6 +9,8 @@ import {
   syncConfiguredCatalog,
 } from "./deps.js";
 import { applyMigrations } from "./db/migrate.js";
+import { createSolanaRpc, type Signature } from "@solana/kit";
+import { rpcLookupTables } from "./relay/lookups.js";
 import { createRelayClient } from "./funding/relay.js";
 import { createFundingStore } from "./funding/store.js";
 import { fetchTreasuryAddresses } from "./funding/treasury.js";
@@ -123,9 +125,37 @@ const fund = await (async (): Promise<ReadDeps["fund"]> => {
     const addresses = await fetchTreasuryAddresses(config.treasuryUrl!, config.treasurySecret!);
     console.log("funding: on, refunds to");
     for (const [family, address] of Object.entries(addresses)) console.log(`  ${family}  ${address}`);
+    /*
+     * One client for the funding path's own chain reads. Separate from the one
+     * `app.ts` builds for the send routes only because they are constructed in
+     * different places; both point at the same endpoint.
+     */
+    const rpc = createSolanaRpc(config.solanaRpcUrl);
     return {
       relay: createRelayClient({ apiKey: config.relayApiKey }),
       store: createFundingStore(auth.db),
+      solana: {
+        lookups: rpcLookupTables(rpc),
+        blockhash: async () => {
+          const { value } = await rpc.getLatestBlockhash({ commitment: "confirmed" }).send();
+          return { blockhash: value.blockhash, lastValidBlockHeight: value.lastValidBlockHeight };
+        },
+        /*
+         * Three answers, not two. A signature the node has not seen is not a
+         * failed one — a client can confirm before the node it reaches has
+         * caught up — and collapsing the two would mark a landed deposit
+         * failed for being early.
+         */
+        landed: async (signature) => {
+          const { value } = await rpc.getSignatureStatuses([signature as Signature]).send();
+          const status = value[0];
+          if (status == null) return null;
+          if (status.err !== null) return false;
+          return status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized"
+            ? true
+            : null;
+        },
+      },
       refund: addresses,
       /* The same values for now; separate fields so splitting them later is
          configuration rather than code. See ADR 0015. */

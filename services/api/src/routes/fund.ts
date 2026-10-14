@@ -1,5 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { address as toAddress, type Address, type Blockhash } from "@solana/kit";
+import type { LookupTableReader } from "../relay/lookups.js";
+import { composeFundSwap } from "../funding/compose.js";
 import type { RelayClient, RelaySource } from "../funding/relay.js";
 import type { FundingStore } from "../funding/store.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
@@ -18,6 +21,19 @@ export interface VmAddresses {
   readonly bvm: string;
 }
 
+/**
+ * What the connected-wallet path needs of the chain.
+ *
+ * Optional on the whole: without it the deposit-address path still works for
+ * every chain, which is the floor this feature stands on.
+ */
+export interface FundSolana {
+  readonly lookups: LookupTableReader;
+  readonly blockhash: () => Promise<{ blockhash: Blockhash; lastValidBlockHeight: bigint }>;
+  /** True landed, false failed, null not seen yet — which is worth retrying. */
+  readonly landed: (signature: string) => Promise<boolean | null>;
+}
+
 export interface FundDeps {
   readonly relay: RelayClient;
   readonly store: FundingStore;
@@ -25,6 +41,7 @@ export interface FundDeps {
   readonly recovery: VmAddresses;
   /** What we will not quote below. Sent to the client so it is stated once. */
   readonly minimumUsd: number;
+  readonly solana?: FundSolana | undefined;
 }
 
 /**
@@ -51,6 +68,17 @@ const FAMILIES: Readonly<Record<string, keyof VmAddresses>> = {
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
 const Body = z.object({ chainId: z.number().int(), currency: z.string().min(1) });
+
+const SwapBody = z.object({
+  chainId: z.number().int(),
+  currency: z.string().min(1),
+  /** The origin token's own smallest unit, as digits. */
+  amountRaw: z.string().regex(/^[1-9]\d{0,25}$/, "Enter an amount."),
+  /** The connected wallet. See the comment where this is used. */
+  from: z.string().min(32).max(64),
+});
+
+const ConfirmBody = z.object({ intentId: z.string().uuid(), signature: z.string().min(32) });
 
 /** Chains change rarely and the list is large. Ten minutes is a deploy, not a session. */
 const CHAINS_TTL_MS = 10 * 60_000;
@@ -182,6 +210,155 @@ export function fundRoutes(deps: FundDeps): Hono {
         createdAt: i.createdAt.toISOString(),
       })),
     });
+  });
+
+  /**
+   * An executable swap for a wallet somebody has connected.
+   *
+   * Solana origin only. Relay answers an EVM origin with calldata and a
+   * Bitcoin one with a PSBT, and this server can compose neither — those go
+   * through a deposit address, which needs no wallet at all.
+   *
+   * The transaction is composed here rather than in the browser for the same
+   * reason the quote is minted here: `recipient` decides whose account the
+   * money lands in, and a page that built its own could name any wallet it
+   * liked.
+   */
+  app.post("/v1/money/fund/swap", async (c) => {
+    const identity = c.get("identity");
+    const wallet = identity.walletAddress;
+    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+
+    const solana = deps.solana;
+    if (solana === undefined) {
+      return c.json(fail("fund_unavailable", "Paying from a connected wallet is unavailable."), 503);
+    }
+
+    const parsed = SwapBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", "Pick a token and an amount."), 400);
+
+    let available: readonly RelaySource[];
+    try {
+      available = await sources();
+    } catch (err) {
+      console.error("fund: could not read Relay's chains", err);
+      return c.json(fail("fund_unavailable", "Deposit options are unavailable right now."), 503);
+    }
+
+    const chain = available.find((s) => s.chainId === parsed.data.chainId);
+    const currency = chain?.currencies.find((cur) => cur.address === parsed.data.currency);
+    if (chain === undefined || currency === undefined) {
+      return c.json(fail("validation_failed", "We cannot accept that token."), 400);
+    }
+    if (chain.vmType !== "svm") {
+      return c.json(fail("validation_failed", "Use a deposit address for this chain."), 400);
+    }
+
+    /*
+     * `from` comes from the request body, and that is safe for one reason
+     * worth stating: it only decides whose tokens the transaction would spend,
+     * and spending them needs that wallet's own signature. Naming somebody
+     * else's address produces a transaction they will never sign. What a
+     * caller cannot touch is `recipient`, which is always the wallet Privy
+     * signed for — so there is no version of this that delivers the money
+     * anywhere but the caller's own account.
+     */
+    let from: Address;
+    try {
+      from = toAddress(parsed.data.from);
+    } catch {
+      return c.json(fail("validation_failed", "That is not a Solana wallet address."), 400);
+    }
+
+    try {
+      const quote = await deps.relay.swapQuote({
+        user: from,
+        recipient: wallet,
+        originChainId: chain.chainId,
+        originCurrency: currency.address,
+        amountRaw: parsed.data.amountRaw,
+      });
+
+      const [lifetime, tables] = await Promise.all([
+        solana.blockhash(),
+        solana.lookups.read(quote.lookupTables as readonly Address[]),
+      ]);
+      /* A table we could not read is a route we cannot compose: composing
+         without it produces a transaction over the size limit, which the
+         network rejects with nothing useful to say. */
+      for (const named of quote.lookupTables) {
+        if (!tables.has(named as Address)) {
+          throw new Error(`lookup table ${named} could not be read`);
+        }
+      }
+
+      const { wire } = composeFundSwap({
+        payer: from,
+        instructions: quote.instructions,
+        lookupTables: tables,
+        ...lifetime,
+      });
+
+      const intent = await deps.store.create({
+        userId: identity.userId,
+        relayRequestId: quote.requestId,
+        originChainId: chain.chainId,
+        originCurrency: currency.address,
+        originChainName: chain.name,
+        originCurrencySymbol: currency.symbol,
+        recipientAddress: wallet,
+        quotedOutRaw: quote.outRaw,
+      });
+
+      return c.json({
+        intentId: intent.id,
+        transaction: wire,
+        in: { amountFormatted: quote.inFormatted, symbol: currency.symbol },
+        out: { amountFormatted: quote.outFormatted, symbol: "USDC" },
+        impactPct: quote.impactPct,
+      });
+    } catch (err) {
+      console.error("fund: could not build a wallet swap", err);
+      return c.json(fail("fund_unavailable", "Could not prepare that deposit. Please try again."), 503);
+    }
+  });
+
+  /**
+   * Record a connected-wallet deposit that landed.
+   *
+   * No webhook behind this one: a Solana-origin swap is a single transaction
+   * the funder signs and broadcasts, so its signature is the receipt. Nothing
+   * about the amount is read from the client — `wallet-events` reads the USDC
+   * delta off the chain, which is the only figure that is a fact.
+   */
+  app.post("/v1/money/fund/confirm", async (c) => {
+    const identity = c.get("identity");
+    if (identity.walletAddress === null) {
+      return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    }
+    const solana = deps.solana;
+    if (solana === undefined) return c.json(fail("fund_unavailable", "Unavailable."), 503);
+
+    const parsed = ConfirmBody.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+
+    const intent = await deps.store.byId(identity.userId, parsed.data.intentId);
+    if (intent === null) return c.json(fail("not_found", "Unknown deposit."), 404);
+
+    const landed = await solana.landed(parsed.data.signature);
+    /* Not seen yet is a different answer from failed, and it is worth asking
+       again: a client can confirm before the node it reaches has caught up. */
+    if (landed === null) {
+      return c.json(fail("transaction_pending", "Not settled yet. Try again shortly."), 409);
+    }
+
+    const settled = await deps.store.settleById(identity.userId, intent.id, {
+      status: landed ? "success" : "failure",
+      inTxHash: parsed.data.signature,
+      ...(landed ? { outTxHash: parsed.data.signature } : { failReason: "TRANSACTION_FAILED" }),
+    });
+
+    return c.json({ status: settled?.status ?? "failure" });
   });
 
   return app;

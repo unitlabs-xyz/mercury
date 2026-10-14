@@ -36,6 +36,8 @@ const store = (over: Partial<FundDeps["store"]> = {}): FundDeps["store"] => ({
   byDepositAddress: vi.fn(),
   advance: vi.fn(),
   forUser: vi.fn().mockResolvedValue([]),
+  byId: vi.fn(),
+  settleById: vi.fn(),
   ...over,
 });
 
@@ -48,7 +50,7 @@ const harness = (
     .fn()
     .mockResolvedValue({ requestId: "0xreq", depositAddress: "0xdeposit", quotedOutRaw: "9990000" });
   const deps: FundDeps = {
-    relay: { chains, depositAddressQuote, status: vi.fn() },
+    relay: { chains, depositAddressQuote, swapQuote: vi.fn(), status: vi.fn() },
     store: store(),
     refund: REFUND,
     recovery: RECOVERY,
@@ -99,6 +101,7 @@ describe("fundRoutes · sources", () => {
         relay: {
           chains: vi.fn().mockRejectedValue(new Error("relay /chains failed: 500")),
           depositAddressQuote: vi.fn(),
+          swapQuote: vi.fn(),
           status: vi.fn(),
         },
       },
@@ -207,6 +210,7 @@ describe("fundRoutes · address", () => {
           depositAddressQuote: vi
             .fn()
             .mockRejectedValue(new Error("relay /quote/v2 failed: 500 x-api-key abc123")),
+          swapQuote: vi.fn(),
           status: vi.fn(),
         },
       },
@@ -273,5 +277,224 @@ describe("fundRoutes · intents", () => {
   it("refuses an unauthenticated read of deposits", async () => {
     const { app } = harness({}, null);
     expect((await app.request("/v1/money/fund/intents")).status).toBe(401);
+  });
+});
+
+const SOLANA_IX = {
+  programId: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+  keys: [{ pubkey: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", isSigner: true, isWritable: true }],
+  data: Buffer.from([1]).toString("base64"),
+};
+
+const solana = (over: Partial<NonNullable<FundDeps["solana"]>> = {}) => ({
+  lookups: { read: vi.fn().mockResolvedValue(new Map()) },
+  blockhash: vi
+    .fn()
+    .mockResolvedValue({ blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 1000n }),
+  landed: vi.fn().mockResolvedValue(true),
+  ...over,
+});
+
+const swapQuoted = () =>
+  vi.fn().mockResolvedValue({
+    requestId: "0xswap",
+    instructions: [SOLANA_IX],
+    lookupTables: [],
+    inFormatted: "10.0",
+    outRaw: "9990651",
+    outFormatted: "9.990651",
+    impactPct: "0.01",
+    vmType: "svm",
+  });
+
+const swapHarness = (over: { chains?: readonly RelaySource[]; deps?: Partial<FundDeps> } = {}) => {
+  const swapQuote = swapQuoted();
+  const created = { id: "11111111-1111-4111-8111-111111111111" };
+  const create = vi.fn().mockResolvedValue(created);
+  const h = harness({
+    chains: over.chains ?? [SOLANA],
+    deps: {
+      relay: {
+        chains: vi.fn().mockResolvedValue(over.chains ?? [SOLANA]),
+        depositAddressQuote: vi.fn(),
+        swapQuote,
+        status: vi.fn(),
+      },
+      store: store({ create }),
+      solana: solana(),
+      ...over.deps,
+    },
+  });
+  return { ...h, swapQuote, create, intentId: created.id };
+};
+
+const postSwap = (app: Hono, body: unknown) =>
+  app.request("/v1/money/fund/swap", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+describe("fundRoutes · swap", () => {
+  const good = {
+    chainId: 792703809,
+    currency: "Es9vMFrz",
+    amountRaw: "10000000",
+    from: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+  };
+
+  it("quotes to the session's wallet, whatever the body says", async () => {
+    const { app, swapQuote } = swapHarness();
+
+    await postSwap(app, { ...good, recipient: "AttackerWallet" });
+
+    expect(swapQuote.mock.calls[0]![0]).toMatchObject({
+      recipient: "PrivyWallet111",
+      user: good.from,
+    });
+  });
+
+  it("returns a transaction and the intent that goes with it", async () => {
+    const { app, intentId } = swapHarness();
+
+    const body = (await (await postSwap(app, good)).json()) as Record<string, unknown>;
+
+    expect(body["intentId"]).toBe(intentId);
+    expect(typeof body["transaction"]).toBe("string");
+    expect(body["out"]).toMatchObject({ amountFormatted: "9.990651", symbol: "USDC" });
+  });
+
+  it("records the intent with no deposit address", async () => {
+    const { app, create } = swapHarness();
+
+    await postSwap(app, good);
+
+    const row = create.mock.calls[0]![0] as Record<string, unknown>;
+    expect(row).toMatchObject({ relayRequestId: "0xswap", recipientAddress: "PrivyWallet111" });
+    expect(row["depositAddress"]).toBeUndefined();
+  });
+
+  it("refuses a chain this server cannot compose for, naming the alternative", async () => {
+    /* Relay answers an EVM origin with calldata and Bitcoin with a PSBT. */
+    const { app, swapQuote } = swapHarness({ chains: [BASE] });
+
+    const res = await postSwap(app, { ...good, chainId: 8453, currency: "0x0" });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toMatch(/deposit address/i);
+    expect(swapQuote).not.toHaveBeenCalled();
+  });
+
+  it("refuses a malformed sender address", async () => {
+    const { app } = swapHarness();
+    expect((await postSwap(app, { ...good, from: "not a solana address at all!!" })).status).toBe(400);
+  });
+
+  it("refuses a zero or non-numeric amount", async () => {
+    const { app } = swapHarness();
+    expect((await postSwap(app, { ...good, amountRaw: "0" })).status).toBe(400);
+    expect((await postSwap(app, { ...good, amountRaw: "ten" })).status).toBe(400);
+  });
+
+  it("refuses a lookup table it could not read rather than composing an oversized message", async () => {
+    const { app } = swapHarness({
+      deps: {
+        relay: {
+          chains: vi.fn().mockResolvedValue([SOLANA]),
+          depositAddressQuote: vi.fn(),
+          swapQuote: vi.fn().mockResolvedValue({
+            requestId: "0xswap",
+            instructions: [SOLANA_IX],
+            lookupTables: ["SomeTableAddress1111111111111111111111111"],
+            inFormatted: "10.0",
+            outRaw: "1",
+            outFormatted: "0.000001",
+            impactPct: null,
+            vmType: "svm",
+          }),
+          status: vi.fn(),
+        },
+        solana: solana({ lookups: { read: vi.fn().mockResolvedValue(new Map()) } }),
+      },
+    });
+
+    expect((await postSwap(app, good)).status).toBe(503);
+  });
+
+  it("is unavailable when the chain port is not configured", async () => {
+    const { app } = harness({ chains: [SOLANA] });
+    expect((await postSwap(app, good)).status).toBe(503);
+  });
+
+  it("refuses a session with no wallet", async () => {
+    const { app } = harness({ chains: [SOLANA], deps: { solana: solana() } }, null);
+    expect((await postSwap(app, good)).status).toBe(401);
+  });
+});
+
+describe("fundRoutes · confirm", () => {
+  const INTENT = { id: "11111111-1111-4111-8111-111111111111", userId: "user-1", status: "waiting" };
+  const post = (app: Hono, body: unknown) =>
+    app.request("/v1/money/fund/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  const confirmHarness = (landed: boolean | null) => {
+    const settleById = vi.fn().mockResolvedValue({ ...INTENT, status: landed ? "success" : "failure" });
+    const h = harness({
+      chains: [SOLANA],
+      deps: {
+        store: store({ byId: vi.fn().mockResolvedValue(INTENT), settleById }),
+        solana: solana({ landed: vi.fn().mockResolvedValue(landed) }),
+      },
+    });
+    return { ...h, settleById };
+  };
+
+  it("settles a landed transaction as success", async () => {
+    const { app, settleById } = confirmHarness(true);
+
+    const res = await post(app, { intentId: INTENT.id, signature: "s".repeat(88) });
+
+    expect(await res.json()).toEqual({ status: "success" });
+    expect(settleById.mock.calls[0]![2]).toMatchObject({ status: "success", outTxHash: "s".repeat(88) });
+  });
+
+  it("settles a failed transaction as failure, with no out hash", async () => {
+    const { app, settleById } = confirmHarness(false);
+
+    await post(app, { intentId: INTENT.id, signature: "s".repeat(88) });
+
+    const patch = settleById.mock.calls[0]![2] as Record<string, unknown>;
+    expect(patch["status"]).toBe("failure");
+    expect(patch["outTxHash"]).toBeUndefined();
+    expect(patch["failReason"]).toBe("TRANSACTION_FAILED");
+  });
+
+  it("answers retryable when the node has not seen it yet", async () => {
+    const { app, settleById } = confirmHarness(null);
+
+    const res = await post(app, { intentId: INTENT.id, signature: "s".repeat(88) });
+
+    /* Not seen is a different answer from failed, and worth asking again. */
+    expect(res.status).toBe(409);
+    expect(JSON.stringify(await res.json())).toMatch(/transaction_pending/);
+    expect(settleById).not.toHaveBeenCalled();
+  });
+
+  it("refuses an intent that is not this user's", async () => {
+    const { app } = harness({
+      chains: [SOLANA],
+      deps: { store: store({ byId: vi.fn().mockResolvedValue(null) }), solana: solana() },
+    });
+
+    expect((await post(app, { intentId: INTENT.id, signature: "s".repeat(88) })).status).toBe(404);
+  });
+
+  it("refuses a body that is not an intent id and a signature", async () => {
+    const { app } = confirmHarness(true);
+    expect((await post(app, { intentId: "nope", signature: "x" })).status).toBe(400);
   });
 });
