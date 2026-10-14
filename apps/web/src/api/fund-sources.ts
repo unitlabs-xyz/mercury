@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import { anyInFlight, type FundChain } from "../app/money/fund-chain";
+import type { FundChain } from "../app/money/fund-chain";
 
 export type { FundChain } from "../app/money/fund-chain";
 
@@ -21,33 +21,4 @@ export const useFundSources = () =>
     /* A 404 means the server has no Relay key. Retrying will not change that. */
     retry: false,
     queryFn: () => apiFetch("/v1/money/fund/sources"),
-  });
-
-export interface FundIntent {
-  readonly id: string;
-  readonly status: string;
-  readonly originChainId: number;
-  readonly originChainName: string;
-  readonly originCurrencySymbol: string;
-  readonly quotedOutRaw: string | null;
-  readonly inTxHash: string | null;
-  readonly outTxHash: string | null;
-  readonly failReason: string | null;
-  readonly createdAt: string;
-}
-
-/**
- * The deposits this account has in flight.
- *
- * Polled while anything is still moving and idle once nothing is, because a
- * Bitcoin deposit sits in `pending` for up to an hour and an app showing
- * nothing is indistinguishable from money lost.
- */
-export const useFundIntents = () =>
-  useQuery<{ intents: readonly FundIntent[] }>({
-    queryKey: ["fund-intents"],
-    retry: false,
-    queryFn: () => apiFetch("/v1/money/fund/intents"),
-    refetchInterval: (query) =>
-      anyInFlight((query.state.data?.intents ?? []).map((i) => i.status)) ? 15_000 : false,
   });

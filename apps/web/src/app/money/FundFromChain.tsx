@@ -1,6 +1,6 @@
 import { useAppKit } from "@reown/appkit/react";
 import { useState } from "react";
-import { useFundIntents, useFundSources } from "../../api/fund-sources";
+import { useFundSources } from "../../api/fund-sources";
 import { useDebounced, useFundTokens, type FundToken } from "../../api/fund-tokens";
 import { useConnectFunder, useDisconnectFunder, useFunder } from "../../wallet/useFunder";
 import type { Funder } from "../../wallet/funder";
@@ -8,7 +8,7 @@ import { Button } from "../../ui/Button";
 import { Alert } from "../../ui/icons";
 import { FundWalletSwap } from "./FundWalletSwap";
 import { TokenMark } from "./TokenMark";
-import { statusCopy, timingCopy } from "./fund-chain";
+import { timingCopy } from "./fund-chain";
 
 /**
  * Adding cash from a wallet somebody already holds, on any chain we can sign on.
@@ -142,41 +142,6 @@ const ChainFilter = ({
   );
 };
 
-const InFlight = () => {
-  const { data } = useFundIntents();
-  const intents = data?.intents ?? [];
-  if (intents.length === 0) return null;
-
-  return (
-    <div className="mt-6">
-      <p className="text-[12px] leading-none text-ds-muted">Recent deposits</p>
-      <div className="mt-2 flex flex-col gap-1">
-        {intents.slice(0, 5).map((intent) => {
-          const { label, done } = statusCopy(intent.status);
-          return (
-            <div
-              key={intent.id}
-              className="flex items-center justify-between gap-3 rounded-md bg-ds-panel px-3 py-2.5"
-            >
-              <span className="truncate text-[13px] leading-none text-ds-ink">
-                {intent.originCurrencySymbol} from{" "}
-                <span className="capitalize">{intent.originChainName}</span>
-              </span>
-              <span
-                className={`shrink-0 text-[12px] leading-none ${
-                  intent.status === "success" ? "text-ds-up" : done ? "text-ds-chip-down" : "text-ds-muted"
-                }`}
-              >
-                {label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
 /**
  * `0x1234…cdef`, which is as much of an address as anyone reads.
  *
@@ -286,7 +251,6 @@ export const FundFromChain = () => {
             </Button>
           </div>
           {back}
-          <InFlight />
         </div>
       );
     }
@@ -315,7 +279,6 @@ export const FundFromChain = () => {
               connected it is the only one. */}
           <ConnectedWallet funder={funder} />
           {back}
-          <InFlight />
         </div>
       );
     }
@@ -331,7 +294,6 @@ export const FundFromChain = () => {
         </div>
         <ConnectedWallet funder={funder} />
         {back}
-        <InFlight />
       </div>
     );
   }
@@ -413,8 +375,6 @@ export const FundFromChain = () => {
           with a wallet still attached from last time, and the screen where
           they would want to change it. */}
       {funder !== null && <ConnectedWallet funder={funder} />}
-
-      <InFlight />
     </div>
   );
 };

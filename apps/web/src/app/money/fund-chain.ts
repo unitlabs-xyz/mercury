@@ -1,11 +1,15 @@
 /**
  * The decisions behind "add cash from another chain", with no React in them.
  *
- * Searching and filtering used to live here, over a list of 56 tokens the
- * server had read out of Relay's `/chains`. Both moved to the server, which
- * searches Relay's whole index instead — see services/api/src/routes/fund.ts.
- * What is left is what a deposit's state means and how long it takes, which
- * differ by chain in a way the copy has to say out loud.
+ * Most of what was here has gone, in two moves worth recording. Searching and
+ * filtering went to the server, which searches Relay's whole token index
+ * rather than the 56 names `/chains` happened to carry — see
+ * services/api/src/routes/fund.ts. Then the in-progress deposit list went too,
+ * taking `statusCopy` and `anyInFlight` with it: a panel for starting a
+ * deposit is not the place to keep a history of them.
+ *
+ * What is left is how long to say it takes, which is not the same answer on
+ * every chain and has to be said out loud.
  */
 
 /** A chain we take deposits from, as the server reports it. One filter chip. */
@@ -15,43 +19,6 @@ export interface FundChain {
   readonly vmType: string;
   readonly iconUrl: string | null;
 }
-
-/** Relay's own vocabulary. Stored and displayed rather than mapped to ours. */
-export type FundStatus =
-  "waiting" | "depositing" | "pending" | "submitted" | "success" | "failure" | "refund";
-
-const SETTLED: readonly string[] = ["success", "failure", "refund"];
-
-/** Whether anything is still moving, which is what decides whether to poll. */
-export const anyInFlight = (statuses: readonly string[]): boolean =>
-  statuses.some((s) => !SETTLED.includes(s));
-
-/**
- * What to say about a deposit, by what Relay says about it.
- *
- * `waiting` is the common one and the one most worth getting right: nothing has
- * arrived, which is not a problem and must not read as one.
- */
-export const statusCopy = (status: string): { readonly label: string; readonly done: boolean } => {
-  switch (status) {
-    case "waiting":
-      return { label: "Waiting for your transfer", done: false };
-    case "depositing":
-    case "pending":
-      return { label: "Received, converting", done: false };
-    case "submitted":
-      return { label: "Almost there", done: false };
-    case "success":
-      return { label: "Added to your balance", done: true };
-    case "failure":
-      return { label: "Could not be completed", done: true };
-    case "refund":
-      return { label: "Returned to sender", done: true };
-    default:
-      /* An unknown status is Relay's to add, not ours to guess at. */
-      return { label: "In progress", done: false };
-  }
-};
 
 /**
  * How long to tell somebody it will take, which is not the same number on

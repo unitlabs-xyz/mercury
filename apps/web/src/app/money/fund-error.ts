@@ -19,8 +19,19 @@ interface ErrorLike {
   readonly cause?: unknown;
 }
 
-const asErrorLike = (err: unknown): ErrorLike =>
-  typeof err === "object" && err !== null ? (err as ErrorLike) : {};
+/*
+ * A thrown string is a message, not a nothing.
+ *
+ * The Relay SDK throws bare strings — `Unable to find chain: Chain id 8453`,
+ * `Step item is missing data` — and plain objects straight off the wire. An
+ * `err as Error` reader sees no `.message` on any of them and falls back to
+ * "please try again", which is how the most informative error in the system
+ * became the least informative sentence on the screen.
+ */
+const asErrorLike = (err: unknown): ErrorLike => {
+  if (typeof err === "string") return { message: err };
+  return typeof err === "object" && err !== null ? (err as ErrorLike) : {};
+};
 
 const text = (value: unknown): string | null => {
   if (typeof value !== "string") return null;

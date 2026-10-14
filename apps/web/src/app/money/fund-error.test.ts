@@ -89,3 +89,28 @@ describe("isRejection", () => {
     expect(message).toContain("Nothing was sent");
   });
 });
+
+describe("fundErrorCopy · values that are not Errors", () => {
+  it("reads a thrown string, which the Relay SDK does throw", () => {
+    /* `throw `Unable to find chain: Chain id ${chainId}`` in
+       executeSteps/index.js, among others. Treating it as unreadable turned
+       the most specific error in the system into "please try again". */
+    expect(fundErrorCopy("Unable to find chain: Chain id 8453").message).toBe(
+      "Unable to find chain: Chain id 8453",
+    );
+  });
+
+  it("reads a plain object thrown off the wire", () => {
+    /* `throw json` — the API's error body, with no Error wrapper. */
+    expect(fundErrorCopy({ message: "Insufficient balance" }).message).toBe("Insufficient balance");
+  });
+
+  it("still catches a rejection phrased as a bare string", () => {
+    expect(isRejection("User rejected the request")).toBe(true);
+  });
+
+  it("does not read a number or a boolean as a message", () => {
+    expect(fundErrorCopy(42).message).toBe("That deposit could not be completed. Please try again.");
+    expect(fundErrorCopy(false).message).toBe("That deposit could not be completed. Please try again.");
+  });
+});

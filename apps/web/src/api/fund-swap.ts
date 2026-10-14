@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppKitProvider } from "@reown/appkit/react";
 import { useWalletClient } from "wagmi";
 import { createClient, execute, MAINNET_RELAY_API, type AdaptedWallet } from "@relayprotocol/relay-sdk";
+import { configureDynamicChains } from "@relayprotocol/relay-sdk/chain-utils";
 import { adaptSolanaWallet } from "@relayprotocol/relay-svm-wallet-adapter";
 import { Connection, type SendOptions, type VersionedTransaction } from "@solana/web3.js";
 import { apiFetch } from "./client";
@@ -22,6 +23,31 @@ export const NATIVE_SOL = "11111111111111111111111111111111";
  * the steps in it.
  */
 createClient({ baseApiUrl: MAINNET_RELAY_API, source: "trymercury.xyz" });
+
+/**
+ * Relay's real chain list, which the client does not have until it is asked.
+ *
+ * `createClient` without a `chains` option sets exactly one — Ethereum
+ * mainnet — and `executeSteps` opens with
+ * `client.chains.find((c) => c.id === chainId)`, throwing the bare string
+ * `Unable to find chain: Chain id 8453` when it misses. So every deposit from
+ * anywhere but mainnet failed, after the quote had been minted and the intent
+ * written: Relay showed an order, the browser showed an error, and nothing was
+ * ever sent. Solana failed the same way.
+ *
+ * Fetched once and awaited before the first execute rather than fired off at
+ * module scope, because a deposit that starts before the fetch lands is the
+ * same bug with a race in front of it. A failure clears the memo so the next
+ * attempt tries again instead of inheriting a rejected promise forever.
+ */
+let chains: Promise<unknown> | null = null;
+const relayChainsReady = (): Promise<unknown> => {
+  chains ??= configureDynamicChains().catch((err: unknown) => {
+    chains = null;
+    throw err;
+  });
+  return chains;
+};
 
 /**
  * What the connected wallet holds of the token somebody picked.
@@ -115,6 +141,10 @@ export const useFundSwapAction = () => {
                 return walletProvider.signAndSendTransaction(transaction, options);
               },
             );
+
+      /* Before execute, never after: the chain lookup is the first thing it
+         does, and it throws rather than waits. */
+      await relayChainsReady();
 
       const hashes: { in: string | null; out: string | null } = { in: null, out: null };
       await execute({
