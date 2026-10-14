@@ -80,6 +80,24 @@ export const fundErrorCopy = (err: unknown): { readonly message: string; readonl
     return { message: "You cancelled the signature in your wallet. Nothing was sent.", rejected: true };
   }
 
+  /*
+   * The SDK's own terse strings, said in words.
+   *
+   * "Transaction Reverted" is what it throws when a receipt comes back with
+   * `status: 'reverted'` — accurate, and no use to somebody holding a phone.
+   * A revert on this path is nearly always one of two things, and naming both
+   * is more useful than naming neither: not enough of the token to cover what
+   * was typed, or not enough of the chain's native coin for the fee.
+   */
+  const bare = text(asErrorLike(err).message) ?? (typeof err === "string" ? err : null);
+  if (bare !== null && /transaction reverted/i.test(bare)) {
+    return {
+      message:
+        "The network rejected the transaction, so nothing was sent. Usually that means the wallet is short of the token or of the gas coin.",
+      rejected: false,
+    };
+  }
+
   const e = asErrorLike(err);
   /* `shortMessage` before `message`: viem's `message` is the whole annotated
      report — request body, docs link and all — and `shortMessage` is the one

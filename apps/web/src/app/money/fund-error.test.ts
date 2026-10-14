@@ -114,3 +114,27 @@ describe("fundErrorCopy · values that are not Errors", () => {
     expect(fundErrorCopy(false).message).toBe("That deposit could not be completed. Please try again.");
   });
 });
+
+describe("fundErrorCopy · a revert", () => {
+  it("says what a revert means rather than repeating the word", () => {
+    /* `throw 'Transaction Reverted'` in the SDK's transaction.js, when a
+       receipt comes back with status 'reverted'. True, and no use to
+       somebody holding a phone. */
+    const { message, rejected } = fundErrorCopy("Transaction Reverted");
+
+    expect(rejected).toBe(false);
+    expect(message).toContain("nothing was sent");
+    expect(message).toContain("gas");
+  });
+
+  it("matches however the word arrives", () => {
+    expect(fundErrorCopy(new Error("transaction reverted")).message).toContain("nothing was sent");
+  });
+
+  it("does not swallow a revert that came with a real reason", () => {
+    /* A named revert reason is more specific than our sentence, so it wins. */
+    expect(
+      fundErrorCopy({ shortMessage: "execution reverted: ERC20: transfer amount exceeds balance" }).message,
+    ).toContain("exceeds balance");
+  });
+});

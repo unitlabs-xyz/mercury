@@ -195,7 +195,31 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
             <div className="mt-2" role="alert">
               {/* A cancellation is not a fault. Red for it would tell somebody
                   their own decision went wrong. */}
-              <Note tone={rejected ? "warn" : "down"}>{message}</Note>
+              <Note tone={rejected ? "warn" : "down"}>
+                {message}
+                {/*
+                 * The receipt, when the failure had one.
+                 *
+                 * "Transaction Reverted" is all the SDK throws — it drops the
+                 * receipt — and a revert is the one failure whose reason is
+                 * written down publicly. Linking it is the difference between
+                 * telling somebody their money did not move and showing them
+                 * the call that stopped it.
+                 */}
+                {action.failedTxHash !== null && (
+                  <>
+                    {" "}
+                    <a
+                      href={explorer(token, action.failedTxHash)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2"
+                    >
+                      See what happened
+                    </a>
+                  </>
+                )}
+              </Note>
             </div>
           );
         })()}

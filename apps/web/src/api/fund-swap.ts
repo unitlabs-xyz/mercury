@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { useAppKitProvider } from "@reown/appkit/react";
 import { useWalletClient } from "wagmi";
 import { createClient, execute, MAINNET_RELAY_API, type AdaptedWallet } from "@relayprotocol/relay-sdk";
@@ -115,6 +116,9 @@ export const useFundSwapAction = () => {
   const { data: evmWallet } = useWalletClient();
   const { walletProvider } = useAppKitProvider<SolanaProvider>("solana");
 
+  /* Survives the throw that loses the receipt — see where it is set. */
+  const lastHash = useRef<string | null>(null);
+
   const action = useMutation<SwapReceipt, Error, { currency: string; amountRaw: string }>({
     mutationFn: async (input) => {
       if (funder === null) throw new Error("Connect a wallet to pay from first.");
@@ -146,6 +150,15 @@ export const useFundSwapAction = () => {
          does, and it throws rather than waits. */
       await relayChainsReady();
 
+      /*
+       * Kept outside the promise as well as in it.
+       *
+       * A revert throws the bare string `Transaction Reverted` and drops the
+       * receipt, so the hash of the transaction that failed is lost with it —
+       * and the hash is the whole answer. On chain it says which call reverted
+       * and why; without it the interface can only repeat that something did.
+       */
+      lastHash.current = null;
       const hashes: { in: string | null; out: string | null } = { in: null, out: null };
       await execute({
         quote: built.quote as Parameters<typeof execute>[0]["quote"],
@@ -156,6 +169,7 @@ export const useFundSwapAction = () => {
           const txs = progress.txHashes ?? [];
           hashes.in = txs[0]?.txHash ?? hashes.in;
           hashes.out = txs[1]?.txHash ?? hashes.out;
+          lastHash.current = hashes.in ?? lastHash.current;
         },
       });
 
@@ -172,7 +186,18 @@ export const useFundSwapAction = () => {
           ...(hashes.out === null ? {} : { outTxHash: hashes.out }),
         }),
       }).catch((err: unknown) => {
-        console.error("fund: could not report the deposit", err);
+        /*
+         * A 404 here is the good outcome, not a failure.
+         *
+         * It means Relay settled the deposit over its webhook before the
+         * browser finished reporting it — the money arrived faster than the
+         * report — and `markSubmitted` will not touch a settled row. Logging
+         * that at error level sends somebody looking for a bug in the one
+         * case where everything worked.
+         */
+        const settled = err instanceof Error && /settled/i.test(err.message);
+        if (settled) console.log("fund: already settled before we reported it");
+        else console.error("fund: could not report the deposit", err);
       });
 
       return { outFormatted: built.out.amountFormatted, inTxHash: hashes.in, outTxHash: hashes.out };
@@ -195,5 +220,5 @@ export const useFundSwapAction = () => {
     },
   });
 
-  return { ...action, walletReady: funder !== null };
+  return { ...action, walletReady: funder !== null, failedTxHash: lastHash.current };
 };
