@@ -4,7 +4,7 @@ import { ButtonLink } from "../../ui/Button";
 import { GlideRows, MoveChip, RailHead, StatusChip } from "../../ui/ds";
 import { pct, usd, usdSigned } from "@mercury/view";
 import type { Model, Row } from "./model";
-import { Skeleton } from "./ui";
+import { SkeletonRows } from "./ui";
 import { XSTOCKS_LOGO_RADIUS } from "../invest/shared";
 import { TOKEN_NAME, useProviders } from "../stock/heldAs";
 import type { Issuer } from "@mercury/types";
@@ -333,17 +333,7 @@ export const Holdings = ({
               </div>
             )}
 
-            {!m && !failed && (
-              <div className="flex flex-col gap-3 p-4">
-                {[0, 1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Skeleton className="size-9 rounded-full" />
-                    <Skeleton className="h-4 w-40" />
-                    <Skeleton className="ml-auto h-4 w-20" />
-                  </div>
-                ))}
-              </div>
-            )}
+            {!m && !failed && <SkeletonRows count={4} />}
 
             {((m && rows.length === 0 && basketRows.length === 0) || failed) && (
               <div className="px-6 py-10 text-center">

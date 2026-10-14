@@ -13,7 +13,7 @@ import {
 } from "../../ui/ds";
 import { DotChart, TINY } from "../DotChart";
 import { usd, usdCompact } from "@mercury/view";
-import { Skeleton } from "../portfolio/ui";
+import { SkeletonRows } from "../portfolio/ui";
 import { LIST_DOT, Mark, compact, points, type Row } from "./shared";
 
 type SortKey = "name" | "price" | "change" | "volume" | "holders";
@@ -307,15 +307,7 @@ export const Screener = ({
 
       <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
         {loading || (searching && shown.length === 0) ? (
-          <div className="flex flex-col gap-3 p-4">
-            {Array.from({ length: 8 }, (_, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="size-9 rounded-full" />
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="ml-auto h-4 w-24" />
-              </div>
-            ))}
-          </div>
+          <SkeletonRows count={8} figure="w-24" />
         ) : shown.length === 0 ? (
           <div className="px-6 py-10 text-center">
             <p className="text-[14px] font-medium text-ds-ink">

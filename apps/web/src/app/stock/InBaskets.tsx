@@ -5,6 +5,7 @@ import { GlideRows } from "../../ui/ds";
 import { AssetIcon } from "../baskets/AssetIcon";
 import { displayBasketName } from "../baskets/catalog";
 import { RailList } from "../invest/Rail";
+import { SkeletonRows } from "../portfolio/ui";
 
 const weight = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.00$/, "")}%`;
 
@@ -35,6 +36,20 @@ export const InBaskets = ({ ticker }: { ticker: string }) => {
   ];
   const instruments = useInstruments(markTickers);
   const byTicker = new Map((instruments.data ?? []).map((instrument) => [instrument.ticker, instrument]));
+
+  /*
+   * No templates yet is not the same as no basket holding this stock, and both
+   * used to render nothing — so the rail appeared a beat after the rest of the
+   * column and moved what was under it. Hidden only once we know the answer.
+   */
+  if (templates.data === undefined && templates.isError) return null;
+  if (templates.data === undefined) {
+    return (
+      <RailList label="In baskets" meta="Target weight">
+        <SkeletonRows count={2} figure="w-12" />
+      </RailList>
+    );
+  }
   if (holding.length === 0) return null;
 
   return (

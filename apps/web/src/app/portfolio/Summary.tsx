@@ -92,42 +92,62 @@ export const HeaderFigure = ({
   sub,
   tone,
   size = "lg",
+  loading = false,
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
   tone?: "up" | "down" | "warn" | undefined;
   size?: "lg" | "md";
-}) => (
-  <div className="min-w-0">
-    <dt className="truncate text-[14px] text-ds-muted">{label}</dt>
-    <dd
-      // The denser grid wraps a long value (a price range) rather than cutting it off.
-      className={`mt-[7px] ${size === "md" ? "text-[20px] leading-[1.15]" : "truncate text-[24px] leading-none"} font-medium ${
-        tone === "up"
-          ? "text-ds-up"
-          : tone === "down"
-            ? "text-ds-down"
-            : tone === "warn"
-              ? "text-warn"
-              : "text-ds-ink"
-      }`}
-    >
-      {value}
-    </dd>
-    {sub && (
-      <dd
-        // A 16px line so descenders (the g of "borrowing") are not clipped by the
-        // truncation; 2px less above keeps the text where it was. On a phone's
-        // two narrow columns it wraps instead: cut there, the line lost its
-        // figure ("Safe unless your shares fall 6…").
-        className={`${size === "md" ? "mt-1.5" : "mt-[11px]"} text-[12px] leading-4 text-pretty text-ds-ink/80 sm:truncate`}
-      >
-        {sub}
+  /**
+   * The figure is not known yet. The label still is, so it stays: these six
+   * read as a set, and an em-dash beside a pulsing net worth said "nothing
+   * here" about an account that was merely still loading.
+   */
+  loading?: boolean;
+}) =>
+  loading ? (
+    <div className="min-w-0">
+      <dt className="truncate text-[14px] text-ds-muted">{label}</dt>
+      {/* Heights match the real figure's line box — 24px at lg, 23px at md —
+          so nothing moves when the number arrives. */}
+      <dd className="mt-[7px]">
+        <Skeleton className={size === "md" ? "h-[23px] w-20" : "h-6 w-24"} />
       </dd>
-    )}
-  </div>
-);
+      <dd className={size === "md" ? "mt-1.5" : "mt-[11px]"}>
+        <Skeleton className="h-4 w-28" />
+      </dd>
+    </div>
+  ) : (
+    <div className="min-w-0">
+      <dt className="truncate text-[14px] text-ds-muted">{label}</dt>
+      <dd
+        // The denser grid wraps a long value (a price range) rather than cutting it off.
+        className={`mt-[7px] ${size === "md" ? "text-[20px] leading-[1.15]" : "truncate text-[24px] leading-none"} font-medium ${
+          tone === "up"
+            ? "text-ds-up"
+            : tone === "down"
+              ? "text-ds-down"
+              : tone === "warn"
+                ? "text-warn"
+                : "text-ds-ink"
+        }`}
+      >
+        {value}
+      </dd>
+      {sub && (
+        <dd
+          // A 16px line so descenders (the g of "borrowing") are not clipped by the
+          // truncation; 2px less above keeps the text where it was. On a phone's
+          // two narrow columns it wraps instead: cut there, the line lost its
+          // figure ("Safe unless your shares fall 6…").
+          className={`${size === "md" ? "mt-1.5" : "mt-[11px]"} text-[12px] leading-4 text-pretty text-ds-ink/80 sm:truncate`}
+        >
+          {sub}
+        </dd>
+      )}
+    </div>
+  );
 
 /** A quoted stock-price move, not a change in the account's net worth. */
 const TodayMove = ({
@@ -172,12 +192,17 @@ export const AccountHeader = ({
   m,
   dash,
   apr,
+  failed = false,
 }: {
   m: Model | undefined;
   dash: Dashboard | undefined;
   apr: number;
+  /** The refresh failed. The banner above says so; these figures must not
+      pulse as though an answer were still coming. */
+  failed?: boolean;
 }) => {
   const card = dash?.card;
+  const waiting = !m && !failed;
   const owes = card !== null && card !== undefined && card.statementBalanceUsd > 0;
   return (
     <section aria-label="Account" className="flex flex-col rounded-xl bg-white xl:min-h-[189px] xl:flex-row">
@@ -222,11 +247,13 @@ export const AccountHeader = ({
       >
         <HeaderFigure
           label="Holdings"
+          loading={waiting}
           value={m ? usd(m.stocks) : "—"}
           sub={m ? `${m.rows.length} positions` : undefined}
         />
         <HeaderFigure
           label="Stock P&L"
+          loading={waiting}
           value={m ? usdSigned(m.costBasis > 0 ? m.marketReturnUsd : 0) : "—"}
           sub={m ? stockPnlSub(m) : undefined}
           tone={m && m.costBasis > 0 ? (m.marketReturnUsd < 0 ? "down" : "up") : undefined}
@@ -247,17 +274,22 @@ export const AccountHeader = ({
         )}
         <HeaderFigure
           label="Cash"
+          loading={waiting}
           value={m ? usd(m.cash) : "—"}
           sub={`Earning ${pct(apr * 100, 1)} a year`}
         />
         <HeaderFigure
           label="Borrowed"
+          loading={waiting}
           value={m ? usd(m.borrowed) : "—"}
           sub={m ? borrowedSub(m) : undefined}
           tone={m ? borrowedTone(m) : undefined}
         />
         <HeaderFigure
           label="Card due"
+          /* `card` null is a real answer — "No card yet". Only an absent
+             dashboard is unknown, so only that pulses. */
+          loading={dash === undefined}
           value={card ? usd(card.statementBalanceUsd) : "—"}
           sub={card ? (owes ? relDay(card.statementDue) : "Nothing due") : "No card yet"}
           tone={
@@ -347,7 +379,7 @@ export const Performance = ({
             </p>
           ) : (
             <p className="mt-2 text-[14px] leading-none text-ds-muted">
-              {m ? `Net worth ${usd(m.total)}` : "—"}
+              {m ? `Net worth ${usd(m.total)}` : <Skeleton className="h-[14px] w-36" />}
             </p>
           )}
         </div>

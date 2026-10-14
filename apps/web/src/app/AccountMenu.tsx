@@ -8,6 +8,7 @@ import { Button } from "../ui/Button";
 import { useUsdcAck } from "./usdcAck";
 import { openFeedback } from "./Feedback";
 import { usd } from "@mercury/view";
+import { Skeleton } from "./portfolio/ui";
 
 const short = (a: string) => (a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
 
@@ -61,6 +62,9 @@ export const AccountMenu = () => {
   const email = user?.email?.address ?? "Signed in";
   const address = money.data?.depositAddress ?? "";
   const cash = portfolio.data?.cashUsd ?? money.data?.balanceUsd;
+  /* Still waiting, as opposed to asked and failed — the em-dash is the right
+     answer to the second, and a pulse that never stops is the wrong one. */
+  const waiting = !money.isError && !portfolio.isError;
 
   const copy = () => {
     void navigator.clipboard?.writeText(address).then(() => {
@@ -126,7 +130,7 @@ export const AccountMenu = () => {
                 {/* Half the address, always. Copying it waits for a yes to the
                     USDC-only rule, the same one Add cash asks: until then the
                     icon is an "i" that opens the rule, not a copy. */}
-                {address && (
+                {address ? (
                   <button
                     type="button"
                     onClick={acked ? copy : () => setAsking((a) => !a)}
@@ -143,11 +147,13 @@ export const AccountMenu = () => {
                       <Copy className="size-3" />
                     )}
                   </button>
-                )}
+                ) : waiting ? (
+                  <Skeleton className="mt-1.5 h-3 w-28" />
+                ) : null}
               </div>
               <span className="shrink-0 text-right">
                 <span className="block text-[14px] leading-none font-medium text-ds-ink">
-                  {cash === undefined ? "—" : usd(cash)}
+                  {cash !== undefined ? usd(cash) : waiting ? <Skeleton className="h-[14px] w-14" /> : "—"}
                 </span>
                 <span className="mt-1.5 block text-[11px] leading-none text-ds-muted">cash to invest</span>
               </span>
