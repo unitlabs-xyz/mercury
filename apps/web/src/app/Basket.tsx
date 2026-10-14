@@ -43,6 +43,7 @@ import { OperationStatus } from "./baskets/OperationStatus";
 import { TOKEN_NAME } from "./stock/heldAs";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
+import { partial, stale, unread } from "./baskets/unreadable";
 import { EnrollmentRail, ExitSheet, InvestSheet, RebalanceSheet } from "./baskets/Ticket";
 import { rebalanceOutcome, rebalanceTerminal } from "./baskets/rebalance-status";
 import { modeledRanges, modeledSince, modeledWindow } from "@mercury/view";
@@ -567,7 +568,7 @@ export const Basket = () => {
     return (
       <AppShell current="baskets" title={name} quiet>
         <div className="rounded-xl bg-white p-5">
-          <PriceError message="This basket is unavailable right now." onRetry={() => void result.refetch()} />
+          <PriceError message={unread("this basket")} onRetry={() => void result.refetch()} />
           <Link to="/baskets" className="mt-4 inline-block text-[13px] text-ds-link hover:underline">
             Back to baskets
           </Link>
@@ -693,7 +694,7 @@ export const Basket = () => {
       {result.isError && (
         <PriceError
           className="mb-4 md:mb-6"
-          message="Could not refresh this basket. Showing the last available data."
+          message={stale("this basket")}
           onRetry={() => void result.refetch()}
         />
       )}
@@ -741,7 +742,7 @@ export const Basket = () => {
                   <p
                     className={`mt-1 text-[32px] leading-none font-medium ${headline.change !== null ? (Number(headline.change) < 0 ? "text-ds-fall" : "text-ds-up") : "text-ds-ink"}`}
                   >
-                    {headline.change !== null ? returnLabel(headline.change) : "Unavailable"}
+                    {headline.change !== null ? returnLabel(headline.change) : "—"}
                   </p>
                 </div>
                 <div className="max-w-full overflow-x-auto">
@@ -753,7 +754,7 @@ export const Basket = () => {
                   <DotChart series={chart} label={shown} scale="percent" />
                 ) : (
                   <div className="grid h-full place-items-center rounded-lg bg-ds-panel text-[13px] text-ds-muted">
-                    Modeled history is unavailable for this range.
+                    Not enough history for this range.
                   </div>
                 )}
               </div>
@@ -930,7 +931,7 @@ export const Basket = () => {
                         ))}
                       </ul>
                     ) : (
-                      <p className="mt-3 text-[12px] text-ds-muted">Sector classification is unavailable.</p>
+                      <p className="mt-3 text-[12px] text-ds-muted">No sector breakdown available.</p>
                     )}
                   </div>
                 </div>
@@ -1030,7 +1031,7 @@ export const Basket = () => {
               busy={enrollmentBusy}
               error={
                 enrollment.isError && enrollment.data
-                  ? "Could not refresh your basket account. Showing the last reading."
+                  ? stale("your basket account")
                   : enrollment.error?.message
               }
               onRetry={() => void enrollment.refetch()}
@@ -1083,18 +1084,19 @@ export const Basket = () => {
                       </p>
                     )}
                     {account.warnings.length > 0 && (
-                      <p className="mt-3 text-[12px] text-ds-muted">
-                        Some balances could not be read, so this may be low.
-                      </p>
+                      <p className="mt-3 text-[12px] text-ds-muted">{partial("balances")}</p>
                     )}
                     {portfolio.isError && (
-                      <button
-                        type="button"
-                        onClick={() => void portfolio.refetch()}
-                        className="mt-3 text-[12px] font-medium text-ds-link hover:underline"
-                      >
-                        Balance refresh failed · Retry
-                      </button>
+                      <p className="mt-3 text-[12px] text-ds-muted">
+                        {stale("your balances")} ·{" "}
+                        <button
+                          type="button"
+                          onClick={() => void portfolio.refetch()}
+                          className="font-medium text-ds-link hover:underline"
+                        >
+                          Retry
+                        </button>
+                      </p>
                     )}
                     {exitOperationId && (
                       <div className="mt-4 border-t border-ds-divider pt-4 text-[12px]">
@@ -1149,13 +1151,13 @@ export const Basket = () => {
                 ) : ownershipUnknown ? (
                   <PriceError
                     className="mt-5"
-                    message="Your holdings have not been checked yet."
+                    message={unread("your holdings")}
                     onRetry={() => void enrollment.refetch()}
                   />
                 ) : (
                   <PriceError
                     className="mt-5"
-                    message="Your basket account's balances are unavailable."
+                    message={unread("your balances")}
                     onRetry={() => void portfolio.refetch()}
                   />
                 )}
@@ -1181,10 +1183,7 @@ export const Basket = () => {
                     ))}
                   </div>
                 ) : !account && portfolio.isError ? (
-                  <PriceError
-                    message="Account balances are unavailable."
-                    onRetry={() => void portfolio.refetch()}
-                  />
+                  <PriceError message={unread("your balances")} onRetry={() => void portfolio.refetch()} />
                 ) : (
                   <>
                     {portfolio.isError && (
@@ -1192,7 +1191,7 @@ export const Basket = () => {
                         role="alert"
                         className="mx-2 mb-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
                       >
-                        <span>Refresh failed · showing last balances</span>
+                        <span>{stale("your balances")}</span>
                         <button
                           type="button"
                           onClick={() => void portfolio.refetch()}
@@ -1324,7 +1323,7 @@ export const Basket = () => {
                   <RebalanceLocked enrolled={enrolled} />
                 ) : ownershipUnknown ? (
                   <div className="min-h-[160px] text-[12px] text-ds-muted">
-                    <p>The schedule appears once your holdings have been read.</p>
+                    <p>{unread("your holdings")}</p>
                     <button
                       type="button"
                       onClick={() => void enrollment.refetch()}
@@ -1335,7 +1334,7 @@ export const Basket = () => {
                   </div>
                 ) : enrolled && !account ? (
                   <div className="min-h-[160px] text-[12px] text-ds-muted">
-                    <p>Schedule unavailable while account balances cannot be read.</p>
+                    <p>{unread("your balances")}</p>
                     {portfolio.isError && (
                       <button
                         type="button"
@@ -1404,7 +1403,7 @@ export const Basket = () => {
                         role="alert"
                         className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
                       >
-                        <span>Refresh failed · showing last activity</span>
+                        <span>{stale("recent activity")}</span>
                         <button
                           type="button"
                           onClick={() => void activity.refetch()}
@@ -1436,10 +1435,7 @@ export const Basket = () => {
                     ))}
                   </div>
                 ) : activity.isError ? (
-                  <PriceError
-                    message="Recent activity is unavailable."
-                    onRetry={() => void activity.refetch()}
-                  />
+                  <PriceError message={unread("recent activity")} onRetry={() => void activity.refetch()} />
                 ) : (
                   <div className="px-4 py-5 text-center">
                     <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>

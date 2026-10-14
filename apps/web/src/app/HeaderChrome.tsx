@@ -5,6 +5,10 @@ import { Bell, Cog } from "../ui/icons";
  * Global chrome, the same on every app screen. Nothing sits behind either
  * panel yet and both say so: a control that does nothing at all when pressed
  * reads as broken rather than as unfinished.
+ *
+ * Settings said "Not built yet", which is our status and not the reader's.
+ * "Coming soon" is the word the rest of the app uses for the same thing — the
+ * card panel, and two of the ways to add cash.
  */
 type Panel = "alerts" | "settings";
 
@@ -16,7 +20,7 @@ const PANELS: Record<Panel, { label: string; title: string; body: string }> = {
   },
   settings: {
     label: "Settings",
-    title: "Not built yet",
+    title: "Coming soon",
     body: "Your profile, security, and exporting the wallet to somewhere else will live here.",
   },
 };

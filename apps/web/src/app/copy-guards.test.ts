@@ -118,6 +118,25 @@ describe("words the reader does not have", () => {
     expect(found).toEqual([]);
   });
 
+  it("says an unreadable thing one way, through baskets/unreadable.ts", () => {
+    /*
+     * Fifteen hand-written failure messages in six shapes, on one page, with
+     * nothing stopping several of them rendering together. The shapes were
+     * right; the vocabulary was per-panel. A literal here means somebody wrote
+     * a sixteenth instead of passing a noun to `unread`, `stale` or `partial`.
+     *
+     * "Status unavailable" stays: it is an operation chip's label, not a
+     * sentence, and it has only ever had the one wording.
+     */
+    const found = basketSurfaces().flatMap(({ file, copy }) =>
+      copy
+        .filter((s) => /(?:is|are) unavailable|refresh failed|could not be read/i.test(s))
+        .map((s) => `${relative(".", file)}: ${s}`),
+    );
+
+    expect(found).toEqual([]);
+  });
+
   it("calls a basket a basket, not a strategy or a template", () => {
     /*
      * Three nouns named one object. `baskets/rail.tsx` managed two of them in

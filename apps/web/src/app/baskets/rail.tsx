@@ -9,6 +9,7 @@ import { RailList } from "../invest/Rail";
 import { relTime, Skeleton } from "../portfolio/ui";
 import { AssetIcon } from "./AssetIcon";
 import { displayBasketName, THEME_ART_TREATMENT } from "./catalog";
+import { partial, stale, unread } from "./unreadable";
 import { OperationStatus } from "./OperationStatus";
 import { rebalanceOutcome } from "./rebalance-status";
 import { readPortfolioOperations, sortOperationRows, type BasketOperationRow } from "./operations";
@@ -106,12 +107,12 @@ const BasketList = ({
     const title = !signedIn
       ? "Sign in to see your baskets"
       : error
-        ? "Your baskets are unavailable"
+        ? "We could not read your baskets"
         : "No baskets yet";
     const detail = !signedIn
       ? "Your basket accounts will appear here after you sign in."
       : error
-        ? "We couldn't load your basket accounts. Your assets are still in them."
+        ? `${unread("your basket accounts")} Your assets are still in them.`
         : "Pick a basket to create your first basket account.";
     return (
       <div className="flex min-h-[182px] flex-col items-center justify-center px-6 py-5 text-center">
@@ -135,7 +136,7 @@ const BasketList = ({
           role="alert"
           className="mx-2 mb-1 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
         >
-          <span>Refresh failed · showing last balances</span>
+          <span>{stale("your balances")}</span>
           <button
             type="button"
             onClick={onRetry}
@@ -183,9 +184,7 @@ const BasketList = ({
         </button>
       )}
       {visible.some((portfolio) => portfolio.partial) && (
-        <p className="px-3 pt-1 pb-2 text-[11px] leading-relaxed text-ds-muted">
-          Some of this could not be read just now.
-        </p>
+        <p className="px-3 pt-1 pb-2 text-[11px] leading-relaxed text-ds-muted">{partial("of this")}</p>
       )}
     </div>
   );
