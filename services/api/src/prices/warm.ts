@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { D } from "@mercury/core";
-import type { PriceBoard } from "@mercury/market";
+import type { PriceAsk, PriceBoard, TokenPrice } from "@mercury/market";
 import type { Db } from "../db/client.js";
 import { lots, tokens } from "../db/schema.js";
 import { FEATURED_LIQUIDITY_USD, type StockRow } from "../routes/instruments.js";
@@ -9,12 +9,20 @@ export interface WarmDeps {
   /** The same reader the shelf uses, so the warm set and the shelf cannot diverge. */
   readonly supportedStocks: () => Promise<readonly StockRow[]>;
   readonly prices: PriceBoard;
+  /**
+   * What the board is held to. Omitted, it may hand back an entry it is still
+   * replacing, which keeps a screen fast and would make a recorded sample a
+   * price from up to a minute before the moment it is stamped with.
+   */
+  readonly ask?: PriceAsk;
 }
 
 export interface WarmSummary {
   readonly mints: number;
   /** How many of them Jupiter had a price for. Short of `mints` is worth seeing. */
   readonly priced: number;
+  /** The answer itself, so the same pass can be recorded rather than asked for twice. */
+  readonly board: ReadonlyMap<string, TokenPrice>;
 }
 
 /**
@@ -66,7 +74,7 @@ export async function warmPrices(db: Db, deps: WarmDeps): Promise<WarmSummary> {
   const priceable = new Set(mintsOf(rows));
   const warm = [...new Set([...featured, ...held.filter((mint) => priceable.has(mint))])];
 
-  if (warm.length === 0) return { mints: 0, priced: 0 };
-  const board = await deps.prices.pricesFor(warm);
-  return { mints: warm.length, priced: board.size };
+  if (warm.length === 0) return { mints: 0, priced: 0, board: new Map() };
+  const board = await deps.prices.pricesFor(warm, deps.ask);
+  return { mints: warm.length, priced: board.size, board };
 }

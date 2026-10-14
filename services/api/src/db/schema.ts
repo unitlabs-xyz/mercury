@@ -206,6 +206,53 @@ export const multiplierEvents = pgTable(
 );
 
 /**
+ * What a token traded at across one bucket of time. See ADR 0016.
+ *
+ * The only record of a price in the system: the board forgets in a minute, and
+ * every other table holds quantities. Written by the `prices` job from the same
+ * answer that warms the board, at three widths at once, so each one is always
+ * current and none is a rollup that can fall behind.
+ *
+ * Two prices, both per share. `market_*` is what a share of this wrapper fetches
+ * in the pool, which is what a holding is valued at. `reference_*` is the
+ * issuer's quote for the underlying, which is what "did the stock move" is
+ * measured against, and is null across a bar that never had one.
+ *
+ * `first_at` and `last_at` are the instants of the first and last samples, so
+ * a sample that arrives late can widen a bar without taking its close.
+ */
+export const priceBars = pgTable(
+  "price_bar",
+  {
+    tokenId: uuid("token_id")
+      .notNull()
+      .references(() => tokens.id, { onDelete: "cascade" }),
+    width: text("width", { enum: ["1m", "1h", "1d"] }).notNull(),
+    /** The start of the bucket, UTC. A day is a UTC day. */
+    bucketStart: timestamp("bucket_start", { withTimezone: true }).notNull(),
+    marketOpen: usd("market_open").notNull(),
+    marketHigh: usd("market_high").notNull(),
+    marketLow: usd("market_low").notNull(),
+    marketClose: usd("market_close").notNull(),
+    referenceOpen: usd("reference_open"),
+    referenceHigh: usd("reference_high"),
+    referenceLow: usd("reference_low"),
+    referenceClose: usd("reference_close"),
+    /** In force at the last sample. Tokens to shares, and a step in it is a dividend. */
+    multiplier: usd("multiplier").notNull(),
+    liquidityUsd: usd("liquidity_usd").notNull(),
+    samples: integer("samples").notNull(),
+    firstAt: timestamp("first_at", { withTimezone: true }).notNull(),
+    lastAt: timestamp("last_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tokenId, t.width, t.bucketStart] }),
+    // What pruning asks: every minute bar older than a date, whatever its token.
+    index("price_bar_width_bucket_idx").on(t.width, t.bucketStart),
+  ],
+);
+
+/**
  * The unit of cost basis. One row per acquisition, and `shares` is frozen at
  * acquisition: if the multiplier later rises, a *new* lot is written with
  * source 'dividend' and a unit cost of zero.
