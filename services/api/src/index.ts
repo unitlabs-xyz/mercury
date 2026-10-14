@@ -3,17 +3,14 @@ import {
   buildAuthDeps,
   buildDeps,
   buildReadDeps,
-  type ReadDeps,
   buildReconcileDeps,
   readConfig,
   syncConfiguredCatalog,
 } from "./deps.js";
 import { applyMigrations } from "./db/migrate.js";
-import { createSolanaRpc, type Signature } from "@solana/kit";
-import { rpcLookupTables } from "./relay/lookups.js";
 import { createRelayClient } from "./funding/relay.js";
 import { createFundingStore } from "./funding/store.js";
-import { fetchTreasuryAddresses } from "./funding/treasury.js";
+import { pollUnsettledDeposits } from "./funding/poll.js";
 import { syncStocks } from "./stocks/sync.js";
 import { warmPrices } from "./prices/warm.js";
 import { syncAllPositions } from "./portfolio/sync.js";
@@ -93,81 +90,29 @@ console.log(
 );
 
 /*
- * Funding from any chain, if Relay and the treasury are both there.
+ * Funding from any chain, if Relay is configured.
  *
- * Built at boot because the treasury's addresses arrive over HTTP, and held
- * because they are derived from keys that do not change. A refund address that
- * depends on a live call is a deposit that fails for a reason the user cannot
- * act on.
+ * One dependency now rather than four. The treasury and its three keys are
+ * gone: a refund goes back to the wallet that sent the deposit, which is
+ * correct by construction once every deposit comes from a connected wallet,
+ * and nothing we hold has to receive one.
  *
- * All three or nothing: no key, no treasury, or a treasury that will not
- * answer, and the routes are simply not mounted. The interface then hides the
- * method rather than offering one that cannot work — the same way sponsorship
- * degrades when RELAYER_SECRET_KEY is unset.
+ * Absent a key the routes are not mounted, `/v1/money/fund/sources` 404s, and
+ * the interface hides the method — the same way sponsorship degrades when
+ * RELAYER_SECRET_KEY is unset.
  */
-const fund = await (async (): Promise<ReadDeps["fund"]> => {
-  const missing = (
-    [
-      ["RELAY_API_KEY", config.relayApiKey],
-      ["TREASURY_URL", config.treasuryUrl],
-      ["TREASURY_SECRET", config.treasurySecret],
-    ] as const
-  )
-    .filter(([, value]) => value === undefined)
-    .map(([name]) => name);
-  if (missing.length > 0 || config.relayApiKey === undefined) {
-    /* Names, never values. */
-    console.log(`funding: off (${missing.join(", ")} unset); add cash from another chain is hidden`);
-    return undefined;
-  }
-
-  try {
-    const addresses = await fetchTreasuryAddresses(config.treasuryUrl!, config.treasurySecret!);
-    console.log("funding: on, refunds to");
-    for (const [family, address] of Object.entries(addresses)) console.log(`  ${family}  ${address}`);
-    /*
-     * One client for the funding path's own chain reads. Separate from the one
-     * `app.ts` builds for the send routes only because they are constructed in
-     * different places; both point at the same endpoint.
-     */
-    const rpc = createSolanaRpc(config.solanaRpcUrl);
-    return {
-      relay: createRelayClient({ apiKey: config.relayApiKey }),
-      store: createFundingStore(auth.db),
-      solana: {
-        lookups: rpcLookupTables(rpc),
-        blockhash: async () => {
-          const { value } = await rpc.getLatestBlockhash({ commitment: "confirmed" }).send();
-          return { blockhash: value.blockhash, lastValidBlockHeight: value.lastValidBlockHeight };
-        },
-        /*
-         * Three answers, not two. A signature the node has not seen is not a
-         * failed one — a client can confirm before the node it reaches has
-         * caught up — and collapsing the two would mark a landed deposit
-         * failed for being early.
-         */
-        landed: async (signature) => {
-          const { value } = await rpc.getSignatureStatuses([signature as Signature]).send();
-          const status = value[0];
-          if (status == null) return null;
-          if (status.err !== null) return false;
-          return status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized"
-            ? true
-            : null;
-        },
-      },
-      refund: addresses,
-      /* The same values for now; separate fields so splitting them later is
-         configuration rather than code. See ADR 0015. */
-      recovery: addresses,
-      minimumUsd: config.fundMinimumUsd,
-      webhookSecret: config.relayApiKey,
-    };
-  } catch (error: unknown) {
-    console.error("funding: off, the treasury could not be reached", error);
-    return undefined;
-  }
-})();
+const fund =
+  config.relayApiKey === undefined
+    ? (console.log("funding: off (RELAY_API_KEY unset); add cash from another chain is hidden"), undefined)
+    : {
+        relay: createRelayClient({ apiKey: config.relayApiKey }),
+        store: createFundingStore(auth.db),
+        minimumUsd: config.fundMinimumUsd,
+        webhookSecret: config.relayApiKey,
+      };
+if (fund !== undefined) {
+  console.log(`funding: on, minimum $${config.fundMinimumUsd}, refunds to the sending wallet`);
+}
 
 const read = buildReadDeps(auth.db, deps, config, relay, fund);
 
@@ -280,6 +225,24 @@ every("position-sync", 2_000, async () => {
  * Two streams per wallet — its own address for native SOL, its USDC account for
  * cash — so a quiet pass is four calls a minute per wallet and says nothing.
  */
+/*
+ * Relay's own verdict, pulled rather than pushed.
+ *
+ * The webhook is the fast path and this is the same authority over a second
+ * transport — so a webhook that was never enabled, or one delivery that got
+ * lost, cannot leave somebody's deposit reading `submitted` for ever with
+ * their money already spent. Only rows nothing has touched for ninety
+ * seconds, so it never races a fill that is merely in flight.
+ */
+if (fund !== undefined) {
+  const funding = fund;
+  every("funding-poll", 60_000, async () => {
+    const s = await pollUnsettledDeposits({ store: funding.store, relay: funding.relay });
+    if (s.settled === 0 && s.failed === 0) return null;
+    return `${s.settled} settled of ${s.asked} asked` + (s.failed > 0 ? `, ${s.failed} failed` : "");
+  });
+}
+
 every("wallet-events", 30_000, async () => {
   const s = await syncAllWalletEvents(auth.db, {
     history: deps.history,

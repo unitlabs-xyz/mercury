@@ -13,12 +13,11 @@ const setup = async (privyUserId = "did:privy:funder") => {
 const intent = (userId: string, over: Partial<NewFundingIntent> = {}): NewFundingIntent => ({
   userId,
   relayRequestId: "0xreq",
-  depositAddress: "0xdeposit",
   originChainId: 8453,
   originCurrency: "0x0000000000000000000000000000000000000000",
   originChainName: "base",
   originCurrencySymbol: "ETH",
-  recipientAddress: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+  recipientAddress: "PrivyWallet111",
   quotedOutRaw: "24846825",
   ...over,
 });
@@ -32,191 +31,195 @@ describe("createFundingStore", () => {
     expect(saved).toMatchObject({ status: "waiting", inTxHash: null, outTxHash: null });
   });
 
-  it("advances a waiting intent to success", async () => {
-    const { store, userId } = await setup();
-    await store.create(intent(userId));
+  it("reads one back by id, and only the owner's", async () => {
+    const { db, store, userId } = await setup();
+    const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();
+    const saved = await store.create(intent(userId));
 
-    const advanced = await store.advance("0xdeposit", {
-      status: "success",
-      inTxHash: "0xin",
-      outTxHash: "0xout",
+    expect((await store.byId(userId, saved.id))?.id).toBe(saved.id);
+    expect(await store.byId(other!.id, saved.id)).toBeNull();
+  });
+
+  it("never returns another user's deposits", async () => {
+    const { db, store, userId } = await setup();
+    const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();
+    await store.create(intent(userId));
+    await store.create(intent(other!.id, { relayRequestId: "0xtheirs" }));
+
+    const rows = await store.forUser(userId);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.relayRequestId).toBe("0xreq");
+  });
+});
+
+describe("createFundingStore · markSubmitted, which is only a report", () => {
+  it("moves a waiting deposit to submitted and records the hashes", async () => {
+    const { store, userId } = await setup();
+    const saved = await store.create(intent(userId));
+
+    const marked = await store.markSubmitted(userId, saved.id, {
+      inTxHash: "0xorigin",
+      outTxHash: "0xdestination",
     });
 
-    expect(advanced).toMatchObject({ status: "success", inTxHash: "0xin", outTxHash: "0xout" });
+    expect(marked).toMatchObject({
+      status: "submitted",
+      inTxHash: "0xorigin",
+      outTxHash: "0xdestination",
+    });
   });
 
-  it("touches only the unclaimed row on a waiting heartbeat", async () => {
+  it("cannot reopen a deposit Relay has already settled", async () => {
     const { store, userId } = await setup();
-    await store.create(intent(userId));
-    await store.advance("0xdeposit", { status: "success", inTxHash: "0xin" });
-    await store.create(intent(userId));
+    const saved = await store.create(intent(userId));
+    await store.settle("0xreq", { status: "success", outTxHash: "0xfill" });
 
-    const advanced = await store.advance("0xdeposit", { status: "depositing" });
-
-    /* The claimed row is a settled deposit and must not be walked backwards. */
-    expect(advanced?.inTxHash).toBeNull();
-    const rows = await store.forUser(userId);
-    expect(rows.find((r) => r.inTxHash === "0xin")?.status).toBe("success");
+    /* A late or repeated report must not walk a finished deposit backwards. */
+    expect(await store.markSubmitted(userId, saved.id, { inTxHash: "0xorigin" })).toBeNull();
+    expect((await store.byId(userId, saved.id))?.status).toBe("success");
   });
 
-  it("claims the waiting row for the first deposit and makes a new row for the second", async () => {
+  it.each(["failure", "refund"] as const)("cannot reopen a %s either", async (status) => {
+    const { store, userId } = await setup();
+    const saved = await store.create(intent(userId));
+    await store.settle("0xreq", { status });
+
+    expect(await store.markSubmitted(userId, saved.id, { inTxHash: "0x1" })).toBeNull();
+  });
+
+  it("will not touch another user's deposit", async () => {
+    const { db, store, userId } = await setup();
+    const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();
+    const saved = await store.create(intent(userId));
+
+    /* The id arrives in a request body; scoping by user is what makes that safe. */
+    expect(await store.markSubmitted(other!.id, saved.id, { inTxHash: "0x1" })).toBeNull();
+    expect((await store.byId(userId, saved.id))?.status).toBe("waiting");
+  });
+
+  it("is idempotent, because a client may report twice", async () => {
+    const { store, userId } = await setup();
+    const saved = await store.create(intent(userId));
+
+    await store.markSubmitted(userId, saved.id, { inTxHash: "0x1" });
+    await store.markSubmitted(userId, saved.id, { inTxHash: "0x1" });
+
+    expect(await store.forUser(userId)).toHaveLength(1);
+  });
+
+  it("has no way to write a terminal status, by construction", async () => {
+    const { store, userId } = await setup();
+    const saved = await store.create(intent(userId));
+
+    await store.markSubmitted(userId, saved.id, { inTxHash: "0x1", outTxHash: "0x2" });
+
+    /*
+     * The whole point. The hash a client holds proves a transaction landed
+     * somewhere, not that it was this deposit — and on an EVM origin it proves
+     * only the first of two legs. Only Relay's signed webhook settles.
+     */
+    expect((await store.byId(userId, saved.id))?.status).toBe("submitted");
+  });
+});
+
+describe("createFundingStore · settle, which is Relay's word", () => {
+  it("writes the terminal status and the fill", async () => {
     const { store, userId } = await setup();
     await store.create(intent(userId));
 
-    await store.advance("0xdeposit", { status: "success", inTxHash: "0xfirst" });
-    await store.advance("0xdeposit", { status: "success", inTxHash: "0xsecond" });
+    const settled = await store.settle("0xreq", {
+      status: "success",
+      inTxHash: "0xorigin",
+      outTxHash: "0xfill",
+    });
 
-    const rows = await store.forUser(userId);
-    expect(rows.map((r) => r.inTxHash).sort()).toEqual(["0xfirst", "0xsecond"]);
-    /* The second deposit inherits the route and the user, which the webhook does not carry. */
-    expect(
-      rows.every((r) => r.userId === userId && r.originChainId === 8453 && r.originChainName === "base"),
-    ).toBe(true);
+    expect(settled).toMatchObject({ status: "success", outTxHash: "0xfill" });
+  });
+
+  it("records a refund and its reason", async () => {
+    const { store, userId } = await setup();
+    await store.create(intent(userId));
+
+    const settled = await store.settle("0xreq", { status: "refund", failReason: "DOUBLE_SPEND" });
+
+    expect(settled).toMatchObject({ status: "refund", failReason: "DOUBLE_SPEND" });
   });
 
   it("is idempotent for a redelivered webhook", async () => {
     const { store, userId } = await setup();
     await store.create(intent(userId));
 
-    await store.advance("0xdeposit", { status: "submitted", inTxHash: "0xin" });
-    await store.advance("0xdeposit", { status: "success", inTxHash: "0xin" });
-    await store.advance("0xdeposit", { status: "success", inTxHash: "0xin" });
+    await store.settle("0xreq", { status: "success", outTxHash: "0xfill" });
+    await store.settle("0xreq", { status: "success", outTxHash: "0xfill" });
 
     const rows = await store.forUser(userId);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe("success");
   });
 
-  it("records the request id the fill actually landed under", async () => {
-    const { store, userId } = await setup();
-    await store.create(intent(userId));
-
-    /* Relay regenerates the quote on over- or underpayment, and the fill lands
-       under a new id while the one we minted stays waiting forever. */
-    await store.advance("0xdeposit", {
-      status: "success",
-      inTxHash: "0xin",
-      relayRequestId: "0xregenerated",
-    });
-
-    const [row] = await store.forUser(userId);
-    expect(row!.relayRequestId).toBe("0xregenerated");
-  });
-
-  it("records a failure reason", async () => {
-    const { store, userId } = await setup();
-    await store.create(intent(userId));
-
-    await store.advance("0xdeposit", {
-      status: "refund",
-      inTxHash: "0xin",
-      failReason: "DOUBLE_SPEND",
-    });
-
-    const [row] = await store.forUser(userId);
-    expect(row).toMatchObject({ status: "refund", failReason: "DOUBLE_SPEND" });
-  });
-
-  it("moves updatedAt when it advances", async () => {
-    const { db, store, userId } = await setup();
-    const saved = await store.create(intent(userId));
-    await db
-      .update(fundingIntents)
-      .set({ updatedAt: new Date("2026-01-01T00:00:00Z") })
-      .where(eq(fundingIntents.id, saved.id));
-
-    const advanced = await store.advance("0xdeposit", { status: "pending" });
-
-    expect(advanced!.updatedAt.getTime()).toBeGreaterThan(new Date("2026-01-01T00:00:00Z").getTime());
-  });
-
-  it("knows nothing about an address it never minted", async () => {
+  it("knows nothing about a request id it never minted", async () => {
     const { store } = await setup();
 
-    expect(await store.byDepositAddress("0xunknown")).toBeNull();
-    expect(await store.advance("0xunknown", { status: "success", inTxHash: "0xin" })).toBeNull();
+    expect(await store.byRequestId("0xnever")).toBeNull();
+    expect(await store.settle("0xnever", { status: "success" })).toBeNull();
   });
 
-  it("never returns another user's deposits", async () => {
-    const { db, store, userId } = await setup();
-    const [other] = await db.insert(users).values({ privyUserId: "did:privy:someone-else" }).returning();
+  it("finds a row by the id Relay quoted", async () => {
+    const { store, userId } = await setup();
     await store.create(intent(userId));
-    await store.create(intent(other!.id, { depositAddress: "0xtheirs" }));
 
-    const rows = await store.forUser(userId);
-
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.depositAddress).toBe("0xdeposit");
+    expect((await store.byRequestId("0xreq"))?.userId).toBe(userId);
   });
 });
 
-describe("createFundingStore, the connected-wallet path", () => {
-  const swap = (userId: string): NewFundingIntent => ({
-    userId,
-    relayRequestId: "0xswap",
-    originChainId: 792703809,
-    originCurrency: "Es9vMFrz",
-    originChainName: "solana",
-    originCurrencySymbol: "USDT",
-    recipientAddress: "PrivyWallet111",
-    quotedOutRaw: "9990651",
-  });
+describe("createFundingStore · unsettled, for the poller", () => {
+  const future = () => new Date(Date.now() + 60_000);
 
-  it("writes a row with no deposit address", async () => {
+  it("returns deposits Relay has not settled", async () => {
     const { store, userId } = await setup();
+    await store.create(intent(userId));
 
-    const saved = await store.create(swap(userId));
+    const open = await store.unsettled(future(), 10);
 
-    expect(saved.depositAddress).toBeNull();
-    expect(saved.status).toBe("waiting");
+    expect(open.map((r) => r.relayRequestId)).toEqual(["0xreq"]);
   });
 
-  it("settles by id once the funder's transaction lands", async () => {
+  it("leaves settled deposits alone", async () => {
     const { store, userId } = await setup();
-    const saved = await store.create(swap(userId));
+    await store.create(intent(userId));
+    await store.settle("0xreq", { status: "success" });
 
-    const settled = await store.settleById(userId, saved.id, {
-      status: "success",
-      inTxHash: "sig",
-      outTxHash: "sig",
-    });
-
-    expect(settled).toMatchObject({ status: "success", outTxHash: "sig" });
+    expect(await store.unsettled(future(), 10)).toEqual([]);
   });
 
-  it("is idempotent, because a client may retry a confirm it already made", async () => {
+  it("includes a submitted deposit, which is the case it exists for", async () => {
     const { store, userId } = await setup();
-    const saved = await store.create(swap(userId));
+    const saved = await store.create(intent(userId));
+    await store.markSubmitted(userId, saved.id, { inTxHash: "0x1" });
 
-    await store.settleById(userId, saved.id, { status: "success", outTxHash: "sig" });
-    await store.settleById(userId, saved.id, { status: "success", outTxHash: "sig" });
-
-    expect(await store.forUser(userId)).toHaveLength(1);
+    /* The browser said it executed; Relay has not confirmed. That gap is
+       exactly what the poller closes when a webhook never arrives. */
+    expect(await store.unsettled(future(), 10)).toHaveLength(1);
   });
 
-  it("will not settle another user's row", async () => {
+  it("ignores anything touched more recently than the cutoff", async () => {
+    const { store, userId } = await setup();
+    await store.create(intent(userId));
+
+    expect(await store.unsettled(new Date(Date.now() - 60_000), 10)).toEqual([]);
+  });
+
+  it("honours its limit, oldest attention first", async () => {
     const { db, store, userId } = await setup();
-    const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();
-    const saved = await store.create(swap(userId));
+    for (const id of ["0xa", "0xb", "0xc"]) await store.create(intent(userId, { relayRequestId: id }));
+    await db
+      .update(fundingIntents)
+      .set({ updatedAt: new Date("2026-01-01T00:00:00Z") })
+      .where(eq(fundingIntents.relayRequestId, "0xb"));
 
-    /* The id arrives in a request body. Scoping by user is what makes that safe. */
-    expect(await store.settleById(other!.id, saved.id, { status: "success" })).toBeNull();
-    expect((await store.byId(userId, saved.id))?.status).toBe("waiting");
-  });
+    const open = await store.unsettled(future(), 1);
 
-  it("will not read another user's row", async () => {
-    const { db, store, userId } = await setup();
-    const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();
-    const saved = await store.create(swap(userId));
-
-    expect(await store.byId(other!.id, saved.id)).toBeNull();
-  });
-
-  it("keeps two connected-wallet deposits apart", async () => {
-    const { store, userId } = await setup();
-    await store.create(swap(userId));
-    await store.create({ ...swap(userId), relayRequestId: "0xsecond" });
-
-    expect(await store.forUser(userId)).toHaveLength(2);
+    expect(open.map((r) => r.relayRequestId)).toEqual(["0xb"]);
   });
 });

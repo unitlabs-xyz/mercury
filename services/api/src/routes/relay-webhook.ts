@@ -25,16 +25,22 @@ interface WirePayload {
 }
 
 /**
- * Relay telling us a deposit moved.
+ * Relay telling us a deposit moved. The only writer of a terminal status.
  *
- * Registered outside `/v1/*`, so the auth middleware in `app.ts` does not guard
- * it — it cannot, because the caller is Relay and has no session. The signature
- * is its authentication; see `funding/verify.ts`.
+ * Registered outside `/v1/*`, so the auth middleware in `app.ts` does not
+ * guard it — it cannot, because the caller is Relay and has no session. The
+ * signature is its authentication; see `funding/verify.ts`.
  *
- * It advances the row and stops. Naming the deposit in the feed happens in the
- * wallet-events pass, not here: Relay reports `success` the moment it fills,
- * which is before `wallet-events` has seen the USDC, so there is usually no row
- * to name yet. See `funding/enrich.ts`.
+ * This is deliberately the only way a deposit becomes `success`. The browser
+ * reports what it executed through `/v1/money/fund/submitted`, and that cannot
+ * set a terminal status — the hash it holds proves a transaction landed, not
+ * that it was this deposit, and on an EVM origin it proves only leg one of two.
+ * A deposit record a client can write success into is not a record.
+ *
+ * It settles the row and stops. Naming the deposit in the feed happens in the
+ * wallet-events pass: Relay reports `success` the moment it fills, which is
+ * before `wallet-events` has seen the USDC, so there is usually no row to name
+ * yet. See `funding/enrich.ts`.
  */
 export function relayWebhookRoutes(deps: RelayWebhookDeps): Hono {
   const app = new Hono();
@@ -67,32 +73,36 @@ export function relayWebhookRoutes(deps: RelayWebhookDeps): Hono {
 
     const data = payload.data;
     /*
-     * Matched on the deposit address, never on `requestId`. Relay regenerates
-     * the quote on over- or underpayment and the fill lands under a new id
-     * while the one we minted stays `waiting` forever — a tracker keyed on our
-     * id reports a landed deposit as pending for all time.
+     * Matched on the request id, which is ours: we minted it, stored it, and
+     * handed it to nobody but the browser that executed it.
+     *
+     * It could not be the key while deposit addresses existed — Relay
+     * regenerates the quote on over- or underpayment, and the fill then lands
+     * under a new id while the one we minted stays `waiting` for ever. That
+     * cannot happen here: the amount is fixed by a signature before Relay
+     * sees it, so there is nothing to regenerate. Dropping deposit addresses
+     * is what made this the right key.
      */
-    const address = data?.depositAddress?.address;
+    const requestId = data?.requestId;
     const status = data?.status;
-    if (address === undefined || status === undefined) {
-      return c.json({ ok: true, ignored: "no deposit address or status" });
+    if (requestId === undefined || status === undefined) {
+      return c.json({ ok: true, ignored: "no request id or status" });
     }
 
-    const advanced = await deps.store.advance(address, {
+    const settled = await deps.store.settle(requestId, {
       status,
-      ...(data?.depositAddress?.depositTxHash ? { inTxHash: data.depositAddress.depositTxHash } : {}),
+      ...(data?.inTxHashes?.[0] === undefined ? {} : { inTxHash: data.inTxHashes[0] }),
       ...(data?.txHashes?.[0] === undefined ? {} : { outTxHash: data.txHashes[0] }),
       /* "N/A" is Relay's way of saying there is no reason, not a reason. */
       ...(data?.failReason === undefined || data.failReason === "N/A" ? {} : { failReason: data.failReason }),
-      ...(data?.requestId === undefined ? {} : { relayRequestId: data.requestId }),
     });
 
     /*
-     * 200 for an address we do not know. A 4xx would have Relay retry forever
-     * for a deposit that was never ours — another app's webhook pointed at us,
-     * or a row we have since deleted.
+     * 200 for a request id we do not know. A 4xx would have Relay retry for
+     * ever over a deposit that was never ours — another app's webhook pointed
+     * at us, or a row we have since deleted.
      */
-    if (advanced === null) return c.json({ ok: true, ignored: "unknown deposit address" });
+    if (settled === null) return c.json({ ok: true, ignored: "unknown request id" });
 
     return c.json({ ok: true, status });
   });
