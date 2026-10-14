@@ -1,14 +1,20 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useId, useState, type ReactNode } from "react";
+import { lazy, Suspense, useId, useState, type ReactNode } from "react";
 import { EASE } from "../motion/config";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { StatusChip } from "../ui/ds";
 import { ChevronDown } from "../ui/icons";
 import { DepositAddress } from "./Receive";
 import { FundFromWallet } from "./money/FundFromWallet";
-import { FundFromChain } from "./money/FundFromChain";
 import { useFundingWalletAvailable } from "../auth/embedded";
 import { useFundSources } from "../api/fund-sources";
+
+/*
+ * AppKit, its two adapters and a WalletConnect client, behind the one route
+ * that needs them. Eager, they were 1,250 kB of first load for every visitor
+ * — see money/FundFromChainWithWallet.tsx for the measurement.
+ */
+const FundFromChainWithWallet = lazy(() => import("./money/FundFromChainWithWallet"));
 
 type Method = {
   key: string;
@@ -288,7 +294,9 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
 
         {chosen === "networks" && (
           <div className="mt-6">
-            <FundFromChain />
+            <Suspense fallback={<p className="py-6 text-center text-[13px] text-ds-muted">Loading…</p>}>
+              <FundFromChainWithWallet />
+            </Suspense>
           </div>
         )}
 
