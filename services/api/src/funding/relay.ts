@@ -76,18 +76,43 @@ export interface SwapQuoteInput {
   readonly amountRaw: string;
 }
 
-export interface SwapQuote {
+/** What a quote is worth, whichever VM executes it. */
+export interface QuoteDetails {
   readonly requestId: string;
-  /** Solana only. Composed into one transaction the funder signs. */
-  readonly instructions: readonly RelayWireInstruction[];
-  readonly lookupTables: readonly string[];
   readonly inFormatted: string;
   readonly outRaw: string;
   readonly outFormatted: string;
   /** Signed percentage, as Relay reports it. Negative is a loss to the user. */
   readonly impactPct: string | null;
-  readonly vmType: "svm";
 }
+
+/**
+ * A quote, in the shape its own VM can execute.
+ *
+ * Solana arrives as instructions this server composes into one transaction,
+ * because it can: the funder signs a message we built, so `recipient` is ours
+ * and not the page's.
+ *
+ * An EVM quote arrives as calldata against Relay's own contracts, which this
+ * server cannot compose and has no reason to — the destination is already
+ * encoded in those bytes by the party that will honour it. So the quote passes
+ * through verbatim for the browser to run through Relay's `execute()`. A client
+ * that substituted its own quote would be funding its own account with its own
+ * money, and the intent we recorded would simply never complete.
+ */
+export type FundQuote =
+  | {
+      readonly kind: "svm";
+      readonly details: QuoteDetails;
+      readonly instructions: readonly RelayWireInstruction[];
+      readonly lookupTables: readonly string[];
+    }
+  | {
+      readonly kind: "evm";
+      readonly details: QuoteDetails;
+      /** Relay's own response, unread and unmodified, for `execute()`. */
+      readonly quote: unknown;
+    };
 
 export interface RelayClient {
   chains(): Promise<readonly RelaySource[]>;
@@ -95,13 +120,10 @@ export interface RelayClient {
   /**
    * An executable quote for a wallet somebody has connected.
    *
-   * Solana origin only, and the refusal is explicit rather than a surprise
-   * further down: Relay answers an EVM origin with calldata and a Bitcoin one
-   * with a PSBT, neither of which this server can compose or submit. Those
-   * need a wallet stack in the browser, which is a later phase; until then
-   * they go through a deposit address, which needs no wallet at all.
+   * Solana and EVM. A Bitcoin origin would come back as a PSBT and is not
+   * offered — `/v1/money/fund/sources` does not report it.
    */
-  swapQuote(input: SwapQuoteInput): Promise<SwapQuote>;
+  fundQuote(input: SwapQuoteInput): Promise<FundQuote>;
   status(requestId: string): Promise<RelayStatus | null>;
 }
 
@@ -216,7 +238,7 @@ export const createRelayClient = (config: {
       };
     },
 
-    async swapQuote(input) {
+    async fundQuote(input) {
       const body = (await call("/quote/v2", {
         method: "POST",
         body: JSON.stringify({
@@ -228,11 +250,19 @@ export const createRelayClient = (config: {
           destinationCurrency: SOLANA_USDC,
           amount: input.amountRaw,
           tradeType: "EXACT_INPUT",
+          /*
+           * The sender's own wallet, which is the whole reason the treasury
+           * went away. A refund only has to reach an address somebody holds
+           * the key for, and when every deposit comes from a connected wallet
+           * that address is the one that just signed — correct by
+           * construction, and in the right format for its own chain because
+           * that is the chain they connected on.
+           */
+          refundTo: input.user,
         }),
       })) as {
         readonly requestId?: string;
         readonly steps?: readonly {
-          readonly id?: string;
           readonly items?: readonly {
             readonly data?: {
               readonly instructions?: readonly RelayWireInstruction[];
@@ -247,27 +277,30 @@ export const createRelayClient = (config: {
         };
       };
 
-      const data = body.steps?.flatMap((step) => step.items ?? []).find((it) => it.data?.instructions);
-      const instructions = data?.data?.instructions;
-      /*
-       * No instructions means Relay answered in another VM's idiom — calldata
-       * for an EVM origin, a PSBT for Bitcoin. Refusing here keeps the failure
-       * legible; composing it would produce a transaction with nothing in it.
-       */
-      if (body.requestId === undefined || instructions === undefined || instructions.length === 0) {
-        throw new Error("relay returned no Solana instructions for this route");
-      }
+      if (body.requestId === undefined) throw new Error("relay returned no quote for this route");
 
-      return {
+      const details: QuoteDetails = {
         requestId: body.requestId,
-        instructions,
-        lookupTables: data?.data?.addressLookupTableAddresses ?? [],
         inFormatted: body.details?.currencyIn?.amountFormatted ?? input.amountRaw,
         outRaw: body.details?.currencyOut?.amount ?? "0",
         outFormatted: body.details?.currencyOut?.amountFormatted ?? "0",
         impactPct: body.details?.totalImpact?.percent ?? null,
-        vmType: "svm",
       };
+
+      /* Instructions mean a Solana origin, whatever the caller believed. Read
+         off the answer rather than the request, because Relay decides. */
+      const svm = body.steps?.flatMap((step) => step.items ?? []).find((it) => it.data?.instructions);
+      const instructions = svm?.data?.instructions;
+      if (instructions !== undefined && instructions.length > 0) {
+        return {
+          kind: "svm",
+          details,
+          instructions,
+          lookupTables: svm?.data?.addressLookupTableAddresses ?? [],
+        };
+      }
+
+      return { kind: "evm", details, quote: body };
     },
 
     async status(requestId) {

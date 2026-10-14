@@ -90,7 +90,13 @@ export function fundRoutes(deps: FundDeps): Hono {
   const sources = async (): Promise<readonly RelaySource[]> => {
     const now = Date.now();
     if (cached !== null && now - cached.at < CHAINS_TTL_MS) return cached.sources;
-    const fresh = await deps.relay.chains();
+    /*
+     * Bitcoin is left out. Relay will take a BTC deposit, but only to an
+     * address — a connected-wallet deposit would come back as a PSBT, and this
+     * app signs none. Offering a row that cannot be taken is worse than not
+     * offering it.
+     */
+    const fresh = (await deps.relay.chains()).filter((c) => c.vmType !== "bvm");
     cached = { at: now, sources: fresh };
     return fresh;
   };
@@ -230,9 +236,6 @@ export function fundRoutes(deps: FundDeps): Hono {
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
 
     const solana = deps.solana;
-    if (solana === undefined) {
-      return c.json(fail("fund_unavailable", "Paying from a connected wallet is unavailable."), 503);
-    }
 
     const parsed = SwapBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", "Pick a token and an amount."), 400);
@@ -250,10 +253,6 @@ export function fundRoutes(deps: FundDeps): Hono {
     if (chain === undefined || currency === undefined) {
       return c.json(fail("validation_failed", "We cannot accept that token."), 400);
     }
-    if (chain.vmType !== "svm") {
-      return c.json(fail("validation_failed", "Use a deposit address for this chain."), 400);
-    }
-
     /*
      * `from` comes from the request body, and that is safe for one reason
      * worth stating: it only decides whose tokens the transaction would spend,
@@ -263,15 +262,24 @@ export function fundRoutes(deps: FundDeps): Hono {
      * signed for — so there is no version of this that delivers the money
      * anywhere but the caller's own account.
      */
-    let from: Address;
-    try {
-      from = toAddress(parsed.data.from);
-    } catch {
-      return c.json(fail("validation_failed", "That is not a Solana wallet address."), 400);
+    const from = parsed.data.from.trim();
+    const wellFormed =
+      chain.vmType === "svm"
+        ? (() => {
+            try {
+              toAddress(from);
+              return true;
+            } catch {
+              return false;
+            }
+          })()
+        : /^0x[0-9a-fA-F]{40}$/.test(from);
+    if (!wellFormed) {
+      return c.json(fail("validation_failed", "That is not a wallet address for this chain."), 400);
     }
 
     try {
-      const quote = await deps.relay.swapQuote({
+      const quote = await deps.relay.fundQuote({
         user: from,
         recipient: wallet,
         originChainId: chain.chainId,
@@ -279,6 +287,39 @@ export function fundRoutes(deps: FundDeps): Hono {
         amountRaw: parsed.data.amountRaw,
       });
 
+      const record = async () =>
+        deps.store.create({
+          userId: identity.userId,
+          relayRequestId: quote.details.requestId,
+          originChainId: chain.chainId,
+          originCurrency: currency.address,
+          originChainName: chain.name,
+          originCurrencySymbol: currency.symbol,
+          recipientAddress: wallet,
+          quotedOutRaw: quote.details.outRaw,
+        });
+
+      const priced = {
+        in: { amountFormatted: quote.details.inFormatted, symbol: currency.symbol },
+        out: { amountFormatted: quote.details.outFormatted, symbol: "USDC" },
+        impactPct: quote.details.impactPct,
+      };
+
+      /*
+       * An EVM quote passes through for the browser to run through Relay's
+       * `execute()`: the steps are calldata against Relay's own contracts,
+       * which this server cannot compose and has no reason to — the
+       * destination is already in those bytes.
+       */
+      if (quote.kind === "evm") {
+        const intent = await record();
+        return c.json({ intentId: intent.id, kind: "evm", quote: quote.quote, ...priced });
+      }
+
+      /* Solana is composed here, so `recipient` is ours and not the page's. */
+      if (solana === undefined) {
+        return c.json(fail("fund_unavailable", "Solana deposits are unavailable."), 503);
+      }
       const [lifetime, tables] = await Promise.all([
         solana.blockhash(),
         solana.lookups.read(quote.lookupTables as readonly Address[]),
@@ -293,30 +334,14 @@ export function fundRoutes(deps: FundDeps): Hono {
       }
 
       const { wire } = composeFundSwap({
-        payer: from,
+        payer: from as Address,
         instructions: quote.instructions,
         lookupTables: tables,
         ...lifetime,
       });
 
-      const intent = await deps.store.create({
-        userId: identity.userId,
-        relayRequestId: quote.requestId,
-        originChainId: chain.chainId,
-        originCurrency: currency.address,
-        originChainName: chain.name,
-        originCurrencySymbol: currency.symbol,
-        recipientAddress: wallet,
-        quotedOutRaw: quote.outRaw,
-      });
-
-      return c.json({
-        intentId: intent.id,
-        transaction: wire,
-        in: { amountFormatted: quote.inFormatted, symbol: currency.symbol },
-        out: { amountFormatted: quote.outFormatted, symbol: "USDC" },
-        impactPct: quote.impactPct,
-      });
+      const intent = await record();
+      return c.json({ intentId: intent.id, kind: "svm", transaction: wire, ...priced });
     } catch (err) {
       console.error("fund: could not build a wallet swap", err);
       return c.json(fail("fund_unavailable", "Could not prepare that deposit. Please try again."), 503);

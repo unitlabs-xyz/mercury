@@ -30,7 +30,7 @@ const fund = {
   relay: {
     chains: vi.fn().mockResolvedValue([]),
     depositAddressQuote: vi.fn(),
-    swapQuote: vi.fn(),
+    fundQuote: vi.fn(),
     status: vi.fn(),
   },
   store: {
