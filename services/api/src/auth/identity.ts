@@ -69,13 +69,20 @@ export const resolveIdentity = async (
   token: VerifiedToken,
   identityToken: string | null,
 ): Promise<Identity> => {
-  const existing = await db.query.users.findFirst({
-    where: eq(users.privyUserId, token.privyUserId),
-  });
+  const find = () => db.query.users.findFirst({ where: eq(users.privyUserId, token.privyUserId) });
 
+  /*
+   * A first visit sends several requests at once, and each finds no user. One
+   * insert wins; the rest meet the unique index and get nothing back. That is
+   * the same person, created a moment ago by a request beside this one, so
+   * the answer is to read it rather than to fail.
+   */
   const user =
-    existing ??
-    (await db.insert(users).values({ privyUserId: token.privyUserId }).onConflictDoNothing().returning())[0];
+    (await find()) ??
+    (
+      await db.insert(users).values({ privyUserId: token.privyUserId }).onConflictDoNothing().returning()
+    )[0] ??
+    (await find());
 
   if (!user) throw new Error(`could not create or find user for ${token.privyUserId}`);
 
