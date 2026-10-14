@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { useAppKitProvider } from "@reown/appkit/react";
 import { useBalance, useReadContract, useWalletClient } from "wagmi";
 import { erc20Abi } from "viem";
@@ -51,6 +51,9 @@ const relayChainsReady = (): Promise<unknown> => {
   return chains;
 };
 
+/** A refetch for a VM with nothing to read. Module scope, so its identity is fixed. */
+const noop = () => {};
+
 /** Relay's address for a chain's own coin, on every EVM chain it lists. */
 export const NATIVE_EVM = "0x0000000000000000000000000000000000000000";
 
@@ -74,7 +77,11 @@ export const useFunderBalance = (
   owner: string | undefined,
   mint: string | undefined,
   vmType: string,
-): { readonly data: bigint | undefined; readonly isPending: boolean } => {
+): {
+  readonly data: bigint | undefined;
+  readonly isPending: boolean;
+  readonly refetch: () => void;
+} => {
   const svm = vmType === "svm";
   const evm = vmType === "evm";
 
@@ -109,7 +116,22 @@ export const useFunderBalance = (
     },
   });
 
-  if (svm) return { data: solana.data, isPending: solana.isPending };
+  /*
+   * Stable identities, because a caller refetches from an effect.
+   *
+   * A fresh arrow per render makes that effect's dependency change on every
+   * render, and an effect that refetches on every render refetches forever.
+   * Hooks cannot be conditional, so all three are declared and the branch
+   * below picks one.
+   */
+  const { refetch: solanaRefetch } = solana;
+  const { refetch: nativeRefetch } = native;
+  const { refetch: erc20Refetch } = erc20;
+  const refetchSolana = useCallback(() => void solanaRefetch(), [solanaRefetch]);
+  const refetchNative = useCallback(() => void nativeRefetch(), [nativeRefetch]);
+  const refetchErc20 = useCallback(() => void erc20Refetch(), [erc20Refetch]);
+
+  if (svm) return { data: solana.data, isPending: solana.isPending, refetch: refetchSolana };
   if (evm) {
     const read = mint === NATIVE_EVM ? native : erc20;
     return {
@@ -118,9 +140,20 @@ export const useFunderBalance = (
          leave "Reading your wallet…" on screen forever. Only pending while
          actually in flight. */
       isPending: read.isLoading,
+      /*
+       * Its own refetch, rather than a query key for somebody else to
+       * invalidate.
+       *
+       * The mutation used to clear `["funder-token"]` and call it done — our
+       * Solana key, which wagmi's reads know nothing about. So after an EVM
+       * deposit the balance on screen was the balance from before it, and the
+       * only way to the truth was a reload. Handing back the refetch means
+       * nothing has to know what wagmi calls its keys.
+       */
+      refetch: mint === NATIVE_EVM ? refetchNative : refetchErc20,
     };
   }
-  return { data: undefined, isPending: false };
+  return { data: undefined, isPending: false, refetch: noop };
 };
 
 /**
@@ -131,12 +164,17 @@ export const useFunderBalance = (
  * other half of the revert. Only meaningful on EVM — a Solana fee comes out
  * of the SOL balance the panel already keeps back.
  */
-export const useFunderGas = (owner: string | undefined, vmType: string): bigint | undefined => {
-  const { data } = useBalance({
+export const useFunderGas = (
+  owner: string | undefined,
+  vmType: string,
+): { readonly data: bigint | undefined; readonly refetch: () => void } => {
+  const { data, refetch } = useBalance({
     address: owner as `0x${string}` | undefined,
     query: { enabled: vmType === "evm" && owner !== undefined, staleTime: 30_000 },
   });
-  return vmType === "evm" ? data?.value : undefined;
+  /* Stable, for the same reason as the balance above. */
+  const stable = useCallback(() => void refetch(), [refetch]);
+  return { data: vmType === "evm" ? data?.value : undefined, refetch: stable };
 };
 
 interface SwapBuild {

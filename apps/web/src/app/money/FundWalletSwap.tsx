@@ -65,6 +65,24 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
   }, [token.address, funder?.address, resetAction]);
 
   /*
+   * Read the wallet again once the deposit has gone.
+   *
+   * The money has left by then and the number beside the field is the number
+   * from before it, which reads as the deposit not having happened. The
+   * mutation cannot do this itself: it clears its own query keys, and wagmi's
+   * reads are keyed by wagmi — so the refetch has to be asked for by whoever
+   * holds both, which is here.
+   */
+  const refetchBalance = balance.refetch;
+  const refetchGas = gas.refetch;
+  const settled = action.isSuccess;
+  useEffect(() => {
+    if (!settled) return;
+    refetchBalance();
+    refetchGas();
+  }, [settled, refetchBalance, refetchGas]);
+
+  /*
    * `undefined` is a balance nobody could read, and it is not zero. Treating
    * the two alike is what showed "Balance: 0" against a wallet holding 5.69.
    */
@@ -102,7 +120,7 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
 
   /* Read, and actually zero — `undefined` is a balance nobody could read and
      must not disable anything. */
-  const noGas = gas === 0n;
+  const noGas = gas.data === 0n;
   const ready = raw !== null && raw > 0n && !overdrawn && !noGas && action.walletReady;
 
   const submit = (e: FormEvent) => {
