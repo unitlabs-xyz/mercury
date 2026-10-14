@@ -17,3 +17,9 @@ services/api/src/baskets/glider/generated.d.ts
 # Written by `expo prebuild`, and it says so in its own second line. Formatting
 # it makes the next prebuild a failing check.
 apps/mobile/expo-env.d.ts
+
+# Git worktrees the desktop app creates inside the repo. Another checkout of
+# this same project, on another branch — formatting it from here would rewrite
+# somebody else's working tree, and checking it fails this one over their
+# unfinished work.
+.claude/worktrees

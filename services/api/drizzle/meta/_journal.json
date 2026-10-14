@@ -131,15 +131,29 @@
     {
       "idx": 18,
       "version": "7",
-      "when": 1791888829595,
-      "tag": "0018_basket_asset",
+      "when": 1791888747913,
+      "tag": "0018_funding_intent",
       "breakpoints": true
     },
     {
       "idx": 19,
       "version": "7",
-      "when": 1791891622775,
-      "tag": "0019_custom_basket",
+      "when": 1791967573903,
+      "tag": "0019_price_bar",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791969159568,
+      "tag": "0020_funding_intent_wallet_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791980711030,
+      "tag": "0021_custom_baskets",
       "breakpoints": true
     }
   ]

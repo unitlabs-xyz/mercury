@@ -127,7 +127,7 @@ export const Portfolio = () => {
 
       <div className="flex flex-col gap-4 md:gap-6">
         {/* 2 — the account, and what you can do with it. */}
-        <AccountHeader m={m} dash={dash.data} apr={apr} />
+        <AccountHeader m={m} dash={dash.data} apr={apr} failed={failed} />
 
         <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
           {/* 3 — what you own, then how it has moved and where it sits. */}

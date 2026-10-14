@@ -2,8 +2,8 @@
 
 # The Mercury API, for Coolify.
 #
-# BUILD CONTEXT IS THE REPO ROOT, not this directory. The API imports five
-# workspace packages (@mercury/chain, core, market, sdk, types) and every one
+# BUILD CONTEXT IS THE REPO ROOT, not this directory. The API imports
+# workspace packages (@mercury/chain, core, market, types) and every one
 # of them exports raw .ts — nothing in this repo compiles — so the image has
 # to carry the workspace and run TypeScript through tsx.
 #
@@ -27,11 +27,14 @@ RUN corepack enable
 WORKDIR /app
 
 # Manifests before source, so editing a handler does not reinstall the tree.
+#
+# Every workspace package the API reaches needs its line here. One that is
+# missing is linked without its own dependencies: the image builds, and the
+# container dies on its first import. src/dockerfile.test.ts checks the list.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY packages/chain/package.json packages/chain/
 COPY packages/core/package.json packages/core/
 COPY packages/market/package.json packages/market/
-COPY packages/sdk/package.json packages/sdk/
 COPY packages/types/package.json packages/types/
 COPY tooling/tsconfig/package.json tooling/tsconfig/
 COPY services/api/package.json services/api/

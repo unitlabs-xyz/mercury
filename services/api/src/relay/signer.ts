@@ -1,7 +1,7 @@
 import {
   createKeyPairSignerFromBytes,
-  createKeyPairSignerFromPrivateKeyBytes,
   getBase58Encoder,
+  createKeyPairSignerFromPrivateKeyBytes,
   getBase64Decoder,
   getBase64Encoder,
   getTransactionDecoder,
@@ -31,6 +31,11 @@ export interface RelaySigner {
  * bytes as base58; some tools hand out the 32-byte seed alone. All three are
  * accepted because the alternative is a deploy that fails on a format nobody
  * documented, with a stack trace instead of a sentence.
+ *
+ * It lived in `@mercury/keys` for a day, while `services/treasury` held Solana
+ * keys of its own and two copies of this would have drifted. The treasury is
+ * gone — a refund now goes back to the wallet that sent the deposit, so
+ * nothing but the relayer holds a key — and so this comes home.
  */
 export const parseSecretKey = (raw: string): Uint8Array => {
   const text = raw.trim();

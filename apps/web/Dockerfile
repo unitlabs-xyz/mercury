@@ -51,8 +51,13 @@ RUN test -n "$VITE_API_URL" \
 RUN test -n "$VITE_PRIVY_APP_ID" \
   || (echo "ERROR: VITE_PRIVY_APP_ID must be set as a BUILD argument (Coolify: tick 'Build Variable'). Unset, the app throws on first render." && exit 1)
 
+# A warning rather than a failure, because there is now a default that works:
+# the app falls back to a public endpoint that serves browsers. Shared, rate
+# limited, and no indexed methods — a floor under a misconfigured deployment,
+# not something to run on. Use a key restricted by domain: this ships to every
+# visitor.
 RUN test -n "$VITE_SOLANA_RPC_URL" \
-  || (echo "ERROR: VITE_SOLANA_RPC_URL must be set as a BUILD argument (Coolify: tick 'Build Variable'). Privy signs through it, and Solana's public RPC returns 403 to browsers, so there is no default that works. Use a key restricted by domain: this ships to every visitor." && exit 1)
+  || echo "WARNING: VITE_SOLANA_RPC_URL is not set as a BUILD argument (Coolify: tick 'Build Variable'). Falling back to the shared public endpoint, which is rate limited."
 
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_PRIVY_APP_ID=$VITE_PRIVY_APP_ID

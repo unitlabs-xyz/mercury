@@ -7,6 +7,7 @@ import { Alert, Check } from "../../ui/icons";
 import { borrowChoices, pct, pickRow, planBorrow, usd, type BorrowRow, type BorrowTab } from "@mercury/view";
 import { Mark } from "../invest/shared";
 import { LoanMeter, loanNow, loanShape } from "../money/LoanMeter";
+import { Skeleton, SkeletonRows } from "../portfolio/ui";
 import { Fact, RailLine } from "../stock/Panels";
 import { chip } from "../stock/Ticket";
 
@@ -103,9 +104,16 @@ export const BorrowSheet = ({
 
       <div className="px-6 pt-1 pb-6">
         {!b ? (
-          <p className="mt-5 text-[14px] text-ds-muted">
-            {borrow.isError ? "Could not reach Kamino." : "Loading your position…"}
-          </p>
+          borrow.isError ? (
+            <p className="mt-5 text-[14px] text-ds-muted">Could not reach Kamino.</p>
+          ) : (
+            /* A sentence where every other sheet in the app draws the shape of
+               what is coming. The meter, then the collateral rows under it. */
+            <div className="mt-5">
+              <Skeleton className="h-2 w-full rounded-full" />
+              <SkeletonRows count={3} figure="w-16" />
+            </div>
+          )
         ) : action.isSuccess ? (
           <div className="mt-8 flex flex-col items-center text-center">
             <span className="grid size-11 place-items-center rounded-full bg-ds-up-chip text-ds-up">

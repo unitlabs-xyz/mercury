@@ -1,10 +1,17 @@
 import { AnimatePresence, motion } from "motion/react";
-import { useId, useState, type ReactNode } from "react";
+import { lazy, Suspense, useId, useState, type ReactNode } from "react";
 import { EASE } from "../motion/config";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { StatusChip } from "../ui/ds";
 import { ChevronDown } from "../ui/icons";
 import { DepositAddress } from "./Receive";
+
+/*
+ * AppKit, its two adapters and a WalletConnect client, behind the one route
+ * that needs them. Eager, they were 1,250 kB of first load for every visitor
+ * — see money/FundFromChainWithWallet.tsx for the measurement.
+ */
+const FundFromChainWithWallet = lazy(() => import("./money/FundFromChainWithWallet"));
 
 type Method = {
   key: string;
@@ -140,6 +147,14 @@ const SolanaGlyph = () => {
   );
 };
 
+/** A wallet, in the line-icon set the other methods use. */
+const WalletGlyph = () => (
+  <Glyph>
+    <rect x="2" y="4" width="12" height="8.5" rx="1.5" />
+    <path d="M11 8.25h1.5" />
+  </Glyph>
+);
+
 const METHODS: readonly Method[] = [
   {
     key: "solana",
@@ -178,18 +193,11 @@ const METHODS: readonly Method[] = [
   },
   {
     key: "networks",
-    title: "USDC on another network",
-    sub: "Ethereum, Base or Arbitrum, moved to Solana for you",
+    title: "From your wallet",
+    sub: "Any token, any chain — swapped to USDC for you",
     figure: "Minutes",
-    note: "Coming soon",
-    soon: true,
-    icon: (
-      <Glyph>
-        <circle cx="5" cy="8" r="2.5" />
-        <circle cx="11" cy="8" r="2.5" />
-        <path d="M7.5 8h1" />
-      </Glyph>
-    ),
+    note: "Network fee",
+    icon: <WalletGlyph />,
   },
 ];
 
@@ -203,7 +211,15 @@ const SOON = METHODS.filter((m) => m.soon);
  * them, the details of the chosen way (for Solana, the address and its code).
  */
 export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
-  const [pick, setPick] = useState("solana");
+  const [pick, setPick] = useState("networks");
+  /*
+   * Every live method is offered. Nothing here is gated on a wallet being
+   * installed any more: the wallet method opens a panel that offers to connect
+   * one, including over WalletConnect from a phone, so there is no browser in
+   * which the row leads nowhere.
+   */
+  const live = LIVE;
+  const chosen = pick;
   return (
     <SidePanel open={open} onClose={onClose} labelledBy="add-cash-heading">
       <PanelHeader
@@ -218,8 +234,8 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
           aria-label="How to add cash"
           className="flex flex-col gap-1 rounded-lg bg-ds-panel p-1"
         >
-          {LIVE.map((m) => {
-            const on = pick === m.key;
+          {live.map((m) => {
+            const on = chosen === m.key;
             return (
               <button
                 key={m.key}
@@ -239,7 +255,15 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
           <OtherMethods methods={SOON} />
         </div>
 
-        {pick === "solana" && (
+        {chosen === "networks" && (
+          <div className="mt-6">
+            <Suspense fallback={<p className="py-6 text-center text-[13px] text-ds-muted">Loading…</p>}>
+              <FundFromChainWithWallet />
+            </Suspense>
+          </div>
+        )}
+
+        {chosen === "solana" && (
           <div className="mt-6">
             {/* Not "Send USDC to this address": the note directly beneath it
                 names the token and the network, and says what happens to

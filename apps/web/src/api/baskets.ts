@@ -2,7 +2,8 @@ import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
-import { useSignMessage, useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
+import { useSignMessage, useSignTransaction } from "@privy-io/react-auth/solana";
+import { useEmbeddedWallet } from "../auth/embedded";
 import { getBase58Decoder } from "@solana/kit";
 import type { BasketDraft } from "@mercury/core";
 import type { PickableBasketAsset } from "@mercury/types";
@@ -103,8 +104,7 @@ export const useBaskets = () =>
 export const useOwnedBasketPortfolios = () => {
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
-  const { wallets } = useWallets();
-  const walletAddress = wallets[0]?.address;
+  const { address: walletAddress } = useEmbeddedWallet();
   return useQuery({
     queryKey: ["api", "basket-portfolios", user?.id, walletAddress],
     queryFn: async () =>
@@ -150,8 +150,7 @@ export const basketEnrollmentEnabled = (ready: boolean, authenticated: boolean, 
 export const useBasketEnrollment = (slug: string) => {
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
-  const { wallets } = useWallets();
-  const walletAddress = wallets[0]?.address;
+  const { address: walletAddress } = useEmbeddedWallet();
   return useQuery({
     queryKey: ["api", "basket-enrollment", slug, user?.id, walletAddress],
     queryFn: async () =>
@@ -170,9 +169,9 @@ export const useBasketEnrollment = (slug: string) => {
 export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
-  const { wallets } = useWallets();
+  const { address } = useEmbeddedWallet();
   return useQuery({
-    queryKey: ["api", "basket-portfolio", slug, user?.id, wallets[0]?.address],
+    queryKey: ["api", "basket-portfolio", slug, user?.id, address],
     queryFn: async () =>
       (
         await apiFetch<{ portfolio: BasketPortfolioSnapshot | null }>(
@@ -182,7 +181,7 @@ export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
     enabled:
       enrolled &&
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
-      (SAMPLE_NO_LOGIN || Boolean(wallets[0]?.address)),
+      (SAMPLE_NO_LOGIN || Boolean(address)),
     retry: false,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -196,13 +195,13 @@ type Viewer = { signedIn: boolean; userId: string | undefined; address: string |
 const useViewer = (): Viewer => {
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
-  const { wallets } = useWallets();
+  const { address } = useEmbeddedWallet();
   return {
     signedIn:
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
-      (SAMPLE_NO_LOGIN || Boolean(wallets[0]?.address)),
+      (SAMPLE_NO_LOGIN || Boolean(address)),
     userId: user?.id,
-    address: wallets[0]?.address,
+    address,
   };
 };
 
@@ -254,7 +253,7 @@ export const useBasketRebalanceAction = (slug: string) => {
 /** Prepare first so the review sheet shows the exact assets and recipient before signing. */
 export const useBasketExitAction = (slug: string) => {
   const qc = useQueryClient();
-  const { wallets } = useWallets();
+  const { wallet } = useEmbeddedWallet();
   const { signMessage } = useSignMessage();
   const path = `${basketPath(slug)}/exit`;
   const prepare = useMutation({
@@ -266,7 +265,6 @@ export const useBasketExitAction = (slug: string) => {
   });
   const submit = useMutation({
     mutationFn: async (prepared: PreparedBasketExit) => {
-      const wallet = wallets[0];
       if (!wallet) throw new Error("Your Solana wallet is unavailable.");
       if (
         prepared.recipientAccountId !== `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${wallet.address}` ||
@@ -288,21 +286,21 @@ export const useBasketExitAction = (slug: string) => {
     },
     onSettled: () => refreshAfterChain(qc),
   });
-  return { prepare, submit, walletReady: wallets[0] !== undefined };
+  return { prepare, submit, walletReady: wallet !== undefined };
 };
 
 export const useBasketActivity = (slug: string, enrolled: boolean) => {
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
-  const { wallets } = useWallets();
+  const { address } = useEmbeddedWallet();
   return useQuery({
-    queryKey: ["api", "basket-activity", slug, user?.id, wallets[0]?.address],
+    queryKey: ["api", "basket-activity", slug, user?.id, address],
     queryFn: async () =>
       (await apiFetch<{ activity: BasketActivity[] }>(`${basketPath(slug)}/activity`)).activity,
     enabled:
       enrolled &&
       basketEnrollmentEnabled(ready, authenticated, identityToken !== null) &&
-      (SAMPLE_NO_LOGIN || Boolean(wallets[0]?.address)),
+      (SAMPLE_NO_LOGIN || Boolean(address)),
     retry: false,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
@@ -317,12 +315,11 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
 export const useBasketEnrollmentAction = (slug: string) => {
   const qc = useQueryClient();
-  const { wallets } = useWallets();
+  const { wallet } = useEmbeddedWallet();
   const { signMessage } = useSignMessage();
   const { signTransaction } = useSignTransaction();
   const mutation = useMutation({
     mutationFn: async () => {
-      const wallet = wallets[0];
       if (!wallet) throw new Error("Your Solana wallet is still loading.");
       const path = `${basketPath(slug)}/enrollment`;
       return enrollBasket(slug, {
@@ -346,7 +343,7 @@ export const useBasketEnrollmentAction = (slug: string) => {
     },
     onSettled: () => refreshAfterChain(qc),
   });
-  return { ...mutation, walletReady: wallets[0] !== undefined };
+  return { ...mutation, walletReady: wallet !== undefined };
 };
 
 const FUNDING_KIND = "funding";
@@ -361,12 +358,11 @@ const confirmSentFunding = ({ slug, signature }: SentFunding) =>
 
 export const useBasketFundingAction = (slug: string) => {
   const qc = useQueryClient();
-  const { wallets } = useWallets();
+  const { wallet } = useEmbeddedWallet();
   const { signTransaction } = useSignTransaction();
   const [step, setStep] = useState<"preparing" | "signing" | "sending" | null>(null);
   const mutation = useMutation({
     mutationFn: async ({ amountUsd, portfolio }: { amountUsd: string; portfolio: BasketPortfolio }) => {
-      const wallet = wallets[0];
       if (!wallet) throw new Error("Your Solana wallet is still loading.");
       setStep("preparing");
       const receipt = await fundBasket(amountUsd, portfolio, {
@@ -429,7 +425,7 @@ export const useBasketFundingAction = (slug: string) => {
     ...mutation,
     data: mutation.data ?? receipt,
     step,
-    walletReady: wallets[0] !== undefined,
+    walletReady: wallet !== undefined,
     reset: () => {
       mutation.reset();
       setStep(null);

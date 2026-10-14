@@ -1,5 +1,5 @@
 {
-  "id": "153ad662-9ac8-4451-8d6a-da29a25996fe",
+  "id": "6af11786-0655-4c13-ade3-08fdf6340826",
   "prevId": "10c144fe-176c-4ded-ac8f-50b386f78080",
   "version": "7",
   "dialect": "postgresql",
@@ -470,48 +470,105 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.basket_asset": {
-      "name": "basket_asset",
+    "public.funding_intent": {
+      "name": "funding_intent",
       "schema": "",
       "columns": {
-        "mint": {
-          "name": "mint",
-          "type": "text",
+        "id": {
+          "name": "id",
+          "type": "uuid",
           "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
           "notNull": true
         },
-        "ticker": {
-          "name": "ticker",
+        "relay_request_id": {
+          "name": "relay_request_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
+        "deposit_address": {
+          "name": "deposit_address",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "symbol": {
-          "name": "symbol",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "decimals": {
-          "name": "decimals",
+        "origin_chain_id": {
+          "name": "origin_chain_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "logo_url": {
-          "name": "logo_url",
+        "origin_currency": {
+          "name": "origin_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origin_chain_name": {
+          "name": "origin_chain_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origin_currency_symbol": {
+          "name": "origin_currency_symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipient_address": {
+          "name": "recipient_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quoted_out_raw": {
+          "name": "quoted_out_raw",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "synced_at": {
-          "name": "synced_at",
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'waiting'"
+        },
+        "in_tx_hash": {
+          "name": "in_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "out_tx_hash": {
+          "name": "out_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fail_reason": {
+          "name": "fail_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -519,11 +576,17 @@
         }
       },
       "indexes": {
-        "basket_asset_ticker_idx": {
-          "name": "basket_asset_ticker_idx",
+        "funding_intent_user_created_idx": {
+          "name": "funding_intent_user_created_idx",
           "columns": [
             {
-              "expression": "ticker",
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -533,9 +596,59 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "funding_intent_deposit_address_idx": {
+          "name": "funding_intent_deposit_address_idx",
+          "columns": [
+            {
+              "expression": "deposit_address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "funding_intent_address_in_tx_idx": {
+          "name": "funding_intent_address_in_tx_idx",
+          "columns": [
+            {
+              "expression": "deposit_address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "in_tx_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "funding_intent_user_id_user_id_fk": {
+          "name": "funding_intent_user_id_user_id_fk",
+          "tableFrom": "funding_intent",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

@@ -4,6 +4,7 @@ import { ButtonLink } from "../../ui/Button";
 import { RailCard, RailFigure, RailHead } from "../../ui/ds";
 import { pct, usd } from "@mercury/view";
 import { HeaderFigure } from "../portfolio/Summary";
+import { Skeleton } from "../portfolio/ui";
 import { Fact, FigureCard } from "./Panels";
 import { useHeldAs } from "./heldAs";
 
@@ -20,7 +21,28 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
      above are xStocks only, so the Ondo part of a position is what they miss. */
   const { lendableShares, unlendableShares, unlendableUsd } = useHeldAs(ticker);
 
-  if (!signedIn || !borrow.data) return null;
+  if (!signedIn) return null;
+  /*
+   * Signed in but the terms have not arrived. Returning null meant the whole
+   * rail was missing and then appeared, shoving everything below it down the
+   * page — on the stock screen that is the panel a buyer is reading when it
+   * jumps. The card keeps its place and its heading; only the figures wait.
+   */
+  /* A request that failed is not a request still running: it has an answer,
+     and it is "no". Hidden, as it was before this card learned to wait. */
+  if (!borrow.data && borrow.isError) return null;
+  if (!borrow.data) {
+    return (
+      <RailCard label="Borrow against it">
+        <RailHead title="Borrow against it" />
+        <div className="mt-[15px] flex flex-col gap-3">
+          <Skeleton className="h-7 w-32" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/5" />
+        </div>
+      </RailCard>
+    );
+  }
   if (!row) {
     return (
       <RailCard label="Borrow against it">

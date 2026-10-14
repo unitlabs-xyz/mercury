@@ -8,8 +8,12 @@ import {
   syncConfiguredCatalog,
 } from "./deps.js";
 import { applyMigrations } from "./db/migrate.js";
+import { createRelayClient } from "./funding/relay.js";
+import { createFundingStore } from "./funding/store.js";
+import { pollUnsettledDeposits } from "./funding/poll.js";
 import { syncStocks } from "./stocks/sync.js";
 import { warmPrices } from "./prices/warm.js";
+import { RECORD_MAX_AGE_MS, prunePriceBars, recordPriceBars } from "./prices/record.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
@@ -19,6 +23,14 @@ import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
 import { keypairRelaySigner } from "./relay/signer.js";
+import { exitOnUncaught, oneLineErrors } from "./log.js";
+
+/*
+ * First, so that nothing after it, a bad config included, logs a stack trace.
+ * See `log.ts`; LOG_STACKS=1 turns both off.
+ */
+oneLineErrors();
+exitOnUncaught();
 
 const config = readConfig();
 const port = Number(process.env.PORT ?? 8787);
@@ -86,7 +98,32 @@ console.log(
     : `loan alerts: emailed from ${config.notifyFrom}`,
 );
 
-const read = buildReadDeps(auth.db, deps, config, relay);
+/*
+ * Funding from any chain, if Relay is configured.
+ *
+ * One dependency now rather than four. The treasury and its three keys are
+ * gone: a refund goes back to the wallet that sent the deposit, which is
+ * correct by construction once every deposit comes from a connected wallet,
+ * and nothing we hold has to receive one.
+ *
+ * Absent a key the routes are not mounted, `/v1/money/fund/sources` 404s, and
+ * the interface hides the method — the same way sponsorship degrades when
+ * RELAYER_SECRET_KEY is unset.
+ */
+const fund =
+  config.relayApiKey === undefined
+    ? (console.log("funding: off (RELAY_API_KEY unset); add cash from another chain is hidden"), undefined)
+    : {
+        relay: createRelayClient({ apiKey: config.relayApiKey }),
+        store: createFundingStore(auth.db),
+        minimumUsd: config.fundMinimumUsd,
+        webhookSecret: config.relayApiKey,
+      };
+if (fund !== undefined) {
+  console.log(`funding: on, minimum $${config.fundMinimumUsd}, refunds to the sending wallet`);
+}
+
+const read = buildReadDeps(auth.db, deps, config, relay, fund);
 
 /**
  * A background job, on its own clock.
@@ -122,7 +159,8 @@ const every = (name: string, ms: number, run: () => Promise<string | null>) => {
  *
  * | Job                  | Cadence | Writes                                               |
  * | -------------------- | ------- | ---------------------------------------------------- |
- * | `prices`             | 20s     | nothing — it fills the shared price board            |
+ * | `prices`             | 20s     | `price_bar`, and it fills the shared price board     |
+ * | `price-bar-prune`    | 6h      | deletes minute bars past thirty days                 |
  * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`            |
  * | `position-sync`      | 2s      | `lot`, `position`, `activity` — including dividends  |
  * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers               |
@@ -155,16 +193,33 @@ const every = (name: string, ms: number, run: () => Promise<string | null>) => {
  * One request covers it: the featured shelf is 41 mints and holdings are few.
  * A pass says nothing unless the set changed size — at this cadence a line
  * every twenty seconds would bury the jobs that matter.
+ *
+ * The same answer is recorded as `price_bar`, the only history of a price the
+ * system keeps (ADR 0016). That is why this pass names an age and waits for
+ * it, where a reader would take the stale entry: a sample is stamped with the
+ * moment it is written, so it has to have been true then. It costs no extra
+ * request — a pass at this cadence finds every entry past its window anyway.
  */
 let warmed = -1;
 every("prices", 20_000, async () => {
   const s = await warmPrices(auth.db, {
     supportedStocks: read.instruments.supportedStocks,
     prices: deps.prices,
+    ask: { maxAgeMs: RECORD_MAX_AGE_MS },
   });
+  await recordPriceBars(auth.db, s.board, new Date());
   if (s.mints === warmed) return null;
   warmed = s.mints;
-  return `${s.priced}/${s.mints} mints warm`;
+  return `${s.priced}/${s.mints} mints warm and recorded`;
+});
+
+/**
+ * Six hours, because a minute bar thirty days old is no worse at thirty days
+ * and six hours. Quiet when there was nothing to drop.
+ */
+every("price-bar-prune", 6 * 60 * 60 * 1000, async () => {
+  const dropped = await prunePriceBars(auth.db, new Date());
+  return dropped === 0 ? null : `${dropped} minute bars past thirty days dropped`;
 });
 
 /**
@@ -211,12 +266,31 @@ every("position-sync", 2_000, async () => {
  * Two streams per wallet — its own address for native SOL, its USDC account for
  * cash — so a quiet pass is four calls a minute per wallet and says nothing.
  */
+/*
+ * Relay's own verdict, pulled rather than pushed.
+ *
+ * The webhook is the fast path and this is the same authority over a second
+ * transport — so a webhook that was never enabled, or one delivery that got
+ * lost, cannot leave somebody's deposit reading `submitted` for ever with
+ * their money already spent. Only rows nothing has touched for ninety
+ * seconds, so it never races a fill that is merely in flight.
+ */
+if (fund !== undefined) {
+  const funding = fund;
+  every("funding-poll", 60_000, async () => {
+    const s = await pollUnsettledDeposits({ store: funding.store, relay: funding.relay });
+    if (s.settled === 0 && s.failed === 0) return null;
+    return `${s.settled} settled of ${s.asked} asked` + (s.failed > 0 ? `, ${s.failed} failed` : "");
+  });
+}
+
 every("wallet-events", 30_000, async () => {
   const s = await syncAllWalletEvents(auth.db, {
     history: deps.history,
     lendingProgram: KAMINO_LENDING_PROGRAM,
     ...(relay === undefined ? {} : { relayer: relay.signer.address }),
     ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
+    ...(fund === undefined ? {} : { fundingDeposits: true }),
   });
   if (s.written === 0 && s.failed === 0) return null;
   return (

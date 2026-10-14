@@ -1,6 +1,6 @@
 {
-  "id": "65d66c33-b62c-4ba5-84ae-6b8785bbd69d",
-  "prevId": "153ad662-9ac8-4451-8d6a-da29a25996fe",
+  "id": "c41c0451-eb22-41e5-9111-6cbad7cf712c",
+  "prevId": "6af11786-0655-4c13-ade3-08fdf6340826",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -470,80 +470,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.basket_asset": {
-      "name": "basket_asset",
-      "schema": "",
-      "columns": {
-        "mint": {
-          "name": "mint",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "ticker": {
-          "name": "ticker",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "symbol": {
-          "name": "symbol",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "decimals": {
-          "name": "decimals",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "logo_url": {
-          "name": "logo_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "synced_at": {
-          "name": "synced_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "basket_asset_ticker_idx": {
-          "name": "basket_asset_ticker_idx",
-          "columns": [
-            {
-              "expression": "ticker",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.custom_basket": {
-      "name": "custom_basket",
+    "public.funding_intent": {
+      "name": "funding_intent",
       "schema": "",
       "columns": {
         "id": {
@@ -559,32 +487,75 @@
           "primaryKey": false,
           "notNull": true
         },
-        "slug": {
-          "name": "slug",
+        "relay_request_id": {
+          "name": "relay_request_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
+        "deposit_address": {
+          "name": "deposit_address",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "description": {
-          "name": "description",
+        "origin_chain_id": {
+          "name": "origin_chain_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origin_currency": {
+          "name": "origin_currency",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "assets": {
-          "name": "assets",
-          "type": "jsonb",
+        "origin_chain_name": {
+          "name": "origin_chain_name",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "glider_strategy_id": {
-          "name": "glider_strategy_id",
+        "origin_currency_symbol": {
+          "name": "origin_currency_symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipient_address": {
+          "name": "recipient_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quoted_out_raw": {
+          "name": "quoted_out_raw",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'waiting'"
+        },
+        "in_tx_hash": {
+          "name": "in_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "out_tx_hash": {
+          "name": "out_tx_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fail_reason": {
+          "name": "fail_reason",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -602,35 +573,20 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
-        "custom_basket_slug_idx": {
-          "name": "custom_basket_slug_idx",
-          "columns": [
-            {
-              "expression": "slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "custom_basket_user_idx": {
-          "name": "custom_basket_user_idx",
+        "funding_intent_user_created_idx": {
+          "name": "funding_intent_user_created_idx",
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -640,12 +596,48 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "funding_intent_deposit_address_idx": {
+          "name": "funding_intent_deposit_address_idx",
+          "columns": [
+            {
+              "expression": "deposit_address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "funding_intent_address_in_tx_idx": {
+          "name": "funding_intent_address_in_tx_idx",
+          "columns": [
+            {
+              "expression": "deposit_address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "in_tx_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
-        "custom_basket_user_id_user_id_fk": {
-          "name": "custom_basket_user_id_user_id_fk",
-          "tableFrom": "custom_basket",
+        "funding_intent_user_id_user_id_fk": {
+          "name": "funding_intent_user_id_user_id_fk",
+          "tableFrom": "funding_intent",
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
@@ -1560,6 +1552,160 @@
           "columns": [
             "user_id",
             "instrument_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.price_bar": {
+      "name": "price_bar",
+      "schema": "",
+      "columns": {
+        "token_id": {
+          "name": "token_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "width": {
+          "name": "width",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bucket_start": {
+          "name": "bucket_start",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "market_open": {
+          "name": "market_open",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "market_high": {
+          "name": "market_high",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "market_low": {
+          "name": "market_low",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "market_close": {
+          "name": "market_close",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reference_open": {
+          "name": "reference_open",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_high": {
+          "name": "reference_high",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_low": {
+          "name": "reference_low",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reference_close": {
+          "name": "reference_close",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "multiplier": {
+          "name": "multiplier",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "liquidity_usd": {
+          "name": "liquidity_usd",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "samples": {
+          "name": "samples",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "first_at": {
+          "name": "first_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_at": {
+          "name": "last_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "price_bar_width_bucket_idx": {
+          "name": "price_bar_width_bucket_idx",
+          "columns": [
+            {
+              "expression": "width",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "bucket_start",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "price_bar_token_id_token_id_fk": {
+          "name": "price_bar_token_id_token_id_fk",
+          "tableFrom": "price_bar",
+          "tableTo": "token",
+          "columnsFrom": [
+            "token_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "price_bar_token_id_width_bucket_start_pk": {
+          "name": "price_bar_token_id_width_bucket_start_pk",
+          "columns": [
+            "token_id",
+            "width",
+            "bucket_start"
           ]
         }
       },

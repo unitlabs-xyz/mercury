@@ -206,6 +206,53 @@ export const multiplierEvents = pgTable(
 );
 
 /**
+ * What a token traded at across one bucket of time. See ADR 0016.
+ *
+ * The only record of a price in the system: the board forgets in a minute, and
+ * every other table holds quantities. Written by the `prices` job from the same
+ * answer that warms the board, at three widths at once, so each one is always
+ * current and none is a rollup that can fall behind.
+ *
+ * Two prices, both per share. `market_*` is what a share of this wrapper fetches
+ * in the pool, which is what a holding is valued at. `reference_*` is the
+ * issuer's quote for the underlying, which is what "did the stock move" is
+ * measured against, and is null across a bar that never had one.
+ *
+ * `first_at` and `last_at` are the instants of the first and last samples, so
+ * a sample that arrives late can widen a bar without taking its close.
+ */
+export const priceBars = pgTable(
+  "price_bar",
+  {
+    tokenId: uuid("token_id")
+      .notNull()
+      .references(() => tokens.id, { onDelete: "cascade" }),
+    width: text("width", { enum: ["1m", "1h", "1d"] }).notNull(),
+    /** The start of the bucket, UTC. A day is a UTC day. */
+    bucketStart: timestamp("bucket_start", { withTimezone: true }).notNull(),
+    marketOpen: usd("market_open").notNull(),
+    marketHigh: usd("market_high").notNull(),
+    marketLow: usd("market_low").notNull(),
+    marketClose: usd("market_close").notNull(),
+    referenceOpen: usd("reference_open"),
+    referenceHigh: usd("reference_high"),
+    referenceLow: usd("reference_low"),
+    referenceClose: usd("reference_close"),
+    /** In force at the last sample. Tokens to shares, and a step in it is a dividend. */
+    multiplier: usd("multiplier").notNull(),
+    liquidityUsd: usd("liquidity_usd").notNull(),
+    samples: integer("samples").notNull(),
+    firstAt: timestamp("first_at", { withTimezone: true }).notNull(),
+    lastAt: timestamp("last_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tokenId, t.width, t.bucketStart] }),
+    // What pruning asks: every minute bar older than a date, whatever its token.
+    index("price_bar_width_bucket_idx").on(t.width, t.bucketStart),
+  ],
+);
+
+/**
  * The unit of cost basis. One row per acquisition, and `shares` is frozen at
  * acquisition: if the multiplier later rises, a *new* lot is written with
  * source 'dividend' and a unit cost of zero.
@@ -596,6 +643,72 @@ export const loanAlerts = pgTable("loan_alert", {
   notifiedAt: timestamp("notified_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type LoanAlert = typeof loanAlerts.$inferSelect;
+
+/**
+ * A deposit we quoted, from the moment we quoted it.
+ *
+ * The row exists before the user sees an address, which is the whole point.
+ * `wallet-events` can tell us that USDC arrived and never what it arrived
+ * from, so without this a deposit bridged from Tron and a transfer from a
+ * friend are the same two lines in the database.
+ */
+export const fundingIntents = pgTable(
+  "funding_intent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * The id Relay gave the quote we minted.
+     *
+     * Not an identity. Relay regenerates the quote on over- or underpayment
+     * and the fill lands under a new id, so this is what we asked for and not
+     * necessarily what happened. `deposit_address` is the identity.
+     */
+    relayRequestId: text("relay_request_id").notNull(),
+    originChainId: integer("origin_chain_id").notNull(),
+    originCurrency: text("origin_currency").notNull(),
+    /**
+     * The chain and token as they were named to the user, not as Relay names
+     * them today.
+     *
+     * Stored rather than looked up, for the reason `order.decision` is stored:
+     * the feed has to be able to say "from Base" a month later, and Relay's
+     * chain list is theirs to change. A row that has to call an upstream to
+     * describe itself is a row that reads differently depending on when you
+     * read it.
+     */
+    originChainName: text("origin_chain_name").notNull(),
+    originCurrencySymbol: text("origin_currency_symbol").notNull(),
+    /** The Privy wallet, as quoted. Stored so a changed wallet is visible rather than assumed. */
+    recipientAddress: text("recipient_address").notNull(),
+    /** USDC base units. Indicative at mint time, and never updated. */
+    quotedOutRaw: text("quoted_out_raw"),
+    status: text("status").notNull().default("waiting"),
+    inTxHash: text("in_tx_hash"),
+    outTxHash: text("out_tx_hash"),
+    failReason: text("fail_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("funding_intent_user_created_idx").on(t.userId, t.createdAt),
+    /**
+     * The deposit's identity, and the webhook's idempotency.
+     *
+     * One quote is one deposit: the amount is fixed by a signature before
+     * Relay ever sees it, so Relay has nothing to regenerate and the id it
+     * gave us stays the id the fill lands under. That was not true while
+     * deposit addresses existed — an open address is reusable, and Relay
+     * reissues a quote on over- or underpayment — which is why this index was
+     * briefly a partial one over a `deposit_address` column that no longer
+     * exists.
+     */
+    uniqueIndex("funding_intent_request_idx").on(t.relayRequestId),
+  ],
+);
+export type FundingIntent = typeof fundingIntents.$inferSelect;
 
 /**
  * What a custom basket may hold.

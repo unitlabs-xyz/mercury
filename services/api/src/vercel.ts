@@ -14,6 +14,7 @@ import { syncStocks } from "./stocks/sync.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
+import { oneLineErrors } from "./log.js";
 
 /**
  * The API as one Vercel function. Same app as `index.ts`, built once per cold
@@ -25,6 +26,11 @@ import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
  * server's cadence. `index.ts` (the Dockerfile) is still the real home for
  * the background work; this keeps the HTTP surface deployable meanwhile.
  */
+/*
+ * Errors as one line, as in index.ts. Not its uncaught-error handler: the
+ * function runtime owns what happens to a process that throws.
+ */
+oneLineErrors();
 const config = readConfig();
 
 /*

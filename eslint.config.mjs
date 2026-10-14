@@ -17,6 +17,10 @@ export default tseslint.config(
   {
     ignores: [
       "**/node_modules/**",
+      /* A git worktree the desktop app created inside the repo: another
+         checkout of this project on another branch. Linting it from here
+         reports somebody else's unfinished work as this branch's failure. */
+      "**/.claude/worktrees/**",
       "**/dist/**",
       "**/.next/**",
       "**/.turbo/**",

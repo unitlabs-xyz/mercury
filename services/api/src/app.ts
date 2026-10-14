@@ -23,6 +23,8 @@ import { portfolioRoutes } from "./routes/portfolio.js";
 import { waitlistRoutes } from "./routes/waitlist.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { basketRoutes } from "./routes/basket.js";
+import { fundRoutes } from "./routes/fund.js";
+import { relayWebhookRoutes } from "./routes/relay-webhook.js";
 
 const fail = (code: ErrorCode | "not_implemented", message: string, details?: unknown) => ({
   error: { code, message, ...(details === undefined ? {} : { details }) },
@@ -96,6 +98,15 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   // The in-app feedback button. Public: signing in may be the thing that broke.
   if (read.feedback) app.route("/", feedbackRoutes(read.feedback));
 
+  /*
+   * Relay's webhook, above the auth middleware because it cannot pass it — the
+   * caller is Relay and has no session. Its authentication is the signature on
+   * the body; see funding/verify.ts.
+   */
+  if (read.fund) {
+    app.route("/", relayWebhookRoutes({ store: read.fund.store, secret: read.fund.webhookSecret }));
+  }
+
   app.use("/v1/*", requireAuth(auth));
 
   app.onError((err, c) => {
@@ -112,6 +123,9 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", activityRoutes(read.activity));
   app.route("/", borrowRoutes(read.borrow));
   app.route("/", sendRoutes(read.send));
+  /* Absent when Relay or the treasury is not configured, so the routes 404 and
+     the interface hides the method rather than offering one that cannot work. */
+  if (read.fund) app.route("/", fundRoutes(read.fund));
 
   app.get("/v1/market/status", async (c) => {
     const s = await market().sessions.current();
