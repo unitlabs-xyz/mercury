@@ -1,6 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { rawTokenAmount, tokenAmount } from "@mercury/view";
-import { NATIVE_SOL, useFunderBalance, useFundSwapAction } from "../../api/fund-swap";
+import {
+  NATIVE_EVM,
+  NATIVE_SOL,
+  useFunderBalance,
+  useFunderGas,
+  useFundSwapAction,
+} from "../../api/fund-swap";
 import { useFunder } from "../../wallet/useFunder";
 import { Button } from "../../ui/Button";
 import { Alert, Check } from "../../ui/icons";
@@ -44,9 +50,9 @@ const explorer = (token: FundToken, hash: string) =>
 export const FundWalletSwap = ({ token }: { token: FundToken }) => {
   const funder = useFunder();
   const decimals = decimalsOf(token);
-  /* Solana only — see the note above. */
-  const readable = token.vmType === "svm";
-  const balance = useFunderBalance(funder?.address, token.address, readable);
+  /* Both VMs read now; the hook knows which chain it is on. */
+  const balance = useFunderBalance(funder?.address, token.address, token.vmType);
+  const gas = useFunderGas(funder?.address, token.vmType);
   const action = useFundSwapAction();
   const resetAction = action.reset;
   const [amount, setAmount] = useState("");
@@ -62,24 +68,42 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
    * `undefined` is a balance nobody could read, and it is not zero. Treating
    * the two alike is what showed "Balance: 0" against a wallet holding 5.69.
    */
-  const held = readable ? balance.data : undefined;
+  const held = balance.data;
   const heldText = tokenAmount((held ?? 0n).toString(), decimals);
   const raw = rawTokenAmount(amount, decimals);
   const malformed = amount.length > 0 && raw === null;
   const overdrawn = held !== undefined && raw !== null && raw > held;
 
   /*
-   * Native SOL cannot be sent down to zero: the wallet still has to pay for
-   * this transaction, and a Max that spent the lot would produce a signature
-   * the network refuses for a fee the user can no longer cover.
+   * A chain's own coin cannot be sent down to zero: the wallet still has to
+   * pay for this transaction, and a Max that spent the lot would produce a
+   * signature the network refuses for a fee the user can no longer cover.
+   *
+   * The amounts are reserves, not estimates. 0.01 SOL covers a Solana fee many
+   * times over. On EVM an approve and a deposit is roughly 300k gas, which is
+   * about 0.003 ETH at 10 gwei on mainnet and a small fraction of that on an
+   * L2 — so mainnet gets ten times the reserve the rollups do. Erring high
+   * costs somebody a few cents of unspent balance; erring low costs them a
+   * reverted transaction and the gas it burned.
    */
-  const spendable = held === undefined ? undefined : token.address === NATIVE_SOL ? held - 10_000_000n : held;
+  const reserve =
+    token.address === NATIVE_SOL
+      ? 10_000_000n
+      : token.address === NATIVE_EVM
+        ? token.chainId === 1
+          ? 3_000_000_000_000_000n
+          : 300_000_000_000_000n
+        : 0n;
+  const spendable = held === undefined ? undefined : held - reserve;
   const maxText = tokenAmount(
     (spendable !== undefined && spendable > 0n ? spendable : 0n).toString(),
     decimals,
   );
 
-  const ready = raw !== null && raw > 0n && !overdrawn && action.walletReady;
+  /* Read, and actually zero — `undefined` is a balance nobody could read and
+     must not disable anything. */
+  const noGas = gas === 0n;
+  const ready = raw !== null && raw > 0n && !overdrawn && !noGas && action.walletReady;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -129,7 +153,7 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
       <div className="rounded-lg bg-ds-panel p-1">
         <div className="flex items-baseline justify-between gap-3 px-3 pt-2 pb-2.5">
           <p className="text-[14px] leading-none text-ds-muted">{token.symbol} to send</p>
-          {readable && (
+          {
             <p className="text-[12px] leading-none text-ds-muted">
               {balance.isPending
                 ? "Reading your wallet…"
@@ -137,7 +161,7 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
                   ? "Balance unavailable"
                   : `Balance: ${heldText}`}
             </p>
-          )}
+          }
         </div>
         <label
           className={`flex h-15 items-center gap-2 rounded-md bg-white px-4 outline-1 ${
@@ -183,6 +207,22 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
       {token.address === NATIVE_SOL && (
         <div className="mt-2">
           <Note tone="warn">Keep a little SOL back — your wallet pays the network fee.</Note>
+        </div>
+      )}
+      {/*
+       * The other half of a revert.
+       *
+       * A wallet holding the token and none of the chain's coin signs a
+       * transaction that cannot be mined. Zero rather than a threshold,
+       * because what a fee costs varies by chain and by minute, and a guess
+       * that read too high would block a deposit that would have worked.
+       */}
+      {noGas && (
+        <div className="mt-2">
+          <Note tone="warn">
+            This wallet has no {token.chainName} gas coin, so it cannot pay the network fee. Send a little to
+            it first.
+          </Note>
         </div>
       )}
       {action.isError &&

@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
 import { useAppKitProvider } from "@reown/appkit/react";
-import { useWalletClient } from "wagmi";
+import { useBalance, useReadContract, useWalletClient } from "wagmi";
+import { erc20Abi } from "viem";
 import { createClient, execute, MAINNET_RELAY_API, type AdaptedWallet } from "@relayprotocol/relay-sdk";
 import { configureDynamicChains } from "@relayprotocol/relay-sdk/chain-utils";
 import { adaptSolanaWallet } from "@relayprotocol/relay-svm-wallet-adapter";
@@ -50,27 +51,93 @@ const relayChainsReady = (): Promise<unknown> => {
   return chains;
 };
 
+/** Relay's address for a chain's own coin, on every EVM chain it lists. */
+export const NATIVE_EVM = "0x0000000000000000000000000000000000000000";
+
 /**
  * What the connected wallet holds of the token somebody picked.
  *
- * Solana only, read straight from the chain, because our API has no opinion on
- * a wallet that is not an account we keep. `undefined` is a balance nobody
- * could read and it is not zero — the panel has to tell those apart, which is
- * the lesson `FundFromWallet` records about showing "Balance: 0" against a
- * wallet holding 5.69.
+ * Both VMs now. It used to be Solana only, on the reasoning that an EVM
+ * balance was the wallet's own business and reading a dozen chains meant a
+ * dozen RPC endpoints to keep working. That reasoning had a hole in it: with
+ * no balance here, typing more than the wallet holds produced a signed
+ * transaction that reverted on chain — gas spent, nothing moved, and an error
+ * that could not say why. wagmi already holds a client for each chain we
+ * declare, so the read costs no infrastructure we did not have.
  *
- * An EVM balance is the wallet's own business: AppKit shows it in its account
- * view and reading twelve chains ourselves would be a dozen RPC endpoints to
- * keep working for a number the user already has.
+ * `undefined` is a balance nobody could read and it is not zero. Treating the
+ * two alike is what showed "Balance: 0" against a wallet holding 5.69, which
+ * `FundFromWallet` records; a disabled button would now be the same mistake
+ * with the stakes the other way up.
  */
-export const useFunderBalance = (owner: string | undefined, mint: string | undefined, enabled: boolean) =>
-  useQuery({
+export const useFunderBalance = (
+  owner: string | undefined,
+  mint: string | undefined,
+  vmType: string,
+): { readonly data: bigint | undefined; readonly isPending: boolean } => {
+  const svm = vmType === "svm";
+  const evm = vmType === "evm";
+
+  const solana = useQuery({
     queryKey: ["funder-token", owner, mint],
-    enabled: enabled && owner !== undefined && mint !== undefined,
+    enabled: svm && owner !== undefined && mint !== undefined,
     staleTime: 10_000,
     refetchOnWindowFocus: true,
     queryFn: () => (mint === NATIVE_SOL ? solBalanceRaw(owner!) : tokenBalanceRaw(owner!, mint!)),
   });
+
+  /*
+   * Two reads, one of which is always idle.
+   *
+   * Hooks cannot be conditional, so the native and the ERC-20 read are both
+   * declared and `enabled` decides which runs. A token's own contract knows
+   * nothing about the chain's coin and there is no one call that answers both.
+   */
+  const native = useBalance({
+    address: owner as `0x${string}` | undefined,
+    query: { enabled: evm && owner !== undefined && mint === NATIVE_EVM, staleTime: 10_000 },
+  });
+
+  const erc20 = useReadContract({
+    abi: erc20Abi,
+    address: mint as `0x${string}` | undefined,
+    functionName: "balanceOf",
+    args: owner === undefined ? undefined : [owner as `0x${string}`],
+    query: {
+      enabled: evm && owner !== undefined && mint !== undefined && mint !== NATIVE_EVM,
+      staleTime: 10_000,
+    },
+  });
+
+  if (svm) return { data: solana.data, isPending: solana.isPending };
+  if (evm) {
+    const read = mint === NATIVE_EVM ? native : erc20;
+    return {
+      data: mint === NATIVE_EVM ? native.data?.value : erc20.data,
+      /* `isPending` is true on a query that is merely disabled, which would
+         leave "Reading your wallet…" on screen forever. Only pending while
+         actually in flight. */
+      isPending: read.isLoading,
+    };
+  }
+  return { data: undefined, isPending: false };
+};
+
+/**
+ * What the wallet holds of the coin the chain charges fees in.
+ *
+ * Separate from the balance above, and needed separately: a wallet with the
+ * token and no gas signs a transaction that cannot be mined, which is the
+ * other half of the revert. Only meaningful on EVM — a Solana fee comes out
+ * of the SOL balance the panel already keeps back.
+ */
+export const useFunderGas = (owner: string | undefined, vmType: string): bigint | undefined => {
+  const { data } = useBalance({
+    address: owner as `0x${string}` | undefined,
+    query: { enabled: vmType === "evm" && owner !== undefined, staleTime: 30_000 },
+  });
+  return vmType === "evm" ? data?.value : undefined;
+};
 
 interface SwapBuild {
   readonly intentId: string;
