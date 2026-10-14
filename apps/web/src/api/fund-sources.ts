@@ -1,19 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import { anyInFlight, type FundSource } from "../app/money/fund-chain";
+import { anyInFlight, type FundChain } from "../app/money/fund-chain";
 
-export type { FundCurrency, FundSource } from "../app/money/fund-chain";
+export type { FundChain } from "../app/money/fund-chain";
 
 /**
- * Every chain and token we can accept.
+ * The chains we take deposits from, for the filter row.
  *
  * Long-lived on purpose: it is the same answer for everybody, and it changes
- * when Relay adds a chain rather than while somebody is choosing one. The
- * query failing is how the panel knows funding is not configured — the routes
- * are not mounted at all in that case.
+ * when we deploy a new chain list rather than while somebody is choosing one.
+ * The query failing is how the panel knows funding is not configured — the
+ * routes are not mounted at all in that case.
+ *
+ * Tokens are not here. They come from useFundTokens, which searches.
  */
 export const useFundSources = () =>
-  useQuery<{ chains: readonly FundSource[]; minimumUsd: string }>({
+  useQuery<{ chains: readonly FundChain[]; minimumUsd: string }>({
     queryKey: ["fund-sources"],
     staleTime: 10 * 60_000,
     /* A 404 means the server has no Relay key. Retrying will not change that. */

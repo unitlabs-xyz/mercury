@@ -1,87 +1,20 @@
 /**
  * The decisions behind "add cash from another chain", with no React in them.
  *
- * The panel offers every chain Relay supports — 61 of them, 154 tokens — so
- * the list is searched rather than read, and what the search does is worth
- * being sure of. The rest is what a deposit's state means and how long it
- * takes, which differ by chain in a way the copy has to say out loud.
+ * Searching and filtering used to live here, over a list of 56 tokens the
+ * server had read out of Relay's `/chains`. Both moved to the server, which
+ * searches Relay's whole index instead — see services/api/src/routes/fund.ts.
+ * What is left is what a deposit's state means and how long it takes, which
+ * differ by chain in a way the copy has to say out loud.
  */
 
-export interface FundCurrency {
-  readonly id: string;
-  readonly symbol: string;
-  readonly name: string;
-  readonly address: string;
-  readonly decimals: number;
-}
-
-export interface FundSource {
+/** A chain we take deposits from, as the server reports it. One filter chip. */
+export interface FundChain {
   readonly chainId: number;
   readonly name: string;
   readonly vmType: string;
-  readonly currencies: readonly FundCurrency[];
+  readonly iconUrl: string | null;
 }
-
-/** One row in the list: a token on a chain. */
-export interface FundOption {
-  readonly chainId: number;
-  readonly chainName: string;
-  readonly vmType: string;
-  readonly currency: FundCurrency;
-}
-
-export const optionsOf = (sources: readonly FundSource[]): readonly FundOption[] =>
-  sources.flatMap((s) =>
-    s.currencies.map((currency) => ({
-      chainId: s.chainId,
-      chainName: s.name,
-      vmType: s.vmType,
-      currency,
-    })),
-  );
-
-/**
- * The handful somebody is most likely to want, in the order they are likely to
- * want them, and only when they are actually on offer.
- *
- * A list of sixty-one is a worse list than a list of six, and the answer is not
- * to shorten what we accept — somebody holding the sixty-first thing should not
- * be told we cannot take their money. So everything stays searchable and this
- * decides what leads.
- */
-const LEADS: readonly { readonly chainId: number; readonly symbol: string }[] = [
-  { chainId: 792703809, symbol: "USDT" },
-  { chainId: 792703809, symbol: "SOL" },
-  { chainId: 8453, symbol: "ETH" },
-  { chainId: 8453, symbol: "USDC" },
-  { chainId: 1, symbol: "USDC" },
-  { chainId: 728126428, symbol: "USDT" },
-  { chainId: 8253038, symbol: "BTC" },
-];
-
-export const leadOptions = (options: readonly FundOption[]): readonly FundOption[] =>
-  LEADS.flatMap((lead) => {
-    const found = options.find((o) => o.chainId === lead.chainId && o.currency.symbol === lead.symbol);
-    return found === undefined ? [] : [found];
-  });
-
-/**
- * Case-insensitive, and across both names a person might type.
- *
- * Somebody looking for USDT on Tron types either word, and a search that only
- * matched the token would make the chain unfindable — which on a list this
- * long is the same as not supporting it.
- */
-export const matchOptions = (options: readonly FundOption[], query: string): readonly FundOption[] => {
-  const q = query.trim().toLowerCase();
-  if (q.length === 0) return options;
-  return options.filter(
-    (o) =>
-      o.chainName.toLowerCase().includes(q) ||
-      o.currency.symbol.toLowerCase().includes(q) ||
-      o.currency.name.toLowerCase().includes(q),
-  );
-};
 
 /** Relay's own vocabulary. Stored and displayed rather than mapped to ours. */
 export type FundStatus =

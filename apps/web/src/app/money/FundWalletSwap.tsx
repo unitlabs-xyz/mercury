@@ -4,7 +4,7 @@ import { NATIVE_SOL, useFunderBalance, useFundSwapAction } from "../../api/fund-
 import { useFunder } from "../../wallet/useFunder";
 import { Button } from "../../ui/Button";
 import { Alert, Check } from "../../ui/icons";
-import type { FundOption } from "./fund-chain";
+import type { FundToken } from "../../api/fund-tokens";
 
 /**
  * Swapping a token the connected wallet holds into cash in the account.
@@ -33,20 +33,19 @@ const Note = ({ tone, children }: { tone: "warn" | "down"; children: ReactNode }
 );
 
 /** Native SOL is nine decimals; an SPL or ERC-20 token says so in the Relay listing. */
-const decimalsOf = (option: FundOption) =>
-  option.currency.address === NATIVE_SOL ? 9 : option.currency.decimals;
+const decimalsOf = (token: FundToken) => (token.address === NATIVE_SOL ? 9 : token.decimals);
 
-const explorer = (option: FundOption, hash: string) =>
-  option.vmType === "svm"
+const explorer = (token: FundToken, hash: string) =>
+  token.vmType === "svm"
     ? `https://solscan.io/tx/${encodeURIComponent(hash)}`
     : `https://relay.link/transaction/${encodeURIComponent(hash)}`;
 
-export const FundWalletSwap = ({ option }: { option: FundOption }) => {
+export const FundWalletSwap = ({ token }: { token: FundToken }) => {
   const funder = useFunder();
-  const decimals = decimalsOf(option);
+  const decimals = decimalsOf(token);
   /* Solana only — see the note above. */
-  const readable = option.vmType === "svm";
-  const balance = useFunderBalance(funder?.address, option.currency.address, readable);
+  const readable = token.vmType === "svm";
+  const balance = useFunderBalance(funder?.address, token.address, readable);
   const action = useFundSwapAction();
   const resetAction = action.reset;
   const [amount, setAmount] = useState("");
@@ -56,7 +55,7 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
   useEffect(() => {
     setAmount("");
     resetAction();
-  }, [option.currency.address, funder?.address, resetAction]);
+  }, [token.address, funder?.address, resetAction]);
 
   /*
    * `undefined` is a balance nobody could read, and it is not zero. Treating
@@ -73,8 +72,7 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
    * this transaction, and a Max that spent the lot would produce a signature
    * the network refuses for a fee the user can no longer cover.
    */
-  const spendable =
-    held === undefined ? undefined : option.currency.address === NATIVE_SOL ? held - 10_000_000n : held;
+  const spendable = held === undefined ? undefined : token.address === NATIVE_SOL ? held - 10_000_000n : held;
   const maxText = tokenAmount(
     (spendable !== undefined && spendable > 0n ? spendable : 0n).toString(),
     decimals,
@@ -85,7 +83,7 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (ready && !action.isPending) {
-      action.mutate({ currency: option.currency.address, amountRaw: raw.toString() });
+      action.mutate({ currency: token.address, amountRaw: raw.toString() });
     }
   };
 
@@ -98,12 +96,12 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
         </span>
         <p className="mt-4 text-[20px] font-medium text-ds-ink">Deposit sent</p>
         <p className="mt-3 text-[14px] text-ds-muted">
-          About ${action.data.outFormatted} from {amount} {option.currency.symbol}. It lands in your balance
-          once the swap settles.
+          About ${action.data.outFormatted} from {amount} {token.symbol}. It lands in your balance once the
+          swap settles.
         </p>
         {hash !== null && (
           <a
-            href={explorer(option, hash)}
+            href={explorer(token, hash)}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-4 text-[13px] text-ds-link hover:underline"
@@ -129,7 +127,7 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
     <form onSubmit={submit} className="flex flex-col">
       <div className="rounded-lg bg-ds-panel p-1">
         <div className="flex items-baseline justify-between gap-3 px-3 pt-2 pb-2.5">
-          <p className="text-[14px] leading-none text-ds-muted">{option.currency.symbol} to send</p>
+          <p className="text-[14px] leading-none text-ds-muted">{token.symbol} to send</p>
           {readable && (
             <p className="text-[12px] leading-none text-ds-muted">
               {balance.isPending
@@ -150,7 +148,7 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
             onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
             inputMode="decimal"
             placeholder="0.00"
-            aria-label={`Amount in ${option.currency.symbol}`}
+            aria-label={`Amount in ${token.symbol}`}
             aria-invalid={overdrawn}
             className="w-full min-w-0 bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none placeholder:text-ds-muted/50"
           />
@@ -165,14 +163,14 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
               Max
             </button>
           )}
-          <span className="shrink-0 text-[12px] text-ds-muted">{option.currency.symbol}</span>
+          <span className="shrink-0 text-[12px] text-ds-muted">{token.symbol}</span>
         </label>
       </div>
 
       {overdrawn && (
         <div className="mt-2">
           <Note tone="down">
-            More than this wallet holds. {heldText} {option.currency.symbol} available.
+            More than this wallet holds. {heldText} {token.symbol} available.
           </Note>
         </div>
       )}
@@ -181,12 +179,12 @@ export const FundWalletSwap = ({ option }: { option: FundOption }) => {
           <Note tone="down">Enter an amount.</Note>
         </div>
       )}
-      {option.currency.address === NATIVE_SOL && (
+      {token.address === NATIVE_SOL && (
         <div className="mt-2">
           <Note tone="warn">Keep a little SOL back — your wallet pays the network fee.</Note>
         </div>
       )}
-      {option.vmType === "evm" && (
+      {token.vmType === "evm" && (
         <div className="mt-2">
           {/* Two signatures on most ERC-20 routes: an approval, then the
               deposit. Saying so beforehand stops the second one looking like
