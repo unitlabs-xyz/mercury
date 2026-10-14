@@ -34,3 +34,25 @@ export const timingCopy = (vmType: string): string =>
   vmType === "bvm"
     ? "Bitcoin deposits wait for block confirmations, so this usually takes 10 to 60 minutes."
     : "This usually takes about a minute once your transfer lands.";
+
+/**
+ * What an amount field holds, as it is typed.
+ *
+ * Digits and one point, nothing else; a point typed first is a "0." so the
+ * field never shows a bare "."; leading zeros fold away ("007" is "7", "00.5"
+ * is "0.5"); and no more decimals than `places`, which is the token's own, or
+ * two for dollars. A trailing point is kept — it is somebody halfway through
+ * typing "0.5" — and the callers read past it.
+ */
+export const cleanAmount = (input: string, places: number): string => {
+  const kept = input.replace(/[^0-9.]/g, "");
+  const point = kept.indexOf(".");
+  let whole = point === -1 ? kept : kept.slice(0, point);
+  let fraction = point === -1 ? null : kept.slice(point + 1).replace(/\./g, "");
+  whole = whole.replace(/^0+(?=\d)/, "");
+  if (fraction === null) return whole;
+  if (whole.length === 0) whole = "0";
+  if (places <= 0) return whole;
+  fraction = fraction.slice(0, places);
+  return `${whole}.${fraction}`;
+};

@@ -37,6 +37,16 @@ export const Glass = () => (
   </svg>
 );
 
+/** Two arrows, up and down: flip between two ways of reading the same figure. */
+export const Flip = (p: Icon) => (
+  <svg {...base} {...p}>
+    <path d="M8 4v16" />
+    <path d="M4 8l4-4 4 4" />
+    <path d="M16 20V4" />
+    <path d="M20 16l-4 4-4-4" />
+  </svg>
+);
+
 export const ArrowRight = (p: Icon) => (
   <svg {...base} {...p}>
     <path d="M5 12h14" />

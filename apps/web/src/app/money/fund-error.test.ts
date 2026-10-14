@@ -15,28 +15,30 @@ describe("fundErrorCopy", () => {
     /* viem's `message` is the full report — request body, docs url, version
        footer — and `shortMessage` is the line of it written for a person. */
     const err = {
-      shortMessage: "Insufficient funds for gas.",
+      shortMessage: "Gas price below the network minimum.",
       message: "Execution reverted.\n\nRequest Arguments:\n  from: 0x…\n\nDocs: https://viem.sh/…",
     };
 
-    expect(fundErrorCopy(err).message).toBe("Insufficient funds for gas.");
+    expect(fundErrorCopy(err).message).toBe("Gas price below the network minimum.");
   });
 
   it("falls back through message and details", () => {
     expect(fundErrorCopy({ message: "Nonce too low." }).message).toBe("Nonce too low.");
-    expect(fundErrorCopy({ message: "   ", details: "Chain mismatch." }).message).toBe("Chain mismatch.");
+    expect(fundErrorCopy({ message: "   ", details: "Replacement fee too low." }).message).toBe(
+      "Replacement fee too low.",
+    );
   });
 
   it("clips a message too long for a sheet on a phone", () => {
     const long = fundErrorCopy({ shortMessage: "x".repeat(400) }).message;
 
-    expect(long.length).toBe(180);
+    expect(long.length).toBe(90);
     expect(long.endsWith("…")).toBe(true);
   });
 
   it("treats whitespace as absent rather than as a message", () => {
     expect(fundErrorCopy({ shortMessage: "\n  \t " }).message).toBe(
-      "That deposit could not be completed. Please try again.",
+      "Couldn't complete the deposit. Try again.",
     );
   });
 });
@@ -102,7 +104,7 @@ describe("fundErrorCopy · values that are not Errors", () => {
 
   it("reads a plain object thrown off the wire", () => {
     /* `throw json` — the API's error body, with no Error wrapper. */
-    expect(fundErrorCopy({ message: "Insufficient balance" }).message).toBe("Insufficient balance");
+    expect(fundErrorCopy({ message: "Quote expired" }).message).toBe("Quote expired");
   });
 
   it("still catches a rejection phrased as a bare string", () => {
@@ -110,8 +112,8 @@ describe("fundErrorCopy · values that are not Errors", () => {
   });
 
   it("does not read a number or a boolean as a message", () => {
-    expect(fundErrorCopy(42).message).toBe("That deposit could not be completed. Please try again.");
-    expect(fundErrorCopy(false).message).toBe("That deposit could not be completed. Please try again.");
+    expect(fundErrorCopy(42).message).toBe("Couldn't complete the deposit. Try again.");
+    expect(fundErrorCopy(false).message).toBe("Couldn't complete the deposit. Try again.");
   });
 });
 
@@ -123,18 +125,91 @@ describe("fundErrorCopy · a revert", () => {
     const { message, rejected } = fundErrorCopy("Transaction Reverted");
 
     expect(rejected).toBe(false);
-    expect(message).toContain("nothing was sent");
+    expect(message).toMatch(/nothing was sent/i);
     expect(message).toContain("gas");
   });
 
   it("matches however the word arrives", () => {
-    expect(fundErrorCopy(new Error("transaction reverted")).message).toContain("nothing was sent");
+    expect(fundErrorCopy(new Error("transaction reverted")).message).toMatch(/nothing was sent/i);
   });
 
   it("does not swallow a revert that came with a real reason", () => {
-    /* A named revert reason is more specific than our sentence, so it wins. */
+    /* A named revert reason is more specific than the generic sentence, so
+       it wins — said plainly rather than in the contract's words. */
     expect(
       fundErrorCopy({ shortMessage: "execution reverted: ERC20: transfer amount exceeds balance" }).message,
-    ).toContain("exceeds balance");
+    ).toMatch(/Not enough of this token/);
+  });
+});
+
+describe("fundErrorCopy · a wallet that says only 'internal error'", () => {
+  /* What viem builds from MetaMask's "Internal JSON-RPC error" when the
+     wallet cannot pay for gas: the reason is on `details`, not the summary. */
+  const internal = (details: string) => ({
+    name: "InternalRpcError",
+    shortMessage: "An internal error was received.",
+    details,
+    code: -32603,
+  });
+
+  it("names a wallet short of the gas coin", () => {
+    const { message } = fundErrorCopy(internal("insufficient funds for gas * price + value"));
+    expect(message).toMatch(/Not enough gas/);
+  });
+
+  it("finds the reason a cause or two down", () => {
+    const { message } = fundErrorCopy({
+      shortMessage: "An internal error was received.",
+      cause: { cause: { message: "insufficient funds for gas * price + value" } },
+    });
+    expect(message).toMatch(/Not enough gas/);
+  });
+
+  it("names a wallet short of the token", () => {
+    expect(
+      fundErrorCopy(internal("execution reverted: ERC20: transfer amount exceeds balance")).message,
+    ).toMatch(/Not enough of this token/);
+  });
+
+  it("names a wallet that changed networks", () => {
+    expect(fundErrorCopy("Current chain id: 1 does not match expected chain id: 8453").message).toMatch(
+      /switched networks/,
+    );
+  });
+
+  it("says anything else plainly, not in viem's words", () => {
+    const { message } = fundErrorCopy(internal("nonce too low"));
+    expect(message).toBe("Your wallet couldn't send it. Try again.");
+  });
+
+  it("still says something when the wallet left no reason at all", () => {
+    const { message } = fundErrorCopy({ shortMessage: "An internal error was received." });
+    expect(message).toBe("Your wallet couldn't send it. Try again.");
+  });
+});
+
+describe("fundErrorCopy · MetaMask's own shape", () => {
+  /* As viem receives it from MetaMask when the wallet cannot pay for gas: the
+     reason is on the provider error's `data`, not on any message. */
+  const metamask = (reason: string) => ({
+    name: "InternalRpcError",
+    shortMessage: "An internal error was received.",
+    details: "Internal JSON-RPC error.",
+    cause: { code: -32603, message: "Internal JSON-RPC error.", data: { code: -32000, message: reason } },
+  });
+
+  it("reads the reason off the provider error's data", () => {
+    expect(fundErrorCopy(metamask("insufficient funds for gas * price + value")).message).toBe(
+      "Not enough gas for the network fee.",
+    );
+  });
+
+  it("reads a reason nested under error, as some wallets send it", () => {
+    expect(
+      fundErrorCopy({
+        shortMessage: "An internal error was received.",
+        cause: { error: { message: "insufficient funds for transfer" } },
+      }).message,
+    ).toBe("Not enough gas for the network fee.");
   });
 });

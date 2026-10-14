@@ -7,11 +7,17 @@ import {
   useFunderGas,
   useFundSwapAction,
 } from "../../api/fund-swap";
-import { useFunder } from "../../wallet/useFunder";
+import { useEstimateFeesPerGas } from "wagmi";
+import { useConnectFunder, useFunder } from "../../wallet/useFunder";
+import { EVM_NETWORKS } from "../../wallet/chains";
 import { Button } from "../../ui/Button";
-import { Alert, Check } from "../../ui/icons";
-import type { FundToken } from "../../api/fund-tokens";
-import { fundErrorCopy } from "./fund-error";
+import { Alert, Check, ChevronDown, Flip } from "../../ui/icons";
+import { useFundPrice } from "../../api/fund-price";
+import { TokenMark } from "./TokenMark";
+import { Skeleton } from "../portfolio/ui";
+import { useDebounced, type FundToken } from "../../api/fund-tokens";
+import { cleanAmount } from "./fund-chain";
+import { fundErrorCopy, fundErrorDetail } from "./fund-error";
 
 /**
  * Swapping a token the connected wallet holds into cash in the account.
@@ -47,8 +53,18 @@ const explorer = (token: FundToken, hash: string) =>
     ? `https://solscan.io/tx/${encodeURIComponent(hash)}`
     : `https://relay.link/transaction/${encodeURIComponent(hash)}`;
 
-export const FundWalletSwap = ({ token }: { token: FundToken }) => {
+/** Dollars as people read them: "$1,240.50", and "<$0.01" rather than "$0.00" for dust. */
+const usd = (n: number) =>
+  n > 0 && n < 0.01
+    ? "<$0.01"
+    : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+
+/** A decimal string with its trailing zeros dropped: "0.00500000" is "0.005". */
+const trimZeros = (s: string) => (s.includes(".") ? s.replace(/\.?0+$/, "") : s);
+
+export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onChangeToken: () => void }) => {
   const funder = useFunder();
+  const connect = useConnectFunder();
   const decimals = decimalsOf(token);
   /* Both VMs read now; the hook knows which chain it is on. */
   const balance = useFunderBalance(funder?.address, token.address, token.vmType, token.chainId);
@@ -56,11 +72,20 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
   const action = useFundSwapAction();
   const resetAction = action.reset;
   const [amount, setAmount] = useState("");
+  /*
+   * Which side the field is typed in. Tokens by default, because that is what
+   * the wallet holds and what it will ask to approve; dollars on request, for
+   * somebody who knows they want to add $50 and not how much ETH that is.
+   */
+  const [unit, setUnit] = useState<"token" | "usd">("token");
+  const priced = useFundPrice(token.chainId, token.address);
+  const price = priced.data ?? null;
 
   /* A different token, or a different wallet, is a different balance — so the
      amount typed against the old one is not an amount any more. */
   useEffect(() => {
     setAmount("");
+    setUnit("token");
     resetAction();
   }, [token.address, funder?.address, resetAction]);
 
@@ -88,8 +113,48 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
    */
   const held = balance.data;
   const heldText = tokenAmount((held ?? 0n).toString(), decimals);
-  const raw = rawTokenAmount(amount, decimals);
-  const malformed = amount.length > 0 && raw === null;
+
+  /*
+   * The amount in tokens, whichever side it was typed on. Dollars become
+   * tokens at the shown price, to no more places than the token has or eight,
+   * which is past anything a wallet displays. The quote is still Relay's: this
+   * only decides how much is offered to it.
+   */
+  const places = Math.min(decimals, 8);
+  const inUsd = unit === "usd" && price !== null;
+  /* "12." is "12" halfway to "12.5": read as the number it already is. */
+  const entered = amount.endsWith(".") ? amount.slice(0, -1) : amount;
+  const typed = Number(entered);
+  const tokenText =
+    !inUsd || entered.length === 0 || !Number.isFinite(typed)
+      ? entered
+      : trimZeros((typed / price).toFixed(places));
+  const raw = rawTokenAmount(tokenText, decimals);
+  /* The other side of the field: dollars under tokens, or tokens under dollars. */
+  const tokenValue = Number(tokenText);
+  /* Always a figure: $0.00 before anything is typed, so the line is there
+     from the start and does not appear under the field mid-keystroke. */
+  const counterpart =
+    price === null
+      ? null
+      : inUsd
+        ? `${entered.length === 0 ? "0" : tokenText} ${token.symbol}`
+        : usd(entered.length === 0 || !Number.isFinite(tokenValue) ? 0 : tokenValue * price);
+
+  const flip = () => {
+    if (price === null) return;
+    if (inUsd) {
+      setAmount(tokenText);
+      setUnit("token");
+    } else {
+      setAmount(entered.length === 0 || !Number.isFinite(typed) ? "" : (typed * price).toFixed(2));
+      setUnit("usd");
+    }
+  };
+  /* Said only once typing has paused, so a half-typed amount is never told
+     it is wrong while it is still being written. */
+  const quiet = useDebounced(amount, 600);
+  const malformed = quiet === amount && entered.length > 0 && raw === null;
   const overdrawn = held !== undefined && raw !== null && raw > held;
 
   /*
@@ -118,13 +183,36 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
     decimals,
   );
 
-  /* Read, and actually zero — `undefined` is a balance nobody could read and
-     must not disable anything. */
-  const noGas = gas.data === 0n;
+  /*
+   * Whether the wallet can pay for the deposit, checked before it is asked.
+   *
+   * Zero was the old test and it missed the case that actually happens: a
+   * wallet holding a few cents of dust. Phantom, given an approve it cannot
+   * fund, does not say so — it answers "Unexpected error", which reached the
+   * screen as an internal error (measured 14 October: 0.00000058 ETH on Base
+   * against ~0.00000096 ETH for approve plus deposit). So the cost is
+   * estimated: the gas a deposit takes, with half again for headroom, at the
+   * chain's current max fee. An ERC-20 is an approve and a deposit (~160k
+   * measured); the chain's own coin is a deposit alone, and its amount comes
+   * out of the same balance. `undefined` anywhere is a figure we could not
+   * read, and that never blocks anything.
+   */
+  const fees = useEstimateFeesPerGas({
+    chainId: token.chainId,
+    query: { enabled: token.vmType === "evm" && funder !== null, staleTime: 15_000 },
+  });
+  const feePerGas = fees.data?.maxFeePerGas ?? fees.data?.gasPrice;
+  const isNative = token.address === NATIVE_EVM;
+  const gasNeeded = feePerGas === undefined ? undefined : feePerGas * (isNative ? 150_000n : 240_000n);
+  const gasCoin = EVM_NETWORKS.find((c) => c.id === token.chainId)?.nativeCurrency.symbol ?? "gas";
+  const lowGas =
+    gas.data !== undefined &&
+    (gas.data === 0n ||
+      (gasNeeded !== undefined && gas.data < gasNeeded + (isNative && raw !== null ? raw : 0n)));
   /* The wallet is somewhere else. Not a blocker any more — the deposit brings
      it across — but the button should say so before the prompt appears. */
   const wrongChain = funder !== null && funder.chainId !== token.chainId;
-  const ready = raw !== null && raw > 0n && !overdrawn && !noGas && action.walletReady;
+  const ready = raw !== null && raw > 0n && !overdrawn && !lowGas && action.walletReady;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -142,7 +230,7 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
         </span>
         <p className="mt-4 text-[20px] font-medium text-ds-ink">Deposit sent</p>
         <p className="mt-3 text-[14px] text-ds-muted">
-          About ${action.data.outFormatted} from {amount} {token.symbol}. It lands in your balance once the
+          About ${action.data.outFormatted} from {tokenText} {token.symbol}. It lands in your balance once the
           swap settles.
         </p>
         {hash !== null && (
@@ -173,53 +261,89 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
     <form onSubmit={submit} className="flex flex-col">
       <div className="rounded-lg bg-ds-panel p-1">
         <div className="flex items-baseline justify-between gap-3 px-3 pt-2 pb-2.5">
-          <p className="text-[14px] leading-none text-ds-muted">{token.symbol} to send</p>
-          {
+          <p className="text-[14px] leading-none text-ds-muted">You send</p>
+          {/* No wallet yet, no balance to show: a query that never runs reads
+              as loading, and a skeleton that never resolves is worse than none. */}
+          {funder === null ? null : balance.isPending ? (
+            <Skeleton className="h-3 w-24" />
+          ) : (
             <p className="text-[12px] leading-none text-ds-muted">
-              {balance.isPending
-                ? "Reading your wallet…"
-                : held === undefined
-                  ? "Balance unavailable"
-                  : `Balance: ${heldText}`}
+              {held === undefined ? "Balance unavailable" : `Balance: ${heldText} ${token.symbol}`}
             </p>
-          }
+          )}
         </div>
-        <label
-          className={`flex h-15 items-center gap-2 rounded-md bg-white px-4 outline-1 ${
+        <div
+          className={`rounded-md bg-white outline-1 ${
             overdrawn ? "outline-ds-down" : "outline-transparent focus-within:outline-black/10"
           }`}
         >
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-            inputMode="decimal"
-            placeholder="0.00"
-            aria-label={`Amount in ${token.symbol}`}
-            aria-invalid={overdrawn}
-            className="w-full min-w-0 bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none placeholder:text-ds-muted/50"
-          />
-          {/* Nothing to offer when the balance could not be read, and offering
-              zero would be a number we made up. */}
-          {spendable !== undefined && spendable > 0n && (
+          <label className="flex h-15 items-center gap-2 px-4">
+            {inUsd && <span className="text-[28px] leading-none font-medium text-ds-ink">$</span>}
+            <input
+              value={amount}
+              onChange={(e) => setAmount(cleanAmount(e.target.value, inUsd ? 2 : decimals))}
+              inputMode="decimal"
+              placeholder="0.00"
+              aria-label={inUsd ? "Amount in dollars" : `Amount in ${token.symbol}`}
+              aria-invalid={overdrawn}
+              className="w-full min-w-0 bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none placeholder:text-ds-muted/50"
+            />
+            {/* Nothing to offer when the balance could not be read, and offering
+                zero would be a number we made up. Max is a token amount, so it
+                brings the field back to tokens. */}
+            {spendable !== undefined && spendable > 0n && (
+              <button
+                type="button"
+                onClick={() => {
+                  setUnit("token");
+                  setAmount(maxText);
+                }}
+                className="h-[26px] shrink-0 rounded-full border border-black/10 bg-linear-to-b from-white to-[#eeeeee] px-3 text-[12px] leading-none text-ds-ink"
+              >
+                Max
+              </button>
+            )}
+            {/* The token being sent, and the way to change it. */}
             <button
               type="button"
-              onClick={() => setAmount(maxText)}
-              className="h-[26px] shrink-0 rounded-full border border-black/10 bg-linear-to-b from-white to-[#eeeeee] px-3 text-[12px] leading-none text-ds-ink"
+              onClick={onChangeToken}
+              aria-label={`${token.symbol} on ${token.chainName}. Change token`}
+              className="flex h-9 shrink-0 items-center gap-2 rounded-full bg-ds-panel pr-2.5 pl-1 text-[14px] leading-none font-medium text-ds-ink transition-colors hover:bg-black/[0.06]"
             >
-              Max
+              <TokenMark
+                symbol={token.symbol}
+                logoUrl={token.logoUrl}
+                chainName={token.chainName}
+                chainIconUrl={token.chainIconUrl}
+              />
+              {token.symbol}
+              <ChevronDown className="size-3.5 text-ds-muted" />
             </button>
-          )}
-          <span className="shrink-0 text-[12px] text-ds-muted">{token.symbol}</span>
-        </label>
-      </div>
-
-      {overdrawn && (
-        <div className="mt-2">
-          <Note tone="down">
-            More than this wallet holds. {heldText} {token.symbol} available.
-          </Note>
+          </label>
+          {/* The same amount on the other side, and the switch between them.
+              Hidden when the token has no price rather than showing a dollar
+              figure we cannot back. */}
+          <div className="flex h-10 items-center justify-between gap-3 border-t border-ds-divider px-4">
+            {priced.isPending ? (
+              <Skeleton className="h-3 w-20" />
+            ) : (
+              <p className="min-w-0 truncate text-[13px] leading-none text-ds-muted">
+                {counterpart === null ? "No dollar price for this token" : `≈ ${counterpart}`}
+              </p>
+            )}
+            {price !== null && (
+              <button
+                type="button"
+                onClick={flip}
+                className="flex shrink-0 items-center gap-1.5 text-[12px] leading-none text-ds-muted transition-colors hover:text-ds-ink"
+              >
+                <Flip className="size-3.5" />
+                {inUsd ? `Enter in ${token.symbol}` : "Enter in dollars"}
+              </button>
+            )}
+          </div>
         </div>
-      )}
+      </div>
       {malformed && (
         <div className="mt-2">
           <Note tone="down">Enter an amount.</Note>
@@ -238,14 +362,6 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
        * because what a fee costs varies by chain and by minute, and a guess
        * that read too high would block a deposit that would have worked.
        */}
-      {noGas && (
-        <div className="mt-2">
-          <Note tone="warn">
-            This wallet has no {token.chainName} gas coin, so it cannot pay the network fee. Send a little to
-            it first.
-          </Note>
-        </div>
-      )}
       {action.isError &&
         (() => {
           /* Never `action.error.message` straight out: viem wraps a wallet
@@ -258,6 +374,13 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
                   their own decision went wrong. */}
               <Note tone={rejected ? "warn" : "down"}>
                 {message}
+                {/* Dev builds only: the wallet's raw words, so a failure can be
+                    read off the screen without opening the console. */}
+                {import.meta.env.DEV && (
+                  <span className="mt-1 block font-mono text-[11px] break-all opacity-70">
+                    {fundErrorDetail(action.error)}
+                  </span>
+                )}
                 {/*
                  * The receipt, when the failure had one.
                  *
@@ -285,23 +408,36 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
           );
         })()}
 
-      <Button
-        type="submit"
-        variant="primary"
-        size="lg"
-        loading={action.isPending}
-        disabled={!ready}
-        className="mt-4 w-full"
-      >
-        {action.isPending
-          ? "Waiting for your wallet…"
-          : /* Says the switch is coming rather than springing it. The wallet
-               was always going to ask twice here; the label is what stops the
-               first prompt looking like the wrong one. */
-            wrongChain
-            ? `Switch to ${token.chainName} and send`
-            : "Approve in your wallet"}
-      </Button>
+      {/* One button for the whole flow: it connects a wallet until there is
+          one, then sends. The form above is the same either way, so connecting
+          is a step on the way rather than a screen of its own. */}
+      {funder === null ? (
+        <Button type="button" variant="primary" size="lg" onClick={connect} className="mt-4 w-full">
+          Connect wallet
+        </Button>
+      ) : (
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          loading={action.isPending}
+          disabled={!ready}
+          className="mt-4 w-full"
+        >
+          {action.isPending
+            ? "Waiting for your wallet…"
+            : overdrawn
+              ? `Insufficient ${token.symbol} balance`
+              : lowGas
+                ? `Not enough ${gasCoin} for gas`
+                : /* Says the switch is coming rather than springing it. The wallet
+                 was always going to ask twice here; the label is what stops the
+                 first prompt looking like the wrong one. */
+                  wrongChain
+                  ? `Switch to ${token.chainName} and send`
+                  : "Approve in your wallet"}
+        </Button>
+      )}
     </form>
   );
 };

@@ -1,13 +1,15 @@
+import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
+import { STEP_SLIDE, STEP_TRANSITION } from "../../motion/step";
 import { useFundSources } from "../../api/fund-sources";
-import { useDebounced, useFundTokens, type FundToken } from "../../api/fund-tokens";
-import { useConnectFunder, useDisconnectFunder, useFunder } from "../../wallet/useFunder";
+import { useDebounced, useFundTokens, usePrefetchFundTokens, type FundToken } from "../../api/fund-tokens";
+import { useDisconnectFunder, useFunder } from "../../wallet/useFunder";
 import type { Funder } from "../../wallet/funder";
-import { Button } from "../../ui/Button";
-import { Alert } from "../../ui/icons";
+import { Alert, Check, Close } from "../../ui/icons";
 import { FundWalletSwap } from "./FundWalletSwap";
 import { TokenMark } from "./TokenMark";
-import { timingCopy } from "./fund-chain";
+import { useHeldTokens, type Held } from "../../api/fund-holdings";
+import { FundFromChainSkeleton, TokenRowsSkeleton } from "./FundSkeleton";
 
 /**
  * Adding cash from a wallet somebody already holds, on any chain we can sign on.
@@ -50,15 +52,22 @@ const Note = ({ children }: { children: React.ReactNode }) => (
 const TokenRow = ({
   token,
   showChain,
+  current,
+  held,
   onPick,
 }: {
   token: FundToken;
   showChain: boolean;
+  /** The token already chosen, marked so going back to it is one click. */
+  current: boolean;
+  /** What the connected wallet holds of it, shown in place of the chain. */
+  held?: Held | undefined;
   onPick: () => void;
 }) => (
   <button
     type="button"
     onClick={onPick}
+    aria-current={current || undefined}
     className="group flex items-center gap-3 rounded-md px-3 text-left transition-colors hover:bg-white"
   >
     <TokenMark
@@ -78,22 +87,43 @@ const TokenRow = ({
         <span className="truncate text-[14px] leading-none text-ds-ink">{token.symbol}</span>
         <span className="truncate text-[12px] leading-none text-ds-muted">{token.name}</span>
       </span>
-      {showChain && (
-        <span className="shrink-0 text-[12px] leading-none text-ds-muted">{token.chainName}</span>
-      )}
+      <span className="flex shrink-0 items-center gap-2">
+        {held !== undefined ? (
+          <span className="flex flex-col items-end gap-1.5">
+            <span className="text-[14px] leading-none text-ds-ink">
+              {held.usd === null ? `${held.amountText}` : usdText(held.usd)}
+            </span>
+            <span className="text-[12px] leading-none text-ds-muted">
+              {held.usd === null ? token.chainName : `${held.amountText} ${token.symbol}`}
+            </span>
+          </span>
+        ) : (
+          showChain && <span className="text-[12px] leading-none text-ds-muted">{token.chainName}</span>
+        )}
+        {current && <Check className="size-3.5 text-ds-ink" />}
+      </span>
     </span>
   </button>
 );
+
+/** Dollars for a holding: "$1,240.50", and "<$0.01" for dust. */
+const usdText = (n: number) =>
+  n > 0 && n < 0.01
+    ? "<$0.01"
+    : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 
 /** The chain filters. Server order, which is editorial rather than alphabetical. */
 const ChainFilter = ({
   chains,
   picked,
   onPick,
+  onWarm,
 }: {
   chains: readonly { chainId: number; name: string; iconUrl: string | null }[];
   picked: number | null;
   onPick: (chainId: number | null) => void;
+  /** About to be picked: fetch its list now, so the click lands on an answer. */
+  onWarm: (chainId: number) => void;
 }) => {
   const chip = (on: boolean) =>
     `flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] leading-none whitespace-nowrap transition-colors ${
@@ -130,6 +160,8 @@ const ChainFilter = ({
           key={c.chainId}
           type="button"
           onClick={() => onPick(picked === c.chainId ? null : c.chainId)}
+          onPointerEnter={() => onWarm(c.chainId)}
+          onFocus={() => onWarm(c.chainId)}
           aria-pressed={picked === c.chainId}
           className={chip(picked === c.chainId)}
         >
@@ -194,156 +226,216 @@ const Searching = () => (
   </span>
 );
 
+const sameToken = (a: FundToken | null, b: FundToken) =>
+  a !== null && a.chainId === b.chainId && a.address === b.address;
+
+/**
+ * Two screens, one at a time: the list of tokens, and the amount to send.
+ *
+ * The list comes first and takes the whole panel, because until a token is
+ * chosen there is nothing else to do. Once one is, the amount screen holds it
+ * in a selector inside the field, and the list comes back only when that is
+ * pressed — with a close button that returns to the token already chosen, so
+ * looking is never the same as changing.
+ */
 export const FundFromChain = () => {
   const sources = useFundSources();
   const funder = useFunder();
-  const connect = useConnectFunder();
   const [query, setQuery] = useState("");
   const [chainId, setChainId] = useState<number | null>(null);
   const [picked, setPicked] = useState<FundToken | null>(null);
+  const [choosing, setChoosingState] = useState(false);
+  /* Opening the list is a step back from the amount; picking from it is a step in. */
+  const [dir, setDir] = useState(1);
+  const setChoosing = (open: boolean) => {
+    setDir(open ? -1 : 1);
+    setChoosingState(open);
+  };
 
   const debounced = useDebounced(query.trim());
   const tokens = useFundTokens(debounced, chainId);
+  const prefetch = usePrefetchFundTokens();
 
   /* What is on screen is one answer behind only while a new one is in flight,
      because the query keeps its previous data. `isFetching` is therefore the
      honest signal for the spinner — `isPending` would be false after the first
      search and the field would go quiet for the rest of the session. */
   const searching = tokens.isFetching || debounced !== query.trim();
-  const rows = tokens.data?.tokens ?? [];
+  const listed = tokens.data?.tokens ?? [];
+  /*
+   * With a wallet attached, what it holds comes first, most valuable at the
+   * top, each showing how much — then everything else, without repeating
+   * what was raised. Narrowed by the same search and chain as the list, so a
+   * filter never shows a held token from somewhere else.
+   */
+  const held = useHeldTokens(funder, listed, sources.data?.chains ?? []);
+  const term = debounced.toLowerCase();
+  const heldHere = held.filter(
+    (h) =>
+      (chainId === null || h.token.chainId === chainId) &&
+      (term.length === 0 ||
+        h.token.symbol.toLowerCase().includes(term) ||
+        h.token.name.toLowerCase().includes(term) ||
+        h.token.chainName.toLowerCase().includes(term)),
+  );
+  const heldBy = new Map(heldHere.map((h) => [`${h.token.chainId}:${h.token.address}`, h]));
+  const rows = [
+    ...heldHere.map((h) => h.token),
+    ...listed.filter((t) => !heldBy.has(`${t.chainId}:${t.address}`)),
+  ];
   /* Named rather than carried as an id, so the empty state can say which chain
      it found nothing on. */
   const chainName = sources.data?.chains.find((c) => c.chainId === chainId)?.name ?? null;
 
   if (sources.isPending) {
-    return <p className="py-6 text-center text-[13px] text-ds-muted">Loading deposit options…</p>;
+    return <FundFromChainSkeleton />;
   }
   if (sources.isError) {
     return <Note>Deposits from other chains are unavailable right now. USDC on Solana still works.</Note>;
   }
 
-  if (picked !== null) {
-    const back = (
-      <button
-        type="button"
-        onClick={() => setPicked(null)}
-        className="mt-3 self-center text-[12px] text-ds-muted hover:text-ds-ink hover:underline"
-      >
-        Choose something else
-      </button>
-    );
-
-    if (funder === null) {
-      return (
-        <div className="flex flex-col">
-          <div className="rounded-lg bg-ds-panel p-4">
-            <p className="text-[14px] leading-none font-medium text-ds-ink">
-              Connect the wallet that holds it
-            </p>
-            <p className="mt-2 text-[12px] leading-[1.45] text-ds-muted">
-              Phantom, MetaMask, Rabby, Backpack — or any wallet on your phone. You approve the swap and the
-              cash arrives here.
-            </p>
-            <Button variant="primary" onClick={connect} className="mt-4 w-full">
-              Connect a wallet
-            </Button>
-          </div>
-          {back}
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex flex-col">
-        <p className="text-[14px] leading-none font-medium text-ds-ink">Swap {picked.symbol} into cash</p>
-        <p className="mt-1.5 text-[12px] leading-[1.45] text-ds-muted">
-          It arrives as USDC in your account. {timingCopy(picked.vmType)}
-        </p>
-        <div className="mt-3">
-          <FundWalletSwap token={picked} />
-        </div>
-        <ConnectedWallet funder={funder} />
-        {back}
-      </div>
-    );
-  }
+  const listing = picked === null || choosing;
+  const choose = (token: FundToken) => {
+    setPicked(token);
+    setChoosing(false);
+  };
 
   return (
-    <div className="flex flex-col">
-      <label className="flex h-11 items-center rounded-lg bg-ds-panel px-3">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search chains and tokens"
-          aria-label="Search chains and tokens"
-          className="w-full min-w-0 bg-transparent text-[14px] text-ds-ink outline-none placeholder:text-ds-muted"
-        />
-        {searching && <Searching />}
-      </label>
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-x-clip">
+      <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+        {listing ? (
+          <motion.div
+            key="list"
+            custom={dir}
+            variants={STEP_SLIDE}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={STEP_TRANSITION}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="flex items-center gap-2">
+              <label className="flex h-11 min-w-0 flex-1 items-center rounded-lg bg-ds-panel px-3">
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search chains and tokens"
+                  aria-label="Search chains and tokens"
+                  className="w-full min-w-0 bg-transparent text-[14px] text-ds-ink outline-none placeholder:text-ds-muted"
+                />
+                {searching && <Searching />}
+              </label>
+              {/* Back to the token already chosen, without changing it. */}
+              {picked !== null && (
+                <button
+                  type="button"
+                  onClick={() => setChoosing(false)}
+                  aria-label={`Keep ${picked.symbol}`}
+                  className="grid size-11 shrink-0 place-items-center rounded-lg bg-ds-panel text-ds-muted transition-colors hover:bg-black/[0.06] hover:text-ds-ink"
+                >
+                  <Close className="size-3.5" />
+                </button>
+              )}
+            </div>
 
-      <div className="mt-2">
-        <ChainFilter chains={sources.data?.chains ?? []} picked={chainId} onPick={setChainId} />
-      </div>
+            <div className="mt-2">
+              <ChainFilter
+                chains={sources.data?.chains ?? []}
+                picked={chainId}
+                onPick={setChainId}
+                onWarm={(id) => prefetch(debounced, id)}
+              />
+            </div>
 
-      <div
-        aria-busy={searching}
-        /* Dimmed rather than emptied while the next answer lands: the rows
-           under the cursor stay where they are, and the list reads as being
-           refined instead of destroyed and rebuilt. */
-        /* No gap between rows: they are separated by a hairline now, and a gap
-           as well would read as two separation systems arguing. */
-        className={`mt-2 flex max-h-72 flex-col overflow-y-auto rounded-lg bg-ds-panel px-1 transition-opacity ${
-          searching && rows.length > 0 ? "opacity-60" : ""
-        }`}
-      >
-        {tokens.isError ? (
-          <p className="px-3 py-6 text-center text-[13px] text-ds-muted">
-            Could not load tokens. Check your connection and try again.
-          </p>
-        ) : rows.length === 0 ? (
-          <div className="px-3 py-6 text-center text-[13px] text-ds-muted">
-            {searching ? (
-              "Searching…"
-            ) : (
-              <>
-                <p>
-                  {debounced.length > 0
-                    ? `Nothing matches “${debounced}”${chainName === null ? "" : ` on ${chainName}`}.`
-                    : `Nothing to deposit${chainName === null ? "" : ` on ${chainName}`} right now.`}
-                </p>
-                {/*
-                 * The way out of a dead end. A chain filter set three searches
-                 * ago is invisible by the time it stops matching, and "nothing
-                 * matches USDC" is a confusing thing to read about a token we
-                 * take on five chains.
-                 */}
-                {chainName !== null && (
-                  <button
-                    type="button"
-                    onClick={() => setChainId(null)}
-                    className="mt-1 text-ds-ink underline underline-offset-2"
-                  >
-                    Search every chain
-                  </button>
+            {/*
+             * The list runs to the bottom of the panel rather than stopping at
+             * a fixed height, and scrolls inside itself with no bar: the fade
+             * at its foot, in the list's own grey, is what says there is more.
+             */}
+            <div className="relative mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-ds-panel">
+              <div
+                aria-busy={searching}
+                /* Dimmed rather than emptied while the next answer lands: the
+                   rows under the cursor stay where they are, and the list
+                   reads as being refined instead of destroyed and rebuilt. */
+                className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-1 pb-10 transition-opacity [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+                  searching && rows.length > 0 ? "opacity-60" : ""
+                }`}
+              >
+                {tokens.isError ? (
+                  <p className="px-3 py-6 text-center text-[13px] text-ds-muted">
+                    Could not load tokens. Check your connection and try again.
+                  </p>
+                ) : rows.length === 0 && tokens.isPending ? (
+                  /* The first answer, before there is a list to dim. Later
+                     searches keep the previous rows instead (see above). */
+                  <TokenRowsSkeleton />
+                ) : rows.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-[13px] text-ds-muted">
+                    {searching ? (
+                      "Searching…"
+                    ) : (
+                      <>
+                        <p>
+                          {debounced.length > 0
+                            ? `Nothing matches “${debounced}”${chainName === null ? "" : ` on ${chainName}`}.`
+                            : `Nothing to deposit${chainName === null ? "" : ` on ${chainName}`} right now.`}
+                        </p>
+                        {/*
+                         * The way out of a dead end. A chain filter set three
+                         * searches ago is invisible by the time it stops
+                         * matching, and "nothing matches USDC" is a confusing
+                         * thing to read about a token we take on five chains.
+                         */}
+                        {chainName !== null && (
+                          <button
+                            type="button"
+                            onClick={() => setChainId(null)}
+                            className="mt-1 text-ds-ink underline underline-offset-2"
+                          >
+                            Search every chain
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  rows.map((token) => (
+                    <TokenRow
+                      key={`${token.chainId}:${token.address}`}
+                      token={token}
+                      showChain={chainId === null}
+                      current={sameToken(picked, token)}
+                      held={heldBy.get(`${token.chainId}:${token.address}`)}
+                      onPick={() => choose(token)}
+                    />
+                  ))
                 )}
-              </>
-            )}
-          </div>
+              </div>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-ds-panel to-transparent"
+              />
+            </div>
+          </motion.div>
         ) : (
-          rows.map((token) => (
-            <TokenRow
-              key={`${token.chainId}:${token.address}`}
-              token={token}
-              showChain={chainId === null}
-              onPick={() => setPicked(token)}
-            />
-          ))
+          <motion.div
+            key="amount"
+            custom={dir}
+            variants={STEP_SLIDE}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={STEP_TRANSITION}
+            className="flex flex-col"
+          >
+            <FundWalletSwap token={picked} onChangeToken={() => setChoosing(true)} />
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
 
-      {/* Before anything is picked too: this is the screen somebody lands on
-          with a wallet still attached from last time, and the screen where
-          they would want to change it. */}
+      {/* On every screen: this is where somebody lands with a wallet still
+          attached from last time, and where they would want to change it. */}
       {funder !== null && <ConnectedWallet funder={funder} />}
     </div>
   );

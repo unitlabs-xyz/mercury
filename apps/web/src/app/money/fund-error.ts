@@ -17,6 +17,12 @@ interface ErrorLike {
   readonly code?: unknown;
   readonly name?: unknown;
   readonly cause?: unknown;
+  /* Where a provider keeps the real reason: MetaMask sends
+     `{ code: -32603, message: "Internal JSON-RPC error.", data: { message:
+     "insufficient funds for gas * price + value" } }`, and some wallets nest
+     the whole thing again under `error`. */
+  readonly data?: unknown;
+  readonly error?: unknown;
 }
 
 /*
@@ -71,13 +77,31 @@ export const isRejection = (err: unknown, depth = 0): boolean => {
   return e.cause === undefined || e.cause === null ? false : isRejection(e.cause, depth + 1);
 };
 
-/** Longer than this and it stops being one sentence in a sheet on a phone. */
-const MAX_LENGTH = 180;
+/**
+ * Every readable line on an error and everywhere it nests — `cause`, and the
+ * `data` and `error` a wallet hangs its real reason on — nearest first.
+ */
+const allText = (err: unknown, depth = 0): string[] => {
+  if (depth > MAX_CAUSE_DEPTH || err === undefined || err === null) return [];
+  if (typeof err === "string") return text(err) === null ? [] : [err.trim()];
+  if (typeof err !== "object") return [];
+  const e = asErrorLike(err);
+  const here = [e.shortMessage, e.details, e.message].map(text).filter((s): s is string => s !== null);
+  return [
+    ...here,
+    ...allText(e.cause, depth + 1),
+    ...allText(e.data, depth + 1),
+    ...allText(e.error, depth + 1),
+  ];
+};
+
+/** Longer than this and it stops being one short line in a sheet on a phone. */
+const MAX_LENGTH = 90;
 
 /** The one sentence shown when a deposit fails. Never empty. */
 export const fundErrorCopy = (err: unknown): { readonly message: string; readonly rejected: boolean } => {
   if (isRejection(err)) {
-    return { message: "You cancelled the signature in your wallet. Nothing was sent.", rejected: true };
+    return { message: "Cancelled in your wallet. Nothing was sent.", rejected: true };
   }
 
   /*
@@ -92,8 +116,37 @@ export const fundErrorCopy = (err: unknown): { readonly message: string; readonl
   const bare = text(asErrorLike(err).message) ?? (typeof err === "string" ? err : null);
   if (bare !== null && /transaction reverted/i.test(bare)) {
     return {
-      message:
-        "The network rejected the transaction, so nothing was sent. Usually that means the wallet is short of the token or of the gas coin.",
+      message: "Rejected by the network, likely low balance or gas. Nothing was sent.",
+      rejected: false,
+    };
+  }
+
+  /*
+   * The wallet's own reason, wherever it sits.
+   *
+   * A wallet that refuses a transaction for a reason it does not classify —
+   * MetaMask's "Internal JSON-RPC error", most often — reaches us as viem's
+   * InternalRpcError, whose one-line summary is "An internal error was
+   * received." and says nothing. The reason ("insufficient funds for gas *
+   * price + value") is in `details`, or a cause or two down. So the whole
+   * chain is read for the few reasons worth naming before falling back.
+   */
+  const said = allText(err).join(" \n ");
+  if (/insufficient funds|gas required exceeds allowance|exceeds the balance of the account/i.test(said)) {
+    return {
+      message: "Not enough gas for the network fee.",
+      rejected: false,
+    };
+  }
+  if (/transfer amount exceeds balance|exceeds balance|insufficient balance/i.test(said)) {
+    return {
+      message: "Not enough of this token in your wallet.",
+      rejected: false,
+    };
+  }
+  if (/does not match (the )?(target|expected) chain|chain mismatch|current chain id/i.test(said)) {
+    return {
+      message: "Your wallet switched networks. Try again.",
       rejected: false,
     };
   }
@@ -109,8 +162,17 @@ export const fundErrorCopy = (err: unknown): { readonly message: string; readonl
     (e.cause === undefined || e.cause === null ? null : text(asErrorLike(e.cause).shortMessage)) ??
     null;
 
+  /* An unclassified wallet failure: said plainly, instead of viem's sentence
+     about an internal error. The wallet's own words are on the console. */
+  if (best !== null && /internal (json-rpc )?error/i.test(best)) {
+    return {
+      message: "Your wallet couldn't send it. Try again.",
+      rejected: false,
+    };
+  }
+
   if (best === null) {
-    return { message: "That deposit could not be completed. Please try again.", rejected: false };
+    return { message: "Couldn't complete the deposit. Try again.", rejected: false };
   }
 
   /*
@@ -120,4 +182,14 @@ export const fundErrorCopy = (err: unknown): { readonly message: string; readonl
    */
   const clipped = best.length > MAX_LENGTH ? `${best.slice(0, MAX_LENGTH - 1)}…` : best;
   return { message: clipped, rejected: false };
+};
+
+/**
+ * Everything the error said, joined, for a developer reading the screen in
+ * a dev build. Never shown in production: it is the wallet's raw wording.
+ */
+export const fundErrorDetail = (err: unknown): string => {
+  const lines = [...new Set(allText(err))];
+  const joined = lines.join(" · ");
+  return joined.length > 400 ? `${joined.slice(0, 399)}…` : joined;
 };

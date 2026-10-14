@@ -140,3 +140,83 @@ export const solBalanceRaw = (owner: string): Promise<bigint> =>
     const { value } = await rpc.getBalance(address(owner)).send();
     return BigInt(value);
   });
+
+/** The SPL Token-2022 program, which xStocks and other newer mints live under. */
+const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
+
+/** Native SOL, in Relay's spelling: the system program's address. */
+export const SOL_NATIVE = "11111111111111111111111111111111";
+
+/** One thing a wallet holds: the mint, the raw amount, and its decimals. */
+export interface Holding {
+  readonly mint: string;
+  readonly amount: bigint;
+  readonly decimals: number;
+}
+
+type ParsedHolding = {
+  parsed?: { info?: { mint?: string; tokenAmount?: { amount?: string; decimals?: number } } };
+};
+
+const holdingOf = (data: unknown): Holding | null => {
+  const info = (data as ParsedHolding).parsed?.info;
+  const amount = info?.tokenAmount?.amount;
+  const decimals = info?.tokenAmount?.decimals;
+  if (info?.mint === undefined || amount === undefined || decimals === undefined) return null;
+  const raw = BigInt(amount);
+  return raw > 0n ? { mint: info.mint, amount: raw, decimals } : null;
+};
+
+/**
+ * Everything a Solana wallet holds that has a balance: SOL, and every token
+ * account under both token programs.
+ *
+ * Listed with `getTokenAccountsByOwner` where the endpoint serves it, which is
+ * the only way to find tokens nobody asked about. The public fallback refuses
+ * indexed methods, so there the answer narrows to `known` — the mints already
+ * on screen — read through their derived accounts with `getMultipleAccounts`,
+ * which every endpoint serves. Narrower, but never wrong: a wallet holding
+ * something off-screen simply does not have it raised to the top.
+ */
+export const walletHoldings = async (owner: string, known: readonly string[]): Promise<Holding[]> => {
+  const sol = await solBalanceRaw(owner);
+  const native: Holding[] = sol > 0n ? [{ mint: SOL_NATIVE, amount: sol, decimals: 9 }] : [];
+
+  const tokens = await viaRpc(async (rpc) => {
+    try {
+      const lists = await Promise.all(
+        [TOKEN_PROGRAM_ADDRESS, TOKEN_2022_PROGRAM].map((programId) =>
+          rpc.getTokenAccountsByOwner(address(owner), { programId }, { encoding: "jsonParsed" }).send(),
+        ),
+      );
+      return lists.flatMap((l) => l.value.map((a) => holdingOf(a.account.data))).filter((h) => h !== null);
+    } catch {
+      const mints = known.filter((m) => m !== SOL_NATIVE);
+      const atas = await Promise.all(
+        mints.flatMap((mint) =>
+          [TOKEN_PROGRAM_ADDRESS, TOKEN_2022_PROGRAM].map(async (tokenProgram) => {
+            const [ata] = await findAssociatedTokenPda({
+              owner: address(owner),
+              mint: mint as Address,
+              tokenProgram,
+            });
+            return ata;
+          }),
+        ),
+      );
+      const found: Holding[] = [];
+      for (let i = 0; i < atas.length; i += 100) {
+        const { value } = await rpc
+          .getMultipleAccounts(atas.slice(i, i + 100), { encoding: "jsonParsed" })
+          .send();
+        for (const account of value) {
+          const h = account === null ? null : holdingOf(account.data);
+          if (h !== null) found.push(h);
+        }
+      }
+      return found;
+    }
+  });
+
+  return [...native, ...tokens];
+};

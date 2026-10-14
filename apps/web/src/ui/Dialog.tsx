@@ -184,11 +184,18 @@ export const PanelHeader = ({
   title,
   sub,
   onClose,
+  onBack,
 }: {
   id: string;
   title: ReactNode;
   sub?: ReactNode;
   onClose: () => void;
+  /**
+   * A step inside the panel rather than its front page. The close button
+   * becomes a way back, so the panel reads as having gone one level in;
+   * Escape and the backdrop still close it outright.
+   */
+  onBack?: () => void;
 }) => (
   <header className="flex items-start justify-between gap-3 px-6 pt-6">
     <div className="min-w-0">
@@ -199,13 +206,25 @@ export const PanelHeader = ({
     </div>
     <button
       type="button"
-      onClick={onClose}
-      aria-label="Close"
+      onClick={onBack ?? onClose}
+      aria-label={onBack ? "Back" : "Close"}
       className="-mt-1 -mr-2 grid size-8 shrink-0 place-items-center rounded-lg text-ds-muted transition-colors hover:bg-black/[0.06] hover:text-ds-ink"
     >
-      <svg viewBox="0 0 12 12" width={12} height={12} fill="none" aria-hidden>
-        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
-      </svg>
+      {onBack ? (
+        <svg viewBox="0 0 14 14" width={14} height={14} fill="none" aria-hidden>
+          <path
+            d="M12 7H2M6.5 2.5 2 7l4.5 4.5"
+            stroke="currentColor"
+            strokeWidth={1.4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 12 12" width={12} height={12} fill="none" aria-hidden>
+          <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" />
+        </svg>
+      )}
     </button>
   </header>
 );
