@@ -20,6 +20,10 @@
     "@mercury/view": "workspace:*",
     "@number-flow/react": "^0.6.2",
     "@privy-io/react-auth": "^3.45.0",
+    "@relayprotocol/relay-sdk": "8.0.4",
+    "@reown/appkit": "1.8.24",
+    "@reown/appkit-adapter-solana": "1.8.24",
+    "@reown/appkit-adapter-wagmi": "1.8.24",
     "@solana-program/memo": "^0.15.0",
     "@solana-program/system": "^0.15.0",
     "@solana-program/token": "^0.17.0",
@@ -31,7 +35,9 @@
     "qrcode-generator": "^2.0.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^7.1.0"
+    "react-router-dom": "^7.1.0",
+    "viem": "2.56.0",
+    "wagmi": "2.19.1"
   },
   "devDependencies": {
     "@mercury/tsconfig": "workspace:*",

@@ -36,11 +36,12 @@
   "pnpm": {
     "overrides": {
       "@types/react": "19.2.18",
-      "ws@>=8.0.0 <8.21.0": "^8.21.3",
+      "decode-uri-component": "^0.5.0",
       "fflate": "^0.7.5",
       "shell-quote": "^1.11.0",
       "source-map-js": "^1.2.2",
-      "decode-uri-component": "^0.5.0"
+      "viem": "2.56.0",
+      "ws@>=8.0.0 <8.21.0": "^8.21.3"
     }
   }
 }
