@@ -1,2 +1,0 @@
-ALTER TABLE "funding_intent" ALTER COLUMN "deposit_address" DROP NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX "funding_intent_request_idx" ON "funding_intent" USING btree ("relay_request_id") WHERE "funding_intent"."deposit_address" is null;
