@@ -1,6 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import { anyInFlight, type FundCurrency, type FundSource } from "../app/money/fund-chain";
+import { anyInFlight, type FundSource } from "../app/money/fund-chain";
 
 export type { FundCurrency, FundSource } from "../app/money/fund-chain";
 
@@ -24,9 +24,9 @@ export const useFundSources = () =>
 export interface FundIntent {
   readonly id: string;
   readonly status: string;
-  readonly depositAddress: string;
   readonly originChainId: number;
-  readonly originCurrency: string;
+  readonly originChainName: string;
+  readonly originCurrencySymbol: string;
   readonly quotedOutRaw: string | null;
   readonly inTxHash: string | null;
   readonly outTxHash: string | null;
@@ -49,26 +49,3 @@ export const useFundIntents = () =>
     refetchInterval: (query) =>
       anyInFlight((query.state.data?.intents ?? []).map((i) => i.status)) ? 15_000 : false,
   });
-
-export interface FundAddress {
-  readonly depositAddress: string;
-  readonly requestId: string;
-  readonly chain: { readonly id: number; readonly name: string; readonly vmType: string };
-  readonly currency: FundCurrency;
-  readonly minimumUsd: string;
-  /** False on a chain we hold no refund key for. The panel has to say so. */
-  readonly autoRefund: boolean;
-}
-
-export const useFundAddress = () => {
-  const qc = useQueryClient();
-  return useMutation<FundAddress, Error, { chainId: number; currency: string }>({
-    mutationFn: (input) =>
-      apiFetch<FundAddress>("/v1/money/fund/address", {
-        method: "POST",
-        body: JSON.stringify(input),
-      }),
-    /* The intent exists the moment this resolves, so the list below is stale. */
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["fund-intents"] }),
-  });
-};

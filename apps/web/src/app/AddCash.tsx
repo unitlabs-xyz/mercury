@@ -5,9 +5,6 @@ import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { StatusChip } from "../ui/ds";
 import { ChevronDown } from "../ui/icons";
 import { DepositAddress } from "./Receive";
-import { FundFromWallet } from "./money/FundFromWallet";
-import { useFundingWalletAvailable } from "../auth/embedded";
-import { useFundSources } from "../api/fund-sources";
 
 /*
  * AppKit, its two adapters and a WalletConnect client, behind the one route
@@ -160,14 +157,6 @@ const WalletGlyph = () => (
 
 const METHODS: readonly Method[] = [
   {
-    key: "wallet",
-    title: "From your wallet",
-    sub: "Phantom, Backpack or Solflare",
-    figure: "Instant",
-    note: "No fee",
-    icon: <WalletGlyph />,
-  },
-  {
     key: "solana",
     title: "USDC on Solana",
     sub: "From any wallet or exchange",
@@ -204,17 +193,11 @@ const METHODS: readonly Method[] = [
   },
   {
     key: "networks",
-    title: "From another chain",
-    sub: "Any token on 60+ chains, swapped to USDC for you",
+    title: "From your wallet",
+    sub: "Any token, any chain — swapped to USDC for you",
     figure: "Minutes",
     note: "Network fee",
-    icon: (
-      <Glyph>
-        <circle cx="5" cy="8" r="2.5" />
-        <circle cx="11" cy="8" r="2.5" />
-        <path d="M7.5 8h1" />
-      </Glyph>
-    ),
+    icon: <WalletGlyph />,
   },
 ];
 
@@ -228,29 +211,15 @@ const SOON = METHODS.filter((m) => m.soon);
  * them, the details of the chosen way (for Solana, the address and its code).
  */
 export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
-  const hasWallet = useFundingWalletAvailable();
+  const [pick, setPick] = useState("networks");
   /*
-   * Whether the server has Relay configured at all. The routes are not mounted
-   * without it, so the query fails rather than answering empty — and the row
-   * is hidden rather than disabled, for the reason this file already gives
-   * about its greyed-out rows: a control that cannot be taken invites the
-   * click that does nothing.
+   * Every live method is offered. Nothing here is gated on a wallet being
+   * installed any more: the wallet method opens a panel that offers to connect
+   * one, including over WalletConnect from a phone, so there is no browser in
+   * which the row leads nowhere.
    */
-  const chains = useFundSources();
-  const hasChains = chains.isSuccess;
-  const [pick, setPick] = useState("wallet");
-  /*
-   * The wallet row is hidden rather than disabled where no wallet is
-   * installed, so a browser without one sees exactly the panel it saw before.
-   * `chosen` is what that costs: the default points at the better method, and
-   * falls back on its own rather than needing an effect to correct it.
-   *
-   * Injected wallets register at page load and this panel opens on a click
-   * long after, so in practice the fallback resolves before anybody sees it.
-   */
-  const live = LIVE.filter((m) => (m.key !== "wallet" || hasWallet) && (m.key !== "networks" || hasChains));
-  const unavailable = (key: string) => (key === "wallet" && !hasWallet) || (key === "networks" && !hasChains);
-  const chosen = unavailable(pick) ? "solana" : pick;
+  const live = LIVE;
+  const chosen = pick;
   return (
     <SidePanel open={open} onClose={onClose} labelledBy="add-cash-heading">
       <PanelHeader
@@ -285,12 +254,6 @@ export const AddCash = ({ open, onClose }: { open: boolean; onClose: () => void 
 
           <OtherMethods methods={SOON} />
         </div>
-
-        {chosen === "wallet" && (
-          <div className="mt-6">
-            <FundFromWallet />
-          </div>
-        )}
 
         {chosen === "networks" && (
           <div className="mt-6">
