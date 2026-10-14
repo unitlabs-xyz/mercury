@@ -3,7 +3,7 @@
 # The Mercury API, for Coolify.
 #
 # BUILD CONTEXT IS THE REPO ROOT, not this directory. The API imports
-# workspace packages (@mercury/chain, core, keys, market, types) and every one
+# workspace packages (@mercury/chain, core, market, types) and every one
 # of them exports raw .ts — nothing in this repo compiles — so the image has
 # to carry the workspace and run TypeScript through tsx.
 #
@@ -34,9 +34,7 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY packages/chain/package.json packages/chain/
 COPY packages/core/package.json packages/core/
-COPY packages/keys/package.json packages/keys/
 COPY packages/market/package.json packages/market/
-COPY packages/sdk/package.json packages/sdk/
 COPY packages/types/package.json packages/types/
 COPY tooling/tsconfig/package.json tooling/tsconfig/
 COPY services/api/package.json services/api/
