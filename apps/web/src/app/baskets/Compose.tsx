@@ -2,16 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DESCRIPTION_MAX, NAME_MAX, TOTAL_BPS, type DraftProblem } from "@mercury/core";
 import { shelfOf, weightLabel } from "@mercury/view";
-import type { PickableBasketAsset } from "@mercury/types";
-import { useBasketAssets, useBaskets, useCreateBasket } from "../../api/baskets";
+import type { Basket, PickableBasketAsset } from "@mercury/types";
+import { useBasketAssets, useBaskets, useCreateBasket, useUpdateBasket } from "../../api/baskets";
+import { ApiError } from "../../api/client";
 import { priceInstrument, useHistories, useInstruments } from "../../market/hooks";
 import { Button } from "../../ui/Button";
 import { PanelHeader, SidePanel } from "../../ui/Dialog";
 import { GlideRows, InfoTip, SearchField, SegmentMeter } from "../../ui/ds";
 import { STOCK_ROW, StockRowBody } from "../invest/Rail";
+import { Skeleton } from "../portfolio/ui";
 import { AssetIcon } from "./AssetIcon";
 import { ASSET_DRAG, Weights } from "./Weights";
-import { EMPTY, added, asDraft, distributed, problem, remaining } from "./composition";
+import { EMPTY, added, asDraft, distributed, from, problem, remaining } from "./composition";
 
 /** What stops the create button, said on the rule beside it. */
 const BLOCKED: Record<DraftProblem, string> = {
@@ -28,13 +30,47 @@ const BLOCKED: Record<DraftProblem, string> = {
    is the rows themselves — and six left most of the shelf empty. */
 const MATCHES = 10;
 
-export const Compose = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
+/**
+ * The one authoring surface, for a basket being written and one being changed.
+ *
+ * A second form for editing would be a second copy of the same rules, and the
+ * composer and the API have already drifted apart once over exactly that.
+ */
+export const Compose = ({
+  open,
+  onClose,
+  basket,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Absent writes a new basket; present changes this one. */
+  basket?: Basket | undefined;
+}) => {
   const navigate = useNavigate();
   const [composition, setComposition] = useState(EMPTY);
   const [query, setQuery] = useState("");
   const [dropping, setDropping] = useState(false);
   const catalogue = useBasketAssets(open);
   const create = useCreateBasket();
+  /* Only ever fired with a basket in hand; the slug is a hook's argument, and
+     hooks cannot be called one time in three. */
+  const update = useUpdateBasket(basket?.slug ?? "");
+  const saving = basket ? update : create;
+
+  /* Seeded once per opening. The catalogue refetches on its own, and re-seeding
+     on that would throw away whatever had been changed since. State rather than
+     a ref because the list has to know it is waiting, not say there is nothing. */
+  const [seeded, setSeeded] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) {
+      setSeeded(null);
+      return;
+    }
+    if (basket === undefined || catalogue.data === undefined || seeded === basket.slug) return;
+    setComposition(from(basket, catalogue.data));
+    setSeeded(basket.slug);
+  }, [open, basket, catalogue.data, seeded]);
+  const awaitingSeed = basket !== undefined && seeded !== basket.slug;
 
   const holdable = useMemo(
     () => new Set((catalogue.data ?? []).map((asset) => asset.assetId)),
@@ -55,8 +91,8 @@ export const Compose = ({ open, onClose }: { open: boolean; onClose: () => void 
   const shelf = useBaskets();
   const popular = useMemo(() => {
     const seen = new Map<string, number>();
-    for (const basket of shelfOf(shelf.data ?? []))
-      for (const asset of basket.allocations) seen.set(asset.ticker, (seen.get(asset.ticker) ?? 0) + 1);
+    for (const item of shelfOf(shelf.data ?? []))
+      for (const asset of item.allocations) seen.set(asset.ticker, (seen.get(asset.ticker) ?? 0) + 1);
     const byTicker = new Map((catalogue.data ?? []).map((asset) => [asset.ticker, asset]));
     return [...seen.entries()]
       .sort(([aTicker, a], [bTicker, b]) => b - a || aTicker.localeCompare(bTicker))
@@ -122,7 +158,7 @@ export const Compose = ({ open, onClose }: { open: boolean; onClose: () => void 
   const close = () => {
     setComposition(EMPTY);
     setQuery("");
-    create.reset();
+    saving.reset();
     onClose();
   };
 
@@ -132,7 +168,15 @@ export const Compose = ({ open, onClose }: { open: boolean; onClose: () => void 
   };
 
   const submit = async () => {
-    const made = await create.mutateAsync(asDraft(composition));
+    const draft = asDraft(composition);
+    if (basket) {
+      /* Already on the basket's page: the list invalidation this does covers
+         the detail read too, so there is nowhere to send anybody. */
+      await update.mutateAsync(draft);
+      close();
+      return;
+    }
+    const made = await create.mutateAsync(draft);
     close();
     navigate(`/baskets/${encodeURIComponent(made.slug)}`);
   };
@@ -145,7 +189,7 @@ export const Compose = ({ open, onClose }: { open: boolean; onClose: () => void 
         id="compose-heading"
         title={
           <span className="text-[11px] leading-none tracking-[0.12em] text-ds-muted uppercase">
-            Build a basket
+            {basket ? "Edit basket" : "Build a basket"}
           </span>
         }
         onClose={close}
@@ -237,7 +281,13 @@ export const Compose = ({ open, onClose }: { open: boolean; onClose: () => void 
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-1">
-            {composition.picks.length === 0 ? (
+            {awaitingSeed ? (
+              <div className="flex flex-col gap-1 p-1">
+                {Array.from({ length: 3 }, (_, index) => (
+                  <Skeleton key={index} className="h-13 rounded-md" />
+                ))}
+              </div>
+            ) : composition.picks.length === 0 ? (
               <div className="flex h-full min-h-[160px] flex-col items-center justify-center gap-1.5 px-8 text-center">
                 <p className="text-[14px] leading-none font-medium text-ds-ink">No stocks yet</p>
                 <p className="max-w-[260px] text-[13px] leading-relaxed text-ds-muted">
@@ -333,9 +383,11 @@ export const Compose = ({ open, onClose }: { open: boolean; onClose: () => void 
           sentence set in a button makes the widest, heaviest thing on the sheet
           the one control nobody can press. */}
       <footer className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-ds-divider px-6 py-4">
-        {create.isError ? (
+        {saving.isError ? (
+          /* The API's own refusal where it has one: it names what it would not
+             take, which "try again" never does. */
           <p role="alert" className="text-[13px] text-ds-down">
-            That could not be saved. Try again.
+            {saving.error instanceof ApiError ? saving.error.message : "That could not be saved. Try again."}
           </p>
         ) : blocked ? (
           <p id="compose-blocked" className="text-[13px] text-ds-muted">
@@ -356,12 +408,12 @@ export const Compose = ({ open, onClose }: { open: boolean; onClose: () => void 
           <Button
             variant="primary"
             size="lg"
-            loading={create.isPending}
+            loading={saving.isPending}
             disabled={blocked !== null}
             aria-describedby={blocked ? "compose-blocked" : undefined}
             onClick={() => void submit()}
           >
-            Create a basket
+            {basket ? "Save changes" : "Create a basket"}
           </Button>
         </div>
       </footer>

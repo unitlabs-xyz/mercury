@@ -8,7 +8,7 @@ import { toEvent, usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
 import { useMoney } from "../api/hooks";
 import { refreshAfterChain } from "../api/settle";
-import { ChevronDown } from "../ui/icons";
+import { ChevronDown, Pencil } from "../ui/icons";
 import {
   basketEnrollmentEnabled,
   useBasketActivity,
@@ -41,6 +41,7 @@ import { AssetIcon } from "./baskets/AssetIcon";
 import { Mosaic, TILE_CLASS } from "./baskets/Mosaic";
 import { OperationStatus } from "./baskets/OperationStatus";
 import { TOKEN_NAME } from "./stock/heldAs";
+import { Compose } from "./baskets/Compose";
 import { displayBasketName } from "./baskets/catalog";
 import { EnrollmentRail, ExitSheet, InvestSheet, RebalanceSheet } from "./baskets/Ticket";
 import { rebalanceOutcome, rebalanceTerminal } from "./baskets/rebalance-status";
@@ -373,6 +374,7 @@ export const BasketDetail = () => {
   const [firstDeposit, setFirstDeposit] = useState(false);
   const [fundingAmount, setFundingAmount] = useState("100");
   const [showAllAssets, setShowAllAssets] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [checkingEnrollment, setCheckingEnrollment] = useState(false);
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
@@ -699,10 +701,25 @@ export const BasketDetail = () => {
             <div className="px-5 pt-5 pb-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <h1 className="text-[20px] leading-tight font-medium text-ds-ink">{name}</h1>
+                    {/* Only on a basket somebody wrote: the shelf is not theirs to
+                        change. Drawn as the panel header's close is — a quiet glyph
+                        beside the title, not a button competing with it. */}
+                    {template.source === "mine" && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        aria-label="Edit basket"
+                        className="grid size-8 shrink-0 place-items-center rounded-lg text-ds-muted transition-colors hover:bg-black/[0.06] hover:text-ds-ink"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    )}
                   </div>
-                  <p className="mt-2 text-[13px] text-ds-muted">Glider strategy · Solana</p>
+                  <p className="mt-2 text-[13px] text-ds-muted">
+                    {template.source === "mine" ? "Your basket · Solana" : "Glider strategy · Solana"}
+                  </p>
                 </div>
                 <IconCluster
                   template={template}
@@ -1461,6 +1478,9 @@ export const BasketDetail = () => {
             exitAction.submit.reset();
           }}
         />
+      )}
+      {template.source === "mine" && (
+        <Compose open={editing} basket={template} onClose={() => setEditing(false)} />
       )}
     </AppShell>
   );

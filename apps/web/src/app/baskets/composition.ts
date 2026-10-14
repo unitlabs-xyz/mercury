@@ -1,5 +1,5 @@
 import { TOTAL_BPS, equalWeights, problemWith, type DraftProblem } from "@mercury/core";
-import type { PickableBasketAsset } from "@mercury/types";
+import type { Basket, PickableBasketAsset } from "@mercury/types";
 
 export interface Pick {
   readonly assetId: string;
@@ -43,6 +43,39 @@ export const added = (composition: Composition, asset: PickableBasketAsset): Com
         ...composition,
         picks: levelled([...composition.picks, { ...asset, weightBps: 0, locked: false }]),
       };
+
+/**
+ * A basket already written, back on the bench.
+ *
+ * An allocation knows its ticker and its weight; the catalogue carries the
+ * company name and the logo beside them. One the catalogue no longer offers
+ * keeps its row under its ticker rather than being dropped — `problem` then
+ * names it and the save stays shut, which is the author's call to make, not a
+ * holding that disappears while they were editing something else.
+ */
+export const from = (
+  /* Written out rather than `Pick<Basket, …>`: a pick here is a chosen stock. */
+  basket: { name: string; description: string; allocations: Basket["allocations"] },
+  catalogue: readonly PickableBasketAsset[],
+): Composition => {
+  const byId = new Map(catalogue.map((asset) => [asset.assetId, asset]));
+  return {
+    name: basket.name,
+    description: basket.description,
+    picks: basket.allocations.map((allocation) => {
+      const known = byId.get(allocation.assetId);
+      return {
+        assetId: allocation.assetId,
+        ticker: allocation.ticker,
+        name: known?.name ?? allocation.ticker,
+        mint: allocation.mint,
+        logoUrl: known?.logoUrl ?? null,
+        weightBps: allocation.weightBps,
+        locked: false,
+      };
+    }),
+  };
+};
 
 /**
  * Move a stock to sit where another one is.

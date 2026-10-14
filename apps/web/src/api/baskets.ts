@@ -89,14 +89,6 @@ export const useUpdateBasket = (slug: string) => {
   });
 };
 
-export const useDeleteBasket = (slug: string) => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => apiFetch(basketPath(slug), { method: "DELETE" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["api", "baskets"] }),
-  });
-};
-
 /** The curated shelf and the caller's own baskets, in one list, each marked `source`. */
 export const useBaskets = () =>
   useQuery({

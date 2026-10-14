@@ -93,6 +93,12 @@ export const Alert = (p: Icon) => (
   </svg>
 );
 
+export const Pencil = (p: Icon) => (
+  <svg {...base} {...p}>
+    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3Z" />
+  </svg>
+);
+
 export const Close = (p: Icon) => (
   <svg {...base} {...p}>
     <path d="M6 6l12 12M18 6L6 18" />
