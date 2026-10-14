@@ -1,4 +1,4 @@
-import { useBorrow } from "../api/borrow";
+import { useBorrow, type Borrow } from "../api/borrow";
 import { useMoney, useSignedIn } from "../api/hooks";
 import { Button, ButtonLink } from "../ui/Button";
 import { ArrowUp, Plus } from "../ui/icons";
@@ -8,6 +8,24 @@ import { pct, usd } from "@mercury/view";
 import { BorrowSection } from "./money/BorrowSection";
 import { HeaderFigure } from "./portfolio/Summary";
 import { Skeleton } from "./portfolio/ui";
+
+/**
+ * What the Spendable figure says underneath itself.
+ *
+ * Spendable is defined by the server as cash plus what could be borrowed
+ * (`spendableUsd: input.cashUsd.add(borrowableUsd)`, services/api/src/lending/
+ * capacity.ts), so this line is not a caption — it is the arithmetic behind
+ * the figure above it, and it carries the cents for the same reason that
+ * figure does.
+ *
+ * Rounded to whole dollars it read "Cash + $9 borrowing" beneath $8.66, so
+ * the card plainly failed to add up, and a breakdown that does not add up
+ * invites somebody to doubt every other number on the screen. It rounded
+ * upward as well, which on a credit line is the wrong direction to be wrong
+ * in: it offered a third of a dollar the account could not have borrowed.
+ */
+export const spendableSub = (borrow: Borrow | undefined): string =>
+  borrow === undefined ? "Cash and borrowing" : `Cash + ${usd(borrow.borrowableUsd)} borrowing`;
 
 /**
  * Cash, set like the portfolio: the header card leads with what you can spend
@@ -67,11 +85,7 @@ export const Money = () => {
               tone={m && Number(m.interestEarnedYtdUsd) > 0 ? "up" : undefined}
             />
             <HeaderFigure label="Yield" value={pct(apr * 100)} sub="A year, variable" />
-            <HeaderFigure
-              label="Spendable"
-              value={b ? usd(b.spendableUsd) : "—"}
-              sub={b ? `Cash + ${usd(b.borrowableUsd, 0)} borrowing` : "Cash and borrowing"}
-            />
+            <HeaderFigure label="Spendable" value={b ? usd(b.spendableUsd) : "—"} sub={spendableSub(b)} />
           </dl>
         </section>
 
