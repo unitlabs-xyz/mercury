@@ -15,8 +15,11 @@ import { Alert, Check, ChevronDown, Flip } from "../../ui/icons";
 import { useFundPrice } from "../../api/fund-price";
 import { TokenMark } from "./TokenMark";
 import { Skeleton } from "../portfolio/ui";
+import { InfoTip } from "../../ui/ds";
 import { useDebounced, type FundToken } from "../../api/fund-tokens";
 import { cleanAmount } from "./fund-chain";
+import { useMoney } from "../../api/hooks";
+import { TooSmall, useFundPreview } from "../../api/fund-preview";
 import { fundErrorCopy, fundErrorDetail } from "./fund-error";
 
 /**
@@ -58,6 +61,22 @@ const usd = (n: number) =>
   n > 0 && n < 0.01
     ? "<$0.01"
     : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+
+/** One line of the deposit summary: what, and how much, or a skeleton while it is quoted. */
+const SummaryRow = ({
+  label,
+  loading,
+  children,
+}: {
+  label: ReactNode;
+  loading: boolean;
+  children: ReactNode;
+}) => (
+  <div className="flex items-center justify-between gap-3">
+    <dt className="text-ds-muted">{label}</dt>
+    <dd className="text-ds-ink">{loading ? <Skeleton className="h-3 w-16" /> : children}</dd>
+  </div>
+);
 
 /** A decimal string with its trailing zeros dropped: "0.00500000" is "0.005". */
 const trimZeros = (s: string) => (s.includes(".") ? s.replace(/\.?0+$/, "") : s);
@@ -204,7 +223,10 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
   const feePerGas = fees.data?.maxFeePerGas ?? fees.data?.gasPrice;
   const isNative = token.address === NATIVE_EVM;
   const gasNeeded = feePerGas === undefined ? undefined : feePerGas * (isNative ? 150_000n : 240_000n);
-  const gasCoin = EVM_NETWORKS.find((c) => c.id === token.chainId)?.nativeCurrency.symbol ?? "gas";
+  const gasCoin =
+    token.vmType === "svm"
+      ? "SOL"
+      : (EVM_NETWORKS.find((c) => c.id === token.chainId)?.nativeCurrency.symbol ?? "gas");
   const lowGas =
     gas.data !== undefined &&
     (gas.data === 0n ||
@@ -212,7 +234,27 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
   /* The wallet is somewhere else. Not a blocker any more — the deposit brings
      it across — but the button should say so before the prompt appears. */
   const wrongChain = funder !== null && funder.chainId !== token.chainId;
-  const ready = raw !== null && raw > 0n && !overdrawn && !lowGas && action.walletReady;
+  /*
+   * What the deposit comes to: the USDC that lands, Relay's fee (out of the
+   * amount) and the network fee (paid by the wallet on top). Asked once the
+   * amount has stopped changing, so typing "125" is one quote, not three.
+   */
+  const settledRaw = useDebounced(raw?.toString() ?? null, 400);
+  const recipient = useMoney().data?.depositAddress;
+  const preview = useFundPreview({
+    chainId: token.chainId,
+    currency: token.address,
+    vmType: token.vmType,
+    amountRaw: settledRaw === null ? null : BigInt(settledRaw),
+    user: funder?.address,
+    recipient,
+  });
+  const tooSmall = preview.error instanceof TooSmall;
+  const showSummary = raw !== null && raw > 0n;
+  const quoting =
+    showSummary && (settledRaw !== raw.toString() || preview.isFetching) && preview.data === undefined;
+
+  const ready = raw !== null && raw > 0n && !overdrawn && !lowGas && !tooSmall && action.walletReady;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -344,6 +386,42 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
           </div>
         </div>
       </div>
+
+      {/* What it comes to, before anything is signed. */}
+      {showSummary && !tooSmall && (
+        <dl className="mt-5 flex flex-col gap-3.5 px-1 text-[14px] leading-none">
+          <SummaryRow label="You receive" loading={quoting}>
+            {preview.data === undefined
+              ? "—"
+              : `${trimZeros(Number(preview.data.outAmount).toFixed(2))} USDC`}
+          </SummaryRow>
+          <SummaryRow
+            label={
+              <span className="flex items-center gap-1.5">
+                Fee
+                {preview.data !== undefined && (
+                  <InfoTip label="About the fee" align="start">
+                    <span className="flex min-w-48 flex-col gap-2">
+                      <span className="flex justify-between gap-6">
+                        <span>Relay</span>
+                        <span>{usd(preview.data.relayFeeUsd)}</span>
+                      </span>
+                      <span className="flex justify-between gap-6">
+                        <span>Network</span>
+                        <span>{usd(preview.data.networkFeeUsd)}</span>
+                      </span>
+                    </span>
+                  </InfoTip>
+                )}
+              </span>
+            }
+            loading={quoting}
+          >
+            {preview.data === undefined ? "—" : usd(preview.data.relayFeeUsd + preview.data.networkFeeUsd)}
+          </SummaryRow>
+        </dl>
+      )}
+
       {malformed && (
         <div className="mt-2">
           <Note tone="down">Enter an amount.</Note>
@@ -428,14 +506,16 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
             ? "Waiting for your wallet…"
             : overdrawn
               ? `Insufficient ${token.symbol} balance`
-              : lowGas
-                ? `Not enough ${gasCoin} for gas`
-                : /* Says the switch is coming rather than springing it. The wallet
+              : tooSmall
+                ? "Amount too small to swap"
+                : lowGas
+                  ? `Not enough ${gasCoin} for gas`
+                  : /* Says the switch is coming rather than springing it. The wallet
                  was always going to ask twice here; the label is what stops the
                  first prompt looking like the wrong one. */
-                  wrongChain
-                  ? `Switch to ${token.chainName} and send`
-                  : "Approve in your wallet"}
+                    wrongChain
+                    ? `Switch to ${token.chainName} and send`
+                    : "Approve in your wallet"}
         </Button>
       )}
     </form>
