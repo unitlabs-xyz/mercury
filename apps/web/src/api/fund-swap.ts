@@ -147,6 +147,17 @@ export const useFundSwapAction = () => {
 
       return { outFormatted: built.out.amountFormatted, inTxHash: hashes.in, outTxHash: hashes.out };
     },
+    /*
+     * The raw error, kept where a developer can see it.
+     *
+     * What the interface shows is one sentence from fund-error.ts; this is the
+     * object it was read out of — the request arguments, the cause chain, the
+     * revert data. A deposit that fails for an unanticipated reason is exactly
+     * the case where "please try again" is not enough to act on.
+     */
+    onError: (err) => {
+      console.error("fund: the deposit did not go through", err);
+    },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["funder-token"] });
       void qc.invalidateQueries({ queryKey: ["fund-intents"] });

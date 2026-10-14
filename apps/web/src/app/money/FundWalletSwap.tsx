@@ -5,6 +5,7 @@ import { useFunder } from "../../wallet/useFunder";
 import { Button } from "../../ui/Button";
 import { Alert, Check } from "../../ui/icons";
 import type { FundToken } from "../../api/fund-tokens";
+import { fundErrorCopy } from "./fund-error";
 
 /**
  * Swapping a token the connected wallet holds into cash in the account.
@@ -184,19 +185,20 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
           <Note tone="warn">Keep a little SOL back — your wallet pays the network fee.</Note>
         </div>
       )}
-      {token.vmType === "evm" && (
-        <div className="mt-2">
-          {/* Two signatures on most ERC-20 routes: an approval, then the
-              deposit. Saying so beforehand stops the second one looking like
-              something went wrong. */}
-          <Note tone="warn">Your wallet may ask twice — once to approve the token, once to send it.</Note>
-        </div>
-      )}
-      {action.isError && (
-        <div className="mt-2" role="alert">
-          <Note tone="down">{action.error.message}</Note>
-        </div>
-      )}
+      {action.isError &&
+        (() => {
+          /* Never `action.error.message` straight out: viem wraps a wallet
+             rejection in an error whose `message` is blank, which rendered an
+             alert with nothing in it. */
+          const { message, rejected } = fundErrorCopy(action.error);
+          return (
+            <div className="mt-2" role="alert">
+              {/* A cancellation is not a fault. Red for it would tell somebody
+                  their own decision went wrong. */}
+              <Note tone={rejected ? "warn" : "down"}>{message}</Note>
+            </div>
+          );
+        })()}
 
       <Button
         type="submit"

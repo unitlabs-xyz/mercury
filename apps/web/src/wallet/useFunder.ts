@@ -41,14 +41,26 @@ export const useConnectFunder = (): (() => void) => {
  * say so. AppKit's own modal offers it, but only after a connect button that
  * reads as "connect" to a person who is already connected.
  *
- * Disconnecting every namespace rather than the active one: the adapters hold
- * separate connections, and leaving an EVM wallet attached while clearing a
- * Solana one is a state nothing in this app can describe.
+ * Each namespace by name, rather than one call with none.
+ *
+ * `disconnect()` with no argument looked like it did this — AppKit's own
+ * account view calls it that way, and its client reads an absent namespace as
+ * "all of them". It is not enough here. Two adapters are configured, wagmi and
+ * Solana, and each keeps its own account state; the no-argument path tears
+ * down the connections but leaves that state behind, so `useAppKitAccount()`,
+ * which reports whichever namespace is active, went on naming a wallet. What
+ * somebody saw was Disconnect replacing their wallet with a different one.
+ *
+ * Naming both and awaiting both is the version with no "whichever is active"
+ * in it. `allSettled` because a namespace with nothing connected rejects, and
+ * one rejecting must not leave the other attached.
  */
+const NAMESPACES = ["eip155", "solana"] as const;
+
 export const useDisconnectFunder = (): (() => Promise<void>) => {
   const { disconnect } = useDisconnect();
   return async () => {
     if (!walletConnectConfigured) return;
-    await disconnect();
+    await Promise.allSettled(NAMESPACES.map((namespace) => disconnect({ namespace })));
   };
 };
