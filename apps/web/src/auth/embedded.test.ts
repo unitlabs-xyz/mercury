@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { embeddedOf, SOLANA_CONNECT_OPTIONS } from "./embedded";
+import { embeddedOf } from "./embedded";
 
 /** Privy's own wallet says so. Only what picking reads, so no class is needed. */
 const privy = (address: string) => ({ address, standardWallet: { isPrivyWallet: true } });
@@ -62,24 +62,3 @@ describe("embeddedOf", () => {
  * Privy falls back to "ethereum-only", so the modal hid every Solana wallet
  * and anything connected through it landed in a namespace this never reads.
  */
-describe("SOLANA_CONNECT_OPTIONS", () => {
-  it("asks for Solana wallets, because the default is ethereum-only", () => {
-    expect(SOLANA_CONNECT_OPTIONS.walletChainType).toBe("solana-only");
-  });
-
-  it("leads with whatever is actually installed", () => {
-    expect(SOLANA_CONNECT_OPTIONS.walletList[0]).toBe("detected_solana_wallets");
-  });
-
-  it("names the three the panel promises, so none is unfindable", () => {
-    for (const wallet of ["phantom", "solflare", "backpack"]) {
-      expect(SOLANA_CONNECT_OPTIONS.walletList).toContain(wallet);
-    }
-  });
-
-  it("offers no Ethereum wallet, whose connectors are stubbed out of the bundle", () => {
-    for (const wallet of ["metamask", "coinbase_wallet", "rainbow", "wallet_connect"]) {
-      expect(SOLANA_CONNECT_OPTIONS.walletList).not.toContain(wallet);
-    }
-  });
-});

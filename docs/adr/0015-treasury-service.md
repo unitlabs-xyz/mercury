@@ -1,6 +1,26 @@
 # ADR 0015 · A separate service holds the keys, and derives every address
 
-**Status:** proposed · 13 October 2026
+**Status:** superseded · 13 October 2026, withdrawn 14 October 2026
+
+> **This was built and then deleted, unshipped.** `services/treasury` and
+> `packages/keys` existed for about a day. Dropping deposit addresses removed
+> the problem they solved: every deposit now comes from a wallet the user has
+> just signed with, so `refundTo` is that wallet — an address they
+> demonstrably hold the key for, in the right format for its own chain because
+> that is the chain they connected on. Nothing we control ever receives a
+> refund, so there are no keys to hold and no money of somebody else's sitting
+> in a company wallet waiting for a person to return it.
+>
+> The reasoning below is kept because the problem it names is real and would
+> come straight back the moment a deposit can arrive from an address rather
+> than a wallet. If that is ever reconsidered, read this first: the answer is
+> not "configure a refund address", it is "derive it from a key, because a
+> configured address can be one we hold no key for and nothing would catch it
+> until somebody's refund landed somewhere unspendable."
+>
+> What survived: `parseSecretKey` went back to
+> `services/api/src/relay/signer.ts`, the only place that still holds a key.
+> See the amendment to [ADR 0014](0014-relay-funding.md).
 
 ## Context
 

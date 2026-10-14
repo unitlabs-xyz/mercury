@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRelayClient, SOLANA_CHAIN_ID, SOLANA_USDC } from "./relay.js";
+import { createRelayClient, SOLANA_USDC } from "./relay.js";
 
 const ok = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 
@@ -147,70 +147,6 @@ describe("createRelayClient", () => {
     expect(await client.chains()).toEqual([]);
   });
 
-  it("mints a deposit address against the destination we fix, not one a caller names", async () => {
-    let body: Record<string, unknown> = {};
-    const client = createRelayClient({
-      apiKey: "k",
-      fetch: (_input, init) => {
-        body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        return ok({
-          requestId: "0xabc",
-          steps: [{ id: "deposit", depositAddress: "0xdeadbeef" }],
-          details: { currencyOut: { amount: "24846825" } },
-        });
-      },
-    });
-
-    const quote = await client.depositAddressQuote({
-      originChainId: 8453,
-      originCurrency: "0x0000000000000000000000000000000000000000",
-      recipient: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
-      refundTo: "0xrefund",
-      recoveryAddress: "0xrecovery",
-    });
-
-    expect(body["destinationChainId"]).toBe(SOLANA_CHAIN_ID);
-    expect(body["destinationCurrency"]).toBe(SOLANA_USDC);
-    expect(body["useDepositAddress"]).toBe(true);
-    expect(body["tradeType"]).toBe("EXACT_INPUT");
-    expect(body["appFees"]).toBeUndefined();
-    expect(quote).toEqual({ requestId: "0xabc", depositAddress: "0xdeadbeef", quotedOutRaw: "24846825" });
-  });
-
-  it("refuses a quote that came back without a deposit address", async () => {
-    const client = createRelayClient({
-      apiKey: "k",
-      fetch: () => ok({ requestId: "0xabc", steps: [{ id: "deposit" }] }),
-    });
-
-    await expect(
-      client.depositAddressQuote({
-        originChainId: 8453,
-        originCurrency: "0x0",
-        recipient: "9WzD",
-        refundTo: "0xr",
-        recoveryAddress: "0xrec",
-      }),
-    ).rejects.toThrow(/no deposit address/i);
-  });
-
-  it("reports a quote with no expected output rather than inventing one", async () => {
-    const client = createRelayClient({
-      apiKey: "k",
-      fetch: () => ok({ requestId: "0xabc", steps: [{ depositAddress: "0xdep" }] }),
-    });
-
-    const quote = await client.depositAddressQuote({
-      originChainId: 8453,
-      originCurrency: "0x0",
-      recipient: "9WzD",
-      refundTo: "0xr",
-      recoveryAddress: "0xrec",
-    });
-
-    expect(quote.quotedOutRaw).toBeNull();
-  });
-
   it("carries the upstream status through without reinterpreting it", async () => {
     const client = createRelayClient({ apiKey: "k", fetch: () => ok({ status: "pending" }) });
     expect(await client.status("0xabc")).toBe("pending");
@@ -238,44 +174,5 @@ describe("createRelayClient", () => {
     });
 
     await expect(client.chains()).rejects.toThrow(/relay \/chains failed: 500/);
-  });
-});
-
-describe("createRelayClient, on a chain we hold no refund key for", () => {
-  const mint = async (
-    over: Partial<{ refundTo: string; recoveryAddress: string }> = {},
-  ): Promise<Record<string, unknown>> => {
-    let body: Record<string, unknown> = {};
-    const client = createRelayClient({
-      apiKey: "k",
-      fetch: (_input, init) => {
-        body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        return ok({ requestId: "0xabc", steps: [{ depositAddress: "Tdeposit" }] });
-      },
-    });
-    await client.depositAddressQuote({
-      originChainId: 728126428,
-      originCurrency: "TR7NHq",
-      recipient: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
-      ...over,
-    });
-    return body;
-  };
-
-  /*
-   * Relay reports eight VM families and we hold keys for three. An address is
-   * only meaningful inside its own family, so Tron must not be handed an `0x`
-   * one: Relay would accept it and refund into nothing.
-   */
-  it("omits refundTo entirely rather than sending one from another family", async () => {
-    const body = await mint();
-    expect(body).not.toHaveProperty("refundTo");
-    expect(body).not.toHaveProperty("recoveryAddress");
-  });
-
-  it("still sends them when we do have them", async () => {
-    const body = await mint({ refundTo: "0xrefund", recoveryAddress: "0xrecovery" });
-    expect(body["refundTo"]).toBe("0xrefund");
-    expect(body["recoveryAddress"]).toBe("0xrecovery");
   });
 });

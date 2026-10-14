@@ -109,18 +109,34 @@ interface ParsedTokenAccount {
  * wallet reads as zero, and everything that is a failure stays one and is
  * shown as what it is.
  */
-export const usdcBalanceRaw = async (owner: string): Promise<bigint> => {
+export const tokenBalanceRaw = async (owner: string, mint: string): Promise<bigint> => {
   const [ata] = await findAssociatedTokenPda({
     owner: address(owner),
-    mint: USDC_MINT as Address,
+    mint: mint as Address,
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
   return viaRpc(async (rpc) => {
     const { value } = await rpc.getAccountInfo(ata, { encoding: "jsonParsed" }).send();
-    /* Never held USDC, which is a balance of zero and not a failure to read one. */
+    /* Never held it, which is a balance of zero and not a failure to read one. */
     if (value === null) return 0n;
     const amount = (value.data as ParsedTokenAccount).parsed?.info?.tokenAmount?.amount;
-    /* An account at that address that is not a USDC account: not ours to read. */
+    /* An account at that address that is not a token account: not ours to read. */
     return amount === undefined ? 0n : BigInt(amount);
   });
 };
+
+export const usdcBalanceRaw = (owner: string): Promise<bigint> => tokenBalanceRaw(owner, USDC_MINT);
+
+/**
+ * Native SOL, which is a lamport balance and not a token account.
+ *
+ * Its own function because SOL is the one thing somebody is likely to want to
+ * deposit that has no associated token account at all — reading it through
+ * `tokenBalanceRaw` would derive an address for wrapped SOL that almost nobody
+ * holds and answer a confident zero.
+ */
+export const solBalanceRaw = (owner: string): Promise<bigint> =>
+  viaRpc(async (rpc) => {
+    const { value } = await rpc.getBalance(address(owner)).send();
+    return BigInt(value);
+  });

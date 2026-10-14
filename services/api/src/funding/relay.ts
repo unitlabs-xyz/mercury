@@ -4,10 +4,10 @@ import { defaultFetch } from "@mercury/chain";
  * Relay, as the funding path uses it.
  *
  * Hand-rolled over `fetch` rather than `@relayprotocol/relay-sdk`, which
- * carries viem and five megabytes to perform one POST. The SDK earns its place
- * in the browser, where `execute()` drives a wallet through a quote's steps;
- * here there is no wallet and no execution, only three HTTP calls. The same
- * reasoning `packages/chain/src/jupiter/lite.ts` already follows.
+ * carries viem and five megabytes to perform two HTTP calls. The SDK earns its
+ * place in the browser, where `execute()` drives a wallet through a quote's
+ * steps; here there is no wallet and no execution. The same reasoning
+ * `packages/chain/src/jupiter/lite.ts` already follows.
  */
 
 const BASE = "https://api.relay.link";
@@ -31,42 +31,57 @@ export interface RelaySource {
   readonly currencies: readonly RelayCurrency[];
 }
 
-export interface DepositAddressQuote {
-  readonly requestId: string;
-  readonly depositAddress: string;
-  /** What Relay expects to deliver, in USDC base units. Indicative, not a promise. */
-  readonly quotedOutRaw: string | null;
-}
-
 /** Relay's own vocabulary, carried through rather than mapped. */
 export type RelayStatus =
   "waiting" | "depositing" | "pending" | "submitted" | "success" | "failure" | "refund";
 
-export interface DepositAddressInput {
+/** What a quote is worth, whichever VM executes it. */
+export interface QuoteDetails {
+  readonly requestId: string;
+  readonly inFormatted: string;
+  readonly outRaw: string;
+  readonly outFormatted: string;
+  /** Signed percentage, as Relay reports it. Negative is a loss to the user. */
+  readonly impactPct: string | null;
+}
+
+/**
+ * A quote, passed through for the browser to run through Relay's `execute()`.
+ *
+ * One shape for every VM, which is the point. This server briefly composed the
+ * Solana case itself — it can, because a Solana quote arrives as instructions —
+ * and that bought a second code path, a second set of tests and a per-VM branch
+ * in the route, for a safety property the passthrough already has: the
+ * destination is encoded in bytes Relay produced, and a client that re-quoted
+ * to its own wallet would be funding its own account with its own money while
+ * the intent we recorded never completed.
+ */
+export interface FundQuote {
+  readonly details: QuoteDetails;
+  /** Relay's own response, unread and unmodified. */
+  readonly quote: unknown;
+}
+
+export interface FundQuoteInput {
+  /** The connected wallet. Signs, and pays its own network fee. */
+  readonly user: string;
+  /** The Privy wallet the USDC lands in. Ours to set, never the page's. */
+  readonly recipient: string;
   readonly originChainId: number;
   readonly originCurrency: string;
-  /** The user's Privy wallet, from a Privy-signed token. Never a request body. */
-  readonly recipient: string;
-  /**
-   * Where Relay sends an automatic refund, and where we withdraw from their
-   * depository. Both optional, and absent rather than wrong on purpose.
-   *
-   * Relay reports eight VM families across the 61 chains it will take deposits
-   * from — `evm`, `svm`, `bvm`, `hypevm`, `lvm`, `tvm`, `tonvm`, `xrpvm` — and
-   * an address is only meaningful inside its own family. We hold keys for
-   * three. For the rest, omitting these turns automatic refunds off and leaves
-   * a failed deposit to Relay's support, which is bad; sending an address in
-   * the wrong format would have Relay refund into nothing, which is worse and
-   * silent. See ADR 0015 — the whole point is that we never name an address we
-   * cannot stand behind.
-   */
-  readonly refundTo?: string | undefined;
-  readonly recoveryAddress?: string | undefined;
+  /** In the origin token's own smallest unit. */
+  readonly amountRaw: string;
 }
 
 export interface RelayClient {
   chains(): Promise<readonly RelaySource[]>;
-  depositAddressQuote(input: DepositAddressInput): Promise<DepositAddressQuote>;
+  /**
+   * An executable quote for a wallet somebody has connected.
+   *
+   * Solana and EVM alike. A Bitcoin origin would come back as a PSBT and is
+   * not offered — `/v1/money/fund/sources` does not report it.
+   */
+  fundQuote(input: FundQuoteInput): Promise<FundQuote>;
   status(requestId: string): Promise<RelayStatus | null>;
 }
 
@@ -88,10 +103,8 @@ interface WireChain {
  * De-duplicated by address so the chain that lists it twice does not offer it
  * twice.
  *
- * Only currencies Relay will actually solve. A token sent to a deposit address
- * that Relay does not solve is, by their own documentation, unrecoverable — so
- * the only safe list is the one they gave us, and the native currency joins it
- * only when it says it can be bridged.
+ * Only currencies Relay will actually solve, and the native one only when it
+ * says it can be bridged.
  */
 const currenciesOf = (chain: WireChain): readonly RelayCurrency[] => {
   const native = chain.currency;
@@ -142,42 +155,47 @@ export const createRelayClient = (config: {
         .filter((c) => c.currencies.length > 0);
     },
 
-    async depositAddressQuote(input) {
+    async fundQuote(input) {
       const body = (await call("/quote/v2", {
         method: "POST",
         body: JSON.stringify({
+          user: input.user,
+          recipient: input.recipient,
           originChainId: input.originChainId,
           originCurrency: input.originCurrency,
           destinationChainId: SOLANA_CHAIN_ID,
           destinationCurrency: SOLANA_USDC,
-          recipient: input.recipient,
+          amount: input.amountRaw,
           tradeType: "EXACT_INPUT",
-          useDepositAddress: true,
-          /* Spread rather than assigned: `exactOptionalPropertyTypes` tells an
-             absent field from one set to undefined, and so does Relay. */
-          ...(input.refundTo === undefined ? {} : { refundTo: input.refundTo }),
-          ...(input.recoveryAddress === undefined ? {} : { recoveryAddress: input.recoveryAddress }),
+          /*
+           * The sender's own wallet, which is why there is no treasury. A
+           * refund only has to reach an address somebody holds the key for,
+           * and every deposit now comes from a wallet that has just signed —
+           * in the right format for its own chain, because that is the chain
+           * they connected on.
+           */
+          refundTo: input.user,
         }),
       })) as {
         readonly requestId?: string;
-        readonly steps?: readonly { readonly depositAddress?: string }[];
-        readonly details?: { readonly currencyOut?: { readonly amount?: string } };
+        readonly details?: {
+          readonly currencyIn?: { readonly amountFormatted?: string };
+          readonly currencyOut?: { readonly amount?: string; readonly amountFormatted?: string };
+          readonly totalImpact?: { readonly percent?: string };
+        };
       };
 
-      const depositAddress = body.steps?.find((s) => s.depositAddress !== undefined)?.depositAddress;
-      /*
-       * A quote with no address is not a degraded quote, it is a different
-       * answer to a different question — almost always `useDepositAddress`
-       * being silently refused for the route. Showing the user nothing is
-       * better than showing them an address that is not theirs to send to.
-       */
-      if (body.requestId === undefined || depositAddress === undefined) {
-        throw new Error("relay returned no deposit address for this route");
-      }
+      if (body.requestId === undefined) throw new Error("relay returned no quote for this route");
+
       return {
-        requestId: body.requestId,
-        depositAddress,
-        quotedOutRaw: body.details?.currencyOut?.amount ?? null,
+        details: {
+          requestId: body.requestId,
+          inFormatted: body.details?.currencyIn?.amountFormatted ?? input.amountRaw,
+          outRaw: body.details?.currencyOut?.amount ?? "0",
+          outFormatted: body.details?.currencyOut?.amountFormatted ?? "0",
+          impactPct: body.details?.totalImpact?.percent ?? null,
+        },
+        quote: body,
       };
     },
 

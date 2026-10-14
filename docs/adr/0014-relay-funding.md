@@ -146,3 +146,80 @@ enablement is a request to Relay rather than a setting we flip.
 **Work required.** Four phases, roughly nine and a half days, each shippable on
 its own; phase 1 alone delivers any token from any chain with no signing code.
 Details in the spec.
+
+---
+
+## Amendment · 14 October 2026
+
+Three decisions, taken together, which is why they are one amendment: each
+makes the next cheap.
+
+### Connected wallets only. No deposit addresses.
+
+Decision 1 above is withdrawn. A deposit comes from a wallet somebody
+connects, signs with, and leaves; there is no address to send to.
+
+**What this gives up** is real and worth stating plainly: money on an exchange
+or in a hardware wallet can no longer come in, because neither can connect to a
+web page. For Bitcoin that is most of it, and Bitcoin is therefore not offered
+at all — Relay would answer a connected-wallet BTC deposit with a PSBT, which
+nothing here signs, so `/v1/money/fund/sources` filters it out rather than
+showing a row that cannot be taken.
+
+**What it buys** is the whole of [ADR 0015](0015-treasury-service.md).
+`refundTo` becomes the wallet that just signed: an address the user
+demonstrably holds the key for, correct by construction, in its own chain's
+format because that is the chain they connected on. No treasury, no three
+keys, no refund address per VM family, and nobody holding somebody else's
+money waiting for a person to return it. The card and bank rails remain the
+answer for people with no wallet, and they are still announced rather than
+built.
+
+### One connector, and it is not Privy's.
+
+Funding wallets come from Reown AppKit — EVM, Solana, and a phone browser over
+WalletConnect. Privy remains the account and nothing else.
+
+The reason is in `apps/web/src/auth/embedded.ts`: Privy's `useWallets()`
+returned the account wallet and every connected funding wallet in one list, so
+telling them apart meant sniffing `isPrivyWallet` off a prototype — a check
+whose own docstring conceded it was _"proportionate, not airtight"_, and which
+failed closed by taking account signing offline when two wallets claimed it.
+Two connectors make the sets disjoint, and that file now does one thing.
+
+It costs a duplicate Solana stack: AppKit's Solana adapter brings
+`@solana/web3.js`, which this app had replaced with `@solana/kit`. Measured on
+14 October, wired at the app root, AppKit took first-load JS from 2,524 kB to
+3,774 kB — a 50% increase for every visitor before the sign-in screen, which
+is worse than the Privy EVM connectors that `no-evm-connectors.ts` stubbed out
+of the bundle for being _"about a fifth of the first download"_. Behind
+`React.lazy` it costs **5 kB** on first load and 1,246 kB to somebody who opens
+the deposit panel. That split is load-bearing and fragile: a single static
+import of `wallet/appkit` from the eager graph silently puts it all back, and
+only a bundle measurement would notice.
+
+### Relay settles every deposit. The browser only reports.
+
+`POST /v1/money/fund/submitted` records what the browser executed and moves a
+deposit `waiting → submitted`. It cannot write a terminal status.
+
+This replaced an endpoint that could, and the reason is a flaw worth recording
+rather than quietly fixing. The old `/fund/confirm` verified that a Solana
+signature had landed — but never that the signature had anything to do with
+the intent: not the amount, not the recipient, not the mint. Any landed
+signature marked any of the caller's deposits successful. No money was at risk,
+because balances and the feed come from `wallet-events` reading the chain. The
+record was, and the record is what this feature exists for. A deposit table a
+client can write `success` into is not tracking.
+
+Only Relay's HMAC-signed webhook settles now, matched on a request id — which
+is safe precisely because deposit addresses are gone: Relay reissues a quote on
+over- or underpayment, and with the amount fixed by a signature there is
+nothing to reissue. `funding/poll.ts` asks Relay directly for anything
+untouched for ninety seconds, so the same authority is reachable over a second
+transport and a webhook that was never enabled cannot leave a deposit reading
+`submitted` for ever with the money already spent.
+
+Everything in the quote path is one shape for every chain: the server composes
+nothing, `execute()` runs whatever steps the quote holds, and
+`funding/compose.ts` is deleted.

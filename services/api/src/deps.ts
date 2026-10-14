@@ -130,16 +130,6 @@ export interface Config {
    * not ours.
    */
   readonly relayApiKey?: string;
-  /**
-   * Optional. `services/treasury`, which holds the refund keys and derives
-   * their addresses. This API never sees a key.
-   *
-   * Deliberately a URL and a secret rather than three addresses: a configured
-   * address can be one we hold no key for, and nothing would catch it until a
-   * refund landed somewhere unspendable. See ADR 0015.
-   */
-  readonly treasuryUrl?: string;
-  readonly treasurySecret?: string;
   /** What we will not quote a deposit below. Decided at $10; see ADR 0014. */
   readonly fundMinimumUsd: number;
   /**
@@ -222,8 +212,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
      */
     jupiterApiKeys: parseJupiterKeys(env["JUPITER_API_KEYS"] ?? env["JUPITER_API_KEY"]),
     ...(env["RELAY_API_KEY"] ? { relayApiKey: env["RELAY_API_KEY"] } : {}),
-    ...(env["TREASURY_URL"] ? { treasuryUrl: env["TREASURY_URL"] } : {}),
-    ...(env["TREASURY_SECRET"] ? { treasurySecret: env["TREASURY_SECRET"] } : {}),
     fundMinimumUsd: Number(env["FUND_MINIMUM_USD"] ?? 10),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
@@ -364,11 +352,10 @@ export interface ReadDeps {
   /**
    * Funding from any chain, or nothing.
    *
-   * Absent — no Relay key, or a treasury that could not be reached at boot —
-   * the routes are not mounted, `/v1/money/fund/sources` 404s, and the
-   * interface hides the method. The same shape `AddCash.tsx` already uses to
-   * hide a method whose precondition is unmet, and the same way
-   * `routes/send.ts` degrades without a relayer.
+   * Absent — no Relay key — the routes are not mounted,
+   * `/v1/money/fund/sources` 404s, and the interface hides the method. The
+   * same shape `AddCash.tsx` already uses to hide a method whose precondition
+   * is unmet, and the same way `routes/send.ts` degrades without a relayer.
    */
   readonly fund?: FundDeps & { readonly webhookSecret: string };
 }

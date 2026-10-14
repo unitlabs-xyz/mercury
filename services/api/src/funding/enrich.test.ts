@@ -7,6 +7,7 @@ import { createFundingStore } from "./store.js";
 import { enrichDepositActivity, reconcileFundingDeposits } from "./enrich.js";
 
 const FILL = "5".repeat(88);
+const REQUEST = "0xreq";
 
 const setup = async () => {
   const db = await testDb();
@@ -15,7 +16,6 @@ const setup = async () => {
   const intent = await store.create({
     userId: user!.id,
     relayRequestId: "0xreq",
-    depositAddress: "Tdeposit",
     originChainId: 728126428,
     originCurrency: "TR7NHq",
     originChainName: "tron",
@@ -43,7 +43,7 @@ describe("enrichDepositActivity", () => {
   it("names the origin on the row wallet-events already wrote", async () => {
     const { db, store, userId } = await setup();
     await db.insert(activities).values(generic(userId));
-    const advanced = await store.advance("Tdeposit", {
+    const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
       outTxHash: FILL,
@@ -58,7 +58,7 @@ describe("enrichDepositActivity", () => {
   it("leaves the amount and the kind alone", async () => {
     const { db, store, userId } = await setup();
     await db.insert(activities).values(generic(userId));
-    const advanced = await store.advance("Tdeposit", {
+    const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
       outTxHash: FILL,
@@ -76,7 +76,7 @@ describe("enrichDepositActivity", () => {
 
   it("writes nothing when wallet-events has not seen the fill yet", async () => {
     const { db, store, userId } = await setup();
-    const advanced = await store.advance("Tdeposit", {
+    const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
       outTxHash: FILL,
@@ -92,7 +92,7 @@ describe("enrichDepositActivity", () => {
   it("does nothing twice", async () => {
     const { db, store, userId } = await setup();
     await db.insert(activities).values(generic(userId));
-    const advanced = await store.advance("Tdeposit", {
+    const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
       outTxHash: FILL,
@@ -111,7 +111,7 @@ describe("enrichDepositActivity", () => {
     await db
       .insert(activities)
       .values({ ...generic(userId), kind: "buy", title: "Bought NVDA", subtitle: "something better" });
-    const advanced = await store.advance("Tdeposit", {
+    const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
       outTxHash: FILL,
@@ -126,7 +126,7 @@ describe("enrichDepositActivity", () => {
   it("does nothing for a deposit with no fill transaction", async () => {
     const { db, store, userId } = await setup();
     await db.insert(activities).values(generic(userId));
-    const advanced = await store.advance("Tdeposit", { status: "pending", inTxHash: "0xin" });
+    const advanced = await store.settle(REQUEST, { status: "pending", inTxHash: "0xin" });
 
     expect(await enrichDepositActivity(db, advanced!)).toBe(false);
   });
@@ -135,7 +135,7 @@ describe("enrichDepositActivity", () => {
 describe("reconcileFundingDeposits", () => {
   it("enriches every landed deposit whose feed row has arrived since", async () => {
     const { db, store, userId } = await setup();
-    await store.advance("Tdeposit", { status: "success", inTxHash: "0xin", outTxHash: FILL });
+    await store.settle(REQUEST, { status: "success", inTxHash: "0xin", outTxHash: FILL });
     /* The order the real system runs in: the webhook lands first, wallet-events
        writes the generic row on its next pass, and this closes the gap. */
     await db.insert(activities).values(generic(userId));
@@ -154,7 +154,7 @@ describe("reconcileFundingDeposits", () => {
 
   it("ignores a deposit that has not landed", async () => {
     const { db, store, userId } = await setup();
-    await store.advance("Tdeposit", { status: "pending", inTxHash: "0xin" });
+    await store.settle(REQUEST, { status: "pending", inTxHash: "0xin" });
     await db.insert(activities).values(generic(userId));
 
     expect(await reconcileFundingDeposits(db)).toBe(0);

@@ -667,7 +667,6 @@ export const fundingIntents = pgTable(
      * necessarily what happened. `deposit_address` is the identity.
      */
     relayRequestId: text("relay_request_id").notNull(),
-    depositAddress: text("deposit_address").notNull(),
     originChainId: integer("origin_chain_id").notNull(),
     originCurrency: text("origin_currency").notNull(),
     /**
@@ -695,15 +694,18 @@ export const fundingIntents = pgTable(
   },
   (t) => [
     index("funding_intent_user_created_idx").on(t.userId, t.createdAt),
-    index("funding_intent_deposit_address_idx").on(t.depositAddress),
     /**
-     * Webhook idempotency, and deliberately on the pair rather than on
-     * `relay_request_id`. An open deposit address is reusable for its route, so
-     * one address legitimately sees many deposits — each with its own origin
-     * transaction, each a row. A unique index on the request id would collapse
-     * somebody's second deposit into their first.
+     * The deposit's identity, and the webhook's idempotency.
+     *
+     * One quote is one deposit: the amount is fixed by a signature before
+     * Relay ever sees it, so Relay has nothing to regenerate and the id it
+     * gave us stays the id the fill lands under. That was not true while
+     * deposit addresses existed — an open address is reusable, and Relay
+     * reissues a quote on over- or underpayment — which is why this index was
+     * briefly a partial one over a `deposit_address` column that no longer
+     * exists.
      */
-    uniqueIndex("funding_intent_address_in_tx_idx").on(t.depositAddress, t.inTxHash),
+    uniqueIndex("funding_intent_request_idx").on(t.relayRequestId),
   ],
 );
 export type FundingIntent = typeof fundingIntents.$inferSelect;

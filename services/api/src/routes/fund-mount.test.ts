@@ -27,10 +27,16 @@ const base = {
 };
 
 const fund = {
-  relay: { chains: vi.fn().mockResolvedValue([]), depositAddressQuote: vi.fn(), status: vi.fn() },
-  store: { create: vi.fn(), byDepositAddress: vi.fn(), advance: vi.fn(), forUser: vi.fn() },
-  refund: { evm: "0xe", svm: "S", bvm: "bc1q" },
-  recovery: { evm: "0xe", svm: "S", bvm: "bc1q" },
+  relay: { chains: vi.fn().mockResolvedValue([]), fundQuote: vi.fn(), status: vi.fn() },
+  store: {
+    create: vi.fn(),
+    byId: vi.fn(),
+    forUser: vi.fn(),
+    markSubmitted: vi.fn(),
+    byRequestId: vi.fn(),
+    settle: vi.fn(),
+    unsettled: vi.fn(),
+  },
   minimumUsd: 10,
   webhookSecret: "relay-api-key",
 };

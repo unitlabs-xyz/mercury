@@ -519,8 +519,25 @@ the property worth protecting: at no point between here and the end is the
 feature broken, and at no point does a slip take funding with it. Roughly eleven
 days in total, of which the first four are the ones that matter.
 
-Each phase gets its own implementation plan, written when the one before it
-lands. Planning all four now would be planning phases 3 and 4 against what
+**Amended 14 October 2026.** Phase 1 shipped, and the Solana half of phases 2
+and 3 went in with it rather than after, because it needed neither of the two
+things those phases were sized for. Relay answers a Solana-origin quote with
+`{ instructions, addressLookupTableAddresses }`, which the server composes
+itself — so there is no AppKit (Privy's existing connector already reaches
+Phantom, Backpack and Solflare) and no Relay SDK in the browser (the wallet
+signs a transaction we built, as it already does for a buy).
+
+What that leaves of phase 2 is the part that was always the work: connecting an
+**EVM or Bitcoin** wallet. Relay answers an EVM origin with calldata and a
+Bitcoin one with a PSBT, neither of which this server can compose, and
+`POST /v1/money/fund/swap` refuses them explicitly and says to use an address
+instead. Those chains all work today through the deposit address, so this is a
+convenience rather than a gap in coverage — and for the BTC on an exchange and
+the USDT in a hardware wallet it will never be more than that, because nothing
+we build reaches a wallet that cannot open a web page.
+
+Each remaining phase gets its own implementation plan, written when the one
+before it lands. Planning all four now would be planning phases 3 and 4 against what
 phase 2 is guessed to have produced.
 
 **This work stacks on PR #63** rather than waiting for it to merge, by decision
