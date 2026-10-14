@@ -1,8 +1,11 @@
+import { useConnectWallet } from "@privy-io/react-auth";
 import { useMemo, useState } from "react";
 import { useFundAddress, useFundIntents, useFundSources } from "../../api/fund-sources";
+import { SOLANA_CONNECT_OPTIONS, useFundingWallets } from "../../auth/embedded";
 import { Button } from "../../ui/Button";
 import { Alert, Check, Copy } from "../../ui/icons";
 import { QrBlock } from "../Receive";
+import { FundWalletSwap } from "./FundWalletSwap";
 import { leadOptions, matchOptions, optionsOf, statusCopy, timingCopy, type FundOption } from "./fund-chain";
 
 /**
@@ -114,8 +117,32 @@ const InFlight = () => {
 export const FundFromChain = () => {
   const sources = useFundSources();
   const action = useFundAddress();
+  const { wallets } = useFundingWallets();
+  const { connectWallet } = useConnectWallet();
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<FundOption | null>(null);
+  /*
+   * "auto" takes the better route where there is one: a connected Solana
+   * wallet signs once and copies nothing. "address" is what somebody chooses
+   * when they would rather send from an exchange, or when there is no wallet
+   * this app can sign with — which is every chain but Solana, for now.
+   */
+  const [mode, setMode] = useState<"auto" | "address">("auto");
+  const hasWallet = wallets.length > 0;
+
+  const requestAddress = (option: FundOption) => {
+    setMode("address");
+    action.mutate({ chainId: option.chainId, currency: option.currency.address });
+  };
+
+  const pick = (option: FundOption) => {
+    setPicked(option);
+    action.reset();
+    /* Solana with a wallet attached needs no address at all. Everything else
+       does, so it is asked for on the same click rather than after another. */
+    if (option.vmType === "svm" && hasWallet) setMode("auto");
+    else requestAddress(option);
+  };
 
   const options = useMemo(() => optionsOf(sources.data?.chains ?? []), [sources.data]);
   const shown = useMemo(
@@ -133,6 +160,58 @@ export const FundFromChain = () => {
       <Note tone="down">
         Deposits from other chains are unavailable right now. USDC on Solana still works.
       </Note>
+    );
+  }
+
+  /* Solana, a wallet attached, and nobody has asked for an address instead. */
+  if (picked !== null && mode === "auto" && picked.vmType === "svm" && hasWallet) {
+    return (
+      <div className="flex flex-col">
+        <p className="text-[14px] leading-none font-medium text-ds-ink">
+          Swap {picked.currency.symbol} into cash
+        </p>
+        <p className="mt-1.5 text-[12px] leading-[1.45] text-ds-muted">
+          One signature in your wallet. It arrives as USDC in your account.
+        </p>
+        <div className="mt-3">
+          <FundWalletSwap option={picked} onUseAddress={() => requestAddress(picked)} />
+        </div>
+        <InFlight />
+      </div>
+    );
+  }
+
+  /*
+   * Solana, no wallet attached. Offered rather than assumed: connecting is
+   * better than copying an address, and somebody who would rather send from an
+   * exchange should not have to connect anything to do it.
+   */
+  if (picked !== null && mode === "auto" && picked.vmType === "svm") {
+    return (
+      <div className="flex flex-col">
+        <div className="rounded-lg bg-ds-panel p-4">
+          <p className="text-[14px] leading-none font-medium text-ds-ink">Pay from a wallet you hold</p>
+          <p className="mt-2 text-[12px] leading-[1.45] text-ds-muted">
+            Phantom, Backpack or Solflare. You approve one swap and the cash arrives here — nothing to copy,
+            and no chance of sending the wrong token.
+          </p>
+          <Button
+            variant="primary"
+            onClick={() => connectWallet({ ...SOLANA_CONNECT_OPTIONS })}
+            className="mt-4 w-full"
+          >
+            Connect a wallet
+          </Button>
+        </div>
+        <button
+          type="button"
+          onClick={() => requestAddress(picked)}
+          className="mt-3 self-center text-[12px] text-ds-muted hover:text-ds-ink hover:underline"
+        >
+          Use a deposit address instead
+        </button>
+        <InFlight />
+      </div>
     );
   }
 
@@ -178,6 +257,7 @@ export const FundFromChain = () => {
           variant="secondary"
           onClick={() => {
             setPicked(null);
+            setMode("auto");
             action.reset();
           }}
           className="mt-5 w-full"
@@ -210,10 +290,7 @@ export const FundFromChain = () => {
             <OptionRow
               key={`${option.chainId}:${option.currency.address}`}
               option={option}
-              onPick={() => {
-                setPicked(option);
-                action.mutate({ chainId: option.chainId, currency: option.currency.address });
-              }}
+              onPick={() => pick(option)}
             />
           ))
         )}
