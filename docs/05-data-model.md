@@ -41,6 +41,28 @@ to `multiplier_event` as well, because it is a dividend and the user should see 
 id, token_id, old_multiplier, new_multiplier, observed_at, kind ('dividend'|'split'|'unknown')
 ```
 
+### `price_bar`
+
+What a token traded at across one bucket of time. The only record of a price in the system; see
+[ADR 0016](adr/0016-price-history.md).
+
+```
+token_id, width ('1m'|'1h'|'1d'), bucket_start,
+market_open, market_high, market_low, market_close,
+reference_open, reference_high, reference_low, reference_close,
+multiplier, liquidity_usd, samples, first_at, last_at
+primary key (token_id, width, bucket_start)
+```
+
+Both prices are **per share**. `market_*` is what one share of the wrapper fetches in the pool
+(`usdPricePerToken ÷ multiplier`), the price holdings are valued at. `reference_*` is the issuer's
+quote for the underlying, the price "did the stock move" is measured against, and is null across a
+bar that never had one.
+
+The `prices` job writes every 20 seconds, at all three widths at once, so no width is a rollup that
+can fall behind. Covers the warm set: every mint anyone has held, plus the featured shelf. Minute
+bars are deleted after thirty days; hours and days are kept.
+
 ### `user` and `wallet`
 
 ```

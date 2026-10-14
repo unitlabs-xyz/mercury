@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { D, ZERO } from "@mercury/core";
-import type { TokenPrice } from "@mercury/market";
+import type { PriceAsk, TokenPrice } from "@mercury/market";
 import { testDb } from "../db/testing.js";
 import { instruments, lots, tokens, users } from "../db/schema.js";
 import type { StockRow, StockWrapperRow } from "../routes/instruments.js";
@@ -52,11 +52,14 @@ const price = (mint: string): TokenPrice => ({
 /** Prices everything except `UNPRICED`, and records what it was asked for. */
 const board = () => {
   const asked: string[][] = [];
+  const asks: (PriceAsk | undefined)[] = [];
   return {
     asked,
+    asks,
     prices: {
-      pricesFor: async (mints: readonly string[]) => {
+      pricesFor: async (mints: readonly string[], ask?: PriceAsk) => {
         asked.push([...mints]);
+        asks.push(ask);
         return new Map(mints.filter((m) => !m.startsWith("UNPRICED")).map((m) => [m, price(m)]));
       },
     },
@@ -104,7 +107,7 @@ describe("warmPrices", () => {
     // as somebody keeps looking at it. Warming it here would be an id spent on
     // a ticker nobody opened.
     expect(b.asked).toEqual([[FEATURED]]);
-    expect(summary).toEqual({ mints: 1, priced: 1 });
+    expect(summary).toMatchObject({ mints: 1, priced: 1 });
   });
 
   it("warms a held mint even when nobody would find it on the shelf", async () => {
@@ -156,7 +159,8 @@ describe("warmPrices", () => {
       prices: b.prices,
     });
     expect(b.asked).toEqual([]);
-    expect(summary).toEqual({ mints: 0, priced: 0 });
+    expect(summary).toMatchObject({ mints: 0, priced: 0 });
+    expect(summary.board.size).toBe(0);
   });
 
   it("reports a mint it asked about and got no price for", async () => {
@@ -171,6 +175,29 @@ describe("warmPrices", () => {
       prices: b.prices,
     });
     // Worth seeing in a log: two mints warm, one of them not actually priced.
-    expect(summary).toEqual({ mints: 2, priced: 1 });
+    expect(summary).toMatchObject({ mints: 2, priced: 1 });
+  });
+
+  it("hands back what it was answered with, so the pass can be recorded", async () => {
+    const db = await testDb();
+    const b = board();
+    const summary = await warmPrices(db, {
+      supportedStocks: async () => [row("FEAT", [wrapper(FEATURED, "90000")])],
+      prices: b.prices,
+    });
+    expect([...summary.board.keys()]).toEqual([FEATURED]);
+  });
+
+  it("holds the board to the age its caller names", async () => {
+    // A recorded sample is stamped with the moment it was recorded, so it
+    // must not be an entry the board was still serving from a minute ago.
+    const db = await testDb();
+    const b = board();
+    await warmPrices(db, {
+      supportedStocks: async () => [row("FEAT", [wrapper(FEATURED, "90000")])],
+      prices: b.prices,
+      ask: { maxAgeMs: 5_000 },
+    });
+    expect(b.asks).toEqual([{ maxAgeMs: 5_000 }]);
   });
 });

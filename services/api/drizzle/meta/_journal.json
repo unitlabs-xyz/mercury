@@ -134,6 +134,13 @@
       "when": 1791888747913,
       "tag": "0018_funding_intent",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791967573903,
+      "tag": "0019_price_bar",
+      "breakpoints": true
     }
   ]
 }
