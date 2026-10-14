@@ -29,7 +29,8 @@ export class PgCustomBasketStore implements CustomBasketStore {
       .select()
       .from(customBaskets)
       .where(this.ownedBy(userId))
-      .orderBy(desc(customBaskets.createdAt));
+      // Two written in the same millisecond would otherwise come back in any order.
+      .orderBy(desc(customBaskets.createdAt), desc(customBaskets.id));
     return rows.map(toBasket);
   }
 

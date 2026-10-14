@@ -113,6 +113,47 @@ export const SearchField = ({
   </label>
 );
 
+/**
+ * The screener's filter row: 26px pills, the chosen one raised on the same
+ * white-to-grey key the range switch uses. Keeps one line and scrolls sideways
+ * rather than wrapping, so a long set never goes ragged.
+ */
+export const FilterPills = <T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+  className = "",
+}: {
+  options: readonly { key: T; label: ReactNode }[];
+  value: T;
+  onChange: (key: T) => void;
+  label: string;
+  className?: string;
+}) => (
+  <div
+    role="group"
+    aria-label={label}
+    className={`flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${className}`}
+  >
+    {options.map((option) => (
+      <button
+        key={option.key}
+        type="button"
+        onClick={() => onChange(option.key)}
+        aria-pressed={value === option.key}
+        className={`h-[26px] shrink-0 rounded-full border px-[17px] text-[14px] leading-none text-ds-ink transition-colors ${
+          value === option.key
+            ? "border-black/10 bg-linear-to-b from-white to-[#eeeeee]"
+            : "border-black/5 hover:border-black/10"
+        }`}
+      >
+        {option.label}
+      </button>
+    ))}
+  </div>
+);
+
 export type Tone = "up" | "warn" | "down" | "pending" | "neutral" | "owned";
 
 const CHIP: Record<Tone, string> = {
@@ -460,18 +501,23 @@ export const GlideTable = ({
   children,
   footer,
   minWidth = "min-w-[900px]",
+  sheet = "bg-white",
 }: {
   columns: string;
   headings: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   minWidth?: string;
+  /** Passed through to the rows: panel grey when the table itself sits on white. */
+  sheet?: string;
 }) => (
   <div className={minWidth}>
     <div className={`grid ${columns} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}>
       {headings}
     </div>
-    <GlideRows as="ul">{children}</GlideRows>
+    <GlideRows as="ul" sheet={sheet}>
+      {children}
+    </GlideRows>
     {footer}
   </div>
 );

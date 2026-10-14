@@ -1070,6 +1070,7 @@ export class BasketService {
     return assets.map(({ ticker, name, mint, logoUrl }) => ({
       ticker,
       name,
+      mint,
       assetId: assetIdFor(mint),
       logoUrl,
     }));

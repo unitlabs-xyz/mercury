@@ -86,6 +86,8 @@ describe("PgCustomBasketStore", () => {
   it("lists newest first, because that is the one just made", async () => {
     const { store, mine } = await setup();
     await draft(store, mine, "first-aaaaaaaa");
+    // A real gap: back-to-back inserts share a `now()` tick, which two creates never do.
+    await new Promise((resolve) => setTimeout(resolve, 5));
     await draft(store, mine, "second-bbbbbbbb");
     expect((await store.mine(mine)).map((b) => b.slug)).toEqual(["second-bbbbbbbb", "first-aaaaaaaa"]);
   });

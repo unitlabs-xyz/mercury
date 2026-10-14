@@ -13,14 +13,24 @@ import { LIST_DOT, Mark, compact, points, type Row } from "./shared";
  * 12, an 84 × 28 dot-matrix sparkline, and the price over its move chip on the
  * right, in a 52px row. It is the hover sheet's `data-row`.
  */
-export const Saved = memo(({ r, sub }: { r: Row; sub?: string }) => (
-  <Link
-    data-row
-    to={`/invest/${r.instrument.ticker}`}
-    className="relative grid h-[52px] grid-cols-[minmax(0,1fr)_84px_56px] items-center gap-x-3 rounded-md px-3"
-  >
+/** The 52px stock row: 32px mark, name over ticker · sector, an 84 × 28 sparkline, price over its move chip. */
+export const STOCK_ROW =
+  "relative grid h-[52px] grid-cols-[minmax(0,1fr)_84px_56px] items-center gap-x-3 rounded-md px-3";
+
+/** Its contents, so a row that adds a stock looks exactly like one that opens it. */
+export const StockRowBody = ({
+  r,
+  sub,
+  mark,
+}: {
+  r: Row;
+  sub?: string | undefined;
+  /** The basket picker shows Glider's Ondo logo, not the instrument's default wrapper. */
+  mark?: ReactNode;
+}) => (
+  <>
     <span className="flex min-w-0 items-center gap-3">
-      <Mark i={r.instrument} size={32} />
+      {mark ?? <Mark i={r.instrument} size={32} />}
       <span className="min-w-0">
         <span className="block truncate text-[14px] leading-[18px] font-medium text-ds-ink">
           {r.instrument.name}
@@ -55,6 +65,13 @@ export const Saved = memo(({ r, sub }: { r: Row; sub?: string }) => (
         </span>
       </span>
     </span>
+  </>
+);
+
+/** One stock in a rail list (Watchlist, Top movers, Most bought), to waitlist.svg. */
+export const Saved = memo(({ r, sub }: { r: Row; sub?: string }) => (
+  <Link data-row to={`/invest/${r.instrument.ticker}`} className={STOCK_ROW}>
+    <StockRowBody r={r} sub={sub} />
   </Link>
 ));
 Saved.displayName = "Saved";

@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-type Asset = { ticker: string; mint: string };
+/** `logoUrl` is Glider's own, which the picker has and no instrument read can supply. */
+type Asset = { ticker: string; mint: string; logoUrl?: string | null };
 type LogoSource = { logo?: string; wrappers: readonly { mint: string; icon?: string }[] };
 
 /** The token held by a Glider strategy may have a different logo from its stock's default wrapper. */
@@ -16,7 +17,7 @@ export const AssetIcon = ({
   source: LogoSource | undefined;
   className: string;
 }) => {
-  const logo = assetLogo(asset.mint, source);
+  const logo = asset.logoUrl ?? assetLogo(asset.mint, source);
   const [failed, setFailed] = useState<string | null>(null);
 
   return logo && failed !== logo ? (

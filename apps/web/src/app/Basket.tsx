@@ -38,9 +38,9 @@ import { LiveStatusChip, PriceError } from "./LiveStatus";
 import { Button } from "../ui/Button";
 import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
+import { Mosaic, TILE_CLASS } from "./baskets/Mosaic";
 import { OperationStatus } from "./baskets/OperationStatus";
 import { TOKEN_NAME } from "./stock/heldAs";
-import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
 import { EnrollmentRail, ExitSheet, InvestSheet, RebalanceSheet } from "./baskets/Ticket";
 import { rebalanceOutcome, rebalanceTerminal } from "./baskets/rebalance-status";
@@ -70,15 +70,6 @@ const RANGE_NAME: Record<Exclude<Range, "All">, string> = {
 };
 const weight = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.00$/, "")}%`;
 const returnLabel = (value: string) => `${Number(value) > 0 ? "+" : ""}${Number(value).toFixed(2)}%`;
-const TILE_TONES = [
-  "bg-[#e9f2ed]",
-  "bg-[#e9edf5]",
-  "bg-[#f4eee7]",
-  "bg-[#eeeaf4]",
-  "bg-[#e7f1f1]",
-  "bg-[#f3f1e9]",
-  "bg-ds-tag",
-];
 const USDC_ASSET_ID =
   "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const assetBalance = (value: string) => {
@@ -593,7 +584,6 @@ export const BasketDetail = () => {
   );
   const heldAsLabel =
     issuers.size === 0 ? "Ondo tokens" : [...issuers].map((i) => `${TOKEN_NAME[i]} tokens`).join(" and ");
-  const mosaic = allocationRows(allocations);
   /* The headline follows the chosen range; "All" reads as the return since the first modeled day. */
   const sinceStart = modeledSince(performance);
   const headline = {
@@ -934,62 +924,19 @@ export const BasketDetail = () => {
                     <span>Target allocation</span>
                     <span>{allocations.length} assets</span>
                   </div>
-                  <div className="flex h-[290px] flex-col gap-1.5" aria-label="Target allocation">
-                    {mosaic.map((row, rowIndex) => {
-                      const rowWeight = row.reduce((sum, tile) => sum + tile.weightBps, 0);
-                      return (
-                        <div
-                          key={rowIndex}
-                          className="flex min-h-0 gap-1.5"
-                          style={{ flexGrow: rowWeight, flexBasis: 0 }}
-                        >
-                          {row.map((tile, index) => (
-                            <StockLink
-                              key={tile.ticker}
-                              ticker={tile.kind === "asset" && byTicker.has(tile.ticker) ? tile.ticker : null}
-                              className="basket-allocation-tile group min-w-0 overflow-hidden rounded-lg px-2.5 transition-transform duration-300 motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none sm:px-3"
-                              style={{ flexGrow: tile.weightBps, flexBasis: 0 }}
-                              title={`${tile.ticker}: ${weight(tile.weightBps)} target weight`}
-                            >
-                              <span
-                                aria-hidden="true"
-                                className={`basket-allocation-color pointer-events-none absolute -inset-3 ${TILE_TONES[(rowIndex * 2 + index) % TILE_TONES.length]}`}
-                              />
-                              <span className="basket-allocation-content">
-                                {tile.kind === "asset" ? (
-                                  <AssetIcon
-                                    asset={tile.asset}
-                                    source={byTicker.get(tile.ticker)}
-                                    className="size-6 shrink-0 rounded-full object-contain transition-transform duration-300 motion-safe:group-hover:scale-110 motion-reduce:transition-none"
-                                  />
-                                ) : (
-                                  <span className="flex shrink-0 items-center -space-x-2 pl-0.5">
-                                    {tile.assets.slice(0, 3).map((asset) => (
-                                      <AssetIcon
-                                        key={asset.assetId}
-                                        asset={asset}
-                                        source={byTicker.get(asset.ticker)}
-                                        className="size-6 rounded-full bg-white object-contain ring-2 ring-white"
-                                      />
-                                    ))}
-                                  </span>
-                                )}
-                                <span className="flex min-w-0 flex-col">
-                                  <span className="truncate text-[12px] font-medium text-ds-ink">
-                                    {tile.ticker}
-                                  </span>
-                                  <span className="text-[11px] text-ds-muted">
-                                    {weight(tile.weightBps)}
-                                    {tile.kind === "other" ? ` · ${tile.assets.length} assets` : ""}
-                                  </span>
-                                </span>
-                              </span>
-                            </StockLink>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <Mosaic
+                    holdings={allocations}
+                    instruments={byTicker}
+                    tile={(tile, body) => (
+                      <StockLink
+                        ticker={tile.kind === "asset" && byTicker.has(tile.ticker) ? tile.ticker : null}
+                        className={TILE_CLASS}
+                        title={`${tile.ticker}: ${weight(tile.weightBps)} target weight`}
+                      >
+                        {body}
+                      </StockLink>
+                    )}
+                  />
                 </div>
               </div>
             </section>

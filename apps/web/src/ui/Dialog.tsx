@@ -137,11 +137,14 @@ export const SidePanel = ({
   open,
   onClose,
   labelledBy,
+  width = "max-w-[460px]",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   labelledBy: string;
+  /** Wider for a task with two halves to keep side by side, like composing a basket. */
+  width?: string;
   children: ReactNode;
 }) => {
   const panel = useOverlay(open, onClose);
@@ -168,7 +171,7 @@ export const SidePanel = ({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ duration: 0.34, ease: EASE }}
-            className="flex h-full w-full max-w-[460px] flex-col overflow-y-auto bg-white outline-none sm:m-2 sm:h-[calc(100%-16px)] sm:rounded-xl"
+            className={`flex h-full w-full ${width} flex-col overflow-y-auto bg-white outline-none sm:m-2 sm:h-[calc(100%-16px)] sm:rounded-xl`}
           >
             {children}
           </motion.div>

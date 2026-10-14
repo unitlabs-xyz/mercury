@@ -160,6 +160,10 @@ export const useInstruments = (tickers: readonly string[]) => {
         )
       ).instruments.map(toInstrument),
     enabled: key.length > 0,
+    /* The key is the ticker list, so adding or dropping one starts a new query.
+       Holding the last answer keeps prices and charts on screen instead of
+       blanking every row; a ticker it does not cover just falls back. */
+    placeholderData: (previous) => previous,
     staleTime: 60_000,
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
@@ -302,6 +306,8 @@ export const useHistories = (tickers: readonly string[], span: Span) => {
       );
     },
     enabled: key.length > 0,
+    /* As above: a changed ticker list must not empty the charts already drawn. */
+    placeholderData: (previous) => previous,
     staleTime: span === "1D" || span === "1W" ? 60_000 : 10 * 60 * 1000,
     refetchInterval: span === "1D" || span === "1W" ? 60_000 : 10 * 60 * 1000,
     refetchOnWindowFocus: true,

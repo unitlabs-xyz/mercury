@@ -82,6 +82,8 @@ describe("pickableAssets", () => {
     expect(nvda).toEqual({
       ticker: "NVDA",
       name: "NVDA Inc",
+      // Both: the strategy is addressed by the id, the logo is keyed by the mint.
+      mint: "gEGtLTPNQ7jcg25zTetkbmF7teoDLcrfTnQfmn2ondo",
       assetId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:gEGtLTPNQ7jcg25zTetkbmF7teoDLcrfTnQfmn2ondo",
       logoUrl: null,
     });

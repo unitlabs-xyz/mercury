@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { BasketTag } from "@mercury/types";
-import { shelfOf, type ShelfBasket } from "@mercury/view";
+import type { Basket, BasketTag } from "@mercury/types";
+import { ownedBy, shelfOf, sourced, type BasketSource, type ShelfBasket } from "@mercury/view";
 import { Link } from "react-router-dom";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useWallets } from "@privy-io/react-auth/solana";
 import { basketEnrollmentEnabled, useBaskets, useOwnedBasketPortfolios } from "../api/baskets";
 import { useInstruments, type Instrument } from "../market/hooks";
-import { GlideTable, SearchField } from "../ui/ds";
+import { FilterPills, GlideTable, SearchField } from "../ui/ds";
 import { ArrowRight } from "../ui/icons";
 import { AppShell } from "./AppShell";
 import { PriceError } from "./LiveStatus";
@@ -21,6 +21,7 @@ import {
   visibleStrategies,
 } from "./baskets/catalog";
 import { BasketsRail } from "./baskets/rail";
+import { Compose } from "./baskets/Compose";
 
 type Instruments = ReadonlyMap<string, Instrument>;
 const EMPTY_TEMPLATES: readonly ShelfBasket[] = [];
@@ -100,7 +101,7 @@ const Holdings = ({
   instruments,
   limit = 5,
 }: {
-  template: ShelfBasket;
+  template: Basket;
   instruments: Instruments;
   limit?: number;
 }) => {
@@ -304,8 +305,11 @@ const StrategyTable = ({
   setShowAll,
   query,
   setQuery,
+  source,
+  setSource,
+  mine,
 }: {
-  templates: readonly ShelfBasket[];
+  templates: readonly Basket[];
   instruments: Instruments;
   selected: BasketTag | null;
   clear: () => void;
@@ -313,15 +317,27 @@ const StrategyTable = ({
   setShowAll: (value: boolean) => void;
   query: string;
   setQuery: (value: string) => void;
+  source: BasketSource;
+  setSource: (value: BasketSource) => void;
+  mine: number;
 }) => {
   const searching = query.trim() !== "";
   const title = searching
     ? "Search results"
-    : selected
-      ? `${selected.replace("theme:", "").replace(/\b\w/g, (letter) => letter.toUpperCase())} strategies`
-      : showAll
-        ? "All strategies"
-        : "Featured strategies";
+    : source === "private"
+      ? "Your baskets"
+      : selected
+        ? `${selected.replace("theme:", "").replace(/\b\w/g, (letter) => letter.toUpperCase())} strategies`
+        : showAll
+          ? "All strategies"
+          : "Featured strategies";
+  const sub = searching
+    ? `${templates.length} ${templates.length === 1 ? "strategy" : "strategies"} matching “${query.trim()}”.`
+    : source === "private"
+      ? "Yours alone. Nobody else can see them."
+      : source === "curated"
+        ? "Explore curated Glider strategies on Solana."
+        : "Curated Glider strategies, and the baskets you wrote.";
   return (
     <section
       id="strategies"
@@ -331,11 +347,7 @@ const StrategyTable = ({
       <header className="flex flex-wrap items-center justify-between gap-3 px-3 sm:px-5 pt-4">
         <div>
           <h2 className="text-[16px] font-medium text-ds-ink">{title}</h2>
-          <p className="mt-1 text-[12px] text-ds-muted">
-            {searching
-              ? `${templates.length} ${templates.length === 1 ? "strategy" : "strategies"} matching “${query.trim()}”.`
-              : "Explore curated Glider strategies on Solana."}
-          </p>
+          <p className="mt-1 text-[12px] text-ds-muted">{sub}</p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:shrink-0">
           <SearchField
@@ -344,22 +356,45 @@ const StrategyTable = ({
             placeholder="Search by strategy, company or ticker"
             label="Search strategies"
           />
+          {/* Always here, whichever pill is up: dropping it on one of them
+              moved the search box 160px across on every click. From the private
+              shelf it means the same thing it always did — show me everything. */}
           <TextAction
             onClick={() => {
-              if (selected) {
-                clear();
-                setShowAll(true);
-              } else setShowAll(!showAll);
+              if (source === "private") setSource("all");
+              else if (selected) clear();
+              setShowAll(source === "private" || Boolean(selected) || !showAll);
             }}
           >
-            {selected || !showAll ? "See all strategies" : "Show featured"}
+            {source === "private" || selected || !showAll ? "See all strategies" : "Show featured"}
           </TextAction>
         </div>
       </header>
+
+      {/* Who wrote it, not what it holds: the themes above narrow the curated
+          catalogue, and this says whose shelf is being read at all. Under the
+          search rather than beside it: a third control on that line left the
+          title fighting a toolbar for the row. */}
+      <FilterPills
+        options={[
+          { key: "all", label: "All" },
+          { key: "curated", label: "Curated" },
+          { key: "private", label: mine > 0 ? `Private · ${mine}` : "Private" },
+        ]}
+        value={source}
+        onChange={setSource}
+        label="Whose baskets"
+        className="mt-3 px-3 sm:px-5"
+      />
+
       <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
         {templates.length === 0 ? (
           <p className="px-4 py-8 text-center text-[13px] text-ds-muted">
-            {searching ? `No strategy matches “${query.trim()}”.` : "No strategies in this theme yet."}
+            {searching
+              ? `No strategy matches “${query.trim()}”.`
+              : source === "private"
+                ? "You have not written a basket yet."
+                : "No strategies in this theme yet."}
           </p>
         ) : (
           <GlideTable
@@ -386,7 +421,14 @@ const StrategyTable = ({
                     <span className="block truncate font-medium text-ds-ink">
                       {displayBasketName(template.name)}
                     </span>
+                    {/* Draft leads rather than replaces: it says the basket
+                        cannot be funded yet, which the blurb never would. */}
                     <span className="mt-1 block truncate text-[11px] text-ds-muted">
+                      {template.source === "mine" && template.strategyId === null && "Draft"}
+                      {template.source === "mine" &&
+                        template.strategyId === null &&
+                        template.description !== "" &&
+                        " · "}
                       {template.description}
                     </span>
                   </span>
@@ -412,6 +454,7 @@ export const Baskets = () => {
   const owned = useOwnedBasketPortfolios();
   const [selected, setSelected] = useState<BasketTag | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [source, setSource] = useState<BasketSource>("all");
   const [query, setQuery] = useState("");
   const [term, setTerm] = useState("");
   /* Typing filters a local catalog, so a short settle is enough to keep it from thrashing. */
@@ -423,6 +466,8 @@ export const Baskets = () => {
   // The shelf is the curated catalogue; a basket somebody wrote is not on it.
   const templates = useMemo(() => (catalog.data ? shelfOf(catalog.data) : EMPTY_TEMPLATES), [catalog.data]);
   const shelves = useMemo(() => curatedShelves(templates), [templates]);
+  const mine = useMemo(() => (catalog.data ? ownedBy(catalog.data) : []), [catalog.data]);
+  const [composing, setComposing] = useState(false);
   const tickers = useMemo(() => {
     /* A search reads every holding's company name, so it needs the whole catalog's instruments. */
     const discovery = searching
@@ -433,8 +478,13 @@ export const Baskets = () => {
       .filter((template) => ownedSlugs.has(template.slug))
       .flatMap((template) => [...template.allocations].sort((a, b) => b.weightBps - a.weightBps).slice(0, 2))
       .map((asset) => asset.ticker);
-    return [...new Set([...discovery, ...ownedLogos])];
-  }, [templates, selected, showAll, owned.data, searching]);
+    /* A basket somebody wrote is listed in the same table, so its row needs the
+       same logos; there are few of them, so they are always read. */
+    const own = mine
+      .flatMap((basket) => [...basket.allocations].sort((a, b) => b.weightBps - a.weightBps).slice(0, 5))
+      .map((asset) => asset.ticker);
+    return [...new Set([...discovery, ...ownedLogos, ...own])];
+  }, [templates, mine, selected, showAll, owned.data, searching]);
   const instruments = useInstruments(tickers);
   const instrumentsByTicker = useMemo(
     () => new Map((instruments.data ?? []).map((item) => [item.ticker, item])),
@@ -444,12 +494,14 @@ export const Baskets = () => {
     () => new Map([...instrumentsByTicker].map(([ticker, item]) => [ticker, item.name])),
     [instrumentsByTicker],
   );
+  /* A search reads the whole shelf it is pointed at; the themes and the
+     featured cut only narrow what is listed when nobody is searching. */
   const visible = useMemo(
     () =>
       searching
-        ? searchStrategies(templates, term, companyNames)
-        : visibleStrategies(templates, selected, showAll),
-    [templates, selected, showAll, searching, term, companyNames],
+        ? searchStrategies(sourced(templates, mine, source), term, companyNames)
+        : sourced(visibleStrategies(templates, selected, showAll), mine, source),
+    [templates, mine, source, selected, showAll, searching, term, companyNames],
   );
   const walletReady = Boolean(wallets[0]?.address);
   const signedIn = basketEnrollmentEnabled(ready, authenticated, identityToken !== null) && walletReady;
@@ -494,6 +546,14 @@ export const Baskets = () => {
                 setShowAll={setShowAll}
                 query={query}
                 setQuery={setQuery}
+                source={source}
+                setSource={(next) => {
+                  /* Themes tag the curated catalogue only, so a shelf that is
+                     not it cannot stay narrowed by one. */
+                  setSource(next);
+                  setSelected(null);
+                }}
+                mine={mine.length}
               />
             </>
           )}
@@ -515,6 +575,7 @@ export const Baskets = () => {
         </div>
         <BasketsRail
           onExplore={seeAll}
+          onCompose={() => setComposing(true)}
           onSignIn={() => login()}
           onRetry={() => owned.refetch()}
           signedIn={signedIn}
@@ -525,6 +586,7 @@ export const Baskets = () => {
           instruments={instrumentsByTicker}
         />
       </div>
+      <Compose open={composing} onClose={() => setComposing(false)} />
     </AppShell>
   );
 };

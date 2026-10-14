@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useSignMessage, useSignTransaction, useWallets } from "@privy-io/react-auth/solana";
 import { getBase58Decoder } from "@solana/kit";
+import type { BasketDraft } from "@mercury/core";
+import type { PickableBasketAsset } from "@mercury/types";
 import type {
   BasketInsights,
   Basket,
@@ -44,6 +46,56 @@ export const useBasketReturns = (enabled: boolean) => {
 };
 
 const basketPath = (slug: string) => `/v1/baskets/${encodeURIComponent(slug)}`;
+
+/**
+ * Every stock a basket may hold, in one answer.
+ *
+ * A few hundred rows that change once a day, so the composer's search filters
+ * a list already in the browser instead of putting a request behind every
+ * keystroke.
+ */
+export const useBasketAssets = (enabled: boolean) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "basket-assets"],
+    queryFn: async () => (await apiFetch<{ assets: PickableBasketAsset[] }>("/v1/basket-assets")).assets,
+    enabled: signedIn && enabled,
+    staleTime: 60 * 60_000,
+  });
+};
+
+/** Creating signs nothing on chain, so the list is the only thing to refresh. */
+export const useCreateBasket = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (draft: BasketDraft) =>
+      (await apiFetch<{ basket: Basket }>("/v1/baskets", { method: "POST", body: JSON.stringify(draft) }))
+        .basket,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["api", "baskets"] }),
+  });
+};
+
+export const useUpdateBasket = (slug: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (changes: Partial<BasketDraft>) =>
+      (
+        await apiFetch<{ basket: Basket }>(basketPath(slug), {
+          method: "PATCH",
+          body: JSON.stringify(changes),
+        })
+      ).basket,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["api", "baskets"] }),
+  });
+};
+
+export const useDeleteBasket = (slug: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch(basketPath(slug), { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["api", "baskets"] }),
+  });
+};
 
 /** The curated shelf and the caller's own baskets, in one list, each marked `source`. */
 export const useBaskets = () =>

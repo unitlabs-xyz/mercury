@@ -95,6 +95,8 @@ export const UpdateBasket = z
 export const PickableBasketAsset = z.object({
   ticker: z.string(),
   name: z.string(),
+  /** Both, as allocations carry both: the id a strategy holds it by, and the logo's key. */
+  mint: z.string(),
   assetId: z.string(),
   logoUrl: z.string().nullable(),
 });

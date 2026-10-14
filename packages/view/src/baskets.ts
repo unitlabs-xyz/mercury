@@ -75,6 +75,25 @@ export const visibleStrategies = (
       ? [...templates]
       : templates.filter((item) => item.tags.includes("shelf:featured"));
 
+/** The three shelves discovery can be narrowed to. */
+export const BASKET_SOURCES = ["all", "curated", "private"] as const;
+export type BasketSource = (typeof BASKET_SOURCES)[number];
+
+/**
+ * What discovery lists once a source is chosen.
+ *
+ * Themes and the featured shelf are tags only the curated catalogue carries,
+ * so they narrow `curated` before it arrives here; a basket somebody wrote is
+ * never filtered by them. The shelf leads, which is what discovery is for; own
+ * baskets are one pill away.
+ */
+export const sourced = (
+  curated: readonly ShelfBasket[],
+  own: readonly OwnBasket[],
+  source: BasketSource,
+): readonly Basket[] =>
+  source === "curated" ? [...curated] : source === "private" ? [...own] : [...curated, ...own];
+
 /** Holdings by weight, largest first. */
 export const byWeight = <T extends { weightBps: number }>(items: readonly T[]) =>
   [...items].sort((a, b) => b.weightBps - a.weightBps);
