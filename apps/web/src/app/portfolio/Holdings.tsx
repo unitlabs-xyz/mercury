@@ -211,7 +211,7 @@ const BasketLine = ({ b, weight }: { b: BasketHolding; weight: number }) => (
       // inside Glider and we never see one.
       title={
         b.pnlUsd !== null && b.pnlUsd !== undefined
-          ? `Total since you funded it, net of Glider's fees${b.basisIsComplete === false ? ". Understated: something left this basket in kind, and no dollar figure was recorded for it" : ""}`
+          ? `Total since you funded it, net of Glider's fees${b.basisIsComplete === false ? ". Understated: something left this basket as assets rather than cash, and no dollar figure was recorded for it" : ""}`
           : b.returnPct === null
             ? "All-time return unavailable; zero is a display placeholder"
             : "Glider money-weighted all-time return"

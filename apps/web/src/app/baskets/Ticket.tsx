@@ -74,13 +74,13 @@ export const EnrollmentRail = ({
   const notice = checking
     ? null
     : lookupFailed
-      ? "We couldn't check your portfolio."
+      ? "We couldn't check your basket account."
       : walletMissing
         ? "Connect a Solana wallet to invest."
         : !signedIn
           ? "Sign in to invest."
           : blocked && !enrolled
-            ? "This strategy isn't open to new portfolios right now."
+            ? "This strategy isn't open to new accounts right now."
             : (error ?? null);
   return (
     <section aria-label={`Invest in ${name}`} className="min-w-0 rounded-xl bg-white p-1">
@@ -88,7 +88,7 @@ export const EnrollmentRail = ({
         <RailHead title={`Invest in ${name}`} meta={cash === null ? undefined : `${usd(cash)} cash`} />
       </div>
       {checking ? (
-        <div className="mt-[11px] rounded-lg bg-ds-panel p-1" aria-label="Checking your portfolio">
+        <div className="mt-[11px] rounded-lg bg-ds-panel p-1" aria-label="Checking your basket account">
           <Skeleton className="h-15 w-full rounded-md bg-white" />
           <Skeleton className="mt-1 h-9 w-full rounded-md" />
         </div>
@@ -106,7 +106,7 @@ export const EnrollmentRail = ({
       <dl className="flex flex-col gap-3 px-5 pt-5">
         <RailLine k="Target assets">{assetCount}</RailLine>
         <RailLine k="Rebalancing">Daily</RailLine>
-        <RailLine k="Your portfolio">
+        <RailLine k="Your basket account">
           {checking ? (
             "Checking…"
           ) : address ? (
@@ -114,7 +114,7 @@ export const EnrollmentRail = ({
               href={`https://solscan.io/account/${encodeURIComponent(address)}`}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`View smart account ${address} on Solscan`}
+              aria-label={`View basket account ${address} on Solscan`}
               className="text-ds-link hover:underline"
             >
               {short(address)} ↗
@@ -141,11 +141,11 @@ export const EnrollmentRail = ({
           className="w-full"
         >
           {checking
-            ? "Checking portfolio…"
+            ? "Checking…"
             : lookupFailed
-              ? "Retry portfolio check"
+              ? "Check again"
               : busy
-                ? "Setting up portfolio…"
+                ? "Setting up…"
                 : valid
                   ? `Review ${usd(Number(amount))}`
                   : "Review"}
@@ -162,8 +162,8 @@ export const EnrollmentRail = ({
  */
 const Steps = ({ current, amount }: { current: 1 | 2; amount: string }) => {
   const steps = [
-    { label: "Set up your portfolio", sub: "One-time signature. No USDC moves." },
-    { label: sendLabel(amount), sub: "Sign the transfer to your portfolio." },
+    { label: "Set up your basket account", sub: "One-time signature. No USDC moves." },
+    { label: sendLabel(amount), sub: "Sign the transfer to your basket account." },
   ];
   return (
     <ol className="flex flex-col gap-4" aria-label={`Step ${current} of 2`}>
@@ -269,7 +269,7 @@ const Swap = ({
 );
 
 const REBALANCE_TIP =
-  "Glider checks your portfolio against the target weights every day and trades back toward them.";
+  "Glider checks your basket account against the target weights every day and trades back toward them.";
 
 /** What happens after signing, where it will be read: a callout, not a footnote. */
 const SheetNote = ({ children }: { children: ReactNode }) => (
@@ -281,7 +281,7 @@ const SheetNote = ({ children }: { children: ReactNode }) => (
 
 const RebalanceNote = () => (
   <SheetNote>
-    Your USDC sits in your portfolio until Glider’s next daily rebalance, which buys the target assets.
+    Your USDC sits in your basket account until Glider’s next daily rebalance, which buys the target assets.
   </SheetNote>
 );
 
@@ -325,8 +325,8 @@ const EnrollmentStep = ({
     />
     <Swap amount={amount} assetCount={assetCount}>
       <TipLine
-        k="Your portfolio"
-        tip="Your own smart account on Glider. The assets are held in it for you, not pooled into one basket token."
+        k="Your basket account"
+        tip="Your own basket account on Glider. The assets are held in it for you, not pooled into one basket token."
       >
         New
       </TipLine>
@@ -351,7 +351,7 @@ const EnrollmentStep = ({
         onClick={onConfirm}
         className="flex-[1.6]"
       >
-        Set up portfolio
+        Set up account
       </Button>
     </SheetFoot>
   </>
@@ -507,7 +507,7 @@ const FundingStep = ({
       />
       <Swap amount={amount} assetCount={assetCount}>
         <TipLine k="From">Wallet · {short(portfolio.ownerAccountId.split(":").at(-1))}</TipLine>
-        <TipLine k="To" tip="Your own smart account on Glider, where the USDC waits for the next rebalance.">
+        <TipLine k="To" tip="Your own basket account on Glider, where the USDC waits for the next rebalance.">
           Portfolio · {short(destination?.split(":").at(-1))}
         </TipLine>
         <TipLine k="Rebalancing" tip={REBALANCE_TIP}>
@@ -781,7 +781,7 @@ export const ExitSheet = ({
                     onClick={() => onMode(choice)}
                     className={`rounded-md px-2 py-2.5 font-medium ${mode === choice ? "bg-white text-ds-ink shadow-sm" : "text-ds-muted hover:text-ds-ink"}`}
                   >
-                    {choice === "in_kind" ? "Assets in kind" : "Convert to USDC"}
+                    {choice === "in_kind" ? "Assets as they are" : "Convert to USDC"}
                   </button>
                 ))}
               </div>
@@ -947,10 +947,10 @@ export const ExitSheet = ({
                 }
               >
                 <dl className="flex flex-col gap-3">
-                  {manual && <TipLine k="Portfolio value">{usd(account.totalValueUsd)}</TipLine>}
+                  {manual && <TipLine k="Account value">{usd(account.totalValueUsd)}</TipLine>}
                   <TipLine
                     k="Assets in account"
-                    tip="Everything the portfolio holds, whether or not this withdrawal takes it."
+                    tip="Everything the basket account holds, whether or not this withdrawal takes it."
                   >
                     {count}
                   </TipLine>

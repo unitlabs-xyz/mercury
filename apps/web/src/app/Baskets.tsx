@@ -505,7 +505,7 @@ export const Baskets = () => {
           )}
           <footer className="flex flex-wrap items-center justify-between gap-3 pt-4 text-[11px] text-slate-500">
             <p>
-              Strategies are provided by Glider. Assets stay in your own smart account. Past or modeled
+              Strategies are provided by Glider. Assets stay in your own basket account. Past or modeled
               performance does not guarantee future results.
             </p>
             <a

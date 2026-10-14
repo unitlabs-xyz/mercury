@@ -256,7 +256,7 @@ export const Position = ({
             sub={
               h
                 ? `${shares.toFixed(4)} wallet & pledged shares${pledged > 0 ? ` · ${pledged.toFixed(4)} pledged to Kamino` : ""}`
-                : "Held in your Glider smart account"
+                : "Held in your Glider basket account"
             }
           />
         </div>

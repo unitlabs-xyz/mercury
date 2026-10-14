@@ -16,7 +16,7 @@ import { useBasketOperations } from "../../api/baskets";
 
 const steps = [
   ["Choose a strategy", "Each template sets target weights for Solana tokenized assets."],
-  ["You own the assets", "The holdings live in your own smart account, not in one pooled basket token."],
+  ["You own the assets", "The holdings live in an account of your own, not in one pooled basket token."],
   ["Glider rebalances daily", "Glider works toward the target weights as market prices move."],
 ] as const;
 
@@ -109,10 +109,10 @@ const BasketList = ({
         ? "Your baskets are unavailable"
         : "No baskets yet";
     const detail = !signedIn
-      ? "Your Glider portfolios will appear here after you sign in."
+      ? "Your basket accounts will appear here after you sign in."
       : error
-        ? "We couldn't load your Glider portfolios. Your assets remain in your smart account."
-        : "Explore a strategy to create your first Glider portfolio.";
+        ? "We couldn't load your basket accounts. Your assets are still in them."
+        : "Explore a strategy to create your first basket account.";
     return (
       <div className="flex min-h-[182px] flex-col items-center justify-center px-6 py-5 text-center">
         <p className="text-[14px] font-medium text-ds-ink">{title}</p>
@@ -184,7 +184,7 @@ const BasketList = ({
       )}
       {visible.some((portfolio) => portfolio.partial) && (
         <p className="px-3 pt-1 pb-2 text-[11px] leading-relaxed text-ds-muted">
-          Some portfolio data is temporarily unavailable.
+          Some of this could not be read just now.
         </p>
       )}
     </div>
@@ -214,7 +214,7 @@ const OperationList = ({
               portfolio,
               operationId: stored.exit.operationId,
               rebalance: false,
-              name: stored.exit.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC",
+              name: stored.exit.mode === "in_kind" ? "Exit as assets" : "Exit to USDC",
             },
           ]
         : []),

@@ -23,6 +23,15 @@ const copyIn = (source: string): string[] => {
     for (const m of line.matchAll(/"([A-Z][^"\\]*\s[^"\\]*)"|`([A-Z][^`\\$]*\s[^`\\$]*)`/g)) {
       out.push(m[1] ?? m[2] ?? "");
     }
+    /* Text between tags, which is most of the copy in the app and none of it
+       quoted. Left out at first, which made two of these guards pass by not
+       being able to see "Company cap" or "Partial read" at all. */
+    for (const m of line.matchAll(/>\s*([A-Z][^<>{}]*\s[^<>{}]*?)\s*</g)) {
+      out.push(m[1] ?? "");
+    }
+    /* A tag's text can also stand alone on its own line, between the tag
+       above it and the one below. */
+    if (/^[A-Z][^<>{}"`]*\s[^<>{}"`]*$/.test(t)) out.push(t);
   }
   return out;
 };
@@ -63,6 +72,55 @@ describe("the word that is not ours", () => {
   it("appears in no string a person reads", () => {
     const found = copyFiles().flatMap(({ file, copy }) =>
       copy.filter((s) => /\bcatalog/i.test(s)).map((s) => `${relative(".", file)}: ${s}`),
+    );
+
+    expect(found).toEqual([]);
+  });
+});
+
+/*
+ * Words the app knows and the reader does not.
+ *
+ * Each of these named something real and named it the way the system does.
+ * "Smart account" is the Glider account a basket's tokens sit in — nobody
+ * arriving from a brokerage app has met the phrase. "In-kind withdrawal" sat
+ * directly beside "Exit to USDC" as if the two were an even pair of choices,
+ * one plain and one from a settlement desk. "Partial read" is a database word
+ * for a value that may be low. "Company cap" was market cap, renamed into
+ * something ambiguous. "Portfolio status" is the name of a query.
+ *
+ * "Portfolio" is the hardest of them and the reason this list is not just a
+ * glossary: the primary nav tab is called Portfolio and means everything the
+ * account owns, while the basket sheets used the same word for one Glider
+ * account inside it — so "Set up your portfolio" on a basket sheet meant
+ * something quite different from the tab of the same name. One object, one
+ * name: a basket account.
+ */
+const JARGON: readonly (readonly [RegExp, string])[] = [
+  [/smart[- ]account/i, "say basket account"],
+  [/\bin[- ]kind\b/i, "say as assets"],
+  [/partial read/i, "say what could not be read"],
+  [/company cap/i, "say market cap"],
+  [/portfolio status/i, "say basket account"],
+];
+
+describe("words the reader does not have", () => {
+  it.each(JARGON)("does not reach a screen: %s (%s)", (pattern) => {
+    const found = copyFiles().flatMap(({ file, copy }) =>
+      copy.filter((s) => pattern.test(s)).map((s) => `${relative(".", file)}: ${s}`),
+    );
+
+    expect(found).toEqual([]);
+  });
+
+  it("does not call a basket account a portfolio, which is the tab's name", () => {
+    /* Scoped to the basket surfaces: the Portfolio tab and its own panels are
+       entitled to the word, and this is about the sheets that borrowed it. */
+    const baskets = copyFiles().filter(
+      ({ file }) => file.startsWith("app/baskets/") || file === "app/Basket.tsx",
+    );
+    const found = baskets.flatMap(({ file, copy }) =>
+      copy.filter((s) => /\bportfolios?\b/i.test(s)).map((s) => `${relative(".", file)}: ${s}`),
     );
 
     expect(found).toEqual([]);

@@ -800,7 +800,7 @@ export const Basket = () => {
                       <span>Asset</span>
                       <span className="text-right">Weight</span>
                       <span className="text-right">Share price</span>
-                      <span className="text-right">Company cap</span>
+                      <span className="text-right">Market cap</span>
                       <span className="text-right">1D</span>
                       <span className="text-right">1W</span>
                     </>
@@ -873,8 +873,8 @@ export const Basket = () => {
                 </GlideTable>
               </div>
               <p className="mt-3 px-5 pb-4 text-[11px] text-ds-muted">
-                Share price, company cap and 1D/1W moves describe the underlying companies, not the tokens
-                held by this strategy. Unavailable data is shown as —.
+                Share price, market cap and 1D/1W moves describe the underlying companies, not the tokens held
+                by this strategy. Unavailable data is shown as —.
               </p>
             </section>
 
@@ -882,8 +882,8 @@ export const Basket = () => {
               <div className="px-3 sm:px-5 pt-4">
                 <RailHead title={`About ${name}`} />
                 <p className="mt-[13px] max-w-[72ch] text-[14px] leading-[1.55] text-ds-muted">
-                  Follows Glider’s target weights with tokenized assets held in your own smart account. Glider
-                  rebalances daily; your actual holdings can drift between rebalances.
+                  Follows Glider’s target weights with tokenized assets held in your own basket account.
+                  Glider rebalances daily; your actual holdings can drift between rebalances.
                 </p>
               </div>
               <div className="mt-4 grid gap-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
@@ -891,7 +891,7 @@ export const Basket = () => {
                   <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
                     <Fact k="Assets">{allocations.length}</Fact>
                     <Fact k="Rebalancing">Daily</Fact>
-                    <Fact k="Custody">Your smart account</Fact>
+                    <Fact k="Custody">Your basket account</Fact>
                     <Fact k="Held as">{heldAsLabel}</Fact>
                     {/* Glider holds the tokens in its smart account, out of Kamino's reach, and
                         they are Ondo tokens besides. Said here so no one buys in to borrow. */}
@@ -1010,10 +1010,10 @@ export const Basket = () => {
                 />
               </summary>
               <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
-                These are tokenized assets held in a user-owned Glider smart account, not shares in a pooled
-                basket token. Prices, available liquidity, swap costs and actual execution can differ from the
-                modeled strategy. Funding with USDC does not automatically buy the target assets; USDC can
-                remain uninvested until a rebalance executes.
+                These are tokenized assets held in a Glider basket account that is yours, not shares in a
+                pooled basket token. Prices, available liquidity, swap costs and actual execution can differ
+                from the modeled strategy. Funding with USDC does not automatically buy the target assets;
+                USDC can remain uninvested until a rebalance executes.
               </p>
             </details>
           </div>
@@ -1033,7 +1033,7 @@ export const Basket = () => {
               busy={enrollmentBusy}
               error={
                 enrollment.isError && enrollment.data
-                  ? "Portfolio status could not refresh. Showing your last available enrollment."
+                  ? "Could not refresh your basket account. Showing the last reading."
                   : enrollment.error?.message
               }
               onRetry={() => void enrollment.refetch()}
@@ -1086,7 +1086,9 @@ export const Basket = () => {
                       </p>
                     )}
                     {account.warnings.length > 0 && (
-                      <p className="mt-3 text-[12px] text-ds-muted">Partial read; value may be incomplete.</p>
+                      <p className="mt-3 text-[12px] text-ds-muted">
+                        Some balances could not be read, so this may be low.
+                      </p>
                     )}
                     {portfolio.isError && (
                       <button
@@ -1100,7 +1102,7 @@ export const Basket = () => {
                     {exitOperationId && (
                       <div className="mt-4 border-t border-ds-divider pt-4 text-[12px]">
                         <OperationStatus
-                          name={exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
+                          name={exitOperation?.mode === "in_kind" ? "Exit as assets" : "Exit to USDC"}
                           state={exitState}
                           label={
                             exitState?.replaceAll("_", " ") ??
@@ -1150,13 +1152,13 @@ export const Basket = () => {
                 ) : ownershipUnknown ? (
                   <PriceError
                     className="mt-5"
-                    message="Portfolio status is unavailable. Your holdings have not been checked yet."
+                    message="Your holdings have not been checked yet."
                     onRetry={() => void enrollment.refetch()}
                   />
                 ) : (
                   <PriceError
                     className="mt-5"
-                    message="Smart-account balances are unavailable."
+                    message="Your basket account's balances are unavailable."
                     onRetry={() => void portfolio.refetch()}
                   />
                 )}
@@ -1205,7 +1207,7 @@ export const Basket = () => {
                     )}
                     {heldAssets.length === 0 ? (
                       <p className="px-3 py-5 text-[13px] text-ds-muted">
-                        This smart account has no assets right now. Check your wallet and recent activity if
+                        This basket account has no assets right now. Check your wallet and recent activity if
                         you withdrew them.
                       </p>
                     ) : (
@@ -1325,13 +1327,13 @@ export const Basket = () => {
                   <RebalanceLocked enrolled={enrolled} />
                 ) : ownershipUnknown ? (
                   <div className="min-h-[160px] text-[12px] text-ds-muted">
-                    <p>Rebalance schedule is unavailable until portfolio status is known.</p>
+                    <p>The schedule appears once your holdings have been read.</p>
                     <button
                       type="button"
                       onClick={() => void enrollment.refetch()}
                       className="mt-2 font-medium text-ds-link hover:underline"
                     >
-                      Retry portfolio check
+                      Check again
                     </button>
                   </div>
                 ) : enrolled && !account ? (
