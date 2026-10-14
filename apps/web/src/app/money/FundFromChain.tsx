@@ -2,7 +2,8 @@ import { useAppKit } from "@reown/appkit/react";
 import { useState } from "react";
 import { useFundIntents, useFundSources } from "../../api/fund-sources";
 import { useDebounced, useFundTokens, type FundToken } from "../../api/fund-tokens";
-import { useConnectFunder, useFunder } from "../../wallet/useFunder";
+import { useConnectFunder, useDisconnectFunder, useFunder } from "../../wallet/useFunder";
+import type { Funder } from "../../wallet/funder";
 import { Button } from "../../ui/Button";
 import { Alert } from "../../ui/icons";
 import { FundWalletSwap } from "./FundWalletSwap";
@@ -32,11 +33,34 @@ const Note = ({ children }: { children: React.ReactNode }) => (
   </p>
 );
 
-const TokenRow = ({ token, onPick }: { token: FundToken; onPick: () => void }) => (
+/**
+ * One token on one chain.
+ *
+ * The chain goes on the right rather than under the symbol, which is where it
+ * started and where two attempts put it back. Under the symbol it is a column
+ * of the same word repeated — filter to Ethereum and eight rows read
+ * "Ethereum", so the one line meant to tell them apart tells you nothing. On
+ * the right it is a column you read only when it varies, and the second line
+ * is free for the token's own name, which is what differs when the chain does
+ * not.
+ *
+ * `showChain` drops the column entirely once a chip is set, because then it
+ * does not vary either and the chip above already says which chain it is. The
+ * mark keeps its badge, which costs no width.
+ */
+const TokenRow = ({
+  token,
+  showChain,
+  onPick,
+}: {
+  token: FundToken;
+  showChain: boolean;
+  onPick: () => void;
+}) => (
   <button
     type="button"
     onClick={onPick}
-    className="flex h-14 items-center gap-3 rounded-md px-3 text-left transition-colors hover:bg-white/60"
+    className="group flex items-center gap-3 rounded-md px-3 text-left transition-colors hover:bg-white"
   >
     <TokenMark
       symbol={token.symbol}
@@ -44,20 +68,20 @@ const TokenRow = ({ token, onPick }: { token: FundToken; onPick: () => void }) =
       chainName={token.chainName}
       chainIconUrl={token.chainIconUrl}
     />
-    <span className="flex min-w-0 flex-col gap-1.5">
-      <span className="truncate text-[14px] leading-none text-ds-ink">{token.symbol}</span>
-      {/*
-       * The chain, not the token's full name.
-       *
-       * The name is the symbol again in almost every case — USDC is "USD
-       * Coin", ETH is "Ether", DEGEN is "Degen" — so a list of it reads as a
-       * stutter. The chain is the one fact that distinguishes the three rows
-       * all called USDC, which makes it the thing somebody is actually
-       * choosing between. The badge on the mark reinforces it rather than
-       * carrying it alone, because a 14px mark is recognisable once you know
-       * what you are looking for and not before.
-       */}
-      <span className="truncate text-[12px] leading-none text-ds-muted">{token.chainName}</span>
+    {/*
+     * The divider is on the inner span, not the row, so it starts after the
+     * mark and stops short of nothing — a line running the full width would
+     * cut the artwork off from its own label. `group-hover` hides it under a
+     * hovered row so the highlight reads as one block.
+     */}
+    <span className="flex min-w-0 flex-1 items-center justify-between gap-3 border-b border-ds-divider py-3.5 group-last:border-b-0 group-hover:border-transparent">
+      <span className="flex min-w-0 flex-col gap-1.5">
+        <span className="truncate text-[14px] leading-none text-ds-ink">{token.symbol}</span>
+        <span className="truncate text-[12px] leading-none text-ds-muted">{token.name}</span>
+      </span>
+      {showChain && (
+        <span className="shrink-0 text-[12px] leading-none text-ds-muted">{token.chainName}</span>
+      )}
     </span>
   </button>
 );
@@ -149,6 +173,46 @@ const InFlight = () => {
           );
         })}
       </div>
+    </div>
+  );
+};
+
+/**
+ * `0x1234…cdef`, which is as much of an address as anyone reads.
+ *
+ * Returned whole when it is too short to shorten: the two slices overlap below
+ * eleven characters and would print more than they were given.
+ */
+export const shortAddress = (address: string) =>
+  address.length <= 11 ? address : `${address.slice(0, 6)}…${address.slice(-4)}`;
+
+/**
+ * Which wallet is attached, and how to stop it being attached.
+ *
+ * The connector remembers across reloads, so without this a wallet connected
+ * once to make one deposit is still the wallet weeks later, with nothing on
+ * screen saying which one it is or offering to change it. Showing the address
+ * is half the point: "connected" alone does not tell somebody holding three
+ * wallets whether it is the one with the money in it.
+ */
+const ConnectedWallet = ({ funder }: { funder: Funder }) => {
+  const disconnect = useDisconnectFunder();
+
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-ds-panel px-3 py-2.5">
+      <span className="flex min-w-0 items-center gap-2">
+        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-ds-live" />
+        <span className="truncate text-[12px] leading-none text-ds-muted">
+          Paying from <span className="text-ds-ink">{shortAddress(funder.address)}</span>
+        </span>
+      </span>
+      <button
+        type="button"
+        onClick={() => void disconnect()}
+        className="shrink-0 text-[12px] leading-none text-ds-muted underline underline-offset-2 hover:text-ds-ink"
+      >
+        Disconnect
+      </button>
     </div>
   );
 };
@@ -246,6 +310,10 @@ export const FundFromChain = () => {
               Switch network
             </Button>
           </div>
+          {/* Connecting a different wallet is the other way out of this, and
+              for somebody whose Ethereum funds are in a wallet they have not
+              connected it is the only one. */}
+          <ConnectedWallet funder={funder} />
           {back}
           <InFlight />
         </div>
@@ -261,6 +329,7 @@ export const FundFromChain = () => {
         <div className="mt-3">
           <FundWalletSwap token={picked} />
         </div>
+        <ConnectedWallet funder={funder} />
         {back}
         <InFlight />
       </div>
@@ -289,7 +358,9 @@ export const FundFromChain = () => {
         /* Dimmed rather than emptied while the next answer lands: the rows
            under the cursor stay where they are, and the list reads as being
            refined instead of destroyed and rebuilt. */
-        className={`mt-1 flex max-h-72 flex-col gap-1 overflow-y-auto rounded-lg bg-ds-panel p-1 transition-opacity ${
+        /* No gap between rows: they are separated by a hairline now, and a gap
+           as well would read as two separation systems arguing. */
+        className={`mt-2 flex max-h-72 flex-col overflow-y-auto rounded-lg bg-ds-panel px-1 transition-opacity ${
           searching && rows.length > 0 ? "opacity-60" : ""
         }`}
       >
@@ -331,11 +402,17 @@ export const FundFromChain = () => {
             <TokenRow
               key={`${token.chainId}:${token.address}`}
               token={token}
+              showChain={chainId === null}
               onPick={() => setPicked(token)}
             />
           ))
         )}
       </div>
+
+      {/* Before anything is picked too: this is the screen somebody lands on
+          with a wallet still attached from last time, and the screen where
+          they would want to change it. */}
+      {funder !== null && <ConnectedWallet funder={funder} />}
 
       <InFlight />
     </div>

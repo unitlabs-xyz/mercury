@@ -1,4 +1,4 @@
-import { useAppKit, useAppKitAccount } from "@reown/appkit/react";
+import { useAppKit, useAppKitAccount, useDisconnect } from "@reown/appkit/react";
 import { walletConnectConfigured } from "./appkit";
 import { funderFrom, type Funder } from "./funder";
 
@@ -29,5 +29,26 @@ export const useConnectFunder = (): (() => void) => {
   return () => {
     if (!walletConnectConfigured) return;
     void open();
+  };
+};
+
+/**
+ * Let go of the connected wallet.
+ *
+ * Needed more than it looks. This connector holds on across reloads, so a
+ * wallet connected once to make one deposit is still the wallet three weeks
+ * later — and somebody who wants to fund from a different one has no way to
+ * say so. AppKit's own modal offers it, but only after a connect button that
+ * reads as "connect" to a person who is already connected.
+ *
+ * Disconnecting every namespace rather than the active one: the adapters hold
+ * separate connections, and leaving an EVM wallet attached while clearing a
+ * Solana one is a state nothing in this app can describe.
+ */
+export const useDisconnectFunder = (): (() => Promise<void>) => {
+  const { disconnect } = useDisconnect();
+  return async () => {
+    if (!walletConnectConfigured) return;
+    await disconnect();
   };
 };
