@@ -1,8 +1,12 @@
-import { useAppKit } from "@reown/appkit/react";
 import { useState } from "react";
 import { useFundSources } from "../../api/fund-sources";
 import { useDebounced, useFundTokens, type FundToken } from "../../api/fund-tokens";
-import { useConnectFunder, useDisconnectFunder, useFunder } from "../../wallet/useFunder";
+import {
+  useConnectFunder,
+  useDisconnectFunder,
+  useFunder,
+  useSwitchFunderChain,
+} from "../../wallet/useFunder";
 import type { Funder } from "../../wallet/funder";
 import { Button } from "../../ui/Button";
 import { Alert } from "../../ui/icons";
@@ -199,7 +203,7 @@ export const FundFromChain = () => {
   const sources = useFundSources();
   const funder = useFunder();
   const connect = useConnectFunder();
-  const { open } = useAppKit();
+  const switchChain = useSwitchFunderChain();
   const [query, setQuery] = useState("");
   const [chainId, setChainId] = useState<number | null>(null);
   const [picked, setPicked] = useState<FundToken | null>(null);
@@ -264,14 +268,28 @@ export const FundFromChain = () => {
       return (
         <div className="flex flex-col">
           <div className="rounded-lg bg-ds-panel p-4">
+            {/* The button below names the chain, so the heading does not say
+                it a third time. */}
             <p className="text-[14px] leading-none font-medium text-ds-ink">
-              Switch your wallet to {picked.chainName}
+              Your wallet is on another chain
             </p>
             <p className="mt-2 text-[12px] leading-[1.45] text-ds-muted">
-              {picked.symbol} lives on {picked.chainName}, and your wallet is somewhere else.
+              {picked.symbol} lives on {picked.chainName}, so your wallet has to be there to send it.
             </p>
-            <Button variant="primary" onClick={() => void open({ view: "Networks" })} className="mt-4 w-full">
-              Switch network
+            {/* Switches straight to the chain named above rather than opening
+                a list of nine to pick it from. */}
+            <Button
+              variant="primary"
+              onClick={() => {
+                switchChain(picked.chainId).catch((err: unknown) => {
+                  /* Declining the switch in the wallet is a decision, not a
+                     fault, and the screen already says what is needed. */
+                  console.log("fund: the wallet did not switch chain", err);
+                });
+              }}
+              className="mt-4 w-full"
+            >
+              Switch to {picked.chainName}
             </Button>
           </div>
           {/* Connecting a different wallet is the other way out of this, and

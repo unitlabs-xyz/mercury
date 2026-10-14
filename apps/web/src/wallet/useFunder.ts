@@ -1,4 +1,6 @@
-import { useAppKit, useAppKitAccount, useDisconnect } from "@reown/appkit/react";
+import { useAppKit, useAppKitAccount, useAppKitNetwork, useDisconnect } from "@reown/appkit/react";
+import { solana } from "@reown/appkit/networks";
+import { EVM_NETWORKS, SOLANA_CHAIN_ID } from "./chains";
 import { walletConnectConfigured } from "./appkit";
 import { funderFrom, type Funder } from "./funder";
 
@@ -62,5 +64,36 @@ export const useDisconnectFunder = (): (() => Promise<void>) => {
   return async () => {
     if (!walletConnectConfigured) return;
     await Promise.allSettled(NAMESPACES.map((namespace) => disconnect({ namespace })));
+  };
+};
+
+/**
+ * Put the wallet on the chain the chosen token lives on.
+ *
+ * Switches directly rather than opening AppKit's network picker. The picker
+ * was the wrong shape for this: the panel has already named the one chain it
+ * needs, so a list of nine to choose from is a question nobody asked — and
+ * opened straight to that view it has no history behind it, so selecting a
+ * network left it on screen with the switch already done.
+ *
+ * Resolved against the networks this app declares, which is also the check
+ * that the chain is one AppKit was built with. An id that is not in the list
+ * would otherwise reach the adapter as an unknown network.
+ */
+export const useSwitchFunderChain = (): ((chainId: number) => Promise<void>) => {
+  const { switchNetwork } = useAppKitNetwork();
+  return async (chainId) => {
+    if (!walletConnectConfigured) return;
+    const target = chainId === SOLANA_CHAIN_ID ? solana : EVM_NETWORKS.find((c) => c.id === chainId);
+    if (target === undefined) return;
+    /*
+     * The same boundary cast `appkit.ts` makes, for the same reason: AppKit's
+     * `CaipNetwork` declares `assets?: {…}` while its own `solana` export
+     * carries `| undefined` on it, which this repo's `exactOptionalPropertyTypes`
+     * refuses. Cast to their parameter type rather than `any`, and only on a
+     * value that came from them or from `EVM_NETWORKS` — a chain id we do not
+     * declare has already been turned away above.
+     */
+    await switchNetwork(target as Parameters<typeof switchNetwork>[0]);
   };
 };
