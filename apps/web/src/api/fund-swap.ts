@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import { useAppKitProvider } from "@reown/appkit/react";
-import { useBalance, useReadContract, useWalletClient } from "wagmi";
+import { useBalance, useConfig, useReadContract } from "wagmi";
+import { getWalletClient } from "wagmi/actions";
 import { erc20Abi } from "viem";
 import { createClient, execute, MAINNET_RELAY_API, type AdaptedWallet } from "@relayprotocol/relay-sdk";
 import { configureDynamicChains } from "@relayprotocol/relay-sdk/chain-utils";
@@ -10,7 +11,7 @@ import { Connection, type SendOptions, type VersionedTransaction } from "@solana
 import { apiFetch } from "./client";
 import { SOLANA_RPC_URL, solBalanceRaw, tokenBalanceRaw } from "../solana/rpc";
 import { SOLANA_CHAIN_ID } from "../wallet/chains";
-import { useFunder } from "../wallet/useFunder";
+import { useFunder, useSwitchFunderChain } from "../wallet/useFunder";
 import { refreshAfterChain } from "./settle";
 
 /** Relay's identifier for native SOL, which is a lamport balance and not a token account. */
@@ -77,6 +78,7 @@ export const useFunderBalance = (
   owner: string | undefined,
   mint: string | undefined,
   vmType: string,
+  chainId: number,
 ): {
   readonly data: bigint | undefined;
   readonly isPending: boolean;
@@ -102,12 +104,24 @@ export const useFunderBalance = (
    */
   const native = useBalance({
     address: owner as `0x${string}` | undefined,
+    /*
+     * The token's chain, not the wallet's.
+     *
+     * Without it wagmi reads whichever chain the wallet happens to be on, so a
+     * wallet sitting on Ethereum while somebody looks at USDT on Base had
+     * `balanceOf` called against the Base address on Ethereum — a number that
+     * means nothing, shown as if it meant something. wagmi holds a client for
+     * every chain we declare, so naming one costs nothing and the balance is
+     * right wherever the wallet is pointed.
+     */
+    chainId,
     query: { enabled: evm && owner !== undefined && mint === NATIVE_EVM, staleTime: 10_000 },
   });
 
   const erc20 = useReadContract({
     abi: erc20Abi,
     address: mint as `0x${string}` | undefined,
+    chainId,
     functionName: "balanceOf",
     args: owner === undefined ? undefined : [owner as `0x${string}`],
     query: {
@@ -167,9 +181,13 @@ export const useFunderBalance = (
 export const useFunderGas = (
   owner: string | undefined,
   vmType: string,
+  chainId: number,
 ): { readonly data: bigint | undefined; readonly refetch: () => void } => {
   const { data, refetch } = useBalance({
     address: owner as `0x${string}` | undefined,
+    /* The chain that will charge the fee, which is the token's, not whichever
+       one the wallet is on right now. */
+    chainId,
     query: { enabled: vmType === "evm" && owner !== undefined, staleTime: 30_000 },
   });
   /* Stable, for the same reason as the balance above. */
@@ -218,27 +236,50 @@ interface SolanaProvider {
 export const useFundSwapAction = () => {
   const qc = useQueryClient();
   const funder = useFunder();
-  const { data: evmWallet } = useWalletClient();
+  const config = useConfig();
+  const switchChain = useSwitchFunderChain();
   const { walletProvider } = useAppKitProvider<SolanaProvider>("solana");
 
   /* Survives the throw that loses the receipt — see where it is set. */
   const lastHash = useRef<string | null>(null);
 
-  const action = useMutation<SwapReceipt, Error, { currency: string; amountRaw: string }>({
+  const action = useMutation<SwapReceipt, Error, { chainId: number; currency: string; amountRaw: string }>({
     mutationFn: async (input) => {
       if (funder === null) throw new Error("Connect a wallet to pay from first.");
 
+      /*
+       * The chain comes from the token, not from where the wallet happens to
+       * be, and the wallet is brought to it here rather than on a screen in
+       * front of this one.
+       *
+       * The SDK will not do it. `adaptViemWallet` exposes a `switchChain`,
+       * but nothing in `executeSteps` calls it — it polls `getChainId()` ten
+       * times over 2.5 seconds and then throws `Current chain id: 1 does not
+       * match expected chain id: 8453`. So the choice was never whether to
+       * switch, only whether to make somebody do it before they could see
+       * their balance or type an amount.
+       */
+      if (funder.vmType === "evm" && funder.chainId !== input.chainId) {
+        await switchChain(input.chainId);
+      }
+
       const built = await apiFetch<SwapBuild>("/v1/money/fund/swap", {
         method: "POST",
-        body: JSON.stringify({ ...input, chainId: funder.chainId, from: funder.address }),
+        body: JSON.stringify({ ...input, from: funder.address }),
       });
 
-      const wallet: AdaptedWallet | NonNullable<typeof evmWallet> =
+      /*
+       * Fetched after the switch, not captured at render.
+       *
+       * A viem WalletClient carries the chain it was made for, and `execute()`
+       * builds its transactions against that. The one this component rendered
+       * with belongs to the chain the wallet was on a moment ago, so sending
+       * through it after a switch produces a chain mismatch inside viem — the
+       * switch would have worked and the deposit would still fail.
+       */
+      const wallet: AdaptedWallet | Awaited<ReturnType<typeof getWalletClient>> =
         funder.vmType === "evm"
-          ? (() => {
-              if (evmWallet === undefined) throw new Error("Your wallet is not ready to sign yet.");
-              return evmWallet;
-            })()
+          ? await getWalletClient(config, { chainId: input.chainId })
           : adaptSolanaWallet(
               funder.address,
               SOLANA_CHAIN_ID,

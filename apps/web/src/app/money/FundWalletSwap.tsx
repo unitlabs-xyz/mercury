@@ -51,8 +51,8 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
   const funder = useFunder();
   const decimals = decimalsOf(token);
   /* Both VMs read now; the hook knows which chain it is on. */
-  const balance = useFunderBalance(funder?.address, token.address, token.vmType);
-  const gas = useFunderGas(funder?.address, token.vmType);
+  const balance = useFunderBalance(funder?.address, token.address, token.vmType, token.chainId);
+  const gas = useFunderGas(funder?.address, token.vmType, token.chainId);
   const action = useFundSwapAction();
   const resetAction = action.reset;
   const [amount, setAmount] = useState("");
@@ -121,12 +121,15 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
   /* Read, and actually zero — `undefined` is a balance nobody could read and
      must not disable anything. */
   const noGas = gas.data === 0n;
+  /* The wallet is somewhere else. Not a blocker any more — the deposit brings
+     it across — but the button should say so before the prompt appears. */
+  const wrongChain = funder !== null && funder.chainId !== token.chainId;
   const ready = raw !== null && raw > 0n && !overdrawn && !noGas && action.walletReady;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (ready && !action.isPending) {
-      action.mutate({ currency: token.address, amountRaw: raw.toString() });
+      action.mutate({ chainId: token.chainId, currency: token.address, amountRaw: raw.toString() });
     }
   };
 
@@ -290,7 +293,14 @@ export const FundWalletSwap = ({ token }: { token: FundToken }) => {
         disabled={!ready}
         className="mt-4 w-full"
       >
-        {action.isPending ? "Waiting for your wallet…" : "Approve in your wallet"}
+        {action.isPending
+          ? "Waiting for your wallet…"
+          : /* Says the switch is coming rather than springing it. The wallet
+               was always going to ask twice here; the label is what stops the
+               first prompt looking like the wrong one. */
+            wrongChain
+            ? `Switch to ${token.chainName} and send`
+            : "Approve in your wallet"}
       </Button>
     </form>
   );
