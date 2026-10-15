@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { usd } from "@mercury/view";
-import type { ManagedBasketPortfolioSummary, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketPortfolioSummary, Basket } from "@mercury/types";
 import type { Instrument } from "../../market/hooks";
 import { ArrowRight } from "../../ui/icons";
+import { Button } from "../../ui/Button";
 import { GlideRows, RailCard, RailHead } from "../../ui/ds";
 import { RailList } from "../invest/Rail";
 import { relTime, Skeleton } from "../portfolio/ui";
@@ -22,18 +23,19 @@ const steps = [
 
 type RailProps = {
   onExplore: () => void;
+  onCompose: () => void;
   onSignIn: () => void;
   onRetry: () => void;
   signedIn: boolean;
   loading: boolean;
   error: boolean;
-  portfolios: readonly ManagedBasketPortfolioSummary[];
-  templates: readonly ManagedBasketTemplate[];
+  portfolios: readonly BasketPortfolioSummary[];
+  templates: readonly Basket[];
   instruments: ReadonlyMap<string, Instrument>;
 };
 
 /** The two heaviest holdings mark a basket wherever it is listed. */
-const topAssets = (template: ManagedBasketTemplate | undefined) =>
+const topAssets = (template: Basket | undefined) =>
   [...(template?.allocations ?? [])].sort((a, b) => b.weightBps - a.weightBps).slice(0, 2);
 
 /** A basket's marks and name, shared by every rail row so the lists stay identical. */
@@ -284,6 +286,42 @@ const OperationList = ({
 /** The Invest rail's card rhythm, with Glider ownership explained accurately. */
 export const BasketsRail = (props: RailProps) => (
   <aside aria-label="Baskets information" className="grid gap-4 md:gap-6">
+    <section
+      aria-label="Build your own basket"
+      className="relative min-h-[214px] overflow-hidden rounded-xl border-[3px] border-white bg-[#eef6ff] px-6 py-7 shadow-sm"
+    >
+      <img
+        src="/baskets/themes/1.webp"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 size-full object-cover object-center"
+        style={THEME_ART_TREATMENT}
+      />
+      <h2 className="relative max-w-[230px] text-[20px] leading-tight font-medium text-ds-ink">
+        Build your own basket
+      </h2>
+      <p className="relative mt-2 max-w-[215px] text-[13px] leading-relaxed text-ds-muted">
+        Pick your stocks. Set your weights. Your strategy, your way.
+      </p>
+      <Button
+        variant="primary"
+        onClick={props.signedIn ? props.onCompose : props.onSignIn}
+        className="relative mt-5"
+      >
+        {props.signedIn ? "Create a basket" : "Sign in to create"}
+      </Button>
+    </section>
+
+    <RailList label="Your baskets" meta="On Glider">
+      <BasketList {...props} />
+    </RailList>
+
+    <OperationList
+      portfolios={props.portfolios}
+      templates={props.templates}
+      instruments={props.instruments}
+    />
+
     <RailCard label="How baskets work">
       <RailHead title="How baskets work" />
       <ol className="mt-5 space-y-5">
@@ -308,41 +346,5 @@ export const BasketsRail = (props: RailProps) => (
         Learn about Glider <ArrowRight className="size-3.5" />
       </a>
     </RailCard>
-
-    <RailList label="Your baskets" meta="On Glider">
-      <BasketList {...props} />
-    </RailList>
-
-    <OperationList
-      portfolios={props.portfolios}
-      templates={props.templates}
-      instruments={props.instruments}
-    />
-
-    <section
-      aria-label="Explore strategies"
-      className="relative min-h-[214px] overflow-hidden rounded-xl border-[3px] border-white bg-[#eef6ff] px-6 py-7 shadow-sm"
-    >
-      <img
-        src="/baskets/themes/1.webp"
-        alt=""
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 size-full object-cover object-center"
-        style={THEME_ART_TREATMENT}
-      />
-      <h2 className="relative max-w-[230px] text-[20px] leading-tight font-medium text-ds-ink">
-        A simpler way to invest
-      </h2>
-      <p className="relative mt-2 max-w-[200px] text-[13px] leading-relaxed text-ds-muted">
-        Discover curated ideas, powered by Glider on Solana.
-      </p>
-      <button
-        type="button"
-        onClick={props.onExplore}
-        className="relative mt-5 inline-flex items-center gap-2 rounded-full bg-ds-ink px-5 py-2 text-[12px] font-medium text-white hover:bg-black"
-      >
-        Explore strategies <ArrowRight className="size-3.5" />
-      </button>
-    </section>
   </aside>
 );

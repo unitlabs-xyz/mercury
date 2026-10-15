@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
 import { useEmbeddedWallet } from "../auth/embedded";
-import type { BasketExitMode, ManagedBasketPortfolioSnapshot, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketExitMode, BasketPortfolioSnapshot, Basket } from "@mercury/types";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toEvent, usd, usdCompact } from "@mercury/view";
 import { Link, useParams } from "react-router-dom";
 import { useMoney } from "../api/hooks";
 import { refreshAfterChain } from "../api/settle";
-import { ChevronDown } from "../ui/icons";
+import { ChevronDown, Pencil } from "../ui/icons";
 import {
   basketEnrollmentEnabled,
   useBasketActivity,
@@ -20,7 +20,7 @@ import {
   useBasketOperation,
   useBasketPortfolio,
   useBasketRebalanceAction,
-  useBasketTemplate,
+  useBasket,
 } from "../api/baskets";
 import { useHistories, useInstruments, usePrices, type Instrument } from "../market/hooks";
 import {
@@ -32,16 +32,16 @@ import {
   RailFigure,
   RailHead,
   RangeSwitch,
-  StatusChip,
 } from "../ui/ds";
 import { AppShell } from "./AppShell";
 import { LiveStatusChip, PriceError } from "./LiveStatus";
 import { Button } from "../ui/Button";
 import { DotChart, TINY } from "./DotChart";
 import { AssetIcon } from "./baskets/AssetIcon";
+import { Mosaic, TILE_CLASS } from "./baskets/Mosaic";
 import { OperationStatus } from "./baskets/OperationStatus";
 import { TOKEN_NAME } from "./stock/heldAs";
-import { allocationRows } from "./baskets/allocation";
+import { Compose } from "./baskets/Compose";
 import { displayBasketName } from "./baskets/catalog";
 import { EnrollmentRail, ExitSheet, InvestSheet, RebalanceSheet } from "./baskets/Ticket";
 import { rebalanceOutcome, rebalanceTerminal } from "./baskets/rebalance-status";
@@ -71,15 +71,6 @@ const RANGE_NAME: Record<Exclude<Range, "All">, string> = {
 };
 const weight = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.00$/, "")}%`;
 const returnLabel = (value: string) => `${Number(value) > 0 ? "+" : ""}${Number(value).toFixed(2)}%`;
-const TILE_TONES = [
-  "bg-[#e9f2ed]",
-  "bg-[#e9edf5]",
-  "bg-[#f4eee7]",
-  "bg-[#eeeaf4]",
-  "bg-[#e7f1f1]",
-  "bg-[#f3f1e9]",
-  "bg-ds-tag",
-];
 const USDC_ASSET_ID =
   "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp/spl:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const assetBalance = (value: string) => {
@@ -100,7 +91,7 @@ const RebalanceTimer = ({
   schedule,
   hasAccount,
 }: {
-  schedule: ManagedBasketPortfolioSnapshot["schedule"] | undefined;
+  schedule: BasketPortfolioSnapshot["schedule"] | undefined;
   hasAccount: boolean;
 }) => {
   const [clock, setClock] = useState(() => Date.now());
@@ -222,7 +213,7 @@ const IconCluster = ({
   instruments,
   onClick,
 }: {
-  template: ManagedBasketTemplate;
+  template: Basket;
   instruments: ReadonlyMap<string, Instrument>;
   onClick: () => void;
 }) => {
@@ -375,7 +366,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
   </AppShell>
 );
 
-export const Basket = () => {
+export const BasketDetail = () => {
   const { slug = "" } = useParams();
   const [range, setRange] = useState<Range>("1Y");
   const [investOpen, setInvestOpen] = useState(false);
@@ -383,6 +374,7 @@ export const Basket = () => {
   const [firstDeposit, setFirstDeposit] = useState(false);
   const [fundingAmount, setFundingAmount] = useState("100");
   const [showAllAssets, setShowAllAssets] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [checkingEnrollment, setCheckingEnrollment] = useState(false);
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
@@ -400,7 +392,7 @@ export const Basket = () => {
   const fundingRequestActive = useRef(false);
   const rebalanceRequestActive = useRef(false);
   const exitRequestActive = useRef(false);
-  const result = useBasketTemplate(slug);
+  const result = useBasket(slug);
   const insights = useBasketInsights(slug);
   const { ready, authenticated, user } = usePrivy();
   const { identityToken } = useIdentityToken();
@@ -559,7 +551,7 @@ export const Basket = () => {
   };
 
   if (!template && result.isPending) {
-    const cachedCatalog = queryClient.getQueryData<ManagedBasketTemplate[]>(["api", "basket-templates"]);
+    const cachedCatalog = queryClient.getQueryData<Basket[]>(["api", "baskets"]);
     const assetCount = cachedCatalog?.find((item) => item.slug === slug)?.allocations.length ?? 7;
     return <DetailLoading assetCount={assetCount} />;
   }
@@ -594,7 +586,6 @@ export const Basket = () => {
   );
   const heldAsLabel =
     issuers.size === 0 ? "Ondo tokens" : [...issuers].map((i) => `${TOKEN_NAME[i]} tokens`).join(" and ");
-  const mosaic = allocationRows(allocations);
   /* The headline follows the chosen range; "All" reads as the return since the first modeled day. */
   const sinceStart = modeledSince(performance);
   const headline = {
@@ -710,17 +701,25 @@ export const Basket = () => {
             <div className="px-5 pt-5 pb-4">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <h1 className="text-[20px] leading-tight font-medium text-ds-ink">{name}</h1>
-                    <StatusChip tone={template.status === "enabled" ? "up" : "neutral"} size="md">
-                      {template.status === "enabled"
-                        ? "Available"
-                        : template.status === "candidate"
-                          ? "Enrollment pilot"
-                          : "Preview"}
-                    </StatusChip>
+                    {/* Only on a basket somebody wrote: the shelf is not theirs to
+                        change. Drawn as the panel header's close is — a quiet glyph
+                        beside the title, not a button competing with it. */}
+                    {template.source === "mine" && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(true)}
+                        aria-label="Edit basket"
+                        className="grid size-8 shrink-0 place-items-center rounded-lg text-ds-muted transition-colors hover:bg-black/[0.06] hover:text-ds-ink"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    )}
                   </div>
-                  <p className="mt-2 text-[13px] text-ds-muted">Glider strategy · Solana</p>
+                  <p className="mt-2 text-[13px] text-ds-muted">
+                    {template.source === "mine" ? "Your basket · Solana" : "Glider strategy · Solana"}
+                  </p>
                 </div>
                 <IconCluster
                   template={template}
@@ -942,62 +941,19 @@ export const Basket = () => {
                     <span>Target allocation</span>
                     <span>{allocations.length} assets</span>
                   </div>
-                  <div className="flex h-[290px] flex-col gap-1.5" aria-label="Target allocation">
-                    {mosaic.map((row, rowIndex) => {
-                      const rowWeight = row.reduce((sum, tile) => sum + tile.weightBps, 0);
-                      return (
-                        <div
-                          key={rowIndex}
-                          className="flex min-h-0 gap-1.5"
-                          style={{ flexGrow: rowWeight, flexBasis: 0 }}
-                        >
-                          {row.map((tile, index) => (
-                            <StockLink
-                              key={tile.ticker}
-                              ticker={tile.kind === "asset" && byTicker.has(tile.ticker) ? tile.ticker : null}
-                              className="basket-allocation-tile group min-w-0 overflow-hidden rounded-lg px-2.5 transition-transform duration-300 motion-safe:hover:-translate-y-0.5 motion-reduce:transition-none sm:px-3"
-                              style={{ flexGrow: tile.weightBps, flexBasis: 0 }}
-                              title={`${tile.ticker}: ${weight(tile.weightBps)} target weight`}
-                            >
-                              <span
-                                aria-hidden="true"
-                                className={`basket-allocation-color pointer-events-none absolute -inset-3 ${TILE_TONES[(rowIndex * 2 + index) % TILE_TONES.length]}`}
-                              />
-                              <span className="basket-allocation-content">
-                                {tile.kind === "asset" ? (
-                                  <AssetIcon
-                                    asset={tile.asset}
-                                    source={byTicker.get(tile.ticker)}
-                                    className="size-6 shrink-0 rounded-full object-contain transition-transform duration-300 motion-safe:group-hover:scale-110 motion-reduce:transition-none"
-                                  />
-                                ) : (
-                                  <span className="flex shrink-0 items-center -space-x-2 pl-0.5">
-                                    {tile.assets.slice(0, 3).map((asset) => (
-                                      <AssetIcon
-                                        key={asset.assetId}
-                                        asset={asset}
-                                        source={byTicker.get(asset.ticker)}
-                                        className="size-6 rounded-full bg-white object-contain ring-2 ring-white"
-                                      />
-                                    ))}
-                                  </span>
-                                )}
-                                <span className="flex min-w-0 flex-col">
-                                  <span className="truncate text-[12px] font-medium text-ds-ink">
-                                    {tile.ticker}
-                                  </span>
-                                  <span className="text-[11px] text-ds-muted">
-                                    {weight(tile.weightBps)}
-                                    {tile.kind === "other" ? ` · ${tile.assets.length} assets` : ""}
-                                  </span>
-                                </span>
-                              </span>
-                            </StockLink>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <Mosaic
+                    holdings={allocations}
+                    instruments={byTicker}
+                    tile={(tile, body) => (
+                      <StockLink
+                        ticker={tile.kind === "asset" && byTicker.has(tile.ticker) ? tile.ticker : null}
+                        className={TILE_CLASS}
+                        title={`${tile.ticker}: ${weight(tile.weightBps)} target weight`}
+                      >
+                        {body}
+                      </StockLink>
+                    )}
+                  />
                 </div>
               </div>
             </section>
@@ -1029,7 +985,6 @@ export const Basket = () => {
               walletMissing={walletMissing}
               checking={sessionChecking || (signedIn && !walletMissing && enrollment.isPending)}
               lookupFailed={signedIn && enrollment.isError && !enrollment.data}
-              blocked={template.status === "disabled"}
               busy={enrollmentBusy}
               error={
                 enrollment.isError && enrollment.data
@@ -1379,13 +1334,7 @@ export const Basket = () => {
                   <Button
                     size="lg"
                     className="mt-5 w-full"
-                    disabled={
-                      !account ||
-                      template.status === "disabled" ||
-                      operationActive ||
-                      exitActive ||
-                      rebalanceAction.isPending
-                    }
+                    disabled={!account || operationActive || exitActive || rebalanceAction.isPending}
                     onClick={() => {
                       rebalanceAction.reset();
                       setRebalanceOpen(true);
@@ -1529,6 +1478,9 @@ export const Basket = () => {
             exitAction.submit.reset();
           }}
         />
+      )}
+      {template.source === "mine" && (
+        <Compose open={editing} basket={template} onClose={() => setEditing(false)} />
       )}
     </AppShell>
   );

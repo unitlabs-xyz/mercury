@@ -7,13 +7,13 @@ import bs58 from "bs58";
 import type {
   BasketExitAsset,
   BasketExitMode,
-  ManagedBasketActivity,
-  ManagedBasketInsights,
-  ManagedBasketOperation,
-  ManagedBasketPortfolio,
-  ManagedBasketPortfolioSnapshot,
-  ManagedBasketPortfolioSummary,
-  ManagedBasketTemplate,
+  BasketActivity,
+  BasketInsights,
+  BasketOperation,
+  BasketPortfolio,
+  BasketPortfolioSnapshot,
+  BasketPortfolioSummary,
+  Basket,
   PreparedBasketEnrollment,
   PreparedBasketExit,
   PreparedBasketFunding,
@@ -31,7 +31,7 @@ import { ApiError, apiFetch, toBase64, toBytes, useSignedIn } from "../api";
  * here (see `fundBasket` in `@mercury/view`), and signed by the embedded wallet.
  */
 
-const slugPath = (slug: string) => `/v1/basket-templates/${encodeURIComponent(slug)}`;
+const basketPath = (slug: string) => `/v1/baskets/${encodeURIComponent(slug)}`;
 
 /** The wallet a basket belongs to. Owner-scoped reads wait for it, as the web's do. */
 const useWalletAddress = () => useEmbeddedSolanaWallet().wallets?.[0]?.address;
@@ -43,20 +43,19 @@ const useOwner = () => {
   return { ready: signedIn && address !== undefined, address };
 };
 
-/** Public: the catalog shows before anyone signs in. */
-export const useBasketTemplates = () =>
+/** The curated shelf and the caller's own baskets, in one list, each marked `source`. */
+export const useBaskets = () =>
   useQuery({
-    queryKey: ["api", "basket-templates"],
-    queryFn: async () =>
-      (await apiFetch<{ templates: ManagedBasketTemplate[] }>("/v1/basket-templates")).templates,
+    queryKey: ["api", "baskets"],
+    queryFn: async () => (await apiFetch<{ baskets: Basket[] }>("/v1/baskets")).baskets,
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
   });
 
-export const useBasketTemplate = (slug: string) =>
+export const useBasket = (slug: string) =>
   useQuery({
-    queryKey: ["api", "basket-templates", slug],
-    queryFn: async () => (await apiFetch<{ template: ManagedBasketTemplate }>(slugPath(slug))).template,
+    queryKey: ["api", "baskets", slug],
+    queryFn: async () => (await apiFetch<{ basket: Basket }>(basketPath(slug))).basket,
     enabled: slug.length > 0,
     retry: false,
     staleTime: 5 * 60_000,
@@ -64,9 +63,9 @@ export const useBasketTemplate = (slug: string) =>
 
 export const useBasketInsights = (slug: string) =>
   useQuery({
-    queryKey: ["api", "basket-templates", slug, "insights"],
+    queryKey: ["api", "baskets", slug, "insights"],
     queryFn: async () =>
-      (await apiFetch<{ insights: ManagedBasketInsights }>(`${slugPath(slug)}/insights`)).insights,
+      (await apiFetch<{ insights: BasketInsights }>(`${basketPath(slug)}/insights`)).insights,
     enabled: slug.length > 0,
     retry: false,
     staleTime: 5 * 60_000,
@@ -78,7 +77,7 @@ export const useOwnedBasketPortfolios = () => {
   return useQuery({
     queryKey: ["api", "basket-portfolios", owner.address],
     queryFn: async () =>
-      (await apiFetch<{ portfolios: ManagedBasketPortfolioSummary[] }>("/v1/basket-portfolios")).portfolios,
+      (await apiFetch<{ portfolios: BasketPortfolioSummary[] }>("/v1/basket-portfolios")).portfolios,
     enabled: owner.ready,
     retry: false,
     staleTime: 15_000,
@@ -92,8 +91,7 @@ export const useBasketEnrollment = (slug: string) => {
   return useQuery({
     queryKey: ["api", "basket-enrollment", slug, owner.address],
     queryFn: async () =>
-      (await apiFetch<{ portfolio: ManagedBasketPortfolio | null }>(`${slugPath(slug)}/enrollment`))
-        .portfolio,
+      (await apiFetch<{ portfolio: BasketPortfolio | null }>(`${basketPath(slug)}/portfolio`)).portfolio,
     enabled: owner.ready && slug.length > 0,
     retry: false,
     staleTime: 15_000,
@@ -107,8 +105,11 @@ export const useBasketPortfolio = (slug: string, enrolled: boolean) => {
   return useQuery({
     queryKey: ["api", "basket-portfolio", slug, owner.address],
     queryFn: async () =>
-      (await apiFetch<{ portfolio: ManagedBasketPortfolioSnapshot | null }>(`${slugPath(slug)}/portfolio`))
-        .portfolio,
+      (
+        await apiFetch<{ portfolio: BasketPortfolioSnapshot | null }>(
+          `${basketPath(slug)}/portfolio/positions`,
+        )
+      ).portfolio,
     enabled: enrolled && owner.ready,
     retry: false,
     staleTime: 15_000,
@@ -121,7 +122,7 @@ export const useBasketActivity = (slug: string, enrolled: boolean) => {
   return useQuery({
     queryKey: ["api", "basket-activity", slug, owner.address],
     queryFn: async () =>
-      (await apiFetch<{ activity: ManagedBasketActivity[] }>(`${slugPath(slug)}/activity`)).activity,
+      (await apiFetch<{ activity: BasketActivity[] }>(`${basketPath(slug)}/activity`)).activity,
     enabled: enrolled && owner.ready,
     retry: false,
     refetchInterval: 30_000,
@@ -135,8 +136,8 @@ export const useBasketOperation = (slug: string, operationId: string | null) => 
     queryKey: ["api", "basket-operation", slug, owner.address, operationId],
     queryFn: async () =>
       (
-        await apiFetch<{ operation: ManagedBasketOperation }>(
-          `${slugPath(slug)}/operations/${encodeURIComponent(operationId ?? "")}`,
+        await apiFetch<{ operation: BasketOperation }>(
+          `${basketPath(slug)}/operations/${encodeURIComponent(operationId ?? "")}`,
         )
       ).operation,
     enabled: owner.ready && operationId !== null,
@@ -190,13 +191,13 @@ export const useBasketOperations = (requests: readonly { slug: string; operation
       queryKey: ["api", "basket-operation", slug, owner.address, operationId],
       queryFn: async () =>
         (
-          await apiFetch<{ operation: ManagedBasketOperation }>(
-            `${slugPath(slug)}/operations/${encodeURIComponent(operationId)}`,
+          await apiFetch<{ operation: BasketOperation }>(
+            `${basketPath(slug)}/operations/${encodeURIComponent(operationId)}`,
           )
         ).operation,
       enabled: owner.ready,
       retry: false,
-      refetchInterval: (query: { state: { data?: ManagedBasketOperation } }) => {
+      refetchInterval: (query: { state: { data?: BasketOperation } }) => {
         const state = query.state.data?.state;
         return state && ["completed", "failed", "cancelled"].includes(state) ? false : 4_000;
       },
@@ -252,10 +253,10 @@ export const useBasketEnrollmentAction = (slug: string) => {
     mutationFn: () =>
       enrollBasket(slug, {
         prepare: () =>
-          apiFetch<PreparedBasketEnrollment>(`${slugPath(slug)}/enrollment/prepare`, { method: "POST" }),
+          apiFetch<PreparedBasketEnrollment>(`${basketPath(slug)}/enrollment/prepare`, { method: "POST" }),
         submit: async (body) =>
           (
-            await apiFetch<{ portfolio: ManagedBasketPortfolio }>(`${slugPath(slug)}/enrollment`, {
+            await apiFetch<{ portfolio: BasketPortfolio }>(`${basketPath(slug)}/enrollment/submit`, {
               method: "POST",
               body: JSON.stringify(body),
             })
@@ -272,7 +273,7 @@ export const useBasketEnrollmentAction = (slug: string) => {
 };
 
 const confirmFunding = (slug: string, signature: string) =>
-  apiFetch(`${slugPath(slug)}/funding/confirm`, { method: "POST", body: JSON.stringify({ signature }) });
+  apiFetch(`${basketPath(slug)}/funding/confirm`, { method: "POST", body: JSON.stringify({ signature }) });
 
 /**
  * USDC from the wallet to the portfolio: prepared by the server, re-checked by
@@ -291,11 +292,11 @@ export const useBasketFundingAction = (slug: string) => {
       portfolio,
     }: {
       amountUsd: string;
-      portfolio: ManagedBasketPortfolio;
+      portfolio: BasketPortfolio;
     }): Promise<FundingReceipt> => {
       const receipt = await fundBasket(amountUsd, portfolio, {
         prepare: (amount) =>
-          apiFetch<PreparedBasketFunding>(`${slugPath(slug)}/funding/prepare`, {
+          apiFetch<PreparedBasketFunding>(`${basketPath(slug)}/funding/prepare`, {
             method: "POST",
             body: JSON.stringify({ amountUsd: amount }),
           }),
@@ -334,7 +335,7 @@ export const useBasketFundingAction = (slug: string) => {
 export const useBasketRebalanceAction = (slug: string) => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => apiFetch<TriggeredBasketRebalance>(`${slugPath(slug)}/rebalance`, { method: "POST" }),
+    mutationFn: () => apiFetch<TriggeredBasketRebalance>(`${basketPath(slug)}/rebalance`, { method: "POST" }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["api", "basket-activity", slug] }),
   });
 };
@@ -346,7 +347,7 @@ export const useBasketExitAction = (slug: string) => {
   /* Without assets, the whole portfolio; with them, exactly those amounts. */
   const prepare = useMutation({
     mutationFn: ({ mode, assets }: { mode: BasketExitMode; assets?: BasketExitAsset[] }) =>
-      apiFetch<PreparedBasketExit>(`${slugPath(slug)}/exit/${mode}/prepare`, {
+      apiFetch<PreparedBasketExit>(`${basketPath(slug)}/exit/${mode}/prepare`, {
         method: "POST",
         ...(assets ? { body: JSON.stringify({ assets }) } : {}),
       }),
@@ -363,7 +364,7 @@ export const useBasketExitAction = (slug: string) => {
       if (Date.parse(prepared.expiresAt) <= Date.now() + 5_000)
         throw new Error("Withdrawal review expired. Prepare it again.");
       const signature = await signer.signMessage(prepared.authorization.text);
-      return apiFetch<SubmittedBasketExit>(`${slugPath(slug)}/exit/${prepared.mode}`, {
+      return apiFetch<SubmittedBasketExit>(`${basketPath(slug)}/exit/${prepared.mode}/submit`, {
         method: "POST",
         body: JSON.stringify({ message: prepared.message, signature, submission: prepared.submission }),
       });

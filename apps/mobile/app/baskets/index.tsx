@@ -3,22 +3,23 @@ import { Image, Linking, ScrollView, StyleSheet, Text as RNText, TextInput, View
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketTag } from "@mercury/types";
 import {
   BASKET_INVESTORS,
   BASKET_THEMES,
-  basketStatusLabel,
   displayBasketName,
   rebalanceOutcome,
   searchStrategies,
   themeTitle,
   usd,
   visibleStrategies,
+  shelfOf,
+  type ShelfBasket,
 } from "@mercury/view";
 import { useSignedIn } from "../../src/api";
 import {
   useBasketOperations,
-  useBasketTemplates,
+  useBaskets,
   useOwnedBasketPortfolios,
   useTrackedOperations,
 } from "../../src/baskets/api";
@@ -39,7 +40,7 @@ const HOW: readonly [string, string][] = [
   ["Glider rebalances daily", "It works back toward the target weights as prices move."],
 ];
 
-const EMPTY: readonly ManagedBasketTemplate[] = [];
+const EMPTY: readonly ShelfBasket[] = [];
 
 /**
  * Baskets, as the web's page lays them out on a phone: what you already hold,
@@ -49,9 +50,9 @@ const EMPTY: readonly ManagedBasketTemplate[] = [];
 export default function Baskets() {
   const router = useRouter();
   const signedIn = useSignedIn();
-  const catalog = useBasketTemplates();
+  const catalog = useBaskets();
   const owned = useOwnedBasketPortfolios();
-  const [theme, setTheme] = useState<ManagedBasketTag | null>(null);
+  const [theme, setTheme] = useState<BasketTag | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [list, setList] = useState(0);
   const [query, setQuery] = useState("");
@@ -64,7 +65,8 @@ export default function Baskets() {
   const searching = term !== "";
   const scroller = useMemo(() => ({ current: null as ScrollView | null }), []);
 
-  const templates = catalog.data ?? EMPTY;
+  // The shelf is the curated catalogue; a basket somebody wrote is not on it.
+  const templates = useMemo(() => (catalog.data ? shelfOf(catalog.data) : EMPTY), [catalog.data]);
   /* A search reads every holding's company name, so it needs the whole catalog's instruments. */
   const instruments = useHoldingInstruments(templates, searching ? 100 : 5);
   const companyNames = useMemo(
@@ -81,7 +83,7 @@ export default function Baskets() {
   const pros = useMemo(
     () =>
       BASKET_INVESTORS.map((slug) => templates.find((t) => t.slug === slug)).filter(
-        (t): t is ManagedBasketTemplate => t !== undefined,
+        (t): t is ShelfBasket => t !== undefined,
       ),
     [templates],
   );
@@ -89,7 +91,7 @@ export default function Baskets() {
   const open = (slug: string) => router.push({ pathname: "/baskets/[slug]", params: { slug } });
 
   /* Picking a theme or "see all" brings the list into view, as the web scrolls to it. */
-  const showList = (next: { theme?: ManagedBasketTag | null; all?: boolean }) => {
+  const showList = (next: { theme?: BasketTag | null; all?: boolean }) => {
     if (next.theme !== undefined) setTheme(next.theme);
     if (next.all !== undefined) setShowAll(next.all);
     requestAnimationFrame(() => scroller.current?.scrollTo({ y: list - 12, animated: true }));
@@ -359,9 +361,7 @@ export default function Baskets() {
                         </View>
                         <View style={s.strategyFoot}>
                           <AssetStack template={t} instruments={instruments} limit={5} size={24} />
-                          <RNText style={s.sub}>
-                            {t.allocations.length} assets · Daily · {basketStatusLabel(t.status)}
-                          </RNText>
+                          <RNText style={s.sub}>{t.allocations.length} assets · Daily</RNText>
                         </View>
                       </PressableScale>
                     ))

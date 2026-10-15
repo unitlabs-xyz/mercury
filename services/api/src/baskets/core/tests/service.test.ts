@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { BasketService } from "../service.js";
 import { BasketFundingPreflightError, type BasketProvider, type BasketStore } from "../deps.js";
-import type { BasketTemplate } from "../primitives.js";
+import type { CuratedBasket } from "../primitives.js";
 
-const basket: BasketTemplate = {
+const basket: CuratedBasket = {
   slug: "nvidia",
   providerId: "remote-1",
   sourceStrategyId: "source-1",
-  status: "candidate",
   tags: ["theme:technology"],
   name: "Mercury Solana - Nvidia",
   description: "One Ondo token.",
@@ -15,8 +14,7 @@ const basket: BasketTemplate = {
   schedule: { type: "interval", frequency: "daily" },
 };
 
-const missing: BasketTemplate = { ...basket };
-delete missing.providerId;
+const missing: CuratedBasket = { ...basket, providerId: null };
 const remote = {
   id: "remote-1",
   name: basket.name,
@@ -30,6 +28,9 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   },
   validate: async () => {
     throw new Error("unexpected validate");
+  },
+  publishAllocation: async () => {
+    throw new Error("unexpected publishAllocation");
   },
   create: async () => {
     throw new Error("unexpected create");
@@ -81,7 +82,7 @@ const provider = (changes: Partial<BasketProvider> = {}): BasketProvider => ({
   },
   ...changes,
 });
-const store = (definition: BasketTemplate) => ({
+const store = (definition: CuratedBasket) => ({
   load: async () => [definition],
   withSyncLock: async <T>(work: () => Promise<T>) => work(),
   saveEnrollmentIntent: async () => {
@@ -272,7 +273,7 @@ it("labels a new Solana strategy's target-allocation history as modeled performa
     }),
   });
 
-  expect((await service.getTemplate("nvidia"))?.performance).toEqual({
+  expect((await service.detail("nvidia", "user-1"))?.performance).toEqual({
     basis: "modeled_strategy_twr",
     asOf: "2026-10-05T16:16:11.358Z",
     points: [{ date: "2025-10-05", percentChange: "0.0000" }],
@@ -290,8 +291,8 @@ it("keeps the catalog available when performance cannot be read", async () => {
     }),
   });
 
-  expect(await service.getTemplate("nvidia")).toEqual(
-    expect.objectContaining({ slug: "nvidia", performance: null, canEnroll: true }),
+  expect(await service.detail("nvidia", "user-1")).toEqual(
+    expect.objectContaining({ slug: "nvidia", performance: null, strategyId: "remote-1" }),
   );
 });
 
@@ -318,7 +319,7 @@ it("prepares funding only for the signed-in owner's Glider Solana account", asyn
     },
   });
 
-  expect(await service.prepareFunding("nvidia", owner, "12.345678")).toEqual({
+  expect(await service.prepareFunding("nvidia", "user-1", owner, "12.345678")).toEqual({
     portfolioId: "portfolio-1",
     destinationAccountId: destination,
     amountRaw: "12345678",
@@ -346,9 +347,11 @@ it("refuses funding when Glider returns a portfolio owned by another wallet", as
       },
     },
   });
-  await expect(service.prepareFunding("nvidia", "solana:mainnet:Owner", "1")).rejects.toMatchObject({
-    code: "funding_unavailable",
-  });
+  await expect(service.prepareFunding("nvidia", "user-1", "solana:mainnet:Owner", "1")).rejects.toMatchObject(
+    {
+      code: "funding_unavailable",
+    },
+  );
 });
 
 it("reports a failed transfer simulation without presenting it as an enrollment failure", async () => {
@@ -374,7 +377,7 @@ it("reports a failed transfer simulation without presenting it as an enrollment 
     },
   });
 
-  await expect(service.prepareFunding("nvidia", owner, "1")).rejects.toMatchObject({
+  await expect(service.prepareFunding("nvidia", "user-1", owner, "1")).rejects.toMatchObject({
     code: "funding_preflight_failed",
     status: 422,
   });
@@ -383,7 +386,7 @@ it("reports a failed transfer simulation without presenting it as an enrollment 
 it("reads balances and schedule only for the enrolled owner", async () => {
   const owner = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:owner";
   const service = new BasketService({
-    store: store({ ...basket, status: "disabled" }),
+    store: store(basket),
     provider: provider({
       portfolios: async () => [
         { portfolioId: "p-1", ownerAccountId: owner, strategyId: "remote-1", smartAccounts: [] },
@@ -423,7 +426,7 @@ it("reads balances and schedule only for the enrolled owner", async () => {
       }),
     }),
   });
-  expect(await service.portfolioSnapshot("nvidia", owner)).toMatchObject({
+  expect(await service.positions("nvidia", "user-1", owner)).toMatchObject({
     portfolioId: "p-1",
     totalValueUsd: "50.000000",
     schedule: { status: "active" },
@@ -445,7 +448,7 @@ it("rejects a provider portfolio belonging to another owner before reading its b
       },
     }),
   });
-  await expect(service.portfolioSnapshot("nvidia", "owner")).rejects.toMatchObject({
+  await expect(service.positions("nvidia", "user-1", "owner")).rejects.toMatchObject({
     code: "portfolio_unavailable",
   });
   expect(readPositions).toBe(false);
@@ -548,7 +551,7 @@ it("prepares a full in-kind exit for the verified owner and refuses a redirected
       transaction: async () => null,
     },
   });
-  await expect(service.prepareExit("nvidia", owner, "in_kind")).resolves.toMatchObject({ message });
+  await expect(service.prepareExit("nvidia", "user-1", owner, "in_kind")).resolves.toMatchObject({ message });
   expect(recorded).toBe(0);
   await expect(
     service.submitExit(
@@ -656,12 +659,16 @@ it("prepares selected in-kind amounts against live balances without changing the
       },
     }),
   });
-  await service.prepareExit("nvidia", owner, "in_kind", [{ assetId: first, amountRaw: "500000" }]);
-  await service.prepareExit("nvidia", owner, "in_kind", [{ assetId: second, amountRaw: "2000000" }]);
+  await service.prepareExit("nvidia", "user-1", owner, "in_kind", [{ assetId: first, amountRaw: "500000" }]);
+  await service.prepareExit("nvidia", "user-1", owner, "in_kind", [
+    { assetId: second, amountRaw: "2000000" },
+  ]);
   await expect(
-    service.prepareExit("nvidia", owner, "liquidate_usdc", [{ assetId: first, amountRaw: "500000" }]),
+    service.prepareExit("nvidia", "user-1", owner, "liquidate_usdc", [
+      { assetId: first, amountRaw: "500000" },
+    ]),
   ).resolves.toMatchObject({ submission: "withdraw", message: { liquidate: true } });
-  await expect(service.prepareExit("nvidia", owner, "liquidate_usdc")).resolves.toMatchObject({
+  await expect(service.prepareExit("nvidia", "user-1", owner, "liquidate_usdc")).resolves.toMatchObject({
     submission: "liquidate_all",
   });
   expect(prepared).toEqual([
@@ -675,10 +682,10 @@ it("prepares selected in-kind amounts against live balances without changing the
   ]);
   expect(submissions).toEqual(["withdraw", "withdraw", "withdraw", "liquidate_all"]);
   await expect(
-    service.prepareExit("nvidia", owner, "in_kind", [{ assetId: first, amountRaw: "1000001" }]),
+    service.prepareExit("nvidia", "user-1", owner, "in_kind", [{ assetId: first, amountRaw: "1000001" }]),
   ).rejects.toMatchObject({ code: "invalid_exit_amount" });
   await expect(
-    service.prepareExit("nvidia", owner, "in_kind", [
+    service.prepareExit("nvidia", "user-1", owner, "in_kind", [
       { assetId: first, amountRaw: "1" },
       { assetId: first, amountRaw: "1" },
     ]),

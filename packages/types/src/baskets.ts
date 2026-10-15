@@ -1,35 +1,6 @@
 import { z } from "zod";
-import { Iso, Ratio, Ticker, Usd } from "./primitives.js";
-import { Decision } from "./orders.js";
 
-export const BasketConstituent = z.object({
-  ticker: Ticker,
-  name: z.string(),
-  weightBps: z.number().int().min(1).max(10_000),
-  currentWeightBps: z.number().int().min(0).max(10_000).nullable(),
-});
-
-export const Basket = z.object({
-  slug: z.string(),
-  name: z.string(),
-  description: z.string(),
-  feeBps: z.number().int().min(0),
-  minimumUsd: Usd,
-  navPerToken: Usd.nullable(),
-  performance12mPct: Ratio.nullable(),
-  capUsd: Usd.nullable(),
-  constituents: z.array(BasketConstituent),
-  venue: z.literal("symmetry"),
-});
-
-export const BasketPreview = z.object({
-  legs: z.array(z.object({ ticker: Ticker, usdAmount: Usd, decision: Decision })),
-  overall: z.enum(["executable", "partial", "refused"]),
-  refusedLegs: z.array(Ticker),
-});
-
-/** A Glider template creates a user-owned portfolio; it is not a pooled token. */
-export const ManagedBasketTag = z.enum([
+export const BasketTag = z.enum([
   "theme:technology",
   "theme:energy",
   "theme:defense",
@@ -40,45 +11,99 @@ export const ManagedBasketTag = z.enum([
   "shelf:pros",
   "shelf:featured",
 ]);
+export type BasketTag = z.infer<typeof BasketTag>;
 
-export const ManagedBasketTemplate = z.object({
-  slug: z.string(),
-  kind: z.literal("managed_portfolio"),
-  provider: z.literal("glider"),
-  status: z.enum(["candidate", "disabled", "enabled"]),
-  tags: z.array(ManagedBasketTag),
-  canEnroll: z.boolean(),
-  name: z.string(),
-  description: z.string(),
-  strategyId: z.string().nullable(),
-  sourceStrategyId: z.string(),
-  schedule: z.object({ type: z.literal("interval"), frequency: z.literal("daily") }),
-  allocations: z.array(
-    z.object({
-      ticker: z.string(),
-      mint: z.string(),
-      assetId: z.string(),
-      weightBps: z.number().int().min(1).max(10_000),
-    }),
-  ),
-  performance: z
-    .object({
-      basis: z.literal("modeled_strategy_twr"),
-      asOf: z.string(),
-      points: z.array(z.object({ date: z.string(), percentChange: z.string() })),
-      windows: z.array(
-        z.object({
-          window: z.enum(["1d", "1w", "1m", "3m", "6m", "12m", "all"]),
-          percentChange: z.string(),
-          since: z.string(),
-        }),
-      ),
-    })
-    .nullable(),
+const BasketAllocation = z.object({
+  ticker: z.string(),
+  mint: z.string(),
+  assetId: z.string(),
+  weightBps: z.number().int().min(1).max(10_000),
 });
 
+/** Glider's modeled return for the strategy, not what any one owner earned. */
+const BasketPerformance = z.object({
+  basis: z.literal("modeled_strategy_twr"),
+  asOf: z.string(),
+  points: z.array(z.object({ date: z.string(), percentChange: z.string() })),
+  windows: z.array(
+    z.object({
+      window: z.enum(["1d", "1w", "1m", "3m", "6m", "12m", "all"]),
+      percentChange: z.string(),
+      since: z.string(),
+    }),
+  ),
+});
+
+const shared = {
+  slug: z.string(),
+  name: z.string(),
+  description: z.string(),
+  /** Null until Glider holds a strategy for it; nothing can be funded before then. */
+  strategyId: z.string().nullable(),
+  schedule: z.object({ type: z.literal("interval"), frequency: z.literal("daily") }),
+  allocations: z.array(BasketAllocation),
+  performance: BasketPerformance.nullable(),
+};
+
+/**
+ * A basket, from the shelf or from its author.
+ *
+ * Split on `source` rather than carrying both halves' fields, because they
+ * genuinely differ: a curated basket is shelved under themes, and one
+ * somebody wrote has no themes but is theirs to edit and delete. Anything
+ * rendering that difference reads this; a flat shape would have left it
+ * inferring ownership from a null.
+ */
+export const Basket = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("curated"), tags: z.array(BasketTag), ...shared }),
+  z.object({ source: z.literal("mine"), createdAt: z.string(), updatedAt: z.string(), ...shared }),
+]);
+export type Basket = z.infer<typeof Basket>;
+
+/**
+ * A basket as somebody composed it. Bounds here are abuse guards only: the
+ * real rules answer with their own codes, so the client can say which broke.
+ */
+const DraftAsset = z.object({
+  assetId: z.string().min(1).max(200),
+  weightBps: z.number().int().min(1).max(10_000),
+});
+export const CreateBasket = z.object({
+  name: z.string().max(500),
+  description: z.string().max(2000).default(""),
+  assets: z.array(DraftAsset).max(200),
+});
+
+/** Every field optional, but not all of them at once. */
+export const UpdateBasket = z
+  .object({
+    name: z.string().max(500).optional(),
+    description: z.string().max(2000).optional(),
+    assets: z.array(DraftAsset).max(200).optional(),
+  })
+  .refine((body) => Object.values(body).some((value) => value !== undefined), {
+    message: "Nothing to change.",
+  });
+
+/**
+ * One tokenised equity a basket may be written from.
+ *
+ * Narrower than the universe this product trades: Glider classifies xStocks as
+ * crypto and will not hold them inside a strategy, so this is Ondo's equities
+ * and nothing else.
+ */
+export const PickableBasketAsset = z.object({
+  ticker: z.string(),
+  name: z.string(),
+  /** Both, as allocations carry both: the id a strategy holds it by, and the logo's key. */
+  mint: z.string(),
+  assetId: z.string(),
+  logoUrl: z.string().nullable(),
+});
+export type PickableBasketAsset = z.infer<typeof PickableBasketAsset>;
+
 /** Read-only provider facts about a strategy's target holdings, not a user's portfolio. */
-export const ManagedBasketInsights = z.object({
+export const BasketInsights = z.object({
   allocation: z
     .object({
       sectors: z.array(
@@ -94,7 +119,7 @@ export const ManagedBasketInsights = z.object({
   integratorSwapFeeBps: z.number().int().nullable(),
 });
 
-export const ManagedBasketPortfolio = z.object({
+export const BasketPortfolio = z.object({
   portfolioId: z.string(),
   ownerAccountId: z.string(),
   strategyId: z.string(),
@@ -102,7 +127,7 @@ export const ManagedBasketPortfolio = z.object({
 });
 
 /** Live Glider account facts. Values are decimal strings, not basket-token units or P&L. */
-export const ManagedBasketPortfolioSnapshot = ManagedBasketPortfolio.extend({
+export const BasketPortfolioSnapshot = BasketPortfolio.extend({
   schedule: z
     .object({
       status: z.enum(["active", "paused"]),
@@ -141,10 +166,10 @@ export const ManagedBasketPortfolioSnapshot = ManagedBasketPortfolio.extend({
     }),
   ),
 });
-export type ManagedBasketPortfolioSnapshot = z.infer<typeof ManagedBasketPortfolioSnapshot>;
+export type BasketPortfolioSnapshot = z.infer<typeof BasketPortfolioSnapshot>;
 
 /** An owner-scoped landing-page summary; values describe the live smart account. */
-export const ManagedBasketPortfolioSummary = z.object({
+export const BasketPortfolioSummary = z.object({
   portfolioId: z.string(),
   strategyId: z.string(),
   slug: z.string(),
@@ -156,9 +181,9 @@ export const ManagedBasketPortfolioSummary = z.object({
   fetchedAt: z.string().nullable(),
   partial: z.boolean(),
 });
-export type ManagedBasketPortfolioSummary = z.infer<typeof ManagedBasketPortfolioSummary>;
+export type BasketPortfolioSummary = z.infer<typeof BasketPortfolioSummary>;
 
-export const ManagedBasketOperation = z.object({
+export const BasketOperation = z.object({
   operationId: z.string(),
   portfolioId: z.string(),
   kind: z.enum(["withdraw", "rebalance", "bridge", "swap", "deposit", "transfer", "execution", "converge"]),
@@ -168,7 +193,7 @@ export const ManagedBasketOperation = z.object({
   finishedAt: z.string().nullable(),
   error: z.string().nullable(),
 });
-export type ManagedBasketOperation = z.infer<typeof ManagedBasketOperation>;
+export type BasketOperation = z.infer<typeof BasketOperation>;
 
 export const TriggeredBasketRebalance = z.object({
   operationId: z.string().min(1),
@@ -244,7 +269,7 @@ export const SubmitBasketExit = z.object({
 });
 export const SubmittedBasketExit = TriggeredBasketRebalance.extend({ mode: BasketExitMode });
 export type SubmittedBasketExit = z.infer<typeof SubmittedBasketExit>;
-export const ManagedBasketActivity = z.object({
+export const BasketActivity = z.object({
   id: z.string(),
   kind: z.string(),
   occurredAt: z.string(),
@@ -254,30 +279,8 @@ export const ManagedBasketActivity = z.object({
   tokenQuantity: z.string().nullable(),
   txSignature: z.string().nullable(),
 });
-export type ManagedBasketActivity = z.infer<typeof ManagedBasketActivity>;
+export type BasketActivity = z.infer<typeof BasketActivity>;
 
-export const InvestBasketRequest = z.object({ usdAmount: Usd, acceptQueued: z.boolean().default(false) });
-
-export const PlanCadence = z.enum(["weekly", "monthly"]);
-export const PlanAllocation = z.object({
-  targetKind: z.enum(["instrument", "basket"]),
-  targetId: z.string(),
-  weightBps: z.number().int().min(1).max(10_000),
-});
-export const Plan = z.object({
-  id: z.string().uuid(),
-  usdAmount: Usd,
-  cadence: PlanCadence,
-  nextRunAt: Iso,
-  status: z.enum(["active", "paused"]),
-  allocations: z.array(PlanAllocation),
-});
-
-export type Basket = z.infer<typeof Basket>;
-export type ManagedBasketTag = z.infer<typeof ManagedBasketTag>;
-export type ManagedBasketTemplate = z.infer<typeof ManagedBasketTemplate>;
-export type ManagedBasketInsights = z.infer<typeof ManagedBasketInsights>;
-export type ManagedBasketPortfolio = z.infer<typeof ManagedBasketPortfolio>;
+export type BasketInsights = z.infer<typeof BasketInsights>;
+export type BasketPortfolio = z.infer<typeof BasketPortfolio>;
 export type PreparedBasketEnrollment = z.infer<typeof PreparedBasketEnrollment>;
-export type BasketPreview = z.infer<typeof BasketPreview>;
-export type Plan = z.infer<typeof Plan>;

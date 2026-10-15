@@ -69,3 +69,60 @@ export function currentWeights(
     out.set(v.ticker, v.valueUsd.div(total).mul(TOTAL_BPS).toDecimalPlaces(0).toNumber());
   return out;
 }
+
+/**
+ * n weights totalling exactly `total`, remainder on the last — which is how
+ * the curated catalogue stores them (Magnificent Seven is 1428 × 6 + 1432).
+ *
+ * `total` is what a held weight leaves behind, so levelling around a lock is
+ * the same arithmetic rather than a second copy of it.
+ */
+export const equalWeights = (count: number, total: number = TOTAL_BPS): number[] => {
+  if (!Number.isInteger(count) || count < 1) throw new RangeError("count must be a positive integer");
+  const each = Math.floor(total / count);
+  return Array.from({ length: count }, (_, i) => (i === count - 1 ? total - each * (count - 1) : each));
+};
+
+/**
+ * Glider's measured limits: 1–50 assets, weights totalling exactly 100.00.
+ * `unknown_asset` is ours — its `validate` accepts a strategy holding BONK,
+ * so the catalogue is the only tradability signal we have.
+ */
+export type DraftProblem =
+  | "name_required"
+  | "name_too_long"
+  | "no_assets"
+  | "too_many_assets"
+  | "duplicate_asset"
+  | "unknown_asset"
+  | "weights_must_total_10000";
+
+export interface BasketDraft {
+  readonly name: string;
+  readonly description: string;
+  /** No ticker: it is the catalogue's to say, resolved by `assetId`. */
+  readonly assets: readonly { assetId: string; weightBps: number }[];
+}
+
+export const NAME_MAX = 60;
+export const DESCRIPTION_MAX = 280;
+const ASSETS_MAX = 50;
+
+/** On its own because a rename must not re-check assets that are already stored. */
+export const nameProblem = (name: string): DraftProblem | null =>
+  name.trim() === "" ? "name_required" : name.trim().length > NAME_MAX ? "name_too_long" : null;
+
+/** Shared by the composer and the API, so a form cannot offer what the server refuses. */
+export const problemWith = (draft: BasketDraft, holdable: ReadonlySet<string>): DraftProblem | null => {
+  /* What is missing, in the order somebody would fix it: the stocks, then the
+     name, then the weights. A composer reports only the first. */
+  if (draft.assets.length === 0) return "no_assets";
+  if (draft.assets.length > ASSETS_MAX) return "too_many_assets";
+  const ids = draft.assets.map((asset) => asset.assetId);
+  if (new Set(ids).size !== ids.length) return "duplicate_asset";
+  if (ids.some((id) => !holdable.has(id))) return "unknown_asset";
+  const named = nameProblem(draft.name);
+  if (named !== null) return named;
+  const total = draft.assets.reduce((sum, asset) => sum + asset.weightBps, 0);
+  return total === TOTAL_BPS ? null : "weights_must_total_10000";
+};

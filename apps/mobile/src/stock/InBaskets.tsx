@@ -1,7 +1,7 @@
 import { StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
 import { byWeight, displayBasketName, usd, weightLabel } from "@mercury/view";
-import { useBasketTemplates } from "../baskets/api";
+import { useBaskets } from "../baskets/api";
 import { AssetStack, useHoldingInstruments } from "../baskets/ui";
 import { Icon, PressableScale } from "../ui";
 import { color, font, radius, space } from "../theme";
@@ -14,9 +14,8 @@ import { color, font, radius, space } from "../theme";
  */
 export const InBaskets = ({ ticker, basketValue }: { ticker: string; basketValue: number }) => {
   const router = useRouter();
-  const templates = useBasketTemplates();
+  const templates = useBaskets();
   const holding = (templates.data ?? [])
-    .filter((t) => t.status !== "disabled")
     .flatMap((t) => {
       const mine = t.allocations.find((a) => a.ticker.toUpperCase() === ticker.toUpperCase());
       return mine ? [{ template: t, weightBps: mine.weightBps }] : [];

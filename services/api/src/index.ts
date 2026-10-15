@@ -222,6 +222,20 @@ every("price-bar-prune", 6 * 60 * 60 * 1000, async () => {
   return dropped === 0 ? null : `${dropped} minute bars past thirty days dropped`;
 });
 
+/**
+ * What a custom basket may hold.
+ *
+ * Daily, because Ondo lists a stock far less often than that, and because the
+ * endpoint behind it is Glider's own front end's — undocumented and
+ * unversioned, so the less it is leaned on the better. Nothing user-facing
+ * waits on this: the picker reads the table it fills.
+ */
+every("basket-assets", 24 * 60 * 60 * 1000, async () => {
+  const s = await read.baskets.syncAssets();
+  if (s.held) return `held: ${s.offered} offered against a larger catalogue, keeping what we had`;
+  return `${s.written} assets`;
+});
+
 every("stocks", 6 * 60 * 60 * 1000, async () => {
   const s = await syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices });
   return `${s.instruments} instruments, ${s.tokens} tokens`;

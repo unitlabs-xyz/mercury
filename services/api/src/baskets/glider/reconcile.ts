@@ -3,7 +3,7 @@ import {
   BasketExitMessage,
   BasketExitMode,
   BasketExitSubmission,
-  type ManagedBasketOperation,
+  type BasketOperation,
 } from "@mercury/types";
 import { type ChainHistory, type TransactionDetail } from "@mercury/chain";
 import { z } from "zod";
@@ -253,7 +253,7 @@ async function markSettled(db: Db, row: ExitRow, now: Date): Promise<void> {
 
 interface ExitReconcileDeps {
   readonly history: ChainHistory;
-  operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
+  operation(portfolioId: string, operationId: string): Promise<BasketOperation>;
 }
 
 type ExitState = "pending" | "settled" | "stopped";

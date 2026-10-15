@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ManagedBasketTemplate } from "@mercury/types";
+import type { ShelfBasket } from "@mercury/view";
 import { searchStrategies } from "./catalog";
 
 const template = (
@@ -7,15 +7,16 @@ const template = (
   name: string,
   description: string,
   tickers: readonly string[],
-  tags: ManagedBasketTemplate["tags"] = [],
+  tags: ShelfBasket["tags"] = [],
 ) =>
   ({
+    source: "curated",
     slug,
     name,
     description,
     tags,
     allocations: tickers.map((ticker) => ({ ticker, mint: "", assetId: "", weightBps: 1 })),
-  }) as ManagedBasketTemplate;
+  }) as ShelfBasket;
 
 const catalog = [
   template("magnificent-seven", "Mercury Solana - Magnificent Seven", "US market growth leaders.", [

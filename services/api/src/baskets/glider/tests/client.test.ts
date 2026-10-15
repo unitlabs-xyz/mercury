@@ -375,6 +375,7 @@ describe("GliderClient", () => {
     const client = new GliderClient("test-key", fetcher);
     const definition = {
       slug: "nvidia",
+      providerId: null,
       name: remote.name,
       description: remote.description,
       assets: [{ assetId: NVDA_ID, weightBps: 10_000 }],

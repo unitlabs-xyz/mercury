@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { StyleSheet, Text as RNText, View, type ImageSourcePropType } from "react-native";
-import type { ManagedBasketTag, ManagedBasketTemplate } from "@mercury/types";
+import type { BasketTag, Basket } from "@mercury/types";
 import { byWeight } from "@mercury/view";
 import { useInstrumentsByTicker, type Instrument } from "../api";
 import { StockLogo } from "../ui";
@@ -26,7 +26,7 @@ export const THEME_ART: Record<string, ImageSourcePropType> = {
   "theme:healthcare": art_themes_5,
   "theme:finance": art_themes_6,
   "theme:energy": art_themes_7,
-} satisfies Partial<Record<ManagedBasketTag, ImageSourcePropType>>;
+} satisfies Partial<Record<BasketTag, ImageSourcePropType>>;
 
 export const INVESTOR_ART: Record<string, ImageSourcePropType> = {
   "nancy-pelosi-tracker": art_investors_3,
@@ -39,7 +39,7 @@ export const INVESTOR_ART: Record<string, ImageSourcePropType> = {
  * Logos and prices for the stocks a set of baskets holds, in one read. The
  * catalog names its holdings by ticker; our instruments carry the marks.
  */
-export const useHoldingInstruments = (templates: readonly ManagedBasketTemplate[], perBasket = 5) => {
+export const useHoldingInstruments = (templates: readonly Basket[], perBasket = 5) => {
   const tickers = useMemo(
     () => [
       ...new Set(
@@ -66,7 +66,7 @@ export const AssetStack = ({
   limit = 4,
   size = 28,
 }: {
-  template: ManagedBasketTemplate;
+  template: Basket;
   instruments: ReadonlyMap<string, Instrument>;
   limit?: number;
   size?: number;

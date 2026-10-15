@@ -3,12 +3,11 @@ import { Linking, ScrollView, StyleSheet, Text as RNText, View } from "react-nat
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ManagedBasketOperation, ManagedBasketPortfolioSnapshot } from "@mercury/types";
+import type { BasketOperation, BasketPortfolioSnapshot } from "@mercury/types";
 import {
   BASKET_RANGES,
   USDC_ASSET_ID,
   allocationRows,
-  basketStatusLabel,
   byWeight,
   countdownText,
   displayBasketName,
@@ -29,7 +28,7 @@ import {
   useBasketInsights,
   useBasketOperation,
   useBasketPortfolio,
-  useBasketTemplate,
+  useBasket,
   useTrackedOperation,
 } from "../../src/baskets/api";
 import { AssetStack, Fact, useHoldingInstruments } from "../../src/baskets/ui";
@@ -42,7 +41,6 @@ import {
   MoveChip,
   PressableScale,
   Skeleton,
-  StatusChip,
   StockLogo,
   Text,
   useBottomGap,
@@ -57,7 +55,7 @@ const balance = (value: string) => {
 };
 
 /* Glider's state in words, naming the one failure that may not be one. */
-const stateLabel = (state: ManagedBasketOperation["state"] | undefined, error: string | null = null) =>
+const stateLabel = (state: BasketOperation["state"] | undefined, error: string | null = null) =>
   state ? rebalanceOutcome(state, error).label : "Checking…";
 
 /**
@@ -78,7 +76,7 @@ export default function Basket() {
   const [allAssets, setAllAssets] = useState(false);
   const [risksOpen, setRisksOpen] = useState(false);
 
-  const result = useBasketTemplate(slug);
+  const result = useBasket(slug);
   const insights = useBasketInsights(slug);
   const enrollment = useBasketEnrollment(slug);
   const enrolled = signedIn && Boolean(enrollment.data);
@@ -156,9 +154,6 @@ export default function Basket() {
                 {name}
               </Text>
               <View style={s.chips}>
-                <StatusChip tone={template.status === "enabled" ? "up" : "neutral"}>
-                  {basketStatusLabel(template.status)}
-                </StatusChip>
                 <RNText style={s.meta}>Glider strategy · Solana</RNText>
               </View>
             </View>
@@ -239,14 +234,8 @@ export default function Basket() {
             <Fact k="Target assets" v={String(allocations.length)} />
             <Fact k="Funding" v="USDC on Solana, after enrolling" />
             <Button
-              label={
-                enrollment.isError
-                  ? "Retry portfolio check"
-                  : template.status === "disabled"
-                    ? "Not open for enrollment"
-                    : "Review enrollment"
-              }
-              disabled={!signedIn || checking || (template.status === "disabled" && !enrollment.isError)}
+              label={enrollment.isError ? "Retry portfolio check" : "Review enrollment"}
+              disabled={!signedIn || checking}
               onPress={() => (enrollment.isError ? void enrollment.refetch() : sheet("enroll"))}
             />
           </View>
@@ -310,7 +299,7 @@ export default function Basket() {
             <Button
               variant="secondary"
               label={busy && tracked?.kind === "rebalance" ? "Rebalance in progress" : "Rebalance now"}
-              disabled={account === null || template.status === "disabled" || busy}
+              disabled={account === null || busy}
               onPress={() => sheet("rebalance")}
             />
           </View>
@@ -509,18 +498,18 @@ const Position = ({
   onFund,
   onExit,
 }: {
-  account: ManagedBasketPortfolioSnapshot | null;
+  account: BasketPortfolioSnapshot | null;
   loading: boolean;
   failed: boolean;
   onRetry: () => void;
   usdc: number | undefined;
-  held: ManagedBasketPortfolioSnapshot["assets"];
-  template: NonNullable<ReturnType<typeof useBasketTemplate>["data"]>;
+  held: BasketPortfolioSnapshot["assets"];
+  template: NonNullable<ReturnType<typeof useBasket>["data"]>;
   instruments: ReturnType<typeof useHoldingInstruments>;
   allAssets: boolean;
   toggleAll: () => void;
   address: string | undefined;
-  exitState: ManagedBasketOperation["state"] | undefined;
+  exitState: BasketOperation["state"] | undefined;
   exitMode: string | undefined;
   exitError: string | null;
   busy: boolean;
@@ -634,7 +623,7 @@ const Position = ({
 );
 
 /** The time to the next scheduled rebalance, ticking, and how far through the cycle it is. */
-const Countdown = ({ schedule }: { schedule: ManagedBasketPortfolioSnapshot["schedule"] }) => {
+const Countdown = ({ schedule }: { schedule: BasketPortfolioSnapshot["schedule"] }) => {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1_000);

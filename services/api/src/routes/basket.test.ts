@@ -1,6 +1,18 @@
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { BasketService } from "../baskets/core/service.js";
 import { basketRoutes } from "./basket.js";
+
+/** The app as it is mounted: every basket route sits behind the auth guard. */
+const signedIn = (service: BasketService, identity: Record<string, unknown>) => {
+  const app = new Hono();
+  app.use("*", async (c, next) => {
+    c.set("identity", identity as never);
+    await next();
+  });
+  app.route("/", basketRoutes(service));
+  return app;
+};
 
 describe("authenticated basket enrollment", () => {
   it("scopes the landing list to the verified wallet, not a request parameter", async () => {
@@ -11,9 +23,10 @@ describe("authenticated basket enrollment", () => {
         return [];
       },
     } as unknown as BasketService;
-    const app = basketRoutes(service, async (c, next) => {
-      c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
-      await next();
+    const app = signedIn(service, {
+      userId: "user-1",
+      privyUserId: "did:privy:1",
+      walletAddress: "VerifiedWallet",
     });
     const response = await app.request("/v1/basket-portfolios?ownerAccountId=AttackerWallet");
     expect(response.status).toBe(200);
@@ -21,20 +34,21 @@ describe("authenticated basket enrollment", () => {
     expect(await response.json()).toEqual({ portfolios: [] });
   });
 
-  it("uses the verified wallet for enrollment lookup, never a requested owner", async () => {
+  it("uses the verified wallet for the portfolio lookup, never a requested owner", async () => {
     let lookedUpOwner = "";
     const service = {
-      enrollment: async (_slug: string, owner: string) => {
+      portfolio: async (_slug: string, _userId: string, owner: string) => {
         lookedUpOwner = owner;
         return null;
       },
-    } as BasketService;
-    const app = basketRoutes(service, async (c, next) => {
-      c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
-      await next();
+    } as unknown as BasketService;
+    const app = signedIn(service, {
+      userId: "user-1",
+      privyUserId: "did:privy:1",
+      walletAddress: "VerifiedWallet",
     });
     const response = await app.request(
-      "/v1/basket-templates/magnificent-seven/enrollment?ownerAccountId=AttackerWallet",
+      "/v1/baskets/magnificent-seven/portfolio?ownerAccountId=AttackerWallet",
     );
     expect(response.status).toBe(200);
     expect(lookedUpOwner).toBe("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet");
@@ -55,11 +69,12 @@ it("prepares funding for the verified wallet and ignores a client-supplied desti
       };
     },
   } as BasketService;
-  const app = basketRoutes(service, async (c, next) => {
-    c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
-    await next();
+  const app = signedIn(service, {
+    userId: "user-1",
+    privyUserId: "did:privy:1",
+    walletAddress: "VerifiedWallet",
   });
-  const response = await app.request("/v1/basket-templates/magnificent-seven/funding/prepare", {
+  const response = await app.request("/v1/baskets/magnificent-seven/funding/prepare", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ amountUsd: "12", destinationAccountId: "AttackerWallet" }),
@@ -67,6 +82,7 @@ it("prepares funding for the verified wallet and ignores a client-supplied desti
   expect(response.status).toBe(200);
   expect(observed).toEqual([
     "magnificent-seven",
+    "user-1",
     "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet",
     "12",
   ]);
@@ -80,11 +96,12 @@ it("submits rebalance for the verified wallet without accepting a client portfol
       return { operationId: "op-1", submittedAt: "2026-10-06T00:00:00Z" };
     },
   } as BasketService;
-  const app = basketRoutes(service, async (c, next) => {
-    c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
-    await next();
+  const app = signedIn(service, {
+    userId: "user-1",
+    privyUserId: "did:privy:1",
+    walletAddress: "VerifiedWallet",
   });
-  const response = await app.request("/v1/basket-templates/magnificent-seven/rebalance", {
+  const response = await app.request("/v1/baskets/magnificent-seven/rebalance", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ portfolioId: "attacker-portfolio" }),
@@ -92,8 +109,8 @@ it("submits rebalance for the verified wallet without accepting a client portfol
   expect(response.status).toBe(202);
   expect(observed).toEqual([
     "magnificent-seven",
-    "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet",
     "user-1",
+    "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet",
   ]);
 });
 
@@ -120,12 +137,13 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
       };
     },
   } as BasketService;
-  const app = basketRoutes(service, async (c, next) => {
-    c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
-    await next();
+  const app = signedIn(service, {
+    userId: "user-1",
+    privyUserId: "did:privy:1",
+    walletAddress: "VerifiedWallet",
   });
   const response = await app.request(
-    "/v1/basket-templates/magnificent-seven/exit/in_kind/prepare?recipientAccountId=AttackerWallet",
+    "/v1/baskets/magnificent-seven/exit/in_kind/prepare?recipientAccountId=AttackerWallet",
     {
       method: "POST",
       body: JSON.stringify({ assets: [{ assetId: "solana:asset", amountRaw: "1" }] }),
@@ -134,8 +152,81 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
   expect(response.status).toBe(200);
   expect(observed).toEqual([
     "magnificent-seven",
+    "user-1",
     owner,
     "in_kind",
     [{ assetId: "solana:asset", amountRaw: "1" }],
   ]);
+});
+
+describe("writing a basket somebody owns", () => {
+  const identity = { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" };
+
+  it("creates for the signed-in user, never a requested one", async () => {
+    let observed: unknown;
+    const app = signedIn(
+      {
+        create: async (...args: unknown[]) => {
+          observed = args;
+          return {
+            source: "mine",
+            slug: "my-ai-bet-7fq2kx9m",
+            name: "My AI Bet",
+            description: "",
+            strategyId: "strategy-1",
+            createdAt: "2026-10-13T00:00:00.000Z",
+            updatedAt: "2026-10-13T00:00:00.000Z",
+            schedule: { type: "interval", frequency: "daily" },
+            allocations: [{ ticker: "NVDA", mint: "m", assetId: "solana:x/spl:m", weightBps: 10_000 }],
+            performance: null,
+          };
+        },
+      } as unknown as BasketService,
+      identity,
+    );
+    const response = await app.request("/v1/baskets", {
+      method: "POST",
+      body: JSON.stringify({
+        userId: "user-2",
+        name: "My AI Bet",
+        assets: [{ assetId: "solana:x/spl:m", weightBps: 10_000 }],
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(observed).toEqual([
+      "user-1",
+      { name: "My AI Bet", description: "", assets: [{ assetId: "solana:x/spl:m", weightBps: 10_000 }] },
+    ]);
+  });
+
+  // Deleting checks what the basket still holds, and that read is wallet-scoped.
+  it("deletes against the verified wallet, never a requested owner", async () => {
+    let observed: unknown;
+    const app = signedIn(
+      {
+        remove: async (...args: unknown[]) => {
+          observed = args;
+        },
+      } as unknown as BasketService,
+      identity,
+    );
+    const response = await app.request("/v1/baskets/mine-7fq2kx9m?ownerAccountId=AttackerWallet", {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(204);
+    expect(observed).toEqual([
+      "user-1",
+      "mine-7fq2kx9m",
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet",
+    ]);
+  });
+
+  it("refuses a change that changes nothing", async () => {
+    const app = signedIn({} as BasketService, identity);
+    const response = await app.request("/v1/baskets/mine-7fq2kx9m", {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(400);
+  });
 });

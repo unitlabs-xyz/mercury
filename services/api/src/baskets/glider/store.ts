@@ -2,10 +2,10 @@ import { and, desc, eq, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
-import { ManagedBasketTag } from "@mercury/types";
+import { BasketTag } from "@mercury/types";
 import catalogJson from "../../../catalog.json" with { type: "json" };
 import type { BasketStore } from "../core/deps.js";
-import type { BasketTemplate } from "../core/primitives.js";
+import type { CuratedBasket } from "../core/primitives.js";
 import type {
   EnrollmentChallenge,
   EnrollmentIntent,
@@ -24,7 +24,7 @@ const allocation = z.object({
   weightBps: z.number().int().min(1).max(10_000),
 });
 const tags = z
-  .array(ManagedBasketTag)
+  .array(BasketTag)
   .refine(
     (values) =>
       new Set(values).size === values.length &&
@@ -38,7 +38,6 @@ const strategy = z.object({
   description: z.string().min(1),
   sourceStrategyId: z.string().min(1),
   gliderStrategyId: z.string().min(1).optional(),
-  status: z.enum(["candidate", "disabled", "enabled"]),
   schedule,
   allocations: z.array(allocation).min(1),
 });
@@ -355,7 +354,7 @@ export class JsonBasketStore implements BasketStore {
       .limit(40);
   }
 
-  async load(): Promise<readonly BasketTemplate[]> {
+  async load(): Promise<readonly CuratedBasket[]> {
     const catalog = schema.parse(this.source);
     const slugs = new Set<string>();
     const sourceIds = new Set<string>();
@@ -387,11 +386,10 @@ export class JsonBasketStore implements BasketStore {
       return {
         slug: entry.slug,
         tags: entry.tags,
-        ...(entry.gliderStrategyId === undefined ? {} : { providerId: entry.gliderStrategyId }),
+        providerId: entry.gliderStrategyId ?? null,
         name: entry.name,
         description: entry.description,
         sourceStrategyId: entry.sourceStrategyId,
-        status: entry.status,
         assets,
         schedule: entry.schedule,
       };

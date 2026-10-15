@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { Span } from "../../market/hooks";
 import {
   BookmarkMark,
+  FilterPills,
   GlideTable,
   InfoTip,
   MoveChip,
@@ -287,23 +288,13 @@ export const Screener = ({
         </div>
       </header>
 
-      <div className="mt-3 flex gap-1 overflow-x-auto px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {sectors.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onSector(s)}
-            aria-pressed={sector === s}
-            className={`h-[26px] shrink-0 rounded-full border px-[17px] text-[14px] leading-none text-ds-ink transition-colors ${
-              sector === s
-                ? "border-black/10 bg-linear-to-b from-white to-[#eeeeee]"
-                : "border-black/5 hover:border-black/10"
-            }`}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      <FilterPills
+        options={sectors.map((s) => ({ key: s, label: s }))}
+        value={sector}
+        onChange={onSector}
+        label="Sector"
+        className="mt-3 px-5"
+      />
 
       <div className="mt-3 overflow-x-auto rounded-lg bg-ds-panel p-1">
         {loading || (searching && shown.length === 0) ? (

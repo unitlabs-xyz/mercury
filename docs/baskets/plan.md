@@ -4,7 +4,7 @@ The [phase spec](spec.md) holds shared decisions. For each next task, present th
 
 - [x] Curate 22 Solana strategies and record confirmed Glider IDs, allocations, and mints in the [catalog](../../services/api/catalog.json). All are enabled based on confirmed Glider support; individual funded checks are not an availability gate.
 - [x] Reconcile the catalog on API startup through [BasketService](../../services/api/src/baskets/core/service.ts), [Glider adapter](../../services/api/src/baskets/glider/client.ts), and [JSON store](../../services/api/src/baskets/glider/store.ts); keep focused tests in their `tests/` directories.
-- [x] Backend discovery/detail: public typed `/v1/basket-templates` list/detail, candidate/disabled states, and Glider's **modeled Solana strategy TWR** on detail. Existing pooled-basket routes stay separate.
+- [x] Backend discovery/detail: typed `/v1/baskets` list/detail and Glider's **modeled Solana strategy TWR** on detail. (Enrollment gating and the pooled Symmetry routes have since been removed.)
 - [x] Backend discovery tags: validate one primary theme or pros grouping per catalog entry and expose optional editorial featured tags through list/detail.
 - [ ] Backend lifecycle: enrollment, owner-paid USDC funding, authenticated live positions/schedule, manual rebalance, and operation-by-ID read are implemented. Both signed exits are wired; real-funded verification and global accounting remain.
 - [x] Web discovery and strategy detail: tag-driven shelves, local artwork, Glider allocations, modeled-performance labels, and availability states.

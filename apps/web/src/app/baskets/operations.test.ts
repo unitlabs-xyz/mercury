@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { ManagedBasketOperation, ManagedBasketPortfolioSummary } from "@mercury/types";
+import type { BasketOperation, BasketPortfolioSummary } from "@mercury/types";
 import { sortOperationRows, type BasketOperationRow } from "./operations";
 
-const portfolio = { portfolioId: "p1", slug: "magnificent-seven" } as ManagedBasketPortfolioSummary;
+const portfolio = { portfolioId: "p1", slug: "magnificent-seven" } as BasketPortfolioSummary;
 
 const row = (
   key: string,
-  state: ManagedBasketOperation["state"] | undefined,
+  state: BasketOperation["state"] | undefined,
   occurredAt: string | null,
 ): BasketOperationRow => ({
   key,

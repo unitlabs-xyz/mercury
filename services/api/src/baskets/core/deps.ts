@@ -1,7 +1,7 @@
 import type {
-  ManagedBasketInsights,
-  ManagedBasketOperation,
-  ManagedBasketPortfolioSnapshot,
+  BasketInsights,
+  BasketOperation,
+  BasketPortfolioSnapshot,
   TriggeredBasketRebalance,
   BasketExitMessage,
   BasketExitMode,
@@ -10,11 +10,13 @@ import type {
   SubmittedBasketExit,
 } from "@mercury/types";
 import type {
+  BasketAsset,
   BasketDefinition,
-  BasketTemplate,
+  CustomBasket,
+  CuratedBasket,
   ProviderBasket,
   StrategyPerformance,
-  BasketPortfolio,
+  ProviderPortfolio,
   EnrollmentChallenge,
   EnrollmentIntent,
   ExitIntent,
@@ -26,20 +28,21 @@ export interface BasketProvider {
   validate(basket: BasketDefinition): Promise<void>;
   create(basket: BasketDefinition): Promise<string>;
   get(id: string): Promise<ProviderBasket>;
+  /** The new active allocation; portfolios rebalance to it on their next run. No
+   *  counterpart for the name, because Glider holds the slug and that never changes. */
+  publishAllocation(id: string, assets: BasketDefinition["assets"]): Promise<void>;
   strategyPerformance(id: string): Promise<StrategyPerformance>;
   /** Glider's all-time money-weighted return, absent until enough history exists. */
   portfolioReturn(id: string): Promise<string | null>;
-  allocationBreakdown(
-    assets: BasketDefinition["assets"],
-  ): Promise<NonNullable<ManagedBasketInsights["allocation"]>>;
+  allocationBreakdown(assets: BasketDefinition["assets"]): Promise<NonNullable<BasketInsights["allocation"]>>;
   effectiveSwapFeeBps(id: string): Promise<number | null>;
-  portfolios(ownerAccountId: string, strategyId: string): Promise<readonly BasketPortfolio[]>;
-  portfoliosForOwner(ownerAccountId: string): Promise<readonly BasketPortfolio[]>;
+  portfolios(ownerAccountId: string, strategyId: string): Promise<readonly ProviderPortfolio[]>;
+  portfoliosForOwner(ownerAccountId: string): Promise<readonly ProviderPortfolio[]>;
   portfolio(
     id: string,
   ): Promise<
     Pick<
-      ManagedBasketPortfolioSnapshot,
+      BasketPortfolioSnapshot,
       "portfolioId" | "ownerAccountId" | "strategyId" | "smartAccounts" | "schedule"
     >
   >;
@@ -47,11 +50,11 @@ export interface BasketProvider {
     id: string,
   ): Promise<
     Pick<
-      ManagedBasketPortfolioSnapshot,
+      BasketPortfolioSnapshot,
       "portfolioId" | "totalValueUsd" | "inTransitUsd" | "fetchedAt" | "assets" | "warnings"
     >
   >;
-  operation(portfolioId: string, operationId: string): Promise<ManagedBasketOperation>;
+  operation(portfolioId: string, operationId: string): Promise<BasketOperation>;
   triggerRebalance(portfolioId: string): Promise<TriggeredBasketRebalance>;
   prepareExit(
     portfolioId: string,
@@ -74,7 +77,7 @@ export interface BasketProvider {
     challenge: EnrollmentChallenge,
     signed: string,
     name: string,
-  ): Promise<BasketPortfolio>;
+  ): Promise<ProviderPortfolio>;
 }
 
 export interface BasketFunding {
@@ -96,8 +99,51 @@ export class BasketRebalanceCooldownError extends Error {
   }
 }
 
+/**
+ * Apart from `BasketProvider` because it is a different contract: that one is
+ * Glider's documented v2 API, this is the undocumented route its front end
+ * browses with. The risky one stays swappable without touching money.
+ */
+export interface BasketAssetSource {
+  list(): Promise<readonly BasketAsset[]>;
+}
+
+/**
+ * Apart from `BasketStore`, which holds a user's in-flight business. This is a
+ * catalogue: the same rows for everybody, replaced whole once a day.
+ */
+export interface BasketAssetStore {
+  /** The catalogue, in ticker order. */
+  all(): Promise<readonly BasketAsset[]>;
+  /** How many are on offer, for deciding whether a fresh list can be believed. */
+  count(): Promise<number>;
+  /** All of it or none: a picker half-written is worse than one a day old. */
+  replace(assets: readonly BasketAsset[]): Promise<number>;
+}
+
+/** Baskets people wrote for themselves. Every read is owner-scoped: that is the privacy. */
+export interface CustomBasketStore {
+  /** Everything this owner has, newest first, drafts included. */
+  mine(userId: string): Promise<readonly CustomBasket[]>;
+  /** Null when the slug is unknown, deleted, or somebody else's. */
+  bySlug(userId: string, slug: string): Promise<CustomBasket | null>;
+  /** Throws on a slug already taken; the unique index decides. */
+  draft(input: {
+    userId: string;
+    slug: string;
+    name: string;
+    description: string;
+    assets: CustomBasket["assets"];
+  }): Promise<CustomBasket>;
+  attachStrategy(id: string, providerId: string): Promise<void>;
+  reviseAssets(id: string, assets: CustomBasket["assets"]): Promise<void>;
+  rename(id: string, name: string, description: string): Promise<void>;
+  /** Soft: Glider cannot delete a strategy, so the slug stays spent. */
+  remove(id: string): Promise<void>;
+}
+
 export interface BasketStore {
-  load(): Promise<readonly BasketTemplate[]>;
+  load(): Promise<readonly CuratedBasket[]>;
   withSyncLock<T>(work: () => Promise<T>): Promise<T>;
   saveEnrollmentIntent(intent: Omit<EnrollmentIntent, "id" | "portfolioId">): Promise<string>;
   enrollmentIntent(id: string): Promise<EnrollmentIntent | null>;

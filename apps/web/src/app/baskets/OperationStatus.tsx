@@ -1,4 +1,4 @@
-import type { ManagedBasketOperation } from "@mercury/types";
+import type { BasketOperation } from "@mercury/types";
 import { StatusChip, type Tone } from "../../ui/ds";
 
 /* The chip carries the state on its own: amber while work runs, green once it lands, red when it stops. */
@@ -19,7 +19,7 @@ export const OperationStatus = ({
 }: {
   /** Omitted where the surrounding row already names the operation. */
   name?: string;
-  state: ManagedBasketOperation["state"] | undefined;
+  state: BasketOperation["state"] | undefined;
   label: string;
   unavailable?: boolean;
 }) => {

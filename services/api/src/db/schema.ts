@@ -706,3 +706,58 @@ export const fundingIntents = pgTable(
   ],
 );
 export type FundingIntent = typeof fundingIntents.$inferSelect;
+
+/**
+ * What a custom basket may hold.
+ *
+ * Narrower than `token`, which is everything this product trades. Glider's
+ * registry classifies xStocks as crypto and refuses it inside a strategy, so
+ * the set a basket can be built from is Ondo's tokenised equities and nothing
+ * else. Conflating the two would let the picker offer a stock the basket
+ * cannot actually hold.
+ *
+ * Filled nightly from Glider, which is the only place the list exists — see
+ * `baskets/glider/assets.ts`.
+ */
+export const basketAssets = pgTable(
+  "basket_asset",
+  {
+    /** The Solana mint, and the natural key: Glider is addressed by it. */
+    mint: text("mint").primaryKey(),
+    /** The company, as somebody searching would type it: NVDA, not NVDAon. */
+    ticker: text("ticker").notNull(),
+    name: text("name").notNull(),
+    symbol: text("symbol").notNull(),
+    decimals: integer("decimals").notNull(),
+    logoUrl: text("logo_url"),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("basket_asset_ticker_idx").on(t.ticker)],
+);
+
+export type BasketAsset = typeof basketAssets.$inferSelect;
+
+/** A basket somebody wrote for themselves. Slugs share a namespace with the curated catalogue; see `slugFor`. */
+export const customBaskets = pgTable(
+  "custom_basket",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    /** `[{ assetId, ticker, weightBps }]`, summing to 10000. */
+    assets: jsonb("assets").notNull(),
+    /** Null while a draft: written before Glider is called, which is not transactional. */
+    gliderStrategyId: text("glider_strategy_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set rather than deleted: Glider has no way to remove a strategy. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("custom_basket_slug_idx").on(t.slug), index("custom_basket_user_idx").on(t.userId)],
+);
+
+export type CustomBasketRow = typeof customBaskets.$inferSelect;

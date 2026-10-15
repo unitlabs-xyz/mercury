@@ -6,9 +6,8 @@ import { color } from "../../src/theme";
 /**
  * Four tabs, under a bar that floats over the content.
  *
- * The web carries five sections; Baskets is absent here because Symmetry
- * blocks it on both clients. The bar floats rather than docking, which is why
- * the home screen's lower card pads itself past it.
+ * The web carries five sections; Baskets is absent here. The bar floats rather
+ * than docking, which is why the home screen's lower card pads itself past it.
  */
 const ICONS: Record<string, IconName> = {
   index: "pieChart",

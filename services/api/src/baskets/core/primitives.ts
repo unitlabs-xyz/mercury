@@ -1,24 +1,92 @@
-import type {
-  BasketExitMessage,
-  BasketExitMode,
-  BasketExitSubmission,
-  ManagedBasketTag,
-} from "@mercury/types";
+export {
+  DESCRIPTION_MAX,
+  nameProblem,
+  problemWith,
+  type BasketDraft,
+  type DraftProblem,
+} from "@mercury/core";
+import { customAlphabet } from "nanoid";
+import slugify from "slugify";
+import type { BasketExitMessage, BasketExitMode, BasketExitSubmission, BasketTag } from "@mercury/types";
 
 export interface BasketDefinition {
   slug: string;
-  providerId?: string;
+  /** Null until Glider holds the strategy. The same spelling on both kinds of basket. */
+  providerId: string | null;
   name: string;
   description: string;
   assets: readonly { assetId: string; weightBps: number }[];
   schedule: { type: "interval"; frequency: "daily" };
 }
 
+/**
+ * One tokenised equity a basket may be built from: Ondo's, and nothing else.
+ * Glider classifies xStocks as crypto and will not hold them in a strategy.
+ */
+export interface BasketAsset {
+  /** The Solana mint, and the natural key: Glider is addressed by it. */
+  readonly mint: string;
+  /** The company, as somebody searching would type it: NVDA, not NVDAon. */
+  readonly ticker: string;
+  readonly name: string;
+  readonly symbol: string;
+  readonly decimals: number;
+  readonly logoUrl: string | null;
+}
+
+/** Solana, in CAIP-2, as every `assetId` in a definition is written. */
+export const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+
+/** The id a strategy holds an asset by, derived so the mint is written down once. */
+export const assetIdFor = (mint: string): string => `${SOLANA}/spl:${mint}`;
+
+/** A basket somebody wrote for themselves. Private to its author. */
+export interface CustomBasket {
+  readonly id: string;
+  readonly userId: string;
+  readonly slug: string;
+  readonly name: string;
+  readonly description: string;
+  readonly assets: readonly { assetId: string; ticker: string; weightBps: number }[];
+  /** Null while a draft: the row is written before Glider is called. */
+  readonly providerId: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+/** No i/l/o/u: the slug goes in a URL people read aloud and retype. */
+const suffix = customAlphabet("0123456789abcdefghjkmnpqrstvwxyz", 8);
+
+const STEM_MAX = 40;
+
+export const randomSuffix = (): string => suffix();
+
+/**
+ * Custom and curated baskets share one slug namespace, because every basket
+ * route resolves `/:slug` through a single lookup. The suffix is what stops a
+ * basket named "Magnificent Seven" addressing the curated one.
+ */
+export const slugFor = (name: string, suffix: string): string => {
+  const stem = slugify(name, { lower: true, strict: true, trim: true }).slice(0, STEM_MAX).replace(/-+$/, "");
+  return `${stem || "basket"}-${suffix}`;
+};
+
+/**
+ * What enrolling, funding, rebalancing or exiting needs of a basket, whoever
+ * wrote it. Resolution has already proved Glider holds the strategy, so
+ * `providerId` is not optional here.
+ */
+export interface LiveBasket {
+  readonly slug: string;
+  readonly name: string;
+  readonly providerId: string;
+  readonly assets: readonly { assetId: string; ticker: string; weightBps: number }[];
+}
+
 /** Catalog metadata stays with the definition so sync and discovery read one source. */
-export interface BasketTemplate extends BasketDefinition {
+export interface CuratedBasket extends BasketDefinition {
   sourceStrategyId: string;
-  status: "candidate" | "disabled" | "enabled";
-  tags: readonly ManagedBasketTag[];
+  tags: readonly BasketTag[];
   assets: readonly (BasketDefinition["assets"][number] & { ticker: string })[];
 }
 
@@ -37,7 +105,7 @@ export type ProviderBasket = Omit<BasketDefinition, "slug" | "providerId" | "sch
   schedule: unknown;
 };
 
-export interface BasketPortfolio {
+export interface ProviderPortfolio {
   portfolioId: string;
   ownerAccountId: string;
   strategyId: string;
@@ -94,6 +162,23 @@ export interface ExitIntent {
   operationId: string | null;
   submittedAt: Date | null;
   createdAt: Date;
+}
+
+/** One asset as the picker shows it: the ticker, and the id a strategy holds it by. */
+export interface PickableAsset {
+  readonly ticker: string;
+  readonly name: string;
+  readonly mint: string;
+  readonly assetId: string;
+  readonly logoUrl: string | null;
+}
+
+/** What a catalogue refresh did, including deciding not to. */
+export interface AssetSyncResult {
+  readonly written: number;
+  readonly offered: number;
+  /** True when the answer was too thin to believe and the catalogue stands. */
+  readonly held: boolean;
 }
 
 export interface SyncResult {

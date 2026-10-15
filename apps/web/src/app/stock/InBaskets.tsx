@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useBasketTemplates } from "../../api/baskets";
+import { useBaskets } from "../../api/baskets";
 import { useInstruments } from "../../market/hooks";
 import { GlideRows } from "../../ui/ds";
 import { AssetIcon } from "../baskets/AssetIcon";
@@ -15,9 +15,8 @@ const weight = (bps: number) => `${(bps / 100).toFixed(2).replace(/\.00$/, "")}%
  * the right. Hidden when no basket holds it.
  */
 export const InBaskets = ({ ticker }: { ticker: string }) => {
-  const templates = useBasketTemplates();
+  const templates = useBaskets();
   const holding = (templates.data ?? [])
-    .filter((template) => template.status !== "disabled")
     .flatMap((template) => {
       const mine = template.allocations.find((a) => a.ticker.toUpperCase() === ticker.toUpperCase());
       return mine ? [{ template, weightBps: mine.weightBps }] : [];

@@ -105,35 +105,6 @@ export interface TriggerSource {
   cancel(account: string, owner: string): Promise<readonly string[]>;
 }
 
-export interface BasketQuote {
-  readonly navPerToken: Decimal;
-  readonly estimatedTokensOut: Decimal;
-  readonly capRemainingUsd: Decimal | null;
-}
-
-export interface BasketWeight {
-  readonly ticker: string;
-  readonly mint: string;
-  readonly weightBps: number;
-  readonly currentWeightBps: number;
-}
-
-/**
- * Symmetry sits behind these four methods and nothing else. `@mercury/core` never
- * imports the SDK. That boundary is what keeps writing our own vault a week of work
- * rather than a rewrite. See ADR 0005.
- */
-export interface BasketVenue {
-  quote(basketId: string, usdAmount: Decimal): Promise<BasketQuote>;
-  invest(
-    basketId: string,
-    deposits: readonly { mint: string; amount: Decimal }[],
-    owner: string,
-  ): Promise<readonly string[]>;
-  redeem(basketId: string, tokens: Decimal, owner: string): Promise<readonly string[]>;
-  value(basketId: string): Promise<{ nav: Decimal; navPerToken: Decimal; weights: readonly BasketWeight[] }>;
-}
-
 /** What the stock sync needs and `TokenRegistry` deliberately does not carry. */
 export interface ListedWrapper {
   readonly mint: string;

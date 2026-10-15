@@ -37,6 +37,9 @@
   --color-ds-divider: #e6e6e6;
   --color-ds-chevron: #5c5c5c;
   --color-ds-avatar: #d9d9d9;
+  /* the scrollbar's thumb, on the same neutral ramp between divider and muted */
+  --color-ds-scroll: #d4d4d4;
+  --color-ds-scroll-strong: #a8a8a8;
   /* the portfolio header */
   --color-ds-panel: #f7f7f7;
   --color-ds-link: #007681;
@@ -187,24 +190,33 @@
     background: var(--color-brand);
     color: #fff;
   }
+  /* One scrollbar for every surface. The track, and the inset that keeps the
+     thumb off the edge, are transparent rather than page grey, so the bar
+     floats over whatever it scrolls — the page, a white card, a grey panel.
+     Painted, each inner panel showed a stripe of another surface's colour. */
   html {
     caret-color: var(--color-brand);
-    scrollbar-color: var(--color-dash) var(--color-page);
+    scrollbar-color: var(--color-ds-scroll) transparent;
   }
   ::-webkit-scrollbar {
     width: 12px;
     height: 12px;
   }
-  ::-webkit-scrollbar-track {
-    background: var(--color-page);
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
+  /* Clipped to the padding box: without it the border paints the thumb's own
+     colour and the inset disappears. */
   ::-webkit-scrollbar-thumb {
-    background: var(--color-dash);
-    border: 3px solid var(--color-page);
+    background: var(--color-ds-scroll);
+    background-clip: padding-box;
+    border: 3px solid transparent;
     border-radius: 999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-faint);
+    background: var(--color-ds-scroll-strong);
+    background-clip: padding-box;
   }
 }
 

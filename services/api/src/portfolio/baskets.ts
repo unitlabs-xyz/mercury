@@ -1,5 +1,5 @@
 import { D, toWire, ZERO, type Decimal } from "@mercury/core";
-import type { BasketProvider, BasketStore } from "../baskets/core/deps.js";
+import type { BasketProvider, BasketStore, CustomBasketStore } from "../baskets/core/deps.js";
 
 const SOLANA_OWNER = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:";
 
@@ -63,6 +63,7 @@ const money = (value: string): Decimal => {
 export function basketValueReader(
   provider: BasketProvider | undefined,
   store: BasketStore,
+  custom?: CustomBasketStore,
 ): BasketValueReader {
   return async (userId, walletAddress) => {
     const owner = `${SOLANA_OWNER}${walletAddress}`;
@@ -72,16 +73,27 @@ export function basketValueReader(
       return { totalUsd: ZERO, baskets: [], fetchedAt: null };
     }
 
-    const [portfolios, catalog] = await Promise.all([provider.portfoliosForOwner(owner), store.load()]);
+    const [portfolios, catalog, mine] = await Promise.all([
+      provider.portfoliosForOwner(owner),
+      store.load(),
+      custom?.mine(userId) ?? [],
+    ]);
     if (portfolios.some((item) => item.ownerAccountId !== owner))
       throw new BasketValuationError("Glider returned a portfolio for another owner.");
     if (new Set(portfolios.map((item) => item.portfolioId)).size !== portfolios.length)
       throw new BasketValuationError("Glider returned duplicate portfolios.");
     if (portfolios.length === 0) return { totalUsd: ZERO, baskets: [], fetchedAt: null };
 
-    const templates = new Map(
-      catalog.filter((item) => item.providerId).map((item) => [item.providerId!, item]),
-    );
+    /* Curated and this owner's own. Without the second half a basket somebody
+       wrote is still counted — value comes from the portfolio, not from here —
+       but shows as "Glider portfolio" with no slug to open it by. */
+    const templates = new Map<
+      string,
+      { slug: string; name: string; assets: readonly { assetId: string; ticker: string }[] }
+    >([
+      ...catalog.filter((item) => item.providerId).map((item) => [item.providerId!, item] as const),
+      ...mine.filter((item) => item.providerId).map((item) => [item.providerId!, item] as const),
+    ]);
     const baskets = await Promise.all(
       portfolios.map(async (portfolio): Promise<ValuedBasket> => {
         const positions = await provider.positions(portfolio.portfolioId);

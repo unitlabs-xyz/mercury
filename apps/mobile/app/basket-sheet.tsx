@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { BasketExitMode, ManagedBasketPortfolioSnapshot } from "@mercury/types";
+import type { BasketExitMode, BasketPortfolioSnapshot } from "@mercury/types";
 import {
   FUNDING_AMOUNT,
   displayBasketName,
@@ -31,7 +31,7 @@ import {
   useBasketFundingAction,
   useBasketPortfolio,
   useBasketRebalanceAction,
-  useBasketTemplate,
+  useBasket,
 } from "../src/baskets/api";
 import { Fact } from "../src/baskets/ui";
 import { Haptics } from "../src/haptics";
@@ -71,7 +71,7 @@ export default function BasketSheet() {
   const kind: Kind = rawKind ?? "enroll";
   const router = useRouter();
   const bottom = useBottomGap();
-  const template = useBasketTemplate(slug).data;
+  const template = useBasket(slug).data;
   const enrollment = useBasketEnrollment(slug);
   const portfolio = useBasketPortfolio(slug, Boolean(enrollment.data));
   const name = template ? displayBasketName(template.name) : "Basket";
@@ -412,7 +412,7 @@ const Exit = ({
 }: {
   slug: string;
   name: string;
-  account: ManagedBasketPortfolioSnapshot;
+  account: BasketPortfolioSnapshot;
   onClose: () => void;
 }) => {
   const action = useBasketExitAction(slug);

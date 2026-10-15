@@ -144,7 +144,6 @@ describe("JsonBasketStore", () => {
     expect(baskets.find((basket) => basket.slug === "nvda-tsla-50-50")).toMatchObject({
       providerId: "01M49AGQ193X4CRQ3MQ4YHNDZJ",
       sourceStrategyId: "01M49AGQ193X4CRQ3MQ4YHNDZJ",
-      status: "candidate",
       tags: ["theme:technology"],
       schedule: { type: "interval", frequency: "daily" },
       assets: [

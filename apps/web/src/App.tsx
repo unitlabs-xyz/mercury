@@ -16,7 +16,7 @@ const Portfolio = lazy(() => import("./app/Portfolio").then((m) => ({ default: m
 const Invest = lazy(() => import("./app/Invest").then((m) => ({ default: m.Invest })));
 const Stock = lazy(() => import("./app/Stock").then((m) => ({ default: m.Stock })));
 const Baskets = lazy(() => import("./app/Baskets").then((m) => ({ default: m.Baskets })));
-const Basket = lazy(() => import("./app/Basket").then((m) => ({ default: m.Basket })));
+const BasketDetail = lazy(() => import("./app/Basket").then((m) => ({ default: m.BasketDetail })));
 const Money = lazy(() => import("./app/Money").then((m) => ({ default: m.Money })));
 const Activity = lazy(() => import("./app/Activity").then((m) => ({ default: m.Activity })));
 /** The side panels (Add cash, Send, Borrow), drawn over any page; see app/Panels. */
@@ -117,7 +117,7 @@ export const App = () => (
               path="/baskets/:slug"
               element={
                 <RequireAuth>
-                  <Basket />
+                  <BasketDetail />
                 </RequireAuth>
               }
             />

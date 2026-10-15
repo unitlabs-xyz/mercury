@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 import { BasketService, verifiedBasketFunding } from "../service.js";
 import { USDC_MINT } from "@mercury/chain";
 import type { BasketProvider, BasketStore } from "../deps.js";
-import type { BasketTemplate } from "../primitives.js";
+import type { CuratedBasket } from "../primitives.js";
 
-const template: BasketTemplate = {
+const template: CuratedBasket = {
   slug: "magnificent-seven",
   providerId: "strategy-1",
   sourceStrategyId: "source-1",
-  status: "candidate",
   tags: ["theme:technology"],
   name: "Magnificent Seven",
   description: "Technology leaders.",
@@ -159,7 +158,7 @@ describe("basket enrollment", () => {
       store: store(),
       provider: provider({ portfolios: async () => [portfolio] }),
     });
-    expect(await service.enrollment("magnificent-seven", owner)).toEqual(portfolio);
+    expect(await service.portfolio("magnificent-seven", "user-1", owner)).toEqual(portfolio);
   });
 
   it("prepares a Solana challenge bound to the verified owner and template", async () => {
@@ -235,12 +234,12 @@ it("rebalance submits only a portfolio verified against the signed-in owner and 
       },
     }),
   });
-  expect(await service.rebalance("magnificent-seven", owner, "user-1")).toMatchObject({
+  expect(await service.rebalance("magnificent-seven", "user-1", owner)).toMatchObject({
     operationId: "op-1",
   });
   expect(triggered).toEqual(["portfolio-1"]);
   expect(recorded).toMatchObject([{ userId: "user-1", portfolioId: "portfolio-1", operationId: "op-1" }]);
-  await expect(service.rebalance("magnificent-seven", `${owner}-other`)).rejects.toMatchObject({
+  await expect(service.rebalance("magnificent-seven", "user-1", `${owner}-other`)).rejects.toMatchObject({
     code: "portfolio_unavailable",
   });
   expect(triggered).toHaveLength(1);
