@@ -39,7 +39,6 @@ COPY apps/web/ apps/web/
 ARG VITE_API_URL
 ARG VITE_PRIVY_APP_ID
 ARG VITE_SOLANA_RPC_URL
-ARG VITE_WAITLIST_API_URL
 
 # Fail here rather than ship a broken bundle. Both variables have quiet
 # failure modes: VITE_API_URL falls back to http://localhost:8787, so every
@@ -62,7 +61,6 @@ RUN test -n "$VITE_SOLANA_RPC_URL" \
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_PRIVY_APP_ID=$VITE_PRIVY_APP_ID
 ENV VITE_SOLANA_RPC_URL=$VITE_SOLANA_RPC_URL
-ENV VITE_WAITLIST_API_URL=$VITE_WAITLIST_API_URL
 
 RUN pnpm --filter @mercury/web build
 

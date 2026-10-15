@@ -4,24 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Pending = "sending" | "resending" | "checking" | "creating" | null;
 
-/** Why a send or a code was refused. `code` is Privy's, so the screen can tell them apart. */
-export type Rejection = { readonly code: string | null; readonly message: string };
-
-/*
- * A literal rather than the SDK's `PrivyErrorCode`: that enum is a type-only
- * export, so importing it for a runtime comparison type-checks and then fails
- * in the browser with "does not provide an export named 'PrivyErrorCode'".
- */
-export const NOT_INVITED = "allowlist_rejected";
-
-const codeOf = (cause: unknown): string | null => {
-  if (typeof cause !== "object" || cause === null || !("privyErrorCode" in cause)) return null;
-  const code = (cause as { privyErrorCode?: unknown }).privyErrorCode;
-  return typeof code === "string" ? code : null;
-};
+/** Why a send or a code was refused. */
+export type Rejection = { readonly message: string };
 
 const rejection = (cause: unknown, fallback: string): Rejection => ({
-  code: codeOf(cause),
   message: cause instanceof Error && cause.message ? cause.message : fallback,
 });
 

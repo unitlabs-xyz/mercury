@@ -54,17 +54,6 @@ for (const [pkg, file] of WASM) {
   await copyFile(join(base, file), join(fn, file.split("/").pop()));
 }
 
-// The founding card's renderer, and what it draws with. The renderer looks for
-// both beside the bundle first (src/waitlist/card.ts).
-await copyFile(
-  require.resolve("@resvg/resvg-wasm/index_bg.wasm", { paths: [root] }),
-  join(fn, "index_bg.wasm"),
-);
-// Satori shapes text with HarfBuzz, which reads its WebAssembly from __dirname.
-const satori = dirname(require.resolve("satori/package.json", { paths: [root] }));
-await copyFile(require.resolve("harfbuzzjs/hb.wasm", { paths: [satori] }), join(fn, "hb.wasm"));
-await cp(join(root, "assets", "card"), join(fn, "assets", "card"), { recursive: true });
-
 // The migrations, so the function can bring the database up to date on a cold
 // start (src/vercel.ts) the way the container does before it serves.
 await cp(join(root, "drizzle"), join(fn, "drizzle"), { recursive: true });

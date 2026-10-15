@@ -108,7 +108,6 @@ const harness = async (over: { balances?: TokenBalance[]; sponsored?: boolean } 
     portfolio: {},
     money: {},
     activity: {},
-    waitlist: {},
     fills: {},
     borrow: {},
   } as unknown as ReadDeps;
@@ -226,5 +225,18 @@ describe("POST /v1/orders", () => {
   /* In dollars, not the shares the decision reports, for the same reason. */
   it("keeps the dollars that were asked for", async () => {
     expect((await create({ ticker: "NVDA", side: "sell", amount: "500" })).usdAmount).toBe("500");
+  });
+});
+
+describe("GET /f/:slug", () => {
+  /*
+   * The waitlist is gone, but its share links are still in people's posts on
+   * X. Each one sends a reader on to the site rather than to an error page.
+   */
+  it("sends a founding card's old share link on to the site", async () => {
+    const { get } = await harness();
+    const res = await get("/f/3kQ9xZ1bTq7w");
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://trymercury.xyz");
   });
 });

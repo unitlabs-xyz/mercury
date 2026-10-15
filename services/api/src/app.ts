@@ -21,7 +21,6 @@ import { sendRoutes } from "./routes/send.js";
 import { instrumentRoutes } from "./routes/instruments.js";
 import { moneyRoutes } from "./routes/money.js";
 import { portfolioRoutes } from "./routes/portfolio.js";
-import { waitlistRoutes } from "./routes/waitlist.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { basketRoutes } from "./routes/basket.js";
 import { fundRoutes } from "./routes/fund.js";
@@ -94,8 +93,12 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", instrumentRoutes(read.instruments));
   app.route("/", basketRoutes(read.basketTemplates, requireAuth(auth)));
 
-  // The landing page's signup form. Public to write, token-guarded to read.
-  app.route("/", waitlistRoutes(read.waitlist));
+  /*
+   * The waitlist's share links. The waitlist is gone, but people posted their
+   * founding cards on X, and those posts still point here: each is sent on to
+   * the site rather than to a 404. See docs/archive/waitlist.
+   */
+  app.get("/f/:slug", (c) => c.redirect("https://trymercury.xyz", 301));
 
   // The in-app feedback button. Public: signing in may be the thing that broke.
   if (read.feedback) app.route("/", feedbackRoutes(read.feedback));

@@ -235,7 +235,7 @@ less-liquid wrapper so the user keeps the more liquid one.
 apps/
   web/        Vite + React 19 + React Router. The submission judges open.
   mobile/     Expo 56 + React Native (iOS). Shares sdk, types and view with web.
-  landing/    Astro on bun. Marketing site and waitlist. Outside the pnpm workspace.
+  landing/    Astro on bun. Marketing site. Outside the pnpm workspace.
 services/
   api/        Hono on Node. The only backend; background jobs run inside it.
 packages/
@@ -268,7 +268,7 @@ receives quotes as plain data and returns decisions, so the engine is tested wit
 | Wallets & auth  | Privy embedded wallets (web: `react-auth`, mobile: `expo`)                                  |
 | Data fetching   | TanStack Query on web and mobile                                                            |
 | Styling         | Tailwind v4 on web; shared design tokens on mobile                                          |
-| Share images    | Satori + resvg (waitlist cards, OG images)                                                  |
+| Share images    | Satori + resvg (OG images)                                                                  |
 | Tests           | Vitest                                                                                      |
 | Hosting         | API in Docker on Coolify; web on Vercel                                                     |
 
@@ -337,7 +337,8 @@ Kamino). WCAG 2.1 AA is a binding commitment.
 - Activity with filters and export
 - Loan warnings
 - iOS app at near-parity on the core flows
-- Landing site with a founding-card waitlist ("Mercury Card", 500 founding seats)
+- Landing site. The founding-card waitlist it launched with is archived in
+  [docs/archive/waitlist](docs/archive/waitlist/README.md)
 
 **Still open before submission:**
 

@@ -8,9 +8,6 @@ export const site = {
   url: "https://trymercury.xyz",
   // The web app, open in beta. Every call to action on the page sends people here.
   app: "https://beta.trymercury.xyz",
-  // The API the waitlist form posts to. Set PUBLIC_API_URL on the Vercel project;
-  // unset, it is the API running locally.
-  api: (import.meta.env.PUBLIC_API_URL ?? "http://localhost:8787").replace(/\/$/, ""),
   // The tagline, description and every other word live in src/i18n, per language.
   twitter: "@trymercury_",
   socials: [{ label: "X", href: "https://x.com/trymercury_" }],

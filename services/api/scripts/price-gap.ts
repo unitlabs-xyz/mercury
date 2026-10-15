@@ -78,7 +78,7 @@ const post = [
 ].join("\n");
 
 // The image: the buy, then the two tokens, the cheaper one ticked.
-const assets = new URL("../assets/card/", import.meta.url);
+const assets = new URL("../assets/brand/", import.meta.url);
 const require = createRequire(import.meta.url);
 await initWasm(await readFile(require.resolve("@resvg/resvg-wasm/index_bg.wasm")));
 const [regular, medium, logo] = await Promise.all([
