@@ -51,7 +51,7 @@ The authorisation shape is proved before any query depends on it, and `/v1/admin
   - `Config.adminPrivyUserIds?: readonly string[]`
 - Consumes: `requireAuth` and `Identity` from `src/auth/`, already present.
 
-- [ ] **Step 1: Write the failing allowlist test**
+- [x] **Step 1: Write the failing allowlist test**
 
 `services/api/src/admin/allowlist.test.ts`:
 
@@ -88,12 +88,12 @@ describe("parseAdmins", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd services/api && pnpm vitest run src/admin/allowlist.test.ts`
 Expected: FAIL — cannot resolve `./allowlist.js`.
 
-- [ ] **Step 3: Write the allowlist and the middleware**
+- [x] **Step 3: Write the allowlist and the middleware**
 
 `services/api/src/admin/allowlist.ts`:
 
@@ -143,12 +143,12 @@ export const requireAdmin = (admins: readonly string[]): MiddlewareHandler => {
 };
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd services/api && pnpm vitest run src/admin/allowlist.test.ts`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Write the freshness query**
+- [x] **Step 5: Write the freshness query**
 
 `services/api/src/admin/freshness.ts`:
 
@@ -199,7 +199,7 @@ export const freshness = async (db: Db): Promise<Freshness> => {
 };
 ```
 
-- [ ] **Step 6: Write the failing route test**
+- [x] **Step 6: Write the failing route test**
 
 `services/api/src/routes/admin.test.ts`:
 
@@ -277,12 +277,12 @@ describe("admin routes", () => {
 });
 ```
 
-- [ ] **Step 7: Run it to verify it fails**
+- [x] **Step 7: Run it to verify it fails**
 
 Run: `cd services/api && pnpm vitest run src/routes/admin.test.ts`
 Expected: FAIL — cannot resolve `./admin.js`.
 
-- [ ] **Step 8: Write the routes module**
+- [x] **Step 8: Write the routes module**
 
 `services/api/src/routes/admin.ts`:
 
@@ -315,12 +315,12 @@ export const adminRoutes = (deps: AdminDeps): Hono => {
 };
 ```
 
-- [ ] **Step 9: Run the tests to verify they pass**
+- [x] **Step 9: Run the tests to verify they pass**
 
 Run: `cd services/api && pnpm vitest run src/routes/admin.test.ts`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 10: Thread the config through**
+- [x] **Step 10: Thread the config through**
 
 In `services/api/src/deps.ts`:
 
@@ -351,7 +351,7 @@ and inside the returned object, following the existing spread idiom that `exactO
 
 - `buildReadDeps` gains an `admin` member built the same way `fund` is: present only when `config.adminPrivyUserIds` is set. Read the function first and match its existing shape.
 
-- [ ] **Step 11: Mount it**
+- [x] **Step 11: Mount it**
 
 In `services/api/src/app.ts`, after the other authenticated route mounts:
 
@@ -361,7 +361,7 @@ In `services/api/src/app.ts`, after the other authenticated route mounts:
 if (read.admin) app.route("/", adminRoutes(read.admin));
 ```
 
-- [ ] **Step 12: Announce it at boot**
+- [x] **Step 12: Announce it at boot**
 
 In `services/api/src/index.ts`, alongside the other capability lines:
 
@@ -373,7 +373,7 @@ console.log(
 );
 ```
 
-- [ ] **Step 13: Document the variable**
+- [x] **Step 13: Document the variable**
 
 Append to `services/api/.env.example`:
 
@@ -383,7 +383,7 @@ Append to `services/api/.env.example`:
 ADMIN_PRIVY_USER_IDS=
 ```
 
-- [ ] **Step 14: Verify and commit**
+- [x] **Step 14: Verify and commit**
 
 Run: `cd /Users/sainathr19/Desktop/unit/mercury && pnpm check`
 
@@ -404,7 +404,7 @@ Before the queries, so no query is ever merged without the index it needs.
 - Modify: `services/api/src/db/schema.ts` (declare the indexes)
 - Create: `services/api/src/admin/indexes.test.ts`
 
-- [ ] **Step 1: Establish why**
+- [x] **Step 1: Establish why**
 
 The existing indexes are all user-first and useless to a dashboard:
 
@@ -416,7 +416,7 @@ The existing indexes are all user-first and useless to a dashboard:
 
 A leading `user_id` cannot serve a query that does not filter on it, so every admin aggregate would be a sequential scan over a table that live traffic is writing to.
 
-- [ ] **Step 2: Declare the indexes in the schema**
+- [x] **Step 2: Declare the indexes in the schema**
 
 Add to the index arrays in `services/api/src/db/schema.ts`:
 
@@ -433,7 +433,7 @@ Add to the index arrays in `services/api/src/db/schema.ts`:
 
 Keep each one inside the table it belongs to, with a comment saying which admin query it serves.
 
-- [ ] **Step 3: Generate the migration**
+- [x] **Step 3: Generate the migration**
 
 Run: `cd services/api && pnpm drizzle-kit generate --name admin_indexes`
 
@@ -447,7 +447,7 @@ CREATE INDEX IF NOT EXISTS "order_created_status_idx" ON "order" ("created_at","
 
 Do **not** use `CONCURRENTLY`: `applyMigrations` runs inside a transaction and `CREATE INDEX CONCURRENTLY` cannot. At current table sizes a plain `CREATE INDEX` is milliseconds; revisit if a table passes a few million rows.
 
-- [ ] **Step 4: Write the test**
+- [x] **Step 4: Write the test**
 
 `services/api/src/admin/indexes.test.ts`:
 
@@ -477,12 +477,12 @@ describe("the indexes the admin queries need", () => {
 });
 ```
 
-- [ ] **Step 5: Run it**
+- [x] **Step 5: Run it**
 
 Run: `cd services/api && pnpm vitest run src/admin/indexes.test.ts`
 Expected: PASS, 4 tests. A failure here means the migration was not generated or not applied.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run: `cd /Users/sainathr19/Desktop/unit/mercury && pnpm check`
 
@@ -504,7 +504,7 @@ git commit -m "feat(api): indexes for the admin aggregates, which are all time-f
 
 - Produces: `rangeSchema` (Zod), `type Range = { from: Date; to: Date; days: number }`, `parseRange(query: Record<string, string | undefined>): Range`, `ADMIN_STATEMENT_TIMEOUT_MS`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `services/api/src/admin/range.test.ts`:
 
@@ -549,12 +549,12 @@ describe("parseRange", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd services/api && pnpm vitest run src/admin/range.test.ts`
 Expected: FAIL — cannot resolve `./range.js`.
 
-- [ ] **Step 3: Write it**
+- [x] **Step 3: Write it**
 
 `services/api/src/admin/range.ts`:
 
@@ -604,12 +604,12 @@ export const parseRange = (query: Readonly<Record<string, string | undefined>>):
 };
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cd services/api && pnpm vitest run src/admin/range.test.ts`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Apply the timeout and the range in the routes**
+- [x] **Step 5: Apply the timeout and the range in the routes**
 
 In `services/api/src/routes/admin.ts`, add a middleware above the route handlers that sets the timeout for the connection this request uses, and a small helper that turns a thrown range error into a 400 rather than a 500:
 
@@ -627,7 +627,7 @@ Read the file as it stands after Task 1 and keep the shape. A range error answer
 `400 { error: { code: "bad_range", message } }` — the message is for an engineer
 reading their own dashboard, so it may name the cap.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 Run: `cd /Users/sainathr19/Desktop/unit/mercury && pnpm check`
 
@@ -658,13 +658,13 @@ One task because the four are the same shape — a query function, a route, and 
   - `fundingStats` → `{ byChain: { chain: string; day: string; status: string; count: number }[]; settleSeconds: { chain: string; p50: number }[]; failures: { reason: string; count: number }[] }`
   - `basketStats` → `{ byKind: { kind: string; count: number }[]; byState: { state: string; count: number }[]; stuck: number }`
 
-- [ ] **Step 1: Write the fixtures**
+- [x] **Step 1: Write the fixtures**
 
 `services/api/src/admin/fixtures.ts` — a `seedAdminFixtures(db: Db)` that inserts, with fixed dates so assertions are exact: three users (one with no activity), wallets of both kinds, four orders across two tickers and both sides including one `refused`, three `funding_intent` rows from two chains with one `failed` carrying a `fail_reason`, two `portfolio_snapshot` rows per user at different hours, and two `basket_action` rows.
 
 Return the ids it created so each test can assert against known values rather than re-querying.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Four files, each against `testDb()` plus `seedAdminFixtures`. The cases that matter, one per behaviour:
 
@@ -745,35 +745,35 @@ describe("fundingStats", () => {
 
 `baskets.test.ts`: groups by `kind` and by `reconciliation_state`; counts as stuck anything whose `reconcile_after` has passed and whose state is not terminal.
 
-- [ ] **Step 3: Run them to verify they fail**
+- [x] **Step 3: Run them to verify they fail**
 
 Run: `cd services/api && pnpm vitest run src/admin`
 Expected: FAIL on the four new files.
 
-- [ ] **Step 4: Write the four query modules**
+- [x] **Step 4: Write the four query modules**
 
 Drizzle's query builder where it reads clearly; `sql` template for the window functions that `overview`'s latest-snapshot-per-user needs. Money is summed in SQL as `numeric` and returned as a string — never through a JavaScript number.
 
 Each module gets a doc comment saying which question it answers and which index it relies on.
 
-- [ ] **Step 5: Run them to verify they pass**
+- [x] **Step 5: Run them to verify they pass**
 
 Run: `cd services/api && pnpm vitest run src/admin`
 Expected: all green.
 
-- [ ] **Step 6: Mutation-test the AUM query**
+- [x] **Step 6: Mutation-test the AUM query**
 
 Change `overview`'s latest-snapshot-per-user to sum every snapshot instead. The AUM test must fail. Restore it. This is the assertion most likely to be silently wrong and the one whose wrongness would be quoted in a meeting.
 
-- [ ] **Step 7: Add the routes**
+- [x] **Step 7: Add the routes**
 
 Four GETs in `services/api/src/routes/admin.ts`, each parsing the range and calling its query. No new middleware.
 
-- [ ] **Step 8: Record the query plans**
+- [x] **Step 8: Record the query plans**
 
 For each of the four, run `EXPLAIN ANALYZE` against a database with realistic row counts and paste the output into the pull request body. An aggregate that sequentially scans `order` is not ready to merge, whatever the test says.
 
-- [ ] **Step 9: Verify and commit**
+- [x] **Step 9: Verify and commit**
 
 Run: `cd /Users/sainathr19/Desktop/unit/mercury && pnpm check`
 
@@ -793,7 +793,7 @@ git commit -m "feat(api): admin aggregates for users, orders, funding and basket
 - Modify: `apps/web/src/App.tsx` (one lazy route)
 - Modify: `apps/web/src/app/AccountMenu.tsx` (the entry)
 
-- [ ] **Step 1: Write the bundle guard first**
+- [x] **Step 1: Write the bundle guard first**
 
 `apps/web/src/app/admin/bundle.test.ts`:
 
@@ -829,22 +829,22 @@ describe("the admin route", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd apps/web && pnpm vitest run src/app/admin/bundle.test.ts`
 Expected: FAIL — no `Admin` lazy import in `App.tsx` yet.
 
-- [ ] **Step 3: Write the formatting helpers and their tests**
+- [x] **Step 3: Write the formatting helpers and their tests**
 
 `format.ts` holds the pure functions — a percentage from a count pair, a day label, a compact USD figure — and `format.test.ts` covers them, following `fund-reserve.test.ts`'s shape. Pure functions over fixtures, no component rendering.
 
 Reuse `usd()` from `app/Money.tsx` rather than writing a second money formatter. A dashboard that rounds differently from the product is a dashboard that starts arguments.
 
-- [ ] **Step 4: Write the data hooks**
+- [x] **Step 4: Write the data hooks**
 
 `useAdmin.ts` — TanStack Query hooks against the five routes, following the existing `api/` hook conventions. `useAdminAccess()` queries `/v1/admin/overview` and reports `granted` only on a 200; a 404 is the expected answer for everybody else and must not surface as an error toast.
 
-- [ ] **Step 5: Write the page**
+- [x] **Step 5: Write the page**
 
 `Admin.tsx` with five sections, in the order somebody actually reads them:
 
@@ -856,7 +856,7 @@ Reuse `usd()` from `app/Money.tsx` rather than writing a second money formatter.
 
 Charts reuse `ValueChart`, `Sparkline` and `DotChart` before any new dependency. If none fits a grouped time series, a plain table is a better answer than a new 90 kB import.
 
-- [ ] **Step 6: Add the route and the entry**
+- [x] **Step 6: Add the route and the entry**
 
 In `App.tsx`:
 
@@ -868,12 +868,12 @@ and a `<Route path="/admin" …>` inside the existing authenticated `Suspense`, 
 
 In `AccountMenu.tsx`, render the Admin link only when `useAdminAccess().granted` — which comes from the API answering 200, never from a client-side flag anybody can flip in a console.
 
-- [ ] **Step 7: Run the guard and the tests**
+- [x] **Step 7: Run the guard and the tests**
 
 Run: `cd apps/web && pnpm vitest run src/app/admin`
 Expected: PASS.
 
-- [ ] **Step 8: Prove the bundle did not grow**
+- [x] **Step 8: Prove the bundle did not grow**
 
 ```bash
 cd apps/web && pnpm build
@@ -887,7 +887,7 @@ grep -rl "Money in" dist/assets/ | head
 
 It must appear only in the lazy admin chunk. If it is in the main chunk the route is not actually split, and the guard in step 1 passed on the shape of `App.tsx` while something else imported the page.
 
-- [ ] **Step 9: Verify and commit**
+- [x] **Step 9: Verify and commit**
 
 Run: `cd /Users/sainathr19/Desktop/unit/mercury && pnpm check`
 
@@ -907,3 +907,79 @@ git commit -m "feat(web): an admin dashboard, behind a lazy route and a 200"
 **Type consistency.** `Range` is produced in Task 3 and consumed by all four query functions in Task 4 — `parseRange` is used in Task 4's tests, which is why Task 3 comes first. `AdminDeps` is declared in Task 1 and extended in Tasks 3 and 4 without changing its shape. `Config.adminPrivyUserIds` is `readonly string[] | undefined` throughout, and the `exactOptionalPropertyTypes` spread idiom is spelled out in Task 1 step 10 rather than left to be rediscovered.
 
 **One deliberate gap.** Task 4 step 8 asks for `EXPLAIN ANALYZE` against realistic row counts, which PGlite fixtures cannot provide — the test database has single-digit rows and will index-scan anything. That step needs a dump of production-scale data or a generated one; whoever runs it should say which they used.
+
+---
+
+## As built
+
+All five tasks landed on `feat/admin-dashboard`. Seven things in the plan turned
+out to be wrong when measured, and the code departs from it in each case. They
+are recorded here because each one would otherwise read as an unexplained
+difference between the plan and the branch.
+
+**The migration is 0023, not 0021.** Main took 0021 and 0022 while this plan sat
+unexecuted.
+
+**`adminRoutes` takes query functions, not a `Db`.** The plan's interface said
+`{ db, admins }`, which contradicts the plan's own global constraint that the
+admin module is "given no write path — no writes in scope at all": a `Db`
+carries `insert`, `update` and `delete`. `deps.ts` already documents the
+closure convention for every other route module. It also drops the
+authorisation tests to 7ms with no database.
+
+**`freshness` uses typed selects, not `db.execute` of subqueries.** The two
+drivers disagree about what `db.execute` returns — postgres.js answers the rows
+array, PGlite answers `{ rows, fields, command, affectedRows, rowCount }` — so
+`result[0]` is a row in production and `undefined` under test. It also skips
+drizzle's column mappers, and PGlite reads a timestamp back as
+`"2026-10-15 16:51:03.627+05"`, which is not ISO. Mutation-tested: the plan's
+version returns null for a snapshot that exists while its own
+empty-database test stays green. Every computed value in the four aggregates is
+cast to `text` in SQL for the same reason.
+
+**The migration keeps `IF NOT EXISTS` out.** The plan asked for it by hand, on
+the grounds of making the statements "concurrent-safe". It is about idempotency,
+not concurrency, and it guards nothing here: `db/migrate.ts` takes an advisory
+lock and drizzle tracks applied migrations. 13 of the 16 `CREATE INDEX`
+statements already in `drizzle/` omit it. The plan was right that `CONCURRENTLY`
+is unavailable — `pg-core/dialect.js` runs every migration inside
+`session.transaction`.
+
+**The date range validates the calendar, not just the shape.** `new Date` does
+not fail on a date that does not exist, it rolls over: `2026-02-30` is 2 March,
+and `2026-02-29` is 1 March because 2026 is not a leap year. A range typed as
+February would have reported March under February's heading.
+
+**The statement timeout is inside each query's transaction, not in middleware.**
+`SET LOCAL` outside a transaction block does nothing: after issuing it, `show
+statement_timeout` still answers `0`. Inside one it answers `10s` and reverts to
+`0` on commit, which is also what keeps it off the next request on a pooled
+connection. `SET` takes no bind parameters either, so the value is `sql.raw`
+behind an integer guard.
+
+**The range is parsed in the handler, not thrown across the framework.** A
+`try`/`catch` around `await next()` can never fire — Hono's `compose` catches a
+handler's throw in the frame that called it and answers through `onError`
+without rethrowing. `onError` would have worked and been worse: `app.ts` logs
+everything it sees as `request failed` at error level, so every mistyped date
+would land in the error stream.
+
+Decisions the plan left open, each documented in the module that makes it:
+`overview`'s funnel is lifetime rather than the range, and counts a _settled_
+deposit as funded; `orderStats.byDay` reads filled orders only while `byStatus`
+reads every status, and reports `feesUsd` and `revenueUsd` separately because
+one transfer carries the network cost and Mercury's fee together;
+`basketStats.stuck` is lifetime, because an action that jammed two months ago is
+still jammed.
+
+Added beyond the plan: `money.ts` (a decimal string helper, so no sum passes
+through a float), `privacy.test.ts` (no payload carries a seeded email, wallet
+address, DID or user id, asserted over the whole serialised response), and the
+indexes test asserts each index's _leading column_ — reversing
+`order_created_status_idx` to `(status, created_at)` still creates an index of
+that name and still passes a name check.
+
+**Still outstanding: Task 4 step 8.** `EXPLAIN ANALYZE` against realistic row
+counts, which the plan's own self-review already names as a gap PGlite cannot
+fill. The test database has single-digit rows and will sequentially scan
+regardless, so a plan captured there would be misleading rather than reassuring.
