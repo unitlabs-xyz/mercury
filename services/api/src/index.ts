@@ -27,6 +27,7 @@ import { exitOnUncaught, oneLineErrors } from "./log.js";
 import { telemetryEndpoint } from "./telemetry/otel.js";
 import { forwardConsoleToOtel } from "./telemetry/console-logs.js";
 import { every } from "./jobs/every.js";
+import { logger } from "./log/index.js";
 
 /*
  * First, so that nothing after it, a bad config included, logs a stack trace.
@@ -35,18 +36,31 @@ import { every } from "./jobs/every.js";
 oneLineErrors();
 exitOnUncaught();
 /*
- * And on to the collector, where one is configured.
+ * Anything that still writes to the console, on to the collector.
+ *
+ * Our own code logs through pino now (`log/index.ts`), so this is no longer
+ * the path our log lines take — it is the net under everything else. Hono, the
+ * Solana libraries and the Kamino SDK all write to the console on their own,
+ * and without this their output stops at the container's stdout, which nothing
+ * reads: `grafana/otel-lgtm` ingests OTLP only.
  *
  * After `oneLineErrors`, so an Error has already become its one line by the
  * time this reads the arguments. Reversed, the forward would see the raw Error
  * and send a stack.
- *
- * This bridge is not optional plumbing: configuring the SDK's log pipeline
- * does not make `console.log` reach it. OpenTelemetry bridges winston, pino
- * and bunyan and nothing else, and this service logs through the console. See
- * telemetry/console-logs.ts.
  */
 forwardConsoleToOtel();
+
+/**
+ * The boot sequence's own logger.
+ *
+ * Each capability announces itself with `on` as a field rather than only in a
+ * sentence, which is what the comments below have been asking for all along: a
+ * deployment that believes it is sponsoring transactions, or warning
+ * borrowers, and is not looks exactly like one whose upstream is down, and the
+ * two are fixed in different places. As a field, "which capabilities were off
+ * on this deploy" is a query.
+ */
+const boot = logger("boot");
 
 const config = readConfig();
 const port = Number(process.env.PORT ?? 8787);
@@ -59,7 +73,7 @@ const port = Number(process.env.PORT ?? 8787);
  * traffic, which is the right outcome: the old code and the old schema agree.
  */
 await applyMigrations(config.databaseUrl);
-console.log("migrations: up to date");
+boot.info("migrations up to date");
 
 /*
  * Whether anything is watching, said out loud.
@@ -72,10 +86,9 @@ console.log("migrations: up to date");
  * than deciding one.
  */
 const telemetry = telemetryEndpoint();
-console.log(
-  telemetry === null
-    ? "telemetry: off (OTEL_EXPORTER_OTLP_ENDPOINT unset)"
-    : `telemetry: on, exporting to ${telemetry}`,
+boot.info(
+  { on: telemetry !== null, ...(telemetry === null ? {} : { endpoint: telemetry }) },
+  telemetry === null ? "telemetry off (OTEL_EXPORTER_OTLP_ENDPOINT unset)" : "telemetry on",
 );
 
 await syncConfiguredCatalog(config);
@@ -92,16 +105,23 @@ const relay =
   config.relayerSecretKey === undefined
     ? undefined
     : { signer: await keypairRelaySigner(config.relayerSecretKey), builds: inMemoryBuilds() };
-console.log(
+boot.info(
+  /* `payer` is our own hot wallet, not a user's, and naming it is the point:
+     a relayer nobody funded looks exactly like one that is switched off. */
+  { on: relay !== undefined, ...(relay === undefined ? {} : { payer: relay.signer.address }) },
   relay === undefined
-    ? "sponsorship: off (RELAYER_SECRET_KEY unset); buyers pay their own network costs"
-    : `sponsorship: on, paying from ${relay.signer.address}`,
+    ? "sponsorship off (RELAYER_SECRET_KEY unset); buyers pay their own network costs"
+    : "sponsorship on",
 );
 // Which Jupiter tier the rate limits in the logs below belong to.
-console.log(
+boot.info(
+  {
+    keys: config.jupiterApiKeys.length,
+    host: config.jupiterApiKeys.length === 0 ? "lite-api.jup.ag" : "api.jup.ag",
+  },
   config.jupiterApiKeys.length === 0
-    ? "jupiter: keyless (JUPITER_API_KEYS unset); lite-api.jup.ag free tier"
-    : `jupiter: ${config.jupiterApiKeys.length} key${config.jupiterApiKeys.length === 1 ? "" : "s"}, rotated per request; api.jup.ag`,
+    ? "jupiter keyless (JUPITER_API_KEYS unset); free tier"
+    : "jupiter keys rotated per request",
 );
 
 /*
@@ -110,10 +130,11 @@ console.log(
  * believes it reads Pyth and does not would refuse orders all weekend without
  * anything saying why.
  */
-console.log(
+boot.info(
+  { pyth: config.pythApiKey !== undefined },
   config.pythApiKey === undefined
-    ? "reference: issuer feed only (PYTH_API_KEY unset); it stops advancing at the closing bell"
-    : "reference: Pyth first, issuer feed as fallback",
+    ? "reference feed is the issuer's only (PYTH_API_KEY unset); it stops advancing at the closing bell"
+    : "reference feed is Pyth, with the issuer's as fallback",
 );
 
 /*
@@ -125,10 +146,11 @@ const notifier =
   config.resendApiKey === undefined
     ? loggingNotifier()
     : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom });
-console.log(
+boot.info(
+  { emailed: config.resendApiKey !== undefined },
   config.resendApiKey === undefined
-    ? "loan alerts: in-app only (RESEND_API_KEY unset); nothing is emailed"
-    : `loan alerts: emailed from ${config.notifyFrom}`,
+    ? "loan alerts in-app only (RESEND_API_KEY unset); nothing is emailed"
+    : "loan alerts emailed",
 );
 
 /*
@@ -145,7 +167,8 @@ console.log(
  */
 const fund =
   config.relayApiKey === undefined
-    ? (console.log("funding: off (RELAY_API_KEY unset); add cash from another chain is hidden"), undefined)
+    ? (boot.info({ on: false }, "funding off (RELAY_API_KEY unset); add cash from another chain is hidden"),
+      undefined)
     : {
         relay: createRelayClient({ apiKey: config.relayApiKey }),
         store: createFundingStore(auth.db),
@@ -153,7 +176,7 @@ const fund =
         webhookSecret: config.relayApiKey,
       };
 if (fund !== undefined) {
-  console.log(`funding: on, minimum $${config.fundMinimumUsd}, refunds to the sending wallet`);
+  boot.info({ on: true, minimumUsd: config.fundMinimumUsd }, "funding on, refunds to the sending wallet");
 }
 
 const read = buildReadDeps(auth.db, deps, config, relay, fund);
@@ -337,5 +360,5 @@ every("loan-watch", 5 * 60 * 1000, async () => {
 });
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
-  console.log(`mercury api listening on :${info.port}`);
+  boot.info({ port: info.port }, "mercury api listening");
 });

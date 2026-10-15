@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Tracer } from "@opentelemetry/api";
+import { pino } from "pino";
 import { every, type EveryDeps } from "./every.js";
 
 /**
@@ -18,12 +19,13 @@ const harness = () => {
       pending.push(fn);
       return { unref: () => undefined } as unknown as NodeJS.Timeout;
     }) as unknown as typeof setTimeout,
-    log: {
-      log: (...a: unknown[]) => lines.push(a.join(" ")),
-      error: (...a: unknown[]) => lines.push(a.join(" ")),
-      warn: () => undefined,
-      info: () => undefined,
-    } as unknown as Console,
+    /* A real pino writing to an array, rather than a hand-made double: the
+       assertions are about the fields it emits, and a double would only
+       assert our own belief about pino back to us. */
+    log: pino(
+      { level: "debug", base: null, formatters: { level: (label) => ({ level: label }) } },
+      { write: (line: string) => void lines.push(line) },
+    ),
   };
 
   return {
@@ -110,7 +112,14 @@ describe("every", () => {
 
     every("stocks", 1000, async () => "41 instruments, 118 tokens", h.deps);
 
-    await vi.waitFor(() => expect(h.lines).toContain("stocks: 41 instruments, 118 tokens"));
+    await vi.waitFor(() => expect(h.lines).toHaveLength(1));
+    /* The note is the message and the job is a field, so one job's history is
+       a filter rather than a grep for a prefix. */
+    expect(JSON.parse(h.lines[0]!)).toMatchObject({
+      level: "info",
+      job: "stocks",
+      msg: "41 instruments, 118 tokens",
+    });
   });
 
   it("keeps the schedule after a failure, because an upstream being down is not a reason to stop", async () => {
@@ -121,7 +130,9 @@ describe("every", () => {
 
     every("prices", 1000, run, h.deps);
 
-    await vi.waitFor(() => expect(h.lines.some((l) => l.includes("prices failed"))).toBe(true));
+    await vi.waitFor(() =>
+      expect(h.lines.some((l) => l.includes('"job":"prices"') && l.includes("job failed"))).toBe(true),
+    );
     await h.tick();
     await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
   });
@@ -209,13 +220,12 @@ describe("every", () => {
     expect(spans[0]?.status).toMatchObject({ message: expect.stringContaining("deadlock") });
   });
 
-  it("logs the failure the way it always did, so nothing anybody greps for changed", async () => {
-    /* The error is handed to the console untouched, exactly as the inline
-       helper in index.ts did. Turning it into one line is `log.ts`'s job, done
-       once at the console for every call site in the service and tested there
-       — which is why this harness, which has no `oneLineErrors` applied, sees
-       the Error's own `toString`. What matters here is the prefix: the job's
-       name and the word "failed" are what somebody greps for. */
+  it("names the job and the failure as fields", async () => {
+    /* The job's name is a field and the failure is `err`, which pino's
+       serializer reduces to one line. The harness has no serializer
+       configured, so it sees pino's own default for an Error — what is
+       asserted here is that the job and the message arrive, which is what
+       anybody queries on. */
     const h = harness();
 
     every(
@@ -227,7 +237,12 @@ describe("every", () => {
       h.deps,
     );
 
-    await vi.waitFor(() => expect(h.lines[0]).toContain("position-sync failed:"));
+    await vi.waitFor(() => expect(h.lines).toHaveLength(1));
+    expect(JSON.parse(h.lines[0]!)).toMatchObject({
+      level: "error",
+      job: "position-sync",
+      msg: "job failed",
+    });
     expect(h.lines[0]).toContain("rpc timeout");
   });
 

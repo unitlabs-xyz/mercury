@@ -28,13 +28,16 @@
  * pass.
  */
 import { SpanStatusCode, trace, type Tracer } from "@opentelemetry/api";
+/* pino's `err` serializer uses this too; the span needs it directly, because a
+   span attribute takes a string and not a serializer. */
 import { errorLine } from "../log.js";
+import { logger, type Log } from "../log/index.js";
 import { jobMetrics } from "../telemetry/metrics.js";
 
 export interface EveryDeps {
   readonly now?: () => number;
   readonly setTimeout?: typeof setTimeout;
-  readonly log?: Console;
+  readonly log?: Log;
   readonly tracer?: Tracer;
 }
 
@@ -49,7 +52,7 @@ export type JobRun = () => Promise<string | null>;
 export const every = (name: string, ms: number, run: JobRun, deps: EveryDeps = {}): void => {
   const now = deps.now ?? (() => Date.now());
   const schedule = deps.setTimeout ?? setTimeout;
-  const log = deps.log ?? console;
+  const log = deps.log ?? logger("jobs");
   const tracer = deps.tracer ?? trace.getTracer("mercury-api");
 
   const tick = async (): Promise<void> => {
@@ -61,11 +64,12 @@ export const every = (name: string, ms: number, run: JobRun, deps: EveryDeps = {
         /* So an idle job and a stuck one are different shapes in a trace list,
            rather than both being "a pass that said nothing". */
         span.setAttribute("mercury.job.quiet", note === null);
-        if (note !== null) log.log(`${name}: ${note}`);
+        /* The job's name as a field, so one job's history is a filter rather
+           than a grep for a prefix. */
+        if (note !== null) log.info({ job: name, ms: now() - started }, note);
         jobMetrics().runs.add(1, { job: name, outcome: "ok" });
       } catch (error: unknown) {
-        /* The same line this wrote before, unchanged. */
-        log.error(`${name} failed:`, error);
+        log.error({ job: name, err: error, ms: now() - started }, "job failed");
         span.recordException(errorLine(error));
         span.setStatus({ code: SpanStatusCode.ERROR, message: errorLine(error) });
         jobMetrics().runs.add(1, { job: name, outcome: "failed" });
