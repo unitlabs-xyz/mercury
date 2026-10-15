@@ -83,17 +83,27 @@ export const seriesByGroup = <T>(
   days: readonly string[];
   groups: readonly { name: string; values: readonly number[]; total: number }[];
 } => {
+  /*
+   * One pass and two maps, rather than a filter per group per day. At the
+   * API's 366-day cap and its 2,000-row limit, ten chains would have been
+   * seven million string comparisons on the main thread for a panel nobody
+   * is waiting on.
+   */
   const days = [...new Set(rows.map(day))].sort();
-  const names = [...new Set(rows.map(group))];
+  const column = new Map(days.map((d, i) => [d, i]));
+  const byGroup = new Map<string, number[]>();
 
-  const groups = names
-    .map((name) => {
-      const own = rows.filter((row) => group(row) === name);
-      const values = days.map((d) =>
-        own.filter((row) => day(row) === d).reduce((sum, row) => sum + value(row), 0),
-      );
-      return { name, values, total: values.reduce((a, b) => a + b, 0) };
-    })
+  for (const row of rows) {
+    const name = group(row);
+    const at = column.get(day(row));
+    if (at === undefined) continue;
+    const values = byGroup.get(name) ?? Array.from({ length: days.length }, () => 0);
+    values[at] = values[at]! + value(row);
+    byGroup.set(name, values);
+  }
+
+  const groups = [...byGroup]
+    .map(([name, values]) => ({ name, values, total: values.reduce((a, b) => a + b, 0) }))
     .sort((a, b) => b.total - a.total);
 
   return { days, groups };
