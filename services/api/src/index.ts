@@ -61,8 +61,14 @@ const relay =
     : { signer: await keypairRelaySigner(config.relayerSecretKey), builds: inMemoryBuilds() };
 console.log(
   relay === undefined
-    ? "sponsorship: off (RELAYER_SECRET_KEY unset); buyers pay their own network costs"
+    ? "sponsorship: off (RELAYER_SECRET_KEY unset); stock trades are refused, sends pay their own network costs"
     : `sponsorship: on, paying from ${relay.signer.address}`,
+);
+// The rate every trade turns on, and where the money goes, so neither has to be inferred.
+console.log(
+  relay === undefined
+    ? `trading fee: ${config.tradingFeeBps} bps, but no trades without a relayer`
+    : `trading fee: ${config.tradingFeeBps} bps, collected in ${relay.signer.address}'s USDC account`,
 );
 // Which Jupiter tier the rate limits in the logs below belong to.
 console.log(

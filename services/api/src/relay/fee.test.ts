@@ -5,6 +5,7 @@ import {
   TOKEN_ACCOUNT_RENT_LAMPORTS,
   investable,
   networkFee,
+  tradingFee,
   transferFee,
 } from "./fee.js";
 
@@ -99,5 +100,29 @@ describe("transferFee", () => {
     // Rent at this SOL price is $0.2039…, and a charge quoted a hair short is
     // a transfer that fails at the relayer for the price of a rounding error.
     expect(transferFee({ needsTokenAccount: true, solPriceUsd: D("100") }).usdc.toString()).toBe("0.21");
+  });
+});
+
+describe("tradingFee", () => {
+  /* The deck's own example: $500 of Nvidia at 0.5% is $2.50. */
+  it("is the rate's share of what the trade is worth", () => {
+    expect(tradingFee(D(500), 50).toString()).toBe("2.5");
+  });
+
+  /*
+   * Down, never up. The rate is what the ticket promises, so a fraction of a
+   * cent is ours to give away: $333 at 0.5% is $1.665, and $1.67 would be more
+   * than half a percent.
+   */
+  it("rounds down to the cent, so it never comes to more than the rate", () => {
+    expect(tradingFee(D(333), 50).toString()).toBe("1.66");
+  });
+
+  it("is nothing on a trade too small for a whole cent of it", () => {
+    expect(tradingFee(D("1.99"), 50).toString()).toBe("0");
+  });
+
+  it("is nothing when the rate is zero", () => {
+    expect(tradingFee(D(500), 0).toString()).toBe("0");
   });
 });

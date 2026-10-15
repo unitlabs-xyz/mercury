@@ -75,6 +75,51 @@ export const transferFee = (input: FeeInput): Fee =>
     : { usdc: D(0), lamports: 0 };
 
 /**
+ * Mercury's own fee on a trade: `bps` of what it is worth, in USDC.
+ *
+ * The worth is the dollars the buyer pays on a buy and the dollars the shares
+ * fetch on a sell — the figure on the ticket either way, so "0.5%" means 0.5%
+ * of a number the person can see.
+ *
+ * Rounded down to the cent, the opposite way from the network cost. That one
+ * rounds up because SOL moves under it and a hair short fails the trade; this
+ * one is a rate we state, and a rounded-up cent would charge more than it says.
+ */
+export const tradingFee = (worthUsd: Decimal, bps: number): Decimal =>
+  worthUsd.mul(bps).div(10_000).div(CENT).floor().mul(CENT);
+
+/**
+ * Everything a trade's one USDC transfer carries, and what each part is for.
+ *
+ * One transfer rather than two, both to the relayer's USDC account. A second
+ * transfer would name a second destination, and a swap route already needs
+ * lookup tables to fit in 1232 bytes; a bigger amount costs no bytes at all.
+ * The parts are kept apart here so the ticket can show them apart and the
+ * books can tell revenue from repaid gas.
+ */
+export interface TradeCharge {
+  /** The whole transfer: what comes out of the amount on a buy, or the proceeds on a sell. */
+  readonly usdc: Decimal;
+  readonly lamports: number;
+  /** What repays the relayer for the network. */
+  readonly network: Decimal;
+  /** Mercury's fee, at `mercuryBps`. */
+  readonly mercury: Decimal;
+  readonly mercuryBps: number;
+}
+
+export const tradeCharge = (network: Fee, worthUsd: Decimal, bps: number): TradeCharge => {
+  const mercury = tradingFee(worthUsd, bps);
+  return {
+    usdc: network.usdc.add(mercury),
+    lamports: network.lamports,
+    network: network.usdc,
+    mercury,
+    mercuryBps: bps,
+  };
+};
+
+/**
  * What the buy is actually worth once the network has been paid.
  *
  * The fee comes out of the amount rather than being added to it. A buyer

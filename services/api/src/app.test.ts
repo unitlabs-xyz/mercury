@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { getBase64Encoder, getCompiledTransactionMessageDecoder, getTransactionDecoder } from "@solana/kit";
 import { D } from "@mercury/core";
 import { USDC_MINT, type TokenBalance } from "@mercury/chain";
 import { createApp } from "./app.js";
@@ -15,6 +18,51 @@ const XSC9 = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 /** A dollar a share, so the dollars and the shares in a test are told apart by size. */
 const FAIR = 100;
 
+const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const JUPITER = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
+
+/*
+ * The one RPC call a build makes that nothing else stands in for: a recent
+ * blockhash. Answered locally, so the transaction is really composed and the
+ * charge inside it can be read back.
+ */
+let rpcUrl = "";
+const rpc = createServer((req, res) => {
+  let body = "";
+  req.on("data", (chunk: Buffer) => (body += chunk.toString()));
+  req.on("end", () => {
+    const { id } = JSON.parse(body) as { id: unknown };
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          context: { slot: 1 },
+          value: { blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 100 },
+        },
+      }),
+    );
+  });
+});
+beforeAll(async () => {
+  await new Promise<void>((resolve) => rpc.listen(0, "127.0.0.1", resolve));
+  rpcUrl = `http://127.0.0.1:${(rpc.address() as AddressInfo).port}`;
+});
+afterAll(() => new Promise<void>((resolve) => rpc.close(() => resolve())));
+
+/** The USDC the built transaction moves to the relayer, in base units: the SPL transfer's amount. */
+const chargedIn = (wire: string): bigint => {
+  const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
+  const m = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
+  const transfer = m.instructions.find((i) => m.staticAccounts[i.programAddressIndex] === TOKEN_PROGRAM);
+  const data = transfer?.data ?? new Uint8Array();
+  expect(data[0]).toBe(3);
+  let n = 0n;
+  for (let i = data.length - 1; i >= 1; i--) n = (n << 8n) | BigInt(data[i] ?? 0);
+  return n;
+};
+
 const held = (mint: string, whole: string, decimals: number): TokenBalance => ({
   mint,
   rawAmount: BigInt(D(whole).mul(D(10).pow(decimals)).toFixed(0)),
@@ -28,9 +76,13 @@ const held = (mint: string, whole: string, decimals: number): TokenBalance => ({
  * was priced, are the two things that differ by side and the two that nothing
  * below the route can observe.
  */
-const harness = async (over: { balances?: TokenBalance[]; sponsored?: boolean } = {}) => {
+const harness = async (
+  over: { balances?: TokenBalance[]; sponsored?: boolean; tradingFeeBps?: number } = {},
+) => {
   const db = await testDb();
   const priced: string[] = [];
+  /* What each quote was for, in the units the side trades: dollars on a buy. */
+  const amounts: string[] = [];
 
   const market = {
     registry: {
@@ -53,6 +105,7 @@ const harness = async (over: { balances?: TokenBalance[]; sponsored?: boolean } 
     quotes: {
       quote: async (req: { side: string; amount: { toFixed(): string } }) => {
         priced.push(req.side);
+        amounts.push(req.amount.toFixed());
         const amount = D(req.amount.toFixed());
         return {
           inAmount: amount,
@@ -65,6 +118,14 @@ const harness = async (over: { balances?: TokenBalance[]; sponsored?: boolean } 
           raw: {},
         };
       },
+      /* A swap with nothing in it: the charge beside it is what these tests read. */
+      buildSwapInstructions: async () => ({
+        computeBudget: [],
+        setup: [],
+        swap: { programId: JUPITER, accounts: [], data: "" },
+        cleanup: null,
+        lookupTables: [],
+      }),
     },
     chain: {
       tokenBalances: async (_owner: string) => over.balances ?? [held(XSC9, "10", 8)],
@@ -89,9 +150,10 @@ const harness = async (over: { balances?: TokenBalance[]; sponsored?: boolean } 
   } as unknown as Deps;
 
   const read = {
+    tradingFeeBps: over.tradingFeeBps ?? 50,
     orders: memoryOrderStore(),
     send: {
-      rpcUrl: "http://localhost:8899",
+      rpcUrl,
       ...(over.sponsored === false
         ? {}
         : {
@@ -128,7 +190,7 @@ const harness = async (over: { balances?: TokenBalance[]; sponsored?: boolean } 
     app.request(path, { method: "POST", headers, body: JSON.stringify(body) });
   const get = (path: string) => app.request(path, { headers });
 
-  return { post, get, priced };
+  return { post, get, priced, amounts };
 };
 
 describe("POST /v1/quote, selling", () => {
@@ -157,15 +219,30 @@ describe("POST /v1/quote, selling", () => {
   it("quotes the fee against USDC, which the seller may have no account for", async () => {
     const { post } = await harness();
     const res = await post("/v1/quote", { ticker: "NVDA", side: "sell", amount: "500" });
-    const body = (await res.json()) as { fee: { usdc: string } };
-    expect(body.fee.usdc).toBe("0.25");
+    const body = (await res.json()) as { fee: { network: string } };
+    expect(body.fee.network).toBe("0.25");
   });
 
   it("charges only the signature once that USDC account exists", async () => {
     const { post } = await harness({ balances: [held(XSC9, "10", 8), held(USDC_MINT, "1", 6)] });
     const res = await post("/v1/quote", { ticker: "NVDA", side: "sell", amount: "500" });
-    const body = (await res.json()) as { fee: { usdc: string } };
-    expect(body.fee.usdc).toBe("0.01");
+    const body = (await res.json()) as { fee: { network: string } };
+    expect(body.fee.network).toBe("0.01");
+  });
+
+  /*
+   * On what the shares fetch, not on what lands: five shares at $100 is $500
+   * gross, so 0.5% of it is $2.50, and the $0.25 network cost comes off too.
+   */
+  it("charges Mercury's fee on what the shares fetch, and takes it from the proceeds", async () => {
+    const { post } = await harness();
+    const res = await post("/v1/quote", { ticker: "NVDA", side: "sell", amount: "500" });
+    const body = (await res.json()) as {
+      proceeds: string;
+      fee: { usdc: string; network: string; mercury: string; mercuryBps: number };
+    };
+    expect(body.fee).toMatchObject({ network: "0.25", mercury: "2.5", mercuryBps: 50, usdc: "2.75" });
+    expect(body.proceeds).toBe("497.25");
   });
 
   it("prices once, where a buy prices twice", async () => {
@@ -196,6 +273,36 @@ describe("POST /v1/quote, buying", () => {
     const { post, priced } = await harness();
     await post("/v1/quote", { ticker: "NVDA", side: "buy", amount: "500" });
     expect(priced).toEqual(["buy", "buy"]);
+  });
+
+  /*
+   * The deck's confirm screen, to the cent: $500 of Nvidia, $2.50 to Mercury,
+   * $0.01 to the network — this wallet already holds the stock, so no rent —
+   * and $497.49 of it buys shares.
+   */
+  it("takes Mercury's fee out of the amount, beside the network cost", async () => {
+    const { post } = await harness();
+    const res = await post("/v1/quote", { ticker: "NVDA", side: "buy", amount: "500" });
+    const body = (await res.json()) as {
+      investable: string;
+      fee: { usdc: string; network: string; mercury: string; mercuryBps: number };
+    };
+    expect(body.fee).toMatchObject({ network: "0.01", mercury: "2.5", mercuryBps: 50, usdc: "2.51" });
+    expect(body.investable).toBe("497.49");
+  });
+
+  /* Quoting the gross would put a share count on screen that the fill cannot deliver. */
+  it("quotes the swap for what is left after both fees", async () => {
+    const { post, amounts } = await harness();
+    await post("/v1/quote", { ticker: "NVDA", side: "buy", amount: "500" });
+    expect(amounts.at(-1)).toBe("497.49");
+  });
+
+  it("charges the rate the deployment is configured with", async () => {
+    const { post } = await harness({ tradingFeeBps: 35 });
+    const res = await post("/v1/quote", { ticker: "NVDA", side: "buy", amount: "500" });
+    const body = (await res.json()) as { fee: { mercury: string; mercuryBps: number } };
+    expect(body.fee).toMatchObject({ mercury: "1.75", mercuryBps: 35 });
   });
 });
 
@@ -238,5 +345,70 @@ describe("GET /f/:slug", () => {
     const res = await get("/f/3kQ9xZ1bTq7w");
     expect(res.status).toBe(301);
     expect(res.headers.get("location")).toBe("https://trymercury.xyz");
+  });
+});
+
+describe("POST /v1/orders/:id/execute", () => {
+  const execute = async (h: Awaited<ReturnType<typeof harness>>, body: unknown) => {
+    const { orderId } = (await (await h.post("/v1/orders", body)).json()) as { orderId: string };
+    return h.post(`/v1/orders/${orderId}/execute`, {});
+  };
+
+  /*
+   * Without a relayer there is no transfer to carry Mercury's fee, so the
+   * trade would fill for nothing. Decided on 15 October 2026: refuse instead.
+   */
+  it("refuses to build a trade when there is no relayer to carry the fee", async () => {
+    const h = await harness({ sponsored: false });
+    const res = await execute(h, { ticker: "NVDA", side: "buy", amount: "500" });
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("upstream_unavailable");
+  });
+
+  /* $2.50 to Mercury and $0.01 to the network, one transfer: 2,510,000 USDC base units. */
+  it("charges a buyer both fees in the one transfer it builds", async () => {
+    const h = await harness();
+    const res = await execute(h, { ticker: "NVDA", side: "buy", amount: "500" });
+    expect(res.status).toBe(200);
+    const { transactions } = (await res.json()) as { transactions: string[] };
+    expect(chargedIn(transactions[0]!)).toBe(2_510_000n);
+  });
+
+  /* The relayer's account mixes revenue with repaid gas; the order row is what tells them apart. */
+  it("records Mercury's fee on the order it builds", async () => {
+    const h = await harness();
+    const { orderId } = (await (
+      await h.post("/v1/orders", { ticker: "NVDA", side: "buy", amount: "500" })
+    ).json()) as { orderId: string };
+    await h.post(`/v1/orders/${orderId}/execute`, {});
+    const order = (await (await h.get(`/v1/orders/${orderId}`)).json()) as { mercuryFeeUsd: string | null };
+    expect(order.mercuryFeeUsd).toBe("2.5");
+  });
+
+  it("swaps what is left of a buy after both fees", async () => {
+    const h = await harness();
+    await execute(h, { ticker: "NVDA", side: "buy", amount: "500" });
+    expect(h.amounts.at(-1)).toBe("497.49");
+  });
+
+  /* $500 of shares sold: $2.50 to Mercury, and $0.25 because this seller has no USDC account yet. */
+  it("charges a seller both fees out of the proceeds", async () => {
+    const h = await harness();
+    const res = await execute(h, { ticker: "NVDA", side: "sell", amount: "500" });
+    expect(res.status).toBe(200);
+    const { transactions } = (await res.json()) as { transactions: string[] };
+    expect(chargedIn(transactions[0]!)).toBe(2_750_000n);
+  });
+
+  /*
+   * Forty cents of shares at a 50% rate owes $0.20 to Mercury and $0.25 to the
+   * network. The network cost alone fits; both do not, and a transfer of
+   * dollars the swap never produced fails and takes the swap down with it.
+   */
+  it("refuses a sell whose proceeds cannot cover both fees", async () => {
+    const h = await harness({ tradingFeeBps: 5_000 });
+    const res = await execute(h, { ticker: "NVDA", side: "sell", amount: "0.40" });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: { message: string } }).error.message).toContain("$0.45");
   });
 });

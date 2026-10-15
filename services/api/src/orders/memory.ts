@@ -15,6 +15,7 @@ export const memoryOrderStore = (): OrderStore => {
         status: order.status,
         usdAmount: order.usdAmount,
         max: order.max ?? false,
+        mercuryFeeUsd: null,
         createdAt: new Date().toISOString(),
       };
       rows.set(stored.id, { order, stored });
@@ -34,7 +35,12 @@ export const memoryOrderStore = (): OrderStore => {
       if (row === undefined || row.order.userId !== userId) return;
       rows.set(id, {
         order: { ...row.order, ...next },
-        stored: { ...row.stored, decision: next.decision, status: next.status },
+        stored: {
+          ...row.stored,
+          decision: next.decision,
+          status: next.status,
+          mercuryFeeUsd: next.mercuryFeeUsd ?? null,
+        },
       });
     },
   };

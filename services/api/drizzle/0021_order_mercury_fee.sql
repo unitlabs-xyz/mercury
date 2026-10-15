@@ -1,0 +1,1 @@
+ALTER TABLE "order" ADD COLUMN "mercury_fee_usd" numeric(38, 18);
