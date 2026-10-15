@@ -217,6 +217,14 @@ export interface ChainReader {
    * do it leaves it out and callers fall back to `mintConfig`.
    */
   mintConfigs?(mints: readonly string[]): Promise<ReadonlyMap<string, MintConfig>>;
+  /**
+   * Optional. Lamports an account of `bytes` has to hold to stay open, as the
+   * node says today.
+   *
+   * Optional for the same reason as `mintConfigs`: a reader that cannot ask
+   * leaves it out, and callers fall back to a rate they measured.
+   */
+  rentExemption?(bytes: number): Promise<bigint>;
 }
 
 /** One signature from an address's history. */
