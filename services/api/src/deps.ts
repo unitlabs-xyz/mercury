@@ -46,6 +46,14 @@ import type { LendingSource } from "./lending/ports.js";
 import type { InstrumentDeps } from "./routes/instruments.js";
 import type { MoneyDeps } from "./routes/money.js";
 import type { FundDeps } from "./routes/fund.js";
+import type { AdminDeps } from "./routes/admin.js";
+import { parseAdmins } from "./admin/allowlist.js";
+import { freshness } from "./admin/freshness.js";
+import { withTimeout } from "./admin/timeout.js";
+import { overview } from "./admin/overview.js";
+import { orderStats } from "./admin/orders.js";
+import { fundingStats } from "./admin/funding.js";
+import { basketStats } from "./admin/baskets.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import type { FeedbackDeps } from "./routes/feedback.js";
@@ -167,6 +175,14 @@ export interface Config {
    * rather than on dislocation.
    */
   readonly pythApiKey?: string;
+  /**
+   * Optional. Privy DIDs allowed to read the admin surface, comma-separated.
+   *
+   * Unset means the admin routes are not mounted at all, which is why the web
+   * app never shows the entry — the same shape as `relayApiKey` and the
+   * funding method.
+   */
+  readonly adminPrivyUserIds?: readonly string[];
 }
 
 /**
@@ -239,6 +255,7 @@ const evmAddress = (env: NodeJS.ProcessEnv, key: string): string | undefined => 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
   const depositFeeRecipient = evmAddress(env, "DEPOSIT_FEE_RECIPIENT");
+  const admins = parseAdmins(env["ADMIN_PRIVY_USER_IDS"]);
   return {
     databaseUrl: required(env, "DATABASE_URL"),
     privyAppId: required(env, "PRIVY_APP_ID"),
@@ -262,6 +279,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     depositFeeBps: basisPoints(env, "DEPOSIT_FEE_BPS", DEFAULT_DEPOSIT_FEE_BPS),
     ...(depositFeeRecipient === undefined ? {} : { depositFeeRecipient }),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
+    ...(admins.length > 0 ? { adminPrivyUserIds: admins } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
   };
@@ -406,6 +424,14 @@ export interface ReadDeps {
    * is unmet, and the same way `routes/send.ts` degrades without a relayer.
    */
   readonly fund?: FundDeps & { readonly webhookSecret: string };
+  /**
+   * The admin dashboard, or nothing.
+   *
+   * Absent when ADMIN_PRIVY_USER_IDS is unset, so the routes are not mounted,
+   * every `/v1/admin/*` call 404s, and the web app shows no entry for them.
+   * Queries rather than a `Db`: see `routes/admin.ts`.
+   */
+  readonly admin?: AdminDeps;
 }
 
 /**
@@ -437,6 +463,7 @@ export function buildReadDeps(
     | "notifyFrom"
     | "feedbackTo"
     | "tradingFeeBps"
+    | "adminPrivyUserIds"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
@@ -493,6 +520,26 @@ export function buildReadDeps(
       settle: (input) => settleOrder(db, input),
     },
     ...(fund === undefined ? {} : { fund }),
+    /* Present only when the allowlist is configured, as `fund` is present only
+       when Relay is. The queries are bound to `db` here so the route module
+       never sees a handle it could write through. */
+    ...(config.adminPrivyUserIds === undefined
+      ? {}
+      : {
+          admin: {
+            admins: config.adminPrivyUserIds,
+            /* No timeout on health: three max() reads against indexes, and the
+               one route that has to answer when something else is wrong. */
+            health: () => freshness(db),
+            /* Each aggregate inside its own transaction with a statement
+               timeout — see admin/timeout.ts for why it cannot be middleware.
+               `withTimeout` hands the query a reader, never the handle. */
+            overview: (range) => withTimeout(db, (r) => overview(r, range)),
+            orders: (range) => withTimeout(db, (r) => orderStats(r, range)),
+            funding: (range) => withTimeout(db, (r) => fundingStats(r, range)),
+            baskets: (range) => withTimeout(db, (r) => basketStats(r, range)),
+          },
+        }),
     borrow: {
       lending: deps.lending,
       chain: deps.chain,

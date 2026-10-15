@@ -29,6 +29,7 @@ import { feedbackRoutes } from "./routes/feedback.js";
 import { basketRoutes } from "./routes/basket.js";
 import { fundRoutes } from "./routes/fund.js";
 import { relayWebhookRoutes } from "./routes/relay-webhook.js";
+import { adminRoutes } from "./routes/admin.js";
 
 const fail = (code: ErrorCode | "not_implemented", message: string, details?: unknown) => ({
   error: { code, message, ...(details === undefined ? {} : { details }) },
@@ -200,6 +201,11 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   /* Absent when Relay or the treasury is not configured, so the routes 404 and
      the interface hides the method rather than offering one that cannot work. */
   if (read.fund) app.route("/", fundRoutes(read.fund));
+  /* Absent when ADMIN_PRIVY_USER_IDS is unset, so the routes 404 and the web
+     app never renders the entry — as with read.fund and the funding method.
+     Mounted below requireAuth: an admin is an ordinary session plus membership
+     of the allowlist, never a second credential. */
+  if (read.admin) app.route("/", adminRoutes(read.admin));
 
   app.get("/v1/market/status", async (c) => {
     const s = await market().sessions.current();

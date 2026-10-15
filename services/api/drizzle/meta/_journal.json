@@ -162,6 +162,13 @@
       "when": 1792046593081,
       "tag": "0022_funding_intent_mercury_fee",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792065604187,
+      "tag": "0023_admin_indexes",
+      "breakpoints": true
     }
   ]
 }
