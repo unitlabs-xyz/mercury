@@ -301,7 +301,7 @@ describe("POST /v1/money/send/quote", () => {
   it("charges the rent when the recipient has never held USDC", async () => {
     const res = await quote({});
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ feeUsd: "0.25", sponsored: true });
+    expect(await res.json()).toEqual({ feeUsd: "0.18", sponsored: true });
   });
 
   it("charges nothing when the recipient already holds USDC, which is the ordinary case", async () => {

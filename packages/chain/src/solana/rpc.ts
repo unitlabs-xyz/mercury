@@ -161,6 +161,9 @@ function tokenTransfersIn(
 /** `getMultipleAccounts` takes at most a hundred keys and refuses the call past that. */
 const ACCOUNTS_BATCH = 100;
 
+/** How long one size's rent is believed. See `rentExemption`. */
+const RENT_TTL_MS = 60 * 60_000;
+
 export interface SolanaRpcConfig {
   readonly rpcUrl: string;
   readonly fetch?: typeof fetch;
@@ -186,6 +189,7 @@ export class SolanaRpc implements ChainReader, ChainHistory {
    * reader above. See `batch.ts` for what that is worth and what it costs.
    */
   private readonly call: <T>(method: string, params: readonly unknown[]) => Promise<T>;
+  private readonly rents = new Map<number, { readonly at: number; readonly lamports: Promise<bigint> }>();
 
   constructor(config: SolanaRpcConfig) {
     this.now = config.now ?? Date.now;
@@ -274,6 +278,30 @@ export class SolanaRpc implements ChainReader, ChainHistory {
       });
     });
     return found;
+  }
+
+  /**
+   * What an account of `bytes` has to hold to stay open, from the node.
+   *
+   * Asked rather than written down, because the written-down figure went
+   * stale without anything noticing: mainnet charged 6,960 lamports a byte
+   * when the first constants were set, and 5,080 by October 2026. The rate
+   * only moves when a validator feature turns on, so each size's answer is
+   * kept for an hour. A quote asks on every keystroke, and following a cut an
+   * hour late costs a few cents for that hour. A failed answer is not kept.
+   */
+  rentExemption(bytes: number): Promise<bigint> {
+    const now = this.now();
+    const seen = this.rents.get(bytes);
+    if (seen !== undefined && now - seen.at < RENT_TTL_MS) return seen.lamports;
+    const lamports = this.call<number>("getMinimumBalanceForRentExemption", [bytes]).then(BigInt);
+    const entry = { at: now, lamports };
+    // Only this attempt's own entry: a newer one may have replaced it since.
+    lamports.catch(() => {
+      if (this.rents.get(bytes) === entry) this.rents.delete(bytes);
+    });
+    this.rents.set(bytes, entry);
+    return lamports;
   }
 
   /** One parse, so a mint read on its own and one read in a batch cannot differ. */

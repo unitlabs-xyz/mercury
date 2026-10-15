@@ -213,14 +213,14 @@ describe("POST /v1/quote, selling", () => {
   /*
    * The fee's own value is the tell, and the only one visible from outside.
    * These balances hold the stock and no USDC, so rent is owed on the USDC
-   * account and the charge is $0.25. Had the fee been quoted against the stock
+   * account and the charge is $0.18. Had the fee been quoted against the stock
    * — which is held — it would have come back $0.01, the signature alone.
    */
   it("quotes the fee against USDC, which the seller may have no account for", async () => {
     const { post } = await harness();
     const res = await post("/v1/quote", { ticker: "NVDA", side: "sell", amount: "500" });
     const body = (await res.json()) as { fee: { network: string } };
-    expect(body.fee.network).toBe("0.25");
+    expect(body.fee.network).toBe("0.18");
   });
 
   it("charges only the signature once that USDC account exists", async () => {
@@ -232,7 +232,7 @@ describe("POST /v1/quote, selling", () => {
 
   /*
    * On what the shares fetch, not on what lands: five shares at $100 is $500
-   * gross, so 0.5% of it is $2.50, and the $0.25 network cost comes off too.
+   * gross, so 0.5% of it is $2.50, and the $0.18 network cost comes off too.
    */
   it("charges Mercury's fee on what the shares fetch, and takes it from the proceeds", async () => {
     const { post } = await harness();
@@ -241,8 +241,8 @@ describe("POST /v1/quote, selling", () => {
       proceeds: string;
       fee: { usdc: string; network: string; mercury: string; mercuryBps: number };
     };
-    expect(body.fee).toMatchObject({ network: "0.25", mercury: "2.5", mercuryBps: 50, usdc: "2.75" });
-    expect(body.proceeds).toBe("497.25");
+    expect(body.fee).toMatchObject({ network: "0.18", mercury: "2.5", mercuryBps: 50, usdc: "2.68" });
+    expect(body.proceeds).toBe("497.32");
   });
 
   it("prices once, where a buy prices twice", async () => {
@@ -391,24 +391,24 @@ describe("POST /v1/orders/:id/execute", () => {
     expect(h.amounts.at(-1)).toBe("497.49");
   });
 
-  /* $500 of shares sold: $2.50 to Mercury, and $0.25 because this seller has no USDC account yet. */
+  /* $500 of shares sold: $2.50 to Mercury, and $0.18 because this seller has no USDC account yet. */
   it("charges a seller both fees out of the proceeds", async () => {
     const h = await harness();
     const res = await execute(h, { ticker: "NVDA", side: "sell", amount: "500" });
     expect(res.status).toBe(200);
     const { transactions } = (await res.json()) as { transactions: string[] };
-    expect(chargedIn(transactions[0]!)).toBe(2_750_000n);
+    expect(chargedIn(transactions[0]!)).toBe(2_680_000n);
   });
 
   /*
-   * Forty cents of shares at a 50% rate owes $0.20 to Mercury and $0.25 to the
+   * Thirty cents of shares at a 50% rate owes $0.15 to Mercury and $0.18 to the
    * network. The network cost alone fits; both do not, and a transfer of
    * dollars the swap never produced fails and takes the swap down with it.
    */
   it("refuses a sell whose proceeds cannot cover both fees", async () => {
     const h = await harness({ tradingFeeBps: 5_000 });
-    const res = await execute(h, { ticker: "NVDA", side: "sell", amount: "0.40" });
+    const res = await execute(h, { ticker: "NVDA", side: "sell", amount: "0.30" });
     expect(res.status).toBe(409);
-    expect(((await res.json()) as { error: { message: string } }).error.message).toContain("$0.45");
+    expect(((await res.json()) as { error: { message: string } }).error.message).toContain("$0.33");
   });
 });

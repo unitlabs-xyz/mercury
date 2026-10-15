@@ -454,3 +454,73 @@ describe("SolanaRpc.mintConfigs", () => {
     expect(batched.get(NVDAX_MINT)!.isPaused).toBe(alone!.isPaused);
   });
 });
+
+/**
+ * A node that charges `rate` lamports a byte, on top of Solana's 128 bytes of
+ * overhead, and keeps every size it was asked about. Told to, it refuses its
+ * first answer the way a node refuses a call: an error entry under HTTP 200.
+ */
+const rentNode = (rate: number, refuseFirst = false) => {
+  const asked: number[] = [];
+  let refusing = refuseFirst;
+  const doFetch = ((_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const sent: unknown = JSON.parse(String(init?.body));
+    const reqs = (Array.isArray(sent) ? sent : [sent]) as RpcRequest[];
+    const replies = reqs.map((r, i) => {
+      const bytes = r.params?.[0] as number;
+      asked.push(bytes);
+      if (refusing) {
+        refusing = false;
+        return { jsonrpc: "2.0", id: r.id ?? i, error: { code: -32005, message: "node is behind" } };
+      }
+      return { jsonrpc: "2.0", id: r.id ?? i, result: (128 + bytes) * rate };
+    });
+    return Promise.resolve(
+      new Response(JSON.stringify(Array.isArray(sent) ? replies : replies[0]), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  }) as typeof fetch;
+  return { doFetch, asked };
+};
+
+describe("SolanaRpc.rentExemption", () => {
+  /* Mainnet's rate on 15 October 2026, and the size of a USDC account. */
+  it("asks the node what an account of that size has to hold", async () => {
+    const node = rentNode(5_080);
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
+    expect(await rpc.rentExemption(165)).toBe(1_488_440n);
+    expect(node.asked).toEqual([165]);
+  });
+
+  /* A quote asks on every keystroke; the rate moves only when a validator feature does. */
+  it("keeps a size's answer for an hour", async () => {
+    const node = rentNode(5_080);
+    let now = 0;
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch, now: () => now });
+    await rpc.rentExemption(165);
+    now = 59 * 60_000;
+    await rpc.rentExemption(165);
+    expect(node.asked).toEqual([165]);
+    now = 61 * 60_000;
+    await rpc.rentExemption(165);
+    expect(node.asked).toEqual([165, 165]);
+  });
+
+  it("keeps each size apart", async () => {
+    const node = rentNode(5_080);
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
+    expect(await rpc.rentExemption(0)).toBe(650_240n);
+    expect(await rpc.rentExemption(179)).toBe(1_559_560n);
+    expect(node.asked).toEqual([0, 179]);
+  });
+
+  /* Kept, a refusal would stand in for the rate for an hour. */
+  it("does not keep a failed answer", async () => {
+    const node = rentNode(5_080, true);
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
+    await expect(rpc.rentExemption(165)).rejects.toThrow("node is behind");
+    expect(await rpc.rentExemption(165)).toBe(1_488_440n);
+    expect(node.asked).toEqual([165, 165]);
+  });
+});
