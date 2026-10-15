@@ -413,6 +413,12 @@ export const orders = pgTable(
   },
   (t) => [
     index("order_user_created_idx").on(t.userId, t.createdAt),
+    /* Time-first, for the admin aggregates. Every existing index on this table
+       leads with user_id, and a leading user_id cannot serve a query that does
+       not filter on it — so "every order last Tuesday, by status" would be a
+       sequential scan over a table live traffic is writing to. Serves
+       admin/orders.ts. */
+    index("order_created_status_idx").on(t.createdAt, t.status),
     // One signature, one order. This is what makes confirm idempotent in
     // subsystem 3, where a double submit would otherwise write a second lot.
     uniqueIndex("order_tx_signature_idx").on(t.txSignature),
@@ -444,6 +450,9 @@ export const activities = pgTable(
   },
   (t) => [
     index("activity_user_occurred_idx").on(t.userId, t.occurredAt, t.id),
+    /* Activity by kind over a range, for the admin aggregates. The two indexes
+       around it both lead with user_id. */
+    index("activity_occurred_kind_idx").on(t.occurredAt, t.kind),
     index("activity_basket_portfolio_idx").on(t.userId, t.basketPortfolioId, t.occurredAt),
     /**
      * The idempotency guarantee. A movement seen twice — a crash between
@@ -570,7 +579,14 @@ export const portfolioSnapshots = pgTable(
      */
     debtUsd: usd("debt_usd").notNull().default("0"),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.capturedAt] })],
+  (t) => [
+    primaryKey({ columns: [t.userId, t.capturedAt] }),
+    /* The latest reading per user, which the admin overview's assets-under-
+       management sum needs, and `freshness`'s max(captured_at). The primary key
+       leads with user_id, so neither can use it: a max over the whole table
+       would walk the entire PK index. */
+    index("portfolio_snapshot_captured_idx").on(t.capturedAt),
+  ],
 );
 export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
 
@@ -713,6 +729,9 @@ export const fundingIntents = pgTable(
   },
   (t) => [
     index("funding_intent_user_created_idx").on(t.userId, t.createdAt),
+    /* Deposits by chain and status over a range: the chain-trend question the
+       dashboard exists to answer. Serves admin/funding.ts. */
+    index("funding_intent_created_chain_idx").on(t.createdAt, t.originChainName, t.status),
     /**
      * The deposit's identity, and the webhook's idempotency.
      *
