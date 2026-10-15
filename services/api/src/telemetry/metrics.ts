@@ -30,10 +30,12 @@ export const jobMetrics = (): JobMetrics => {
   const meter = metrics.getMeter("mercury-api");
   cached = {
     runs: meter.createCounter("mercury_job_runs_total", {
-      description: "Background job passes, by job and outcome.",
+      /* Labelled `mercury_job`, never `job` — see jobs/every.ts. Prometheus
+         owns `job` and overwrites it with the scrape target's name. */
+      description: "Background job passes, by mercury_job and outcome.",
     }),
     duration: meter.createHistogram("mercury_job_duration_seconds", {
-      description: "How long a background job pass took.",
+      description: "How long a background job pass took, by mercury_job.",
       unit: "s",
     }),
   };

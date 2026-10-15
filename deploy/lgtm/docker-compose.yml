@@ -1,0 +1,63 @@
+# Grafana, Prometheus, Tempo and Loki in one container, for Coolify.
+#
+# Grafana classifies this image as being for "development, demo, and testing
+# environments" and points production users at Grafana Cloud. We run it anyway,
+# and docs/superpowers/specs/2026-10-15-observability-design.md says why: it is
+# one deployable rather than five, losing traces is survivable where losing a
+# portfolio snapshot is not, and the application only ever knows an OTLP
+# endpoint — so moving to a managed backend later is an environment variable
+# and no code at all.
+#
+# Coolify: Build Pack "Docker Compose", Base Directory "/deploy/lgtm".
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    restart: unless-stopped
+    environment:
+      # Five seconds is the default and is tight for flushing four stores to
+      # disk. A redeploy that cuts them off loses whatever had not been written.
+      LGTM_SHUTDOWN_TIMEOUT_SECONDS: "30"
+      # Metrics for a quarter. A metric that old is still the only way to see
+      # that something has been getting slower all along.
+      #
+      # Prometheus is the only one of the four whose retention is a flag.
+      # Loki's and Tempo's are config, in the two files mounted below —
+      # `LOKI_EXTRA_ARGS=--limits.retention-period=720h` looks right by
+      # analogy with this line and is not: Loki exits at startup with "flag
+      # provided but not defined" and the container dies with "Error: Loki
+      # exited before becoming ready".
+      PROMETHEUS_EXTRA_ARGS: "--storage.tsdb.retention.time=90d"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?set a password}"
+      # Coolify terminates TLS and proxies to Grafana's port; Grafana needs to
+      # know its own public URL or its links and OAuth redirects point at
+      # localhost.
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:?set the public url}"
+      # Nobody signs up for an internal telemetry stack.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      # Every component writes under /data. Without this volume a Coolify
+      # redeploy is a total history loss — and that is the one failure here
+      # that cannot be repaired after the fact.
+      - lgtm-data:/data
+      # Retention for Tempo and Loki, which neither takes as a flag.
+      - ./tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
+      - ./loki-config.yaml:/otel-lgtm/loki-config.yaml:ro
+      - ./grafana/provisioning/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      # Grafana only.
+      #
+      # The OTLP ports (4317 gRPC, 4318 HTTP) are deliberately NOT published.
+      # The API reaches them over the Docker network by service name, and an
+      # OTLP ingest open to the internet is an invitation to fill the disk —
+      # there is no authentication on it.
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  lgtm-data:

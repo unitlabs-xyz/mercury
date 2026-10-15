@@ -1,0 +1,78 @@
+# Tempo, as the image ships it, plus trace retention.
+#
+# Taken verbatim from grafana/otel-lgtm with `docker run --rm --entrypoint cat
+# grafana/otel-lgtm:latest /otel-lgtm/tempo-config.yaml` and edited, rather
+# than written by hand. The image's own config changes between versions and a
+# partial one does not start — if a Tempo upgrade breaks this, diff it against
+# the image's current file rather than guessing.
+#
+# The one addition is the `compactor` block at the end. Retention for
+# Prometheus and Loki is a CLI flag and goes in the compose file's
+# *_EXTRA_ARGS; Tempo's is config only, which is the whole reason this file is
+# mounted at all.
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9096
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "127.0.0.1:4417"
+        http:
+          endpoint: "127.0.0.1:4418"
+
+memberlist:
+  bind_addr: [127.0.0.1]
+  bind_port: 7947
+
+querier:
+  frontend_worker:
+    frontend_address: 127.0.0.1:9096
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /data/tempo/wal
+    local:
+      path: /data/tempo/blocks
+
+metrics_generator:
+  processor:
+    span_metrics:
+      dimensions:
+        - service_name
+        - operation
+        - status_code
+  storage:
+    path: /data/tempo/generator/wal
+    remote_write:
+      - url: http://127.0.0.1:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics]
+    # Two weeks of traces, stated rather than inherited.
+    #
+    # This matches Tempo 3.1's own default — `/status/config?mode=defaults`
+    # reports `block_retention: 336h0m0s` — so it changes nothing today. It is
+    # here so the number is a decision in this repository instead of whatever
+    # the next Tempo release happens to default to, and so the figure sits
+    # beside Prometheus's 90d and Loki's 720h where all three can be read
+    # together.
+    #
+    # Here and not in a top-level `compactor:` block, which is what Tempo 2.x
+    # took and what the guides still show. Tempo 3.1 refuses that outright —
+    # "field compactor not found in type app.Config" — and the container dies
+    # with "Error: Tempo exited before becoming ready". Retention is a
+    # per-tenant override now, and this is the default tenant.
+    #
+    # Traces are the bulkiest of the four stores and the least useful once
+    # cold: nobody debugs a request from a fortnight ago, and Prometheus keeps
+    # the shape of that period for a quarter.
+    compaction:
+      block_retention: 336h

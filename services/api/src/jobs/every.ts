@@ -22,6 +22,14 @@
  * so nothing anybody greps for has changed; the span and the metrics are
  * additional.
  *
+ * The metric label is `mercury_job` and not `job`, which matters and is not a
+ * style choice. `job` is Prometheus's own target label: the OTLP bridge writes
+ * it as the scrape job name, so a metric attribute called `job` is silently
+ * overwritten. Measured against a real Prometheus, every one of the eight jobs
+ * collapsed into `job="mercury-api"` and `mercury_job_runs_total` had two
+ * series — one per outcome — with no job names in it at all. The span
+ * attribute is still `mercury.job`; spans have no such collision.
+ *
  * Everything is injectable because none of it should need a real clock, a real
  * scheduler or a real collector to test. With telemetry off, `getTracer`
  * returns the API's no-op tracer and the only cost is one function call per
@@ -67,12 +75,12 @@ export const every = (name: string, ms: number, run: JobRun, deps: EveryDeps = {
         /* The job's name as a field, so one job's history is a filter rather
            than a grep for a prefix. */
         if (note !== null) log.info({ job: name, ms: now() - started }, note);
-        jobMetrics().runs.add(1, { job: name, outcome: "ok" });
+        jobMetrics().runs.add(1, { mercury_job: name, outcome: "ok" });
       } catch (error: unknown) {
         log.error({ job: name, err: error, ms: now() - started }, "job failed");
         span.recordException(errorLine(error));
         span.setStatus({ code: SpanStatusCode.ERROR, message: errorLine(error) });
-        jobMetrics().runs.add(1, { job: name, outcome: "failed" });
+        jobMetrics().runs.add(1, { mercury_job: name, outcome: "failed" });
       } finally {
         /*
          * In `finally`, because a span left open is a trace that never
@@ -81,7 +89,7 @@ export const every = (name: string, ms: number, run: JobRun, deps: EveryDeps = {
          */
         const elapsed = now() - started;
         span.setAttribute("mercury.job.duration_ms", elapsed);
-        jobMetrics().duration.record(elapsed / 1000, { job: name });
+        jobMetrics().duration.record(elapsed / 1000, { mercury_job: name });
         span.end();
       }
     });

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import type { Tracer } from "@opentelemetry/api";
 import { pino } from "pino";
@@ -161,6 +163,18 @@ describe("every", () => {
     for (let i = 0; i < 5; i += 1) await h.tick();
 
     expect(overlapped).toBe(false);
+  });
+
+  it("labels its metrics mercury_job, because Prometheus owns `job`", () => {
+    /* A regression test for a label collision that only shows against a real
+       Prometheus: the OTLP bridge writes `job` as the scrape target's name, so
+       an attribute by that name is overwritten and every job collapses into
+       one series. Asserted on the source, because asserting it through a meter
+       would need the collector this suite deliberately does without. */
+    const source = readFileSync(fileURLToPath(new URL("./every.ts", import.meta.url)), "utf8");
+
+    expect(source).toContain("mercury_job: name");
+    expect(source).not.toMatch(/\.(add|record)\([^)]*\{\s*job:/);
   });
 
   it("records a span per pass, named for the job", async () => {
