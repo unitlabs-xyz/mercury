@@ -1,14 +1,16 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useMoney, usePortfolio, useSignedIn } from "../api/hooks";
 import { useAuthModal } from "../auth/AuthContext";
-import { Check, ChevronDown, Copy, Help, Message, SignOut } from "../ui/icons";
+import { Check, ChevronDown, Copy, Help, Message, Pulse, SignOut } from "../ui/icons";
 import { Button } from "../ui/Button";
 import { useUsdcAck } from "./usdcAck";
 import { openFeedback } from "./Feedback";
 import { usd } from "@mercury/view";
 import { Skeleton } from "./portfolio/ui";
+import { useAdminAccess } from "./admin/useAdmin";
 
 const short = (a: string) => (a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
 
@@ -28,6 +30,10 @@ export const AccountMenu = () => {
   const auth = useAuthModal();
   const money = useMoney();
   const portfolio = usePortfolio();
+  /* A hook and a `<Link>`, never an import of the page — importing anything
+     from `admin/Admin` or `admin/panels` here would pull the whole surface
+     into the eager chunk. bundle.test.ts asserts that too. */
+  const admin = useAdminAccess();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [acked, ack] = useUsdcAck();
@@ -193,6 +199,15 @@ export const AccountMenu = () => {
                 a place to go. Sign out stays muted, so the pair does not read as
                 two equal offers. */}
             <div className="flex flex-col gap-px rounded-lg bg-ds-panel p-1">
+              {/* Only when the API answered 200 to the cheapest admin route —
+                  never a client-side flag. Everybody else never sees it, and
+                  typing the path gets the same 404 the API gives. */}
+              {admin.granted && (
+                <Link to="/admin" onClick={() => setOpen(false)} className={`${row} text-ds-ink`}>
+                  <Pulse className="size-4 shrink-0 text-ds-muted [stroke-width:1.5]" />
+                  Admin
+                </Link>
+              )}
               {/* Opens the feedback panel: a message and screenshots, straight to the team. */}
               <button
                 type="button"
