@@ -66,6 +66,14 @@ Stops the $5–7 we lose on every new borrower.
 **Today:** `services/api/src/lending/kamino.ts` and `sponsor.ts` top up the user's rent from the relayer
 and charge nothing back. Kamino pays us nothing.
 
+**Measured 15 October 2026**, by simulating a first deposit-and-borrow on mainnet: the setup tops a new
+wallet up by 29,504,640 lamports, about $3.04 at $103 SOL. That covers the obligation (17,637,760), user
+metadata (5,892,800), the farm state (5,323,840) and the wallet's own minimum (650,240). The borrow
+transaction then opens a USDC account if there is none. The deck's $5–7 assumed a higher SOL price and
+mainnet's old rent rate.
+
+- [x] Stop creating Kamino's per-user lookup table, which nothing uses (`USER_SETUP` in `kamino.ts`):
+      934,720 lamports less per new borrower
 - [ ] Work out the first-loan setup rent from account sizes (confirm with Kamino)
 - [ ] Charge it once from the borrowed USDC, shown as "Account setup, one time"
 - [ ] Add the 0.25% borrow fee in the same USDC transfer
@@ -141,8 +149,11 @@ the trade fee.
 ## Relayer and network cost fixes (deck section 05)
 
 - [ ] Charge both signatures. `fee.ts` adds `SIGNATURE_LAMPORTS` once, and the deck says there are 2 per tx
-- [ ] Use Token-2022 rent for xStock accounts. `fee.ts` charges SPL rent (2,039,280 lamports), while
-      `lending/sponsor.ts` already has `TOKEN_2022_ACCOUNT_RENT` (3,000,000)
+- [x] Charge rent at mainnet's current rate, by the size of the account opened. The constants assumed
+      6,960 lamports a byte and mainnet charges 5,080, so a first buy, a first sell and a transfer to a new
+      account were each overcharged $0.05–0.06, and every new borrower's wallet got 240,640 lamports more
+      than it needed. Rent is now asked of the node and kept for an hour (`services/api/src/rent.ts`): 179
+      bytes for a stock account (xStocks and Ondo alike), 165 for USDC
 - [ ] Weekly check: SOL the relayer spent vs USDC it collected
 - [ ] Decide whether "Send" keeps absorbing the signature (−$0.002 each, a deliberate choice in `transferFee`)
 

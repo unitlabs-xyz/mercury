@@ -3,6 +3,7 @@ import type { ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import { USDC_MINT } from "@mercury/chain";
 import { networkFee, transferFee, type Fee } from "./fee.js";
+import { STOCK_ACCOUNT_BYTES, TOKEN_ACCOUNT_BYTES, rentFor } from "../rent.js";
 
 /** Native SOL trades under the wrapped-SOL mint, which is how it is priced. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -36,14 +37,17 @@ export const NO_FEE: Fee = { usdc: D(0), lamports: 0 };
  * whether they already hold the account the trade delivers into — a second buy
  * of the same stock opens no account and so owes no rent, and neither does a
  * sell into a USDC account that is already there — and what SOL costs now.
+ * The rent itself is the node's figure for that account's size.
  *
- * Read together, because they are two round trips and someone is waiting on
- * both.
+ * Read together, because someone is waiting on all three. The rent is asked
+ * even when it turns out not to be owed: the reader keeps it for an hour, so
+ * asking costs nothing, and waiting to know would cost a round trip.
  */
 export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promise<Fee> => {
-  const [balances, prices] = await Promise.all([
+  const [balances, prices, rent] = await Promise.all([
     deps.chain.tokenBalances(input.owner),
     deps.prices.pricesFor([SOL_MINT]),
+    rentFor(deps.chain, input.receivingMint === USDC_MINT ? TOKEN_ACCOUNT_BYTES : STOCK_ACCOUNT_BYTES),
   ]);
 
   const sol = prices.get(SOL_MINT)?.usdPricePerToken;
@@ -60,7 +64,7 @@ export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promis
    * account is what rent pays for, not the tokens in it.
    */
   const holds = balances.some((b) => b.mint === input.receivingMint);
-  return networkFee({ needsTokenAccount: !holds, solPriceUsd: sol });
+  return networkFee({ rentLamports: holds ? 0 : Number(rent), solPriceUsd: sol });
 };
 
 /**
@@ -76,9 +80,10 @@ export const quoteTransferFee = async (
   deps: FeeQuoteDeps,
   input: { readonly destination: string },
 ): Promise<Fee> => {
-  const [balances, prices] = await Promise.all([
+  const [balances, prices, rent] = await Promise.all([
     deps.chain.tokenBalances(input.destination),
     deps.prices.pricesFor([SOL_MINT]),
+    rentFor(deps.chain, TOKEN_ACCOUNT_BYTES),
   ]);
 
   const sol = prices.get(SOL_MINT)?.usdPricePerToken;
@@ -87,5 +92,5 @@ export const quoteTransferFee = async (
   if (sol === undefined || sol.lte(0)) return NO_FEE;
 
   const holds = balances.some((b) => b.mint === USDC_MINT);
-  return transferFee({ needsTokenAccount: !holds, solPriceUsd: sol });
+  return transferFee({ rentLamports: holds ? 0 : Number(rent), solPriceUsd: sol });
 };

@@ -13,7 +13,24 @@ import type { Event } from "@mercury/view";
  * Everything it does not cover (instruments, logos, market status) still goes
  * to the real API.
  */
-export const SAMPLE = import.meta.env["VITE_SAMPLE"] === "1";
+/*
+ * `import.meta.env.VITE_SAMPLE`, and never `import.meta.env["VITE_SAMPLE"]`.
+ *
+ * Vite substitutes a member expression for a literal at build time, which
+ * folds this constant to `false` and lets Rollup drop every branch below it —
+ * which is what the sentence above promises. Bracket access defeats the
+ * substitution: the comparison stays a runtime read of an object Vite bakes
+ * empty, so the value is still correctly `false`, and not one line of this
+ * file is eliminated.
+ *
+ * That is not hypothetical. It was written with brackets, and a production
+ * build of apps/web carried all 806 lines of the fixtures below — "Bald
+ * Founder Index", "Not Insider Trading", a holding called IITMAGCA — in the
+ * main chunk, readable by anyone who opened devtools on the live beta, under
+ * this very comment claiming the bundler had dropped them. `sample.test.ts`
+ * asserts the member form so it cannot come back.
+ */
+export const SAMPLE = import.meta.env.VITE_SAMPLE === "1";
 /** Local sample runs only: straight past sign-in. A deployed sample build keeps it. */
 export const SAMPLE_NO_LOGIN = SAMPLE && import.meta.env.DEV;
 

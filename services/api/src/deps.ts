@@ -364,6 +364,7 @@ export function buildDeps(config: Config): Deps {
     lending: new KaminoLending({
       rpcUrl: config.solanaRpcUrl,
       ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
+      rent: chain,
     }),
     ...(basketProvider ? { basketProvider } : {}),
   };
