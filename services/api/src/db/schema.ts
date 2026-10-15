@@ -283,7 +283,8 @@ export const lots = pgTable(
      */
     unitCostUsd: usd("unit_cost_usd").notNull(),
     /**
-     * The charge for sponsoring the trade that wrote this lot.
+     * The charge on the trade that wrote this lot: the network cost and
+     * Mercury's fee, carried in one transfer to the relayer.
      *
      * A cost of trading, kept apart from the price so that the two can be
      * reported as the separate things they are. Zero on an unsponsored trade
@@ -337,7 +338,7 @@ export const positions = pgTable(
      * and spread that were paid to get in.
      */
     referenceBasisUsd: usd("reference_basis_usd").notNull().default("0"),
-    /** Sponsorship fees paid to acquire the shares still held. */
+    /** Trading charges paid to acquire the shares still held: network cost and Mercury's fee. */
     feeUsd: usd("fee_usd").notNull().default("0"),
     avgUnitCostUsd: usd("avg_unit_cost_usd").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -382,8 +383,21 @@ export const orders = pgTable(
       enum: ["pending", "executing", "filled", "queued", "cancelled", "refused"],
     }).notNull(),
     txSignature: text("tx_signature"),
-    /** What the relayer charged to sponsor this order, read off the chain. */
+    /**
+     * What the relayer took in this order's transaction, read off the chain:
+     * the network cost and Mercury's fee together, since one transfer carries
+     * both. `mercuryFeeUsd` is the part of it that was revenue.
+     */
     feeUsd: usd("fee_usd"),
+    /**
+     * Mercury's own fee, as the transaction was built with it.
+     *
+     * Both halves of the charge land in the relayer's one USDC account, so the
+     * chain cannot tell revenue from repaid gas; the build can, and this is
+     * where it says so. Written with the decision it belongs to, every time the
+     * order is re-priced, so it is null on a row whose last pass built nothing.
+     */
+    mercuryFeeUsd: usd("mercury_fee_usd"),
     /**
      * What a sell made against the basis it removed, before its own fee.
      *
@@ -682,6 +696,14 @@ export const fundingIntents = pgTable(
     recipientAddress: text("recipient_address").notNull(),
     /** USDC base units. Indicative at mint time, and never updated. */
     quotedOutRaw: text("quoted_out_raw"),
+    /**
+     * Mercury's fee in the quote, in dollars, as Relay reported it. Null when
+     * the deposit was charged none — Circle's USDC, or no recipient set.
+     *
+     * Relay holds every deposit's fee as one balance until it is claimed, so
+     * this is the only record of which deposit each part of it came from.
+     */
+    mercuryFeeUsd: usd("mercury_fee_usd"),
     status: text("status").notNull().default("waiting"),
     inTxHash: text("in_tx_hash"),
     outTxHash: text("out_tx_hash"),

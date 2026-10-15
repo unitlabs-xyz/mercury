@@ -52,10 +52,10 @@ const deps = buildDeps(config);
  * and confirm can land on different instances, so `recognises` would refuse a
  * transaction this server really did build, intermittently, for a reason no
  * log would explain. A hot key that sometimes will not sign is worse than a
- * wallet told plainly that it pays its own network fee — which is what every
- * sponsored route answers while `read.send.relay` is undefined, and what the
- * app already renders. Sponsorship needs a shared store before it can live
- * here.
+ * wallet told plainly that it pays its own network fee — which is what the
+ * send route answers while `read.send.relay` is undefined. Stock trades are
+ * refused outright here, since Mercury's fee rides in the relayer's transfer.
+ * Sponsorship needs a shared store before it can live here.
  */
 const read = buildReadDeps(auth.db, deps, config);
 
@@ -77,7 +77,7 @@ const read = buildReadDeps(auth.db, deps, config);
 console.log(
   [
     "vercel: HTTP surface only.",
-    "sponsorship: off (needs a shared build store, not per-instance memory).",
+    "sponsorship: off (needs a shared build store, not per-instance memory), so stock trades are refused.",
     "jobs: stocks, position-sync and wallet-events daily; no snapshot, no loan alerts.",
     "The container (index.ts) is the real home for all of it.",
   ].join(" "),

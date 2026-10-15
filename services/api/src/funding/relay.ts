@@ -1,4 +1,5 @@
 import { defaultFetch } from "@mercury/chain";
+import type { DepositFee } from "./fees.js";
 
 /**
  * Relay, as the funding path uses it.
@@ -71,6 +72,8 @@ export interface QuoteDetails {
   readonly outFormatted: string;
   /** Signed percentage, as Relay reports it. Negative is a loss to the user. */
   readonly impactPct: string | null;
+  /** What Relay will take for Mercury, in dollars. Null when it reports none. */
+  readonly appFeeUsd: string | null;
 }
 
 /**
@@ -99,6 +102,8 @@ export interface FundQuoteInput {
   readonly originCurrency: string;
   /** In the origin token's own smallest unit. */
   readonly amountRaw: string;
+  /** Mercury's fee, when this deposit owes one. See `depositFeeFor`. */
+  readonly appFee?: DepositFee | null;
 }
 
 export interface RelayClient {
@@ -268,6 +273,10 @@ export const createRelayClient = (config: {
            * they connected on.
            */
           refundTo: input.user,
+          /* Absent rather than empty when nothing is owed: there is no fee to ask for. */
+          ...(input.appFee == null
+            ? {}
+            : { appFees: [{ recipient: input.appFee.recipient, fee: String(input.appFee.bps) }] }),
         }),
       })) as {
         readonly requestId?: string;
@@ -276,6 +285,7 @@ export const createRelayClient = (config: {
           readonly currencyOut?: { readonly amount?: string; readonly amountFormatted?: string };
           readonly totalImpact?: { readonly percent?: string };
         };
+        readonly fees?: { readonly app?: { readonly amountUsd?: string } };
       };
 
       if (body.requestId === undefined) throw new Error("relay returned no quote for this route");
@@ -287,6 +297,7 @@ export const createRelayClient = (config: {
           outRaw: body.details?.currencyOut?.amount ?? "0",
           outFormatted: body.details?.currencyOut?.amountFormatted ?? "0",
           impactPct: body.details?.totalImpact?.percent ?? null,
+          appFeeUsd: body.fees?.app?.amountUsd ?? null,
         },
         quote: body,
       };

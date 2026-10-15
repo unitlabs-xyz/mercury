@@ -260,3 +260,61 @@ describe("createRelayClient · currencies", () => {
     expect(await client.currencies({ chainIds: [8453] })).toHaveLength(1);
   });
 });
+
+describe("createRelayClient · fundQuote", () => {
+  const RECIPIENT = "0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E";
+  const input = {
+    user: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+    recipient: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+    originChainId: 8453,
+    originCurrency: "0x0000000000000000000000000000000000000000",
+    amountRaw: "10000000000000000",
+  };
+  /* The shape Relay answered with for 0.01 ETH on Base at 30 bps, 15 October 2026. */
+  const answer = (app: unknown) => ({
+    requestId: "0xreq",
+    details: {
+      currencyIn: { amountFormatted: "0.01" },
+      currencyOut: { amount: "23473486", amountFormatted: "23.473486" },
+      totalImpact: { percent: "-0.55" },
+    },
+    fees: { gas: { amountUsd: "0.000499" }, relayer: { amountUsd: "0.042912" }, app },
+  });
+
+  const capture = (reply: unknown) => {
+    const sent: Record<string, unknown>[] = [];
+    const client = createRelayClient({
+      apiKey: "k",
+      fetch: (_input, init) => {
+        sent.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+        return ok(reply);
+      },
+    });
+    return { client, sent };
+  };
+
+  /* Relay's own field, in its own units: basis points, as a string. */
+  it("asks Relay for Mercury's fee when the deposit owes one", async () => {
+    const { client, sent } = capture(answer({ amountUsd: "0.070814" }));
+    await client.fundQuote({ ...input, appFee: { recipient: RECIPIENT, bps: 30 } });
+    expect(sent[0]!["appFees"]).toEqual([{ recipient: RECIPIENT, fee: "30" }]);
+  });
+
+  it("asks for no fee on a deposit that owes none", async () => {
+    const { client, sent } = capture(answer({ amountUsd: "0" }));
+    await client.fundQuote(input);
+    expect(sent[0]).not.toHaveProperty("appFees");
+  });
+
+  /* What Relay will take for us, in dollars: the figure the record keeps. */
+  it("reads back what the fee came to", async () => {
+    const { client } = capture(answer({ amountUsd: "0.070814" }));
+    const quote = await client.fundQuote({ ...input, appFee: { recipient: RECIPIENT, bps: 30 } });
+    expect(quote.details.appFeeUsd).toBe("0.070814");
+  });
+
+  it("reads a fee Relay does not report as none", async () => {
+    const { client } = capture(answer(undefined));
+    expect((await client.fundQuote(input)).details.appFeeUsd).toBeNull();
+  });
+});

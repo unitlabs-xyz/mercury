@@ -5,6 +5,7 @@ import { address as toAddress } from "@solana/kit";
 import type { RelayClient, RelaySource } from "../funding/relay.js";
 import { chainRank, isSupportedChain, SUPPORTED_CHAIN_IDS } from "../funding/chains.js";
 import type { FundingStore } from "../funding/store.js";
+import { depositFeeFor } from "../funding/fees.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 
@@ -13,6 +14,11 @@ export interface FundDeps {
   readonly store: FundingStore;
   /** What we will not quote below. Sent to the client so it is stated once. */
   readonly minimumUsd: number;
+  /**
+   * Mercury's fee on a deposit Relay has to swap. No recipient, no fee: see
+   * `depositFeeFor`, which is the one place that decides who owes it.
+   */
+  readonly fee: { readonly bps: number; readonly recipient?: string | undefined };
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -153,6 +159,13 @@ export function fundRoutes(deps: FundDeps): Hono {
                   name: t.name,
                   decimals: t.decimals,
                   logoUrl: t.logoUrl,
+                  /*
+                   * What depositing this costs in Mercury's fee, or null. Sent
+                   * so the browser's own preview asks Relay for the same fee
+                   * the server will, without keeping a second list of which
+                   * tokens are free.
+                   */
+                  appFee: depositFeeFor(deps.fee, t),
                 },
               ];
         })
@@ -257,6 +270,8 @@ export function fundRoutes(deps: FundDeps): Hono {
         originChainId: chain.chainId,
         originCurrency: currency.address,
         amountRaw: parsed.data.amountRaw,
+        /* Decided on the token Relay resolved, not on the address the body named. */
+        appFee: depositFeeFor(deps.fee, { chainId: chain.chainId, address: currency.address }),
       });
 
       const intent = await deps.store.create({
@@ -268,6 +283,7 @@ export function fundRoutes(deps: FundDeps): Hono {
         originCurrencySymbol: currency.symbol,
         recipientAddress: wallet,
         quotedOutRaw: quote.details.outRaw,
+        mercuryFeeUsd: quote.details.appFeeUsd,
       });
 
       return c.json({

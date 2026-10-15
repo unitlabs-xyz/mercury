@@ -13,6 +13,7 @@ import { useMoney } from "../api/hooks";
 import { PriceMoved, useOrderAction } from "../api/orders";
 import { Button } from "../ui/Button";
 import { useDecision } from "../market/hooks";
+import { feeLines, type Charge } from "./fee-lines";
 import type { Instrument, PriceMap } from "../market/hooks";
 
 const usd = (v: number) =>
@@ -192,11 +193,14 @@ const Execute = ({
   pick,
   amount,
   fee,
+  charge,
 }: {
   d: ExecuteDecision;
   pick: PricedCandidate;
   amount: number;
   fee: number;
+  /** `fee` by part. Null before the quote arrives, when there is nothing to break down. */
+  charge: Charge | null;
 }) => {
   const selling = d.side === "sell";
   const sold = num(pick.filledShares) ?? 0;
@@ -245,18 +249,12 @@ const Execute = ({
           >
             {usd(price)}
           </TipLine>
-          {fee > 0 && (
-            <TipLine
-              k="Network fee"
-              tip={
-                selling
-                  ? "Covers sending the dollars to your wallet. Taken from the proceeds."
-                  : `Covers opening your account for this stock, once. Taken from the ${usd(amount)}, so ${usd(invested)} is invested.`
-              }
-            >
-              {usd(fee)}
-            </TipLine>
-          )}
+          {charge !== null &&
+            feeLines(charge, { selling, amount, invested }).map((line) => (
+              <TipLine key={line.key} k={line.label} tip={line.tip}>
+                {usd(line.value)}
+              </TipLine>
+            ))}
           {/* Who issues the token, then where it trades: one white pill, the issuer set in grey. */}
           <div className="flex items-center justify-between gap-4 text-[14px] leading-5">
             <dt className="text-ds-muted">Route</dt>
@@ -550,12 +548,14 @@ export const OrderSheet = ({
   const [sent, setSent] = useState<{
     decision: typeof live.decision;
     fee: typeof live.fee;
+    charge: typeof live.charge;
     available: number;
     heldShares: typeof liveHeldShares;
   } | null>(null);
   const held = working && sent !== null;
   const decision = held ? sent.decision : live.decision;
   const fee = held ? sent.fee : live.fee;
+  const charge = held ? sent.charge : live.charge;
   const available = held ? sent.available : liveAvailable;
   const heldShares = held ? sent.heldShares : liveHeldShares;
   const isLoading = held ? false : live.isLoading;
@@ -566,7 +566,7 @@ export const OrderSheet = ({
   const unavailable = decision?.kind === "execute" ? unavailableOf(decision) : [];
   const pick =
     decision?.kind === "execute" ? (options.find((c) => c.mint === picked) ?? decision.best) : null;
-  /* Zero unless a relayer is paying the network on this buyer's behalf. */
+  /* The whole charge: the network cost and Mercury's fee, both taken from the amount or the proceeds. */
   const feeUsd = fee === null ? 0 : Number(fee.toString());
 
   const typing = settled !== amount;
@@ -719,7 +719,7 @@ export const OrderSheet = ({
                           {...(onAcceptImpact ? { onAcceptImpact } : {})}
                         />
                       )}
-                      <Execute d={decision} pick={pick} amount={settled} fee={feeUsd} />
+                      <Execute d={decision} pick={pick} amount={settled} fee={feeUsd} charge={charge} />
                     </div>
                   )}
                   {decision.kind === "offer_queue" && (
@@ -753,6 +753,7 @@ export const OrderSheet = ({
                 setSent({
                   decision: live.decision,
                   fee: live.fee,
+                  charge: live.charge,
                   available: liveAvailable,
                   heldShares: liveHeldShares,
                 });

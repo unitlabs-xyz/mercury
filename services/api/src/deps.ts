@@ -137,12 +137,28 @@ export interface Config {
   /**
    * Optional. The key that pays for sponsored transactions.
    *
-   * Absent, sponsorship is off and buyers pay their own network costs — which
-   * is the behaviour today, not a broken state. The send route falls back to
-   * requiring the buyer to be their own fee payer, so a deployment without a
-   * funded relayer still sells stock.
+   * Absent, sponsorship is off. Sends fall back to the sender paying their own
+   * network cost, but stock trades are refused: Mercury's fee is carried in
+   * the relayer's USDC transfer, and without one a trade would fill for free.
    */
   readonly relayerSecretKey?: string;
+  /**
+   * Mercury's own fee on a stock trade, in basis points of what the trade is
+   * worth: 50 is 0.5%. Charged in the same USDC transfer that repays the
+   * relayer, so it lands in the relayer's USDC account beside the network cost.
+   */
+  readonly tradingFeeBps: number;
+  /**
+   * Mercury's fee on a deposit Relay has to swap, in basis points of what is
+   * sent: 30 is 0.3%. Circle's own USDC is never charged. Relay takes it out of
+   * the deposit and holds it for us; see `depositFeeRecipient`.
+   */
+  readonly depositFeeBps: number;
+  /**
+   * Optional. The EVM address Relay credits deposit fees to, and the one that
+   * claims them. Absent, no deposit is charged, because there is nobody to pay.
+   */
+  readonly depositFeeRecipient?: string;
   /**
    * Hermes rejects Pyth's price endpoints without one, as of 26 August 2026.
    * Unset, the reference price is the issuer's quote inside Jupiter's
@@ -187,8 +203,42 @@ const required = (env: NodeJS.ProcessEnv, key: string): string => {
   return value;
 };
 
+/** Half a percent, the rate the founders set on 15 October 2026. */
+const DEFAULT_TRADING_FEE_BPS = 50;
+
+/** 0.3% on a deposit Relay has to swap, the rate in the revenue deck of 14 October 2026. */
+const DEFAULT_DEPOSIT_FEE_BPS = 30;
+
+/*
+ * Whole basis points, below 100%, or the server does not start. "0.5" read as
+ * half a percent, or a typo, would otherwise charge every trade something
+ * nobody chose — and a fee is not a setting anyone checks by eye afterwards.
+ */
+const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): number => {
+  const raw = env[key];
+  if (raw === undefined || raw.length === 0) return fallback;
+  const bps = Number(raw);
+  if (!Number.isInteger(bps) || bps < 0 || bps >= 10_000) {
+    throw new Error(`${key} must be whole basis points from 0 to 9999, got "${raw}"`);
+  }
+  return bps;
+};
+
+/*
+ * Relay pays app fees to an EVM address only, Solana deposits included. A
+ * Solana address here would be taken by nothing and found out at the claim.
+ */
+const evmAddress = (env: NodeJS.ProcessEnv, key: string): string | undefined => {
+  const raw = env[key];
+  if (raw === undefined || raw.length === 0) return undefined;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(raw))
+    throw new Error(`${key} must be an EVM address (0x and 40 hex digits)`);
+  return raw;
+};
+
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
+  const depositFeeRecipient = evmAddress(env, "DEPOSIT_FEE_RECIPIENT");
   return {
     databaseUrl: required(env, "DATABASE_URL"),
     privyAppId: required(env, "PRIVY_APP_ID"),
@@ -208,6 +258,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["RELAY_API_KEY"] ? { relayApiKey: env["RELAY_API_KEY"] } : {}),
     fundMinimumUsd: Number(env["FUND_MINIMUM_USD"] ?? 10),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
+    tradingFeeBps: basisPoints(env, "TRADING_FEE_BPS", DEFAULT_TRADING_FEE_BPS),
+    depositFeeBps: basisPoints(env, "DEPOSIT_FEE_BPS", DEFAULT_DEPOSIT_FEE_BPS),
+    ...(depositFeeRecipient === undefined ? {} : { depositFeeRecipient }),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
@@ -339,6 +392,8 @@ export interface ReadDeps {
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
   readonly send: SendDeps;
+  /** Mercury's fee on every stock trade, in basis points. See `Config.tradingFeeBps`. */
+  readonly tradingFeeBps: number;
   /** The in-app feedback button. Optional so a test app can leave it out. */
   readonly feedback?: FeedbackDeps;
   /**
@@ -374,7 +429,13 @@ export function buildReadDeps(
   deps: Deps,
   config: Pick<
     Config,
-    "databaseUrl" | "gliderApiKey" | "solanaRpcUrl" | "resendApiKey" | "notifyFrom" | "feedbackTo"
+    | "databaseUrl"
+    | "gliderApiKey"
+    | "solanaRpcUrl"
+    | "resendApiKey"
+    | "notifyFrom"
+    | "feedbackTo"
+    | "tradingFeeBps"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
@@ -418,6 +479,7 @@ export function buildReadDeps(
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
+    tradingFeeBps: config.tradingFeeBps,
     feedback: {
       to: config.feedbackTo,
       notifier:

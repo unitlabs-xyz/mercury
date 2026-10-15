@@ -21,6 +21,7 @@ import { useDebounced, type FundToken } from "../../api/fund-tokens";
 import { cleanAmount } from "./fund-chain";
 import { useMoney } from "../../api/hooks";
 import { TooSmall, useFundPreview } from "../../api/fund-preview";
+import { rateLabel } from "../fee-lines";
 import { fundErrorCopy, fundErrorDetail } from "./fund-error";
 
 /**
@@ -245,9 +246,10 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
      have worked. */
   const wrongChain = funder !== null && funder.vmType === "evm" && funder.chainId !== token.chainId;
   /*
-   * What the deposit comes to: the USDC that lands, Relay's fee (out of the
-   * amount) and the network fee (paid by the wallet on top). Asked once the
-   * amount has stopped changing, so typing "125" is one quote, not three.
+   * What the deposit comes to: the USDC that lands, Relay's fee and Mercury's
+   * (both out of the amount) and the network fee (paid by the wallet on top).
+   * Asked once the amount has stopped changing, so typing "125" is one quote,
+   * not three.
    */
   const settledRaw = useDebounced(raw?.toString() ?? null, 400);
   const recipient = useMoney().data?.depositAddress;
@@ -258,6 +260,7 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
     amountRaw: settledRaw === null ? null : BigInt(settledRaw),
     user: funder?.address,
     recipient,
+    appFee: token.appFee ?? null,
   });
   const tooSmall = preview.error instanceof TooSmall;
   const showSummary = raw !== null && raw > 0n;
@@ -416,6 +419,12 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
                         <span>Relay</span>
                         <span>{usd(preview.data.relayFeeUsd)}</span>
                       </span>
+                      {preview.data.mercuryFeeUsd > 0 && token.appFee != null && (
+                        <span className="flex justify-between gap-6">
+                          <span>Mercury ({rateLabel(token.appFee.bps)})</span>
+                          <span>{usd(preview.data.mercuryFeeUsd)}</span>
+                        </span>
+                      )}
                       <span className="flex justify-between gap-6">
                         <span>Network</span>
                         <span>{usd(preview.data.networkFeeUsd)}</span>
@@ -427,7 +436,9 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
             }
             loading={quoting}
           >
-            {preview.data === undefined ? "—" : usd(preview.data.relayFeeUsd + preview.data.networkFeeUsd)}
+            {preview.data === undefined
+              ? "—"
+              : usd(preview.data.relayFeeUsd + preview.data.mercuryFeeUsd + preview.data.networkFeeUsd)}
           </SummaryRow>
         </dl>
       )}

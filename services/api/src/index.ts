@@ -110,8 +110,17 @@ boot.info(
      a relayer nobody funded looks exactly like one that is switched off. */
   { on: relay !== undefined, ...(relay === undefined ? {} : { payer: relay.signer.address }) },
   relay === undefined
-    ? "sponsorship off (RELAYER_SECRET_KEY unset); buyers pay their own network costs"
+    ? "sponsorship off (RELAYER_SECRET_KEY unset); stock trades are refused, sends pay their own network costs"
     : "sponsorship on",
+);
+/* The rate every trade turns on, and where the money goes, so neither has to
+   be inferred. `collector` is our own relayer account, as `payer` above. */
+boot.info(
+  {
+    bps: config.tradingFeeBps,
+    ...(relay === undefined ? { collected: false } : { collected: true, collector: relay.signer.address }),
+  },
+  relay === undefined ? "trading fee set, but no trades without a relayer" : "trading fee collected",
 );
 // Which Jupiter tier the rate limits in the logs below belong to.
 boot.info(
@@ -173,10 +182,24 @@ const fund =
         relay: createRelayClient({ apiKey: config.relayApiKey }),
         store: createFundingStore(auth.db),
         minimumUsd: config.fundMinimumUsd,
+        fee: { bps: config.depositFeeBps, recipient: config.depositFeeRecipient },
         webhookSecret: config.relayApiKey,
       };
 if (fund !== undefined) {
   boot.info({ on: true, minimumUsd: config.fundMinimumUsd }, "funding on, refunds to the sending wallet");
+  /* Where deposit fees go, said once, because Relay holds them until somebody
+     claims them. `recipient` is one of our own accounts, not a user's. */
+  const depositFeeOn = config.depositFeeRecipient !== undefined && config.depositFeeBps !== 0;
+  boot.info(
+    {
+      on: depositFeeOn,
+      bps: config.depositFeeBps,
+      ...(config.depositFeeRecipient === undefined ? {} : { recipient: config.depositFeeRecipient }),
+    },
+    depositFeeOn
+      ? "deposit fee charged on anything but Circle USDC, credited by Relay"
+      : "deposit fee off (DEPOSIT_FEE_RECIPIENT unset or DEPOSIT_FEE_BPS 0); no deposit is charged",
+  );
 }
 
 const read = buildReadDeps(auth.db, deps, config, relay, fund);

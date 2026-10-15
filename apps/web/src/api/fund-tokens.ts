@@ -13,6 +13,12 @@ export interface FundToken {
   readonly name: string;
   readonly decimals: number;
   readonly logoUrl: string | null;
+  /**
+   * Mercury's fee on depositing this token, as the server decides it: null for
+   * Circle's USDC, or when no fee is set. Optional, because a server older than
+   * the fee does not send it — and charges none.
+   */
+  readonly appFee?: { readonly recipient: string; readonly bps: number } | null;
 }
 
 /**

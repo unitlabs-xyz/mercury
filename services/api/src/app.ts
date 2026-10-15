@@ -9,6 +9,7 @@ import { gateExecution } from "./orders/gate.js";
 import { planFill } from "./orders/fill.js";
 import { decisionToWire } from "./serialize.js";
 import { NO_FEE, quoteFee } from "./relay/quote.js";
+import { tradeCharge, type TradeCharge } from "./relay/fee.js";
 import { buildSponsored } from "./relay/build.js";
 import { rpcLookupTables } from "./relay/lookups.js";
 import { createSolanaRpc } from "@solana/kit";
@@ -70,6 +71,19 @@ const acceptedImpact = (shown: ReturnType<typeof decisionToWire>) =>
 
 /** For a refusal that has to name a figure. */
 const asUsd = (d: ReturnType<typeof D>) => `$${d.toFixed(2)}`;
+
+/*
+ * `usdc` stays the whole charge, as it was when the network was all there was
+ * to pay: a ticket already built takes it off the amount, so one that has not
+ * learnt the breakdown still shows what actually lands.
+ */
+const chargeToWire = (charge: TradeCharge) => ({
+  usdc: charge.usdc.toString(),
+  lamports: charge.lamports,
+  network: charge.network.toString(),
+  mercury: charge.mercury.toString(),
+  mercuryBps: charge.mercuryBps,
+});
 
 const NOT_READY = fail(
   "not_implemented",
@@ -233,7 +247,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * wrapper wins. So the fee is quoted beside the price rather than after it.
      */
     if (parsed.data.side === "sell") {
-      const [decision, fee] = await Promise.all([
+      const [decision, network] = await Promise.all([
         priceOrder(market(), req),
         sponsored
           ? quoteFee(
@@ -251,13 +265,15 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
         wire.kind === "refuse" || wire.best.pricePerShare === null || wire.best.filledShares === null
           ? D(0)
           : D(wire.best.pricePerShare).mul(D(wire.best.filledShares));
+      /* On what the shares fetch: the figure the ticket shows as their worth. */
+      const charge = tradeCharge(network, gross, read.tradingFeeBps);
 
       return c.json({
         decision: wire,
-        fee: { usdc: fee.usdc.toString(), lamports: fee.lamports },
+        fee: chargeToWire(charge),
         investable: null,
-        /* What lands in the wallet, once the network has been paid. */
-        proceeds: gross.sub(fee.usdc).toString(),
+        /* What lands in the wallet, once the network and Mercury have been paid. */
+        proceeds: gross.sub(charge.usdc).toString(),
       });
     }
 
@@ -269,33 +285,37 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const probe = await priceOrder(market(), req);
     if (probe === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
-    const fee =
+    const network =
       !sponsored || probe.kind === "refuse"
         ? NO_FEE
         : await quoteFee(
             { chain: market().chain, prices: market().prices },
             { owner: wallet, receivingMint: probe.best.mint },
           );
+    /* On what the buyer pays: the amount they typed, before anything comes out of it. */
+    const charge = tradeCharge(network, D(parsed.data.amount), read.tradingFeeBps);
 
     /*
      * The decision shown is the one for the swap that will actually happen.
      * Quoting the gross here and swapping the net would put a share count on
-     * screen that the fill cannot deliver.
+     * screen that the fill cannot deliver. A refusal is not re-priced: it is
+     * refused whatever it is quoted for.
      */
-    const decision = fee.usdc.lte(0)
-      ? probe
-      : await priceOrder(market(), {
-          ...req,
-          amount: D(parsed.data.amount).sub(fee.usdc).toFixed(),
-          feeUsdc: fee.usdc.toFixed(),
-        });
+    const decision =
+      probe.kind === "refuse" || charge.usdc.lte(0)
+        ? probe
+        : await priceOrder(market(), {
+            ...req,
+            amount: D(parsed.data.amount).sub(charge.usdc).toFixed(),
+            feeUsdc: charge.usdc.toFixed(),
+          });
     if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
     return c.json({
       decision: decisionToWire(decision),
-      fee: { usdc: fee.usdc.toString(), lamports: fee.lamports },
-      /* What the swap is actually for, once the network has been paid. */
-      investable: D(parsed.data.amount).sub(fee.usdc).toString(),
+      fee: chargeToWire(charge),
+      /* What the swap is actually for, once the network and Mercury have been paid. */
+      investable: D(parsed.data.amount).sub(charge.usdc).toString(),
       proceeds: null,
     });
   });
@@ -371,10 +391,25 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     }
 
     /*
-     * The network charge comes out of the amount, so the swap is quoted for
-     * what is left after it — not for the whole amount with the charge added
-     * on top. Getting this the wrong way round means the buyer is debited more
-     * than the figure they agreed to, and the shares they receive are priced
+     * No relayer, no trade.
+     *
+     * Mercury's fee rides in the relayer's USDC transfer, and without a relayer
+     * there is no transfer: Jupiter would build the swap alone and it would fill
+     * for nothing. Refusing was decided on 15 October 2026 over trading free.
+     */
+    const relay = read.send.relay;
+    if (relay === undefined) {
+      return c.json(
+        fail("upstream_unavailable", "Trading is unavailable right now. Please try again shortly."),
+        503,
+      );
+    }
+
+    /*
+     * The charge comes out of the amount, so the swap is quoted for what is
+     * left after it — not for the whole amount with the charge added on top.
+     * Getting this the wrong way round means the buyer is debited more than
+     * the figure they agreed to, and the shares they receive are priced
      * against a number they never authorised.
      *
      * Priced before the quote rather than after, because the quote has to be
@@ -395,30 +430,30 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * might pay rent for is the USDC one, whichever wrapper wins, so there is
      * no winner to find first.
      */
-    const feeUsdc =
-      read.send.relay === undefined
-        ? NO_FEE.usdc
-        : selling
-          ? (
-              await quoteFee(
-                { chain: market().chain, prices: market().prices },
-                { owner, receivingMint: USDC_MINT },
-              )
-            ).usdc
-          : await (async () => {
-              const probe = await priceOrder(market(), {
-                ticker: shown.ticker,
-                side: shown.side,
-                amount: shown.amount,
-                issuer,
-              });
-              if (probe === null || probe.kind === "refuse") return NO_FEE.usdc;
-              const f = await quoteFee(
-                { chain: market().chain, prices: market().prices },
-                { owner, receivingMint: probe.best.mint },
-              );
-              return f.usdc;
-            })();
+    const network = selling
+      ? await quoteFee(
+          { chain: market().chain, prices: market().prices },
+          { owner, receivingMint: USDC_MINT },
+        )
+      : await (async () => {
+          const probe = await priceOrder(market(), {
+            ticker: shown.ticker,
+            side: shown.side,
+            amount: shown.amount,
+            issuer,
+          });
+          if (probe === null || probe.kind === "refuse") return NO_FEE;
+          return quoteFee(
+            { chain: market().chain, prices: market().prices },
+            { owner, receivingMint: probe.best.mint },
+          );
+        })();
+    /*
+     * A buy's charge is known now, from the dollars agreed to. A sell's waits
+     * for the fresh quote below: Mercury's share is of what the shares fetch,
+     * and that is the one figure the quote has yet to say.
+     */
+    const buying = selling ? null : tradeCharge(network, D(shown.amount), read.tradingFeeBps);
 
     /*
      * Re-priced from the row, not from the decision on it. A stored sell's
@@ -428,7 +463,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      */
     const fresh = await priceOrder(
       market(),
-      selling
+      buying === null
         ? {
             ticker: shown.ticker,
             side: shown.side,
@@ -441,8 +476,8 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
         : {
             ticker: shown.ticker,
             side: shown.side,
-            amount: D(shown.amount).sub(feeUsdc).toFixed(),
-            feeUsdc: feeUsdc.toFixed(),
+            amount: D(shown.amount).sub(buying.usdc).toFixed(),
+            feeUsdc: buying.usdc.toFixed(),
             issuer,
             ...(acceptedImpact(shown) ? { acceptImpact: true } : {}),
           },
@@ -451,14 +486,16 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const wire = decisionToWire(fresh);
 
     // The row ends up holding the decision that was acted on, never the one
-    // that was merely displayed. Whatever happens below, this is what is stored.
-    const record = (status: "pending" | "executing" | "refused") =>
+    // that was merely displayed. Whatever happens below, this is what is stored
+    // — with Mercury's fee only when a transaction is built to charge it.
+    const record = (status: "pending" | "executing" | "refused", mercuryFeeUsd: string | null = null) =>
       read.orders.reprice(identity.userId, order.id, {
         decision: wire,
         chosenMint: wire.kind === "refuse" ? null : wire.best.mint,
         referencePrice: wire.fairPricePerShare,
         premiumPct: wire.kind === "refuse" ? null : wire.premium,
         status,
+        mercuryFeeUsd,
       });
 
     const gate = gateExecution({
@@ -539,6 +576,17 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     }
 
     /*
+     * What the shares fetch, on a sell. A winning quote always names both
+     * figures; were one missing, the sell is valued at nothing and refused
+     * below rather than filled without its fee.
+     */
+    const proceeds =
+      fresh.best.pricePerShare !== null && fresh.best.filledShares !== null
+        ? fresh.best.pricePerShare.mul(fresh.best.filledShares)
+        : D(0);
+    const charge = buying ?? tradeCharge(network, proceeds, read.tradingFeeBps);
+
+    /*
      * The one refusal a sell keeps, and it is arithmetic rather than policy.
      *
      * The charge is a USDC transfer out of the proceeds. Proceeds that do not
@@ -550,53 +598,44 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * position cannot be moved for what moving it costs. Different remedies,
      * and this one has none.
      */
-    if (selling && feeUsdc.gt(0) && fresh.best.pricePerShare !== null && fresh.best.filledShares !== null) {
-      const proceeds = fresh.best.pricePerShare.mul(fresh.best.filledShares);
-      if (proceeds.lte(feeUsdc)) {
-        await record("refused");
-        return c.json(
-          fail(
-            "instrument_not_tradable",
-            `This is worth ${asUsd(proceeds)}, which is less than the ${asUsd(feeUsdc)} network fee to sell it.`,
-            { decision: wire },
-          ),
-          409,
-        );
-      }
+    if (selling && charge.usdc.gt(0) && proceeds.lte(charge.usdc)) {
+      await record("refused");
+      return c.json(
+        fail(
+          "instrument_not_tradable",
+          `This is worth ${asUsd(proceeds)}, which is less than the ${asUsd(charge.usdc)} in fees to sell it.`,
+          { decision: wire },
+        ),
+        409,
+      );
     }
 
     const quote = { quoteId: fresh.best.quoteId, raw: fresh.best.quoteRaw };
 
     /*
-     * Sponsored when there is a relayer to pay: the buyer signs a transaction
-     * whose fee payer is ours, and repays the network cost in USDC inside the
-     * same message. Priced here rather than taken from the quote the ticket
-     * showed, because it turns on whether the buyer holds the token — which a
-     * moment ago they might not have.
+     * The buyer signs a transaction whose fee payer is ours, and pays the
+     * network cost and Mercury's fee in one USDC transfer inside the same
+     * message. Priced here rather than taken from the quote the ticket showed,
+     * because the network part turns on whether the buyer holds the token —
+     * which a moment ago they might not have.
      */
-    const transactions =
-      read.send.relay === undefined
-        ? await market().quotes.buildSwap(quote, owner)
-        : [
-            (
-              await buildSponsored(
-                {
-                  quotes: market().quotes,
-                  lookups: rpcLookupTables(rpc),
-                  relay: read.send.relay,
-                  blockhash: async () => {
-                    const { value } = await rpc.getLatestBlockhash().send();
-                    return {
-                      blockhash: value.blockhash,
-                      lastValidBlockHeight: value.lastValidBlockHeight,
-                    };
-                  },
-                },
-                { quote, owner, feeUsdc, side: shown.side },
-              )
-            ).wire,
-          ];
-    await record("executing");
+    const { wire: built } = await buildSponsored(
+      {
+        quotes: market().quotes,
+        lookups: rpcLookupTables(rpc),
+        relay,
+        blockhash: async () => {
+          const { value } = await rpc.getLatestBlockhash().send();
+          return {
+            blockhash: value.blockhash,
+            lastValidBlockHeight: value.lastValidBlockHeight,
+          };
+        },
+      },
+      { quote, owner, feeUsdc: charge.usdc, side: shown.side },
+    );
+    const transactions = [built];
+    await record("executing", charge.mercury.toString());
     return c.json({
       transactions,
       decision: wire,
