@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { adminRoutes, type AdminDeps } from "./admin.js";
+import { adminRoutes, ranged, type AdminDeps } from "./admin.js";
 import type { Freshness } from "../admin/freshness.js";
 
 const NOTHING: Freshness = {
@@ -76,5 +76,60 @@ describe("admin routes", () => {
       const res = await app.request("/v1/admin/health", { method });
       expect(res.status).not.toBe(200);
     }
+  });
+});
+
+describe("ranged", () => {
+  /* A probe route, because the range-taking routes arrive with the queries.
+     `ranged` is exported for this: the behaviour under test is the 400, and it
+     is the same whichever query sits behind it. */
+  const probe = (run: (r: { days: number }) => Promise<unknown> = async (r) => ({ days: r.days })) => {
+    const app = new Hono();
+    app.get("/probe", ranged(run));
+    return app;
+  };
+
+  it("answers a mistyped date 400, not 500", async () => {
+    /* Parsed in the handler and not thrown across the framework: Hono's
+       compose turns a handler's throw into a response in the frame that called
+       it, so a middleware awaiting next() never sees it, and app.ts's onError
+       would log every mistyped date as `request failed` at error level. */
+    const res = await probe().request("/probe?from=2026-02-30");
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "bad_range", message: "2026-02-30 is not a date." },
+    });
+  });
+
+  it("answers 400 for a range beyond the cap, naming it", async () => {
+    const res = await probe().request("/probe?from=2020-01-01&to=2026-01-01");
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(body.error.message).toMatch(/366 days/);
+  });
+
+  it("passes a good range through", async () => {
+    const res = await probe().request("/probe?from=2026-09-01&to=2026-09-08");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ days: 7 });
+  });
+
+  it("defaults the range when none is given", async () => {
+    const res = await probe().request("/probe");
+
+    expect(await res.json()).toEqual({ days: 30 });
+  });
+
+  it("does not turn a real failure into a 400", async () => {
+    /* Only BadRange is the caller's mistake. A broken query must not be
+       reported as a mistyped date. */
+    const res = await probe(async () => {
+      throw new Error("relation does not exist");
+    }).request("/probe");
+
+    expect(res.status).toBe(500);
   });
 });
