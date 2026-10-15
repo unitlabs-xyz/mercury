@@ -3,12 +3,7 @@ import { MercuryLogo } from "../ui/Logo";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderChrome } from "./HeaderChrome";
 
-/*
- * "admin" is a page, not a nav item: it is deliberately absent from NAV below,
- * so the bar shows nothing for it and no item reads as active while it is
- * open. Its way in is the account menu, and only when the API says so.
- */
-export type NavKey = "portfolio" | "invest" | "baskets" | "money" | "activity" | "admin";
+export type NavKey = "portfolio" | "invest" | "baskets" | "money" | "activity";
 
 type Item = { key: NavKey; label: string; to: string };
 

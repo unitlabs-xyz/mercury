@@ -19,9 +19,6 @@ const Baskets = lazy(() => import("./app/Baskets").then((m) => ({ default: m.Bas
 const Basket = lazy(() => import("./app/Basket").then((m) => ({ default: m.Basket })));
 const Money = lazy(() => import("./app/Money").then((m) => ({ default: m.Money })));
 const Activity = lazy(() => import("./app/Activity").then((m) => ({ default: m.Activity })));
-/* Read-only, and three people will ever open it — so every user who never
-   sees it must not download it. bundle.test.ts asserts this stays lazy. */
-const Admin = lazy(() => import("./app/admin/Admin").then((m) => ({ default: m.Admin })));
 /** The side panels (Add cash, Send, Borrow), drawn over any page; see app/Panels. */
 const GlobalPanels = lazy(() => import("./app/Panels").then((m) => ({ default: m.GlobalPanels })));
 
@@ -138,17 +135,6 @@ export const App = () => (
               element={
                 <RequireAuth>
                   <Activity />
-                </RequireAuth>
-              }
-            />
-            {/* Mounted for everybody who is signed in; the API decides who sees
-                anything, and answers 404 to the rest. A route guarded in the
-                client would be a guard anybody can edit in a console. */}
-            <Route
-              path="/admin"
-              element={
-                <RequireAuth>
-                  <Admin />
                 </RequireAuth>
               }
             />
