@@ -111,4 +111,32 @@ describe("services/api/Dockerfile", () => {
       dockerfile.includes(`COPY ${dir}/ ${dir}/`) || dockerfile.includes(`COPY ${parent}/ ${parent}/`);
     expect(copied).toBe(true);
   });
+  /**
+   * tsx, then telemetry, then the app — in that order.
+   *
+   * Both orderings matter and only one of them fails loudly. tsx after the
+   * telemetry module means node cannot parse the TypeScript and the container
+   * dies at boot, which at least says so. Telemetry after the app means
+   * auto-instrumentation patches nothing: the server starts, serves normally,
+   * and the only symptom is an empty Grafana — which reads as a broken
+   * collector and sends whoever is debugging it to the wrong machine.
+   *
+   * Nothing in CI runs this image, and nothing else reads this line, so a
+   * refactor that reorders the arguments would be invisible until somebody
+   * went looking for a trace that was never recorded.
+   */
+  it("loads tsx, then telemetry, then the app", () => {
+    const cmd = /^CMD \[(.+)\]$/m.exec(dockerfile)?.[1];
+
+    expect(cmd).toBeDefined();
+
+    const args = [...cmd!.matchAll(/"([^"]*)"/g)].map((m) => m[1]!);
+    const tsx = args.indexOf("tsx");
+    const telemetry = args.findIndex((a) => a.includes("telemetry/otel"));
+    const entry = args.findIndex((a) => a.endsWith("index.ts"));
+
+    expect(tsx).toBeGreaterThan(-1);
+    expect(telemetry).toBeGreaterThan(tsx);
+    expect(entry).toBeGreaterThan(telemetry);
+  });
 });

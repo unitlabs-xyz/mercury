@@ -24,6 +24,7 @@ import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
 import { keypairRelaySigner } from "./relay/signer.js";
 import { exitOnUncaught, oneLineErrors } from "./log.js";
+import { telemetryEndpoint } from "./telemetry/otel.js";
 
 /*
  * First, so that nothing after it, a bad config included, logs a stack trace.
@@ -44,6 +45,23 @@ const port = Number(process.env.PORT ?? 8787);
  */
 await applyMigrations(config.databaseUrl);
 console.log("migrations: up to date");
+
+/*
+ * Whether anything is watching, said out loud.
+ *
+ * The same reason the relayer, Jupiter's tier and the Pyth feed each announce
+ * themselves: a deployment that believes it is reporting telemetry and is not
+ * looks exactly like one whose collector is down, and those two are fixed in
+ * different places and by different people. The SDK itself started before this
+ * line — before `index.ts` was even imported — so this reports a fact rather
+ * than deciding one.
+ */
+const telemetry = telemetryEndpoint();
+console.log(
+  telemetry === null
+    ? "telemetry: off (OTEL_EXPORTER_OTLP_ENDPOINT unset)"
+    : `telemetry: on, exporting to ${telemetry}`,
+);
 
 await syncConfiguredCatalog(config);
 
