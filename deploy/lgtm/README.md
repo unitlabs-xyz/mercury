@@ -23,81 +23,98 @@ to run it.
 is the point: the API knows one thing about it, a URL. Three containers on the
 box, each its own Coolify resource:
 
-| Container      |             |                                               |
-| -------------- | ----------- | --------------------------------------------- |
-| `mercury-api`  | the API     | reads `OTEL_EXPORTER_OTLP_ENDPOINT` and sends |
-| `mercury-web`  | the web app | untouched by any of this                      |
-| `mercury-lgtm` | this stack  | receives, stores, draws                       |
+| Resource            | Built from                | Its share of this                             |
+| ------------------- | ------------------------- | --------------------------------------------- |
+| the API             | `services/api/Dockerfile` | reads `OTEL_EXPORTER_OTLP_ENDPOINT` and sends |
+| the web app         | `apps/web/Dockerfile`     | untouched by any of this                      |
+| the telemetry stack | `deploy/lgtm/Dockerfile`  | receives, stores, draws                       |
 
-So the API needs **one environment variable** and no code, and this stack needs
-its two secrets and a network. If the stack is down the API carries on
-normally: the exporter drops what it cannot deliver and the request path never
-notices.
+All three are Dockerfile resources built from this repository, so all three are
+configured the same way and nobody has to remember which one is different.
 
-## Step 0: the shared network
-
-Do this once, before the first deploy, or nothing below reaches anything else:
-
-```bash
-docker network create mercury
-```
-
-Then attach **both** the API resource and this one to it (in Coolify, the
-resource's network settings; or `docker network connect mercury <container>`).
-
-This is the step that is easy to skip and fails confusingly. Each Coolify
-resource gets its own Docker network by default, so without a shared one the
-API cannot resolve `mercury-lgtm` at all — the endpoint points at a hostname
-that does not exist, the exporter retries quietly, and Grafana stays empty
-while the API reports `telemetry: on` at boot. Exactly the symptom that sends
-somebody off to debug the collector.
-
-The alternative — publishing port 4318 — is what the shared network exists to
-avoid. OTLP ingest has no authentication at all.
+The API needs **one environment variable** and no code. This stack needs two
+secrets and a volume. If the stack is down the API carries on normally: the
+exporter drops what it cannot deliver and the request path never notices.
 
 ## Deploy
 
-In Coolify, new resource → Docker Compose:
+Exactly as the API and the web app are deployed — same repo, same build pack,
+same base directory. There is nothing to create on the host first.
 
-| Setting                 | Value                             |
-| ----------------------- | --------------------------------- |
-| Build Pack              | Docker Compose                    |
-| Base Directory          | `/deploy/lgtm`                    |
-| Docker Compose Location | `/deploy/lgtm/docker-compose.yml` |
+| Setting             | Value                     |
+| ------------------- | ------------------------- |
+| Build Pack          | **Dockerfile**            |
+| Base Directory      | `/`                       |
+| Dockerfile Location | `/deploy/lgtm/Dockerfile` |
+| Ports Exposes       | `3000`                    |
 
-Environment variables (both required — the compose file refuses to start
-without them):
+Two environment variables, both required:
 
-| Variable                 |                                                                                              |
-| ------------------------ | -------------------------------------------------------------------------------------------- |
-| `GRAFANA_ADMIN_PASSWORD` | the admin password. A secret, not a build arg.                                               |
-| `GRAFANA_ROOT_URL`       | the public URL Coolify serves Grafana on. Without it Grafana's own links point at localhost. |
+| Variable                     |                                                                                                                                  |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `GF_SECURITY_ADMIN_PASSWORD` | a password you generate (`openssl rand -base64 24`). A secret, not a build arg.                                                  |
+| `GF_SERVER_ROOT_URL`         | the public URL Coolify serves this on, e.g. `https://grafana.trymercury.xyz`. Without it Grafana's own links point at localhost. |
+
+And **one persistent volume, mounted at `/data`**. This is the only manual step
+and the only one that cannot be repaired later: all four components write
+there, so without it every redeploy is a total history loss. Add it in the
+resource's Storages tab before the first deploy.
+
+Everything else — the retention figures, the dashboards, the Tempo and Loki
+configs — is in the image, because it is in this repository.
+
+### Why a Dockerfile and not the compose file beside it
+
+The compose file was how this stack was verified locally, and it is kept for
+that. It is the wrong shape for Coolify, which was established the hard way:
+
+- **Compose gives each resource its own network.** The API is its own Coolify
+  resource on its own network, so it could not resolve this container at all.
+  Working around it meant an external network created by hand on the host and
+  re-attached to the API after every redeploy — a manual step that gets
+  forgotten and then looks like "telemetry broke".
+- **Relative bind mounts do not resolve.** Coolify checks the repository out
+  somewhere of its own choosing, so `./tempo-config.yaml` named a path that did
+  not exist, Docker created a directory over it, and the container died with
+  `error mounting … not a directory: Are you trying to mount a directory onto a
+file`.
+
+Built as a Dockerfile the configs are in the image, so there are no mounts to
+resolve, and Coolify wires this container to the others the same way it already
+wires the API to the web app — so there is nothing to create and nothing to
+remember.
 
 ## The API's side: one variable
 
 On the **API** resource:
 
-| Variable                      | Required                 |                                                                                                                                                            |
-| ----------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | **yes, to switch it on** | `http://mercury-lgtm:4318` — the container name on the shared network. Unset means telemetry is off: the SDK never starts, and the API says which at boot. |
-| `GIT_SHA`                     | no, but do it            | becomes `service.version`. Without it every deploy reports the same version, so "did this start at the last deploy" has no answer.                         |
-| `LOG_LEVEL`                   | no                       | `info` by default. `debug` adds the decision inputs while reproducing somebody's problem.                                                                  |
-| `OTEL_SERVICE_NAME`           | no                       | `mercury-api` by default.                                                                                                                                  |
+| Variable                      | Required                 |                                                                                                                                                                 |
+| ----------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | **yes, to switch it on** | the address Coolify gives this resource on its internal network, port 4318. Unset means telemetry is off: the SDK never starts, and the API says which at boot. |
+| `GIT_SHA`                     | no, but do it            | becomes `service.version`. Without it every deploy reports the same version, so "did this start at the last deploy" has no answer.                              |
+| `LOG_LEVEL`                   | no                       | `info` by default. `debug` adds the decision inputs while reproducing somebody's problem.                                                                       |
+| `OTEL_SERVICE_NAME`           | no                       | `mercury-api` by default.                                                                                                                                       |
 
-That is the whole of the API's side. No code change, no SDK to initialise in a
-handler, no sidecar. And it is reversible for the same reason: point that one
-variable at a managed backend and delete this container.
+That is the whole of the API's side: no code change, no SDK to initialise in a
+handler, no sidecar. And it is reversible for the same reason — point that one
+variable at a managed backend and delete this resource.
+
+OTLP has no authentication of any kind, which is why port 4318 is not exposed
+and the API reaches it over Coolify's internal network rather than a published
+port.
 
 ## Two things not to change
 
-**Only port 3000 is published.** The OTLP ports, 4317 and 4318, are
-deliberately absent from the compose file. The API reaches them over the Docker
-network by service name. OTLP ingest has no authentication of any kind, so
-publishing it to the internet is an invitation to fill the disk.
+**Only port 3000 is exposed.** The OTLP ports, 4317 and 4318, are deliberately
+not declared — Coolify publishes what a resource exposes. The API reaches OTLP
+over Coolify's internal network instead, which needs nothing published. OTLP
+ingest has no authentication at all, so publishing it is an invitation to fill
+the disk.
 
-**The `/data` volume is not optional.** All four components write there. Without
-it a Coolify redeploy is a total history loss — and `portfolio_snapshot`-shaped
-losses aside, it is the one failure here that cannot be repaired afterwards.
+**The `/data` volume is not optional**, and it is the one thing the repository
+cannot carry for you. All four components write there. Without it a redeploy is
+a total history loss, and it is the only failure here that cannot be repaired
+afterwards.
 
 ## Retention, and why it lives in three different places
 
@@ -110,7 +127,9 @@ files are mounted:
 | Loki       | `loki-config.yaml`                          | 720h (30d) |
 | Tempo      | `tempo-config.yaml`                         | 336h (14d) |
 
-Both config files were taken verbatim from the image and edited. If an upgrade
+All three are in the repository rather than in Coolify's UI, so the current
+value is reviewable. Both config files were taken verbatim from the image and
+edited. If an upgrade
 breaks one, diff it against the image's current copy rather than guessing:
 
 ```bash
@@ -150,6 +169,20 @@ so experimenting in the UI works; the file wins on restart.
 Job metrics are labelled `mercury_job`, not `job`. Prometheus owns `job` and
 overwrites it with the scrape target's name — measured, and it collapsed all
 eight jobs into a single series with no job names at all.
+
+## Running it locally
+
+The compose file, which is what it is now for:
+
+```bash
+cd deploy/lgtm
+GRAFANA_ADMIN_PASSWORD=local GRAFANA_ROOT_URL=http://localhost:3000 \
+  docker compose up -d
+```
+
+It bind-mounts the configs rather than baking them, so editing retention or a
+dashboard and restarting is immediate. It also declares an external `mercury`
+network, so `docker network create mercury` once before the first run.
 
 ## Verifying a deployment
 
