@@ -67,12 +67,15 @@ import { GliderClient } from "./baskets/glider/client.js";
 import { JsonBasketStore } from "./baskets/glider/store.js";
 import { SolanaBasketFunding } from "./baskets/glider/funding.js";
 import type { BasketProvider } from "./baskets/core/deps.js";
+import { logger } from "./log/index.js";
 
 /** Pyth in front of the issuer's quote, or the issuer's quote alone. */
 const withFallback = (pythApiKey: string | undefined, issuer: ReferenceSource): ReferenceSource =>
   pythApiKey === undefined
     ? issuer
     : new FallbackReference(new PythReference({ apiKey: pythApiKey }), issuer);
+
+const log = logger("deps");
 
 export interface Deps {
   readonly registry: TokenRegistry;
@@ -220,11 +223,12 @@ export async function syncConfiguredCatalog(config: Config): Promise<void> {
       store: new JsonBasketStore(config.databaseUrl),
     });
     const result = await service.sync();
-    console.log(
-      `Glider catalog: ${result.recorded} recorded, ${result.reused} reused, ${result.created} created`,
+    log.info(
+      { recorded: result.recorded, reused: result.reused, created: result.created },
+      "Glider strategies synced",
     );
   } catch (error: unknown) {
-    console.error("Glider catalog sync failed; other API features remain available:", error);
+    log.error({ err: error }, "Glider strategy sync failed; the rest of the API is unaffected");
   }
 }
 

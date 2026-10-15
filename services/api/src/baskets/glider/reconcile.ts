@@ -1,4 +1,5 @@
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { logger } from "../../log/index.js";
 import {
   BasketExitMessage,
   BasketExitMode,
@@ -48,6 +49,8 @@ type ExitRow = Omit<
   nonce: string;
   operationId: string;
 };
+
+const log = logger("baskets");
 
 export interface VerifiedExitTransfer {
   readonly mint: string;
@@ -421,7 +424,7 @@ export async function reconcileBasketExits(
       if (state === "stopped") stopped += 1;
     } catch (error) {
       failed += 1;
-      console.error(`basket-exit reconciliation failed for action ${row.id}`, error);
+      log.error({ actionId: row.id, err: error }, "basket-exit reconciliation failed");
       await defer(db, row, now).catch(() => undefined);
     } finally {
       recorded += progress.recorded;

@@ -116,6 +116,40 @@ describe("redaction", () => {
   });
 });
 
+describe("a thrown value belongs under `err`", () => {
+  /*
+   * The trap this documents cost a real test. `log.error({ raw }, "…")` where
+   * `raw` is an Error records `"raw":{}` — an Error's own properties are not
+   * enumerable, so JSON.stringify sees nothing — and the error is gone. Only
+   * `err` goes through the serializer, and the serializer is where `errorLine`
+   * reduces it to the one sentence that says what went wrong.
+   */
+  it("keeps an error passed as err", () => {
+    const { log, out } = lines();
+
+    log.error({ err: new TypeError("socket hang up") }, "m");
+
+    expect(JSON.parse(out[0]!).err).toBe("TypeError: socket hang up");
+  });
+
+  it("loses an error passed under any other name, which is why this test exists", () => {
+    const { log, out } = lines();
+
+    log.error({ cause: new TypeError("socket hang up") }, "m");
+
+    expect(JSON.parse(out[0]!).cause).toEqual({});
+    expect(out[0]).not.toContain("socket hang up");
+  });
+
+  it("keeps a thrown string under err too, which the Solana SDK does throw", () => {
+    const { log, out } = lines();
+
+    log.error({ err: "Unable to find chain: Chain id 8453" }, "m");
+
+    expect(JSON.parse(out[0]!).err).toContain("Chain id 8453");
+  });
+});
+
 describe("the log line", () => {
   it("names the level in words, so a reader and a query agree", () => {
     const { log, out } = lines();

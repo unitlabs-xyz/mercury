@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { logger } from "../log/index.js";
 import type { Db } from "../db/client.js";
 import { activities, loanAlerts, users, wallets } from "../db/schema.js";
 import type { Notifier } from "../notify/ports.js";
@@ -8,6 +9,8 @@ import type { LendingSource } from "./ports.js";
 import type { ChainReader } from "@mercury/chain";
 import { alertFor, markAfter } from "./watch.js";
 import type { Health } from "./capacity.js";
+
+const log = logger("loan-watch");
 
 export interface WatchDeps {
   readonly lending: LendingSource;
@@ -126,7 +129,10 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
       } catch (error: unknown) {
         failed += 1;
         // The user, never the address or the figures.
-        console.error(`loan-watch: could not check the loan for user ${row.userId}`, error);
+        /* A loan is the only thing here that can cost somebody money while
+             they are not looking, so a pass that could not check one matters
+             more than its count suggests. */
+        log.error({ userId: row.userId, err: error }, "could not check a loan");
       }
     }
   };

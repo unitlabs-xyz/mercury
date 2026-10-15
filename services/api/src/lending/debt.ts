@@ -1,4 +1,5 @@
 import { ZERO, type Decimal } from "@mercury/core";
+import { logger } from "../log/index.js";
 import type { LendingSource } from "./ports.js";
 
 /**
@@ -14,13 +15,15 @@ import type { LendingSource } from "./ports.js";
  * loan, and null for not knowing. The caller decides what to show for null; it
  * must not decide it is zero.
  */
+const log = logger("lending");
+
 export async function debtFrom(lending: LendingSource, wallet: string): Promise<Decimal | null> {
   try {
     const position = await lending.position(wallet);
     return position === null ? ZERO : position.debtUsd;
   } catch (error: unknown) {
     // The wallet, never the address: an address in a log is a person's holdings in a log.
-    console.error("debt: could not read the loan for a wallet", error);
+    log.error({ err: error }, "could not read the loan for a wallet");
     return null;
   }
 }

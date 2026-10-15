@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { logger } from "../../log/index.js";
 import type {
   BasketExitAsset,
   BasketExitMessage,
@@ -26,6 +27,8 @@ import type {
 
 const allocations = (assets: readonly { assetId: string; weightBps: number }[]) =>
   assets.map(({ assetId, weightBps }) => `${assetId}:${weightBps}`).sort();
+
+const log = logger("baskets");
 
 export class BasketEnrollmentError extends Error {
   constructor(
@@ -180,7 +183,10 @@ export class BasketService {
                 partial: positions.warnings.length > 0,
               };
             } catch (error) {
-              console.warn("Glider basket positions unavailable:", item.portfolioId, error);
+              /* `warn` and not `error`: the basket still renders, with the figures
+                 it could not read left null and `partial` set, so this is a
+                 degradation the interface already accounts for. */
+              log.warn({ portfolioId: item.portfolioId, err: error }, "Glider basket positions unavailable");
               return {
                 ...base,
                 totalValueUsd: null,
@@ -848,8 +854,8 @@ export class BasketService {
       integratorSwapFeeBps: fee.status === "fulfilled" ? fee.value : null,
     };
     if (allocation.status === "rejected")
-      console.warn("Glider allocation breakdown unavailable:", slug, allocation.reason);
-    if (fee.status === "rejected") console.warn("Glider strategy fee unavailable:", slug, fee.reason);
+      log.warn({ slug, err: allocation.reason }, "Glider allocation breakdown unavailable");
+    if (fee.status === "rejected") log.warn({ slug, err: fee.reason }, "Glider strategy fee unavailable");
     this.insightsCache.set(definition.providerId, {
       until:
         Date.now() + (allocation.status === "fulfilled" && fee.status === "fulfilled" ? 300_000 : 30_000),
@@ -868,7 +874,7 @@ export class BasketService {
       this.performanceCache.set(id, { until: now + 300_000, value });
       return value;
     } catch (error) {
-      console.warn("Glider strategy performance unavailable:", id, error);
+      log.warn({ strategyId: id, err: error }, "Glider strategy performance unavailable");
       this.performanceCache.set(id, { until: now + 30_000, value: null });
       return null;
     }

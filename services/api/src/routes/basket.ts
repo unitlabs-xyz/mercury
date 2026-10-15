@@ -1,4 +1,5 @@
 import { Hono, type MiddlewareHandler } from "hono";
+import { logger } from "../log/index.js";
 import {
   ManagedBasketInsights,
   ManagedBasketTemplate,
@@ -27,13 +28,15 @@ const fail = (code: string, message: string) => ({ error: { code, message } });
 
 const ownerFor = (address: string | null) => (address ? `${SOLANA}:${address}` : null);
 
+const log = logger("baskets");
+
 export function basketRoutes(service: BasketService, requireBasketAuth: MiddlewareHandler): Hono {
   const app = new Hono();
 
   const handle = (error: unknown, action = "enrollment") => {
     if (error instanceof BasketEnrollmentError)
       return { status: error.status, body: fail(error.code, error.message) };
-    console.error(`Basket ${action} failed:`, error);
+    log.error({ action, err: error }, "basket operation failed");
     return {
       status: 502 as const,
       body: fail("provider_error", `Basket ${action} is temporarily unavailable.`),

@@ -1,4 +1,5 @@
 import type { RelayClient, RelayStatus } from "./relay.js";
+import { logger } from "../log/index.js";
 import type { FundingStore } from "./store.js";
 
 /**
@@ -17,6 +18,8 @@ import type { FundingStore } from "./store.js";
  */
 
 const TERMINAL: readonly RelayStatus[] = ["success", "failure", "refund"];
+
+const log = logger("funding");
 
 export interface PollDeps {
   readonly store: FundingStore;
@@ -56,7 +59,7 @@ export const pollUnsettledDeposits = async (deps: PollDeps): Promise<PollSummary
       /* One deposit we could not ask about is not a failed pass. The next one
          tries again, because nothing moved. */
       failed += 1;
-      console.error(`funding-poll: could not read status for user ${intent.userId}`, error);
+      log.error({ userId: intent.userId, err: error }, "could not read a deposit's status");
     }
   }
 

@@ -96,6 +96,16 @@ const NOT_READY = fail(
  */
 const orderLog = logger("orders");
 
+/**
+ * The HTTP boundary's logger.
+ *
+ * Separate from `orders` so that "every failed request" and "every refused
+ * order" are different queries. `route` is the pattern and not the path, for
+ * the same reason the span carries the pattern: a field per ticker is a field
+ * nobody can group by.
+ */
+const httpLog = logger("http");
+
 export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
   /* One client for the routes that talk to the chain directly. */
@@ -162,7 +172,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * answers nothing at all.
      */
     const id = (c.get("requestId") as string | undefined) ?? "unknown";
-    console.error(`request ${id} failed:`, err);
+    httpLog.error({ requestId: id, method: c.req.method, route: c.req.routePath, err }, "request failed");
     return c.json({ ...fail("internal", "Something went wrong."), requestId: id }, 500);
   });
 

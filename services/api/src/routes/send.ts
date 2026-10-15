@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { logger } from "../log/index.js";
 import { z } from "zod";
 import {
   address,
@@ -83,6 +84,8 @@ const feePayerSignature = (wire: string): string | null => {
  */
 const KIT_CONTEXT = /decode\s+--\s+-?\d+\s+'([A-Za-z0-9+/=]+)'/;
 
+const log = logger("send");
+
 export const logsFrom = (raw: string): readonly string[] => {
   const encoded = KIT_CONTEXT.exec(raw)?.[1];
   if (encoded === undefined) return [];
@@ -143,7 +146,11 @@ export const reasonFrom = (raw: string): string => {
   const logged = logs.find((l) => /Program log: Error: /.test(l));
   if (logged !== undefined) return logged.replace(/^.*Program log: Error:\s*/, "").trim();
 
-  console.error("send: preflight failed with no reason we could name", raw);
+  /* `err`, not `raw`: an Error under any other key serializes to `{}`,
+     because its own properties are not enumerable. Only `err` goes through
+     pino's serializer, which is where `errorLine` turns it into the one line
+     this used to log. */
+  log.error({ err: raw }, "preflight failed with no reason we could name");
   return "the network rejected this order and did not say why. Nothing has been charged.";
 };
 
@@ -247,7 +254,7 @@ export function sendRoutes(deps: SendDeps): Hono {
        * unsponsored is what the screen showed before any of this existed, and
        * `prepare` prices it again for real.
        */
-      console.error("send: could not quote the transfer fee", err);
+      log.error({ err }, "could not quote the transfer fee");
       return c.json({ feeUsd: "0", sponsored: deps.relay !== undefined });
     }
   });
@@ -329,7 +336,7 @@ export function sendRoutes(deps: SendDeps): Hono {
       if (built.messageBytes !== null && relay !== undefined) relay.builds.remember(built.messageBytes);
       return c.json({ transaction: built.wire, feeUsd: feeUsdc.toString() });
     } catch (err) {
-      console.error("send: could not prepare USDC transfer", err);
+      log.error({ err }, "could not prepare USDC transfer");
       return c.json(fail("send_unavailable", "Could not prepare this transfer. Please try again."), 503);
     }
   });
