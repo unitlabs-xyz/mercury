@@ -3,6 +3,9 @@ import { applySell, D, ZERO, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { activities, instruments, lots, orders, positions, tokens } from "../db/schema.js";
 import type { Fill } from "./fill.js";
+import { logger } from "../log/index.js";
+
+const log = logger("orders");
 
 export interface SettleInput {
   readonly userId: string;
@@ -114,7 +117,17 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
       )
       .returning({ id: orders.id });
 
-    if (claimed.length === 0) return { kind: "already_settled" };
+    if (claimed.length === 0) {
+      /*
+       * Two callers raced for one order and this one lost, which is the
+       * guarantee the claim exists for rather than a fault — a client that
+       * submits twice, or the webhook arriving beside the poller. Debug
+       * because it is expected and common; it earns a line only when
+       * somebody is working out why a fill was recorded once.
+       */
+      log.debug({ userId: input.userId, orderId: input.orderId }, "order was already settled");
+      return { kind: "already_settled" };
+    }
 
     if (input.side === "buy") {
       await tx.insert(lots).values({
@@ -185,6 +198,20 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
       // The wallet-events job walks the same signature from the wallet's side.
       // Whichever arrives second writes nothing. See activity_signature_mint_idx.
       .onConflictDoNothing();
+
+    /* The money line: a fill that happened, with what it cost. `side` and
+
+       `orderId` are fields so the shape of a day's trading is a query.
+
+       Figures that belong to the user — the shares, the basis — are
+
+       redacted; the fee is ours and is what the relayer charged us. */
+
+    log.info(
+      { userId: input.userId, orderId: input.orderId, side: input.side, feeUsd: String(fill.feeUsd) },
+
+      "order settled",
+    );
 
     return { kind: "settled", realisedPnlUsd };
   });
