@@ -1095,225 +1095,72 @@ git commit -m "feat(api): a span and a duration for every background job pass"
 
 ---
 
-### Task 6: Outbound calls and database queries
+### Task 6: Outbound calls and database queries — done, and the plan was wrong
 
-**Files:**
+**The design in this task was wrong and is recorded here as it was built.**
 
-- Modify: `services/api/src/telemetry/otel.ts` (enable undici instrumentation)
-- Create: `services/api/src/telemetry/query-span.ts`
-- Create: `services/api/src/telemetry/query-span.test.ts`
-- Modify: `services/api/src/db/client.ts`
+It said to wrap `db.execute`. Drizzle does not route queries through any
+`execute` on the handle it returns: its postgres-js session issues every one as
+`client.unsafe(query, params)`, sometimes followed by `.values()`, and
+transactions through `client.begin` (read from
+`drizzle-orm/postgres-js/session.js`). A wrapper on `db.execute` would have
+caught the handful of raw `db.execute(sql…)` calls, missed every `select`,
+`insert` and `findFirst` in the service, and passed its own unit tests while
+recording almost nothing. The Proxy belongs on the postgres.js client, applied
+in `db/client.ts` before Drizzle ever sees it.
 
-**Interfaces:**
+- [x] **Outbound fetch spans need no code.** `@opentelemetry/instrumentation-undici`
+      is already inside `getNodeAutoInstrumentations`, and a probe produced
+      `kind=CLIENT scope=@opentelemetry/instrumentation-undici` for one outbound
+      call plus an `http.client.request.duration` metric. Jupiter, Relay, Glider,
+      Privy, Kamino, Pyth and the RPC are all covered with nothing added.
 
-- Consumes: `safeAttributes` from Task 2.
-- Produces: `withQuerySpans(db: Db, tracer?: Tracer): Db` — returns a handle whose queries each open a span.
+- [x] **Two plausible alternatives that do not work**, both checked rather than
+      assumed:
 
-- [ ] **Step 1: Enable fetch instrumentation**
+  - **Drizzle's own tracing is dead code** in 0.45.3. Its session is full of
+    `tracer.startActiveSpan("drizzle.driver.execute", …)` and
+    `@opentelemetry/api` is an optional peer, so it reads as a feature you
+    enable by installing the package. `tracing.js` declares `let otel;`, guards
+    every span behind `if (!otel) return fn();`, and nothing in the shipped
+    package assigns `otel`.
+  - **No OTel instrumentation exists for postgres.js.** The official
+    `instrumentation-pg` is for `pg`. Swapping the driver to gain a span is a
+    change across eighteen tables and the whole suite.
 
-Jupiter, Relay, Glider, Privy, Kamino, Pyth and the Solana RPC are all reached over `fetch`, which is undici. `getNodeAutoInstrumentations` includes `@opentelemetry/instrumentation-undici` already — confirm it is on and that a client span appears for one Jupiter call, then record the finding. No code change if it is already enabled.
+- [x] **`telemetry/query-span.ts`** — the Proxy, 19 tests. Only `unsafe` is
+      intercepted, so `begin`, `end`, `listen` and the tagged-template call pass
+      through; the original query object is returned, so `.values()` still works;
+      the span ends when the query settles, and also when the call throws
+      synchronously.
 
-Verify: start the API with a console trace exporter, hit `/v1/market/status`, and look for an `HTTP GET` client span with `server.address` naming the upstream.
+- [x] **The statement's shape, never its parameters.** `db select order`, not
+      the text — a span named with the statement is one name per distinct query,
+      which is cardinality in Tempo and a flame graph nobody can read.
 
-- [ ] **Step 2: Write the failing test for query spans**
+- [x] **A tripwire on the parameter leak.** `drizzle-tracing.test.ts`. If
+      Drizzle ever wires its tracing up, `drizzle.query.params` puts
+      `JSON.stringify(params)` — every address, email and amount — on a span bound
+      for a trace store. The test fails on the version bump that makes it live,
+      rather than a span processor stripping it quietly and leaving nobody to
+      decide. Mutation-tested by simulating the fix.
 
-`services/api/src/telemetry/query-span.test.ts`:
+- [x] **Verified end to end against a real Postgres**, because PGlite does not
+      use postgres.js and so no test in the suite exercises this path:
 
-```ts
-import { describe, expect, it, vi } from "vitest";
-import { withQuerySpans } from "./query-span.js";
+  ```
+  db select user    status=0 stmt=select "id", "privy_user_id", "email", …
+  db insert user    status=0 stmt=insert into "user" ("id", "privy_user_id", …
+  db select user    status=0 stmt=select "id" from "user" limit $1
+  db update user    status=0 stmt=update "user" set "display_currency" = $1 …
+  TOTAL db spans: 4
+  params leaked: no
+  ```
 
-const recordingTracer = () => {
-  const spans: { name: string; attributes: Record<string, unknown>; ended: boolean }[] = [];
-  return {
-    spans,
-    tracer: {
-      startActiveSpan: <T>(name: string, fn: (span: unknown) => T): T => {
-        const record = { name, attributes: {} as Record<string, unknown>, ended: false };
-        spans.push(record);
-        return fn({
-          setAttribute: (k: string, v: unknown) => void (record.attributes[k] = v),
-          setAttributes: (a: Record<string, unknown>) => void Object.assign(record.attributes, a),
-          recordException: () => undefined,
-          setStatus: () => undefined,
-          end: () => void (record.ended = true),
-        });
-      },
-    } as never,
-  };
-};
-
-describe("withQuerySpans", () => {
-  it("opens a span per query and ends it", async () => {
-    /* Without this a slow request is one flat 600ms span with nothing inside,
-       and "which query" is the question anybody actually has. postgres.js has
-       no OpenTelemetry instrumentation of its own — the official one is for
-       `pg` — so this wrapper is the only way to get it. */
-    const { spans, tracer } = recordingTracer();
-    const inner = { execute: vi.fn(async () => [{ n: 1 }]) };
-    const db = withQuerySpans(inner as never, tracer);
-
-    await (db as unknown as { execute: (q: unknown) => Promise<unknown> }).execute({
-      sql: "select 1",
-    });
-
-    expect(spans).toHaveLength(1);
-    expect(spans[0]!.ended).toBe(true);
-  });
-
-  it("names the span for the operation, not the whole statement", async () => {
-    /* A span named with the full SQL is a span name per distinct query text,
-       which is cardinality in Tempo and unreadable in a flame graph. */
-    const { spans, tracer } = recordingTracer();
-    const inner = { execute: vi.fn(async () => []) };
-    const db = withQuerySpans(inner as never, tracer);
-
-    await (db as unknown as { execute: (q: unknown) => Promise<unknown> }).execute({
-      sql: 'select "id" from "order" where "user_id" = $1',
-    });
-
-    expect(spans[0]!.name).toBe("db select order");
-  });
-
-  it("carries no parameter values", async () => {
-    /* The parameters are the user's: an address, an email, an amount. The
-       statement shape is what helps; the values are what leaks. */
-    const { spans, tracer } = recordingTracer();
-    const inner = { execute: vi.fn(async () => []) };
-    const db = withQuerySpans(inner as never, tracer);
-
-    await (db as unknown as { execute: (q: unknown) => Promise<unknown> }).execute({
-      sql: "select 1 where x = $1",
-      params: ["someone@example.com"],
-    });
-
-    expect(JSON.stringify(spans[0]!.attributes)).not.toContain("example.com");
-  });
-
-  it("ends the span when the query throws", async () => {
-    const { spans, tracer } = recordingTracer();
-    const inner = {
-      execute: vi.fn(async () => {
-        throw new Error("deadlock detected");
-      }),
-    };
-    const db = withQuerySpans(inner as never, tracer);
-
-    await expect(
-      (db as unknown as { execute: (q: unknown) => Promise<unknown> }).execute({ sql: "select 1" }),
-    ).rejects.toThrow("deadlock");
-    expect(spans[0]!.ended).toBe(true);
-  });
-
-  it("passes through anything that is not a query", async () => {
-    /* Drizzle's handle carries `select`, `insert`, `$with` and more. Only the
-       execution path is wrapped; everything else has to behave as before or
-       every call site breaks. */
-    const { tracer } = recordingTracer();
-    const inner = { execute: vi.fn(), schema: { order: "table" } };
-    const db = withQuerySpans(inner as never, tracer);
-
-    expect((db as unknown as { schema: unknown }).schema).toEqual({ order: "table" });
-  });
-});
-```
-
-- [ ] **Step 3: Run it to verify it fails**
-
-Run: `cd services/api && pnpm vitest run src/telemetry/query-span.test.ts`
-Expected: FAIL — cannot resolve `./query-span.js`.
-
-- [ ] **Step 4: Write the wrapper**
-
-`services/api/src/telemetry/query-span.ts`:
-
-```ts
-/**
- * A span per database query.
- *
- * Hand-written because there is nothing to install. The driver here is
- * postgres.js, and OpenTelemetry's official Postgres instrumentation
- * (`@opentelemetry/instrumentation-pg`) covers the `pg` package only; no
- * equivalent for postgres.js exists on npm. The alternative was swapping the
- * driver across eighteen tables and 837 tests to gain a span, which is the
- * wrong trade.
- *
- * A Proxy over the Drizzle handle rather than a patched method, so the dozens
- * of call sites and every builder on the handle keep working untouched: only
- * `execute` is intercepted, and everything else passes through as itself.
- *
- * The span carries the statement's shape and never its parameters. The shape
- * is what answers "which query was slow"; the parameters are an address, an
- * email, an amount — the user's, and not ours to put in a trace store.
- */
-import { SpanStatusCode, trace, type Tracer } from "@opentelemetry/api";
-import type { Db } from "../db/client.js";
-
-/** `select … from "order" …` becomes `select order`. Shape, not text. */
-export const operationOf = (sql: string): string => {
-  const verb = /^\s*(select|insert|update|delete|with)\b/i.exec(sql)?.[1]?.toLowerCase() ?? "query";
-  const table = /\b(?:from|into|update|join)\s+"?([a-z_][a-z0-9_]*)"?/i.exec(sql)?.[1]?.toLowerCase() ?? null;
-  return table === null ? `db ${verb}` : `db ${verb} ${table}`;
-};
-
-interface Query {
-  readonly sql?: unknown;
-}
-
-export const withQuerySpans = (db: Db, tracer: Tracer = trace.getTracer("mercury-api")): Db =>
-  new Proxy(db as object, {
-    get(target, property, receiver) {
-      const value = Reflect.get(target, property, receiver);
-      if (property !== "execute" || typeof value !== "function") return value;
-
-      return (...args: unknown[]) => {
-        const first = args[0] as Query | undefined;
-        const sql = typeof first?.sql === "string" ? first.sql : "";
-        return tracer.startActiveSpan(operationOf(sql), async (span) => {
-          try {
-            const answer: unknown = await (value as (...a: unknown[]) => unknown).apply(target, args);
-            return answer;
-          } catch (error: unknown) {
-            span.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: error instanceof Error ? error.message : "query failed",
-            });
-            throw error;
-          } finally {
-            span.end();
-          }
-        });
-      };
-    },
-  }) as Db;
-```
-
-- [ ] **Step 5: Run the test to verify it passes**
-
-Run: `cd services/api && pnpm vitest run src/telemetry/query-span.test.ts`
-Expected: PASS, 5 tests.
-
-- [ ] **Step 6: Apply it where the handle is built**
-
-In `services/api/src/db/client.ts`, wrap the handle the factory returns in `withQuerySpans(...)`. With telemetry off, `trace.getTracer` returns a no-op tracer and the Proxy's only cost is one property lookup per `execute`.
-
-Read `client.ts` first and keep its existing shape — do not change the exported signature.
-
-- [ ] **Step 7: Verify the whole suite still passes against PGlite**
-
-Run: `cd services/api && pnpm vitest run`
-Expected: 837 tests pass. The funding store tests exercise real queries through this handle, so a wrapper that broke the handle fails loudly here.
-
-- [ ] **Step 8: Verify and commit**
-
-Run: `cd /Users/sainathr19/Desktop/unit/mercury && pnpm check`
-
-```bash
-git add services/api/src/telemetry services/api/src/db/client.ts
-git commit -m "feat(api): spans for outbound calls and database queries"
-```
-
----
+  `findFirst`, `insert`, `select` and `update` — one span each, correctly
+  named, with neither the email nor the DID anywhere in the attributes. The
+  same run is the proof that the `db.execute` design would have recorded zero
+  of them.
 
 ### Task 7: LGTM on Coolify
 
