@@ -657,209 +657,89 @@ git commit -m "feat(api): a request id, and a span per request"
 
 ---
 
-### Task 4: Structured logs with trace correlation
+### Task 4: Logs that reach the collector — corrected
+
+**This task was specified wrongly and is recorded here as it was built.**
+
+The plan said: write log lines as JSON on stdout, and let the SDK's
+`logRecordProcessors` carry them. The second half does not follow from the
+first. Configuring a log pipeline on the SDK does **not** make `console.log`
+reach it — OpenTelemetry ships log bridges for winston, pino and bunyan and
+for nothing else, and this service logs through `console` on purpose, because
+`log.ts` patches it so every call site gets one-line errors for free. So the
+pipeline would have been configured, connected, and carrying nothing, and
+`grafana/otel-lgtm` ingests OTLP only: nothing reads the container's stdout.
+JSON on stdout would have been a format change with no destination.
+
+Measured before and after, against a throwaway OTLP sink: without a bridge the
+sink receives `/v1/traces` and `/v1/metrics` and no `/v1/logs` at all. With
+one, `/v1/logs` arrives.
+
+The three ways out, and why this one:
+
+- **Forward the console to the OTel logs API** (built). Forty lines, no new
+  deployable, and the console keeps writing exactly what it wrote before.
+- A Promtail or Alloy sidecar reading the container's stdout. A fourth
+  deployable, which ADR 0004 argued against.
+- Move the service to pino. A change at every call site in the API and the
+  packages it runs, to gain a bridge we can write ourselves.
 
 **Files:**
 
-- Modify: `services/api/src/log.ts`
-- Create: `services/api/src/log-json.test.ts`
-- Modify: `services/api/src/index.ts` (call it)
+- Create: `services/api/src/telemetry/console-logs.ts`
+- Create: `services/api/src/telemetry/console-logs.test.ts`
+- Modify: `services/api/src/index.ts`
 
 **Interfaces:**
 
-- Consumes: `errorLine` (already exported from `log.ts`), `safeAttributes` from Task 2.
-- Produces: `jsonErrors(target?: Console, env?: Env): void` — replaces the console writers with ones that emit a single JSON object per line, carrying `trace_id` and `span_id` from the active context.
+- Produces: `forwardConsoleToOtel(target?: Console, env?: Env, getLogger?: () => Logger): void`,
+  plus `severityOf(level)` and `lineOf(args)` exported for their own tests.
+- Consumes: `errorLine` from `log.ts`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Forward, never replace**
 
-`services/api/src/log-json.test.ts`:
+The console still writes what it wrote. `docker logs` is how anybody actually
+reads this service, and a deployment whose collector is down must not also
+lose its stdout. So `oneLineErrors()` keeps its behaviour untouched and this
+is additional.
 
-```ts
-import { describe, expect, it, vi } from "vitest";
-import { jsonErrors } from "./log.js";
+- [x] **Step 2: After `oneLineErrors`, in that order**
 
-const capture = () => {
-  const lines: string[] = [];
-  const target = {
-    log: (...a: unknown[]) => lines.push(String(a[0])),
-    info: (...a: unknown[]) => lines.push(String(a[0])),
-    warn: (...a: unknown[]) => lines.push(String(a[0])),
-    error: (...a: unknown[]) => lines.push(String(a[0])),
-  };
-  return { target, lines };
-};
+Wired in `index.ts` immediately after `oneLineErrors()` and `exitOnUncaught()`,
+so an `Error` has already become its one line by the time the forward reads the
+arguments. Reversed, the forward would ship a stack.
 
-describe("jsonErrors", () => {
-  it("does nothing unless telemetry is configured", () => {
-    /* A person tailing the container gets log.ts's one-line format, which was
-       written for exactly that and is better at it. JSON is for the collector. */
-    const { target, lines } = capture();
-    jsonErrors(target, {});
+- [x] **Step 3: Trace correlation comes free on this path**
 
-    target.log("migrations: up to date");
+Nothing in `console-logs.ts` touches trace context. `Logger.emit` in
+`@opentelemetry/sdk-logs` reads `context.active()` and hands it to the log
+record, so a line written inside a request carries that request's `trace_id`
+without this file doing anything. Confirmed by reading `Logger.emit` in the
+installed package rather than by assertion; the end-to-end proof is the
+trace-to-logs link in Task 7's verification.
 
-    expect(lines[0]).toBe("migrations: up to date");
-  });
+- [x] **Step 4: Guard the things that actually break**
 
-  it("emits one JSON object per line when it is", () => {
-    const { target, lines } = capture();
-    jsonErrors(target, { OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4318" });
+Twelve tests, over an injected logger so they test this bridge and not the
+SDK: off when unconfigured; still writes to the console; one record per call;
+an `Error` reduced to its line and never a stack; patched once however many
+times it is called (`--import` runs once, but a second call would emit every
+line twice); and a logger that throws never takes the process with it, because
+a collector being unreachable must cost a log record and not a request.
 
-    target.log("migrations: up to date");
+- [x] **Step 5: Verify against a real sink, not an in-memory one**
 
-    expect(JSON.parse(lines[0]!)).toMatchObject({ level: "info", msg: "migrations: up to date" });
-  });
+A warning for whoever revisits this. `SimpleLogRecordProcessor` plus
+`InMemoryLogRecordExporter` from sdk-logs 0.223.0 recorded nothing in a
+standalone harness — not even via `ConsoleLogRecordExporter`, with
+`loggerConfig` reading `{"disabled":false,"minimumSeverity":0,"traceBased":false}`
+and `enabled()` returning true. The production path works regardless:
+`BatchLogRecordProcessor` over the OTLP exporter delivers. So verify this
+against a real OTLP endpoint. An in-memory harness here will tell you logs are
+broken when they are not, and that is an afternoon.
 
-  it("names the level the way a log store expects", () => {
-    const { target, lines } = capture();
-    jsonErrors(target, { OTEL_EXPORTER_OTLP_ENDPOINT: "x" });
-
-    target.error("position-sync failed");
-    target.warn("slow");
-
-    expect(JSON.parse(lines[0]!).level).toBe("error");
-    expect(JSON.parse(lines[1]!).level).toBe("warn");
-  });
-
-  it("reduces an Error to its one line rather than a stack", () => {
-    /* The reasoning in log.ts holds in either format: a trace is a screenful
-       of node_modules frames around the one sentence that says what broke. */
-    const { target, lines } = capture();
-    jsonErrors(target, { OTEL_EXPORTER_OTLP_ENDPOINT: "x" });
-
-    target.error("job failed:", new TypeError("nope"));
-
-    const line = JSON.parse(lines[0]!) as { msg: string };
-    expect(line.msg).toBe("job failed: TypeError: nope");
-    expect(line.msg).not.toContain("at ");
-  });
-
-  it("carries no trace id when there is no active span", () => {
-    const { target, lines } = capture();
-    jsonErrors(target, { OTEL_EXPORTER_OTLP_ENDPOINT: "x" });
-
-    target.log("boot");
-
-    expect(JSON.parse(lines[0]!).trace_id).toBeUndefined();
-  });
-
-  it("never throws on a value that will not serialise", () => {
-    /* A log line that crashes the logger takes the process with it. */
-    const { target, lines } = capture();
-    jsonErrors(target, { OTEL_EXPORTER_OTLP_ENDPOINT: "x" });
-    const looped: Record<string, unknown> = {};
-    looped["self"] = looped;
-
-    expect(() => target.log("cycle", looped)).not.toThrow();
-    expect(lines).toHaveLength(1);
-  });
-});
-```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-Run: `cd services/api && pnpm vitest run src/log-json.test.ts`
-Expected: FAIL — `jsonErrors` is not exported.
-
-- [ ] **Step 3: Add the JSON writer**
-
-Append to `services/api/src/log.ts`:
-
-```ts
-/**
- * The same log lines as JSON, when there is a collector to read them.
- *
- * A second format rather than a replacement. `oneLineErrors` was written for a
- * person tailing the container and is better at that than any JSON could be,
- * so it stays the default; this takes over only where something is parsing.
- *
- * `trace_id` is the field that earns the whole telemetry stack. Without it a
- * log store answers "an error happened at 14:02"; with it, Grafana goes from
- * that line to the request it happened in and everything else that request
- * did. `span_id` narrows it to the handler.
- *
- * Level names are the ones log stores expect — `console.log` and
- * `console.info` are both `info`, because the distinction means nothing to
- * anything downstream.
- */
-const LEVEL_NAMES: Readonly<Record<(typeof LEVELS)[number], string>> = {
-  error: "error",
-  warn: "warn",
-  log: "info",
-  info: "info",
-};
-
-/** One argument as text: an Error is its line, an object is JSON, anything else is itself. */
-const part = (value: unknown): string => {
-  if (value instanceof Error) return errorLine(value);
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    /* A cycle, or a BigInt. A log line that throws takes the process with it. */
-    return String(value);
-  }
-};
-
-export const jsonErrors = (target: Console = console, env: Env = process.env): void => {
-  const endpoint = env["OTEL_EXPORTER_OTLP_ENDPOINT"]?.trim();
-  if (endpoint === undefined || endpoint.length === 0) return;
-
-  for (const level of LEVELS) {
-    const write = target[level].bind(target);
-    target[level] = (...args: unknown[]) => {
-      const span = trace.getActiveSpan()?.spanContext();
-      const line = {
-        level: LEVEL_NAMES[level],
-        msg: args.map(part).join(" "),
-        ...(span === undefined ? {} : { trace_id: span.traceId, span_id: span.spanId }),
-      };
-      try {
-        write(JSON.stringify(line));
-      } catch {
-        write(`{"level":"${LEVEL_NAMES[level]}","msg":"unserialisable log line"}`);
-      }
-    };
-  }
-};
-```
-
-with `import { trace } from "@opentelemetry/api";` added at the top of `log.ts`.
-
-- [ ] **Step 4: Run the test to verify it passes**
-
-Run: `cd services/api && pnpm vitest run src/log-json.test.ts`
-Expected: PASS, 6 tests.
-
-- [ ] **Step 5: Call it at boot**
-
-In `services/api/src/index.ts`, immediately after `oneLineErrors();`:
-
-```ts
-/*
- * After oneLineErrors, so an Error still becomes its one line and then that
- * line becomes the `msg` field. The order is the whole behaviour: reversed,
- * the JSON writer would be wrapped by the one-line writer and every line
- * would be a JSON string inside a plain one.
- */
-jsonErrors();
-```
-
-- [ ] **Step 6: Verify the composition by hand**
-
-Run: `cd services/api && OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 node --import tsx -e 'import("./src/log.js").then(({oneLineErrors,jsonErrors})=>{oneLineErrors();jsonErrors();console.error("x:", new TypeError("y"))})'`
-Expected: one line of JSON whose `msg` is `x: TypeError: y`, with no stack frames and no nested quoting.
-
-- [ ] **Step 7: Verify and commit**
-
-Run: `cd /Users/sainathr19/Desktop/unit/mercury && pnpm check`
-
-```bash
-git add services/api/src/log.ts services/api/src/log-json.test.ts services/api/src/index.ts
-git commit -m "feat(api): log as JSON with the trace id when a collector is configured"
-```
-
----
+(The same harness is reliable for spans — `InMemorySpanExporter` is what
+answered Task 3's duplicate-span question.)
 
 ### Task 5: The background jobs
 

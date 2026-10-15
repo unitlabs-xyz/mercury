@@ -441,6 +441,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.1
         version: 1.9.1
+      '@opentelemetry/api-logs':
+        specifier: ^0.223.0
+        version: 0.223.0
       '@opentelemetry/auto-instrumentations-node':
         specifier: ^0.81.0
         version: 0.81.0(@opentelemetry/api@1.9.1)(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))
@@ -10928,7 +10931,7 @@ snapshots:
       metro-babel-transformer: 0.84.5
       metro-cache: 0.84.5
       metro-cache-key: 0.84.5
-      metro-config: 0.84.5(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      metro-config: 0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       metro-core: 0.84.5
       metro-file-map: 0.84.5
       metro-minify-terser: 0.84.5
@@ -20862,22 +20865,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  metro-config@0.84.5(bufferutil@4.1.0)(utf-8-validate@5.0.10):
-    dependencies:
-      connect: 3.7.0
-      flow-enums-runtime: 0.0.6
-      jest-validate: 29.7.0
-      metro: 0.84.5(bufferutil@4.1.0)(utf-8-validate@5.0.10)
-      metro-cache: 0.84.5
-      metro-core: 0.84.5
-      metro-runtime: 0.84.5
-      yaml: 2.9.1
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-    optional: true
-
   metro-config@0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       connect: 3.7.0
@@ -21154,7 +21141,7 @@ snapshots:
       metro-babel-transformer: 0.84.5
       metro-cache: 0.84.5
       metro-cache-key: 0.84.5
-      metro-config: 0.84.5(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+      metro-config: 0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       metro-core: 0.84.5
       metro-file-map: 0.84.5
       metro-resolver: 0.84.5

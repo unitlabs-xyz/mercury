@@ -25,6 +25,7 @@ import { inMemoryBuilds } from "./relay/builds.js";
 import { keypairRelaySigner } from "./relay/signer.js";
 import { exitOnUncaught, oneLineErrors } from "./log.js";
 import { telemetryEndpoint } from "./telemetry/otel.js";
+import { forwardConsoleToOtel } from "./telemetry/console-logs.js";
 
 /*
  * First, so that nothing after it, a bad config included, logs a stack trace.
@@ -32,6 +33,19 @@ import { telemetryEndpoint } from "./telemetry/otel.js";
  */
 oneLineErrors();
 exitOnUncaught();
+/*
+ * And on to the collector, where one is configured.
+ *
+ * After `oneLineErrors`, so an Error has already become its one line by the
+ * time this reads the arguments. Reversed, the forward would see the raw Error
+ * and send a stack.
+ *
+ * This bridge is not optional plumbing: configuring the SDK's log pipeline
+ * does not make `console.log` reach it. OpenTelemetry bridges winston, pino
+ * and bunyan and nothing else, and this service logs through the console. See
+ * telemetry/console-logs.ts.
+ */
+forwardConsoleToOtel();
 
 const config = readConfig();
 const port = Number(process.env.PORT ?? 8787);
