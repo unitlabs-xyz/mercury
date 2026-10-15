@@ -8,9 +8,6 @@ import { D, type Decimal } from "@mercury/core";
  * removes; the relayer pays the SOL and is repaid in the same transaction.
  */
 
-/** Rent for one token account, from the rent-exemption minimum for its size. */
-export const TOKEN_ACCOUNT_RENT_LAMPORTS = 2_039_280;
-
 /** One signature. The relayer's; the buyer's costs nothing extra. */
 export const SIGNATURE_LAMPORTS = 5_000;
 
@@ -18,12 +15,15 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
 
 export interface FeeInput {
   /**
-   * Whether this buy has to open a token account to receive the shares into.
+   * Rent for the token account this has to open, in lamports: zero when it
+   * opens none.
    *
-   * True only the first time a wallet holds a given stock. Rent is charged
-   * once per account, so charging it again would be charging for nothing.
+   * Non-zero only the first time a wallet holds a given token. Rent is charged
+   * once per account, so charging it again would be charging for nothing. The
+   * figure is the node's, by the account's size (see `rent.ts`): mainnet's
+   * rate has moved under a constant here before.
    */
-  readonly needsTokenAccount: boolean;
+  readonly rentLamports: number;
   readonly solPriceUsd: Decimal;
 }
 
@@ -51,7 +51,7 @@ const priced = (lamports: number, solPriceUsd: Decimal): Fee => ({
 });
 
 export const networkFee = (input: FeeInput): Fee =>
-  priced(SIGNATURE_LAMPORTS + (input.needsTokenAccount ? TOKEN_ACCOUNT_RENT_LAMPORTS : 0), input.solPriceUsd);
+  priced(SIGNATURE_LAMPORTS + input.rentLamports, input.solPriceUsd);
 
 /**
  * What a sponsored transfer charges, which is rent and never the signature.
@@ -63,16 +63,14 @@ export const networkFee = (input: FeeInput): Fee =>
  * print on every transfer.
  *
  * Rent is different in kind, not just in size. Opening the recipient's USDC
- * account moves 2,039,280 lamports out of the relayer and into an account the
- * sender named — it is not a fee at all but a transfer of our balance to
- * somewhere we chose nothing about. That is precisely the drain `SponsorPolicy`
- * warns of while the program list is open, so it is charged, and charged inside
- * the same message so it cannot be dropped.
+ * account moves 1,488,440 lamports (October 2026) out of the relayer and into
+ * an account the sender named — it is not a fee at all but a transfer of our
+ * balance to somewhere we chose nothing about. That is precisely the drain
+ * `SponsorPolicy` warns of while the program list is open, so it is charged,
+ * and charged inside the same message so it cannot be dropped.
  */
 export const transferFee = (input: FeeInput): Fee =>
-  input.needsTokenAccount
-    ? priced(TOKEN_ACCOUNT_RENT_LAMPORTS, input.solPriceUsd)
-    : { usdc: D(0), lamports: 0 };
+  input.rentLamports > 0 ? priced(input.rentLamports, input.solPriceUsd) : { usdc: D(0), lamports: 0 };
 
 /**
  * Mercury's own fee on a trade: `bps` of what it is worth, in USDC.
@@ -123,7 +121,7 @@ export const tradeCharge = (network: Fee, worthUsd: Decimal, bps: number): Trade
  * What the buy is actually worth once the network has been paid.
  *
  * The fee comes out of the amount rather than being added to it. A buyer
- * holding exactly $5 can never pay $5.25, so adding on top makes a whole
+ * holding exactly $5 can never pay $5.19, so adding on top makes a whole
  * balance unspendable and makes "Max" fail by construction.
  */
 export const investable = (amountUsd: Decimal, fee: Fee): Decimal => amountUsd.sub(fee.usdc);
