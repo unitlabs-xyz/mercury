@@ -36,7 +36,10 @@ export interface Fill {
    * a profit computed from it would be wrong by exactly the fee.
    */
   readonly usd: Decimal;
-  /** The relayer's charge for sponsoring, from its own leg. Zero when unsponsored. */
+  /**
+   * Everything the relayer took, from its own leg: the network cost and
+   * Mercury's fee, which ride in one transfer. Zero when unsponsored.
+   */
   readonly feeUsd: Decimal;
   readonly pricePerShare: Decimal;
   readonly occurredAt: Date;

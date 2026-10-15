@@ -1,0 +1,163 @@
+# Revenue, fees and referrals: TODO
+
+Built from _How Mercury makes money_ (internal deck, 14 October 2026) and checked against the code on
+`main` at `fb3fc99`. The deck points to `docs/12-revenue.md` and `docs/13-fees-and-referrals.md`.
+Neither exists on any branch yet, so this list and the deck are the only written version.
+
+Today Mercury earns $0. The only thing a user pays is the network cost, charged at cost.
+
+---
+
+## Blockers: decisions before code
+
+### Founders
+
+- [ ] Set the trading fee and its tiers (proposed: 0.5% up to $2k, 0.35% for $2k–$20k, 0.25% above $20k)
+- [ ] Country check at sign-in: yes or no, and which list (Backed geoblocks the US, UK, Canada and Australia)
+- [ ] Perps: in scope ever, or not (keeping them out means ADR 0009 stays as it is)
+
+### Partners
+
+- [ ] Jupiter: its cut on **our** swap path. See note A: we use `/swap/v1`, not Ultra, so the ~20% may not apply
+- [ ] Glider: how `swapBps` gets paid out, and to which account
+- [ ] Kamino: the real first-loan setup rent, and whether they'll set a referrer share (it is 0% on the xStocks market today)
+- [ ] Bridge: our share of card interchange
+
+### Lawyer
+
+- [ ] Do we have to block restricted countries at sign-in?
+- [ ] Does adding a borrow fee on top of Kamino make us a lender in any launch market?
+- [ ] Can we pay inviters a share of stock-trading fees in our launch markets?
+- [ ] California DFAL, if any US users stay
+
+---
+
+## 0 · Country check at sign-in (prerequisite)
+
+The deck puts this first: we can only charge for stocks where we're allowed to offer them.
+**Today:** nothing. The app never reads the user's country.
+
+- [ ] Detect country at sign-in (IP header from the edge, maybe plus a self-declared country)
+- [ ] Store it on `user`
+- [ ] Block or limit restricted countries for xStocks, baskets, borrowing and perps
+- [ ] Tell blocked users why, instead of showing a broken shelf
+
+## 1 · Trading fee (flat 0.5% shipped; tiers later)
+
+**Built 15 October 2026.** A flat fee, `TRADING_FEE_BPS` (default 50), added to the USDC transfer that
+already repays the relayer for gas, in the same transaction as the swap. Jupiter takes no cut, because
+it never sees the fee. Fees collect in the relayer's USDC account, and trades are refused without a
+relayer.
+
+- [x] Collect it in our own USDC transfer, not Jupiter's `platformFeeBps` (note A)
+- [x] Collect in USDC on both sides, into the relayer's USDC account for now
+- [x] Take the fee out of the amount, like the network cost, so "Max" still works
+- [x] Return it in `/v1/quote` as `fee.network`, `fee.mercury` and `fee.mercuryBps`; `fee.usdc` stays the total
+- [x] Confirm screen: "Mercury fee (0.5%)" above "Network fee" on web, and on mobile
+- [x] Record Mercury's share on each order (`order.mercury_fee_usd`), apart from the total in `fee_usd`
+- [x] Refuse trades when no relayer is configured (Vercel deployment included)
+- [ ] Sweep the fees from the relayer's hot wallet to a treasury
+- [ ] Tier function: 0.5% / 0.35% / 0.25% by trade size, with tests at the $2k and $20k edges
+- [ ] Alert when a fill comes back without a fee
+
+## 2 · Borrow fee and first-loan setup at cost
+
+Stops the $5–7 we lose on every new borrower.
+**Today:** `services/api/src/lending/kamino.ts` and `sponsor.ts` top up the user's rent from the relayer
+and charge nothing back. Kamino pays us nothing.
+
+- [ ] Work out the first-loan setup rent from account sizes (confirm with Kamino)
+- [ ] Charge it once from the borrowed USDC, shown as "Account setup, one time"
+- [ ] Add the 0.25% borrow fee in the same USDC transfer
+- [ ] Show both on the borrow confirm screen
+- [ ] Record both on `loan_event`
+
+## 3 · Referral tracking
+
+**Today:** not tracked. Nothing reads `?ref=`. The founding-card links (`/f/:slug`) now 301 to
+`trymercury.xyz` and drop any query string (`services/api/src/app.ts`). The founding 500 are still in
+the `waitlist` table (`position <= 500`).
+
+- [ ] Give every user a referral code and a share link
+- [ ] Read `?ref=` on landing and web, keep it through Privy sign-in, then attach it at first sign-in
+- [ ] Store who invited whom: one inviter, set once, no self-referral
+- [ ] Count a referral only once the friend funds $50+ and trades once
+- [ ] Friend discount: 25% off fees for 90 days, applied in the fee function from item 1
+- [ ] Inviter tiers by funded friends: 0–9 → 25%, 10–49 → 30%, 50+ → 35%
+- [ ] Founding 500 start at 30%: match `waitlist.email` to `user.email`
+- [ ] Keep `?ref=` when `/f/:slug` redirects
+- [ ] Invite screen: link, friends invited, friends funded, earned so far
+
+## 4 · Referral payouts (after the trade fee has run a few weeks)
+
+- [ ] Accrue 25/30/35% of Mercury's **net** fee (after Jupiter's cut) per friend, for 12 months from sign-up
+- [ ] 7-day hold before a reward counts
+- [ ] Claw back quick round trips (buy then sell within the hold)
+- [ ] Weekly USDC payout job, $1 minimum, with a ledger of what was paid and when
+- [ ] Payout history in the app
+
+## 5 · Glider basket fee (once Glider confirms the payout)
+
+**Today:** `baskets.ts` sets `feeBps: 0`. `glider/client.ts` already reads `swapBps` back from
+`/tenant/fees` for display.
+
+- [ ] Set tenant `swapBps` to 50 (0.5%) on Glider
+- [ ] Show it on the basket ticket before deposit and rebalance (`apps/web/src/app/baskets/Ticket.tsx`)
+- [ ] Charge the network cost on basket deposits (today nothing is charged, −$0.002 each)
+
+## 6 · Add-cash fee: 0.3% on non-USDC tokens
+
+The deck says "when Relay funding ships". It has (PRs #68, #72, #73), so this is no longer blocked.
+**Today:** `services/api/src/funding/relay.ts` sends no `appFees` in the `/quote/v2` body.
+
+- [ ] Add `appFees` (30 bps, our recipient) on quotes where the origin currency isn't USDC
+- [ ] Keep USDC deposits free
+- [ ] Show the fee in `FundWalletSwap.tsx`'s deposit summary
+- [ ] Confirm where Relay pays out app fees, and how often
+
+## 7 · "Buy more with credit" (once 1 and 2 are live)
+
+Fits ADR 0009's 30 September amendment. Both legs exist already, and it earns twice: the borrow fee and
+the trade fee.
+
+- [ ] One-tap borrow-then-buy, capped at our 80% safety target, on the 8 xStocks Kamino lends against
+- [ ] Show the liquidation price prominently, and warn that xStocks can gap at the Monday open
+
+## 8 · Bridge: card and cash-out (as part of those builds)
+
+**Today:** no Bridge integration in the code at all.
+
+- [ ] Card: our share of interchange, free to the user, 1% FX fee abroad
+- [ ] Cash out to a bank: `developer_fee_percent` at 0.5%
+
+---
+
+## Relayer and network cost fixes (deck section 05)
+
+- [ ] Charge both signatures. `fee.ts` adds `SIGNATURE_LAMPORTS` once, and the deck says there are 2 per tx
+- [ ] Use Token-2022 rent for xStock accounts. `fee.ts` charges SPL rent (2,039,280 lamports), while
+      `lending/sponsor.ts` already has `TOKEN_2022_ACCOUNT_RENT` (3,000,000)
+- [ ] Weekly check: SOL the relayer spent vs USDC it collected
+- [ ] Decide whether "Send" keeps absorbing the signature (−$0.002 each, a deliberate choice in `transferFee`)
+
+## After launch
+
+- [ ] Swap the projection assumptions for real numbers after a month of fees (deck section 06)
+- [ ] Write `docs/12-revenue.md` and `docs/13-fees-and-referrals.md`, which the deck cites but which don't exist yet
+
+## Out of scope unless founders decide otherwise
+
+- Stock perps (Phoenix, Pacifica). This would reverse ADR 0009 and needs geofencing; the EU caps retail
+  equity leverage at 5x. Avoid Velocity (exploited) and Flash Trade (winding down).
+
+---
+
+### Notes
+
+**A. Jupiter's cut may be smaller than the deck assumes.** The deck's "Jupiter keeps ~20%" is the Ultra
+integrator fee. ADR 0008 was superseded on 30 September, and trades now go through Jupiter's keyless
+`/swap/v1` endpoints. We also already build the trade transaction ourselves and add an atomic USDC
+`charge` to it for the network cost. If the trading fee goes into that same charge instead of through
+Jupiter's `platformFeeBps`, Jupiter may take nothing, and we keep 0.5% rather than 0.4%. Check this with
+Jupiter before building item 1, because it changes the referral maths too (inviters get a share of the
+net fee).

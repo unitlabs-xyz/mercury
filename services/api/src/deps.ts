@@ -134,12 +134,17 @@ export interface Config {
   /**
    * Optional. The key that pays for sponsored transactions.
    *
-   * Absent, sponsorship is off and buyers pay their own network costs — which
-   * is the behaviour today, not a broken state. The send route falls back to
-   * requiring the buyer to be their own fee payer, so a deployment without a
-   * funded relayer still sells stock.
+   * Absent, sponsorship is off. Sends fall back to the sender paying their own
+   * network cost, but stock trades are refused: Mercury's fee is carried in
+   * the relayer's USDC transfer, and without one a trade would fill for free.
    */
   readonly relayerSecretKey?: string;
+  /**
+   * Mercury's own fee on a stock trade, in basis points of what the trade is
+   * worth: 50 is 0.5%. Charged in the same USDC transfer that repays the
+   * relayer, so it lands in the relayer's USDC account beside the network cost.
+   */
+  readonly tradingFeeBps: number;
   /**
    * Hermes rejects Pyth's price endpoints without one, as of 26 August 2026.
    * Unset, the reference price is the issuer's quote inside Jupiter's
@@ -184,6 +189,23 @@ const required = (env: NodeJS.ProcessEnv, key: string): string => {
   return value;
 };
 
+/** Half a percent, the rate the founders set on 15 October 2026. */
+const DEFAULT_TRADING_FEE_BPS = 50;
+
+/*
+ * Whole basis points, below 100%, or the server does not start. "0.5" read as
+ * half a percent, or a typo, would otherwise charge every trade something
+ * nobody chose — and a fee is not a setting anyone checks by eye afterwards.
+ */
+const tradingFeeBps = (raw: string | undefined): number => {
+  if (raw === undefined || raw.length === 0) return DEFAULT_TRADING_FEE_BPS;
+  const bps = Number(raw);
+  if (!Number.isInteger(bps) || bps < 0 || bps >= 10_000) {
+    throw new Error(`TRADING_FEE_BPS must be whole basis points from 0 to 9999, got "${raw}"`);
+  }
+  return bps;
+};
+
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
   return {
@@ -205,6 +227,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["RELAY_API_KEY"] ? { relayApiKey: env["RELAY_API_KEY"] } : {}),
     fundMinimumUsd: Number(env["FUND_MINIMUM_USD"] ?? 10),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
+    tradingFeeBps: tradingFeeBps(env["TRADING_FEE_BPS"]),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
@@ -335,6 +358,8 @@ export interface ReadDeps {
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
   readonly send: SendDeps;
+  /** Mercury's fee on every stock trade, in basis points. See `Config.tradingFeeBps`. */
+  readonly tradingFeeBps: number;
   /** The in-app feedback button. Optional so a test app can leave it out. */
   readonly feedback?: FeedbackDeps;
   /**
@@ -370,7 +395,13 @@ export function buildReadDeps(
   deps: Deps,
   config: Pick<
     Config,
-    "databaseUrl" | "gliderApiKey" | "solanaRpcUrl" | "resendApiKey" | "notifyFrom" | "feedbackTo"
+    | "databaseUrl"
+    | "gliderApiKey"
+    | "solanaRpcUrl"
+    | "resendApiKey"
+    | "notifyFrom"
+    | "feedbackTo"
+    | "tradingFeeBps"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
@@ -414,6 +445,7 @@ export function buildReadDeps(
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
+    tradingFeeBps: config.tradingFeeBps,
     feedback: {
       to: config.feedbackTo,
       notifier:

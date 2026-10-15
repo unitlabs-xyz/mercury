@@ -468,6 +468,10 @@ const Preview = ({
   /* The charge comes out of the amount rather than being added to it, so
      somebody holding exactly $5 can still spend all of it. */
   const invested = amount - fee;
+  /* The same charge by part. With no breakdown it was the network's alone. */
+  const network = Number(quote?.fee.network ?? quote?.fee.usdc ?? 0);
+  const mercury = Number(quote?.fee.mercury ?? 0);
+  const rate = `${Number(((quote?.fee.mercuryBps ?? 0) / 100).toFixed(2))}%`;
 
   return (
     <View style={s.lines}>
@@ -490,19 +494,17 @@ const Preview = ({
           {worst !== null && worst < price && got !== null && (
             <Line label="Least you'd get" value={usd(got * worst - fee)} muted />
           )}
-          {fee > 0 && <Line label="Network charge" value={`−${usd(fee)}`} muted />}
+          {mercury > 0 && <Line label={`Mercury fee (${rate})`} value={`−${usd(mercury)}`} muted />}
+          {network > 0 && <Line label="Network charge" value={`−${usd(network)}`} muted />}
         </>
       ) : (
         <>
           <Line label="You get" value={got === null ? "—" : `${fmtShares(got)} shares`} strong />
           <Line label="Price a share" value={usd(price)} />
           {worst !== null && worst !== price && <Line label="Most you'd pay" value={usd(worst)} muted />}
-          {fee > 0 && (
-            <>
-              <Line label="Network charge" value={usd(fee)} muted />
-              <Line label="Invested" value={usd(invested)} muted />
-            </>
-          )}
+          {mercury > 0 && <Line label={`Mercury fee (${rate})`} value={usd(mercury)} muted />}
+          {network > 0 && <Line label="Network charge" value={usd(network)} muted />}
+          {fee > 0 && <Line label="Invested" value={usd(invested)} muted />}
         </>
       )}
       <Line label="Issued by" value={TOKEN_NAME[chosen.issuer]} muted />

@@ -28,9 +28,9 @@ describe("readConfig", () => {
   });
 
   /*
-   * Absent means sponsorship is off, not that the server is misconfigured. A
-   * deployment without a funded relayer still sells stock; buyers just pay
-   * their own network costs, which is the behaviour before any of this.
+   * Absent means sponsorship is off, not that the server is misconfigured: it
+   * still starts, and sends still work with the sender paying the network.
+   * Trades are refused at execute instead, since the fee needs the relayer.
    */
   it("treats a missing relayer key as sponsorship being off", () => {
     expect("relayerSecretKey" in readConfig(base)).toBe(false);
@@ -48,6 +48,28 @@ describe("readConfig", () => {
    */
   it("accepts the singular JUPITER_API_KEY, which is the easy name to reach for", () => {
     expect(readConfig({ ...base, JUPITER_API_KEY: "k1" }).jupiterApiKeys).toEqual(["k1"]);
+  });
+
+  /* Empty too: .env.example lists every optional variable with no value. */
+  it("charges 50 bps on a trade when nothing says otherwise", () => {
+    expect(readConfig(base).tradingFeeBps).toBe(50);
+    expect(readConfig({ ...base, TRADING_FEE_BPS: "" }).tradingFeeBps).toBe(50);
+  });
+
+  it("reads the trading fee from TRADING_FEE_BPS, zero included", () => {
+    expect(readConfig({ ...base, TRADING_FEE_BPS: "35" }).tradingFeeBps).toBe(35);
+    expect(readConfig({ ...base, TRADING_FEE_BPS: "0" }).tradingFeeBps).toBe(0);
+  });
+
+  /*
+   * A fee is a number every trade turns on. "0.5" meaning half a percent, or a
+   * typo, would otherwise charge something nobody chose — refusing to boot is
+   * the one place that cannot go unnoticed.
+   */
+  it("refuses a trading fee that is not whole basis points below 100%", () => {
+    for (const bad of ["0.5", "-1", "10000", "fifty"]) {
+      expect(() => readConfig({ ...base, TRADING_FEE_BPS: bad })).toThrow("TRADING_FEE_BPS");
+    }
   });
 
   it("prefers the plural when a deployment somehow sets both", () => {

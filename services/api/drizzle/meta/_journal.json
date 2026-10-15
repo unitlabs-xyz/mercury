@@ -148,6 +148,13 @@
       "when": 1791969159568,
       "tag": "0020_funding_intent_wallet_only",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792043685376,
+      "tag": "0021_order_mercury_fee",
+      "breakpoints": true
     }
   ]
 }

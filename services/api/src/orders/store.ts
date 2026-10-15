@@ -31,6 +31,12 @@ export interface Repricing {
   readonly referencePrice: string | null;
   readonly premiumPct: string | null;
   readonly status: OrderStatus;
+  /**
+   * Mercury's fee in the transaction this pass built. Absent when it built
+   * none — a refusal, or a price that moved — and stored as null then, so the
+   * row never keeps the fee of a build that its decision no longer describes.
+   */
+  readonly mercuryFeeUsd?: string | null;
 }
 
 export interface StoredOrder {
@@ -46,6 +52,8 @@ export interface StoredOrder {
    */
   readonly usdAmount: string;
   readonly max: boolean;
+  /** Mercury's fee in the last transaction built for it. Null until one is. */
+  readonly mercuryFeeUsd: string | null;
   readonly createdAt: string;
 }
 
@@ -106,6 +114,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         status: orders.status,
         usdAmount: orders.usdAmount,
         max: orders.max,
+        mercuryFeeUsd: orders.mercuryFeeUsd,
         createdAt: orders.createdAt,
       });
     if (saved === undefined) throw new Error("order insert returned nothing");
@@ -116,6 +125,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
       status: saved.status,
       usdAmount: saved.usdAmount,
       max: saved.max,
+      mercuryFeeUsd: saved.mercuryFeeUsd,
       createdAt: saved.createdAt.toISOString(),
     };
   },
@@ -128,6 +138,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         status: orders.status,
         usdAmount: orders.usdAmount,
         max: orders.max,
+        mercuryFeeUsd: orders.mercuryFeeUsd,
         createdAt: orders.createdAt,
       })
       .from(orders)
@@ -144,6 +155,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
           status: row.status,
           usdAmount: row.usdAmount,
           max: row.max,
+          mercuryFeeUsd: row.mercuryFeeUsd,
           createdAt: row.createdAt.toISOString(),
         };
   },
@@ -164,6 +176,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         referencePrice: next.referencePrice,
         premiumPct: next.premiumPct,
         status: next.status,
+        mercuryFeeUsd: next.mercuryFeeUsd ?? null,
       })
       .where(and(eq(orders.id, id), eq(orders.userId, userId)));
   },
