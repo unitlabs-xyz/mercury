@@ -26,6 +26,7 @@ import { keypairRelaySigner } from "./relay/signer.js";
 import { exitOnUncaught, oneLineErrors } from "./log.js";
 import { telemetryEndpoint } from "./telemetry/otel.js";
 import { forwardConsoleToOtel } from "./telemetry/console-logs.js";
+import { every } from "./jobs/every.js";
 
 /*
  * First, so that nothing after it, a bad config included, logs a stack trace.
@@ -156,28 +157,6 @@ if (fund !== undefined) {
 }
 
 const read = buildReadDeps(auth.db, deps, config, relay, fund);
-
-/**
- * A background job, on its own clock.
- *
- * The next run is scheduled after the last one finishes, never on a fixed
- * tick: a pass that overruns its interval must not have a second one start
- * behind it and write the same rows twice. A failure is logged and the
- * schedule continues — an upstream being down is a reason to try again later,
- * not to stop trying.
- */
-const every = (name: string, ms: number, run: () => Promise<string | null>) => {
-  const tick = async () => {
-    try {
-      const note = await run();
-      if (note !== null) console.log(`${name}: ${note}`);
-    } catch (error: unknown) {
-      console.error(`${name} failed:`, error);
-    }
-    setTimeout(() => void tick(), ms).unref();
-  };
-  void tick();
-};
 
 /**
  * The background half of the system, and the whole of it. This is the only
