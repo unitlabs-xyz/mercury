@@ -10,6 +10,15 @@ const NOTHING: Freshness = {
   now: "2026-10-15T00:00:00.000Z",
 };
 
+/** Every query stubbed; the authorisation tests need no database at all. */
+const STUBS = {
+  health: async () => NOTHING,
+  overview: async () => ({}) as never,
+  orders: async () => ({}) as never,
+  funding: async () => ({}) as never,
+  baskets: async () => ({}) as never,
+} satisfies Omit<AdminDeps, "admins">;
+
 /** An app with the identity already set, as requireAuth would leave it. */
 const appAs = (privyUserId: string, admins: readonly string[], deps: Partial<AdminDeps> = {}) => {
   const app = new Hono();
@@ -17,19 +26,42 @@ const appAs = (privyUserId: string, admins: readonly string[], deps: Partial<Adm
     c.set("identity", { userId: "u1", privyUserId, walletAddress: null });
     await next();
   });
-  app.route("/", adminRoutes({ admins, health: async () => NOTHING, ...deps }));
+  app.route("/", adminRoutes({ admins, ...STUBS, ...deps }));
   return app;
 };
 
+/** Every route this surface exposes. New routes join this list or go ungated. */
+const ROUTES = [
+  "/v1/admin/health",
+  "/v1/admin/overview",
+  "/v1/admin/orders",
+  "/v1/admin/funding",
+  "/v1/admin/baskets",
+] as const;
+
 describe("admin routes", () => {
-  it("answers 404 to an authenticated caller who is not an admin", async () => {
+  it.each(ROUTES)("answers 404 on %s to a caller who is not an admin", async (route) => {
     /* 404 and not 403: a 403 confirms the surface exists. It reads every
-       account's holdings, so there is no reason to advertise it. */
+       account's holdings, so there is no reason to advertise it. Every route,
+       because a gate that covers four of five is not a gate. */
     const app = appAs("did:privy:nobody", ["did:privy:me"]);
 
-    const res = await app.request("/v1/admin/health");
+    expect((await app.request(route)).status).toBe(404);
+  });
 
-    expect(res.status).toBe(404);
+  it.each(ROUTES)("answers 404 on %s when the allowlist is empty", async (route) => {
+    const app = appAs("did:privy:me", []);
+
+    expect((await app.request(route)).status).toBe(404);
+  });
+
+  it.each(ROUTES)("exposes no write method on %s", async (route) => {
+    /* Read-only by construction, asserted rather than assumed. */
+    const app = appAs("did:privy:me", ["did:privy:me"]);
+
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      expect((await app.request(route, { method })).status).not.toBe(200);
+    }
   });
 
   it("answers an admin", async () => {
@@ -39,14 +71,6 @@ describe("admin routes", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(NOTHING);
-  });
-
-  it("answers 404 to everybody when the allowlist is empty", async () => {
-    /* The unmounted case, asserted at the route level as well: a config that
-       was never set must not leave the surface open to the first caller. */
-    const app = appAs("did:privy:me", []);
-
-    expect((await app.request("/v1/admin/health")).status).toBe(404);
   });
 
   it("does not run the query for a caller who is refused", async () => {
@@ -64,18 +88,6 @@ describe("admin routes", () => {
     await app.request("/v1/admin/health");
 
     expect(ran).toBe(0);
-  });
-
-  it("exposes no route that is not a GET", async () => {
-    /* Read-only by construction, asserted rather than assumed. The surface
-       reads every account in the system; a POST on it is a bug nobody would
-       notice until it mattered. */
-    const app = appAs("did:privy:me", ["did:privy:me"]);
-
-    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
-      const res = await app.request("/v1/admin/health", { method });
-      expect(res.status).not.toBe(200);
-    }
   });
 });
 

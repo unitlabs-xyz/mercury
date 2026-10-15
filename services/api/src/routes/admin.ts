@@ -13,10 +13,18 @@ import { Hono, type Handler } from "hono";
 import { requireAdmin } from "../admin/allowlist.js";
 import { BadRange, parseRange, type Range } from "../admin/range.js";
 import type { Freshness } from "../admin/freshness.js";
+import type { Overview } from "../admin/overview.js";
+import type { OrderStats } from "../admin/orders.js";
+import type { FundingStats } from "../admin/funding.js";
+import type { BasketStats } from "../admin/baskets.js";
 
 export interface AdminDeps {
   readonly admins: readonly string[];
   readonly health: () => Promise<Freshness>;
+  readonly overview: (range: Range) => Promise<Overview>;
+  readonly orders: (range: Range) => Promise<OrderStats>;
+  readonly funding: (range: Range) => Promise<FundingStats>;
+  readonly baskets: (range: Range) => Promise<BasketStats>;
 }
 
 /**
@@ -60,6 +68,11 @@ export const adminRoutes = (deps: AdminDeps): Hono => {
 
   /* No range: it is three max() reads, bounded by definition. */
   app.get("/v1/admin/health", async (c) => c.json(await deps.health()));
+
+  app.get("/v1/admin/overview", ranged(deps.overview));
+  app.get("/v1/admin/orders", ranged(deps.orders));
+  app.get("/v1/admin/funding", ranged(deps.funding));
+  app.get("/v1/admin/baskets", ranged(deps.baskets));
 
   return app;
 };

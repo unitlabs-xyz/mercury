@@ -49,6 +49,11 @@ import type { FundDeps } from "./routes/fund.js";
 import type { AdminDeps } from "./routes/admin.js";
 import { parseAdmins } from "./admin/allowlist.js";
 import { freshness } from "./admin/freshness.js";
+import { withTimeout } from "./admin/timeout.js";
+import { overview } from "./admin/overview.js";
+import { orderStats } from "./admin/orders.js";
+import { fundingStats } from "./admin/funding.js";
+import { basketStats } from "./admin/baskets.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import type { FeedbackDeps } from "./routes/feedback.js";
@@ -523,7 +528,16 @@ export function buildReadDeps(
       : {
           admin: {
             admins: config.adminPrivyUserIds,
+            /* No timeout on health: three max() reads against indexes, and the
+               one route that has to answer when something else is wrong. */
             health: () => freshness(db),
+            /* Each aggregate inside its own transaction with a statement
+               timeout — see admin/timeout.ts for why it cannot be middleware.
+               `withTimeout` hands the query a reader, never the handle. */
+            overview: (range) => withTimeout(db, (r) => overview(r, range)),
+            orders: (range) => withTimeout(db, (r) => orderStats(r, range)),
+            funding: (range) => withTimeout(db, (r) => fundingStats(r, range)),
+            baskets: (range) => withTimeout(db, (r) => basketStats(r, range)),
           },
         }),
     borrow: {

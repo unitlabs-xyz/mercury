@@ -34,7 +34,7 @@ export const ADMIN_STATEMENT_TIMEOUT_MS = 10_000;
  * query functions take this type — it is the one `db.transaction` can supply,
  * and it carries no `insert`, `update` or `delete`.
  */
-export type Reader = Pick<Db, "select" | "execute">;
+export type Reader = Pick<Db, "select" | "selectDistinctOn" | "execute">;
 
 const timeoutMs = (): string => {
   const ms = ADMIN_STATEMENT_TIMEOUT_MS;
