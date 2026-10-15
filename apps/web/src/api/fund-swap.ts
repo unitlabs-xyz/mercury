@@ -9,7 +9,7 @@ import { configureDynamicChains } from "@relayprotocol/relay-sdk/chain-utils";
 import { adaptSolanaWallet } from "@relayprotocol/relay-svm-wallet-adapter";
 import { Connection, type SendOptions, type VersionedTransaction } from "@solana/web3.js";
 import { apiFetch } from "./client";
-import { SOLANA_RPC_URL, solBalanceRaw, tokenBalanceRaw } from "../solana/rpc";
+import { SOLANA_RPC_URL, signatureSucceeded, solBalanceRaw, tokenBalanceRaw } from "../solana/rpc";
 import { SOLANA_CHAIN_ID } from "../wallet/chains";
 import { vmOfChain } from "../wallet/funder";
 import { useFunderForChain, useSwitchFunderChain } from "../wallet/useFunder";
@@ -360,18 +360,41 @@ export const useFundSwapAction = (chainId: number) => {
        */
       lastHash.current = null;
       const hashes: { in: string | null; out: string | null } = { in: null, out: null };
-      await execute({
-        quote: built.quote as Parameters<typeof execute>[0]["quote"],
-        wallet,
-        onProgress: (progress) => {
-          /* Relay reports the origin leg first and the fill second. Kept as
-             they arrive so a failure still leaves something to look up. */
-          const txs = progress.txHashes ?? [];
-          hashes.in = txs[0]?.txHash ?? hashes.in;
-          hashes.out = txs[1]?.txHash ?? hashes.out;
-          lastHash.current = hashes.in ?? lastHash.current;
-        },
-      });
+      try {
+        await execute({
+          quote: built.quote as Parameters<typeof execute>[0]["quote"],
+          wallet,
+          onProgress: (progress) => {
+            /* Relay reports the origin leg first and the fill second. Kept as
+               they arrive so a failure still leaves something to look up. */
+            const txs = progress.txHashes ?? [];
+            hashes.in = txs[0]?.txHash ?? hashes.in;
+            hashes.out = txs[1]?.txHash ?? hashes.out;
+            lastHash.current = hashes.in ?? lastHash.current;
+          },
+        });
+      } catch (err: unknown) {
+        /*
+         * A confirmation that gave up is not a deposit that failed.
+         *
+         * Relay's Solana adapter confirms by subscribing to the signature
+         * after sending it, and a wallet that waits for confirmation before
+         * handing the signature back — Phantom does — has already changed the
+         * status the adapter is about to listen for. Nothing arrives, the
+         * block height passes, and web3.js throws
+         * `TransactionExpiredBlockheightExceededError` over a transaction that
+         * is finalized on chain. Observed once with real money: the swap went
+         * through and the panel called it an error.
+         *
+         * So the chain is asked before the error is believed. If the origin
+         * transaction is there and did not fail, the deposit is in flight —
+         * Relay settles the far leg over its webhook either way — and the only
+         * thing that went wrong was our listening.
+         */
+        const landed = funder.vmType === "svm" && hashes.in !== null && (await signatureSucceeded(hashes.in));
+        if (!landed) throw err;
+        console.log("fund: confirmation timed out, but the transaction landed", hashes.in);
+      }
 
       /*
        * Reported, not asserted. A failure here leaves the deposit at

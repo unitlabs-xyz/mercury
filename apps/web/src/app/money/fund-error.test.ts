@@ -213,3 +213,31 @@ describe("fundErrorCopy · MetaMask's own shape", () => {
     ).toBe("Not enough gas for the network fee.");
   });
 });
+
+describe("fundErrorCopy · a confirmation that ran out of blocks", () => {
+  it("does not put web3.js's sentence in front of a person", () => {
+    /* What the panel showed over a deposit that had in fact finalized:
+       "TransactionExpiredBlockheightExceededError: Signature 46pg9yr3… has
+       expired: block height exceeded." Every word of that is for us. */
+    const { message, rejected } = fundErrorCopy(
+      new Error(
+        "TransactionExpiredBlockheightExceededError: Signature 46pg9yr3BFbanL4dhk4gZ66BMx3XEpi6vjf has expired: block height exceeded.",
+      ),
+    );
+
+    expect(rejected).toBe(false);
+    expect(message).toBe("We couldn't confirm this in time. Check the transaction before sending again.");
+  });
+
+  it("does not claim nothing was sent, because something may well have been", () => {
+    /* This sentence is only reached once the chain has been asked and could
+       not confirm the signature — which is not the same as it not existing. */
+    const { message } = fundErrorCopy(new Error("block height exceeded"));
+
+    expect(message).not.toMatch(/nothing was sent/i);
+  });
+
+  it("still lets a revert win, which is a different and worse answer", () => {
+    expect(fundErrorCopy(new Error("Transaction Reverted")).message).not.toMatch(/confirm this in time/);
+  });
+});

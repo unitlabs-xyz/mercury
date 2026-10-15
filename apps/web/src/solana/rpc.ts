@@ -1,4 +1,4 @@
-import { address, createSolanaRpc, type Address, type Blockhash } from "@solana/kit";
+import { address, createSolanaRpc, type Address, type Blockhash, type Signature } from "@solana/kit";
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { USDC_MINT } from "@mercury/chain";
 
@@ -153,6 +153,41 @@ export const solBalanceRaw = (owner: string): Promise<bigint> =>
 const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
 
 /** Native SOL, in Relay's spelling: the system program's address. */
+/**
+ * Whether a signature is on chain and did not fail.
+ *
+ * Asked of the chain, because the alternative is believing a confirmation
+ * that gave up. Relay's Solana adapter confirms a deposit by subscribing to
+ * the signature *after* sending it, and wallets like Phantom do not return
+ * until the transaction is already confirmed — so the status it is waiting
+ * for has often changed before it starts listening, nothing ever arrives, and
+ * sixty seconds later the block height passes and web3.js throws
+ * `TransactionExpiredBlockheightExceededError`. The money moved; only the
+ * listener missed it. Observed 15 October 2026 on a deposit that `finalized`
+ * with `err: null` while the panel showed it as failed.
+ *
+ * `searchTransactionHistory`, since by the time this is asked the signature
+ * may have left the recent-status cache.
+ *
+ * `false` rather than a throw when the lookup itself fails: this is only ever
+ * asked in order to second-guess an error, and an unreachable endpoint is no
+ * evidence the deposit survived.
+ */
+export const signatureSucceeded = async (signature: string): Promise<boolean> => {
+  try {
+    return await viaRpc(async (rpc) => {
+      const { value } = await rpc
+        .getSignatureStatuses([signature as Signature], { searchTransactionHistory: true })
+        .send();
+      const status = value[0];
+      if (status === null || status === undefined) return false;
+      return status.err === null && status.confirmationStatus !== "processed";
+    });
+  } catch {
+    return false;
+  }
+};
+
 export const SOL_NATIVE = "11111111111111111111111111111111";
 
 /** One thing a wallet holds: the mint, the raw amount, and its decimals. */
