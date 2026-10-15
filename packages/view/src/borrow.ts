@@ -64,6 +64,12 @@ export type Borrow = {
   readonly poolAvailableUsd: number;
   readonly borrowApy: number;
   readonly obligation: string | null;
+  /**
+   * What opening the Kamino account costs, which Mercury pays: shown struck
+   * through on a first borrow. Null once the account is open, or when the
+   * server could not price it.
+   */
+  readonly setupCostUsd: number | null;
   readonly collateral: readonly BorrowRow[];
 };
 
@@ -94,6 +100,7 @@ export const borrowFromWire = (w: BorrowWire): Borrow => ({
   poolAvailableUsd: Number(w["poolAvailableUsd"]),
   borrowApy: Number(w["borrowApy"]),
   obligation: typeof w["obligation"] === "string" ? w["obligation"] : null,
+  setupCostUsd: n(w["setupCostUsd"]),
   collateral: w.collateral.map((r) => ({
     ticker: String(r["ticker"]),
     isStock: r["isStock"] === true,

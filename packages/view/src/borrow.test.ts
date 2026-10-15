@@ -49,6 +49,7 @@ const position = (over: Partial<Borrow> = {}): Borrow => ({
   poolAvailableUsd: 1_000_000,
   borrowApy: 0.08,
   obligation: null,
+  setupCostUsd: null,
   collateral: [row()],
   ...over,
 });
@@ -166,5 +167,15 @@ describe("borrowFromWire", () => {
     expect(b.locked).toBe(false);
     expect(b.obligation).toBe("abc");
     expect(b.collateral[0]?.liquidationPrice).toBeNull();
+  });
+
+  /* What Mercury pays to open a first-time borrower's Kamino account, struck through on the sheet. */
+  it("reads the setup cost, and keeps its absence as null", () => {
+    const wire = (setupCostUsd: string | null | undefined) =>
+      ({ setupCostUsd, obligation: null, collateral: [] }) as unknown as BorrowWire;
+    expect(borrowFromWire(wire("2.97")).setupCostUsd).toBe(2.97);
+    expect(borrowFromWire(wire(null)).setupCostUsd).toBeNull();
+    // A server from before the field says nothing at all.
+    expect(borrowFromWire(wire(undefined)).setupCostUsd).toBeNull();
   });
 });
