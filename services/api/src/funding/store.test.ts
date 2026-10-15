@@ -31,6 +31,19 @@ describe("createFundingStore", () => {
     expect(saved).toMatchObject({ status: "waiting", inTxHash: null, outTxHash: null });
   });
 
+  /* Relay holds the fee as one balance; this row is what says which deposit each part came from. */
+  it("keeps Mercury's fee on the deposit it was charged on", async () => {
+    const { store, userId } = await setup();
+    const saved = await store.create(intent(userId, { mercuryFeeUsd: "0.070814" }));
+    expect(Number((await store.byId(userId, saved.id))!.mercuryFeeUsd)).toBe(0.070814);
+  });
+
+  it("records no fee on a deposit that was charged none", async () => {
+    const { store, userId } = await setup();
+    const saved = await store.create(intent(userId));
+    expect(saved.mercuryFeeUsd).toBeNull();
+  });
+
   it("reads one back by id, and only the owner's", async () => {
     const { db, store, userId } = await setup();
     const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();

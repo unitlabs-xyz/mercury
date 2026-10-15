@@ -13,6 +13,8 @@ export interface NewFundingIntent {
   readonly originCurrencySymbol: string;
   readonly recipientAddress: string;
   readonly quotedOutRaw: string | null;
+  /** Mercury's fee in the quote, in dollars, as Relay reported it. Null when none was charged. */
+  readonly mercuryFeeUsd?: string | null;
 }
 
 export interface FundingSettlement {

@@ -705,6 +705,9 @@ const sampleToken = (
     name,
     decimals,
     logoUrl,
+    /* The server's rule, roughly: 0.3% on anything but USDC. The burn address
+       stands in for the recipient, so the live preview quote can still be asked. */
+    appFee: symbol === "USDC" ? null : { recipient: "0x000000000000000000000000000000000000dEaD", bps: 30 },
   };
 };
 

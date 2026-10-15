@@ -51,7 +51,12 @@ const DETAILS = {
   outRaw: "9990651",
   outFormatted: "9.990651",
   impactPct: "0.01",
+  appFeeUsd: "0.03",
 };
+
+/** Where Relay credits Mercury's deposit fee: an EVM address, whatever chain the deposit is from. */
+const FEE_RECIPIENT = "0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E";
+const BASE_USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 
 const store = (over: Partial<FundDeps["store"]> = {}): FundDeps["store"] => ({
   create: vi.fn().mockResolvedValue({ id: INTENT_ID }),
@@ -86,6 +91,7 @@ const harness = (
     relay: { chains, currencies, fundQuote, status: vi.fn() },
     store: store(),
     minimumUsd: 10,
+    fee: { bps: 30, recipient: FEE_RECIPIENT },
     ...over.deps,
   };
   const app = new Hono();
@@ -226,6 +232,56 @@ describe("fundRoutes · tokens", () => {
   it("refuses a session with no wallet", async () => {
     const { app } = harness({}, null);
     expect((await app.request("/v1/money/fund/tokens")).status).toBe(401);
+  });
+});
+
+describe("fundRoutes · the deposit fee", () => {
+  const usdcOnBase = token({ address: BASE_USDC, symbol: "USDC", name: "USD Coin", decimals: 6 });
+
+  /*
+   * The browser prices the deposit with Relay directly while somebody types,
+   * so it has to ask for the same fee the server will — and it learns which
+   * tokens owe one from here, rather than from a second list of its own.
+   */
+  it("says on each token whether it owes Mercury's fee, and to whom", async () => {
+    const { app } = harness({ tokens: [token(), usdcOnBase] });
+    const body = (await (await app.request("/v1/money/fund/tokens")).json()) as {
+      tokens: { symbol: string; appFee: unknown }[];
+    };
+    expect(body.tokens.map((t) => [t.symbol, t.appFee])).toEqual([
+      ["ETH", { recipient: FEE_RECIPIENT, bps: 30 }],
+      ["USDC", null],
+    ]);
+  });
+
+  it("asks Relay for the fee on a token it has to swap", async () => {
+    const { app, fundQuote } = harness();
+    await post(app, "/v1/money/fund/swap", swap);
+    expect(fundQuote.mock.calls[0]![0]).toMatchObject({ appFee: { recipient: FEE_RECIPIENT, bps: 30 } });
+  });
+
+  it("charges nothing on Circle's USDC", async () => {
+    const { app, fundQuote } = harness({ chains: [BASE], tokens: [usdcOnBase] });
+    await post(app, "/v1/money/fund/swap", {
+      chainId: 8453,
+      currency: BASE_USDC,
+      amountRaw: "10000000",
+      from: EVM_WALLET,
+    });
+    expect(fundQuote.mock.calls[0]![0]).toMatchObject({ appFee: null });
+  });
+
+  it("charges nothing when no recipient is configured", async () => {
+    const { app, fundQuote } = harness({ deps: { fee: { bps: 30 } } });
+    await post(app, "/v1/money/fund/swap", swap);
+    expect(fundQuote.mock.calls[0]![0]).toMatchObject({ appFee: null });
+  });
+
+  /* Relay holds the money; the row is the only place that says which deposit it came from. */
+  it("records what the fee came to on the intent", async () => {
+    const { app, deps } = harness();
+    await post(app, "/v1/money/fund/swap", swap);
+    expect(vi.mocked(deps.store.create).mock.calls[0]![0]).toMatchObject({ mercuryFeeUsd: "0.03" });
   });
 });
 

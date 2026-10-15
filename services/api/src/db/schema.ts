@@ -696,6 +696,14 @@ export const fundingIntents = pgTable(
     recipientAddress: text("recipient_address").notNull(),
     /** USDC base units. Indicative at mint time, and never updated. */
     quotedOutRaw: text("quoted_out_raw"),
+    /**
+     * Mercury's fee in the quote, in dollars, as Relay reported it. Null when
+     * the deposit was charged none — Circle's USDC, or no recipient set.
+     *
+     * Relay holds every deposit's fee as one balance until it is claimed, so
+     * this is the only record of which deposit each part of it came from.
+     */
+    mercuryFeeUsd: usd("mercury_fee_usd"),
     status: text("status").notNull().default("waiting"),
     inTxHash: text("in_tx_hash"),
     outTxHash: text("out_tx_hash"),

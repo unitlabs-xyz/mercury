@@ -155,6 +155,13 @@
       "when": 1792043685376,
       "tag": "0021_order_mercury_fee",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792046593081,
+      "tag": "0022_funding_intent_mercury_fee",
+      "breakpoints": true
     }
   ]
 }

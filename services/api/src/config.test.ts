@@ -72,6 +72,41 @@ describe("readConfig", () => {
     }
   });
 
+  it("charges 30 bps on a swapped deposit when nothing says otherwise", () => {
+    expect(readConfig(base).depositFeeBps).toBe(30);
+    expect(readConfig({ ...base, DEPOSIT_FEE_BPS: "" }).depositFeeBps).toBe(30);
+    expect(readConfig({ ...base, DEPOSIT_FEE_BPS: "0" }).depositFeeBps).toBe(0);
+  });
+
+  it("refuses a deposit fee that is not whole basis points below 100%", () => {
+    for (const bad of ["0.3", "-1", "10000", "thirty"]) {
+      expect(() => readConfig({ ...base, DEPOSIT_FEE_BPS: bad })).toThrow("DEPOSIT_FEE_BPS");
+    }
+  });
+
+  /*
+   * Relay pays app fees to an EVM address and nothing else, Solana deposits
+   * included. Unset is a deployment that has not chosen one: no fee, rather
+   * than a fee owed to nobody.
+   */
+  it("reads the deposit fee's recipient, and leaves it off when unset", () => {
+    expect("depositFeeRecipient" in readConfig(base)).toBe(false);
+    expect("depositFeeRecipient" in readConfig({ ...base, DEPOSIT_FEE_RECIPIENT: "" })).toBe(false);
+    const evm = "0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E";
+    expect(readConfig({ ...base, DEPOSIT_FEE_RECIPIENT: evm }).depositFeeRecipient).toBe(evm);
+  });
+
+  /* A Solana address here would be accepted by nothing and noticed by nobody until the claim. */
+  it("refuses a deposit fee recipient that is not an EVM address", () => {
+    for (const bad of [
+      "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+      "0x1234",
+      "999999cf1046e68e36E1aA2E0E07105eDDD1f08E",
+    ]) {
+      expect(() => readConfig({ ...base, DEPOSIT_FEE_RECIPIENT: bad })).toThrow("DEPOSIT_FEE_RECIPIENT");
+    }
+  });
+
   it("prefers the plural when a deployment somehow sets both", () => {
     expect(readConfig({ ...base, JUPITER_API_KEYS: "k1,k2", JUPITER_API_KEY: "old" }).jupiterApiKeys).toEqual(
       ["k1", "k2"],

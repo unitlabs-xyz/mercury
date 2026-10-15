@@ -146,6 +146,17 @@ export interface Config {
    */
   readonly tradingFeeBps: number;
   /**
+   * Mercury's fee on a deposit Relay has to swap, in basis points of what is
+   * sent: 30 is 0.3%. Circle's own USDC is never charged. Relay takes it out of
+   * the deposit and holds it for us; see `depositFeeRecipient`.
+   */
+  readonly depositFeeBps: number;
+  /**
+   * Optional. The EVM address Relay credits deposit fees to, and the one that
+   * claims them. Absent, no deposit is charged, because there is nobody to pay.
+   */
+  readonly depositFeeRecipient?: string;
+  /**
    * Hermes rejects Pyth's price endpoints without one, as of 26 August 2026.
    * Unset, the reference price is the issuer's quote inside Jupiter's
    * `price/v3`, which republishes every two or three minutes — workable, but
@@ -192,22 +203,39 @@ const required = (env: NodeJS.ProcessEnv, key: string): string => {
 /** Half a percent, the rate the founders set on 15 October 2026. */
 const DEFAULT_TRADING_FEE_BPS = 50;
 
+/** 0.3% on a deposit Relay has to swap, the rate in the revenue deck of 14 October 2026. */
+const DEFAULT_DEPOSIT_FEE_BPS = 30;
+
 /*
  * Whole basis points, below 100%, or the server does not start. "0.5" read as
  * half a percent, or a typo, would otherwise charge every trade something
  * nobody chose — and a fee is not a setting anyone checks by eye afterwards.
  */
-const tradingFeeBps = (raw: string | undefined): number => {
-  if (raw === undefined || raw.length === 0) return DEFAULT_TRADING_FEE_BPS;
+const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): number => {
+  const raw = env[key];
+  if (raw === undefined || raw.length === 0) return fallback;
   const bps = Number(raw);
   if (!Number.isInteger(bps) || bps < 0 || bps >= 10_000) {
-    throw new Error(`TRADING_FEE_BPS must be whole basis points from 0 to 9999, got "${raw}"`);
+    throw new Error(`${key} must be whole basis points from 0 to 9999, got "${raw}"`);
   }
   return bps;
 };
 
+/*
+ * Relay pays app fees to an EVM address only, Solana deposits included. A
+ * Solana address here would be taken by nothing and found out at the claim.
+ */
+const evmAddress = (env: NodeJS.ProcessEnv, key: string): string | undefined => {
+  const raw = env[key];
+  if (raw === undefined || raw.length === 0) return undefined;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(raw))
+    throw new Error(`${key} must be an EVM address (0x and 40 hex digits)`);
+  return raw;
+};
+
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
+  const depositFeeRecipient = evmAddress(env, "DEPOSIT_FEE_RECIPIENT");
   return {
     databaseUrl: required(env, "DATABASE_URL"),
     privyAppId: required(env, "PRIVY_APP_ID"),
@@ -227,7 +255,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["RELAY_API_KEY"] ? { relayApiKey: env["RELAY_API_KEY"] } : {}),
     fundMinimumUsd: Number(env["FUND_MINIMUM_USD"] ?? 10),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
-    tradingFeeBps: tradingFeeBps(env["TRADING_FEE_BPS"]),
+    tradingFeeBps: basisPoints(env, "TRADING_FEE_BPS", DEFAULT_TRADING_FEE_BPS),
+    depositFeeBps: basisPoints(env, "DEPOSIT_FEE_BPS", DEFAULT_DEPOSIT_FEE_BPS),
+    ...(depositFeeRecipient === undefined ? {} : { depositFeeRecipient }),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
