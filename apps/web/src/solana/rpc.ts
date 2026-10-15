@@ -13,12 +13,20 @@ import { USDC_MINT } from "@mercury/chain";
  * key), dRPC (400, chain not on the free tier) and BlockEden (402). This one
  * answered 200 with `access-control-allow-origin: *`.
  *
- * Its limit is that indexed methods — `getTokenAccountsByOwner` and friends —
- * are refused without a token, which is why the balance below is read through
- * `getAccountInfo` on a derived account instead. Everything here has to stay
- * inside that restriction to be worth having.
+ * `solana.publicnode.com`, not `solana-rpc.publicnode.com`. Both serve the
+ * same JSON-RPC over HTTPS, but the `-rpc` host answers a websocket upgrade
+ * with a 301 to this one, and a redirect is not something a websocket
+ * handshake survives — so Privy's subscriptions, which take this URL with
+ * `http` swapped for `ws`, never connected. Measured 15 October 2026.
+ *
+ * Two limits, both measured the same day, and both load-bearing below:
+ * `getTokenAccountsByOwner` is refused outright with a 403, and
+ * `getMultipleAccounts` is refused past **ten** addresses in one call.
  */
-export const PUBLIC_SOLANA_RPC_URL = "https://solana-rpc.publicnode.com";
+export const PUBLIC_SOLANA_RPC_URL = "https://solana.publicnode.com";
+
+/** The most addresses `getMultipleAccounts` takes on the public endpoint. */
+const PUBLIC_BATCH = 10;
 
 const CONFIGURED = import.meta.env["VITE_SOLANA_RPC_URL"] as string | undefined;
 
@@ -204,10 +212,18 @@ export const walletHoldings = async (owner: string, known: readonly string[]): P
           }),
         ),
       );
+      /*
+       * Ten at a time, which is what the public endpoint serves: eleven
+       * addresses in one `getMultipleAccounts` come back 403 "Request
+       * blocked". Chunking at 100 — the figure the method itself allows —
+       * meant this fallback had never once worked on the endpoint it exists
+       * for, so a refused `getTokenAccountsByOwner` was followed straight by
+       * a second refusal. Measured 15 October 2026.
+       */
       const found: Holding[] = [];
-      for (let i = 0; i < atas.length; i += 100) {
+      for (let i = 0; i < atas.length; i += PUBLIC_BATCH) {
         const { value } = await rpc
-          .getMultipleAccounts(atas.slice(i, i + 100), { encoding: "jsonParsed" })
+          .getMultipleAccounts(atas.slice(i, i + PUBLIC_BATCH), { encoding: "jsonParsed" })
           .send();
         for (const account of value) {
           const h = account === null ? null : holdingOf(account.data);

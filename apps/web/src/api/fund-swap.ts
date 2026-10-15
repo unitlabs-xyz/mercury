@@ -210,13 +210,42 @@ export interface SwapReceipt {
   readonly outTxHash: string | null;
 }
 
-/** What AppKit's Solana provider gives us, which is all `adaptSolanaWallet` needs. */
+/**
+ * What AppKit's Solana provider gives us, which is all `adaptSolanaWallet` needs.
+ *
+ * A **bare base58 string**, not an object. AppKit types it
+ * `Promise<TransactionSignature>` and `TransactionSignature` is `string`; this
+ * file used to declare it as `{ signature: string }` and hand the result
+ * straight to Relay's adapter, which reads `.signature` off it. Reading a
+ * property off a string gives `undefined`, and the adapter's own check then
+ * threw "Invalid Solana signature: expected base58." — a true sentence about a
+ * value we had mangled on the way in.
+ *
+ * Typed loosely because the wallets underneath disagree: Phantom's own
+ * injected API answers `{ signature }` and AppKit's wallet-standard provider
+ * flattens it to the string. `signatureOf` takes either.
+ */
 interface SolanaProvider {
   signAndSendTransaction(
     transaction: VersionedTransaction,
     options?: SendOptions,
-  ): Promise<{ signature: string }>;
+  ): Promise<string | { signature?: unknown }>;
 }
+
+/**
+ * The signature out of whatever the wallet answered.
+ *
+ * Never trusts the shape: a wallet that returns neither gets one clear
+ * sentence here rather than a base58 complaint three frames down about a
+ * value that was never a signature.
+ */
+export const signatureOf = (result: string | { signature?: unknown }): string => {
+  const value = typeof result === "string" ? result : result?.signature;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error("Your wallet did not return a transaction signature.");
+  }
+  return value;
+};
 
 /**
  * Deposit from the connected wallet, whichever chain it is on.
@@ -310,7 +339,10 @@ export const useFundSwapAction = (chainId: number) => {
                 if (walletProvider === undefined) {
                   throw new Error("Your wallet is not ready to sign yet.");
                 }
-                return walletProvider.signAndSendTransaction(transaction, options);
+                /* The adapter reads `.signature` off what this returns, so the
+                   string the provider answers has to be put back in a box. */
+                const answered = await walletProvider.signAndSendTransaction(transaction, options);
+                return { signature: signatureOf(answered) };
               },
             );
 
