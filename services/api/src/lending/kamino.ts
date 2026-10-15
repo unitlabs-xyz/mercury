@@ -27,9 +27,10 @@ import {
 } from "@kamino-finance/klend-sdk";
 import BN from "bn.js";
 import { D, ZERO, type Decimal } from "@mercury/core";
+import type { ChainReader } from "@mercury/chain";
 import { createLendingRpc } from "./rpc.js";
 import { batchedLoader } from "./batch.js";
-import { rentForMissing, tokenAccountsCreatedBy, topUp, transferSol } from "./sponsor.js";
+import { rentForMissing, sponsorRents, tokenAccountsCreatedBy, topUp, transferSol } from "./sponsor.js";
 import type {
   BuiltTransactions,
   CollateralTerms,
@@ -80,6 +81,12 @@ export interface KaminoLendingConfig {
   readonly scanRpcUrl?: string;
   /** How long a loaded market is reused. Loading reads every reserve and its oracle. */
   readonly ttlMs?: number;
+  /**
+   * Where rent is asked: the app's own chain reader, so the hour it keeps an
+   * answer for is shared with trades. Left out, the rate measured on mainnet
+   * in October 2026 is used.
+   */
+  readonly rent?: Pick<ChainReader, "rentExemption">;
 }
 
 /**
@@ -103,10 +110,12 @@ export class KaminoLending implements LendingSource {
   private readonly ttlMs: number;
   private cached: { at: number; market: Promise<KaminoMarket> } | null = null;
   private readonly positionOf: (wallet: string) => Promise<LendingPosition | null>;
+  private readonly rent: Pick<ChainReader, "rentExemption">;
 
   constructor(config: KaminoLendingConfig) {
     this.rpc = createLendingRpc(config.rpcUrl, config.scanRpcUrl);
     this.ttlMs = config.ttlMs ?? 30_000;
+    this.rent = config.rent ?? {};
     this.positionOf = batchedLoader((wallets) => this.positions(wallets), null);
   }
 
@@ -337,9 +346,10 @@ export class KaminoLending implements LendingSource {
     firstTime: boolean,
     compile: (ixs: readonly Instruction[]) => { wire: string },
   ): Promise<readonly (readonly Instruction[])[]> {
-    const [{ value: ownerBalance }, { value: relayerBalance }] = await Promise.all([
+    const [{ value: ownerBalance }, { value: relayerBalance }, rents] = await Promise.all([
       this.rpc.getBalance(owner).send(),
       this.rpc.getBalance(relayer).send(),
+      sponsorRents(this.rent),
     ]);
     const probe: bigint = relayerBalance - FEE_RESERVE;
     if (probe <= 0n) throw new Error("kamino: the relayer has no SOL to sponsor with");
@@ -359,7 +369,7 @@ export class KaminoLending implements LendingSource {
           )
           .send();
         const exists = new Set(created.filter((_, j) => value[j] !== null).map((c) => String(c.account)));
-        spend = rentForMissing(created, exists);
+        spend = rentForMissing(created, exists, rents);
       } else {
         const sim = await this.rpc
           .simulateTransaction(compile([transferSol(relayer, owner, probe), ...ixs]).wire as never, {
@@ -378,7 +388,7 @@ export class KaminoLending implements LendingSource {
         spend = held + probe - BigInt(after);
       }
 
-      const send = topUp(held, spend);
+      const send = topUp(held, spend, rents.wallet);
       given += send;
       held = held + send - spend;
       funded.push(send > 0n ? [transferSol(relayer, owner, send), ...ixs] : ixs);

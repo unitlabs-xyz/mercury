@@ -3,11 +3,9 @@ import type { Address, Instruction } from "@solana/kit";
 import {
   ASSOCIATED_TOKEN_PROGRAM,
   SYSTEM_PROGRAM,
-  TOKEN_2022_ACCOUNT_RENT,
-  TOKEN_ACCOUNT_RENT,
   TOKEN_PROGRAM,
-  WALLET_RENT_EXEMPT,
   rentForMissing,
+  sponsorRents,
   tokenAccountsCreatedBy,
   topUp,
   transferSol,
@@ -26,22 +24,30 @@ const createAta = (account: string, tokenProgram: Address, kind = 1): Instructio
   data: new Uint8Array([kind]),
 });
 
+/* What mainnet answered on 15 October 2026 for a wallet, a USDC account and a stock's. */
+const RENTS = { wallet: 650_240n, token: 1_488_440n, token2022: 1_559_560n };
+
 describe("topUp", () => {
   it("creates an empty wallet: covers what is spent and leaves it rent exempt", () => {
-    expect(topUp(0n, 30_000_000n)).toBe(30_000_000n + WALLET_RENT_EXEMPT);
+    expect(topUp(0n, 30_000_000n, RENTS.wallet)).toBe(30_000_000n + RENTS.wallet);
   });
 
   it("sends only the shortfall to a wallet that has some SOL", () => {
-    expect(topUp(10_000_000n, 30_000_000n)).toBe(20_000_000n + WALLET_RENT_EXEMPT);
+    expect(topUp(10_000_000n, 30_000_000n, RENTS.wallet)).toBe(20_000_000n + RENTS.wallet);
   });
 
   it("sends nothing to a wallet that can already pay and stay rent exempt", () => {
-    expect(topUp(40_000_000n, 30_000_000n)).toBe(0n);
+    expect(topUp(40_000_000n, 30_000_000n, RENTS.wallet)).toBe(0n);
   });
 
   it("sends nothing when the transaction spends nothing, even to an empty wallet", () => {
-    expect(topUp(0n, 0n)).toBe(0n);
-    expect(topUp(0n, -5_000n)).toBe(0n);
+    expect(topUp(0n, 0n, RENTS.wallet)).toBe(0n);
+    expect(topUp(0n, -5_000n, RENTS.wallet)).toBe(0n);
+  });
+
+  /* The minimum is the node's to say. A wallet left at less is one the runtime refuses. */
+  it("leaves the wallet holding exactly the minimum it is given", () => {
+    expect(topUp(0n, 30_000_000n, 890_880n)).toBe(30_000_000n + 890_880n);
   });
 });
 
@@ -75,6 +81,24 @@ describe("token accounts an action creates", () => {
       createAta("stockAta", TOKEN_2022),
       createAta("existing", TOKEN_PROGRAM),
     ]);
-    expect(rentForMissing(created, new Set(["existing"]))).toBe(TOKEN_ACCOUNT_RENT + TOKEN_2022_ACCOUNT_RENT);
+    expect(rentForMissing(created, new Set(["existing"]), RENTS)).toBe(RENTS.token + RENTS.token2022);
+  });
+});
+
+describe("sponsorRents", () => {
+  it("asks for a wallet, a USDC account and a stock's account", async () => {
+    const asked: number[] = [];
+    const rents = await sponsorRents({
+      rentExemption: async (bytes) => {
+        asked.push(bytes);
+        return BigInt(bytes);
+      },
+    });
+    expect(asked.sort((a, b) => a - b)).toEqual([0, 165, 179]);
+    expect(rents).toEqual({ wallet: 0n, token: 165n, token2022: 179n });
+  });
+
+  it("falls back to the rate measured on mainnet when nothing can be asked", async () => {
+    expect(await sponsorRents({})).toEqual(RENTS);
   });
 });

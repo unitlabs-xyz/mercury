@@ -1,4 +1,6 @@
 import { getU32Encoder, getU64Encoder, type Address, type Instruction } from "@solana/kit";
+import type { ChainReader } from "@mercury/chain";
+import { STOCK_ACCOUNT_BYTES, TOKEN_ACCOUNT_BYTES, WALLET_BYTES, rentFor } from "../rent.js";
 
 /**
  * Sponsoring a loan for a wallet that holds no SOL.
@@ -20,18 +22,34 @@ export const SYSTEM_PROGRAM = "11111111111111111111111111111111" as Address;
 export const ASSOCIATED_TOKEN_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address;
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
 
-/** What a system account with no data needs to hold to exist: rent exemption at zero bytes. */
-export const WALLET_RENT_EXEMPT = 890_880n;
-
-/** A classic SPL token account, 165 bytes. USDC's. */
-export const TOKEN_ACCOUNT_RENT = 2_039_280n;
-
 /**
- * A Token-2022 account, as xStocks use, with room for the extensions they carry.
- * Generous on purpose: this is only used where the transaction cannot be
- * simulated, and anything over the real figure stays in the user's wallet.
+ * What each account a sponsored loan may open has to hold, as the node says.
+ *
+ * These were constants, and they went stale: set when mainnet charged 6,960
+ * lamports a byte, still in force at 5,080, so every new wallet was left over
+ * a third more SOL than it needed. The Token-2022 figure is a stock account's,
+ * because stocks are the only Token-2022 collateral offered; it used to be
+ * padded instead, and the padding went to the user too. Too little would not
+ * be lost money — the top-up rides in the transaction that needs it, so a
+ * short one fails whole — but it would be a loan that fails.
  */
-export const TOKEN_2022_ACCOUNT_RENT = 3_000_000n;
+export interface SponsorRents {
+  /** A system account with no data: what a wallet has to hold to exist. */
+  readonly wallet: bigint;
+  /** A classic SPL token account. USDC's. */
+  readonly token: bigint;
+  /** A Token-2022 account, as a stock's is. */
+  readonly token2022: bigint;
+}
+
+export const sponsorRents = async (chain: Pick<ChainReader, "rentExemption">): Promise<SponsorRents> => {
+  const [wallet, token, token2022] = await Promise.all([
+    rentFor(chain, WALLET_BYTES),
+    rentFor(chain, TOKEN_ACCOUNT_BYTES),
+    rentFor(chain, STOCK_ACCOUNT_BYTES),
+  ]);
+  return { wallet, token, token2022 };
+};
 
 /** System program `Transfer`: instruction 2, then the lamports. */
 export const transferSol = (from: Address, to: Address, lamports: bigint): Instruction => ({
@@ -52,9 +70,9 @@ export const transferSol = (from: Address, to: Address, lamports: bigint): Instr
  * never less than rent exemption once something is spent, because a wallet
  * left between zero and that minimum is a state the runtime refuses.
  */
-export const topUp = (balance: bigint, spend: bigint): bigint => {
+export const topUp = (balance: bigint, spend: bigint, walletRent: bigint): bigint => {
   if (spend <= 0n) return 0n;
-  const short = spend + WALLET_RENT_EXEMPT - balance;
+  const short = spend + walletRent - balance;
   return short > 0n ? short : 0n;
 };
 
@@ -81,13 +99,14 @@ export const tokenAccountsCreatedBy = (
 export const rentForMissing = (
   created: readonly { readonly account: Address; readonly tokenProgram: Address }[],
   exists: ReadonlySet<string>,
+  rents: Pick<SponsorRents, "token" | "token2022">,
 ): bigint => {
   const seen = new Set<string>();
   let rent = 0n;
   for (const { account, tokenProgram } of created) {
     if (exists.has(account) || seen.has(account)) continue;
     seen.add(account);
-    rent += tokenProgram === TOKEN_PROGRAM ? TOKEN_ACCOUNT_RENT : TOKEN_2022_ACCOUNT_RENT;
+    rent += tokenProgram === TOKEN_PROGRAM ? rents.token : rents.token2022;
   }
   return rent;
 };
