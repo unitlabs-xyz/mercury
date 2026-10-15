@@ -40,6 +40,12 @@ services:
       # know its own public URL or its links and OAuth redirects point at
       # localhost.
       GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:?set the public url}"
+      # Anonymous access OFF, which the base image turns ON — with the Admin
+      # role. Measured: without this, no credentials at all answer 200 and
+      # GF_SECURITY_ADMIN_PASSWORD is decorative. Local-only or not, nobody
+      # should learn this stack's habits from a file that leaves it on.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
       # Nobody signs up for an internal telemetry stack.
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
