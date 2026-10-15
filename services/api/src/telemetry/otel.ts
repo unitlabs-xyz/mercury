@@ -97,6 +97,20 @@ export const startTelemetry = (env: Env = process.env): boolean => {
            TypeScript through tsx — thousands of reads per cold start, none of
            which tells anybody anything. */
         "@opentelemetry/instrumentation-fs": { enabled: false },
+        /*
+         * Off because it does not work here, and because if it ever starts
+         * working it would send every log line twice.
+         *
+         * It patches the `pino` module as it loads, and under ESM it never
+         * does: measured with and without `tsx`, and with and without
+         * `@opentelemetry/instrumentation/hook.mjs` registered, pino wrote to
+         * stdout correctly and the collector received no `/v1/logs` and no
+         * `trace_id` — four combinations, same result. `log/index.ts` attaches
+         * the same kind of destination stream explicitly instead, which is
+         * what this instrumentation would have done, so leaving it enabled
+         * buys a duplicate rather than a fallback.
+         */
+        "@opentelemetry/instrumentation-pino": { enabled: false },
       }),
     ],
   });

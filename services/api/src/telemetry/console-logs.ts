@@ -31,7 +31,7 @@ import { errorLine } from "../log.js";
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-const LEVELS = ["error", "warn", "log", "info"] as const;
+const LEVELS = ["error", "warn", "log", "info", "debug"] as const;
 type Level = (typeof LEVELS)[number];
 
 /**
@@ -42,7 +42,13 @@ type Level = (typeof LEVELS)[number];
  * severity in every query somebody writes.
  */
 export const severityOf = (level: Level): SeverityNumber =>
-  level === "error" ? SeverityNumber.ERROR : level === "warn" ? SeverityNumber.WARN : SeverityNumber.INFO;
+  level === "error"
+    ? SeverityNumber.ERROR
+    : level === "warn"
+      ? SeverityNumber.WARN
+      : level === "debug"
+        ? SeverityNumber.DEBUG
+        : SeverityNumber.INFO;
 
 /**
  * The arguments of one console call as the line a person would have read.

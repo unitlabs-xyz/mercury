@@ -9,6 +9,7 @@ const capture = () => {
     info: (...a: unknown[]) => written.push(`info ${a.join(" ")}`),
     warn: (...a: unknown[]) => written.push(`warn ${a.join(" ")}`),
     error: (...a: unknown[]) => written.push(`error ${a.join(" ")}`),
+    debug: (...a: unknown[]) => written.push(`debug ${a.join(" ")}`),
   } as unknown as Console;
   return { target, written };
 };
@@ -108,6 +109,16 @@ describe("severityOf", () => {
     expect(severityOf("warn")).toBe(SeverityNumber.WARN);
     expect(severityOf("log")).toBe(SeverityNumber.INFO);
     expect(severityOf("info")).toBe(SeverityNumber.INFO);
+    expect(severityOf("debug")).toBe(SeverityNumber.DEBUG);
+  });
+
+  it("does not file debug as info, which would make it unfilterable", () => {
+    /* `debug` was in neither this forward's level list nor log.ts's, so a
+       console.debug call went to stdout with its stack and never reached the
+       collector — a level that looked available and was not. Mapping it to
+       INFO now would be the same mistake with extra steps: the whole value of
+       debug is being able to leave it out of a query. */
+    expect(severityOf("debug")).not.toBe(SeverityNumber.INFO);
   });
 
   it("treats log and info alike, because the difference means nothing downstream", () => {
