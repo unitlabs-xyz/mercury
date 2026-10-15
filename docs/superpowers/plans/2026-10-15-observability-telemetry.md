@@ -617,24 +617,34 @@ app.onError((err, c) => {
 });
 ```
 
-- [ ] **Step 7: Check for duplicate spans**
+- [x] **Step 7: Check for duplicate spans — measured, and there are none**
 
-Run the API with telemetry pointed at a throwaway collector (or `OTEL_TRACES_EXPORTER=console` and `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`), make one request, and count the server spans. Node's HTTP auto-instrumentation creates inbound spans and so does `@hono/otel`.
+Answered on 15 October 2026 rather than left open. The production `NodeSDK`
+with an in-memory exporter swapped in, a real `@hono/node-server` listening,
+and one request to `/v1/invest/AAPL`:
 
-If there are two, disable the HTTP instrumentation's server spans in `otel.ts`:
+```
+kind=SERVER scope=@hono/otel name="GET /v1/invest/:ticker" route=/v1/invest/:ticker
+kind=CLIENT scope=@opentelemetry/instrumentation-undici name="GET" route=-
 
-```ts
-    instrumentations: [
-      getNodeAutoInstrumentations({
-        "@opentelemetry/instrumentation-fs": { enabled: false },
-        /* @hono/otel owns the server span; this would be a second one over the
-           same request, with a path instead of a route pattern. */
-        "@opentelemetry/instrumentation-http": { disableIncomingRequestInstrumentation: true },
-      }),
-    ],
+SERVER SPANS: 1
 ```
 
-Record what you found in the commit body, because the next person will ask.
+Exactly one server span, from `@hono/otel`, carrying the route pattern and not
+the path. Node's HTTP instrumentation does not add a competing one, so
+`disableIncomingRequestInstrumentation` is **not** needed and must not be set —
+setting it would be configuration defending against a problem that does not
+exist, and the next person would have no way to tell.
+
+The client span is the probe's own outbound `fetch`, which is the other thing
+this measured: `@opentelemetry/instrumentation-undici` is on by default inside
+`getNodeAutoInstrumentations`, so **Task 6 step 1 needs no code change**.
+
+Two ways to get this wrong, for whoever re-runs it: `app.request()` from a
+Vitest test never touches Node's HTTP server, so it cannot show the
+duplication either way; and the OTLP HTTP exporter sends protobuf, so a sink
+that `JSON.parse`s the body silently records nothing. Use an in-memory
+exporter.
 
 - [ ] **Step 8: Verify and commit**
 

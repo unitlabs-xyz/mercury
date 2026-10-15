@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { httpInstrumentationMiddleware } from "@hono/otel";
 import { allocate, D, DEFAULT_POLICY, toWire } from "@mercury/core";
 import { ConfirmOrderRequest, CreateOrderRequest, InvestBasketRequest, type ErrorCode } from "@mercury/types";
 import type { Deps } from "./deps.js";
@@ -14,6 +15,7 @@ import { createSolanaRpc } from "@solana/kit";
 import { USDC_MINT } from "@mercury/chain";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
+import { requestId } from "./telemetry/request-id.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
 import { borrowRoutes } from "./routes/borrow.js";
@@ -82,6 +84,25 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
   /* One client for the routes that talk to the chain directly. */
   const rpc = createSolanaRpc(read.send.rpcUrl);
+  /*
+   * Above cors(), both of them, so a request CORS turns away is still a
+   * request that was counted and traced. A rejected preflight is exactly the
+   * kind of failure that otherwise reaches us as "the app is broken" with
+   * nothing in the logs.
+   *
+   * @hono/otel's default `http.route` is the Hono route pattern, which is what
+   * this needs: `/v1/invest/:ticker` and never `/v1/invest/AAPL`. The second
+   * would make every ticker its own time series, and the error-rate graph
+   * unreadable by the time anybody needed it.
+   *
+   * Header capture is left off. It is opt-in in the library, and switching it
+   * on would be a standing invitation to record an Authorization header.
+   *
+   * Both are no-ops when telemetry is unconfigured: the middleware asks for a
+   * tracer and gets the API's no-op one.
+   */
+  app.use("*", httpInstrumentationMiddleware({ serviceName: "mercury-api" }));
+  app.use("*", requestId());
   app.use("*", cors());
 
   // Public, so the app can say "dry run" before anyone signs anything.
@@ -116,8 +137,17 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
 
   app.onError((err, c) => {
     if (err.message.startsWith("buildDeps:")) return c.json(NOT_READY, 503);
-    console.error(err);
-    return c.json(fail("internal", "Something went wrong."), 500);
+    /*
+     * The id in the log line and in the body, so the sentence somebody reads
+     * on screen and the line an engineer greps for name the same request.
+     *
+     * `?? "unknown"` because an error thrown before the middleware ran — in
+     * routing itself, say — has no id, and a crash inside the error handler
+     * answers nothing at all.
+     */
+    const id = (c.get("requestId") as string | undefined) ?? "unknown";
+    console.error(`request ${id} failed:`, err);
+    return c.json({ ...fail("internal", "Something went wrong."), requestId: id }, 500);
   });
 
   /** Who is calling, and which wallet is theirs. The first authenticated route. */
