@@ -55,6 +55,19 @@ const ACTIVE = 0;
  */
 const FIRST_TIME = /^(createUserLutIx|initUserMetadata|InitObligation|InitObligationForFarm)\b/;
 
+/**
+ * A new user's Kamino setup, without the lookup table the SDK makes by default.
+ *
+ * The SDK opens a lookup table for every new user, and nothing here ever puts
+ * an address in it or reads one from it: every transaction `build` compiles is
+ * compressed against the market's own table, XSTOCKS_LUT. It holds rent all the
+ * same, 934,720 lamports at mainnet's rate in October 2026, and for a sponsored
+ * wallet that rent is the relayer's — paid once per borrower, for an empty
+ * table. Skipped, the user's metadata names the default key instead, which is
+ * what the SDK itself writes when it is told not to make one.
+ */
+export const USER_SETUP = { skipInitialization: false, skipLutCreation: true } as const;
+
 /** "SPYx" is SPY; anything else keeps its own symbol. */
 const tickerOf = (symbol: string) => (/x$/.test(symbol) ? symbol.slice(0, -1) : symbol);
 
@@ -202,6 +215,7 @@ export class KaminoLending implements LendingSource {
       useV2Ixs: true,
       scopeRefreshConfig: undefined,
       currentLedgerInstant: instant,
+      initUserMetadata: USER_SETUP,
     };
 
     const reserveOf = (ticker: string): KaminoReserve => {
