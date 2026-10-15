@@ -13,6 +13,14 @@ services:
   lgtm:
     image: grafana/otel-lgtm:latest
     restart: unless-stopped
+    # A fixed name, because it is the hostname the API dials.
+    #
+    # Coolify names containers after the resource plus a generated id, which
+    # is not something another resource can predict — so without this the
+    # endpoint would have to be looked up and re-entered after every redeploy.
+    container_name: mercury-lgtm
+    networks:
+      - mercury
     environment:
       # Five seconds is the default and is tight for flushing four stores to
       # disk. A redeploy that cuts them off loses whatever had not been written.
@@ -61,3 +69,22 @@ services:
 
 volumes:
   lgtm-data:
+
+# A network shared with the API, declared external because it outlives this
+# resource and the API is deployed separately.
+#
+# Compose's default network would not do: it is created per resource, so the
+# API — its own Coolify resource, on its own network — could not resolve this
+# container at all, and `http://lgtm:4318` would simply not answer. This is the
+# piece that makes the two sides reachable without publishing OTLP.
+#
+# Create it once on the host, before the first deploy:
+#
+#     docker network create mercury
+#
+# and attach the API resource to it too (Coolify: the resource's Network tab,
+# or `docker network connect mercury <api-container>`).
+networks:
+  mercury:
+    external: true
+    name: mercury

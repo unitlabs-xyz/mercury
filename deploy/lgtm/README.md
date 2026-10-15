@@ -17,6 +17,44 @@ to run it.
   only ever knows an OTLP endpoint, so moving to a managed backend later is one
   environment variable and no code.
 
+## What this is, and what goes where
+
+**A separate container.** Nothing of this stack lives inside the API, and that
+is the point: the API knows one thing about it, a URL. Three containers on the
+box, each its own Coolify resource:
+
+| Container      |             |                                               |
+| -------------- | ----------- | --------------------------------------------- |
+| `mercury-api`  | the API     | reads `OTEL_EXPORTER_OTLP_ENDPOINT` and sends |
+| `mercury-web`  | the web app | untouched by any of this                      |
+| `mercury-lgtm` | this stack  | receives, stores, draws                       |
+
+So the API needs **one environment variable** and no code, and this stack needs
+its two secrets and a network. If the stack is down the API carries on
+normally: the exporter drops what it cannot deliver and the request path never
+notices.
+
+## Step 0: the shared network
+
+Do this once, before the first deploy, or nothing below reaches anything else:
+
+```bash
+docker network create mercury
+```
+
+Then attach **both** the API resource and this one to it (in Coolify, the
+resource's network settings; or `docker network connect mercury <container>`).
+
+This is the step that is easy to skip and fails confusingly. Each Coolify
+resource gets its own Docker network by default, so without a shared one the
+API cannot resolve `mercury-lgtm` at all — the endpoint points at a hostname
+that does not exist, the exporter retries quietly, and Grafana stays empty
+while the API reports `telemetry: on` at boot. Exactly the symptom that sends
+somebody off to debug the collector.
+
+The alternative — publishing port 4318 — is what the shared network exists to
+avoid. OTLP ingest has no authentication at all.
+
 ## Deploy
 
 In Coolify, new resource → Docker Compose:
@@ -35,11 +73,20 @@ without them):
 | `GRAFANA_ADMIN_PASSWORD` | the admin password. A secret, not a build arg.                                               |
 | `GRAFANA_ROOT_URL`       | the public URL Coolify serves Grafana on. Without it Grafana's own links point at localhost. |
 
-Then on the **API** service, set `OTEL_EXPORTER_OTLP_ENDPOINT` to
-`http://lgtm:4318` — the compose service name on the shared Docker network.
-Optionally `OTEL_SERVICE_NAME`, `LOG_LEVEL`, and `GIT_SHA` (worth it: without
-it every deploy reports the same `service.version`, so "did this start at the
-last deploy" has no answer).
+## The API's side: one variable
+
+On the **API** resource:
+
+| Variable                      | Required                 |                                                                                                                                                            |
+| ----------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | **yes, to switch it on** | `http://mercury-lgtm:4318` — the container name on the shared network. Unset means telemetry is off: the SDK never starts, and the API says which at boot. |
+| `GIT_SHA`                     | no, but do it            | becomes `service.version`. Without it every deploy reports the same version, so "did this start at the last deploy" has no answer.                         |
+| `LOG_LEVEL`                   | no                       | `info` by default. `debug` adds the decision inputs while reproducing somebody's problem.                                                                  |
+| `OTEL_SERVICE_NAME`           | no                       | `mercury-api` by default.                                                                                                                                  |
+
+That is the whole of the API's side. No code change, no SDK to initialise in a
+handler, no sidecar. And it is reversible for the same reason: point that one
+variable at a managed backend and delete this container.
 
 ## Two things not to change
 
@@ -109,25 +156,29 @@ eight jobs into a single series with no job names at all.
 Everything below was verified against this exact config locally before it was
 committed, so a failure here is the deployment rather than the files.
 
+1. **The two containers can see each other.** From the API container,
+   `getent hosts mercury-lgtm`. If that prints nothing, step 0 did not happen
+   and nothing else below will work — the API will still say `telemetry: on` at
+   boot, because all it knows is that a URL was configured.
 1. **Grafana answers.** `curl -s $GRAFANA_ROOT_URL/api/health` → `"database":
 "ok"`.
-2. **The dashboards provisioned.** Both appear in the Mercury folder within
+1. **The dashboards provisioned.** Both appear in the Mercury folder within
    30 seconds (the provisioner's poll interval).
-3. **Telemetry arrives.** Make one request to the API, then in Grafana →
+1. **Telemetry arrives.** Make one request to the API, then in Grafana →
    Explore → Prometheus: `sum(rate(http_server_request_duration_seconds_count[5m]))`
    is above zero.
-4. **Traces arrive.** Explore → Tempo → Search, service `mercury-api`. The span
+1. **Traces arrive.** Explore → Tempo → Search, service `mercury-api`. The span
    should be named for the route pattern.
-5. **Logs arrive, and join to traces.** Explore → Loki,
+1. **Logs arrive, and join to traces.** Explore → Loki,
    `{service_name="mercury-api"} | scope="orders"`. Each line carries
    `trace_id` as structured metadata; the Tempo datasource's trace-to-logs link
    uses it, and it works in both directions.
-6. **Cardinality is sane.** `curl .../loki/api/v1/labels` should list only
+1. **Cardinality is sane.** `curl .../loki/api/v1/labels` should list only
    `service_name` and `deployment_environment_name`. Everything else —
    `trace_id`, `scope`, `ticker` — is structured metadata, which is queryable
    without being indexed. If that list grows, something started promoting
    attributes to labels and Loki's index will suffer for it.
-7. **The flush on shutdown works.** Restart the API and confirm the spans from
+1. **The flush on shutdown works.** Restart the API and confirm the spans from
    its last request still arrived. That is `LGTM_SHUTDOWN_TIMEOUT_SECONDS` and
    the `SIGTERM` handler in `services/api/src/telemetry/otel.ts`.
 
