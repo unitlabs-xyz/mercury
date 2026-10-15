@@ -19,7 +19,6 @@ const base = {
   portfolio: {},
   money: {},
   activity: {},
-  waitlist: {},
   fills: {},
   borrow: {},
   basketTemplates: {},

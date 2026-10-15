@@ -455,8 +455,12 @@ export type WalletStream = typeof walletStreams.$inferSelect;
 
 /**
  * People who asked to be told when Mercury opens. Not users: nobody here has
- * signed in, so this is the one table that holds an email, and it is never
- * joined to anything. Read only through the admin export or the database.
+ * signed in, and it is never joined to anything.
+ *
+ * Nothing reads or writes it any more. The waitlist was removed when the beta
+ * opened to everyone (docs/archive/waitlist), and the table was kept, rows and
+ * all, because the signups are the one part of it that cannot be rebuilt. It
+ * stays defined here so that no generated migration drops it by accident.
  */
 export const waitlist = pgTable(
   "waitlist",
@@ -489,12 +493,6 @@ export const waitlist = pgTable(
     /**
      * When the "Mercury is live" email went out, and the only record that it
      * did. Null means it has not.
-     *
-     * In the database rather than beside whoever sent it, because two things
-     * send it now — the script by hand and the scheduled job — and a sender
-     * that remembers privately will mail someone the other has already
-     * reached. Adding to Privy's allowlist twice is free; emailing twice is
-     * not.
      */
     betaMailedAt: timestamp("beta_mailed_at", { withTimezone: true }),
   },
@@ -504,7 +502,6 @@ export const waitlist = pgTable(
     uniqueIndex("waitlist_slug_idx").on(t.slug),
   ],
 );
-export type WaitlistEntry = typeof waitlist.$inferSelect;
 
 /**
  * What an account was worth, once an hour.

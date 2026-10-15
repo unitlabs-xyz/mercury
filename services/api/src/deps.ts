@@ -48,7 +48,6 @@ import type { MoneyDeps } from "./routes/money.js";
 import type { FundDeps } from "./routes/fund.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
-import { pgWaitlist, type WaitlistDeps } from "./routes/waitlist.js";
 import type { FeedbackDeps } from "./routes/feedback.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
@@ -149,14 +148,6 @@ export interface Config {
    * rather than on dislocation.
    */
   readonly pythApiKey?: string;
-  /** Optional. The bearer token for `GET /admin/waitlist`; unset, that route is a 404. */
-  readonly waitlistAdminToken?: string;
-  /**
-   * Optional. The origin founding-card links are built on, once the landing
-   * domain proxies `/f/*` and `/waitlist/cards/*` here. Unset, each link uses
-   * the address the request came in on.
-   */
-  readonly waitlistPublicUrl?: string;
 }
 
 /**
@@ -217,8 +208,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
-    ...(env["WAITLIST_ADMIN_TOKEN"] ? { waitlistAdminToken: env["WAITLIST_ADMIN_TOKEN"] } : {}),
-    ...(env["WAITLIST_PUBLIC_URL"] ? { waitlistPublicUrl: env["WAITLIST_PUBLIC_URL"] } : {}),
   };
 }
 
@@ -343,7 +332,6 @@ export interface ReadDeps {
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
   readonly orders: OrderStore;
-  readonly waitlist: WaitlistDeps;
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
   readonly send: SendDeps;
@@ -382,14 +370,7 @@ export function buildReadDeps(
   deps: Deps,
   config: Pick<
     Config,
-    | "databaseUrl"
-    | "gliderApiKey"
-    | "solanaRpcUrl"
-    | "waitlistAdminToken"
-    | "waitlistPublicUrl"
-    | "resendApiKey"
-    | "notifyFrom"
-    | "feedbackTo"
+    "databaseUrl" | "gliderApiKey" | "solanaRpcUrl" | "resendApiKey" | "notifyFrom" | "feedbackTo"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
@@ -433,15 +414,6 @@ export function buildReadDeps(
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
-    waitlist: pgWaitlist(db, config.waitlistAdminToken, undefined, {
-      // The welcome email, through the same provider as loan alerts. Without a
-      // key it is logged and not sent; the card still shows on the page.
-      notifier:
-        config.resendApiKey === undefined
-          ? loggingNotifier()
-          : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom }),
-      ...(config.waitlistPublicUrl ? { publicBase: config.waitlistPublicUrl } : {}),
-    }),
     feedback: {
       to: config.feedbackTo,
       notifier:

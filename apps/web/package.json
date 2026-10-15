@@ -18,7 +18,6 @@
     "@mercury/sdk": "workspace:*",
     "@mercury/types": "workspace:*",
     "@mercury/view": "workspace:*",
-    "@number-flow/react": "^0.6.2",
     "@privy-io/react-auth": "^3.45.0",
     "@relayprotocol/relay-sdk": "8.0.4",
     "@relayprotocol/relay-svm-wallet-adapter": "22.0.4",

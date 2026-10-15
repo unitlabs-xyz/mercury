@@ -69,14 +69,14 @@ const read = buildReadDeps(auth.db, deps, config);
  * loan-watch, so no borrower is warned before a liquidation. Both want a
  * cadence Vercel Cron does not offer on this plan.
  *
- * So this serves the waitlist and keeps the HTTP surface deployable. Pointing
- * an app's API base at it gets a working read path, no sponsorship, a feed up
- * to a day behind and a flat chart. That is a reasonable thing to deploy and a
- * poor thing to discover, so it is stated rather than left to a comment.
+ * So this keeps the HTTP surface deployable, and no more. Pointing an app's
+ * API base at it gets a working read path, no sponsorship, a feed up to a day
+ * behind and a flat chart. That is a reasonable thing to deploy and a poor
+ * thing to discover, so it is stated rather than left to a comment.
  */
 console.log(
   [
-    "vercel: HTTP surface and waitlist.",
+    "vercel: HTTP surface only.",
     "sponsorship: off (needs a shared build store, not per-instance memory).",
     "jobs: stocks, position-sync and wallet-events daily; no snapshot, no loan alerts.",
     "The container (index.ts) is the real home for all of it.",

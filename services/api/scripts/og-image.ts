@@ -1,6 +1,7 @@
 /**
- * The web app's share image (og:image), drawn the way the waitlist cards are:
- * one of the card photos, Diatype, the white wordmark. 1200 × 630.
+ * The web app's share image (og:image), drawn the way the waitlist's founding
+ * cards were (docs/archive/waitlist): a photo, Diatype, the white wordmark.
+ * 1200 × 630.
  *
  *   pnpm --filter @mercury/api og-image   # → apps/web/public/og-mercury-beta.png
  */
@@ -13,7 +14,7 @@ import satori from "satori";
 const W = 1200;
 const H = 630;
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
-const asset = (p: string) => here(`../assets/card/${p}`);
+const asset = (p: string) => here(`../assets/brand/${p}`);
 const OUT = here("../../../apps/web/public/og-mercury-beta.png");
 
 await initWasm(await readFile(createRequire(import.meta.url).resolve("@resvg/resvg-wasm/index_bg.wasm")));
@@ -21,7 +22,7 @@ const [regular, medium, logo, photo] = await Promise.all([
   readFile(asset("fonts/ABCDiatype-Regular.ttf")),
   readFile(asset("fonts/ABCDiatype-Medium.ttf")),
   readFile(asset("logo.svg"), "utf8"),
-  readFile(asset("backgrounds/card-05.jpg")),
+  readFile(asset("og-photo.jpg")),
 ]);
 const uri = (type: string, data: Buffer | string) =>
   `data:${type};base64,${Buffer.from(data).toString("base64")}`;
