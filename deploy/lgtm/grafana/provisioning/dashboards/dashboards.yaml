@@ -1,0 +1,17 @@
+# Dashboards come from git, not from a container's volume.
+#
+# One clicked together in a running Grafana is one you rebuild from memory
+# after the next redeploy, and it cannot be reviewed in a pull request.
+apiVersion: 1
+providers:
+  - name: mercury
+    folder: Mercury
+    type: file
+    # Let somebody experiment in the UI without their work being reverted
+    # mid-edit; the file still wins on restart.
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

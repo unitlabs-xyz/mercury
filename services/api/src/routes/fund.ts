@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { logger } from "../log/index.js";
 import { z } from "zod";
 import { address as toAddress } from "@solana/kit";
 import type { RelayClient, RelaySource } from "../funding/relay.js";
@@ -40,6 +41,8 @@ const SubmittedBody = z.object({
 
 /** Chains change rarely and the list is large. Ten minutes is a deploy, not a session. */
 const CHAINS_TTL_MS = 10 * 60_000;
+
+const log = logger("fund");
 
 export function fundRoutes(deps: FundDeps): Hono {
   const app = new Hono();
@@ -97,7 +100,7 @@ export function fundRoutes(deps: FundDeps): Hono {
       }));
       return c.json({ chains, minimumUsd: String(deps.minimumUsd) });
     } catch (err) {
-      console.error("fund: could not read Relay's chains", err);
+      log.error({ err }, "could not read Relay's chains");
       return c.json(fail("fund_unavailable", "Deposit options are unavailable right now."), 503);
     }
   });
@@ -170,7 +173,7 @@ export function fundRoutes(deps: FundDeps): Hono {
 
       return c.json({ tokens: rows });
     } catch (err) {
-      console.error("fund: could not search Relay's currencies", err);
+      log.error({ err }, "could not search Relay's currencies");
       return c.json(fail("fund_unavailable", "Deposit options are unavailable right now."), 503);
     }
   });
@@ -227,7 +230,7 @@ export function fundRoutes(deps: FundDeps): Hono {
       });
       currency = found.find((t) => t.address.toLowerCase() === parsed.data.currency.toLowerCase());
     } catch (err) {
-      console.error("fund: could not resolve the token", err);
+      log.error({ err }, "could not resolve the token");
       return c.json(fail("fund_unavailable", "Deposit options are unavailable right now."), 503);
     }
 
@@ -292,7 +295,7 @@ export function fundRoutes(deps: FundDeps): Hono {
       });
     } catch (err) {
       /* Logged for us, summarised for them: Relay's errors are not user copy. */
-      console.error("fund: could not build a wallet swap", err);
+      log.error({ err }, "could not build a wallet swap");
       return c.json(fail("fund_unavailable", "Could not prepare that deposit. Please try again."), 503);
     }
   });

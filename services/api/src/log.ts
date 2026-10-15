@@ -14,10 +14,16 @@
  * `LOG_STACKS=1` puts the frames back, for the session that needs them.
  */
 
-type Console = Pick<globalThis.Console, "error" | "warn" | "log" | "info">;
+type Console = Pick<globalThis.Console, "error" | "warn" | "log" | "info" | "debug">;
 type Env = Readonly<Record<string, string | undefined>>;
 
-const LEVELS = ["error", "warn", "log", "info"] as const;
+/*
+ * `debug` included, though nothing in this service used it when this list was
+ * written. It was absent from both this array and the OTel forward's, so a
+ * `console.debug` call went to stdout with its stack intact and never reached
+ * the collector at all — a level that looked available and silently was not.
+ */
+const LEVELS = ["error", "warn", "log", "info", "debug"] as const;
 
 /** How far down a chain of causes to follow before stopping. */
 const MAX_DEPTH = 3;

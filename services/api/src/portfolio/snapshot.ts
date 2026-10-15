@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { logger } from "../log/index.js";
 import { toWire, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
@@ -7,6 +8,8 @@ import { portfolioSnapshots, users, wallets } from "../db/schema.js";
 import { hourOf } from "./history.js";
 import { cashFrom, valuePortfolio, type ValuableHolding } from "./value.js";
 import type { BasketValueReader } from "./baskets.js";
+
+const log = logger("portfolio-snapshot");
 
 export interface SnapshotDeps {
   readonly holdings: (userId: string) => Promise<readonly ValuableHolding[]>;
@@ -116,7 +119,9 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
         failed += 1;
         // The wallet, never the address: an address in a log is a person's
         // holdings in a log.
-        console.error(`portfolio-snapshot: wallet for user ${row.userId} failed`, error);
+        /* The only reading of what an account was worth at this hour, and
+             nothing can reconstruct one that was never taken. */
+        log.error({ userId: row.userId, err: error }, "snapshot failed for a wallet");
       }
     }
   };

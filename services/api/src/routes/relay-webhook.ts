@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { logger } from "../log/index.js";
 import type { FundingStore } from "../funding/store.js";
 import type { RelayStatus } from "../funding/relay.js";
 import { verifyRelayWebhook } from "../funding/verify.js";
@@ -42,6 +43,8 @@ interface WirePayload {
  * before `wallet-events` has seen the USDC, so there is usually no row to name
  * yet. See `funding/enrich.ts`.
  */
+const log = logger("relay-webhook");
+
 export function relayWebhookRoutes(deps: RelayWebhookDeps): Hono {
   const app = new Hono();
 
@@ -60,7 +63,10 @@ export function relayWebhookRoutes(deps: RelayWebhookDeps): Hono {
     if (!verdict.ok) {
       /* The code, never the body or the headers: an unverified body is somebody
          else's data and may be anything at all. */
-      console.warn(`relay-webhook: refused a delivery (${verdict.code})`);
+      /* The code as a field, never the body or the headers: an unverified body
+         is somebody else's data and may be anything at all. A rate of these
+         means either a misconfigured secret or somebody probing. */
+      log.warn({ code: verdict.code }, "refused a webhook delivery");
       return c.json({ error: { code: verdict.code } }, 401);
     }
 

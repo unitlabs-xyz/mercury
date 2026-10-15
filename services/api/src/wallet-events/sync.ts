@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { logger } from "../log/index.js";
 import { USDC_MINT, type ChainHistory, type SignatureRef } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import {
@@ -13,6 +14,8 @@ import { walkStream } from "./walk.js";
 import { reconcileBasketExits } from "../baskets/glider/reconcile.js";
 import { reconcileFundingDeposits } from "../funding/enrich.js";
 import type { ManagedBasketOperation } from "@mercury/types";
+
+const log = logger("wallet-events");
 
 export interface WalletEventsDeps {
   readonly history: ChainHistory;
@@ -239,7 +242,7 @@ export async function syncAllWalletEvents(db: Db, deps: WalletEventsDeps): Promi
       failed += 1;
       // The user, never the address: an address in a log is a person's
       // holdings in a log.
-      console.error(`wallet-events: wallet for user ${row.userId} failed`, error);
+      log.error({ userId: row.userId, err: error }, "wallet pass failed");
     }
   }
 
@@ -249,7 +252,7 @@ export async function syncAllWalletEvents(db: Db, deps: WalletEventsDeps): Promi
          reconciler failing must not fail the pass, as below. */
       written += await reconcileFundingDeposits(db);
     } catch (error) {
-      console.error("funding-deposit reconciliation pass failed", error);
+      log.error({ err: error }, "funding-deposit reconciliation pass failed");
     }
   }
 
@@ -261,7 +264,7 @@ export async function syncAllWalletEvents(db: Db, deps: WalletEventsDeps): Promi
       });
       written += exits.recorded;
     } catch (error) {
-      console.error("basket-exit reconciliation pass failed", error);
+      log.error({ err: error }, "basket-exit reconciliation pass failed");
     }
   }
 

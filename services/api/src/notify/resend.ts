@@ -1,4 +1,5 @@
 import type { Notice, Notifier } from "./ports.js";
+import { logger } from "../log/index.js";
 
 /**
  * Email, through Resend's HTTP API.
@@ -6,6 +7,8 @@ import type { Notice, Notifier } from "./ports.js";
  * Written against `fetch` rather than their SDK: this is one POST, and the
  * dependency would be larger than the code it replaced. Node 24 has fetch.
  */
+const log = logger("notify");
+
 export const resendNotifier = (opts: { apiKey: string; from: string }): Notifier => ({
   async send(notice: Notice): Promise<boolean> {
     try {
@@ -34,12 +37,12 @@ export const resendNotifier = (opts: { apiKey: string; from: string }): Notifier
       if (!res.ok) {
         // The status and nothing else. A provider's error body can quote the
         // message back, and the message names what somebody owes.
-        console.error(`notify: Resend refused a message (${res.status})`);
+        log.error({ status: res.status }, "Resend refused a message");
         return false;
       }
       return true;
     } catch (error: unknown) {
-      console.error("notify: could not reach Resend", error);
+      log.error({ err: error }, "could not reach Resend");
       return false;
     }
   },
@@ -56,7 +59,9 @@ export const loggingNotifier = (): Notifier => ({
   async send(notice: Notice): Promise<boolean> {
     // The subject, never the body: the body says what somebody owes and how
     // close they are to losing their shares, which does not belong in a log.
-    console.warn(`notify: no mail provider configured; would have sent "${notice.subject}"`);
+    /* `warn`, because a borrower who should have been warned was not. The
+         subject rather than the body: the body names figures. */
+    log.warn({ subject: notice.subject }, "no mail provider configured; nothing was sent");
     return false;
   },
 });

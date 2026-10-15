@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { logger } from "../log/index.js";
 import {
   D,
   exposure,
@@ -103,6 +104,8 @@ const EMPTY = {
   baskets: [] as const,
 };
 
+const log = logger("portfolio");
+
 export function portfolioRoutes(deps: PortfolioDeps): Hono {
   const app = new Hono();
 
@@ -113,7 +116,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     try {
       return c.json({ returns: await deps.basketReturns(wallet) });
     } catch (error) {
-      console.error("Basket return read failed:", error);
+      log.error({ err: error }, "basket return read failed");
       return c.json(fail("basket_returns_unavailable", "Basket returns are temporarily unavailable."), 503);
     }
   });
@@ -133,7 +136,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       inputs = await Promise.all([
         deps.baskets(identity.userId, identity.walletAddress).catch((error: unknown) => {
           if (error instanceof BasketValuationError) throw error;
-          console.error("Portfolio basket valuation failed:", error);
+          log.error({ err: error }, "basket valuation failed");
           throw new BasketValuationError("Basket balances are temporarily unavailable.");
         }),
         deps.holdings(identity.userId),

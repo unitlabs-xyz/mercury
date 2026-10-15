@@ -1,12 +1,15 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { instruments, orders, tokens } from "../db/schema.js";
+import { logger } from "../log/index.js";
 
 /*
  * `partially_filled` and `expired` were here with nothing able to write them.
  * A swap is one atomic transaction — it lands or it does not — and expiry
  * belonged to trigger orders, which are not built. See @mercury/types.
  */
+const log = logger("orders");
+
 export type OrderStatus = "pending" | "executing" | "filled" | "queued" | "cancelled" | "refused";
 
 export interface NewOrder {
@@ -90,7 +93,12 @@ export const pgOrderStore = (db: Db): OrderStore => ({
       .from(instruments)
       .where(eq(instruments.ticker, order.ticker))
       .limit(1);
-    if (instrument === undefined) throw new Error(`no instrument row for ${order.ticker}`);
+    if (instrument === undefined) {
+      /* A ticker the API offered and the database does not have, which means
+         the stocks job and the shelf disagree. */
+      log.error({ ticker: order.ticker }, "no instrument row for a ticker that was quoted");
+      throw new Error(`no instrument row for ${order.ticker}`);
+    }
 
     const chosenTokenId = await tokenIdFor(db, order.chosenMint);
 
@@ -118,6 +126,28 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         createdAt: orders.createdAt,
       });
     if (saved === undefined) throw new Error("order insert returned nothing");
+
+    /*
+     * The other half of the money story: an order that was asked for. With
+     * "order settled" and "order refused at execution" this makes the whole
+     * path countable — asked, refused, filled — which is what a conversion
+     * rate is, and none of it was recorded before.
+     *
+     * `usdAmount` is what the user typed rather than what they hold, so it is
+     * not a balance; `max` says whether they asked to sell the lot.
+     */
+    log.info(
+      {
+        userId: order.userId,
+        orderId: saved.id,
+        side: order.side,
+        ticker: order.ticker,
+        usdAmount: order.usdAmount,
+        max: order.max ?? false,
+        status: order.status,
+      },
+      "order created",
+    );
 
     return {
       id: saved.id,

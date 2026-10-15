@@ -72,4 +72,14 @@ ENTRYPOINT ["/usr/bin/tini", "--"]
 # Not `pnpm start`: that script reads a local .env, and it would put a process
 # between tini and the server. `--import tsx` loads the transpiler in-process
 # rather than spawning a child, which is what keeps signals working.
-CMD ["node", "--import", "tsx", "src/index.ts"]
+#
+# Three arguments in one order, and both orderings are load-bearing. tsx comes
+# first because the telemetry module is TypeScript and node cannot parse it
+# otherwise — that failure at least announces itself, because the container
+# dies at boot. Telemetry comes before the app because OpenTelemetry patches
+# libraries as they load, so anything imported ahead of it goes
+# uninstrumented; that failure announces nothing. The server starts, serves
+# normally, and the only symptom is an empty Grafana, which reads as a broken
+# collector and sends whoever is debugging it to the wrong machine.
+# src/dockerfile.test.ts asserts the order for exactly that reason.
+CMD ["node", "--import", "tsx", "--import", "./src/telemetry/otel.ts", "src/index.ts"]

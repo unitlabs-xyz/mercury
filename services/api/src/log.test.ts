@@ -58,7 +58,16 @@ const recorder = () => {
       lines.push([level, ...args]);
   return {
     lines,
-    target: { error: write("error"), warn: write("warn"), log: write("log"), info: write("info") },
+    target: {
+      error: write("error"),
+      warn: write("warn"),
+      log: write("log"),
+      info: write("info"),
+      /* `debug` is one of the levels now. It was in neither this list nor the
+         OTel forward's, so a console.debug call kept its stack and never
+         reached the collector — a level that looked available and was not. */
+      debug: write("debug"),
+    },
   };
 };
 

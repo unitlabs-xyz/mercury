@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { httpInstrumentationMiddleware } from "@hono/otel";
 import { allocate, D, DEFAULT_POLICY, toWire } from "@mercury/core";
 import { ConfirmOrderRequest, CreateOrderRequest, InvestBasketRequest, type ErrorCode } from "@mercury/types";
 import type { Deps } from "./deps.js";
@@ -15,6 +16,8 @@ import { createSolanaRpc } from "@solana/kit";
 import { USDC_MINT } from "@mercury/chain";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
+import { requestId } from "./telemetry/request-id.js";
+import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
 import { borrowRoutes } from "./routes/borrow.js";
@@ -92,10 +95,54 @@ const NOT_READY = fail(
  * lifts them out of the browser, and evaluating it at boot would stop the auth
  * path from running at all. The routes that need it answer 503 instead.
  */
+/**
+ * The order path's logger.
+ *
+ * At the boundary rather than inside the decision functions, deliberately.
+ * `gateExecution`, `planFill` and `priceOrder` are pure — inputs to a verdict,
+ * no I/O, tested as tables of fixtures — and logging inside them would mean
+ * threading a logger through every signature to produce lines with no request
+ * context anyway. Here, the request, the user and the verdict are all in scope,
+ * so one line carries the whole decision.
+ *
+ * This is the line that answers "why was my order refused", which until now
+ * had no answer anywhere: the whole of `orders/` logged nothing.
+ */
+const orderLog = logger("orders");
+
+/**
+ * The HTTP boundary's logger.
+ *
+ * Separate from `orders` so that "every failed request" and "every refused
+ * order" are different queries. `route` is the pattern and not the path, for
+ * the same reason the span carries the pattern: a field per ticker is a field
+ * nobody can group by.
+ */
+const httpLog = logger("http");
+
 export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
   /* One client for the routes that talk to the chain directly. */
   const rpc = createSolanaRpc(read.send.rpcUrl);
+  /*
+   * Above cors(), both of them, so a request CORS turns away is still a
+   * request that was counted and traced. A rejected preflight is exactly the
+   * kind of failure that otherwise reaches us as "the app is broken" with
+   * nothing in the logs.
+   *
+   * @hono/otel's default `http.route` is the Hono route pattern, which is what
+   * this needs: `/v1/invest/:ticker` and never `/v1/invest/AAPL`. The second
+   * would make every ticker its own time series, and the error-rate graph
+   * unreadable by the time anybody needed it.
+   *
+   * Header capture is left off. It is opt-in in the library, and switching it
+   * on would be a standing invitation to record an Authorization header.
+   *
+   * Both are no-ops when telemetry is unconfigured: the middleware asks for a
+   * tracer and gets the API's no-op one.
+   */
+  app.use("*", httpInstrumentationMiddleware({ serviceName: "mercury-api" }));
+  app.use("*", requestId());
   app.use("*", cors());
 
   // Public, so the app can say "dry run" before anyone signs anything.
@@ -130,8 +177,17 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
 
   app.onError((err, c) => {
     if (err.message.startsWith("buildDeps:")) return c.json(NOT_READY, 503);
-    console.error(err);
-    return c.json(fail("internal", "Something went wrong."), 500);
+    /*
+     * The id in the log line and in the body, so the sentence somebody reads
+     * on screen and the line an engineer greps for name the same request.
+     *
+     * `?? "unknown"` because an error thrown before the middleware ran — in
+     * routing itself, say — has no id, and a crash inside the error handler
+     * answers nothing at all.
+     */
+    const id = (c.get("requestId") as string | undefined) ?? "unknown";
+    httpLog.error({ requestId: id, method: c.req.method, route: c.req.routePath, err }, "request failed");
+    return c.json({ ...fail("internal", "Something went wrong."), requestId: id }, 500);
   });
 
   /** Who is calling, and which wallet is theirs. The first authenticated route. */
@@ -448,8 +504,38 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       maxQuoteDriftBps: DEFAULT_POLICY.maxQuoteDriftBps,
     });
 
+    /* The inputs, at debug, for reproducing one person's order. A thunk so the
+       object is never built while debug is off, which is the default. */
+    orderLog.debug(
+      () => ({
+        userId: identity.userId,
+        orderId: order.id,
+        shownPricePerShare: shown.best.pricePerShare,
+        freshPricePerShare: fresh.kind === "refuse" ? null : (fresh.best.pricePerShare?.toString() ?? null),
+        decision: fresh.kind,
+        verdict: gate.kind,
+      }),
+      "gate inputs",
+    );
+
     if (gate.kind === "refuse") {
       await record("refused");
+      /*
+       * `detail` is the sentence the user is about to read, recorded beside
+       * the machine-readable reason so that a support conversation and a query
+       * are about the same event. Without this the only trace of a refusal was
+       * a row whose status said `refused` and nothing saying why.
+       */
+      orderLog.info(
+        {
+          userId: identity.userId,
+          orderId: order.id,
+          side: fresh.side,
+          verdict: "refuse",
+          detail: gate.detail,
+        },
+        "order refused at execution",
+      );
       return c.json(fail("instrument_not_tradable", gate.detail, { decision: wire }), 409);
     }
 
@@ -457,6 +543,22 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       // Still pending: the order was never sent, and the same intent can be
       // confirmed again against the price now on screen.
       await record("pending");
+      /*
+       * `warn`, not `info`: this is a user who tried to buy and could not, and
+       * a rate of these climbing means the quote is going stale faster than
+       * people can confirm it — which is a problem with us, not with them.
+       */
+      orderLog.warn(
+        {
+          userId: identity.userId,
+          orderId: order.id,
+          side: fresh.side,
+          verdict: "moved",
+          adverseBps: gate.adverseBps === null ? null : gate.adverseBps.toFixed(1),
+          maxDriftBps: DEFAULT_POLICY.maxQuoteDriftBps,
+        },
+        "order re-quote moved too far, asking again",
+      );
       return c.json(
         fail("price_moved", gate.detail, {
           wasPricePerShare: shown.best.pricePerShare,

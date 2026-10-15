@@ -70,15 +70,28 @@ describe("reasonFrom", () => {
    * fallback.
    */
   it("never hands back the raw error, however little it can make of it", () => {
-    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    /* The log goes through pino now rather than the console, so this watches
+       stdout — which is where pino writes — rather than a console spy. The
+       assertion is unchanged in substance: the sentence the buyer reads says
+       nothing technical, and the raw error is still recorded for us. */
+    const written: string[] = [];
+    const quiet = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk: unknown) => (written.push(String(chunk)), true));
     const raw = withLogs("Program ComputeBudget111 invoke [1]", "Program ComputeBudget111 success");
     const said = reasonFrom(raw);
+    quiet.mockRestore();
+
     expect(said).not.toContain("Solana error #");
     expect(said).not.toMatch(/[A-Za-z0-9+/]{40,}/);
     expect(said).toBe("the network rejected this order and did not say why. Nothing has been charged.");
     // Lost to the reader, kept for us.
-    expect(quiet).toHaveBeenCalledWith(expect.stringContaining("no reason we could name"), raw);
-    quiet.mockRestore();
+    const line = written.find((l) => l.includes("no reason we could name"));
+    expect(line).toBeDefined();
+    /* The error's own one-line form, which is what this logged before pino
+       too: `oneLineErrors` reduced the second console argument the same way.
+       Under a key other than `err` it would have serialized to `{}`. */
+    expect(JSON.parse(line!).err).toContain("Solana error");
   });
 });
 

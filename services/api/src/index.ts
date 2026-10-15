@@ -24,6 +24,10 @@ import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
 import { keypairRelaySigner } from "./relay/signer.js";
 import { exitOnUncaught, oneLineErrors } from "./log.js";
+import { telemetryEndpoint } from "./telemetry/otel.js";
+import { forwardConsoleToOtel } from "./telemetry/console-logs.js";
+import { every } from "./jobs/every.js";
+import { logger } from "./log/index.js";
 
 /*
  * First, so that nothing after it, a bad config included, logs a stack trace.
@@ -31,6 +35,32 @@ import { exitOnUncaught, oneLineErrors } from "./log.js";
  */
 oneLineErrors();
 exitOnUncaught();
+/*
+ * Anything that still writes to the console, on to the collector.
+ *
+ * Our own code logs through pino now (`log/index.ts`), so this is no longer
+ * the path our log lines take — it is the net under everything else. Hono, the
+ * Solana libraries and the Kamino SDK all write to the console on their own,
+ * and without this their output stops at the container's stdout, which nothing
+ * reads: `grafana/otel-lgtm` ingests OTLP only.
+ *
+ * After `oneLineErrors`, so an Error has already become its one line by the
+ * time this reads the arguments. Reversed, the forward would see the raw Error
+ * and send a stack.
+ */
+forwardConsoleToOtel();
+
+/**
+ * The boot sequence's own logger.
+ *
+ * Each capability announces itself with `on` as a field rather than only in a
+ * sentence, which is what the comments below have been asking for all along: a
+ * deployment that believes it is sponsoring transactions, or warning
+ * borrowers, and is not looks exactly like one whose upstream is down, and the
+ * two are fixed in different places. As a field, "which capabilities were off
+ * on this deploy" is a query.
+ */
+const boot = logger("boot");
 
 const config = readConfig();
 const port = Number(process.env.PORT ?? 8787);
@@ -43,7 +73,23 @@ const port = Number(process.env.PORT ?? 8787);
  * traffic, which is the right outcome: the old code and the old schema agree.
  */
 await applyMigrations(config.databaseUrl);
-console.log("migrations: up to date");
+boot.info("migrations up to date");
+
+/*
+ * Whether anything is watching, said out loud.
+ *
+ * The same reason the relayer, Jupiter's tier and the Pyth feed each announce
+ * themselves: a deployment that believes it is reporting telemetry and is not
+ * looks exactly like one whose collector is down, and those two are fixed in
+ * different places and by different people. The SDK itself started before this
+ * line — before `index.ts` was even imported — so this reports a fact rather
+ * than deciding one.
+ */
+const telemetry = telemetryEndpoint();
+boot.info(
+  { on: telemetry !== null, ...(telemetry === null ? {} : { endpoint: telemetry }) },
+  telemetry === null ? "telemetry off (OTEL_EXPORTER_OTLP_ENDPOINT unset)" : "telemetry on",
+);
 
 await syncConfiguredCatalog(config);
 
@@ -59,22 +105,32 @@ const relay =
   config.relayerSecretKey === undefined
     ? undefined
     : { signer: await keypairRelaySigner(config.relayerSecretKey), builds: inMemoryBuilds() };
-console.log(
+boot.info(
+  /* `payer` is our own hot wallet, not a user's, and naming it is the point:
+     a relayer nobody funded looks exactly like one that is switched off. */
+  { on: relay !== undefined, ...(relay === undefined ? {} : { payer: relay.signer.address }) },
   relay === undefined
-    ? "sponsorship: off (RELAYER_SECRET_KEY unset); stock trades are refused, sends pay their own network costs"
-    : `sponsorship: on, paying from ${relay.signer.address}`,
+    ? "sponsorship off (RELAYER_SECRET_KEY unset); stock trades are refused, sends pay their own network costs"
+    : "sponsorship on",
 );
-// The rate every trade turns on, and where the money goes, so neither has to be inferred.
-console.log(
-  relay === undefined
-    ? `trading fee: ${config.tradingFeeBps} bps, but no trades without a relayer`
-    : `trading fee: ${config.tradingFeeBps} bps, collected in ${relay.signer.address}'s USDC account`,
+/* The rate every trade turns on, and where the money goes, so neither has to
+   be inferred. `collector` is our own relayer account, as `payer` above. */
+boot.info(
+  {
+    bps: config.tradingFeeBps,
+    ...(relay === undefined ? { collected: false } : { collected: true, collector: relay.signer.address }),
+  },
+  relay === undefined ? "trading fee set, but no trades without a relayer" : "trading fee collected",
 );
 // Which Jupiter tier the rate limits in the logs below belong to.
-console.log(
+boot.info(
+  {
+    keys: config.jupiterApiKeys.length,
+    host: config.jupiterApiKeys.length === 0 ? "lite-api.jup.ag" : "api.jup.ag",
+  },
   config.jupiterApiKeys.length === 0
-    ? "jupiter: keyless (JUPITER_API_KEYS unset); lite-api.jup.ag free tier"
-    : `jupiter: ${config.jupiterApiKeys.length} key${config.jupiterApiKeys.length === 1 ? "" : "s"}, rotated per request; api.jup.ag`,
+    ? "jupiter keyless (JUPITER_API_KEYS unset); free tier"
+    : "jupiter keys rotated per request",
 );
 
 /*
@@ -83,10 +139,11 @@ console.log(
  * believes it reads Pyth and does not would refuse orders all weekend without
  * anything saying why.
  */
-console.log(
+boot.info(
+  { pyth: config.pythApiKey !== undefined },
   config.pythApiKey === undefined
-    ? "reference: issuer feed only (PYTH_API_KEY unset); it stops advancing at the closing bell"
-    : "reference: Pyth first, issuer feed as fallback",
+    ? "reference feed is the issuer's only (PYTH_API_KEY unset); it stops advancing at the closing bell"
+    : "reference feed is Pyth, with the issuer's as fallback",
 );
 
 /*
@@ -98,10 +155,11 @@ const notifier =
   config.resendApiKey === undefined
     ? loggingNotifier()
     : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom });
-console.log(
+boot.info(
+  { emailed: config.resendApiKey !== undefined },
   config.resendApiKey === undefined
-    ? "loan alerts: in-app only (RESEND_API_KEY unset); nothing is emailed"
-    : `loan alerts: emailed from ${config.notifyFrom}`,
+    ? "loan alerts in-app only (RESEND_API_KEY unset); nothing is emailed"
+    : "loan alerts emailed",
 );
 
 /*
@@ -118,7 +176,8 @@ console.log(
  */
 const fund =
   config.relayApiKey === undefined
-    ? (console.log("funding: off (RELAY_API_KEY unset); add cash from another chain is hidden"), undefined)
+    ? (boot.info({ on: false }, "funding off (RELAY_API_KEY unset); add cash from another chain is hidden"),
+      undefined)
     : {
         relay: createRelayClient({ apiKey: config.relayApiKey }),
         store: createFundingStore(auth.db),
@@ -127,38 +186,23 @@ const fund =
         webhookSecret: config.relayApiKey,
       };
 if (fund !== undefined) {
-  console.log(`funding: on, minimum $${config.fundMinimumUsd}, refunds to the sending wallet`);
-  // Where deposit fees go, said once, because Relay holds them until someone claims them.
-  console.log(
-    config.depositFeeRecipient === undefined || config.depositFeeBps === 0
-      ? "deposit fee: off (DEPOSIT_FEE_RECIPIENT unset or DEPOSIT_FEE_BPS 0); no deposit is charged"
-      : `deposit fee: ${config.depositFeeBps} bps on anything but Circle USDC, credited by Relay to ${config.depositFeeRecipient}`,
+  boot.info({ on: true, minimumUsd: config.fundMinimumUsd }, "funding on, refunds to the sending wallet");
+  /* Where deposit fees go, said once, because Relay holds them until somebody
+     claims them. `recipient` is one of our own accounts, not a user's. */
+  const depositFeeOn = config.depositFeeRecipient !== undefined && config.depositFeeBps !== 0;
+  boot.info(
+    {
+      on: depositFeeOn,
+      bps: config.depositFeeBps,
+      ...(config.depositFeeRecipient === undefined ? {} : { recipient: config.depositFeeRecipient }),
+    },
+    depositFeeOn
+      ? "deposit fee charged on anything but Circle USDC, credited by Relay"
+      : "deposit fee off (DEPOSIT_FEE_RECIPIENT unset or DEPOSIT_FEE_BPS 0); no deposit is charged",
   );
 }
 
 const read = buildReadDeps(auth.db, deps, config, relay, fund);
-
-/**
- * A background job, on its own clock.
- *
- * The next run is scheduled after the last one finishes, never on a fixed
- * tick: a pass that overruns its interval must not have a second one start
- * behind it and write the same rows twice. A failure is logged and the
- * schedule continues — an upstream being down is a reason to try again later,
- * not to stop trying.
- */
-const every = (name: string, ms: number, run: () => Promise<string | null>) => {
-  const tick = async () => {
-    try {
-      const note = await run();
-      if (note !== null) console.log(`${name}: ${note}`);
-    } catch (error: unknown) {
-      console.error(`${name} failed:`, error);
-    }
-    setTimeout(() => void tick(), ms).unref();
-  };
-  void tick();
-};
 
 /**
  * The background half of the system, and the whole of it. This is the only
@@ -339,5 +383,5 @@ every("loan-watch", 5 * 60 * 1000, async () => {
 });
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
-  console.log(`mercury api listening on :${info.port}`);
+  boot.info({ port: info.port }, "mercury api listening");
 });

@@ -1,4 +1,5 @@
 import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
+import { logger } from "../log/index.js";
 import { USDC_MINT } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { activities, fundingIntents, type FundingIntent } from "../db/schema.js";
@@ -21,6 +22,8 @@ import { activities, fundingIntents, type FundingIntent } from "../db/schema.js"
  * in. So a fill whose feed row has not arrived yet is left for the next pass —
  * which is what `reconcileFundingDeposits` is.
  */
+const log = logger("funding");
+
 export const enrichDepositActivity = async (db: Db, intent: FundingIntent): Promise<boolean> => {
   if (intent.outTxHash === null || intent.status !== "success") return false;
 
@@ -80,7 +83,7 @@ export const reconcileFundingDeposits = async (db: Db): Promise<number> => {
     try {
       if (await enrichDepositActivity(db, intent)) named += 1;
     } catch (error: unknown) {
-      console.error(`funding: could not name the deposit for user ${intent.userId}`, error);
+      log.error({ userId: intent.userId, err: error }, "could not name the deposit");
     }
   }
   return named;

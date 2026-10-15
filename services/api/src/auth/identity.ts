@@ -4,6 +4,9 @@ import { eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { users, wallets } from "../db/schema.js";
 import type { VerifiedToken } from "./verifier.js";
+import { logger } from "../log/index.js";
+
+const log = logger("auth");
 
 export interface Identity {
   readonly userId: string;
@@ -84,7 +87,12 @@ export const resolveIdentity = async (
     )[0] ??
     (await find());
 
-  if (!user) throw new Error(`could not create or find user for ${token.privyUserId}`);
+  if (!user) {
+    /* Neither found nor created nor found again, which should be impossible:
+       the insert races with its siblings and one of the three reads wins. */
+    log.error("could not create or find a user");
+    throw new Error(`could not create or find user for ${token.privyUserId}`);
+  }
 
   let address: string | null = null;
   if (identityToken) {
@@ -93,6 +101,17 @@ export const resolveIdentity = async (
     // mismatch means somebody paired their access token with another user's
     // identity token, and we take neither.
     if (claimed.privyUserId !== token.privyUserId) {
+      /*
+       * A security event, and the only one this service can observe.
+       *
+       * It means somebody paired their access token with another user's
+       * identity token, which is either a client bug or an attempt. Either
+       * way it was invisible before: the throw became a generic 500 through
+       * `app.onError` with nothing saying what had been refused. `error`
+       * rather than `warn` because a rate of these above zero wants looking
+       * at. Neither DID is a field — one of them is not theirs.
+       */
+      log.error({ userId: user.id }, "identity token does not match the access token");
       throw new Error("identity token does not match the access token");
     }
     address = claimed.solanaAddress;
@@ -116,6 +135,10 @@ export const resolveIdentity = async (
     const email = claimed.email ?? null;
     if (email !== null && email !== user.email) {
       await db.update(users).set({ email }).where(eq(users.id, user.id));
+      /* Debug, because it happens silently and the only time anybody asks is
+         when an alert went to an address somebody no longer reads. The
+         addresses themselves are redacted. */
+      log.debug({ userId: user.id, had: user.email !== null }, "took a new email from Privy");
     }
   }
 
@@ -127,6 +150,10 @@ export const resolveIdentity = async (
         .values({ userId: user.id, address, kind: "privy_embedded", isPrimary: true })
         .onConflictDoNothing()
         .returning();
+      /* Once per account, in practice: a wallet Privy has finished
+         provisioning. The address itself is redacted, which is the point —
+         what is worth knowing is that this account now has one. */
+      log.info({ userId: user.id }, "linked a Privy wallet");
     }
   }
 

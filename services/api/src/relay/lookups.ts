@@ -1,4 +1,5 @@
 import { getBase58Decoder, type Address } from "@solana/kit";
+import { logger } from "../log/index.js";
 
 /**
  * Address lookup tables, which Jupiter's routes will not fit without.
@@ -21,6 +22,8 @@ import { getBase58Decoder, type Address } from "@solana/kit";
  */
 const HEADER_BYTES = 56;
 const ADDRESS_BYTES = 32;
+
+const log = logger("relay");
 
 export const parseLookupTable = (data: Uint8Array): readonly Address[] => {
   if (data.length < HEADER_BYTES) return [];
@@ -59,6 +62,21 @@ export const rpcLookupTables = (rpc: AccountInfoRpc): LookupTableReader => ({
       const [raw] = account.data;
       found.set(address, parseLookupTable(Uint8Array.from(Buffer.from(raw, "base64"))));
     });
+    /*
+     * A table the RPC did not return is a Jupiter route that cannot be built,
+     * and skipping it silently is how a sponsored transaction fails with
+     * nothing saying why. `warn`, because the usual cause is the RPC rather
+     * than us — these accounts do not disappear.
+     *
+     * The count rather than the addresses. They are public, program-owned
+     * accounts and would be harmless to name, but a field called `address`
+     * is redacted and renaming one to get past that is a habit worth not
+     * starting. A count is what an alert needs; `debug` on the RPC side has
+     * the rest.
+     */
+    if (found.size !== addresses.length) {
+      log.warn({ asked: addresses.length, missing: addresses.length - found.size }, "lookup tables missing");
+    }
     return found;
   },
 });

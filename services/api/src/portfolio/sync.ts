@@ -1,8 +1,11 @@
 import { eq } from "drizzle-orm";
+import { logger } from "../log/index.js";
 import type { Db } from "../db/client.js";
 import { users, wallets } from "../db/schema.js";
 import { applyReconciliation, loadHeldTokens, type ReconcileDeps } from "./apply.js";
 import { planReconciliation } from "./reconcile.js";
+
+const log = logger("position-sync");
 
 export interface SyncSummary {
   readonly wallets: number;
@@ -64,7 +67,7 @@ export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<Syn
         failed += 1;
         // The wallet, never the address: an address in a log is a person's
         // holdings in a log.
-        console.error(`position-sync: wallet for user ${row.userId} failed`, error);
+        log.error({ userId: row.userId, err: error }, "wallet reconcile failed");
       }
     }
   };
