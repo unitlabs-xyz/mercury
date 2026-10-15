@@ -123,10 +123,17 @@ const fund =
         relay: createRelayClient({ apiKey: config.relayApiKey }),
         store: createFundingStore(auth.db),
         minimumUsd: config.fundMinimumUsd,
+        fee: { bps: config.depositFeeBps, recipient: config.depositFeeRecipient },
         webhookSecret: config.relayApiKey,
       };
 if (fund !== undefined) {
   console.log(`funding: on, minimum $${config.fundMinimumUsd}, refunds to the sending wallet`);
+  // Where deposit fees go, said once, because Relay holds them until someone claims them.
+  console.log(
+    config.depositFeeRecipient === undefined || config.depositFeeBps === 0
+      ? "deposit fee: off (DEPOSIT_FEE_RECIPIENT unset or DEPOSIT_FEE_BPS 0); no deposit is charged"
+      : `deposit fee: ${config.depositFeeBps} bps on anything but Circle USDC, credited by Relay to ${config.depositFeeRecipient}`,
+  );
 }
 
 const read = buildReadDeps(auth.db, deps, config, relay, fund);

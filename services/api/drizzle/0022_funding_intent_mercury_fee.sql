@@ -1,0 +1,1 @@
+ALTER TABLE "funding_intent" ADD COLUMN "mercury_fee_usd" numeric(38, 18);
