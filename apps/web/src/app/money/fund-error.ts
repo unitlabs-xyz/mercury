@@ -150,6 +150,21 @@ export const fundErrorCopy = (err: unknown): { readonly message: string; readonl
       rejected: false,
     };
   }
+  /*
+   * A confirmation that ran out of blocks, not a transaction that failed.
+   *
+   * By the time this reaches a person the chain has already been asked
+   * whether the deposit landed — see the catch around `execute` in
+   * api/fund-swap.ts — so this sentence only ever follows a signature that
+   * could not be found or could not be checked. It says the one true thing in
+   * that case, and the transaction link beside it says the rest.
+   */
+  if (/blockheight exceeded|block height exceeded|transactionexpired/i.test(said)) {
+    return {
+      message: "We couldn't confirm this in time. Check the transaction before sending again.",
+      rejected: false,
+    };
+  }
 
   const e = asErrorLike(err);
   /* `shortMessage` before `message`: viem's `message` is the whole annotated

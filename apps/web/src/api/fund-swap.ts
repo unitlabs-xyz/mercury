@@ -9,9 +9,10 @@ import { configureDynamicChains } from "@relayprotocol/relay-sdk/chain-utils";
 import { adaptSolanaWallet } from "@relayprotocol/relay-svm-wallet-adapter";
 import { Connection, type SendOptions, type VersionedTransaction } from "@solana/web3.js";
 import { apiFetch } from "./client";
-import { SOLANA_RPC_URL, solBalanceRaw, tokenBalanceRaw } from "../solana/rpc";
+import { SOLANA_RPC_URL, signatureSucceeded, solBalanceRaw, tokenBalanceRaw } from "../solana/rpc";
 import { SOLANA_CHAIN_ID } from "../wallet/chains";
-import { useFunder, useSwitchFunderChain } from "../wallet/useFunder";
+import { vmOfChain } from "../wallet/funder";
+import { useFunderForChain, useSwitchFunderChain } from "../wallet/useFunder";
 import { refreshAfterChain } from "./settle";
 
 /** Relay's identifier for native SOL, which is a lamport balance and not a token account. */
@@ -209,13 +210,42 @@ export interface SwapReceipt {
   readonly outTxHash: string | null;
 }
 
-/** What AppKit's Solana provider gives us, which is all `adaptSolanaWallet` needs. */
+/**
+ * What AppKit's Solana provider gives us, which is all `adaptSolanaWallet` needs.
+ *
+ * A **bare base58 string**, not an object. AppKit types it
+ * `Promise<TransactionSignature>` and `TransactionSignature` is `string`; this
+ * file used to declare it as `{ signature: string }` and hand the result
+ * straight to Relay's adapter, which reads `.signature` off it. Reading a
+ * property off a string gives `undefined`, and the adapter's own check then
+ * threw "Invalid Solana signature: expected base58." — a true sentence about a
+ * value we had mangled on the way in.
+ *
+ * Typed loosely because the wallets underneath disagree: Phantom's own
+ * injected API answers `{ signature }` and AppKit's wallet-standard provider
+ * flattens it to the string. `signatureOf` takes either.
+ */
 interface SolanaProvider {
   signAndSendTransaction(
     transaction: VersionedTransaction,
     options?: SendOptions,
-  ): Promise<{ signature: string }>;
+  ): Promise<string | { signature?: unknown }>;
 }
+
+/**
+ * The signature out of whatever the wallet answered.
+ *
+ * Never trusts the shape: a wallet that returns neither gets one clear
+ * sentence here rather than a base58 complaint three frames down about a
+ * value that was never a signature.
+ */
+export const signatureOf = (result: string | { signature?: unknown }): string => {
+  const value = typeof result === "string" ? result : result?.signature;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error("Your wallet did not return a transaction signature.");
+  }
+  return value;
+};
 
 /**
  * Deposit from the connected wallet, whichever chain it is on.
@@ -233,9 +263,11 @@ interface SolanaProvider {
  * of two legs, and the leg that delivers the money is one they never signed.
  * Relay settles it, over a signed webhook.
  */
-export const useFundSwapAction = () => {
+export const useFundSwapAction = (chainId: number) => {
   const qc = useQueryClient();
-  const funder = useFunder();
+  /* The wallet that can sign on this token's own chain, not whichever one
+     AppKit happens to have in front. */
+  const funder = useFunderForChain(chainId);
   const config = useConfig();
   const switchChain = useSwitchFunderChain();
   const { walletProvider } = useAppKitProvider<SolanaProvider>("solana");
@@ -245,7 +277,26 @@ export const useFundSwapAction = () => {
 
   const action = useMutation<SwapReceipt, Error, { chainId: number; currency: string; amountRaw: string }>({
     mutationFn: async (input) => {
-      if (funder === null) throw new Error("Connect a wallet to pay from first.");
+      if (funder === null) {
+        throw new Error(
+          vmOfChain(chainId) === "svm"
+            ? "Connect a Solana wallet to pay from first."
+            : "Connect an Ethereum wallet to pay from first.",
+        );
+      }
+
+      /*
+       * The wallet and the token in the same namespace, checked rather than
+       * assumed. The panel will not offer a mismatch, but this is the throw
+       * that beats the alternative: a quote minted and an intent written for
+       * a wallet that was never going to be able to sign it.
+       *
+       * `input.chainId` as well as the one this was built for, because a
+       * render between the two would leave the funder belonging to the old.
+       */
+      if (input.chainId !== chainId || funder.vmType !== vmOfChain(input.chainId)) {
+        throw new Error("That wallet cannot sign on the chain this token is on.");
+      }
 
       /*
        * The chain comes from the token, not from where the wallet happens to
@@ -288,7 +339,10 @@ export const useFundSwapAction = () => {
                 if (walletProvider === undefined) {
                   throw new Error("Your wallet is not ready to sign yet.");
                 }
-                return walletProvider.signAndSendTransaction(transaction, options);
+                /* The adapter reads `.signature` off what this returns, so the
+                   string the provider answers has to be put back in a box. */
+                const answered = await walletProvider.signAndSendTransaction(transaction, options);
+                return { signature: signatureOf(answered) };
               },
             );
 
@@ -306,18 +360,41 @@ export const useFundSwapAction = () => {
        */
       lastHash.current = null;
       const hashes: { in: string | null; out: string | null } = { in: null, out: null };
-      await execute({
-        quote: built.quote as Parameters<typeof execute>[0]["quote"],
-        wallet,
-        onProgress: (progress) => {
-          /* Relay reports the origin leg first and the fill second. Kept as
-             they arrive so a failure still leaves something to look up. */
-          const txs = progress.txHashes ?? [];
-          hashes.in = txs[0]?.txHash ?? hashes.in;
-          hashes.out = txs[1]?.txHash ?? hashes.out;
-          lastHash.current = hashes.in ?? lastHash.current;
-        },
-      });
+      try {
+        await execute({
+          quote: built.quote as Parameters<typeof execute>[0]["quote"],
+          wallet,
+          onProgress: (progress) => {
+            /* Relay reports the origin leg first and the fill second. Kept as
+               they arrive so a failure still leaves something to look up. */
+            const txs = progress.txHashes ?? [];
+            hashes.in = txs[0]?.txHash ?? hashes.in;
+            hashes.out = txs[1]?.txHash ?? hashes.out;
+            lastHash.current = hashes.in ?? lastHash.current;
+          },
+        });
+      } catch (err: unknown) {
+        /*
+         * A confirmation that gave up is not a deposit that failed.
+         *
+         * Relay's Solana adapter confirms by subscribing to the signature
+         * after sending it, and a wallet that waits for confirmation before
+         * handing the signature back — Phantom does — has already changed the
+         * status the adapter is about to listen for. Nothing arrives, the
+         * block height passes, and web3.js throws
+         * `TransactionExpiredBlockheightExceededError` over a transaction that
+         * is finalized on chain. Observed once with real money: the swap went
+         * through and the panel called it an error.
+         *
+         * So the chain is asked before the error is believed. If the origin
+         * transaction is there and did not fail, the deposit is in flight —
+         * Relay settles the far leg over its webhook either way — and the only
+         * thing that went wrong was our listening.
+         */
+        const landed = funder.vmType === "svm" && hashes.in !== null && (await signatureSucceeded(hashes.in));
+        if (!landed) throw err;
+        console.log("fund: confirmation timed out, but the transaction landed", hashes.in);
+      }
 
       /*
        * Reported, not asserted. A failure here leaves the deposit at

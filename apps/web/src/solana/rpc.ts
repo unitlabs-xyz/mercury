@@ -1,4 +1,4 @@
-import { address, createSolanaRpc, type Address, type Blockhash } from "@solana/kit";
+import { address, createSolanaRpc, type Address, type Blockhash, type Signature } from "@solana/kit";
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { USDC_MINT } from "@mercury/chain";
 
@@ -13,12 +13,20 @@ import { USDC_MINT } from "@mercury/chain";
  * key), dRPC (400, chain not on the free tier) and BlockEden (402). This one
  * answered 200 with `access-control-allow-origin: *`.
  *
- * Its limit is that indexed methods — `getTokenAccountsByOwner` and friends —
- * are refused without a token, which is why the balance below is read through
- * `getAccountInfo` on a derived account instead. Everything here has to stay
- * inside that restriction to be worth having.
+ * `solana.publicnode.com`, not `solana-rpc.publicnode.com`. Both serve the
+ * same JSON-RPC over HTTPS, but the `-rpc` host answers a websocket upgrade
+ * with a 301 to this one, and a redirect is not something a websocket
+ * handshake survives — so Privy's subscriptions, which take this URL with
+ * `http` swapped for `ws`, never connected. Measured 15 October 2026.
+ *
+ * Two limits, both measured the same day, and both load-bearing below:
+ * `getTokenAccountsByOwner` is refused outright with a 403, and
+ * `getMultipleAccounts` is refused past **ten** addresses in one call.
  */
-export const PUBLIC_SOLANA_RPC_URL = "https://solana-rpc.publicnode.com";
+export const PUBLIC_SOLANA_RPC_URL = "https://solana.publicnode.com";
+
+/** The most addresses `getMultipleAccounts` takes on the public endpoint. */
+const PUBLIC_BATCH = 10;
 
 const CONFIGURED = import.meta.env["VITE_SOLANA_RPC_URL"] as string | undefined;
 
@@ -145,6 +153,41 @@ export const solBalanceRaw = (owner: string): Promise<bigint> =>
 const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
 
 /** Native SOL, in Relay's spelling: the system program's address. */
+/**
+ * Whether a signature is on chain and did not fail.
+ *
+ * Asked of the chain, because the alternative is believing a confirmation
+ * that gave up. Relay's Solana adapter confirms a deposit by subscribing to
+ * the signature *after* sending it, and wallets like Phantom do not return
+ * until the transaction is already confirmed — so the status it is waiting
+ * for has often changed before it starts listening, nothing ever arrives, and
+ * sixty seconds later the block height passes and web3.js throws
+ * `TransactionExpiredBlockheightExceededError`. The money moved; only the
+ * listener missed it. Observed 15 October 2026 on a deposit that `finalized`
+ * with `err: null` while the panel showed it as failed.
+ *
+ * `searchTransactionHistory`, since by the time this is asked the signature
+ * may have left the recent-status cache.
+ *
+ * `false` rather than a throw when the lookup itself fails: this is only ever
+ * asked in order to second-guess an error, and an unreachable endpoint is no
+ * evidence the deposit survived.
+ */
+export const signatureSucceeded = async (signature: string): Promise<boolean> => {
+  try {
+    return await viaRpc(async (rpc) => {
+      const { value } = await rpc
+        .getSignatureStatuses([signature as Signature], { searchTransactionHistory: true })
+        .send();
+      const status = value[0];
+      if (status === null || status === undefined) return false;
+      return status.err === null && status.confirmationStatus !== "processed";
+    });
+  } catch {
+    return false;
+  }
+};
+
 export const SOL_NATIVE = "11111111111111111111111111111111";
 
 /** One thing a wallet holds: the mint, the raw amount, and its decimals. */
@@ -204,10 +247,18 @@ export const walletHoldings = async (owner: string, known: readonly string[]): P
           }),
         ),
       );
+      /*
+       * Ten at a time, which is what the public endpoint serves: eleven
+       * addresses in one `getMultipleAccounts` come back 403 "Request
+       * blocked". Chunking at 100 — the figure the method itself allows —
+       * meant this fallback had never once worked on the endpoint it exists
+       * for, so a refused `getTokenAccountsByOwner` was followed straight by
+       * a second refusal. Measured 15 October 2026.
+       */
       const found: Holding[] = [];
-      for (let i = 0; i < atas.length; i += 100) {
+      for (let i = 0; i < atas.length; i += PUBLIC_BATCH) {
         const { value } = await rpc
-          .getMultipleAccounts(atas.slice(i, i + 100), { encoding: "jsonParsed" })
+          .getMultipleAccounts(atas.slice(i, i + PUBLIC_BATCH), { encoding: "jsonParsed" })
           .send();
         for (const account of value) {
           const h = account === null ? null : holdingOf(account.data);

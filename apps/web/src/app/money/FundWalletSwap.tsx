@@ -8,7 +8,8 @@ import {
   useFundSwapAction,
 } from "../../api/fund-swap";
 import { useEstimateFeesPerGas } from "wagmi";
-import { useConnectFunder, useFunder } from "../../wallet/useFunder";
+import { useConnectFunder, useFunderForChain } from "../../wallet/useFunder";
+import { vmOfChain } from "../../wallet/funder";
 import { EVM_NETWORKS } from "../../wallet/chains";
 import { Button } from "../../ui/Button";
 import { Alert, Check, ChevronDown, Flip } from "../../ui/icons";
@@ -82,13 +83,19 @@ const SummaryRow = ({
 const trimZeros = (s: string) => (s.includes(".") ? s.replace(/\.?0+$/, "") : s);
 
 export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onChangeToken: () => void }) => {
-  const funder = useFunder();
+  /*
+   * The wallet that can sign on this token's chain, not whichever namespace
+   * AppKit has in front. A wallet that has approved both Ethereum and Solana
+   * holds two accounts, and only one of them can sign any given token.
+   */
+  const vm = vmOfChain(token.chainId);
+  const funder = useFunderForChain(token.chainId);
   const connect = useConnectFunder();
   const decimals = decimalsOf(token);
   /* Both VMs read now; the hook knows which chain it is on. */
   const balance = useFunderBalance(funder?.address, token.address, token.vmType, token.chainId);
   const gas = useFunderGas(funder?.address, token.vmType, token.chainId);
-  const action = useFundSwapAction();
+  const action = useFundSwapAction(token.chainId);
   const resetAction = action.reset;
   const [amount, setAmount] = useState("");
   /*
@@ -231,9 +238,12 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
     gas.data !== undefined &&
     (gas.data === 0n ||
       (gasNeeded !== undefined && gas.data < gasNeeded + (isNative && raw !== null ? raw : 0n)));
-  /* The wallet is somewhere else. Not a blocker any more — the deposit brings
-     it across — but the button should say so before the prompt appears. */
-  const wrongChain = funder !== null && funder.chainId !== token.chainId;
+  /* The wallet is somewhere else within its own namespace. Not a blocker —
+     the deposit brings it across — but the button should say so before the
+     prompt appears. EVM only: a chain switch cannot cross a namespace, and
+     offering "Switch to Solana" to an 0x… wallet was a button that could not
+     have worked. */
+  const wrongChain = funder !== null && funder.vmType === "evm" && funder.chainId !== token.chainId;
   /*
    * What the deposit comes to: the USDC that lands, Relay's fee (out of the
    * amount) and the network fee (paid by the wallet on top). Asked once the
@@ -490,8 +500,10 @@ export const FundWalletSwap = ({ token, onChangeToken }: { token: FundToken; onC
           one, then sends. The form above is the same either way, so connecting
           is a step on the way rather than a screen of its own. */}
       {funder === null ? (
-        <Button type="button" variant="primary" size="lg" onClick={connect} className="mt-4 w-full">
-          Connect wallet
+        <Button type="button" variant="primary" size="lg" onClick={() => connect(vm)} className="mt-4 w-full">
+          {/* Named, because with a token already chosen the wallet it needs is
+              known — and half the list cannot sign for it. */}
+          {vm === "svm" ? "Connect a Solana wallet" : "Connect an Ethereum wallet"}
         </Button>
       ) : (
         <Button
