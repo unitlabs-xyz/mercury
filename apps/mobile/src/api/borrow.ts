@@ -29,9 +29,10 @@ export const useBorrow = () => {
  * One borrowing action, end to end, as the web's `useBorrowAction` runs it: the
  * server checks it against the safety target and builds unsigned transactions,
  * the embedded wallet signs each, and the server broadcasts them in order,
- * waiting for each to confirm. A first-time borrower signs twice: one-time
- * setup, then the action. The network fee is the server's, so a wallet with
- * no SOL can still borrow.
+ * waiting for each to confirm. A first action opens the Kamino account in its
+ * own transaction, so a first-time borrower signs once too, and Mercury pays
+ * for the account. The network fee is the server's, so a wallet with no SOL
+ * can still borrow.
  */
 export const useBorrowAction = () => {
   const qc = useQueryClient();

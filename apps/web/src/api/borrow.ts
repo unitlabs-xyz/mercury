@@ -35,8 +35,9 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 /**
  * One borrowing action, end to end: the server checks it against the safety
  * target and builds unsigned transactions, the embedded wallet signs each, and
- * the server broadcasts them in order, waiting for each to confirm. A first-time
- * borrower signs twice: one-time setup, then the action.
+ * the server broadcasts them in order, waiting for each to confirm. A first
+ * action opens the Kamino account in its own transaction, so a first-time
+ * borrower signs once too, and Mercury pays for the account.
  */
 export const useBorrowAction = () => {
   const qc = useQueryClient();
@@ -80,8 +81,9 @@ export const useBorrowAction = () => {
        * balances sees a loan as cash arriving; only the client knows it asked
        * to borrow $500 against SPYx rather than receive $500 from a friend.
        *
-       * The last signature is the action's own — an earlier one is the one-time
-       * obligation setup, which moved nothing and has nothing to record.
+       * The last signature is the action's own. There is only one today, but a
+       * server that ever sends setup apart again would send it first, and setup
+       * moves nothing and has nothing to record.
        *
        * Deliberately not awaited into the result, and deliberately swallowed:
        * the money has already moved. A confirm that fails costs a row in the
