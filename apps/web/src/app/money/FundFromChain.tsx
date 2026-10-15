@@ -3,8 +3,8 @@ import { useState } from "react";
 import { STEP_SLIDE, STEP_TRANSITION } from "../../motion/step";
 import { useFundSources } from "../../api/fund-sources";
 import { useDebounced, useFundTokens, usePrefetchFundTokens, type FundToken } from "../../api/fund-tokens";
-import { useDisconnectFunder, useFunder } from "../../wallet/useFunder";
-import type { Funder } from "../../wallet/funder";
+import { useDisconnectFunder, useFunders } from "../../wallet/useFunder";
+import { funderForChain, type Funder } from "../../wallet/funder";
 import { Alert, Check, Close } from "../../ui/icons";
 import { FundWalletSwap } from "./FundWalletSwap";
 import { TokenMark } from "./TokenMark";
@@ -240,7 +240,9 @@ const sameToken = (a: FundToken | null, b: FundToken) =>
  */
 export const FundFromChain = () => {
   const sources = useFundSources();
-  const funder = useFunder();
+  /* Both namespaces: which one pays depends on the token chosen below, and
+     the held-token list wants everything either of them holds. */
+  const funders = useFunders();
   const [query, setQuery] = useState("");
   const [chainId, setChainId] = useState<number | null>(null);
   const [picked, setPicked] = useState<FundToken | null>(null);
@@ -268,7 +270,10 @@ export const FundFromChain = () => {
    * what was raised. Narrowed by the same search and chain as the list, so a
    * filter never shows a held token from somewhere else.
    */
-  const held = useHeldTokens(funder, listed, sources.data?.chains ?? []);
+  /* The wallet the strip should name: the one that would pay for the token
+     chosen, or either of them before one has named a chain. */
+  const payer = picked === null ? (funders.evm ?? funders.svm) : funderForChain(funders, picked.chainId);
+  const held = useHeldTokens(funders, listed, sources.data?.chains ?? []);
   const term = debounced.toLowerCase();
   const heldHere = held.filter(
     (h) =>
@@ -436,7 +441,7 @@ export const FundFromChain = () => {
 
       {/* On every screen: this is where somebody lands with a wallet still
           attached from last time, and where they would want to change it. */}
-      {funder !== null && <ConnectedWallet funder={funder} />}
+      {payer !== null && <ConnectedWallet funder={payer} />}
     </div>
   );
 };

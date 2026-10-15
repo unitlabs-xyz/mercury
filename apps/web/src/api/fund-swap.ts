@@ -11,7 +11,8 @@ import { Connection, type SendOptions, type VersionedTransaction } from "@solana
 import { apiFetch } from "./client";
 import { SOLANA_RPC_URL, solBalanceRaw, tokenBalanceRaw } from "../solana/rpc";
 import { SOLANA_CHAIN_ID } from "../wallet/chains";
-import { useFunder, useSwitchFunderChain } from "../wallet/useFunder";
+import { vmOfChain } from "../wallet/funder";
+import { useFunderForChain, useSwitchFunderChain } from "../wallet/useFunder";
 import { refreshAfterChain } from "./settle";
 
 /** Relay's identifier for native SOL, which is a lamport balance and not a token account. */
@@ -233,9 +234,11 @@ interface SolanaProvider {
  * of two legs, and the leg that delivers the money is one they never signed.
  * Relay settles it, over a signed webhook.
  */
-export const useFundSwapAction = () => {
+export const useFundSwapAction = (chainId: number) => {
   const qc = useQueryClient();
-  const funder = useFunder();
+  /* The wallet that can sign on this token's own chain, not whichever one
+     AppKit happens to have in front. */
+  const funder = useFunderForChain(chainId);
   const config = useConfig();
   const switchChain = useSwitchFunderChain();
   const { walletProvider } = useAppKitProvider<SolanaProvider>("solana");
@@ -245,7 +248,26 @@ export const useFundSwapAction = () => {
 
   const action = useMutation<SwapReceipt, Error, { chainId: number; currency: string; amountRaw: string }>({
     mutationFn: async (input) => {
-      if (funder === null) throw new Error("Connect a wallet to pay from first.");
+      if (funder === null) {
+        throw new Error(
+          vmOfChain(chainId) === "svm"
+            ? "Connect a Solana wallet to pay from first."
+            : "Connect an Ethereum wallet to pay from first.",
+        );
+      }
+
+      /*
+       * The wallet and the token in the same namespace, checked rather than
+       * assumed. The panel will not offer a mismatch, but this is the throw
+       * that beats the alternative: a quote minted and an intent written for
+       * a wallet that was never going to be able to sign it.
+       *
+       * `input.chainId` as well as the one this was built for, because a
+       * render between the two would leave the funder belonging to the old.
+       */
+      if (input.chainId !== chainId || funder.vmType !== vmOfChain(input.chainId)) {
+        throw new Error("That wallet cannot sign on the chain this token is on.");
+      }
 
       /*
        * The chain comes from the token, not from where the wallet happens to

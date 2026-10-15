@@ -5,7 +5,7 @@ import { useReadContracts } from "wagmi";
 import { tokenAmount } from "@mercury/view";
 import type { FundChain } from "../app/money/fund-chain";
 import { CONNECTABLE_CHAIN_IDS, SOLANA_CHAIN_ID } from "../wallet/chains";
-import type { Funder } from "../wallet/funder";
+import type { Funders } from "../wallet/funder";
 import { SOL_NATIVE, walletHoldings } from "../solana/rpc";
 import { fetchRelayPrice } from "./fund-price";
 import type { FundToken } from "./fund-tokens";
@@ -75,12 +75,15 @@ const relayToken = async (chainId: number, address: string, signal: AbortSignal)
 const LOOKUP_CAP = 30;
 
 export const useHeldTokens = (
-  funder: Funder | null,
+  funders: Funders,
   rows: readonly FundToken[],
   chains: readonly FundChain[],
 ): readonly Held[] => {
-  const svm = funder?.vmType === "svm" ? funder.address : undefined;
-  const evm = funder?.vmType === "evm" ? (funder.address as `0x${string}`) : undefined;
+  /* Both wallets, because a wallet that has approved Ethereum and Solana holds
+     tokens on both and the list is meant to show what somebody has. Reading
+     only the namespace in front hid half of it. */
+  const svm = funders.svm?.address;
+  const evm = funders.evm?.address as `0x${string}` | undefined;
   const solana = chains.find((c) => c.chainId === SOLANA_CHAIN_ID);
 
   /* The listed Solana mints, for the endpoint that cannot list a wallet. Read
