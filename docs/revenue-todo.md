@@ -107,13 +107,19 @@ the `waitlist` table (`position <= 500`).
 
 ## 6 · Add-cash fee: 0.3% on non-USDC tokens
 
-The deck says "when Relay funding ships". It has (PRs #68, #72, #73), so this is no longer blocked.
-**Today:** `services/api/src/funding/relay.ts` sends no `appFees` in the `/quote/v2` body.
+**Built 15 October 2026.** `DEPOSIT_FEE_BPS` (default 30), sent to Relay as `appFees` on every deposit
+that isn't Circle's own USDC. Relay takes it out of the deposit and holds it as a USDC balance credited
+to `DEPOSIT_FEE_RECIPIENT`, which has to be an EVM address even for deposits from Solana. With no
+recipient set, no deposit is charged.
 
-- [ ] Add `appFees` (30 bps, our recipient) on quotes where the origin currency isn't USDC
-- [ ] Keep USDC deposits free
-- [ ] Show the fee in `FundWalletSwap.tsx`'s deposit summary
-- [ ] Confirm where Relay pays out app fees, and how often
+- [x] Add `appFees` on quotes for anything but Circle USDC (`services/api/src/funding/fees.ts`)
+- [x] Keep Circle USDC free on every chain Circle issues it; BNB Chain has none, so its USDC is charged
+- [x] Ask for the same fee in the browser's preview, from a per-token `appFee` the server sends
+- [x] Show it in `FundWalletSwap.tsx`'s fee breakdown as "Mercury (0.3%)"
+- [x] Record what Relay reported on each deposit (`funding_intent.mercury_fee_usd`)
+- [ ] Pick the EVM wallet that receives the fees (a Safe works) and set `DEPOSIT_FEE_RECIPIENT`
+- [ ] Claim the balance from that wallet at relay.link/claim-app-fees. Not now: decided 15 October 2026
+      to leave the fees held at Relay, and build no payout yet
 
 ## 7 · "Buy more with credit" (once 1 and 2 are live)
 
