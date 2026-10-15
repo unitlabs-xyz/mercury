@@ -11,6 +11,7 @@ import {
 import type { Instrument as WireInstrument } from "@mercury/types";
 import { ApiError, apiFetch } from "../api/client";
 import { useSignedIn } from "../api/hooks";
+import { chargeFromWire, type WireCharge } from "../app/fee-lines";
 import { decisionFromWire } from "@mercury/view";
 import type { Decision as WireDecision } from "@mercury/types";
 
@@ -431,7 +432,7 @@ export const useDecision = (
     queryFn: () =>
       apiFetch<{
         decision: WireDecision;
-        fee: { usdc: string; lamports: number };
+        fee: WireCharge & { lamports: number };
         investable: string | null;
         proceeds: string | null;
       }>("/v1/quote", {
@@ -449,11 +450,12 @@ export const useDecision = (
   return {
     decision: quoted.data ? decisionFromWire(quoted.data.decision) : null,
     /*
-     * What the network costs, and what is left to buy with. Zero unless a
-     * relayer is paying, which is why the ticket shows these lines only
-     * sometimes rather than always.
+     * The whole charge — the network cost and Mercury's fee — which is what
+     * comes off the amount or the proceeds. `charge` is the same figure by
+     * part, for the lines that name each one.
      */
     fee: quoted.data ? D(quoted.data.fee.usdc) : null,
+    charge: quoted.data ? chargeFromWire(quoted.data.fee) : null,
     investable: quoted.data?.investable ? D(quoted.data.investable) : null,
     /** What lands in the wallet once the network is paid. Null on a buy. */
     proceeds: quoted.data?.proceeds ? D(quoted.data.proceeds) : null,

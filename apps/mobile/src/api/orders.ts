@@ -32,7 +32,18 @@ export const toBase64 = (bytes: Uint8Array): string => Buffer.from(bytes).toStri
 /** What a buy would cost right now: the decision, and the charge beside it. */
 export interface Quote {
   readonly decision: Decision;
-  readonly fee: { readonly usdc: string; readonly lamports: number };
+  /**
+   * `usdc` is the whole charge, network cost and Mercury's fee together. The
+   * parts are optional because a server that predates them sent `usdc` alone,
+   * and then it was the network cost and nothing else.
+   */
+  readonly fee: {
+    readonly usdc: string;
+    readonly lamports: number;
+    readonly network?: string;
+    readonly mercury?: string;
+    readonly mercuryBps?: number;
+  };
   /** What actually reaches the swap, after the charge. Null on a sell. */
   readonly investable: string | null;
   /** What a sale lands in the wallet, net of the charge. Absent on a buy. */

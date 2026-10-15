@@ -553,6 +553,11 @@ const quote = (body: string | undefined) => {
     })
     .sort((a, b) => (side === "buy" ? 1 : -1) * (Number(a.pricePerShare) - Number(b.pricePerShare)));
   const best = offers.find((o) => o.viable) ?? offers[0]!;
+  /* The server's charge, roughly: 0.5% of the worth, rounded down to the cent, and a cent of network. */
+  const gross = Number(best.filledShares) * Number(best.pricePerShare);
+  const worth = side === "buy" ? amount : gross;
+  const mercury = Math.floor(worth * 0.5) / 100;
+  const total = mercury + 0.01;
   return {
     decision: {
       kind: "execute",
@@ -568,9 +573,15 @@ const quote = (body: string | undefined) => {
       premium: (Number(best.pricePerShare) / fair - 1).toFixed(6),
       warning: null,
     },
-    fee: { usdc: "0", lamports: 0 },
-    investable: null,
-    proceeds: side === "sell" ? (Number(best.filledShares) * Number(best.pricePerShare)).toFixed(2) : null,
+    fee: {
+      usdc: total.toFixed(2),
+      lamports: 5_000,
+      network: "0.01",
+      mercury: mercury.toFixed(2),
+      mercuryBps: 50,
+    },
+    investable: side === "buy" ? (amount - total).toFixed(2) : null,
+    proceeds: side === "sell" ? (gross - total).toFixed(2) : null,
   };
 };
 
