@@ -66,6 +66,14 @@ Stops the $5–7 we lose on every new borrower.
 **Today:** `services/api/src/lending/kamino.ts` and `sponsor.ts` top up the user's rent from the relayer
 and charge nothing back. Kamino pays us nothing.
 
+**Measured 15 October 2026**, by simulating a first deposit-and-borrow on mainnet: the setup tops a new
+wallet up by 29,745,280 lamports, about $3.06 at $103 SOL. That covers the obligation (17,637,760), user
+metadata (5,892,800), the farm state (5,323,840) and the wallet's own minimum (890,880). The borrow
+transaction then opens a USDC account if there is none. The deck's $5–7 assumed a higher SOL price and
+mainnet's old rent rate.
+
+- [x] Stop creating Kamino's per-user lookup table, which nothing uses (`USER_SETUP` in `kamino.ts`):
+      934,720 lamports less per new borrower
 - [ ] Work out the first-loan setup rent from account sizes (confirm with Kamino)
 - [ ] Charge it once from the borrowed USDC, shown as "Account setup, one time"
 - [ ] Add the 0.25% borrow fee in the same USDC transfer
