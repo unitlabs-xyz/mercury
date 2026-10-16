@@ -1,6 +1,6 @@
 import { Sparkline } from "./Sparkline";
 import { Figure, Panel, Skeleton } from "./ui";
-import { usd, usdCompact } from "@mercury/view";
+import { usd } from "./money";
 import { age, dayLabel, minutesBetween, seriesByGroup, share, snapshotStale } from "./format";
 import type { BasketStats, FundingStats, Freshness, Overview, OrderStats } from "./useAdmin";
 
@@ -234,7 +234,8 @@ export const Trading = ({ data }: { data: OrderStats | undefined }) => {
         {/* Summed from the per-day strings for the headline only. The exact
             decimals are in the table below; a total rendered to the cent is
             what this line is for. */}
-        <Figure label="Volume" value={usdCompact(sum((r) => r.volumeUsd))} />
+        {/* The exact figure, not a compact one: this is read to be quoted. */}
+        <Figure label="Volume" value={usd(sum((r) => r.volumeUsd))} />
         <Figure label="Revenue" value={usd(sum((r) => r.revenueUsd))} sub="Mercury's fee only" />
         <Figure label="Fill rate" value={share(filled, orders)} sub={`${filled} of ${orders}`} />
         <Figure label="Realised P&L" value={usd(sum((r) => r.realisedPnlUsd))} sub="across all accounts" />

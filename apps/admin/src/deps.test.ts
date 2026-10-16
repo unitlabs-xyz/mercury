@@ -31,53 +31,138 @@ const pkg = JSON.parse(readFileSync(fileURLToPath(new URL("../package.json", imp
   devDependencies: Record<string, string>;
 };
 
+/**
+ * React and react-dom must be the exact same version, and pinned.
+ *
+ * Found at runtime and nowhere else: with `^19.0.0` on both, pnpm resolved
+ * react to 19.2.3 and react-dom to 19.3.0, and react-dom throws
+ * "Incompatible React versions" on the first render — a blank page. `pnpm
+ * build` succeeded, `tsc` was clean, and all nineteen tests passed, because
+ * nothing in any of them renders a component.
+ *
+ * A range is what allowed it, so the assertion is that there is no range.
+ */
+const EXACT = /^\d+\.\d+\.\d+$/;
+
 /** Everything this app is allowed to ship to a browser. */
 const ALLOWED_RUNTIME = [
-  "@mercury/view", // usd(), so money reads the same here as in the product
   "@privy-io/react-auth", // email sign-in, which is how the API knows who is asking
   "@tanstack/react-query", // the five reads
   "react",
   "react-dom",
+  /*
+   * Declared, and never imported by anything in src/.
+   *
+   * Privy's graph requires it — `@privy-io/react-auth` → `x402` → `wagmi` →
+   * `@wagmi/connectors` → `@base-org/account` → `@coinbase/cdp-sdk` →
+   * `@solana/kit` — and left to resolve on its own this app got 5.5.1, which
+   * has no `./program-client-core` export and breaks Vite's dependency
+   * pre-bundling outright. `apps/web` gets 8.3.0 because it declares it.
+   *
+   * A root `pnpm.overrides` entry would have been the tidier fix and is not
+   * available: `services/api` pins `@solana/kit` to 2.3.0, so the workspace
+   * deliberately runs two majors and forcing one would break the API's chain
+   * code. So it is declared here, at the version that works, with no import
+   * anywhere in src/ — which the last test in this file asserts.
+   */
+  "@solana/kit",
 ];
 
 /**
- * What must never appear. Named individually so a failure says why, rather
- * than only that an allowlist was violated.
+ * What must never be *declared* here. Named individually so a failure says
+ * why, rather than only that an allowlist was violated.
+ *
+ * **This is not a claim that the wallet stack is absent from the bundle, and
+ * it would be dishonest to read it that way.** `@privy-io/react-auth` pulls
+ * in wagmi, `@wagmi/connectors`, `@base-org/account`, `@coinbase/cdp-sdk`,
+ * x402 and Solana transitively — traced with `pnpm why`. Using Privy means
+ * having that graph, here exactly as in `apps/web`, and no test can change
+ * it. What this keeps out is code this app would have to choose to add.
  */
 const BANNED = [
   /^@reown\//, // AppKit
   /^wagmi$/,
   /^viem$/,
-  /^@solana/, // kit, web3.js, the program clients
   /^@relayprotocol\//,
   /^react-router/, // one page, nowhere to navigate to
   /^@mercury\/(chain|core|market|sdk)$/, // chain and execution code
 ];
 
+/**
+ * `@mercury/view` is a devDependency on purpose, not an oversight.
+ *
+ * Its entry re-exports `order`, `send` and `decision`, which pull in
+ * `@mercury/core` and the Solana libraries, and its `exports` map has only
+ * `"."` — so importing `usd` from it dragged the chain graph in and broke
+ * Vite's dependency pre-bundling: `Missing "./program-client-core" specifier
+ * in "@solana/kit"`. `money.ts` carries its own copy and `money.test.ts` pins
+ * it against the real one. A test may import the heavy graph; a bundle may
+ * not.
+ */
+const TEST_ONLY = ["@mercury/view"];
+
 describe("the admin app's dependencies", () => {
-  it("ships nothing but the five it needs", () => {
+  it("declares nothing but what it needs", () => {
     expect(Object.keys(pkg.dependencies).sort()).toEqual([...ALLOWED_RUNTIME].sort());
   });
 
-  it("carries no wallet, chain or routing stack", () => {
-    const all = [...Object.keys(pkg.dependencies), ...Object.keys(pkg.devDependencies)];
+  it("keeps @mercury/view out of the runtime graph", () => {
+    for (const name of TEST_ONLY) {
+      expect(Object.keys(pkg.dependencies)).not.toContain(name);
+      expect(Object.keys(pkg.devDependencies)).toContain(name);
+    }
+  });
 
-    const offenders = all.filter((name) => BANNED.some((pattern) => pattern.test(name)));
+  it("declares no wallet, routing or chain-logic package it could have avoided", () => {
+    /* Runtime declarations only. A devDependency is not shipped, and
+       `@mercury/view` is one deliberately — see TEST_ONLY above. */
+    const offenders = Object.keys(pkg.dependencies).filter((name) =>
+      BANNED.some((pattern) => pattern.test(name)),
+    );
 
     expect(offenders).toEqual([]);
   });
 
+  it("pins react and react-dom to one exact, identical version", () => {
+    const react = pkg.dependencies["react"];
+    const dom = pkg.dependencies["react-dom"];
+
+    expect(react).toMatch(EXACT);
+    expect(dom).toMatch(EXACT);
+    expect(react).toBe(dom);
+  });
+
   it("does not reach into the customer app", () => {
     /* An app that imports another app's source is not a separate app, and it
-       is also the path by which the wallet stack comes back: one component
-       from apps/web that happens to import a Privy wallet hook. */
-    const sources = ["App.tsx", "Dashboard.tsx", "panels.tsx", "ui.tsx", "useAdmin.ts", "api.ts"].map(
-      (name) => readFileSync(fileURLToPath(new URL(`./${name}`, import.meta.url)), "utf8"),
-    );
+       is also the path by which the chain graph comes back: one component
+       from apps/web that happens to import a wallet hook.
 
-    for (const source of sources) {
-      expect(source).not.toMatch(/from "[^"]*apps\/web/);
-      expect(source).not.toMatch(/@mercury\/(chain|core|market|sdk)/);
+       Import statements only, not the file text — the first version of this
+       matched the prose in `money.ts` explaining why @mercury/core is not
+       imported, which is a test failing on its own documentation. */
+    const shipped = [
+      "App.tsx",
+      "Dashboard.tsx",
+      "panels.tsx",
+      "ui.tsx",
+      "useAdmin.ts",
+      "api.ts",
+      "auth.ts",
+      "money.ts",
+      "main.tsx",
+      "Sparkline.tsx",
+    ];
+
+    for (const name of shipped) {
+      const source = readFileSync(fileURLToPath(new URL(`./${name}`, import.meta.url)), "utf8");
+      const specifiers = [...source.matchAll(/^\s*import[^"']*["']([^"']+)["']/gm)].map((m) => m[1]!);
+
+      expect(specifiers.filter((s) => s.includes("apps/web"))).toEqual([]);
+      expect(specifiers.filter((s) => /@mercury\/(chain|core|market|sdk|view)/.test(s))).toEqual([]);
+      /* The guarantee that makes declaring @solana/kit honest: it is pinned
+         for Privy's benefit and this app's own code never touches chain
+         libraries. */
+      expect(specifiers.filter((s) => /^@solana/.test(s))).toEqual([]);
     }
   });
 });
