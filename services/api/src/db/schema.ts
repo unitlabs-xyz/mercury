@@ -413,11 +413,16 @@ export const orders = pgTable(
   },
   (t) => [
     index("order_user_created_idx").on(t.userId, t.createdAt),
-    /* Time-first, for the admin aggregates. Every existing index on this table
-       leads with user_id, and a leading user_id cannot serve a query that does
-       not filter on it — so "every order last Tuesday, by status" would be a
-       sequential scan over a table live traffic is writing to. Serves
-       admin/orders.ts. */
+    /* Time-first, so a range query that does not name a user can use an index.
+       Every other index on this table leads with user_id, and a leading
+       user_id cannot serve a query that does not filter on it — "every order
+       last Tuesday, by status" would be a sequential scan over a table live
+       traffic is writing to.
+
+       Added for the admin dashboard, which has since been removed. Kept
+       deliberately: it is applied in every environment already, it is what
+       any future reporting over a date range needs, and dropping it would be
+       a DDL change against a live table for no gain. */
     index("order_created_status_idx").on(t.createdAt, t.status),
     // One signature, one order. This is what makes confirm idempotent in
     // subsystem 3, where a double submit would otherwise write a second lot.
@@ -450,8 +455,9 @@ export const activities = pgTable(
   },
   (t) => [
     index("activity_user_occurred_idx").on(t.userId, t.occurredAt, t.id),
-    /* Activity by kind over a range, for the admin aggregates. The two indexes
-       around it both lead with user_id. */
+    /* Activity by kind over a range. The two indexes around it both lead with
+       user_id, which cannot serve a query that does not filter on one. Added
+       for the removed admin dashboard and kept — see order_created_status_idx. */
     index("activity_occurred_kind_idx").on(t.occurredAt, t.kind),
     index("activity_basket_portfolio_idx").on(t.userId, t.basketPortfolioId, t.occurredAt),
     /**
@@ -581,10 +587,10 @@ export const portfolioSnapshots = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.capturedAt] }),
-    /* The latest reading per user, which the admin overview's assets-under-
-       management sum needs, and `freshness`'s max(captured_at). The primary key
-       leads with user_id, so neither can use it: a max over the whole table
-       would walk the entire PK index. */
+    /* max(captured_at) over the whole table, and the latest reading per user.
+       The primary key leads with user_id, so neither can use it: a max would
+       walk the entire PK index. Added for the removed admin dashboard and
+       kept — see order_created_status_idx. */
     index("portfolio_snapshot_captured_idx").on(t.capturedAt),
   ],
 );
@@ -729,8 +735,9 @@ export const fundingIntents = pgTable(
   },
   (t) => [
     index("funding_intent_user_created_idx").on(t.userId, t.createdAt),
-    /* Deposits by chain and status over a range: the chain-trend question the
-       dashboard exists to answer. Serves admin/funding.ts. */
+    /* Deposits by chain and status over a range — which chains money arrives
+       from, and whether that is changing. Added for the removed admin
+       dashboard and kept — see order_created_status_idx. */
     index("funding_intent_created_chain_idx").on(t.createdAt, t.originChainName, t.status),
     /**
      * The deposit's identity, and the webhook's idempotency.
