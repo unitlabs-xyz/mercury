@@ -1,5 +1,22 @@
 # Admin Dashboard Implementation Plan
 
+> **The implementation was removed on 16 October 2026 and this plan is kept for
+> rebuilding it.** The API surface was built and merged
+> ([#88](https://github.com/unitlabs-xyz/mercury/pull/88)), the page was taken out
+> of the customer app ([#89](https://github.com/unitlabs-xyz/mercury/pull/89)), a
+> standalone app was built and closed unmerged
+> ([#90](https://github.com/unitlabs-xyz/mercury/pull/90)), and the API surface
+> was then reverted. Nothing is lost — every file is in #88's and #90's history.
+>
+> Read the **As built** section at the end before following this plan again: it
+> records seven things the plan got wrong that only measurement found, and the
+> standalone attempt added two more (Privy resolves `@solana/kit` to a version
+> that breaks Vite's dep pre-bundling, and a separate app is _not_ smaller
+> because Privy ships the wallet stack transitively).
+>
+> The four time-first indexes it specifies are still applied and still declared
+> in `schema.ts` — they were deliberately not dropped.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** An `/admin` surface in the Mercury web app showing who is here, what they hold, what they have traded, and which chains their money arrives from — read from tables that are already written.

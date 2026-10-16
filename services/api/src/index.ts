@@ -122,25 +122,6 @@ boot.info(
   },
   relay === undefined ? "trading fee set, but no trades without a relayer" : "trading fee collected",
 );
-/*
- * Who can read the dashboard, and whether it is there at all.
- *
- * The count and not the DIDs: a DID in a log line is a user identifier in a
- * store with different retention and different access than the database it
- * came from, and the number is the fact worth having — "admin: on for 0
- * accounts" cannot happen, and "on for 7" after a deploy that was meant to
- * add one is the mistake this line catches.
- */
-boot.info(
-  {
-    on: config.adminPrivyUserIds !== undefined,
-    accounts: config.adminPrivyUserIds?.length ?? 0,
-  },
-  config.adminPrivyUserIds === undefined
-    ? "admin off (ADMIN_PRIVY_USER_IDS unset); the dashboard routes are not mounted"
-    : "admin on",
-);
-
 // Which Jupiter tier the rate limits in the logs below belong to.
 boot.info(
   {

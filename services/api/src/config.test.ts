@@ -112,20 +112,4 @@ describe("readConfig", () => {
       ["k1", "k2"],
     );
   });
-
-  it("leaves the admin allowlist absent when ADMIN_PRIVY_USER_IDS is unset", () => {
-    /* Absent, not empty. The property has to be missing for `buildReadDeps` to
-       leave `read.admin` out, which is what keeps the routes unmounted — an
-       empty array would mount a surface nobody can reach, and
-       `exactOptionalPropertyTypes` is what makes that distinction hold. */
-    expect("adminPrivyUserIds" in readConfig(base)).toBe(false);
-    expect("adminPrivyUserIds" in readConfig({ ...base, ADMIN_PRIVY_USER_IDS: "" })).toBe(false);
-    expect("adminPrivyUserIds" in readConfig({ ...base, ADMIN_PRIVY_USER_IDS: " , " })).toBe(false);
-  });
-
-  it("reads the admin allowlist as a list of DIDs", () => {
-    expect(
-      readConfig({ ...base, ADMIN_PRIVY_USER_IDS: "did:privy:a, did:privy:b" }).adminPrivyUserIds,
-    ).toEqual(["did:privy:a", "did:privy:b"]);
-  });
 });
