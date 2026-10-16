@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/**
+ * The subset of the product's design tokens this app actually uses.
+ *
+ * Copied values rather than a shared stylesheet, and that is the point of the
+ * app being separate: it reads the same API and formats money with the same
+ * `usd()`, but it does not depend on the customer app's internals, and it is
+ * free to diverge visually without touching anything a customer sees.
+ *
+ * If the product's palette moves and this looks dated, that is the trade and
+ * it is a cheap one — these are nine colours on an internal page.
+ */
+@theme {
+  --color-page: #f3f3f3;
+  --color-cardline: #e4e0d7;
+  --color-muted: #6b665c;
+  --color-faint: #6f6a60;
+  --color-brand: #0f7480;
+  --color-brand-deep: #0b5c66;
+  --color-up-deep: #177544;
+  --color-down-deep: #b33d29;
+  --color-warn: #8a5e10;
+  --color-ds-ink: #171717;
+  --color-ds-muted: #656565;
+  --color-ds-panel: #f7f7f7;
+}
+
+/* Every screen sets its text at -2% letter spacing, as the product does. */
+body {
+  @apply bg-page tracking-[-0.02em] text-ds-ink;
+  margin: 0;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+}
