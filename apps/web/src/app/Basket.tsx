@@ -43,6 +43,7 @@ import { OperationStatus } from "./baskets/OperationStatus";
 import { TOKEN_NAME } from "./stock/heldAs";
 import { allocationRows } from "./baskets/allocation";
 import { displayBasketName } from "./baskets/catalog";
+import { partial, stale, unread } from "./baskets/unreadable";
 import { EnrollmentRail, ExitSheet, InvestSheet, RebalanceSheet } from "./baskets/Ticket";
 import { rebalanceOutcome, rebalanceTerminal } from "./baskets/rebalance-status";
 import { modeledRanges, modeledSince, modeledWindow } from "@mercury/view";
@@ -325,7 +326,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
     </nav>
     <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
       <div className="flex min-w-0 flex-col gap-4 md:gap-6">
-        <section aria-label="Loading strategy overview" className="rounded-xl bg-white p-5">
+        <section aria-label="Loading basket overview" className="rounded-xl bg-white p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <Skeleton className="h-7 w-52 max-w-full" />
@@ -342,7 +343,7 @@ const DetailLoading = ({ assetCount }: { assetCount: number }) => (
           <Skeleton className="mt-7 h-9 w-28" />
           <Skeleton className="mt-5 h-[340px] w-full rounded-lg" />
         </section>
-        <section aria-label="Loading strategy composition" className="rounded-xl bg-white p-1">
+        <section aria-label="Loading basket composition" className="rounded-xl bg-white p-1">
           <div className="px-3 sm:px-5 pt-4 pb-3">
             <Skeleton className="h-5 w-44" />
             <Skeleton className="mt-2 h-4 w-64 max-w-full" />
@@ -567,10 +568,7 @@ export const Basket = () => {
     return (
       <AppShell current="baskets" title={name} quiet>
         <div className="rounded-xl bg-white p-5">
-          <PriceError
-            message="This strategy is unavailable right now."
-            onRetry={() => void result.refetch()}
-          />
+          <PriceError message={unread("this basket")} onRetry={() => void result.refetch()} />
           <Link to="/baskets" className="mt-4 inline-block text-[13px] text-ds-link hover:underline">
             Back to baskets
           </Link>
@@ -696,7 +694,7 @@ export const Basket = () => {
       {result.isError && (
         <PriceError
           className="mb-4 md:mb-6"
-          message="Could not refresh this strategy. Showing the last available data."
+          message={stale("this basket")}
           onRetry={() => void result.refetch()}
         />
       )}
@@ -704,7 +702,7 @@ export const Basket = () => {
       <div className="flex flex-col gap-4 md:gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_416px] xl:items-start">
         <div className="contents xl:flex xl:min-w-0 xl:flex-col xl:gap-6">
           <section
-            aria-label="Strategy overview and modeled performance"
+            aria-label="Basket overview and modeled performance"
             className="order-1 min-w-0 rounded-xl bg-white p-1 xl:order-none"
           >
             <div className="px-5 pt-5 pb-4">
@@ -720,7 +718,7 @@ export const Basket = () => {
                           : "Preview"}
                     </StatusChip>
                   </div>
-                  <p className="mt-2 text-[13px] text-ds-muted">Glider strategy · Solana</p>
+                  <p className="mt-2 text-[13px] text-ds-muted">Glider basket · Solana</p>
                 </div>
                 <IconCluster
                   template={template}
@@ -744,7 +742,7 @@ export const Basket = () => {
                   <p
                     className={`mt-1 text-[32px] leading-none font-medium ${headline.change !== null ? (Number(headline.change) < 0 ? "text-ds-fall" : "text-ds-up") : "text-ds-ink"}`}
                   >
-                    {headline.change !== null ? returnLabel(headline.change) : "Unavailable"}
+                    {headline.change !== null ? returnLabel(headline.change) : "—"}
                   </p>
                 </div>
                 <div className="max-w-full overflow-x-auto">
@@ -756,7 +754,7 @@ export const Basket = () => {
                   <DotChart series={chart} label={shown} scale="percent" />
                 ) : (
                   <div className="grid h-full place-items-center rounded-lg bg-ds-panel text-[13px] text-ds-muted">
-                    Modeled history is unavailable for this range.
+                    Not enough history for this range.
                   </div>
                 )}
               </div>
@@ -771,12 +769,12 @@ export const Basket = () => {
           <div className="order-3 flex min-w-0 flex-col gap-4 md:gap-6 xl:order-none">
             <section
               id="composition"
-              aria-label="Strategy composition"
+              aria-label="Basket composition"
               className="min-w-0 scroll-mt-24 overflow-hidden rounded-xl bg-white p-1"
             >
               <div className="flex flex-wrap items-end justify-between gap-3 px-3 sm:px-5 pt-4">
                 <div>
-                  <h2 className="text-[17px] font-medium text-ds-ink">Strategy composition</h2>
+                  <h2 className="text-[17px] font-medium text-ds-ink">Basket composition</h2>
                   <p className="mt-1 text-[12px] text-ds-muted">
                     Target weights; actual holdings can drift between rebalances.
                   </p>
@@ -800,7 +798,7 @@ export const Basket = () => {
                       <span>Asset</span>
                       <span className="text-right">Weight</span>
                       <span className="text-right">Share price</span>
-                      <span className="text-right">Company cap</span>
+                      <span className="text-right">Market cap</span>
                       <span className="text-right">1D</span>
                       <span className="text-right">1W</span>
                     </>
@@ -873,8 +871,8 @@ export const Basket = () => {
                 </GlideTable>
               </div>
               <p className="mt-3 px-5 pb-4 text-[11px] text-ds-muted">
-                Share price, company cap and 1D/1W moves describe the underlying companies, not the tokens
-                held by this strategy. Unavailable data is shown as —.
+                Share price, market cap and 1D/1W moves describe the underlying companies, not the tokens held
+                by this strategy. Unavailable data is shown as —.
               </p>
             </section>
 
@@ -882,8 +880,8 @@ export const Basket = () => {
               <div className="px-3 sm:px-5 pt-4">
                 <RailHead title={`About ${name}`} />
                 <p className="mt-[13px] max-w-[72ch] text-[14px] leading-[1.55] text-ds-muted">
-                  Follows Glider’s target weights with tokenized assets held in your own smart account. Glider
-                  rebalances daily; your actual holdings can drift between rebalances.
+                  Follows Glider’s target weights with tokenized assets held in your own basket account.
+                  Glider rebalances daily; your actual holdings can drift between rebalances.
                 </p>
               </div>
               <div className="mt-4 grid gap-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
@@ -891,7 +889,7 @@ export const Basket = () => {
                   <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
                     <Fact k="Assets">{allocations.length}</Fact>
                     <Fact k="Rebalancing">Daily</Fact>
-                    <Fact k="Custody">Your smart account</Fact>
+                    <Fact k="Custody">Your basket account</Fact>
                     <Fact k="Held as">{heldAsLabel}</Fact>
                     {/* Glider holds the tokens in its smart account, out of Kamino's reach, and
                         they are Ondo tokens besides. Said here so no one buys in to borrow. */}
@@ -933,7 +931,7 @@ export const Basket = () => {
                         ))}
                       </ul>
                     ) : (
-                      <p className="mt-3 text-[12px] text-ds-muted">Sector classification is unavailable.</p>
+                      <p className="mt-3 text-[12px] text-ds-muted">No sector breakdown available.</p>
                     )}
                   </div>
                 </div>
@@ -1010,9 +1008,9 @@ export const Basket = () => {
                 />
               </summary>
               <p className="mt-4 text-[13px] leading-relaxed text-ds-muted">
-                These are tokenized assets held in a user-owned Glider smart account, not shares in a pooled
-                basket token. Prices, available liquidity, swap costs and actual execution can differ from the
-                modeled strategy. Funding with USDC does not automatically buy the target assets; USDC can
+                These are tokenized assets held in a Glider basket account that is yours, not shares in a
+                pooled basket token. Prices, available liquidity, swap costs and actual execution can differ
+                from the model. Funding with USDC does not automatically buy the target assets; USDC can
                 remain uninvested until a rebalance executes.
               </p>
             </details>
@@ -1033,7 +1031,7 @@ export const Basket = () => {
               busy={enrollmentBusy}
               error={
                 enrollment.isError && enrollment.data
-                  ? "Portfolio status could not refresh. Showing your last available enrollment."
+                  ? stale("your basket account")
                   : enrollment.error?.message
               }
               onRetry={() => void enrollment.refetch()}
@@ -1086,21 +1084,24 @@ export const Basket = () => {
                       </p>
                     )}
                     {account.warnings.length > 0 && (
-                      <p className="mt-3 text-[12px] text-ds-muted">Partial read; value may be incomplete.</p>
+                      <p className="mt-3 text-[12px] text-ds-muted">{partial("balances")}</p>
                     )}
                     {portfolio.isError && (
-                      <button
-                        type="button"
-                        onClick={() => void portfolio.refetch()}
-                        className="mt-3 text-[12px] font-medium text-ds-link hover:underline"
-                      >
-                        Balance refresh failed · Retry
-                      </button>
+                      <p className="mt-3 text-[12px] text-ds-muted">
+                        {stale("your balances")} ·{" "}
+                        <button
+                          type="button"
+                          onClick={() => void portfolio.refetch()}
+                          className="font-medium text-ds-link hover:underline"
+                        >
+                          Retry
+                        </button>
+                      </p>
                     )}
                     {exitOperationId && (
                       <div className="mt-4 border-t border-ds-divider pt-4 text-[12px]">
                         <OperationStatus
-                          name={exitOperation?.mode === "in_kind" ? "In-kind withdrawal" : "Exit to USDC"}
+                          name={exitOperation?.mode === "in_kind" ? "Exit as assets" : "Exit to USDC"}
                           state={exitState}
                           label={
                             exitState?.replaceAll("_", " ") ??
@@ -1150,13 +1151,13 @@ export const Basket = () => {
                 ) : ownershipUnknown ? (
                   <PriceError
                     className="mt-5"
-                    message="Portfolio status is unavailable. Your holdings have not been checked yet."
+                    message={unread("your holdings")}
                     onRetry={() => void enrollment.refetch()}
                   />
                 ) : (
                   <PriceError
                     className="mt-5"
-                    message="Smart-account balances are unavailable."
+                    message={unread("your balances")}
                     onRetry={() => void portfolio.refetch()}
                   />
                 )}
@@ -1182,10 +1183,7 @@ export const Basket = () => {
                     ))}
                   </div>
                 ) : !account && portfolio.isError ? (
-                  <PriceError
-                    message="Account balances are unavailable."
-                    onRetry={() => void portfolio.refetch()}
-                  />
+                  <PriceError message={unread("your balances")} onRetry={() => void portfolio.refetch()} />
                 ) : (
                   <>
                     {portfolio.isError && (
@@ -1193,7 +1191,7 @@ export const Basket = () => {
                         role="alert"
                         className="mx-2 mb-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
                       >
-                        <span>Refresh failed · showing last balances</span>
+                        <span>{stale("your balances")}</span>
                         <button
                           type="button"
                           onClick={() => void portfolio.refetch()}
@@ -1205,7 +1203,7 @@ export const Basket = () => {
                     )}
                     {heldAssets.length === 0 ? (
                       <p className="px-3 py-5 text-[13px] text-ds-muted">
-                        This smart account has no assets right now. Check your wallet and recent activity if
+                        This basket account has no assets right now. Check your wallet and recent activity if
                         you withdrew them.
                       </p>
                     ) : (
@@ -1325,18 +1323,18 @@ export const Basket = () => {
                   <RebalanceLocked enrolled={enrolled} />
                 ) : ownershipUnknown ? (
                   <div className="min-h-[160px] text-[12px] text-ds-muted">
-                    <p>Rebalance schedule is unavailable until portfolio status is known.</p>
+                    <p>{unread("your holdings")}</p>
                     <button
                       type="button"
                       onClick={() => void enrollment.refetch()}
                       className="mt-2 font-medium text-ds-link hover:underline"
                     >
-                      Retry portfolio check
+                      Check again
                     </button>
                   </div>
                 ) : enrolled && !account ? (
                   <div className="min-h-[160px] text-[12px] text-ds-muted">
-                    <p>Schedule unavailable while account balances cannot be read.</p>
+                    <p>{unread("your balances")}</p>
                     {portfolio.isError && (
                       <button
                         type="button"
@@ -1405,7 +1403,7 @@ export const Basket = () => {
                         role="alert"
                         className="mx-2 mt-2 flex items-center justify-between gap-2 rounded-md bg-white px-3 py-2 text-[11px] text-ds-muted"
                       >
-                        <span>Refresh failed · showing last activity</span>
+                        <span>{stale("recent activity")}</span>
                         <button
                           type="button"
                           onClick={() => void activity.refetch()}
@@ -1437,10 +1435,7 @@ export const Basket = () => {
                     ))}
                   </div>
                 ) : activity.isError ? (
-                  <PriceError
-                    message="Recent activity is unavailable."
-                    onRetry={() => void activity.refetch()}
-                  />
+                  <PriceError message={unread("recent activity")} onRetry={() => void activity.refetch()} />
                 ) : (
                   <div className="px-4 py-5 text-center">
                     <p className="text-[13px] font-medium text-ds-ink">No activity to show</p>
@@ -1452,7 +1447,7 @@ export const Basket = () => {
               </RailList>
             )}
             <Link to="/baskets" className="text-[13px] font-medium text-ds-link hover:underline">
-              Explore more strategies →
+              Explore more baskets →
             </Link>
           </div>
         </aside>
