@@ -55,11 +55,13 @@ This plan builds everything except money moving to the inviter: attribution, the
 ### Task 1: The tables
 
 **Files:**
+
 - Modify: `services/api/src/db/schema.ts` (the `users` table, the `drizzle-orm/pg-core` import, a new `referrals` table after `waitlist`)
 - Create: `services/api/drizzle/0024_referral.sql` and its `meta/` snapshot (generated)
 - Test: `services/api/src/referrals/schema.test.ts`
 
 **Interfaces:**
+
 - Produces: `users.referralCode` (`text`, unique, nullable); `referrals` (`id`, `inviterId`, `friendId`, `code`, `createdAt`, `qualifiedAt`); `type Referral`.
 
 - [ ] **Step 1: Write the failing test**
@@ -73,7 +75,12 @@ import { referrals, users } from "../db/schema.js";
 
 type Db = Awaited<ReturnType<typeof testDb>>;
 const user = async (db: Db, n: number) =>
-  (await db.insert(users).values({ privyUserId: `did:privy:${n}` }).returning())[0]!;
+  (
+    await db
+      .insert(users)
+      .values({ privyUserId: `did:privy:${n}` })
+      .returning()
+  )[0]!;
 
 describe("referral table", () => {
   it("keeps one inviter per friend", async () => {
@@ -88,14 +95,18 @@ describe("referral table", () => {
   it("refuses a referral of yourself", async () => {
     const db = await testDb();
     const a = await user(db, 1);
-    await expect(db.insert(referrals).values({ inviterId: a.id, friendId: a.id, code: "abcdefgh" })).rejects.toThrow();
+    await expect(
+      db.insert(referrals).values({ inviterId: a.id, friendId: a.id, code: "abcdefgh" }),
+    ).rejects.toThrow();
   });
 
   it("gives a code to one user only", async () => {
     const db = await testDb();
     const [a, b] = [await user(db, 1), await user(db, 2)];
     await db.update(users).set({ referralCode: "abcdefgh" }).where(eq(users.id, a.id));
-    await expect(db.update(users).set({ referralCode: "abcdefgh" }).where(eq(users.id, b.id))).rejects.toThrow();
+    await expect(
+      db.update(users).set({ referralCode: "abcdefgh" }).where(eq(users.id, b.id)),
+    ).rejects.toThrow();
   });
 });
 ```
@@ -187,12 +198,14 @@ git commit -m "feat(api): a referral table and a code per user"
 ### Task 2: The rules, as pure functions
 
 **Files:**
+
 - Create: `packages/types/src/referrals.ts`
 - Modify: `packages/types/src/index.ts`
 - Create: `services/api/src/referrals/rules.ts`
 - Test: `services/api/src/referrals/rules.test.ts`
 
 **Interfaces:**
+
 - Produces (types): `ReferralCode` (zod string), `ClaimReferralRequest` (`{ code }`), `ReferralSummary` (`{ code, link, invited, funded, founding, share, discountUntil }`).
 - Produces (rules): `FRIEND_DISCOUNT: Decimal` (0.25), `FRIEND_DISCOUNT_DAYS = 90`, `QUALIFYING_FUNDING_USD: Decimal` (50), `CLAIM_WINDOW_DAYS = 7`, `isCode(s: string): boolean`, `newCode(): string`, `discountActive(referredAt: Date, now: Date): boolean`, `discountEndsAt(referredAt: Date): Date`, `pricingFor(baseBps: number, referredAt: Date | null, now: Date): FeePricing`, `inviterShare(funded: number, founding: boolean): Decimal`, `interface FeePricing { bps: number; discount: { pct: number; until: Date } | null }`.
 
@@ -384,11 +397,13 @@ git commit -m "feat(api): the referral rules, in one place"
 ### Task 3: Seed helpers, and a code per user
 
 **Files:**
+
 - Create: `services/api/src/referrals/testing.ts` (test seeding, shared with the rewards plan)
 - Create: `services/api/src/referrals/store.ts`
 - Test: `services/api/src/referrals/store.test.ts`
 
 **Interfaces:**
+
 - Consumes: `newCode` (Task 2); `users`, `waitlist` (schema).
 - Produces: `interface ReferralStore { codeFor(userId: string): Promise<string>; isFounding(userId: string): Promise<boolean> }` and `createReferralStore(db: Db): ReferralStore`. Seed helpers: `seedUser(db, n, over?)`, `seedInstrument(db)`, `seedOrder(db, { userId, instrumentId, side, status, filledAt?, mercuryFeeUsd? })`, `seedUsdcIn(db, { userId, usd, signature, kind? })`.
 
@@ -405,7 +420,13 @@ export const seedUser = async (
   db: Db,
   n: number,
   over: { email?: string; createdAt?: Date; referralCode?: string } = {},
-) => (await db.insert(users).values({ privyUserId: `did:privy:${n}`, ...over }).returning())[0]!;
+) =>
+  (
+    await db
+      .insert(users)
+      .values({ privyUserId: `did:privy:${n}`, ...over })
+      .returning()
+  )[0]!;
 
 export const seedWaitlist = async (db: Db, row: { email: string; slug: string; position: number }) =>
   db.insert(waitlist).values({ ...row, country: "GB" });
@@ -434,7 +455,13 @@ export const seedOrder = async (
 /** USDC arriving in a wallet, as `wallet-events` writes it. */
 export const seedUsdcIn = async (
   db: Db,
-  a: { userId: string; usd: string; signature: string; kind?: "transfer_in" | "transfer_out"; refTable?: string },
+  a: {
+    userId: string;
+    usd: string;
+    signature: string;
+    kind?: "transfer_in" | "transfer_out";
+    refTable?: string;
+  },
 ) =>
   db.insert(activities).values({
     userId: a.userId,
@@ -585,10 +612,12 @@ git commit -m "feat(api): a referral code per user, keeping waitlist slugs"
 ### Task 4: Claiming a code
 
 **Files:**
+
 - Modify: `services/api/src/referrals/store.ts`
 - Test: `services/api/src/referrals/store.test.ts`
 
 **Interfaces:**
+
 - Consumes: `CLAIM_WINDOW_DAYS` (Task 2); seed helpers (Task 3).
 - Produces: `type ClaimResult` and two new `ReferralStore` methods: `claim(friendId: string, code: string, now: Date): Promise<ClaimResult>` and `referredAt(userId: string): Promise<Date | null>`.
 
@@ -695,55 +724,56 @@ Add these two members to `interface ReferralStore`:
 Inside `createReferralStore`, before `return`, add:
 
 ```ts
-  const DAY = 86_400_000;
+const DAY = 86_400_000;
 
-  const existing = async (friendId: string) =>
-    (await db.select().from(referrals).where(eq(referrals.friendId, friendId)))[0] ?? null;
+const existing = async (friendId: string) =>
+  (await db.select().from(referrals).where(eq(referrals.friendId, friendId)))[0] ?? null;
 
-  const claim = async (friendId: string, code: string, now: Date): Promise<ClaimResult> => {
-    const [inviter] = await db.select({ id: users.id }).from(users).where(eq(users.referralCode, code));
-    if (inviter === undefined) return { kind: "unknown_code" };
-    if (inviter.id === friendId) return { kind: "self" };
+const claim = async (friendId: string, code: string, now: Date): Promise<ClaimResult> => {
+  const [inviter] = await db.select({ id: users.id }).from(users).where(eq(users.referralCode, code));
+  if (inviter === undefined) return { kind: "unknown_code" };
+  if (inviter.id === friendId) return { kind: "self" };
 
-    const prior = await existing(friendId);
-    if (prior !== null) return prior.inviterId === inviter.id ? { kind: "already", inviterId: inviter.id } : { kind: "taken" };
+  const prior = await existing(friendId);
+  if (prior !== null)
+    return prior.inviterId === inviter.id ? { kind: "already", inviterId: inviter.id } : { kind: "taken" };
 
-    const [friend] = await db.select({ createdAt: users.createdAt }).from(users).where(eq(users.id, friendId));
-    if (friend === undefined || now.getTime() - friend.createdAt.getTime() > CLAIM_WINDOW_DAYS * DAY) {
-      return { kind: "too_late" };
-    }
-    const traded = await db
-      .select({ id: orders.id })
-      .from(orders)
-      .where(and(eq(orders.userId, friendId), eq(orders.status, "filled")))
-      .limit(1);
-    if (traded.length > 0) return { kind: "too_late" };
+  const [friend] = await db.select({ createdAt: users.createdAt }).from(users).where(eq(users.id, friendId));
+  if (friend === undefined || now.getTime() - friend.createdAt.getTime() > CLAIM_WINDOW_DAYS * DAY) {
+    return { kind: "too_late" };
+  }
+  const traded = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.userId, friendId), eq(orders.status, "filled")))
+    .limit(1);
+  if (traded.length > 0) return { kind: "too_late" };
 
-    const written = await db
-      .insert(referrals)
-      .values({ inviterId: inviter.id, friendId, code, createdAt: now })
-      .onConflictDoNothing()
-      .returning({ id: referrals.id });
-    if (written.length === 1) return { kind: "claimed", inviterId: inviter.id };
+  const written = await db
+    .insert(referrals)
+    .values({ inviterId: inviter.id, friendId, code, createdAt: now })
+    .onConflictDoNothing()
+    .returning({ id: referrals.id });
+  if (written.length === 1) return { kind: "claimed", inviterId: inviter.id };
 
-    /* Two claims raced and the other one landed first: answer as if this were the repeat. */
-    const won = await existing(friendId);
-    return won?.inviterId === inviter.id ? { kind: "already", inviterId: inviter.id } : { kind: "taken" };
-  };
+  /* Two claims raced and the other one landed first: answer as if this were the repeat. */
+  const won = await existing(friendId);
+  return won?.inviterId === inviter.id ? { kind: "already", inviterId: inviter.id } : { kind: "taken" };
+};
 ```
 
 and add `claim` and `referredAt` to the returned object:
 
 ```ts
-  return {
-    codeFor,
-    isFounding: async (userId) => {
-      const row = await waitlistRow(userId);
-      return row !== null && row.position <= FOUNDING;
-    },
-    claim,
-    referredAt: async (userId) => (await existing(userId))?.createdAt ?? null,
-  };
+return {
+  codeFor,
+  isFounding: async (userId) => {
+    const row = await waitlistRow(userId);
+    return row !== null && row.position <= FOUNDING;
+  },
+  claim,
+  referredAt: async (userId) => (await existing(userId))?.createdAt ?? null,
+};
 ```
 
 - [ ] **Step 4: Run them to see them pass**
@@ -764,11 +794,13 @@ git commit -m "feat(api): claim an invite code, once, while the account is new"
 ### Task 5: Counting a friend as funded
 
 **Files:**
+
 - Modify: `services/api/src/referrals/store.ts`
 - Test: `services/api/src/referrals/store.test.ts`
 - Modify: `services/api/src/index.ts` (register the job, and add it to the job table in the comment)
 
 **Interfaces:**
+
 - Consumes: `QUALIFYING_FUNDING_USD` (Task 2); `seedUsdcIn`, `seedOrder` (Task 3).
 - Produces: `ReferralStore.qualifyPending(now: Date): Promise<number>`, which sets `qualified_at` and returns how many rows changed. Also a job, `referral-qualify`, every 10 minutes.
 
@@ -786,7 +818,8 @@ describe("qualifyPending", () => {
     const friend = await seedUser(db, 2);
     await store.claim(friend.id, "inviter1", now);
     const nvda = await seedInstrument(db);
-    const trade = () => seedOrder(db, { userId: friend.id, instrumentId: nvda.id, side: "buy", status: "filled" });
+    const trade = () =>
+      seedOrder(db, { userId: friend.id, instrumentId: nvda.id, side: "buy", status: "filled" });
     const qualifiedAt = async () => (await db.select().from(referrals))[0]!.qualifiedAt;
     return { db, store, inviter, friend, trade, qualifiedAt };
   };
@@ -859,17 +892,17 @@ Add to `interface ReferralStore`:
 Inside `createReferralStore`, before `return`, add:
 
 ```ts
-  /*
-   * One statement, so a friend is counted at most once however often it runs.
-   *
-   * Money in is the same rows the performance line reads as flows: USDC
-   * `transfer_in` to the wallet itself, not a basket. Two kinds are left out.
-   * A transfer whose signature also appears in the inviter's own activity is
-   * the inviter's money going round. A row tagged `referral_payout` is a
-   * reward, not funding.
-   */
-  const qualifyPending = async (now: Date): Promise<number> => {
-    const fundedUsd = sql`(
+/*
+ * One statement, so a friend is counted at most once however often it runs.
+ *
+ * Money in is the same rows the performance line reads as flows: USDC
+ * `transfer_in` to the wallet itself, not a basket. Two kinds are left out.
+ * A transfer whose signature also appears in the inviter's own activity is
+ * the inviter's money going round. A row tagged `referral_payout` is a
+ * reward, not funding.
+ */
+const qualifyPending = async (now: Date): Promise<number> => {
+  const fundedUsd = sql`(
       select coalesce(sum(a.amount_usd), 0)
       from ${activities} a
       where a.user_id = ${referrals.friendId}
@@ -883,16 +916,18 @@ Inside `createReferralStore`, before `return`, add:
           where b.user_id = ${referrals.inviterId} and b.tx_signature = a.tx_signature
         )
     )`;
-    const traded = sql`exists (
+  const traded = sql`exists (
       select 1 from ${orders} o where o.user_id = ${referrals.friendId} and o.status = 'filled'
     )`;
-    const changed = await db
-      .update(referrals)
-      .set({ qualifiedAt: now })
-      .where(and(isNull(referrals.qualifiedAt), traded, sql`${fundedUsd} >= ${QUALIFYING_FUNDING_USD.toString()}`))
-      .returning({ id: referrals.id });
-    return changed.length;
-  };
+  const changed = await db
+    .update(referrals)
+    .set({ qualifiedAt: now })
+    .where(
+      and(isNull(referrals.qualifiedAt), traded, sql`${fundedUsd} >= ${QUALIFYING_FUNDING_USD.toString()}`),
+    )
+    .returning({ id: referrals.id });
+  return changed.length;
+};
 ```
 
 Add `qualifyPending` to the returned object.
@@ -938,6 +973,7 @@ git commit -m "feat(api): count an invited friend once they fund \$50 and trade"
 ### Task 6: The routes
 
 **Files:**
+
 - Modify: `services/api/src/referrals/store.ts` (add `summary`)
 - Create: `services/api/src/routes/referrals.ts`
 - Test: `services/api/src/routes/referrals.test.ts`
@@ -945,6 +981,7 @@ git commit -m "feat(api): count an invited friend once they fund \$50 and trade"
 - Modify: `services/api/src/app.ts` (mount after `requireAuth`)
 
 **Interfaces:**
+
 - Consumes: `ReferralStore` (Tasks 3–5); `ClaimReferralRequest`, `ReferralSummary` (Task 2); `inviterShare`, `discountActive`, `discountEndsAt` (Task 2).
 - Produces: `ReferralStore.summary(userId: string, now: Date): Promise<Summary>`, where `interface Summary { code: string; invited: number; funded: number; founding: boolean; share: Decimal; discountUntil: Date | null }`. Also `interface ReferralDeps { store: ReferralStore; now?: () => Date }`, `referralRoutes(deps): Hono`, `SITE = "https://trymercury.xyz"`, and `ReadDeps.referrals?: ReferralDeps`.
 
@@ -1047,10 +1084,18 @@ describe("summary", () => {
     await db.update(referrals).set({ qualifiedAt: now }).where(eq(referrals.friendId, f1.id));
 
     const s = await store.summary(inviter.id, now);
-    expect(s).toMatchObject({ code: "inviter1", invited: 2, funded: 1, founding: false, discountUntil: null });
+    expect(s).toMatchObject({
+      code: "inviter1",
+      invited: 2,
+      funded: 1,
+      founding: false,
+      discountUntil: null,
+    });
     expect(s.share.toString()).toBe("0.25");
 
-    expect((await store.summary(f1.id, now)).discountUntil).toEqual(new Date(now.getTime() + 90 * 86_400_000));
+    expect((await store.summary(f1.id, now)).discountUntil).toEqual(
+      new Date(now.getTime() + 90 * 86_400_000),
+    );
   });
 });
 ```
@@ -1091,40 +1136,42 @@ Add to the interface:
 Inside `createReferralStore`, before `return`, add:
 
 ```ts
-  const summary = async (userId: string, now: Date): Promise<Summary> => {
-    const [code, founding, referred, [counts]] = await Promise.all([
-      codeFor(userId),
-      isFounding(userId),
-      existing(userId),
-      db
-        .select({ invited: count(), funded: count(referrals.qualifiedAt) })
-        .from(referrals)
-        .where(eq(referrals.inviterId, userId)),
-    ]);
-    const funded = counts?.funded ?? 0;
-    return {
-      code,
-      invited: counts?.invited ?? 0,
-      funded,
-      founding,
-      share: inviterShare(funded, founding),
-      discountUntil:
-        referred !== null && discountActive(referred.createdAt, now) ? discountEndsAt(referred.createdAt) : null,
-    };
+const summary = async (userId: string, now: Date): Promise<Summary> => {
+  const [code, founding, referred, [counts]] = await Promise.all([
+    codeFor(userId),
+    isFounding(userId),
+    existing(userId),
+    db
+      .select({ invited: count(), funded: count(referrals.qualifiedAt) })
+      .from(referrals)
+      .where(eq(referrals.inviterId, userId)),
+  ]);
+  const funded = counts?.funded ?? 0;
+  return {
+    code,
+    invited: counts?.invited ?? 0,
+    funded,
+    founding,
+    share: inviterShare(funded, founding),
+    discountUntil:
+      referred !== null && discountActive(referred.createdAt, now)
+        ? discountEndsAt(referred.createdAt)
+        : null,
   };
+};
 ```
 
 `summary` calls `isFounding` by name, so lift it out of the returned object into a `const isFounding = async (userId: string) => { ... }` above `summary`. The returned object then reads:
 
 ```ts
-  return {
-    codeFor,
-    isFounding,
-    claim,
-    referredAt: async (userId) => (await existing(userId))?.createdAt ?? null,
-    qualifyPending,
-    summary,
-  };
+return {
+  codeFor,
+  isFounding,
+  claim,
+  referredAt: async (userId) => (await existing(userId))?.createdAt ?? null,
+  qualifyPending,
+  summary,
+};
 ```
 
 - [ ] **Step 5: Write the routes**
@@ -1197,6 +1244,7 @@ export function referralRoutes(deps: ReferralDeps): Hono {
 - [ ] **Step 6: Wire and mount it**
 
 In `deps.ts`:
+
 - Add `import { createReferralStore } from "./referrals/store.js";` and `import type { ReferralDeps } from "./routes/referrals.js";`.
 - Add to `interface ReadDeps`, after `feedback?`:
 
@@ -1214,7 +1262,7 @@ In `deps.ts`:
 In `app.ts`, add `import { referralRoutes } from "./routes/referrals.js";`. After `app.route("/", activityRoutes(read.activity));` (any place after `app.use("/v1/*", requireAuth(auth))` works), add:
 
 ```ts
-  if (read.referrals) app.route("/", referralRoutes(read.referrals));
+if (read.referrals) app.route("/", referralRoutes(read.referrals));
 ```
 
 - [ ] **Step 7: Run the tests to see them pass**
@@ -1235,10 +1283,12 @@ git commit -m "feat(api): GET /v1/referrals and POST /v1/referrals/claim"
 ### Task 7: The friend's discount on the fee
 
 **Files:**
+
 - Modify: `services/api/src/app.ts` (`chargeToWire`; a `pricing` helper inside `createApp`; lines 269, 296, 456, 587)
 - Test: `services/api/src/app.test.ts`
 
 **Interfaces:**
+
 - Consumes: `pricingFor`, `FeePricing` (Task 2); `ReadDeps.referrals` (Task 6).
 - Produces: the quote's `fee` gains `discount?: { pct: number; until: string }`, and `fee.mercuryBps` can be fractional (37.5). Execute charges and records the discounted fee.
 
@@ -1272,9 +1322,19 @@ describe("an invited friend's fee", () => {
     const { post } = await harness({ referredAt: new Date(Date.now() - 10 * DAY) });
     const res = await post("/v1/quote", { ticker: "NVDA", side: "buy", amount: "500" });
     const body = (await res.json()) as {
-      fee: { mercury: string; mercuryBps: number; network: string; discount?: { pct: number; until: string } };
+      fee: {
+        mercury: string;
+        mercuryBps: number;
+        network: string;
+        discount?: { pct: number; until: string };
+      };
     };
-    expect(body.fee).toMatchObject({ mercury: "1.87", mercuryBps: 37.5, network: "0.01", discount: { pct: 25 } });
+    expect(body.fee).toMatchObject({
+      mercury: "1.87",
+      mercuryBps: 37.5,
+      network: "0.01",
+      discount: { pct: 25 },
+    });
   });
 
   it("quotes the full rate once the 90 days are up", async () => {
@@ -1323,26 +1383,27 @@ const chargeToWire = (charge: TradeCharge, discount: FeePricing["discount"] = nu
 Inside `createApp`, before the first route, add:
 
 ```ts
-  /**
-   * Mercury's rate for this person now: the configured one, or a quarter off
-   * in an invited friend's first 90 days. One lookup per request, read by the
-   * quote and by execute alike, so the two cannot disagree about who was invited.
-   */
-  const pricing = async (userId: string): Promise<FeePricing> =>
-    pricingFor(
-      read.tradingFeeBps,
-      read.referrals === undefined ? null : await read.referrals.store.referredAt(userId),
-      new Date(),
-    );
+/**
+ * Mercury's rate for this person now: the configured one, or a quarter off
+ * in an invited friend's first 90 days. One lookup per request, read by the
+ * quote and by execute alike, so the two cannot disagree about who was invited.
+ */
+const pricing = async (userId: string): Promise<FeePricing> =>
+  pricingFor(
+    read.tradingFeeBps,
+    read.referrals === undefined ? null : await read.referrals.store.referredAt(userId),
+    new Date(),
+  );
 ```
 
 In `POST /v1/quote`, directly after `if (!parsed.success) return ...`, add:
 
 ```ts
-    const rate = await pricing(c.get("identity").userId);
+const rate = await pricing(c.get("identity").userId);
 ```
 
 and change the two charges and the two `chargeToWire` calls in that handler:
+
 - line 269: `const charge = tradeCharge(network, gross, rate.bps);`
 - line 273: `fee: chargeToWire(charge, rate.discount),`
 - line 296: `const charge = tradeCharge(network, D(parsed.data.amount), rate.bps);`
@@ -1351,10 +1412,11 @@ and change the two charges and the two `chargeToWire` calls in that handler:
 In `POST /v1/orders/:id/execute`, directly after `const identity = c.get("identity");`, add:
 
 ```ts
-    const rate = await pricing(identity.userId);
+const rate = await pricing(identity.userId);
 ```
 
 and change:
+
 - line 456: `const buying = selling ? null : tradeCharge(network, D(shown.amount), rate.bps);`
 - line 587: `const charge = buying ?? tradeCharge(network, proceeds, rate.bps);`
 
@@ -1378,10 +1440,12 @@ git commit -m "feat(api): a quarter off Mercury's fee for an invited friend's fi
 ### Task 8: Founding-card links carry their code again
 
 **Files:**
+
 - Modify: `services/api/src/app.ts:162`
 - Test: `services/api/src/app.test.ts:343`
 
 **Interfaces:**
+
 - Consumes: `isCode` (Task 2); `SITE` (Task 6).
 
 - [ ] **Step 1: Change the test first**
@@ -1389,18 +1453,18 @@ git commit -m "feat(api): a quarter off Mercury's fee for an invited friend's fi
 Replace the test at `app.test.ts:343` with:
 
 ```ts
-  it("sends a founding card's old share link on to the site, with the card's code", async () => {
-    const { get } = await harness();
-    const res = await get("/f/3kQ9xZ1bTq7w");
-    expect(res.status).toBe(301);
-    expect(res.headers.get("location")).toBe("https://trymercury.xyz/?ref=3kQ9xZ1bTq7w");
-  });
+it("sends a founding card's old share link on to the site, with the card's code", async () => {
+  const { get } = await harness();
+  const res = await get("/f/3kQ9xZ1bTq7w");
+  expect(res.status).toBe(301);
+  expect(res.headers.get("location")).toBe("https://trymercury.xyz/?ref=3kQ9xZ1bTq7w");
+});
 
-  it("sends anything that is not a code on to the site bare", async () => {
-    const { get } = await harness();
-    const res = await get("/f/x");
-    expect(res.headers.get("location")).toBe("https://trymercury.xyz");
-  });
+it("sends anything that is not a code on to the site bare", async () => {
+  const { get } = await harness();
+  const res = await get("/f/x");
+  expect(res.headers.get("location")).toBe("https://trymercury.xyz");
+});
 ```
 
 - [ ] **Step 2: Run them to see the first fail**
@@ -1413,11 +1477,11 @@ Expected: FAIL. The location is `https://trymercury.xyz`.
 In `app.ts`, add `isCode` to the `./referrals/rules.js` import and `SITE` to the `./routes/referrals.js` import. Replace line 162 with:
 
 ```ts
-  /* The card's slug is its holder's invite code (see referrals/store.ts), so it goes along. */
-  app.get("/f/:slug", (c) => {
-    const slug = c.req.param("slug");
-    return c.redirect(isCode(slug) ? `${SITE}/?ref=${encodeURIComponent(slug)}` : SITE, 301);
-  });
+/* The card's slug is its holder's invite code (see referrals/store.ts), so it goes along. */
+app.get("/f/:slug", (c) => {
+  const slug = c.req.param("slug");
+  return c.redirect(isCode(slug) ? `${SITE}/?ref=${encodeURIComponent(slug)}` : SITE, 301);
+});
 ```
 
 - [ ] **Step 4: Run them to see them pass**
@@ -1438,12 +1502,14 @@ git commit -m "feat(api): founding-card links forward their invite code"
 ### Task 9: The web keeps `?ref=` through sign-in, then claims it
 
 **Files:**
+
 - Create: `apps/web/src/referrals/pending.ts`
 - Test: `apps/web/src/referrals/pending.test.ts`
 - Create: `apps/web/src/referrals/ClaimReferral.tsx`
 - Modify: `apps/web/src/main.tsx`, `apps/web/src/App.tsx`, `apps/web/src/dev/sample.ts`
 
 **Interfaces:**
+
 - Consumes: `POST /v1/referrals/claim` (Task 6); `ReferralCode` (Task 2); `apiFetch`, `useSignedIn`.
 - Produces: `captureRef(search, store?, now?)`, `pendingRef(store?, now?)`, `clearRef(store?)`, `settles(err: unknown): boolean`, and a `<ClaimReferral />` component.
 
@@ -1671,7 +1737,7 @@ In `apps/web/src/App.tsx`, add `import { ClaimReferral } from "./referrals/Claim
 In `apps/web/src/dev/sample.ts`, inside `sampleResponse` before `return undefined;`, add:
 
 ```ts
-  if (route === "/v1/referrals/claim") return { status: "claimed" };
+if (route === "/v1/referrals/claim") return { status: "claimed" };
 ```
 
 - [ ] **Step 6: Check it by hand**
@@ -1691,11 +1757,13 @@ git commit -m "feat(web): keep an invite code through sign-in, then claim it"
 ### Task 10: The confirm screen shows the discount
 
 **Files:**
+
 - Modify: `apps/web/src/app/fee-lines.ts`
 - Test: `apps/web/src/app/fee-lines.test.ts`
 - Modify: `apps/mobile/src/order/BuySheet.tsx:474`, `apps/mobile/src/api/orders.ts:45`
 
 **Interfaces:**
+
 - Consumes: the quote's `fee.discount` (Task 7).
 - Produces: `WireCharge.discount?`, `Charge.discount?` (both `{ pct: number; until: string }`), and a `rateLabel` that keeps three decimals.
 
@@ -1704,42 +1772,42 @@ git commit -m "feat(web): keep an invite code through sign-in, then claim it"
 In `fee-lines.test.ts`, add to `describe("rateLabel", ...)`:
 
 ```ts
-  it("keeps a discounted rate exact", () => {
-    expect(rateLabel(37.5)).toBe("0.375%");
-  });
+it("keeps a discounted rate exact", () => {
+  expect(rateLabel(37.5)).toBe("0.375%");
+});
 ```
 
 Add to `describe("chargeFromWire", ...)`:
 
 ```ts
-  it("carries an invited friend's discount through", () => {
-    expect(
-      chargeFromWire({
-        usdc: "1.88",
-        network: "0.01",
-        mercury: "1.87",
-        mercuryBps: 37.5,
-        discount: { pct: 25, until: "2027-01-15T12:00:00.000Z" },
-      }).discount,
-    ).toEqual({ pct: 25, until: "2027-01-15T12:00:00.000Z" });
-  });
+it("carries an invited friend's discount through", () => {
+  expect(
+    chargeFromWire({
+      usdc: "1.88",
+      network: "0.01",
+      mercury: "1.87",
+      mercuryBps: 37.5,
+      discount: { pct: 25, until: "2027-01-15T12:00:00.000Z" },
+    }).discount,
+  ).toEqual({ pct: 25, until: "2027-01-15T12:00:00.000Z" });
+});
 ```
 
 Add to `describe("feeLines", ...)`:
 
 ```ts
-  it("says why an invited friend's rate is lower, and until when", () => {
-    const discounted = {
-      total: 1.88,
-      network: 0.01,
-      mercury: 1.87,
-      mercuryBps: 37.5,
-      discount: { pct: 25, until: "2027-01-15T12:00:00.000Z" },
-    };
-    const [mercury] = feeLines(discounted, buy);
-    expect(mercury?.label).toBe("Mercury fee (0.375%)");
-    expect(mercury?.tip).toContain("25% off as an invited friend, until 15 Jan");
-  });
+it("says why an invited friend's rate is lower, and until when", () => {
+  const discounted = {
+    total: 1.88,
+    network: 0.01,
+    mercury: 1.87,
+    mercuryBps: 37.5,
+    discount: { pct: 25, until: "2027-01-15T12:00:00.000Z" },
+  };
+  const [mercury] = feeLines(discounted, buy);
+  expect(mercury?.label).toBe("Mercury fee (0.375%)");
+  expect(mercury?.tip).toContain("25% off as an invited friend, until 15 Jan");
+});
 ```
 
 - [ ] **Step 2: Run them to see them fail**
@@ -1801,7 +1869,7 @@ In `apps/mobile/src/api/orders.ts:45`, beside `readonly mercuryBps?: number;`, a
 In `apps/mobile/src/order/BuySheet.tsx:474`, change `toFixed(2)` to `toFixed(3)`:
 
 ```ts
-  const rate = `${Number(((quote?.fee.mercuryBps ?? 0) / 100).toFixed(3))}%`;
+const rate = `${Number(((quote?.fee.mercuryBps ?? 0) / 100).toFixed(3))}%`;
 ```
 
 - [ ] **Step 6: Typecheck, test, commit**
@@ -1817,12 +1885,14 @@ git commit -m "feat(web): name an invited friend's discount on the confirm scree
 ### Task 11: The Invite panel
 
 **Files:**
+
 - Create: `apps/web/src/api/referrals.ts`
 - Create: `apps/web/src/app/Invite.tsx`
 - Modify: `apps/web/src/app/Receive.tsx` (export `Swap` and `useFlag`)
 - Modify: `apps/web/src/app/Panels.tsx`, `apps/web/src/app/AccountMenu.tsx`, `apps/web/src/dev/sample.ts`
 
 **Interfaces:**
+
 - Consumes: `GET /v1/referrals` (Task 6); `ReferralSummary` (Task 2).
 - Produces: `useReferrals()`, query key `["api", "referrals"]`, `usePanels().invite()`, panel key `invite`.
 
@@ -1975,28 +2045,30 @@ export const Invite = ({ open, onClose }: { open: boolean; onClose: () => void }
 - [ ] **Step 4: Open it from the account menu**
 
 In `apps/web/src/app/Panels.tsx`:
+
 - Add `import { Invite } from "./Invite";`.
 - Change `KEYS` to `["add", "send", "borrow", "ticker", "only", "invite"] as const`.
 - In `usePanels`'s returned object, add `invite: () => set({ invite: "1" }),` after `send`.
 - In `GlobalPanels`, add `const inviting = params.get("invite") === "1";` and `const inviteSeen = useSeen(inviting);` beside the others, and render `{inviteSeen && <Invite open={inviting} onClose={close} />}` after the `Send` line.
 
 In `apps/web/src/app/AccountMenu.tsx`:
+
 - Add `Users` to the `../ui/icons` import, and `import { usePanels } from "./Panels";`.
 - In the component body, add `const panels = usePanels();`.
 - Add this as the first child of the `div` that holds Support and Sign out:
 
 ```tsx
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  panels.invite();
-                }}
-                className={`${row} text-ds-ink`}
-              >
-                <Users className="size-4 shrink-0 text-ds-muted [stroke-width:1.5]" />
-                Invite friends
-              </button>
+<button
+  type="button"
+  onClick={() => {
+    setOpen(false);
+    panels.invite();
+  }}
+  className={`${row} text-ds-ink`}
+>
+  <Users className="size-4 shrink-0 text-ds-muted [stroke-width:1.5]" />
+  Invite friends
+</button>
 ```
 
 - Update the comment above that `div`: "the two things that are not a place to go" becomes "the three things that are not a place to go".
@@ -2020,7 +2092,7 @@ const SAMPLE_REFERRALS = {
 and inside `sampleResponse`, before `return undefined;`:
 
 ```ts
-  if (route === "/v1/referrals") return SAMPLE_REFERRALS;
+if (route === "/v1/referrals") return SAMPLE_REFERRALS;
 ```
 
 - [ ] **Step 6: Check it in sample mode**
@@ -2040,9 +2112,11 @@ git commit -m "feat(web): an Invite friends panel from the account menu"
 ### Task 12: The site passes `?ref=` into the app
 
 **Files:**
+
 - Modify: `apps/landing/src/layouts/Base.astro`
 
 **Interfaces:**
+
 - Consumes: `site.app` (`apps/landing/src/config/site.ts:10`).
 
 The landing has no test runner. Verify the built page instead.
@@ -2087,11 +2161,13 @@ git commit -m "feat(landing): carry an invite code into the app"
 ### Task 13: Mark it done
 
 **Files:**
+
 - Modify: `docs/revenue-todo.md` §3
 
 - [ ] **Step 1: Tick what this plan built**
 
 In `docs/revenue-todo.md` §3, change the heading line under "3 · Referral tracking" to `**Built <date>.** See docs/superpowers/plans/2026-10-17-referral-tracking.md.` Tick these items:
+
 - Give every user a referral code and a share link
 - Read `?ref=` on landing and web, keep it through Privy sign-in, then attach it at first sign-in
 - Store who invited whom: one inviter, set once, no self-referral

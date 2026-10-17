@@ -13,6 +13,7 @@
 **Depends on:** `docs/superpowers/plans/2026-10-17-referral-tracking.md`, all of it: the `referral` table, `ReferralStore`, `inviterShare`, the `referral-qualify` job, `GET /v1/referrals`, the Invite panel, and the seed helpers in `referrals/testing.ts`.
 
 **Gate:**
+
 - **Do not set `REFERRAL_PAYOUTS=on` in any environment until the lawyer has answered** `docs/revenue-todo.md`'s "Can we pay inviters a share of stock-trading fees in our launch markets?"
 - The deck also says payouts start "after the trade fee has run a few weeks".
 - Everything except the payout job can merge and run before then. It only writes rows.
@@ -51,6 +52,7 @@
 ### Task 1: Write down the decision
 
 **Files:**
+
 - Create: `docs/adr/0017-referral-payouts-from-the-relayer.md`
 
 - [ ] **Step 1: Write the ADR**
@@ -108,12 +110,14 @@ git commit -m "docs: ADR 0017, referral payouts from the relayer"
 ### Task 2: The tables, and the reward rules
 
 **Files:**
+
 - Modify: `services/api/src/db/schema.ts` (two tables after `referrals`)
 - Create: `services/api/drizzle/0025_referral_rewards.sql` and its `meta/` snapshot (generated)
 - Modify: `services/api/src/referrals/rules.ts`
 - Test: `services/api/src/referrals/rules.test.ts`
 
 **Interfaces:**
+
 - Produces (schema): `referralPayouts` (`id, inviterId, week, amountUsd, wallet, status, txSignature, lastValidBlockHeight, error, createdAt, updatedAt`) and `referralRewards` (`id, referralId, inviterId, friendId, orderId, feeUsd, share, amountUsd, earnedAt, payableAt, status, payoutId, createdAt`), plus their `$inferSelect` types.
 - Produces (rules): `REWARD_DAYS = 365`, `HOLD_DAYS = 7`, `PAYOUT_MINIMUM_USD: Decimal` (1), `isoWeek(d: Date): string`, `floorToUsdc(d: Decimal): Decimal`.
 
@@ -284,12 +288,14 @@ git commit -m "feat(api): referral reward and payout tables"
 ### Task 3: Accruing rewards
 
 **Files:**
+
 - Modify: `services/api/src/referrals/store.ts` (add `shareFor`, and use it in `summary`)
 - Modify: `services/api/src/referrals/testing.ts` (add `seedWallet`, `seedReferral`)
 - Create: `services/api/src/referrals/rewards.ts`
 - Test: `services/api/src/referrals/rewards.test.ts`
 
 **Interfaces:**
+
 - Consumes: `referralRewards` (Task 2); `REWARD_DAYS`, `HOLD_DAYS` (Task 2); `inviterShare` and `ReferralStore` (tracking plan); seed helpers.
 - Produces: `ReferralStore.shareFor(inviterId: string): Promise<Decimal>`; `accrueRewards(db: Db, store: Pick<ReferralStore, "shareFor">, now: Date): Promise<number>`; seed helpers `seedWallet(db, userId, address)` and `seedReferral(db, { inviterId, friendId, createdAt?, qualifiedAt? })`.
 
@@ -359,7 +365,13 @@ describe("accrueRewards", () => {
     const o = await order({ days: 2 });
     expect(await accrueRewards(db, store, at(3))).toBe(1);
     const [r] = await rewards();
-    expect(r).toMatchObject({ inviterId: inviter.id, orderId: o.id, status: "held", earnedAt: at(2), payableAt: at(9) });
+    expect(r).toMatchObject({
+      inviterId: inviter.id,
+      orderId: o.id,
+      status: "held",
+      earnedAt: at(2),
+      payableAt: at(9),
+    });
     expect(Number(r!.amountUsd)).toBe(0.625);
     expect(Number(r!.share)).toBe(0.25);
   });
@@ -422,13 +434,13 @@ In `store.ts`, add to the interface:
 Inside `createReferralStore`, after `isFounding`, add:
 
 ```ts
-  const shareFor = async (inviterId: string): Promise<Decimal> => {
-    const [row] = await db
-      .select({ funded: count(referrals.qualifiedAt) })
-      .from(referrals)
-      .where(eq(referrals.inviterId, inviterId));
-    return inviterShare(row?.funded ?? 0, await isFounding(inviterId));
-  };
+const shareFor = async (inviterId: string): Promise<Decimal> => {
+  const [row] = await db
+    .select({ funded: count(referrals.qualifiedAt) })
+    .from(referrals)
+    .where(eq(referrals.inviterId, inviterId));
+  return inviterShare(row?.funded ?? 0, await isFounding(inviterId));
+};
 ```
 
 In `summary`, replace `share: inviterShare(funded, founding),` with `share: await shareFor(userId),`, and add `shareFor` to the returned object. `summary`'s existing test still passes unchanged.
@@ -535,11 +547,13 @@ git commit -m "feat(api): accrue an inviter's share of each funded friend's fee"
 ### Task 4: The hold and the clawback
 
 **Files:**
+
 - Modify: `services/api/src/referrals/rewards.ts`
 - Test: `services/api/src/referrals/rewards.test.ts`
 - Modify: `services/api/src/index.ts` (the `referral-qualify` job also accrues and matures)
 
 **Interfaces:**
+
 - Consumes: `accrueRewards` (Task 3); `HOLD_DAYS` (Task 2).
 - Produces: `matureRewards(db: Db, now: Date): Promise<{ voided: number; payable: number }>`.
 
@@ -690,12 +704,14 @@ git commit -m "feat(api): hold referral rewards a week and void quick round trip
 ### Task 5: The payout transaction
 
 **Files:**
+
 - Create: `services/api/src/relay/signature.ts` (moved out of `routes/send.ts`)
 - Modify: `services/api/src/routes/send.ts` (import it instead)
 - Create: `services/api/src/referrals/payout-tx.ts`
 - Test: `services/api/src/referrals/payout-tx.test.ts`
 
 **Interfaces:**
+
 - Produces: `feePayerSignature(wire: string): string | null` from `relay/signature.ts`; `buildPayoutTransfer(input: PayoutTransferInput): Promise<string>`, a base64 wire transaction with the relayer as its only signer.
 
 - [ ] **Step 1: Move `feePayerSignature`**
@@ -749,7 +765,8 @@ import { keypairRelaySigner } from "../relay/signer.js";
 import { feePayerSignature } from "../relay/signature.js";
 import { buildPayoutTransfer } from "./payout-tx.js";
 
-const relayerSigner = () => keypairRelaySigner(getBase58Decoder().decode(Uint8Array.from({ length: 32 }, () => 7)));
+const relayerSigner = () =>
+  keypairRelaySigner(getBase58Decoder().decode(Uint8Array.from({ length: 32 }, () => 7)));
 const BLOCKHASH = "4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZAMdL4VZHirAn" as Blockhash;
 
 const transferredIn = (wire: string): bigint => {
@@ -842,7 +859,11 @@ export const buildPayoutTransfer = async (input: PayoutTransferInput): Promise<s
     findAssociatedTokenPda({ owner, mint: USDC, tokenProgram: TOKEN_PROGRAM_ADDRESS }).then(([a]) => a);
   const [source, destination] = await Promise.all([ata(input.relayer), ata(input.recipient)]);
   const relayer = createNoopSigner(input.relayer);
-  const amount = BigInt(floorToUsdc(input.amountUsd).mul(10 ** USDC_DECIMALS).toFixed(0, Decimal.ROUND_DOWN));
+  const amount = BigInt(
+    floorToUsdc(input.amountUsd)
+      .mul(10 ** USDC_DECIMALS)
+      .toFixed(0, Decimal.ROUND_DOWN),
+  );
 
   const message = pipe(
     createTransactionMessage({ version: 0 }),
@@ -888,11 +909,13 @@ git commit -m "feat(api): a USDC transfer from the relayer, for referral payouts
 ### Task 6: Planning a week's payouts
 
 **Files:**
+
 - Create: `services/api/src/referrals/payouts.ts`
 - Test: `services/api/src/referrals/payouts.test.ts`
 - Modify: `services/api/src/referrals/testing.ts` (add `seedReward`)
 
 **Interfaces:**
+
 - Consumes: `referralPayouts`, `referralRewards` (Task 2); `isoWeek`, `floorToUsdc`, `PAYOUT_MINIMUM_USD` (Task 2).
 - Produces: `interface PayoutLimits { maxPerPayoutUsd: Decimal; maxPerWeekUsd: Decimal }` and `planPayouts(db: Db, now: Date, limits: PayoutLimits): Promise<number>`. Seed helper: `seedReward(db, { referralId, inviterId, friendId, orderId, amountUsd, status })`.
 
@@ -949,10 +972,19 @@ const owed = async (amounts: string[], status: "payable" | "held" = "payable") =
   const wallet = (await generateKeyPairSigner()).address;
   await seedWallet(db, inviter.id, wallet);
   const friend = await seedUser(db, 2);
-  const referral = await seedReferral(db, { inviterId: inviter.id, friendId: friend.id, qualifiedAt: new Date() });
+  const referral = await seedReferral(db, {
+    inviterId: inviter.id,
+    friendId: friend.id,
+    qualifiedAt: new Date(),
+  });
   const nvda = await seedInstrument(db);
   for (const amountUsd of amounts) {
-    const order = await seedOrder(db, { userId: friend.id, instrumentId: nvda.id, side: "buy", status: "filled" });
+    const order = await seedOrder(db, {
+      userId: friend.id,
+      instrumentId: nvda.id,
+      side: "buy",
+      status: "filled",
+    });
     await seedReward(db, {
       referralId: referral.id,
       inviterId: inviter.id,
@@ -979,7 +1011,9 @@ describe("planPayouts", () => {
   it("waits until a dollar is owed", async () => {
     const { db } = await owed(["0.625"]);
     expect(await planPayouts(db, monday, limits)).toBe(0);
-    expect(await db.select().from(referralRewards).where(eq(referralRewards.status, "payable"))).toHaveLength(1);
+    expect(await db.select().from(referralRewards).where(eq(referralRewards.status, "payable"))).toHaveLength(
+      1,
+    );
   });
 
   it("does not pay what is still held", async () => {
@@ -1087,10 +1121,16 @@ export const planPayouts = async (db: Db, now: Date, limits: PayoutLimits): Prom
           .select({ total: sql<string>`coalesce(sum(${referralPayouts.amountUsd}), 0)` })
           .from(referralPayouts)
           .where(
-            and(eq(referralPayouts.week, week), inArray(referralPayouts.status, ["pending", "sent", "confirmed"])),
+            and(
+              eq(referralPayouts.week, week),
+              inArray(referralPayouts.status, ["pending", "sent", "confirmed"]),
+            ),
           );
         const overCap =
-          amount.gt(limits.maxPerPayoutUsd) || D(weekSoFar?.total ?? "0").add(amount).gt(limits.maxPerWeekUsd);
+          amount.gt(limits.maxPerPayoutUsd) ||
+          D(weekSoFar?.total ?? "0")
+            .add(amount)
+            .gt(limits.maxPerWeekUsd);
 
         await tx
           .update(referralPayouts)
@@ -1125,10 +1165,12 @@ git commit -m "feat(api): plan one referral payout per inviter per week"
 ### Task 7: Sending and confirming
 
 **Files:**
+
 - Modify: `services/api/src/referrals/payouts.ts`
 - Test: `services/api/src/referrals/payouts.test.ts`
 
 **Interfaces:**
+
 - Consumes: `buildPayoutTransfer` (Task 5); `feePayerSignature` (Task 5); `RelaySigner` (`relay/signer.ts`); `planPayouts` (Task 6).
 - Produces:
   - `interface PayoutChain { latestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: bigint }>; send(wire: string): Promise<void>; status(signature: string): Promise<"confirmed" | "failed" | null>; blockHeight(): Promise<bigint> }`
@@ -1151,7 +1193,10 @@ const relayer = () => keypairRelaySigner(getBase58Decoder().decode(Uint8Array.fr
 const fakeChain = (over: Partial<PayoutChain> = {}) => {
   const sent: string[] = [];
   const chain: PayoutChain = {
-    latestBlockhash: async () => ({ blockhash: "4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZAMdL4VZHirAn", lastValidBlockHeight: 100n }),
+    latestBlockhash: async () => ({
+      blockhash: "4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZAMdL4VZHirAn",
+      lastValidBlockHeight: 100n,
+    }),
     send: async (wire) => void sent.push(wire),
     status: async () => null,
     blockHeight: async () => 50n,
@@ -1296,7 +1341,9 @@ export const solanaPayoutChain = (rpcUrl: string): PayoutChain => {
       const s = value[0];
       if (!s) return null;
       if (s.err) return "failed";
-      return s.confirmationStatus === "confirmed" || s.confirmationStatus === "finalized" ? "confirmed" : null;
+      return s.confirmationStatus === "confirmed" || s.confirmationStatus === "finalized"
+        ? "confirmed"
+        : null;
     },
     blockHeight: () => rpc.getBlockHeight({ commitment: "confirmed" }).send(),
   };
@@ -1310,7 +1357,10 @@ export const solanaPayoutChain = (rpcUrl: string): PayoutChain => {
  * transaction that may or may not exist, and `confirmPayouts` finds out. The
  * other order could leave money sent and no row saying so.
  */
-export const sendPayouts = async (db: Db, deps: { chain: PayoutChain; signer: RelaySigner }): Promise<number> => {
+export const sendPayouts = async (
+  db: Db,
+  deps: { chain: PayoutChain; signer: RelaySigner },
+): Promise<number> => {
   const pending = await db.select().from(referralPayouts).where(eq(referralPayouts.status, "pending"));
   let sent = 0;
   for (const p of pending) {
@@ -1344,7 +1394,10 @@ export const sendPayouts = async (db: Db, deps: { chain: PayoutChain; signer: Re
 };
 
 /** Settle every sent payout the chain has an answer for. A failed one gives its rewards back to be paid next week. */
-export const confirmPayouts = async (db: Db, chain: PayoutChain): Promise<{ confirmed: number; failed: number }> => {
+export const confirmPayouts = async (
+  db: Db,
+  chain: PayoutChain,
+): Promise<{ confirmed: number; failed: number }> => {
   const inFlight = await db.select().from(referralPayouts).where(eq(referralPayouts.status, "sent"));
   let confirmed = 0;
   let failed = 0;
@@ -1352,7 +1405,9 @@ export const confirmPayouts = async (db: Db, chain: PayoutChain): Promise<{ conf
     if (p.txSignature === null) continue;
     const status = await chain.status(p.txSignature);
     const expired =
-      status === null && p.lastValidBlockHeight !== null && (await chain.blockHeight()) > p.lastValidBlockHeight;
+      status === null &&
+      p.lastValidBlockHeight !== null &&
+      (await chain.blockHeight()) > p.lastValidBlockHeight;
 
     if (status === "confirmed") {
       await db.transaction(async (tx) => {
@@ -1400,10 +1455,12 @@ git commit -m "feat(api): send and confirm referral payouts, recording before br
 ### Task 8: Name the payout in the inviter's activity
 
 **Files:**
+
 - Modify: `services/api/src/referrals/payouts.ts`
 - Test: `services/api/src/referrals/payouts.test.ts`
 
 **Interfaces:**
+
 - Consumes: `confirmPayouts` (Task 7); `seedUsdcIn` (tracking plan).
 - Produces: `reconcilePayoutActivity(db: Db, now: Date): Promise<number>`.
 
@@ -1492,12 +1549,14 @@ git commit -m "feat(api): name a referral payout in the inviter's activity"
 ### Task 9: Config and the payout job
 
 **Files:**
+
 - Modify: `services/api/src/deps.ts` (`Config` and `readConfig`)
 - Test: `services/api/src/config.test.ts`
 - Modify: `services/api/.env.example`
 - Modify: `services/api/src/index.ts`
 
 **Interfaces:**
+
 - Consumes: `planPayouts`, `sendPayouts`, `confirmPayouts`, `reconcilePayoutActivity`, `solanaPayoutChain` (Tasks 6–8).
 - Produces: `Config.referralPayouts: boolean`, `Config.referralPayoutMaxUsd: number`, `Config.referralPayoutWeeklyMaxUsd: number`, and the `referral-payouts` job.
 
@@ -1506,21 +1565,21 @@ git commit -m "feat(api): name a referral payout in the inviter's activity"
 Append inside the `describe` in `config.test.ts`:
 
 ```ts
-  /* Off unless somebody turns it on: it sends Mercury's money. See ADR 0017. */
-  it("leaves referral payouts off unless REFERRAL_PAYOUTS is on", () => {
-    expect(readConfig(base).referralPayouts).toBe(false);
-    expect(readConfig({ ...base, REFERRAL_PAYOUTS: "true" }).referralPayouts).toBe(false);
-    expect(readConfig({ ...base, REFERRAL_PAYOUTS: "on" }).referralPayouts).toBe(true);
-  });
+/* Off unless somebody turns it on: it sends Mercury's money. See ADR 0017. */
+it("leaves referral payouts off unless REFERRAL_PAYOUTS is on", () => {
+  expect(readConfig(base).referralPayouts).toBe(false);
+  expect(readConfig({ ...base, REFERRAL_PAYOUTS: "true" }).referralPayouts).toBe(false);
+  expect(readConfig({ ...base, REFERRAL_PAYOUTS: "on" }).referralPayouts).toBe(true);
+});
 
-  it("caps a payout at $250 and a week at $5,000 unless told otherwise", () => {
-    expect(readConfig(base)).toMatchObject({ referralPayoutMaxUsd: 250, referralPayoutWeeklyMaxUsd: 5000 });
-    expect(readConfig({ ...base, REFERRAL_PAYOUT_MAX_USD: "100" }).referralPayoutMaxUsd).toBe(100);
-  });
+it("caps a payout at $250 and a week at $5,000 unless told otherwise", () => {
+  expect(readConfig(base)).toMatchObject({ referralPayoutMaxUsd: 250, referralPayoutWeeklyMaxUsd: 5000 });
+  expect(readConfig({ ...base, REFERRAL_PAYOUT_MAX_USD: "100" }).referralPayoutMaxUsd).toBe(100);
+});
 
-  it.each(["-1", "abc", "0"])("refuses a payout cap of %j", (v) => {
-    expect(() => readConfig({ ...base, REFERRAL_PAYOUT_MAX_USD: v })).toThrow("REFERRAL_PAYOUT_MAX_USD");
-  });
+it.each(["-1", "abc", "0"])("refuses a payout cap of %j", (v) => {
+  expect(() => readConfig({ ...base, REFERRAL_PAYOUT_MAX_USD: v })).toThrow("REFERRAL_PAYOUT_MAX_USD");
+});
 ```
 
 - [ ] **Step 2: Run them to see them fail**
@@ -1548,7 +1607,8 @@ const positiveDollars = (env: NodeJS.ProcessEnv, key: string, fallback: number):
   const raw = env[key];
   if (raw === undefined || raw.length === 0) return fallback;
   const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) throw new Error(`${key} must be a positive number of dollars, got "${raw}"`);
+  if (!Number.isFinite(n) || n <= 0)
+    throw new Error(`${key} must be a positive number of dollars, got "${raw}"`);
   return n;
 };
 ```
@@ -1605,7 +1665,12 @@ import {
  */
 const payoutsOn = config.referralPayouts && relay !== undefined;
 boot.info(
-  { on: payoutsOn, ...(payoutsOn ? { maxUsd: config.referralPayoutMaxUsd, weeklyMaxUsd: config.referralPayoutWeeklyMaxUsd } : {}) },
+  {
+    on: payoutsOn,
+    ...(payoutsOn
+      ? { maxUsd: config.referralPayoutMaxUsd, weeklyMaxUsd: config.referralPayoutWeeklyMaxUsd }
+      : {}),
+  },
   payoutsOn
     ? "referral payouts on, from the relayer"
     : config.referralPayouts
@@ -1615,7 +1680,10 @@ boot.info(
 /* `relay !== undefined` again, rather than `payoutsOn` alone, so the callback below keeps the narrowing. */
 if (payoutsOn && relay !== undefined) {
   const chain = solanaPayoutChain(config.solanaRpcUrl);
-  const limits = { maxPerPayoutUsd: D(config.referralPayoutMaxUsd), maxPerWeekUsd: D(config.referralPayoutWeeklyMaxUsd) };
+  const limits = {
+    maxPerPayoutUsd: D(config.referralPayoutMaxUsd),
+    maxPerWeekUsd: D(config.referralPayoutWeeklyMaxUsd),
+  };
   every("referral-payouts", 60 * 60 * 1000, async () => {
     const now = new Date();
     const planned = await planPayouts(auth.db, now, limits);
@@ -1647,6 +1715,7 @@ git commit -m "feat(api): the weekly referral payout job, off unless switched on
 ### Task 10: Earnings in `GET /v1/referrals`
 
 **Files:**
+
 - Modify: `packages/types/src/referrals.ts`
 - Modify: `services/api/src/referrals/store.ts` (`summary`)
 - Modify: `services/api/src/routes/referrals.ts`
@@ -1654,6 +1723,7 @@ git commit -m "feat(api): the weekly referral payout job, off unless switched on
 - Modify: `apps/web/src/dev/sample.ts`
 
 **Interfaces:**
+
 - Consumes: `referralRewards`, `referralPayouts` (Task 2).
 - Produces: `Summary` gains `paidUsd: Decimal`, `pendingUsd: Decimal` and `payouts: { week, amountUsd: Decimal, status, txSignature: string | null }[]`. `ReferralSummary` gains `earned: { paidUsd, pendingUsd }` and `payouts: { week, amountUsd, status, txSignature }[]`.
 
@@ -1686,11 +1756,27 @@ describe("summary, with earnings", () => {
     const store = createReferralStore(db);
     const inviter = await seedUser(db, 1);
     const friend = await seedUser(db, 2);
-    const referral = await seedReferral(db, { inviterId: inviter.id, friendId: friend.id, qualifiedAt: new Date() });
+    const referral = await seedReferral(db, {
+      inviterId: inviter.id,
+      friendId: friend.id,
+      qualifiedAt: new Date(),
+    });
     const nvda = await seedInstrument(db);
     const reward = async (amountUsd: string, status: "held" | "payable" | "void" | "paid") => {
-      const order = await seedOrder(db, { userId: friend.id, instrumentId: nvda.id, side: "buy", status: "filled" });
-      await seedReward(db, { referralId: referral.id, inviterId: inviter.id, friendId: friend.id, orderId: order.id, amountUsd, status });
+      const order = await seedOrder(db, {
+        userId: friend.id,
+        instrumentId: nvda.id,
+        side: "buy",
+        status: "filled",
+      });
+      await seedReward(db, {
+        referralId: referral.id,
+        inviterId: inviter.id,
+        friendId: friend.id,
+        orderId: order.id,
+        amountUsd,
+        status,
+      });
     };
     await reward("1.5", "paid");
     await reward("0.625", "payable");
@@ -1736,23 +1822,23 @@ In `store.ts`, add `desc, inArray` to the drizzle import, `referralPayouts, refe
 In `summary`, before `return`, add:
 
 ```ts
-    const sumOf = async (statuses: ("held" | "payable" | "paid")[]) => {
-      const [row] = await db
-        .select({ total: sql<string>`coalesce(sum(${referralRewards.amountUsd}), 0)` })
-        .from(referralRewards)
-        .where(and(eq(referralRewards.inviterId, userId), inArray(referralRewards.status, statuses)));
-      return D(row?.total ?? "0");
-    };
-    const [paidUsd, pendingUsd, payouts] = await Promise.all([
-      sumOf(["paid"]),
-      sumOf(["held", "payable"]),
-      db
-        .select()
-        .from(referralPayouts)
-        .where(eq(referralPayouts.inviterId, userId))
-        .orderBy(desc(referralPayouts.createdAt))
-        .limit(10),
-    ]);
+const sumOf = async (statuses: ("held" | "payable" | "paid")[]) => {
+  const [row] = await db
+    .select({ total: sql<string>`coalesce(sum(${referralRewards.amountUsd}), 0)` })
+    .from(referralRewards)
+    .where(and(eq(referralRewards.inviterId, userId), inArray(referralRewards.status, statuses)));
+  return D(row?.total ?? "0");
+};
+const [paidUsd, pendingUsd, payouts] = await Promise.all([
+  sumOf(["paid"]),
+  sumOf(["held", "payable"]),
+  db
+    .select()
+    .from(referralPayouts)
+    .where(eq(referralPayouts.inviterId, userId))
+    .orderBy(desc(referralPayouts.createdAt))
+    .limit(10),
+]);
 ```
 
 and add to the returned object:
@@ -1807,9 +1893,11 @@ git commit -m "feat(api): earnings and payouts in GET /v1/referrals"
 ### Task 11: Earnings on the Invite panel
 
 **Files:**
+
 - Modify: `apps/web/src/app/Invite.tsx`
 
 **Interfaces:**
+
 - Consumes: `ReferralSummary.earned`, `.payouts`, `.share` (Task 10).
 
 Only merge this task once payouts are cleared to go on. Before that, the panel must not promise inviters money (tracking plan, Global Constraints).
@@ -1834,11 +1922,15 @@ and in `Body`, render `rules(s)` in place of `RULES`.
 Change the stats grid to three columns and add earnings:
 
 ```tsx
-    <dl className="grid grid-cols-3 gap-3">
-      <Stat label="Invited" value={String(s.invited)} />
-      <Stat label="Funded" value={String(s.funded)} />
-      <Stat label="Earned" value={usd(Number(s.earned.paidUsd))} sub={`${usd(Number(s.earned.pendingUsd))} on its way`} />
-    </dl>
+<dl className="grid grid-cols-3 gap-3">
+  <Stat label="Invited" value={String(s.invited)} />
+  <Stat label="Funded" value={String(s.funded)} />
+  <Stat
+    label="Earned"
+    value={usd(Number(s.earned.paidUsd))}
+    sub={`${usd(Number(s.earned.pendingUsd))} on its way`}
+  />
+</dl>
 ```
 
 with `Stat` widened to:
@@ -1856,38 +1948,43 @@ const Stat = ({ label, value, sub }: { label: string; value: string; sub?: strin
 After the stats, list the payouts:
 
 ```tsx
-    {s.payouts.length > 0 && (
-      <section aria-label="Payouts">
-        <h3 className="text-[13px] font-medium text-ds-ink">Payouts</h3>
-        <ul className="mt-2 flex flex-col gap-2">
-          {s.payouts.map((p) => (
-            <li key={p.week} className="flex items-center justify-between text-[13px]">
-              <span className="text-ds-muted">Week {p.week.split("-W")[1]}</span>
-              <span className="flex items-center gap-3">
-                <span className="font-medium text-ds-ink">{usd(Number(p.amountUsd))}</span>
-                {p.txSignature !== null && p.status === "confirmed" ? (
-                  <a
-                    href={`https://solscan.io/tx/${encodeURIComponent(p.txSignature)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[12px] text-ds-link hover:underline"
-                  >
-                    View ↗
-                  </a>
-                ) : (
-                  <span className="text-[12px] text-ds-muted">{p.status === "failed" ? "Retrying next week" : "On its way"}</span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-    )}
+{
+  s.payouts.length > 0 && (
+    <section aria-label="Payouts">
+      <h3 className="text-[13px] font-medium text-ds-ink">Payouts</h3>
+      <ul className="mt-2 flex flex-col gap-2">
+        {s.payouts.map((p) => (
+          <li key={p.week} className="flex items-center justify-between text-[13px]">
+            <span className="text-ds-muted">Week {p.week.split("-W")[1]}</span>
+            <span className="flex items-center gap-3">
+              <span className="font-medium text-ds-ink">{usd(Number(p.amountUsd))}</span>
+              {p.txSignature !== null && p.status === "confirmed" ? (
+                <a
+                  href={`https://solscan.io/tx/${encodeURIComponent(p.txSignature)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[12px] text-ds-link hover:underline"
+                >
+                  View ↗
+                </a>
+              ) : (
+                <span className="text-[12px] text-ds-muted">
+                  {p.status === "failed" ? "Retrying next week" : "On its way"}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 ```
 
 - [ ] **Step 2: Check it in sample mode**
 
 Run the `web-sample` preview and open Invite friends from the account menu. Expect:
+
 - three stats: Invited 7, Funded 3, Earned $14.62 with "$3.18 on its way";
 - the share line reading "You get 30% …" (the sample is founding);
 - two payouts, each with a Solscan link.
@@ -1907,6 +2004,7 @@ git commit -m "feat(web): what an inviter has earned, on the Invite panel"
 ### Task 12: Mark it done
 
 **Files:**
+
 - Modify: `docs/revenue-todo.md` §3 and §4
 
 - [ ] **Step 1: Tick what this plan built**
