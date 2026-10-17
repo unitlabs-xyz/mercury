@@ -86,19 +86,22 @@ mainnet's old rent rate.
 
 ## 3 · Referral tracking
 
-**Today:** not tracked. Nothing reads `?ref=`. The founding-card links (`/f/:slug`) now 301 to
-`trymercury.xyz` and drop any query string (`services/api/src/app.ts`). The founding 500 are still in
-the `waitlist` table (`position <= 500`).
+**Built 17 October 2026.** See docs/superpowers/plans/2026-10-17-referral-tracking.md.
 
-- [ ] Give every user a referral code and a share link
-- [ ] Read `?ref=` on landing and web, keep it through Privy sign-in, then attach it at first sign-in
-- [ ] Store who invited whom: one inviter, set once, no self-referral
-- [ ] Count a referral only once the friend funds $50+ and trades once
-- [ ] Friend discount: 25% off fees for 90 days, applied in the fee function from item 1
-- [ ] Inviter tiers by funded friends: 0–9 → 25%, 10–49 → 30%, 50+ → 35%
-- [ ] Founding 500 start at 30%: match `waitlist.email` to `user.email`
-- [ ] Keep `?ref=` when `/f/:slug` redirects
-- [ ] Invite screen: link, friends invited, friends funded, earned so far
+- [x] Give every user a referral code and a share link
+- [x] Read `?ref=` on landing and web, keep it through Privy sign-in, then attach it at first sign-in
+      A claim that fails with 401, 408 or 429 keeps the code for the next visit; any other refusal drops it.
+- [x] Store who invited whom: one inviter, set once, no self-referral
+- [x] Count a referral only once the friend funds $50+ and trades once
+      Money counts towards the $50 an hour after it lands, so the inviter's own side of a transfer between them has been recorded and is left out.
+- [x] Friend discount: 25% off fees for 90 days, applied in the fee function from item 1
+- [x] Inviter tiers by funded friends: 0–9 → 25%, 10–49 → 30%, 50+ → 35% (computed; shown with rewards)
+- [x] Founding 500 start at 30%: match `waitlist.email` to `user.email`
+      A waitlist slug is its holder's code even before they open the Invite panel, so old founding-card links still credit them.
+- [x] Keep `?ref=` when `/f/:slug` redirects
+- [ ] Invite screen: link, friends invited, friends funded, earned so far (link and counts built; earnings arrive with §4)
+
+Mobile has no Invite screen yet: `apps/mobile/app/settings.tsx` is where its row goes.
 
 ## 4 · Referral payouts (after the trade fee has run a few weeks)
 
