@@ -7,7 +7,7 @@ const item = (over: Partial<ActivityItem> = {}): ActivityItem => ({
   kind: "buy",
   occurredAt: "2026-10-15T14:32:00.000Z",
   title: "Bought NVDA",
-  subtitle: "0.044619 shares at $218.29 · $0.26 fee",
+  subtitle: "0.044619 shares at $218.29",
   amountUsd: "10",
   txSignature: "5MRg8vcaYzjDoU1ZBuMgCncMQe5DSUPeVvDc4wTXKQatxWoTeDuAMzWz7SEyLj39bFWmaVQZRDiHwersgCVT4bwe",
   mint: "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
@@ -37,7 +37,7 @@ describe("receiptOf — a trade", () => {
     const r = receiptOf(item(), bought);
     expect(r.swap).toEqual({
       from: { label: "You paid", value: "$10.00", unit: "USD" },
-      to: { label: "You got", value: "0.044619", unit: "shares" },
+      to: { label: "You received", value: "0.044619", unit: "shares" },
     });
   });
 
@@ -45,7 +45,7 @@ describe("receiptOf — a trade", () => {
   it("splits the total into the shares and each part of the charge", () => {
     const r = receiptOf(item(), bought);
     expect(values(r.parts)).toEqual([
-      ["Shares", "$9.74"],
+      ["Subtotal", "$9.74"],
       ["Mercury fee", "$0.05"],
       ["Network fee", "$0.21"],
     ]);
@@ -67,26 +67,29 @@ describe("receiptOf — a trade", () => {
   });
 
   it("takes the charge off a sale, and says what the sale made", () => {
-    const r = receiptOf(item({ kind: "sell", title: "Sold NVDA", amountUsd: "21.72" }), {
-      ...bought,
-      side: "sell",
-      shares: "0.1",
-      pricePerShare: "218.3",
-      sharesUsd: "21.83",
-      mercuryFeeUsd: "0.11",
-      networkFeeUsd: "0",
-      realisedPnlUsd: "-1.2",
-    });
+    const r = receiptOf(
+      item({ kind: "sell", title: "Sold NVDA", subtitle: "0.1 shares at $218.30", amountUsd: "21.72" }),
+      {
+        ...bought,
+        side: "sell",
+        shares: "0.1",
+        pricePerShare: "218.3",
+        sharesUsd: "21.83",
+        mercuryFeeUsd: "0.11",
+        networkFeeUsd: "0",
+        realisedPnlUsd: "-1.2",
+      },
+    );
     expect(r.swap).toEqual({
       from: { label: "You sold", value: "0.1", unit: "shares" },
-      to: { label: "You got", value: "$21.72", unit: "USD" },
+      to: { label: "You received", value: "$21.72", unit: "USD" },
     });
     // A part that came to nothing has no line: there is no fee to explain.
     expect(values(r.parts)).toEqual([
-      ["Shares sold for", "$21.83"],
+      ["Subtotal", "$21.83"],
       ["Mercury fee", "−$0.11"],
     ]);
-    expect(r.total).toMatchObject({ label: "You got", value: "$21.72" });
+    expect(r.total).toMatchObject({ label: "Total received", value: "$21.72" });
     expect(r.after).toEqual([{ label: "Realised loss", value: "$1.20", tone: "down" }]);
   });
 
@@ -115,15 +118,15 @@ const loanDetail = (over: Partial<Extract<ReceiptDetail, { type: "loan" }>> = {}
 describe("receiptOf — a loan", () => {
   it("shows a pledge-and-borrow as stock in and dollars out, from either of its rows", () => {
     const borrow = receiptOf(
-      item({ kind: "borrow", title: "Borrowed $2.11 against NVDA", amountUsd: "2.11" }),
+      item({ kind: "borrow", title: "Borrowed USDC", subtitle: "Against NVDA", amountUsd: "2.11" }),
       loanDetail(),
     );
     expect(borrow.swap).toEqual({
-      from: { label: "You pledged", value: "0.0099", unit: "NVDA" },
-      to: { label: "You got", value: "$2.11", unit: "USDC" },
+      from: { label: "Collateral", value: "0.0099", unit: "NVDA" },
+      to: { label: "Borrowed", value: "$2.11", unit: "USDC" },
     });
     const pledge = receiptOf(
-      item({ kind: "pledge", title: "Pledged 0.0099 NVDA", amountUsd: null }),
+      item({ kind: "pledge", title: "Added collateral", subtitle: "0.0099 NVDA", amountUsd: null }),
       loanDetail(),
     );
     expect(pledge.swap).toEqual(borrow.swap);
@@ -133,12 +136,12 @@ describe("receiptOf — a loan", () => {
     const r = receiptOf(item({ kind: "borrow", amountUsd: "2.11" }), loanDetail());
     expect(values(r.facts)).toEqual([
       ["Interest rate", "5.8% a year"],
-      ["Account setup", "Paid by Mercury"],
+      ["Account setup", "Covered by Mercury"],
     ]);
     expect(values(r.after)).toEqual([
-      ["Loan after", "$2.11"],
-      ["Collateral after", "$4.36"],
-      ["Loan to value", "48%"],
+      ["Loan balance", "$2.11"],
+      ["Collateral value", "$4.36"],
+      ["Loan-to-value", "48%"],
     ]);
     expect(r.actions).toEqual([{ kind: "borrow", tab: "borrow", label: "Manage loan" }]);
   });
@@ -146,7 +149,7 @@ describe("receiptOf — a loan", () => {
   /* Closing a loan is when its interest is paid, so that is where it is shown, as part of the sum. */
   it("splits a repay that closed the loan into what was borrowed and the interest", () => {
     const r = receiptOf(
-      item({ kind: "repay", title: "Repaid your loan in full", amountUsd: "2.110015" }),
+      item({ kind: "repay", title: "Repaid loan", subtitle: "Paid in full", amountUsd: "2.110015" }),
       loanDetail({
         legs: [{ kind: "repay", usdAmount: "2.110015", ticker: null, tokens: null }],
         debtAfterUsd: "0",
@@ -156,25 +159,25 @@ describe("receiptOf — a loan", () => {
     );
     expect(r.swap).toBeNull();
     expect(values(r.parts)).toEqual([
-      ["Borrowed", "$2.11"],
+      ["Principal", "$2.11"],
       ["Interest", "Less than 1¢"],
     ]);
-    expect(r.total).toMatchObject({ label: "Repaid", value: "$2.11" });
+    expect(r.total).toMatchObject({ label: "Total repaid", value: "$2.11" });
     expect(values(r.after)).toEqual([
-      ["Loan after", "Nothing owed"],
-      ["Collateral after", "$4.36"],
+      ["Loan balance", "Nothing owed"],
+      ["Collateral value", "$4.36"],
     ]);
   });
 
   it("says what a withdrawal returned", () => {
     const r = receiptOf(
-      item({ kind: "unpledge", title: "Withdrew 0.0099 NVDA", amountUsd: null }),
+      item({ kind: "unpledge", title: "Withdrew collateral", subtitle: "0.0099 NVDA", amountUsd: null }),
       loanDetail({
         legs: [{ kind: "unpledge", usdAmount: null, ticker: "NVDA", tokens: "0.0099" }],
         openedAccount: false,
       }),
     );
-    expect(values(r.facts)).toEqual([["Withdrew", "0.0099 NVDA"]]);
+    expect(values(r.facts)).toEqual([["Collateral withdrawn", "0.0099 NVDA"]]);
   });
 });
 
@@ -184,7 +187,7 @@ describe("receiptOf — cash", () => {
       item({
         kind: "transfer_in",
         title: "Added cash",
-        subtitle: "cbBTC from Base",
+        subtitle: "From Base · cbBTC",
         amountUsd: "21.04",
         txSignature: "SigSol",
       }),
@@ -205,7 +208,7 @@ describe("receiptOf — cash", () => {
       item({
         kind: "transfer_out",
         title: "Sent cash",
-        subtitle: "Plus $0.25 to open their USDC account",
+        subtitle: "Plus $0.25 recipient account setup",
         amountUsd: "20",
       }),
       {
@@ -223,7 +226,7 @@ describe("receiptOf — cash", () => {
     ]);
     expect(values(r.parts)).toEqual([
       ["Sent", "$20.00"],
-      ["Their USDC account", "$0.25"],
+      ["Recipient account setup", "$0.25"],
     ]);
     expect(r.total).toMatchObject({ label: "Total", value: "$20.25" });
     // The subtitle said the same thing as the sum, so it is not said twice.
@@ -247,13 +250,13 @@ describe("receiptOf — nothing behind the row", () => {
     const r = receiptOf(
       item({
         kind: "dividend",
-        title: "NVDA paid a dividend",
-        subtitle: "0.0012 shares added, at no cost",
+        title: "NVDA dividend",
+        subtitle: "Paid as 0.0012 shares",
         txSignature: null,
       }),
       null,
     );
-    expect(r.note).toBe("0.0012 shares added, at no cost");
+    expect(r.note).toBe("Paid as 0.0012 shares");
     expect(r.links).toEqual([]);
   });
 
@@ -261,7 +264,7 @@ describe("receiptOf — nothing behind the row", () => {
     const r = receiptOf(
       item({
         kind: "loan_alert",
-        title: "Your loan is close to its limit",
+        title: "Loan over limit",
         subtitle: "Repay some, or add collateral.",
         amountUsd: null,
         txSignature: null,

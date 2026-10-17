@@ -147,8 +147,11 @@ describe("settleOrder", () => {
     if (result.kind !== "settled") return;
     expect(result.realisedPnlUsd!.toFixed(2)).toBe("10.04");
 
+    // The gain is the order's to keep and the receipt's to show; the feed's line is the trade.
+    const [order] = await s.db.select().from(orders).where(eq(orders.id, s.orderId));
+    expect(D(order!.realisedPnlUsd!).toFixed(2)).toBe("10.04");
     const [row] = await s.db.select().from(activities);
-    expect(row!.subtitle).toContain("+$10.04");
+    expect(row!.subtitle).toBe("0.449782 shares at $222.33");
   });
 
   it("stays silent about profit on shares it cannot prove a cost for", async () => {
@@ -165,10 +168,8 @@ describe("settleOrder", () => {
 
     const result = await settleOrder(s.db, inputFor(s, { side: "sell" }));
     expect(result.kind === "settled" && result.realisedPnlUsd).toBeNull();
-    // The price is still there; what is missing is the gain that follows it.
-    const [row] = await s.db.select().from(activities);
-    expect(row!.subtitle).toBe("0.449782 shares at $222.33");
-    expect(row!.subtitle).not.toContain("·");
+    const [order] = await s.db.select().from(orders).where(eq(orders.id, s.orderId));
+    expect(order!.realisedPnlUsd).toBeNull();
   });
 
   it("keeps the fee off the share price and on its own line", async () => {
@@ -190,8 +191,9 @@ describe("settleOrder", () => {
     const [order] = await s.db.select().from(orders).where(eq(orders.id, s.orderId));
     expect(order!.feeUsd).toBe("0.230000000000000000");
 
+    // The fee is on the order and the lot, and the receipt splits it out; the feed's line is the trade.
     const [activity] = await s.db.select().from(activities);
-    expect(activity!.subtitle).toContain("$0.23 fee");
+    expect(activity!.subtitle).toBe("0.449782 shares at $43.95");
     // What crossed the wallet's edge is the swap plus the charge.
     expect(activity!.amountUsd).toBe("20.000000000000000000");
   });

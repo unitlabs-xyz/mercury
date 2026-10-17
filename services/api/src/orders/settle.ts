@@ -161,22 +161,14 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
 
     const realisedPnlUsd = input.side === "sell" ? realisedOn(fill.shares, fill.usd, position) : null;
 
-    // Stored, not only printed. The subtitle was the only place this number
-    // ever existed, so a closed position took its whole profit with it.
+    // Stored on the order, which is the only place it lives: the feed's line no
+    // longer prints it, and the receipt reads it from here.
     if (realisedPnlUsd !== null) {
       await tx
         .update(orders)
         .set({ realisedPnlUsd: fixed(realisedPnlUsd) })
         .where(eq(orders.id, input.orderId));
     }
-
-    const gain =
-      realisedPnlUsd === null
-        ? ""
-        : ` · ${realisedPnlUsd.gte(ZERO) ? "+" : "−"}${money(realisedPnlUsd.abs())}`;
-    // The charge for sponsoring gets its own clause rather than being folded
-    // into the gain, which is the whole point of separating it.
-    const charge = fill.feeUsd.gt(ZERO) ? ` · ${money(fill.feeUsd)} fee` : "";
 
     await tx
       .insert(activities)
@@ -185,7 +177,10 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         kind: input.side,
         occurredAt: fill.occurredAt,
         title: `${input.side === "buy" ? "Bought" : "Sold"} ${input.ticker}`,
-        subtitle: `${trim(fill.shares, 6)} shares at ${money(fill.pricePerShare)}${gain}${charge}`,
+        // The trade, and nothing else. The gain and the fee are on the order and
+        // the lot, and the receipt shows each on its own line; folded in here they
+        // made a line nobody could read at a glance.
+        subtitle: `${trim(fill.shares, 6)} shares at ${money(fill.pricePerShare)}`,
         // What crossed the wallet's edge, which is the swap plus the charge on
         // a buy and the swap less the charge on a sell. The feed is about cash
         // moving; the price the shares went at is in the subtitle.

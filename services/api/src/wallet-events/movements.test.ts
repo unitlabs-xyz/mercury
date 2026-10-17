@@ -277,7 +277,7 @@ describe("movementsIn — a basket's own smart account", () => {
     // Still a transfer from the wallet's side, and still in the feed: what
     // changes is that it is not counted as money leaving the account.
     expect(m!.kind).toBe("transfer_out");
-    expect(m!.title).toBe("Cash to a basket");
+    expect(m!.title).toBe("Moved to basket");
   });
 
   it("marks an exit the same way, coming back", () => {
@@ -288,7 +288,7 @@ describe("movementsIn — a basket's own smart account", () => {
     const [m] = movementsIn(exit, withBaskets);
     expect(m!.basketPortfolioId).toBe(PORTFOLIO);
     expect(m!.kind).toBe("transfer_in");
-    expect(m!.title).toBe("Cash from a basket");
+    expect(m!.title).toBe("Moved from basket");
   });
 
   it("leaves an ordinary deposit alone, which is cash crossing the edge", () => {
@@ -353,7 +353,7 @@ describe("movementsIn — a sponsored transfer", () => {
     expect(m).toHaveLength(1);
     expect(m[0]!.kind).toBe("transfer_out");
     expect(m[0]!.amountUsd!.toFixed()).toBe("20");
-    expect(m[0]!.subtitle).toBe("Plus $0.25 to open their USDC account");
+    expect(m[0]!.subtitle).toBe("Plus $0.25 recipient account setup");
   });
 
   it("nets the charge in when it has no relayer to recognise", () => {

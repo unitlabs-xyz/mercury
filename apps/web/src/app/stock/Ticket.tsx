@@ -396,7 +396,7 @@ export const Ticket = ({
           the amount is capped, and the cap is what wants explaining. */}
       {partlyPledged && !over && (
         <p className="mx-5 mt-2.5 text-[12px] leading-[1.45] text-ds-muted">
-          {(pledgedShares ?? 0).toFixed(4)} of your shares are pledged to Kamino.{" "}
+          {(pledgedShares ?? 0).toFixed(4)} of your shares are held as collateral on Kamino.{" "}
           <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
             Withdraw them
           </Link>{" "}
@@ -412,7 +412,7 @@ export const Ticket = ({
       <div aria-live="polite">
         {allPledged && (
           <Note tone="warn" icon={<Alert />}>
-            All {(pledgedShares ?? 0).toFixed(4)} of your shares are pledged to Kamino as collateral.{" "}
+            All {(pledgedShares ?? 0).toFixed(4)} of your shares are held as collateral on Kamino.{" "}
             <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
               Withdraw them
             </Link>{" "}

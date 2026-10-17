@@ -191,7 +191,7 @@ async function recordTransfer(
       userId: row.userId,
       kind: isUsdc ? "liquidate_to_usdc" : "withdraw_in_kind",
       occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1_000),
-      title: isUsdc ? `Exited ${row.payload.templateName} to USDC` : `Received ${expected.symbol}`,
+      title: isUsdc ? `Sold ${row.payload.templateName} to cash` : `Received ${expected.symbol}`,
       subtitle: `${displayQuantity(transfer.rawAmount, transfer.decimals)} ${expected.symbol} from ${row.payload.templateName}`,
       amountUsd: isUsdc ? quantity : null,
       tokenQuantity: quantity,
@@ -207,7 +207,7 @@ async function recordTransfer(
       set: {
         kind: isUsdc ? "liquidate_to_usdc" : "withdraw_in_kind",
         occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1_000),
-        title: isUsdc ? `Exited ${row.payload.templateName} to USDC` : `Received ${expected.symbol}`,
+        title: isUsdc ? `Sold ${row.payload.templateName} to cash` : `Received ${expected.symbol}`,
         subtitle: `${displayQuantity(transfer.rawAmount, transfer.decimals)} ${expected.symbol} from ${row.payload.templateName}`,
         amountUsd: isUsdc ? quantity : null,
         tokenQuantity: quantity,

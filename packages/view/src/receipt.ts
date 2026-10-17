@@ -158,7 +158,7 @@ const trade = (i: ActivityItem, d: Extract<ReceiptDetail, { type: "trade" }>): B
   const parts: ReceiptLine[] = [];
   const sharesUsd = n(d.sharesUsd);
   if (sharesUsd !== null && mercury + network > 0) {
-    parts.push({ label: selling ? "Shares sold for" : "Shares", value: usd(sharesUsd) });
+    parts.push({ label: "Subtotal", value: usd(sharesUsd) });
     if (mercury > 0)
       parts.push({
         label: "Mercury fee",
@@ -186,11 +186,11 @@ const trade = (i: ActivityItem, d: Extract<ReceiptDetail, { type: "trade" }>): B
         : selling
           ? {
               from: { label: "You sold", value: shares, unit: "shares" },
-              to: { label: "You got", value: usd(cash), unit: "USD" },
+              to: { label: "You received", value: usd(cash), unit: "USD" },
             }
           : {
               from: { label: "You paid", value: usd(cash), unit: "USD" },
-              to: { label: "You got", value: shares, unit: "shares" },
+              to: { label: "You received", value: shares, unit: "shares" },
             },
     facts:
       d.pricePerShare === null
@@ -198,7 +198,9 @@ const trade = (i: ActivityItem, d: Extract<ReceiptDetail, { type: "trade" }>): B
         : [{ label: "Price per share", value: usd(d.pricePerShare), ...(tip === undefined ? {} : { tip }) }],
     parts,
     total:
-      parts.length === 0 || cash === null ? null : { label: selling ? "You got" : "Total", value: usd(cash) },
+      parts.length === 0 || cash === null
+        ? null
+        : { label: selling ? "Total received" : "Total", value: usd(cash) },
     after:
       pnl === null
         ? []
@@ -227,13 +229,13 @@ const loan = (d: Extract<ReceiptDetail, { type: "loan" }>): Body => {
 
   const facts: ReceiptLine[] = [];
   if (pledge && !borrow)
-    facts.push({ label: "Pledged", value: `${pledge.tokens ?? "—"} ${pledge.ticker ?? ""}`.trim() });
+    facts.push({ label: "Collateral added", value: `${pledge.tokens ?? "—"} ${pledge.ticker ?? ""}`.trim() });
   if (unpledge)
     facts.push({
-      label: "Withdrew",
+      label: "Collateral withdrawn",
       value:
         unpledge.tokens === null
-          ? `All your ${unpledge.ticker ?? "stock"}`
+          ? `All ${unpledge.ticker ?? "stock"}`
           : `${unpledge.tokens} ${unpledge.ticker ?? ""}`.trim(),
     });
   const apy = n(d.borrowApy);
@@ -246,7 +248,7 @@ const loan = (d: Extract<ReceiptDetail, { type: "loan" }>): Body => {
   if (d.openedAccount)
     facts.push({
       label: "Account setup",
-      value: "Paid by Mercury",
+      value: "Covered by Mercury",
       tone: "up",
       tip: "Opening your borrowing account takes a one-time network deposit. Mercury paid it.",
     });
@@ -257,7 +259,7 @@ const loan = (d: Extract<ReceiptDetail, { type: "loan" }>): Body => {
   const parts: ReceiptLine[] =
     repaid !== null && interest !== null && interest > 0
       ? [
-          { label: "Borrowed", value: usd(repaid - interest) },
+          { label: "Principal", value: usd(repaid - interest) },
           {
             label: "Interest",
             value: interestText(interest),
@@ -267,12 +269,20 @@ const loan = (d: Extract<ReceiptDetail, { type: "loan" }>): Body => {
       : [];
 
   const after: ReceiptLine[] = [
-    { label: "Loan after", value: debt <= 0 ? "Nothing owed" : usd(debt) },
-    { label: "Collateral after", value: usd(collateral) },
+    {
+      label: "Loan balance",
+      value: debt <= 0 ? "Nothing owed" : usd(debt),
+      tip: "Straight after this transaction.",
+    },
+    {
+      label: "Collateral value",
+      value: usd(collateral),
+      tip: "Straight after this transaction, at Kamino's prices.",
+    },
   ];
   if (debt > 0 && collateral > 0)
     after.push({
-      label: "Loan to value",
+      label: "Loan-to-value",
       value: pct((debt / collateral) * 100, 0),
       tip: "What you owe, over what your collateral is worth.",
     });
@@ -282,13 +292,13 @@ const loan = (d: Extract<ReceiptDetail, { type: "loan" }>): Body => {
     swap:
       pledge && borrowed !== null
         ? {
-            from: { label: "You pledged", value: pledge.tokens ?? "—", unit: pledge.ticker ?? "" },
-            to: { label: "You got", value: usd(borrowed), unit: "USDC" },
+            from: { label: "Collateral", value: pledge.tokens ?? "—", unit: pledge.ticker ?? "" },
+            to: { label: "Borrowed", value: usd(borrowed), unit: "USDC" },
           }
         : null,
     facts,
     parts,
-    total: parts.length === 0 || repaid === null ? null : { label: "Repaid", value: usd(repaid) },
+    total: parts.length === 0 || repaid === null ? null : { label: "Total repaid", value: usd(repaid) },
     after,
     actions: [{ kind: "borrow", tab: "borrow", label: "Manage loan" }],
     note: null,
@@ -323,7 +333,7 @@ const transfer = (i: ActivityItem, d: Extract<ReceiptDetail, { type: "transfer" 
       ? [
           { label: "Sent", value: usd(sent) },
           {
-            label: "Their USDC account",
+            label: "Recipient account setup",
             value: usd(setup),
             tip: "Their wallet had no USDC account yet. Opening one is a one-time network deposit, and the sender pays it.",
           },
