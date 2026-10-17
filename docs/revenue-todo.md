@@ -60,11 +60,12 @@ relayer.
 - [ ] Tier function: 0.5% / 0.35% / 0.25% by trade size, with tests at the $2k and $20k edges
 - [ ] Alert when a fill comes back without a fee
 
-## 2 · Borrow fee and first-loan setup at cost
+## 2 · Borrow fee, and the first-loan setup Mercury pays for
 
-Stops the $5–7 we lose on every new borrower.
-**Today:** `services/api/src/lending/kamino.ts` and `sponsor.ts` top up the user's rent from the relayer
-and charge nothing back. Kamino pays us nothing.
+**Decided 15 October 2026:** Mercury pays a new borrower's Kamino account setup, about $3, and says so.
+The relayer tops up the rent inside the first borrow's own transaction, so an account is only opened for
+a loan that lands. The borrow sheet shows the cost struck through as "Paid by Mercury". Kamino pays us
+nothing.
 
 **Measured 15 October 2026**, by simulating a first deposit-and-borrow on mainnet: the setup tops a new
 wallet up by 29,504,640 lamports, about $3.04 at $103 SOL. That covers the obligation (17,637,760), user
@@ -74,11 +75,14 @@ mainnet's old rent rate.
 
 - [x] Stop creating Kamino's per-user lookup table, which nothing uses (`USER_SETUP` in `kamino.ts`):
       934,720 lamports less per new borrower
-- [ ] Work out the first-loan setup rent from account sizes (confirm with Kamino)
-- [ ] Charge it once from the borrowed USDC, shown as "Account setup, one time"
-- [ ] Add the 0.25% borrow fee in the same USDC transfer
-- [ ] Show both on the borrow confirm screen
-- [ ] Record both on `loan_event`
+- [x] Work out the first-loan setup rent from account sizes: measured above, and priced live from the node's
+      rate by `services/api/src/lending/setup.ts`
+- [x] Open the account only with a loan: the setup rides in the first borrow's transaction, so a borrow that
+      fails opens nothing and costs nothing
+- [x] Do not charge it: shown on the borrow sheet as "One-time account setup ~~$2.97~~ Paid by Mercury"
+- [ ] Add the 0.25% borrow fee in a USDC transfer inside the loan's transaction
+- [ ] Show it on the borrow confirm screen
+- [ ] Record it on `loan_event`
 
 ## 3 · Referral tracking
 

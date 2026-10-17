@@ -496,6 +496,7 @@ export function buildReadDeps(
     borrow: {
       lending: deps.lending,
       chain: deps.chain,
+      prices: deps.prices,
       usdcMint: USDC_MINT,
       history: deps.history,
       record: (planned, input) => recordLoanEvents(db, planned, input),

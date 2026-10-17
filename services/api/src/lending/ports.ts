@@ -74,11 +74,14 @@ export type LendingIntent =
   | { readonly kind: "withdraw"; readonly ticker: string; readonly tokensRaw: string | "all" };
 
 export interface BuiltTransactions {
-  /** Unsigned v0 transactions, base64, to be signed and sent in this order. */
+  /**
+   * Unsigned v0 transactions, base64, to be signed and sent in this order. One
+   * today, a first action included: its account setup rides in the same one.
+   */
   readonly transactions: readonly string[];
   /** Each transaction's message, so a sponsored one can be recognised when it comes back signed. */
   readonly messages: readonly Uint8Array[];
-  /** True when the first is one-time setup: the user's obligation does not exist yet. */
+  /** True when this also opens the wallet's Kamino account: its obligation does not exist yet. */
   readonly firstTime: boolean;
   readonly expiresAt: Date;
 }

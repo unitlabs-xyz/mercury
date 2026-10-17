@@ -3,6 +3,7 @@ import { useBorrow, useBorrowAction } from "../../api/borrow";
 import { useInstrument, useInstruments } from "../../market/hooks";
 import { Button } from "../../ui/Button";
 import { PanelHeader, SidePanel } from "../../ui/Dialog";
+import { StatusChip } from "../../ui/ds";
 import { Alert, Check } from "../../ui/icons";
 import { borrowChoices, pct, pickRow, planBorrow, usd, type BorrowRow, type BorrowTab } from "@mercury/view";
 import { Mark } from "../invest/shared";
@@ -366,9 +367,20 @@ export const BorrowSheet = ({
                     ? "Pledge"
                     : "Withdraw"}
             </Button>
-            {b.obligation === null && tab === "borrow" && (
-              <p className="mt-3 text-center text-[12px] text-ds-muted">
-                First time: you will sign twice, once to open your Kamino account and once to borrow.
+            {/* Opening the Kamino account is Mercury's to pay. The relayer covers its
+                rent inside this same transaction, so it is paid only if this lands. */}
+            {b.obligation === null && (tab === "borrow" || tab === "pledge") && (
+              <p className="mt-3 flex justify-center">
+                <StatusChip tone="up" size="md">
+                  One-time account setup
+                  {b.setupCostUsd !== null && (
+                    <>
+                      <span className="sr-only">, worth</span>
+                      <s className="ml-1.5">{usd(b.setupCostUsd)}</s>
+                    </>
+                  )}
+                  <span className="ml-1.5 font-medium">Paid by Mercury</span>
+                </StatusChip>
               </p>
             )}
           </>

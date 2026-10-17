@@ -30,7 +30,8 @@ import { D, ZERO, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { createLendingRpc } from "./rpc.js";
 import { batchedLoader } from "./batch.js";
-import { rentForMissing, sponsorRents, tokenAccountsCreatedBy, topUp, transferSol } from "./sponsor.js";
+import { topUp, transferSol } from "./sponsor.js";
+import { WALLET_BYTES, rentFor } from "../rent.js";
 import type {
   BuiltTransactions,
   CollateralTerms,
@@ -50,9 +51,16 @@ const USDC = address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 const ACTIVE = 0;
 
 /**
- * Setup that must land before the action can. Sent in the same transaction as
- * the deposit it fails with IncorrectInstructionInPosition, so a first-time
- * user signs two transactions: these, then the action.
+ * The SDK's labels for opening a wallet's Kamino account: what makes an
+ * action a first one.
+ *
+ * These went out as a transaction of their own, ahead of the loan, because
+ * sending them with it once failed with IncorrectInstructionInPosition. It no
+ * longer does — a first deposit-and-borrow with its setup in front simulated
+ * cleanly on mainnet on 15 October 2026, at 833 of Solana's 1,232 bytes — and
+ * one transaction is what lets Mercury pay for accounts only when a loan uses
+ * them. Sent apart, a setup could land and the loan behind it fail, leaving
+ * the relayer's rent in an account nobody borrowed through.
  */
 const FIRST_TIME = /^(createUserLutIx|initUserMetadata|InitObligation|InitObligationForFarm)\b/;
 
@@ -275,15 +283,11 @@ export class KaminoLending implements LendingSource {
         break;
     }
 
-    // Split first-time setup into its own transaction, in the order it must land.
-    const setup: Instruction[] = [];
-    const rest: Instruction[] = [];
-    action.setupIxs.forEach((ix, i) =>
-      (FIRST_TIME.test(action.setupIxsLabels[i] ?? "") ? setup : rest).push(ix),
-    );
+    // A first action opens the account in the same transaction, in the SDK's own order.
+    const firstTime = action.setupIxsLabels.some((label) => FIRST_TIME.test(label));
     const actionIxs = [
       ...action.computeBudgetIxs,
-      ...rest,
+      ...action.setupIxs,
       ...KaminoAction.actionToLendingIxs(action),
       ...action.postLendingIxs,
       ...action.cleanupIxs,
@@ -307,23 +311,19 @@ export class KaminoLending implements LendingSource {
       return { wire: getBase64EncodedWireTransaction(tx), messageBytes: Uint8Array.from(tx.messageBytes) };
     };
 
-    const firstTime = setup.length > 0;
-    let groups: readonly (readonly Instruction[])[] = firstTime ? [setup, actionIxs] : [actionIxs];
-    if (sponsor !== undefined) groups = await this.fund(owner.address, payer, groups, firstTime, compile);
+    const ixs = sponsor === undefined ? actionIxs : await this.fund(owner.address, payer, actionIxs, compile);
 
-    const compiled = groups.map(compile);
-    for (const { wire } of compiled) {
-      const bytes = getBase64Encoder().encode(wire).length;
-      if (bytes > MAX_TRANSACTION_BYTES) {
-        throw new Error(
-          `kamino: a built transaction is ${bytes} bytes, over Solana's ${MAX_TRANSACTION_BYTES}`,
-        );
-      }
+    const compiled = compile(ixs);
+    const bytes = getBase64Encoder().encode(compiled.wire).length;
+    if (bytes > MAX_TRANSACTION_BYTES) {
+      throw new Error(
+        `kamino: a built transaction is ${bytes} bytes, over Solana's ${MAX_TRANSACTION_BYTES}`,
+      );
     }
 
     return {
-      transactions: compiled.map((c) => c.wire),
-      messages: compiled.map((c) => c.messageBytes),
+      transactions: [compiled.wire],
+      messages: [compiled.messageBytes],
       firstTime,
       // A blockhash lives about 150 slots, a minute; leave room for signing.
       expiresAt: new Date(Date.now() + 45_000),
@@ -331,71 +331,47 @@ export class KaminoLending implements LendingSource {
   }
 
   /**
-   * Prepend a relayer-to-owner transfer to each transaction that needs one.
+   * Put a relayer-to-owner transfer in front of the transaction, if it needs one.
    *
-   * What a transaction spends from the owner is measured by simulating it with
-   * a probe transfer in front and reading the owner's balance after. The one
-   * transaction that cannot be simulated is a first-time action, which needs
-   * the setup before it to have landed; its only rent is token accounts it
-   * creates, counted instead. See `sponsor.ts`.
+   * What it spends from the owner is measured by simulating it with a probe
+   * transfer in front and reading the owner's balance after. A first loan's
+   * account setup rides in the same transaction, so its rent is measured
+   * exactly like everything else's, and paid only if the loan lands with it.
+   * See `sponsor.ts`.
    */
   private async fund(
     owner: Address,
     relayer: Address,
-    groups: readonly (readonly Instruction[])[],
-    firstTime: boolean,
+    ixs: readonly Instruction[],
     compile: (ixs: readonly Instruction[]) => { wire: string },
-  ): Promise<readonly (readonly Instruction[])[]> {
-    const [{ value: ownerBalance }, { value: relayerBalance }, rents] = await Promise.all([
+  ): Promise<readonly Instruction[]> {
+    const [{ value: ownerBalance }, { value: relayerBalance }, walletRent] = await Promise.all([
       this.rpc.getBalance(owner).send(),
       this.rpc.getBalance(relayer).send(),
-      sponsorRents(this.rent),
+      rentFor(this.rent, WALLET_BYTES),
     ]);
     const probe: bigint = relayerBalance - FEE_RESERVE;
     if (probe <= 0n) throw new Error("kamino: the relayer has no SOL to sponsor with");
 
-    let held: bigint = ownerBalance;
-    let given = 0n;
-    const funded: (readonly Instruction[])[] = [];
-    for (const [i, ixs] of groups.entries()) {
-      const afterSetup = firstTime && i > 0;
-      let spend: bigint;
-      if (afterSetup) {
-        const created = tokenAccountsCreatedBy(ixs);
-        const { value } = await this.rpc
-          .getMultipleAccounts(
-            created.map((c) => c.account),
-            { encoding: "base64", dataSlice: { offset: 0, length: 0 } },
-          )
-          .send();
-        const exists = new Set(created.filter((_, j) => value[j] !== null).map((c) => String(c.account)));
-        spend = rentForMissing(created, exists, rents);
-      } else {
-        const sim = await this.rpc
-          .simulateTransaction(compile([transferSol(relayer, owner, probe), ...ixs]).wire as never, {
-            encoding: "base64",
-            sigVerify: false,
-            replaceRecentBlockhash: true,
-            accounts: { addresses: [owner], encoding: "base64" },
-          })
-          .send();
-        if (sim.value.err !== null) {
-          throw new Error(
-            `kamino: the sponsored transaction would fail: ${JSON.stringify(sim.value.err, (_, v) => (typeof v === "bigint" ? String(v) : v))}`,
-          );
-        }
-        const after = sim.value.accounts[0]?.lamports ?? 0n;
-        spend = held + probe - BigInt(after);
-      }
-
-      const send = topUp(held, spend, rents.wallet);
-      given += send;
-      held = held + send - spend;
-      funded.push(send > 0n ? [transferSol(relayer, owner, send), ...ixs] : ixs);
+    const sim = await this.rpc
+      .simulateTransaction(compile([transferSol(relayer, owner, probe), ...ixs]).wire as never, {
+        encoding: "base64",
+        sigVerify: false,
+        replaceRecentBlockhash: true,
+        accounts: { addresses: [owner], encoding: "base64" },
+      })
+      .send();
+    if (sim.value.err !== null) {
+      throw new Error(
+        `kamino: the sponsored transaction would fail: ${JSON.stringify(sim.value.err, (_, v) => (typeof v === "bigint" ? String(v) : v))}`,
+      );
     }
+    const after = sim.value.accounts[0]?.lamports ?? 0n;
+    const spend = ownerBalance + probe - BigInt(after);
 
-    if (given > probe) throw new Error("kamino: the relayer does not hold enough SOL to sponsor this");
-    return funded;
+    const send = topUp(ownerBalance, spend, walletRent);
+    if (send > probe) throw new Error("kamino: the relayer does not hold enough SOL to sponsor this");
+    return send > 0n ? [transferSol(relayer, owner, send), ...ixs] : ixs;
   }
 }
 

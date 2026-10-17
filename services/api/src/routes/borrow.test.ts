@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { D } from "@mercury/core";
 import type { LendingIntent, LendingSource, LendingTerms } from "../lending/ports.js";
 import type { PlannedLoanEvent } from "../lending/events.js";
+import type { PriceBoard, TokenPrice } from "@mercury/market";
 import { borrowRoutes, type BorrowDeps } from "./borrow.js";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -69,8 +70,23 @@ const lending = (debt = 0, pledgedTokens = 10): LendingSource => ({
   },
 });
 
-const deps = (l: LendingSource, cash = 100_000_000n, spy = 5n * 100_000_000n): BorrowDeps => ({
+const SOL = "So11111111111111111111111111111111111111112";
+
+/** SOL at `usd`, or no price at all. */
+const solAt = (usd: string | null): PriceBoard =>
+  ({
+    pricesFor: async () =>
+      new Map(usd === null ? [] : [[SOL, { mint: SOL, usdPricePerToken: D(usd) } as TokenPrice]]),
+  }) as unknown as PriceBoard;
+
+const deps = (
+  l: LendingSource,
+  cash = 100_000_000n,
+  spy = 5n * 100_000_000n,
+  prices = solAt("103"),
+): BorrowDeps => ({
   lending: l,
+  prices,
   chain: {
     tokenBalances: async () => [
       { mint: USDC, rawAmount: cash, decimals: 6 },
@@ -127,6 +143,30 @@ describe("GET /v1/borrow", () => {
   it("says 401 with no wallet on the session", async () => {
     const res = await app(deps(lending()), null).request("/v1/borrow");
     expect(res.status).toBe(401);
+  });
+
+  /*
+   * What Mercury pays to open a first-time borrower's Kamino account, so the
+   * sheet can say so. Rent for the obligation, the user metadata and the farm
+   * state — 28,854,400 lamports at mainnet's October 2026 rate, which is what
+   * a reader that cannot ask falls back to — at $103 SOL.
+   */
+  it("says what opening the Kamino account costs, for a wallet that has none", async () => {
+    const res = await app(deps(lending(0, 0))).request("/v1/borrow");
+    const body = (await res.json()) as Record<string, string | null>;
+    expect(body.obligation).toBeNull();
+    expect(body.setupCostUsd).toBe("2.97");
+  });
+
+  it("says nothing once the account is open", async () => {
+    const res = await app(deps(lending(1_000))).request("/v1/borrow");
+    expect(((await res.json()) as Record<string, string | null>).setupCostUsd).toBeNull();
+  });
+
+  /* The sheet still says Mercury pays; it only has no figure to strike through. */
+  it("says nothing when SOL has no price", async () => {
+    const res = await app(deps(lending(0, 0), undefined, undefined, solAt(null))).request("/v1/borrow");
+    expect(((await res.json()) as Record<string, string | null>).setupCostUsd).toBeNull();
   });
 });
 

@@ -2,8 +2,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { D, toWire, ZERO, type Decimal } from "@mercury/core";
 import type { ChainHistory, ChainReader } from "@mercury/chain";
+import type { PriceBoard } from "@mercury/market";
 import { capacity, safeHeadroomAfter, safeLimitAfter, type CapacityInput } from "../lending/capacity.js";
 import { capacityInputFor } from "../lending/input.js";
+import { kaminoSetupRent } from "../lending/setup.js";
 import type { LendingIntent, LendingSource } from "../lending/ports.js";
 import { planLoanEvents, type PlannedLoanEvent } from "../lending/events.js";
 import type { RecordInput } from "../lending/record.js";
@@ -14,6 +16,8 @@ import type { SponsoredBuilds } from "../relay/builds.js";
 export interface BorrowDeps {
   readonly lending: LendingSource;
   readonly chain: ChainReader;
+  /** For SOL, which prices what Mercury pays to open a first-time borrower's account. */
+  readonly prices: PriceBoard;
   readonly usdcMint: string;
   /** For confirming that a signature reached the chain before it is recorded. */
   readonly history: ChainHistory;
@@ -77,6 +81,9 @@ const intentFrom = (body: z.infer<typeof Request>, canonical: (ticker: string) =
 };
 
 const usd = (d: Decimal) => toWire(d.toDecimalPlaces(2));
+
+/** Native SOL trades under the wrapped-SOL mint, which is how it is priced. */
+const SOL_MINT = "So11111111111111111111111111111111111111112";
 const pct = (d: Decimal | null) => (d === null ? null : toWire(d.toDecimalPlaces(4)));
 
 /**
@@ -135,11 +142,33 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
     };
   };
 
+  /**
+   * What opening this wallet's Kamino account would cost, in dollars, for the
+   * sheet to show struck through: Mercury pays it. Null once the account is
+   * open, and null when SOL has no price — the sheet still says Mercury pays,
+   * it only has no figure to strike.
+   */
+  const setupCostUsd = async (input: CapacityInput): Promise<string | null> => {
+    if (input.position !== null) return null;
+    const [lamports, prices] = await Promise.all([
+      kaminoSetupRent(deps.chain),
+      deps.prices.pricesFor([SOL_MINT]),
+    ]);
+    const sol = prices.get(SOL_MINT)?.usdPricePerToken;
+    if (sol === undefined || sol.lte(0)) return null;
+    return usd(D(lamports.toString()).div(1_000_000_000).mul(sol));
+  };
+
+  const summaryFor = async (wallet: string) => {
+    const input = await inputFor(wallet);
+    return { ...summaryJson(input), setupCostUsd: await setupCostUsd(input) };
+  };
+
   /** The whole position: cash, what is pledged and owed, and what can be spent. */
   app.get("/v1/borrow", async (c) => {
     const wallet = c.get("identity").walletAddress;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
-    return c.json(summaryJson(await inputFor(wallet)));
+    return c.json(await summaryFor(wallet));
   });
 
   /** One stock: whether Kamino accepts it, and what it can be borrowed against. */
@@ -147,7 +176,7 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
     const wallet = c.get("identity").walletAddress;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const ticker = c.req.param("ticker").toUpperCase();
-    const summary = summaryJson(await inputFor(wallet));
+    const summary = await summaryFor(wallet);
     // Only stocks are offered here; other collateral in the market still counts in `account`.
     const row = summary.collateral.find((r) => r.isStock && r.ticker === ticker) ?? null;
     return c.json({

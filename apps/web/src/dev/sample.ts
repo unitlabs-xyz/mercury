@@ -170,6 +170,8 @@ const borrow = {
   poolAvailableUsd: "538408.73",
   borrowApy: "0.0578",
   obligation: "SampleObligation11111111111111111111111111",
+  // Opened already, so Mercury has nothing left to pay for it and the sheet shows no setup chip.
+  setupCostUsd: null,
   collateral: [
     { ...row("cbBTC", 0.75, 0.8, 84_720, 0.07, 0), isStock: false },
     row("SPY", 0.73, 0.75, 664.22, 3, 2.998),
