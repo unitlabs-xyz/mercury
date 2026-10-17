@@ -49,6 +49,8 @@ import type { FundDeps } from "./routes/fund.js";
 import type { PortfolioDeps } from "./routes/portfolio.js";
 import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import type { FeedbackDeps } from "./routes/feedback.js";
+import { createReferralStore } from "./referrals/store.js";
+import type { ReferralDeps } from "./routes/referrals.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
@@ -397,6 +399,8 @@ export interface ReadDeps {
   readonly tradingFeeBps: number;
   /** The in-app feedback button. Optional so a test app can leave it out. */
   readonly feedback?: FeedbackDeps;
+  /** Invite links and the friend's discount. Optional so a test app can leave it out. */
+  readonly referrals?: ReferralDeps;
   /**
    * Funding from any chain, or nothing.
    *
@@ -480,6 +484,7 @@ export function buildReadDeps(
     money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
     activity: { read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor) },
     orders: pgOrderStore(db),
+    referrals: { store: createReferralStore(db) },
     tradingFeeBps: config.tradingFeeBps,
     feedback: {
       to: config.feedbackTo,

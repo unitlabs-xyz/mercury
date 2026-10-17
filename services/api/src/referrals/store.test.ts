@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { referrals } from "../db/schema.js";
 import { testDb } from "../db/testing.js";
@@ -199,5 +200,32 @@ describe("qualifyPending", () => {
     await trade();
     expect(await store.qualifyPending(now)).toBe(0);
     expect(await store.qualifyPending(new Date(now.getTime() + 60_000))).toBe(1);
+  });
+});
+
+describe("summary", () => {
+  it("counts invited and funded friends and names the tier", async () => {
+    const db = await testDb();
+    const store = createReferralStore(db);
+    const now = new Date("2026-10-17T12:00:00Z");
+    const inviter = await seedUser(db, 1, { referralCode: "inviter1" });
+    const [f1, f2] = [await seedUser(db, 2), await seedUser(db, 3)];
+    await store.claim(f1.id, "inviter1", now);
+    await store.claim(f2.id, "inviter1", now);
+    await db.update(referrals).set({ qualifiedAt: now }).where(eq(referrals.friendId, f1.id));
+
+    const s = await store.summary(inviter.id, now);
+    expect(s).toMatchObject({
+      code: "inviter1",
+      invited: 2,
+      funded: 1,
+      founding: false,
+      discountUntil: null,
+    });
+    expect(s.share.toString()).toBe("0.25");
+
+    expect((await store.summary(f1.id, now)).discountUntil).toEqual(
+      new Date(now.getTime() + 90 * 86_400_000),
+    );
   });
 });

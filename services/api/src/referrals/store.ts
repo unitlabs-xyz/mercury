@@ -1,8 +1,17 @@
 import { USDC_MINT } from "@mercury/chain";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import type { Decimal } from "@mercury/core";
+import { and, count, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { activities, orders, referrals, users, waitlist } from "../db/schema.js";
-import { CLAIM_WINDOW_DAYS, FUNDING_SETTLE_MINUTES, QUALIFYING_FUNDING_USD, newCode } from "./rules.js";
+import {
+  CLAIM_WINDOW_DAYS,
+  FUNDING_SETTLE_MINUTES,
+  QUALIFYING_FUNDING_USD,
+  discountActive,
+  discountEndsAt,
+  inviterShare,
+  newCode,
+} from "./rules.js";
 
 /** The waitlist's founding cohort: the first 500 places. */
 const FOUNDING = 500;
@@ -11,6 +20,17 @@ const FOUNDING = 500;
 export type ClaimResult =
   | { readonly kind: "claimed" | "already"; readonly inviterId: string }
   | { readonly kind: "unknown_code" | "self" | "taken" | "too_late" };
+
+export interface Summary {
+  readonly code: string;
+  readonly invited: number;
+  readonly funded: number;
+  readonly founding: boolean;
+  /** The inviter's share at today's tier. */
+  readonly share: Decimal;
+  /** When this person's own discount ends, if one is running. */
+  readonly discountUntil: Date | null;
+}
 
 export interface ReferralStore {
   /** This person's code, made the first time anyone asks for it. */
@@ -23,6 +43,8 @@ export interface ReferralStore {
   referredAt(userId: string): Promise<Date | null>;
   /** Mark every invited friend who now has $50 in and one filled trade. Returns how many changed. */
   qualifyPending(now: Date): Promise<number>;
+  /** What the Invite panel shows. Makes the code if there is none yet. */
+  summary(userId: string, now: Date): Promise<Summary>;
 }
 
 export const createReferralStore = (db: Db): ReferralStore => {
@@ -169,14 +191,41 @@ export const createReferralStore = (db: Db): ReferralStore => {
     return changed.length;
   };
 
+  const isFounding = async (userId: string) => {
+    const row = await waitlistRow(userId);
+    return row !== null && row.position <= FOUNDING;
+  };
+
+  const summary = async (userId: string, now: Date): Promise<Summary> => {
+    const [code, founding, referred, [counts]] = await Promise.all([
+      codeFor(userId),
+      isFounding(userId),
+      existing(userId),
+      db
+        .select({ invited: count(), funded: count(referrals.qualifiedAt) })
+        .from(referrals)
+        .where(eq(referrals.inviterId, userId)),
+    ]);
+    const funded = counts?.funded ?? 0;
+    return {
+      code,
+      invited: counts?.invited ?? 0,
+      funded,
+      founding,
+      share: inviterShare(funded, founding),
+      discountUntil:
+        referred !== null && discountActive(referred.createdAt, now)
+          ? discountEndsAt(referred.createdAt)
+          : null,
+    };
+  };
+
   return {
     codeFor,
-    isFounding: async (userId) => {
-      const row = await waitlistRow(userId);
-      return row !== null && row.position <= FOUNDING;
-    },
+    isFounding,
     claim,
     referredAt: async (userId) => (await existing(userId))?.createdAt ?? null,
     qualifyPending,
+    summary,
   };
 };

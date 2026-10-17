@@ -20,6 +20,7 @@ import { requestId } from "./telemetry/request-id.js";
 import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
+import { referralRoutes } from "./routes/referrals.js";
 import { borrowRoutes } from "./routes/borrow.js";
 import { sendRoutes } from "./routes/send.js";
 import { instrumentRoutes } from "./routes/instruments.js";
@@ -195,6 +196,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", portfolioRoutes(read.portfolio));
   app.route("/", moneyRoutes(read.money));
   app.route("/", activityRoutes(read.activity));
+  if (read.referrals) app.route("/", referralRoutes(read.referrals));
   app.route("/", borrowRoutes(read.borrow));
   app.route("/", sendRoutes(read.send));
   /* Absent when Relay or the treasury is not configured, so the routes 404 and
