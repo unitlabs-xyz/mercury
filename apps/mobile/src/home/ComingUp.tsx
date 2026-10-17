@@ -3,7 +3,7 @@ import { StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useQueries } from "@tanstack/react-query";
 import type { ManagedBasketPortfolioSnapshot } from "@mercury/types";
-import { displayBasketName, pct, usd, type EventKind } from "@mercury/view";
+import { displayBasketName, interestText, pct, usd, type EventKind } from "@mercury/view";
 import { apiFetch, useMarketStatus, type Borrow } from "../api";
 import { useOwnedBasketPortfolios } from "../baskets/api";
 import { KindGlyph } from "../activity/marks";
@@ -113,9 +113,9 @@ export const ComingUp = ({
       key: "loan",
       kind: "borrow",
       title: "Loan interest",
-      detail: `${pct(borrow.borrowApy * 100, 1)} a year on ${usd(borrow.debtUsd)}`,
+      detail: `${borrow.interestUsdc === null ? "" : `${interestText(borrow.interestUsdc)} so far · `}${pct(borrow.borrowApy * 100, 1)} a year on ${usd(borrow.owedUsdc)}`,
       at: null,
-      right: `≈${usd((borrow.debtUsd * borrow.borrowApy) / 12)}/mo`,
+      right: `≈${usd((borrow.owedUsdc * borrow.borrowApy) / 12)}/mo`,
       onPress: () => router.push("/borrow"),
     });
   }

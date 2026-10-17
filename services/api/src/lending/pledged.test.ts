@@ -51,6 +51,7 @@ const position = {
     },
   ],
   debtUsd: ZERO,
+  owedUsdc: ZERO,
   debtBfAdjustedUsd: ZERO,
   allowedBorrowUsd: ZERO,
   liquidationBorrowUsd: ZERO,

@@ -40,7 +40,7 @@ import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
 import { debtFrom } from "./lending/debt.js";
-import { recordLoanEvents } from "./lending/record.js";
+import { loanLedger, recordLoanEvents } from "./lending/record.js";
 import { pledgedByMint, withPledged } from "./lending/pledged.js";
 import type { LendingSource } from "./lending/ports.js";
 import type { InstrumentDeps } from "./routes/instruments.js";
@@ -500,6 +500,7 @@ export function buildReadDeps(
       usdcMint: USDC_MINT,
       history: deps.history,
       record: (planned, input) => recordLoanEvents(db, planned, input),
+      ledger: (userId) => loanLedger(db, userId),
       ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
     send: {

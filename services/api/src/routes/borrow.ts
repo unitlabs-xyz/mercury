@@ -1,17 +1,33 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { D, toWire, ZERO, type Decimal } from "@mercury/core";
+import { D, Decimal, ONE, toWire, ZERO } from "@mercury/core";
 import type { ChainHistory, ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import { capacity, safeHeadroomAfter, safeLimitAfter, type CapacityInput } from "../lending/capacity.js";
 import { capacityInputFor } from "../lending/input.js";
 import { kaminoSetupRent } from "../lending/setup.js";
-import type { LendingIntent, LendingSource } from "../lending/ports.js";
+import {
+  closeLoanUsdc,
+  leavesDust,
+  loanParts,
+  outstandingPrincipal,
+  type LedgerRow,
+} from "../lending/interest.js";
+import {
+  LendingRefused,
+  SponsorShort,
+  type LendingIntent,
+  type LendingPosition,
+  type LendingSource,
+} from "../lending/ports.js";
 import { planLoanEvents, type PlannedLoanEvent } from "../lending/events.js";
 import type { RecordInput } from "../lending/record.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
+import { logger } from "../log/index.js";
+
+const log = logger("borrow");
 
 export interface BorrowDeps {
   readonly lending: LendingSource;
@@ -32,6 +48,8 @@ export interface BorrowDeps {
    * cover, and remembered so the send route will co-sign it.
    */
   readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
+  /** A borrower's loan events, oldest first: what tells the interest apart from what was lent. */
+  readonly ledger: (userId: string) => Promise<readonly LedgerRow[]>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -81,6 +99,23 @@ const intentFrom = (body: z.infer<typeof Request>, canonical: (ticker: string) =
 };
 
 const usd = (d: Decimal) => toWire(d.toDecimalPlaces(2));
+
+/** Dollars as a sentence says them, rounded the way that keeps the sentence true. */
+const dollars = (d: Decimal, rounding: Decimal.Rounding = Decimal.ROUND_HALF_UP) =>
+  `$${d.toDecimalPlaces(2, rounding).toFixed(2)}`;
+
+/**
+ * Kamino's price for a USDC, from its own two figures for the debt, never
+ * above $1. It is what the one-cent minimum is measured at, and a hair under a
+ * dollar, so the USDC a cent is worth is a hair over a cent. Capped, because a
+ * debt in something other than USDC would push the ratio up and loosen a check
+ * that is only safe when it errs tight.
+ */
+const usdcPrice = (p: LendingPosition | null): Decimal =>
+  p === null || p.owedUsdc.lte(0) ? ONE : Decimal.min(ONE, p.debtUsd.div(p.owedUsdc));
+
+/** Kamino's `NetValueRemainingTooSmall`: a position left worth more than nothing and less than the minimum. */
+const NET_VALUE_REMAINING_TOO_SMALL = 6092;
 
 /** Native SOL trades under the wrapped-SOL mint, which is how it is priced. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -159,16 +194,39 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
     return usd(D(lamports.toString()).div(1_000_000_000).mul(sol));
   };
 
-  const summaryFor = async (wallet: string) => {
+  /**
+   * What the loan is made of, in USDC: what is owed, how much of it was lent
+   * and how much is interest, and what the wallet must hold to repay all of it.
+   * The split is null when the ledger cannot account for the debt, rather than
+   * calling all of it interest.
+   */
+  const loanJson = async (input: CapacityInput, userId: string) => {
+    // Micro-USDC, the smallest amount there is; Kamino's figures run to forty digits.
+    // What is owed rounds up, so a figure read off the wire is never short of it.
+    const owed = (input.position?.owedUsdc ?? ZERO).toDecimalPlaces(6, Decimal.ROUND_UP);
+    const parts = owed.lte(0)
+      ? { principal: ZERO, interest: ZERO }
+      : loanParts(owed, outstandingPrincipal(await deps.ledger(userId)));
+    return {
+      owedUsdc: toWire(owed),
+      principalUsdc: parts.principal === null ? null : toWire(parts.principal),
+      interestUsdc: parts.interest === null ? null : toWire(parts.interest),
+      closeLoanUsdc: toWire(closeLoanUsdc(owed, input.terms.pool.borrowApy)),
+      minPositionUsd: toWire(input.terms.minPositionUsd.toDecimalPlaces(6)),
+    };
+  };
+
+  const summaryFor = async (wallet: string, userId: string) => {
     const input = await inputFor(wallet);
-    return { ...summaryJson(input), setupCostUsd: await setupCostUsd(input) };
+    const [setup, loan] = await Promise.all([setupCostUsd(input), loanJson(input, userId)]);
+    return { ...summaryJson(input), setupCostUsd: setup, ...loan };
   };
 
   /** The whole position: cash, what is pledged and owed, and what can be spent. */
   app.get("/v1/borrow", async (c) => {
     const wallet = c.get("identity").walletAddress;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
-    return c.json(await summaryFor(wallet));
+    return c.json(await summaryFor(wallet, c.get("identity").userId));
   });
 
   /** One stock: whether Kamino accepts it, and what it can be borrowed against. */
@@ -176,7 +234,7 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
     const wallet = c.get("identity").walletAddress;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const ticker = c.req.param("ticker").toUpperCase();
-    const summary = await summaryFor(wallet);
+    const summary = await summaryFor(wallet, c.get("identity").userId);
     // Only stocks are offered here; other collateral in the market still counts in `account`.
     const row = summary.collateral.find((r) => r.isStock && r.ticker === ticker) ?? null;
     return c.json({
@@ -224,6 +282,21 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
       input.terms.collateral.find((t) => t.isStock && t.ticker === ticker.toUpperCase());
     const tokensOf = (raw: string, decimals: number) => D(raw).div(D(10).pow(decimals));
     const debt = input.position?.debtBfAdjustedUsd ?? ZERO;
+    /*
+     * Kamino's one-cent rule, checked here so it can be said plainly: after any
+     * borrow, repay, pledge or withdrawal, the debt and each stock's collateral
+     * must be worth nothing or at least the market's minimum, at Kamino's prices.
+     */
+    const min = input.terms.minPositionUsd;
+    const price = usdcPrice(input.position);
+    const owedNow = input.position?.owedUsdc ?? ZERO;
+    const pledgedOf = (ticker: string) =>
+      input.position?.deposits.find((d) => d.ticker === ticker)?.tokens ?? ZERO;
+    const dust = (message: string) => c.json(fail("dust_left", message), 409);
+    const tooSmallALoan = (amount: Decimal) =>
+      leavesDust(owedNow.add(amount).mul(price), min)
+        ? dust(`Borrow at least ${dollars(min)}: Kamino does not lend less.`)
+        : null;
 
     let intent: LendingIntent;
     switch (body.kind) {
@@ -235,6 +308,10 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
         const held = input.wallet.get(t.mint) ?? 0n;
         if (BigInt(body.tokensRaw) <= 0n || BigInt(body.tokensRaw) > held) {
           return c.json(fail("insufficient_tokens", `The wallet holds fewer ${t.symbol} than that.`), 409);
+        }
+        const pledgedAfter = pledgedOf(t.ticker).add(tokensOf(body.tokensRaw, t.decimals));
+        if (leavesDust(pledgedAfter.mul(t.pricePerToken), min)) {
+          return dust(`Pledge at least ${dollars(min)} of ${t.symbol}: Kamino does not take less.`);
         }
         if (body.kind === "deposit") {
           intent = { kind: "deposit", ticker: t.ticker, tokensRaw: body.tokensRaw };
@@ -254,6 +331,8 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
             409,
           );
         }
+        const small = tooSmallALoan(amount);
+        if (small !== null) return small;
         intent = { kind: "deposit_and_borrow", ticker: t.ticker, tokensRaw: body.tokensRaw, usd: amount };
         break;
       }
@@ -266,19 +345,40 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
             409,
           );
         }
+        const small = tooSmallALoan(amount);
+        if (small !== null) return small;
         intent = { kind: "borrow", usd: amount };
         break;
       }
       case "repay": {
-        // What is actually owed, not the borrow-factor-weighted figure the limits use.
-        const owed = input.position?.debtUsd ?? ZERO;
-        if (owed.isZero()) return c.json(fail("nothing_owed", "There is no loan to repay."), 409);
-        // Repaying everything also covers interest accrued since the last refresh, so ask for a little more.
-        const needed = body.usd === "all" ? owed.mul("1.001") : D(body.usd);
-        if (needed.gt(input.cashUsd)) {
+        // In USDC, interest included: what a repay actually sends, not Kamino's dollar value of it.
+        if (owedNow.lte(0)) return c.json(fail("nothing_owed", "There is no loan to repay."), 409);
+        if (body.usd === "all") {
+          const needed = closeLoanUsdc(owedNow, input.terms.pool.borrowApy);
+          if (needed.gt(input.cashUsd)) {
+            return c.json(
+              fail(
+                "insufficient_cash",
+                `Repaying all of it needs ${dollars(needed, Decimal.ROUND_UP)} in the wallet, to cover the interest until it lands, and the wallet holds ${dollars(input.cashUsd, Decimal.ROUND_DOWN)}.`,
+              ),
+              409,
+            );
+          }
+          intent = { kind: "repay", usd: "all" };
+          break;
+        }
+        const amount = D(body.usd);
+        if (amount.gt(input.cashUsd)) {
           return c.json(fail("insufficient_cash", "Not enough USDC in the wallet to repay that."), 409);
         }
-        intent = { kind: "repay", usd: body.usd === "all" ? "all" : D(body.usd) };
+        if (leavesDust(owedNow.sub(amount).mul(price), min)) {
+          // The most that still leaves the minimum owing, in USDC at Kamino's price.
+          const most = owedNow.sub(min.div(price)).toDecimalPlaces(2, Decimal.ROUND_DOWN);
+          return dust(
+            `That would leave less than ${dollars(min)} owing, which Kamino does not allow. Repay all of it, or at most ${dollars(most)}.`,
+          );
+        }
+        intent = { kind: "repay", usd: amount };
         break;
       }
       case "withdraw": {
@@ -290,6 +390,11 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
         const tokens = body.tokensRaw === "all" ? pledged : tokensOf(body.tokensRaw, t.decimals);
         if (tokens.lte(0) || tokens.gt(pledged)) {
           return c.json(fail("insufficient_tokens", `Only ${toWire(pledged)} ${t.symbol} is pledged.`), 409);
+        }
+        if (leavesDust(pledged.sub(tokens).mul(t.pricePerToken), min)) {
+          return dust(
+            `That would leave less than ${dollars(min)} of ${t.symbol} pledged, which Kamino does not allow. Take all of it back, or leave more.`,
+          );
         }
         if (safeLimitAfter(input, { ticker: t.ticker, tokensDelta: tokens.neg() }).lt(debt)) {
           return c.json(
@@ -305,7 +410,34 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
       }
     }
 
-    const built = await deps.lending.build(wallet, intent, deps.relay?.relayer);
+    let built;
+    try {
+      built = await deps.lending.build(wallet, intent, deps.relay?.relayer);
+    } catch (error: unknown) {
+      if (error instanceof SponsorShort) {
+        log.error(
+          {
+            relayer: error.relayer,
+            heldLamports: String(error.heldLamports),
+            neededLamports: String(error.neededLamports),
+          },
+          "the relayer is short of SOL to sponsor a loan",
+        );
+        return c.json(
+          fail("upstream_unavailable", "Borrowing is unavailable right now. Please try again shortly."),
+          503,
+        );
+      }
+      if (error instanceof LendingRefused) {
+        if (error.code === NET_VALUE_REMAINING_TOO_SMALL) {
+          return dust(
+            `Kamino does not leave a loan or a pledge worth less than ${dollars(min)}. Repay or take back all of it, or leave more.`,
+          );
+        }
+        return c.json(fail("kamino_refused", `Kamino would refuse this transaction (${error.reason}).`), 409);
+      }
+      throw error;
+    }
     if (deps.relay !== undefined) for (const m of built.messages) deps.relay.builds.remember(m);
     return c.json({
       transactions: built.transactions,

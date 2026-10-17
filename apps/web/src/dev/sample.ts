@@ -172,6 +172,13 @@ const borrow = {
   obligation: "SampleObligation11111111111111111111111111",
   // Opened already, so Mercury has nothing left to pay for it and the sheet shows no setup chip.
   setupCostUsd: null,
+  // $1,975 lent and $13.47 of interest since, in USDC; Kamino values the USDC at $0.99988.
+  owedUsdc: "1988.468616",
+  principalUsdc: "1975",
+  interestUsdc: "13.468616",
+  // What is owed and an hour of interest at 5.78%, up to the micro-USDC.
+  closeLoanUsdc: "1988.481737",
+  minPositionUsd: "0.01",
   collateral: [
     { ...row("cbBTC", 0.75, 0.8, 84_720, 0.07, 0), isStock: false },
     row("SPY", 0.73, 0.75, 664.22, 3, 2.998),

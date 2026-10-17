@@ -29,6 +29,7 @@ const terms = (): LendingTerms => ({
       depositedTokens: ZERO,
     },
   ],
+  minPositionUsd: D("0.01"),
   pool: {
     reserve: "usdc",
     availableUsd: D("1000000"),
@@ -54,6 +55,7 @@ const position = (debt: string): LendingPosition => ({
     },
   ],
   debtUsd: D(debt),
+  owedUsdc: D(debt),
   debtBfAdjustedUsd: D(debt),
   allowedBorrowUsd: D("73"),
   liquidationBorrowUsd: D("75"),
