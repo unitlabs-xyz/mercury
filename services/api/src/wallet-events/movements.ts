@@ -190,10 +190,10 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
             ? "Added cash"
             : "Sent cash"
           : usdc > 0n
-            ? "Cash from a basket"
-            : "Cash to a basket",
+            ? "Moved from basket"
+            : "Moved to basket",
       subtitle:
-        charge === 0n ? null : `Plus $${trim(scaled(charge, USDC_DECIMALS), 2)} to open their USDC account`,
+        charge === 0n ? null : `Plus $${trim(scaled(charge, USDC_DECIMALS), 2)} recipient account setup`,
       // USDC is a dollar. No price lookup, and none to be wrong about.
       amountUsd: amount,
       ...(basket === undefined ? {} : { basketPortfolioId: basket }),

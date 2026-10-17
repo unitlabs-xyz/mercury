@@ -105,7 +105,8 @@ describe("planReconciliation: a dividend", () => {
     // shares", not "1 shares" — the failure mode of a trim that strips
     // trailing zeros without checking for a decimal point first.
     const plan = planReconciliation([withLot({ multiplier: D(101) })], NOW);
-    expect(plan.activity[0]!.subtitle).toBe("100 shares added, at no cost");
+    expect(plan.activity[0]!.subtitle).toBe("Paid as 100 shares");
+    expect(plan.activity[0]!.title).toMatch(/^[A-Z]+ dividend$/);
   });
 
   it("makes the average cost per share fall, which is the whole point", () => {

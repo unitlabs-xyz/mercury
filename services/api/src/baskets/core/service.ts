@@ -653,7 +653,7 @@ export class BasketService {
       userId,
       slug,
       portfolioId: portfolio.portfolioId,
-      title: `Funded ${template.name}`,
+      title: `Invested in ${template.name}`,
       signature,
       mint: USDC_MINT,
       amountRaw,
@@ -691,12 +691,12 @@ export class BasketService {
           occurredAt: action.createdAt.toISOString(),
           title:
             action.kind === "enroll"
-              ? `Enrolled in ${template.name}`
+              ? `Joined ${template.name}`
               : action.kind === "withdraw_in_kind"
-                ? `Withdrew ${template.name} assets`
+                ? `Withdrew from ${template.name}`
                 : action.kind === "liquidate_to_usdc"
-                  ? `Exited ${template.name} to USDC`
-                  : "Manual rebalance",
+                  ? `Sold ${template.name} to cash`
+                  : `Rebalanced ${template.name}`,
           subtitle: action.kind === "enroll" ? "Portfolio created" : (state ?? "Status unavailable"),
           amountUsd: null,
           tokenQuantity: null,
@@ -711,7 +711,7 @@ export class BasketService {
         kind: "basket_funding",
         occurredAt: item.occurredAt.toISOString(),
         title: item.title,
-        subtitle: "Transfer between your accounts",
+        subtitle: "Between accounts",
         amountUsd: item.amountUsd,
         tokenQuantity: null,
         txSignature: item.txSignature,
