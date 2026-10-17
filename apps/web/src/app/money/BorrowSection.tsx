@@ -5,7 +5,7 @@ import type { Tab } from "../borrow/BorrowSheet";
 import { usePanels } from "../Panels";
 import { Button } from "../../ui/Button";
 import { GlideRows, InfoTip, MoveChip, StatusChip, type Tone } from "../../ui/ds";
-import { pct, usd } from "@mercury/view";
+import { ceilCents, interestText, monthlyInterestText, pct, usd } from "@mercury/view";
 import { Mark } from "../invest/shared";
 import { HeaderFigure } from "../portfolio/Summary";
 import { Skeleton } from "../portfolio/ui";
@@ -99,11 +99,12 @@ export const BorrowSection = () => {
         <>
           <div className="mt-[11px] rounded-lg bg-ds-panel px-5 py-5">
             <dl className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
+              {/* What was lent, apart from the interest on it; the whole debt is what repaying it all takes. */}
               <HeaderFigure
                 size="md"
                 label="Borrowed"
-                value={usd(b.debtUsd)}
-                sub={`${pct(b.borrowApy * 100, 1)} a year, variable`}
+                value={usd(b.principalUsdc ?? b.owedUsdc)}
+                sub={b.owedUsdc > 0 ? `${usd(ceilCents(b.owedUsdc))} to repay in full` : "Nothing borrowed"}
               />
               <HeaderFigure
                 size="md"
@@ -119,29 +120,21 @@ export const BorrowSection = () => {
                 value={usd(b.collateralUsd)}
                 sub="Still yours, still moving"
               />
+              {/*
+               * Interest in its own tile, where the margin-call distance was: a
+               * loan grows by it every slot, and nothing else on the card said so.
+               * The distance to a sale stays under the meter, and LoanAlert still
+               * warns as a loan nears a margin call.
+               */}
               <HeaderFigure
                 size="md"
-                label={
-                  b.health === "healthy" || b.health === "over_limit"
-                    ? "Margin call if it falls"
-                    : "Kamino sells if it falls"
-                }
-                value={
-                  b.debtUsd <= 0
-                    ? "—"
-                    : b.health === "healthy" || b.health === "over_limit"
-                      ? pctOf(b.dropToMarginCall)
-                      : pctOf(b.safeUntilDrop)
-                }
-                sub={b.debtUsd <= 0 ? "No loan" : `Kamino sells at ${pctOf(b.safeUntilDrop)} down`}
-                tone={
-                  b.debtUsd <= 0
-                    ? undefined
-                    : b.health === "margin_call" || b.health === "liquidation"
-                      ? "down"
-                      : b.health === "over_limit" || (b.dropToMarginCall ?? 1) < 0.1
-                        ? "warn"
-                        : "up"
+                label="Interest so far"
+                value={b.owedUsdc > 0 ? interestText(b.interestUsdc) : "—"}
+                // One line in a quarter of the card: with a loan, the month's estimate takes the room "variable" had.
+                sub={
+                  b.owedUsdc > 0
+                    ? `${pct(b.borrowApy * 100, 1)} a year · ${monthlyInterestText(b)}`
+                    : `${pct(b.borrowApy * 100, 1)} a year, variable`
                 }
               />
             </dl>
