@@ -3,10 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useMoney, usePortfolio, useSignedIn } from "../api/hooks";
 import { useAuthModal } from "../auth/AuthContext";
-import { Check, ChevronDown, Copy, Help, Message, SignOut } from "../ui/icons";
+import { Check, ChevronDown, Copy, Help, Message, SignOut, Users } from "../ui/icons";
 import { Button } from "../ui/Button";
 import { useUsdcAck } from "./usdcAck";
 import { openFeedback } from "./Feedback";
+import { usePanels } from "./Panels";
 import { usd } from "@mercury/view";
 import { Skeleton } from "./portfolio/ui";
 
@@ -15,7 +16,7 @@ const short = (a: string) => (a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}
 /**
  * The account. The bar carries who you are and nothing else, so the header
  * stays quiet; opening it gives the email, the wallet address, the cash you
- * can spend, and the two things that are not a place to go.
+ * can spend, and the three things that are not a place to go.
  *
  * It used to list Portfolio, Money and Activity. All three sit in the nav to
  * the left at every width, so the menu was a second copy of a nav the reader
@@ -28,6 +29,7 @@ export const AccountMenu = () => {
   const auth = useAuthModal();
   const money = useMoney();
   const portfolio = usePortfolio();
+  const panels = usePanels();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [acked, ack] = useUsdcAck();
@@ -193,6 +195,17 @@ export const AccountMenu = () => {
                 a place to go. Sign out stays muted, so the pair does not read as
                 two equal offers. */}
             <div className="flex flex-col gap-px rounded-lg bg-ds-panel p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  panels.invite();
+                }}
+                className={`${row} text-ds-ink`}
+              >
+                <Users className="size-4 shrink-0 text-ds-muted [stroke-width:1.5]" />
+                Invite friends
+              </button>
               {/* Opens the feedback panel: a message and screenshots, straight to the team. */}
               <button
                 type="button"

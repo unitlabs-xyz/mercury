@@ -823,6 +823,16 @@ const sampleTokens = (path: string) => {
   return { tokens };
 };
 
+const SAMPLE_REFERRALS = {
+  code: "ada-0042",
+  link: "https://trymercury.xyz/?ref=ada-0042",
+  invited: 7,
+  funded: 3,
+  founding: true,
+  share: "0.3",
+  discountUntil: null,
+};
+
 export const sampleResponse = (path: string, body?: string): unknown | undefined => {
   const route = path.split("?")[0] ?? path;
   if (route === "/v1/portfolio") return portfolio;
@@ -843,5 +853,6 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
     return { range, points: SAMPLE_HISTORY[range] ?? SAMPLE_HISTORY["1D"] };
   }
   if (route === "/v1/referrals/claim") return { status: "claimed" };
+  if (route === "/v1/referrals") return SAMPLE_REFERRALS;
   return undefined;
 };

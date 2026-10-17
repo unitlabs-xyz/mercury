@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AddCash } from "./AddCash";
 import { BorrowSheet, type Tab } from "./borrow/BorrowSheet";
+import { Invite } from "./Invite";
 import { Send } from "./Send";
 
 const BORROW_TABS: readonly Tab[] = ["borrow", "repay", "pledge", "withdraw"];
 
 /** The query keys a panel owns, so opening one never leaves another's behind. */
-const KEYS = ["add", "send", "borrow", "ticker", "only"] as const;
+const KEYS = ["add", "send", "borrow", "ticker", "only", "invite"] as const;
 
 /**
  * Opens and closes the app's side panels from anywhere, on top of whatever page
@@ -31,6 +32,7 @@ export const usePanels = () => {
     params,
     addCash: () => set({ add: "cash" }),
     send: () => set({ send: "usdc" }),
+    invite: () => set({ invite: "1" }),
     borrow: (tab: Tab = "borrow", ticker?: string) => set({ borrow: tab, ticker }),
     close: () =>
       setParams(
@@ -60,10 +62,12 @@ export const GlobalPanels = () => {
   const sending = params.get("send") !== null;
   const tab = params.get("borrow") as Tab | null;
   const borrowing = tab !== null && BORROW_TABS.includes(tab);
+  const inviting = params.get("invite") === "1";
 
   const addSeen = useSeen(adding);
   const sendSeen = useSeen(sending);
   const borrowSeen = useSeen(borrowing);
+  const inviteSeen = useSeen(inviting);
   // The last tab asked for, so the borrow panel keeps its title while it slides away.
   const [lastTab, setLastTab] = useState<Tab>("borrow");
   if (borrowing && tab !== lastTab) setLastTab(tab);
@@ -72,6 +76,7 @@ export const GlobalPanels = () => {
     <>
       {addSeen && <AddCash open={adding} onClose={close} />}
       {sendSeen && <Send open={sending} onClose={close} />}
+      {inviteSeen && <Invite open={inviting} onClose={close} />}
       {borrowSeen && (
         <BorrowSheet
           open={borrowing}

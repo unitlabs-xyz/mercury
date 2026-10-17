@@ -62,7 +62,7 @@ export const QrBlock = ({ value, size = 112 }: { value?: string | undefined; siz
 };
 
 /** A button's contents crossfading to what it says now, instead of snapping. */
-const Swap = ({ k, children }: { k: string; children: ReactNode }) => (
+export const Swap = ({ k, children }: { k: string; children: ReactNode }) => (
   <AnimatePresence mode="wait" initial={false}>
     <motion.span
       key={k}
@@ -78,7 +78,7 @@ const Swap = ({ k, children }: { k: string; children: ReactNode }) => (
 );
 
 /** A button that says it worked for a moment after it did. */
-const useFlag = () => {
+export const useFlag = () => {
   const [on, setOn] = useState(false);
   return [on, () => (setOn(true), setTimeout(() => setOn(false), 1600))] as const;
 };
