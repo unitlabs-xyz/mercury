@@ -16,7 +16,11 @@ import {
 /** The waitlist's founding cohort: the first 500 places. */
 const FOUNDING = 500;
 
-/** What a claim came to. Only `claimed` writes anything. */
+/**
+ * What a claim came to. Only `claimed` writes a referral. Resolving a waitlist
+ * slug may also give its holder their code (via `codeFor`), whatever the
+ * outcome.
+ */
 export type ClaimResult =
   | { readonly kind: "claimed" | "already"; readonly inviterId: string }
   | { readonly kind: "unknown_code" | "self" | "taken" | "too_late" };

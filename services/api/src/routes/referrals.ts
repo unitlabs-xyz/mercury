@@ -35,8 +35,8 @@ export function referralRoutes(deps: ReferralDeps): Hono {
 
   /*
    * Called by the web once someone is signed in with a code waiting. Every
-   * refusal is final, and the web drops the code on any 4xx, so the codes say
-   * why for the logs rather than for a screen.
+   * refusal is final, and the web drops the code on any 4xx except 401, 408
+   * and 429, so the codes say why for the logs rather than for a screen.
    */
   app.post("/v1/referrals/claim", async (c) => {
     const parsed = ClaimReferralRequest.safeParse(await c.req.json().catch(() => null));

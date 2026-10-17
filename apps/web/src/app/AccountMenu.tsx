@@ -191,9 +191,9 @@ export const AccountMenu = () => {
               )}
             </AnimatePresence>
 
-            {/* What is left once the destinations go: the two things that are not
-                a place to go. Sign out stays muted, so the pair does not read as
-                two equal offers. */}
+            {/* What is left once the destinations go: the things that are not a
+                place to go. Sign out stays muted, so it does not read as one
+                more equal offer beside Invite friends and Support. */}
             <div className="flex flex-col gap-px rounded-lg bg-ds-panel p-1">
               <button
                 type="button"
