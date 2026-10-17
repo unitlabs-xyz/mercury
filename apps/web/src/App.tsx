@@ -5,6 +5,7 @@ import { Suspense, lazy, useEffect, useLayoutEffect, useRef } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigationType } from "react-router-dom";
 import { Login, RequireAuth } from "./auth/Login";
 import { EASE } from "./motion/config";
+import { ClaimReferral } from "./referrals/ClaimReferral";
 
 /**
  * Sign-in ships eagerly because it is the first paint for anyone arriving cold.
@@ -73,6 +74,7 @@ export const App = () => (
   <MotionConfig reducedMotion="user" transition={{ duration: 0.4, ease: EASE }}>
     <QueryClientProvider client={queryClient}>
       <ForgetOnSignOut />
+      <ClaimReferral />
       <BrowserRouter>
         <ScrollToTop />
         <Suspense fallback={<RouteFallback />}>

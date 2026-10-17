@@ -842,5 +842,6 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
     const range = new URLSearchParams(path.split("?")[1] ?? "").get("range") ?? "1D";
     return { range, points: SAMPLE_HISTORY[range] ?? SAMPLE_HISTORY["1D"] };
   }
+  if (route === "/v1/referrals/claim") return { status: "claimed" };
   return undefined;
 };
