@@ -298,7 +298,7 @@ export const planBorrow = (
       drop: safeUntil(b, b.debtUsd + value, after),
       deposits: after,
       ...(tokens > 0
-        ? { note: `Pledges ${tokens.toFixed(4)} ${row.ticker}x to Kamino. The shares stay yours.` }
+        ? { note: `Adds ${tokens.toFixed(4)} ${row.ticker}x as collateral on Kamino. The shares stay yours.` }
         : {}),
     };
     if (value > max + 0.005) blocked = `At most ${usd(max)} at the 80% safety target.`;
@@ -346,7 +346,7 @@ export const planBorrow = (
     };
     if (value > max + 1e-9) blocked = `Only ${max.toFixed(4)} ${row.ticker}x is free in the wallet.`;
     else if (value > 0 && leavesDust(b, (row.depositedTokens + value) * row.pricePerToken))
-      blocked = `Pledge at least ${usd(b.minPositionUsd)} of ${row.ticker}x: Kamino does not take less.`;
+      blocked = `Add at least ${usd(b.minPositionUsd)} of ${row.ticker}x as collateral: Kamino does not take less.`;
   } else if (b && tab === "withdraw" && row) {
     const spare = safePledged(b, (r) => r.depositedTokens) - b.debtUsd;
     const perToken = row.pricePerToken * row.ltv * b.safetyTarget;

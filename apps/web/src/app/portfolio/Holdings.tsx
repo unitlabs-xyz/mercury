@@ -69,10 +69,10 @@ const Line = ({ r, providers }: { r: Row; providers: readonly Issuer[] | undefin
             {pledged > 0 && (
               <span
                 className="shrink-0 uppercase"
-                title={`${pledged.toFixed(3)} shares pledged to Kamino as collateral. Still yours; withdraw them to sell.`}
+                title={`${pledged.toFixed(3)} shares held as collateral on Kamino. Still yours; withdraw them to sell.`}
               >
                 <StatusChip tone="neutral">
-                  {pledged >= r.shares - 1e-9 ? "Pledged" : `${Number(pledged.toFixed(2))} pledged`}
+                  {pledged >= r.shares - 1e-9 ? "Collateral" : `${Number(pledged.toFixed(2))} as collateral`}
                 </StatusChip>
               </span>
             )}
@@ -299,7 +299,7 @@ export const Holdings = ({
                   className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}
                 >
                   <span>Name</span>
-                  <span className="text-right" title="Wallet and pledged value">
+                  <span className="text-right" title="Wallet and collateral value">
                     Value
                   </span>
                   <span className="text-right">Weight</span>
@@ -308,7 +308,7 @@ export const Holdings = ({
                   <span className="pr-1.5 text-right">Today</span>
                   <span
                     className="text-right"
-                    title="Share price movement since purchase, on wallet and pledged shares with a recorded cost basis. Fees and spread are shown on each row."
+                    title="Share price movement since purchase, on wallet and collateral shares with a recorded cost basis. Fees and spread are shown on each row."
                   >
                     Return
                   </span>

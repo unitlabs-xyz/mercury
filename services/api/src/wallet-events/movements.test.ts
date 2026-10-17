@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TokenBalanceEntry, TransactionDetail } from "@mercury/chain";
 import { USDC_MINT } from "@mercury/chain";
-import { movementsIn, NATIVE_SOL_MINT } from "./movements.js";
+import { movementsIn, NATIVE_SOL_MINT, transferParties } from "./movements.js";
 
 const WALLET = "6Yg9nNQEqCQBMcYHLrrfj6qGjcR6hvhdhHQZPjtDqLRT";
 const OTHER = "FMVHP1xw6ZHB9zLGyrJeeAvEzCBgouH8bPzdkYqq2C5W";
@@ -277,7 +277,7 @@ describe("movementsIn — a basket's own smart account", () => {
     // Still a transfer from the wallet's side, and still in the feed: what
     // changes is that it is not counted as money leaving the account.
     expect(m!.kind).toBe("transfer_out");
-    expect(m!.title).toBe("Cash to a basket");
+    expect(m!.title).toBe("Moved to basket");
   });
 
   it("marks an exit the same way, coming back", () => {
@@ -288,7 +288,7 @@ describe("movementsIn — a basket's own smart account", () => {
     const [m] = movementsIn(exit, withBaskets);
     expect(m!.basketPortfolioId).toBe(PORTFOLIO);
     expect(m!.kind).toBe("transfer_in");
-    expect(m!.title).toBe("Cash from a basket");
+    expect(m!.title).toBe("Moved from basket");
   });
 
   it("leaves an ordinary deposit alone, which is cash crossing the edge", () => {
@@ -353,7 +353,7 @@ describe("movementsIn — a sponsored transfer", () => {
     expect(m).toHaveLength(1);
     expect(m[0]!.kind).toBe("transfer_out");
     expect(m[0]!.amountUsd!.toFixed()).toBe("20");
-    expect(m[0]!.subtitle).toBe("Plus $0.25 to open their USDC account");
+    expect(m[0]!.subtitle).toBe("Plus $0.25 recipient account setup");
   });
 
   it("nets the charge in when it has no relayer to recognise", () => {
@@ -402,5 +402,63 @@ describe("movementsIn — a sponsored transfer", () => {
     );
     expect(m[0]!.kind).toBe("transfer_in");
     expect(m[0]!.amountUsd!.toFixed()).toBe("50");
+  });
+});
+
+describe("transferParties", () => {
+  const RELAYER = "4bXpkay5mCujD5BnjtpBGXLbuAZ2rUKhbfW8QBtQxrRm";
+
+  it("names the wallet the dollars went to", () => {
+    const parties = transferParties(
+      tx({
+        preTokens: [usdc(WALLET, 100_000_000n), usdc(OTHER, 5_000_000n)],
+        postTokens: [usdc(WALLET, 80_000_000n), usdc(OTHER, 25_000_000n)],
+      }),
+      { wallet: WALLET, mint: USDC_MINT },
+    );
+    expect(parties.counterparty).toBe(OTHER);
+    expect(parties.accountSetupUsd).toBeNull();
+  });
+
+  it("names the wallet the dollars came from", () => {
+    const parties = transferParties(
+      tx({
+        preTokens: [usdc(WALLET, 0n), usdc(OTHER, 50_000_000n)],
+        postTokens: [usdc(WALLET, 50_000_000n), usdc(OTHER, 0n)],
+      }),
+      { wallet: WALLET, mint: USDC_MINT },
+    );
+    expect(parties.counterparty).toBe(OTHER);
+  });
+
+  /* The relayer is paid in the same transaction; it is not who the money was for. */
+  it("does not mistake the relayer for the recipient, and says what it charged", () => {
+    const parties = transferParties(
+      tx({
+        preTokens: [usdc(WALLET, 100_000_000n), usdc(RELAYER, 7_000_000n)],
+        postTokens: [usdc(WALLET, 79_750_000n), usdc(RELAYER, 7_250_000n), usdc(OTHER, 20_000_000n)],
+      }),
+      { wallet: WALLET, mint: USDC_MINT, relayer: RELAYER },
+    );
+    expect(parties.counterparty).toBe(OTHER);
+    expect(parties.accountSetupUsd?.toFixed()).toBe("0.25");
+  });
+
+  it("names nobody when nobody else's balance moved the other way", () => {
+    const parties = transferParties(
+      tx({ preTokens: [usdc(WALLET, 0n)], postTokens: [usdc(WALLET, 50_000_000n)] }),
+      { wallet: WALLET, mint: USDC_MINT },
+    );
+    expect(parties.counterparty).toBeNull();
+  });
+
+  /* The fee payer's balance carries the network fee, which is not part of what was sent. */
+  it("names the other side of a SOL transfer", () => {
+    const parties = transferParties(
+      tx({ preLamports: [1_000_000_000n, 0n], postLamports: [899_995_000n, 100_000_000n] }),
+      { wallet: WALLET, mint: NATIVE_SOL_MINT },
+    );
+    expect(parties.counterparty).toBe(OTHER);
+    expect(parties.accountSetupUsd).toBeNull();
   });
 });

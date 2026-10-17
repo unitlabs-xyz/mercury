@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
+import type { ReceiptDetail } from "../portfolio/receipt.js";
 
 export interface ActivityRow {
   readonly id: string;
@@ -23,6 +24,15 @@ export interface Cursor {
 
 export interface ActivityDeps {
   readonly read: (userId: string, limit: number, cursor: Cursor | null) => Promise<readonly ActivityRow[]>;
+  /**
+   * One row and what it is made of. Null when the row is not this account's,
+   * which is the same answer as no row at all.
+   */
+  readonly receipt: (
+    userId: string,
+    wallet: string | null,
+    id: string,
+  ) => Promise<{ readonly row: ActivityRow; readonly detail: ReceiptDetail | null } | null>;
 }
 
 const DEFAULT_LIMIT = 25;
@@ -49,6 +59,18 @@ export const decodeCursor = (raw: string): Cursor | null => {
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
+const wire = (i: ActivityRow) => ({
+  id: i.id,
+  kind: i.kind,
+  occurredAt: i.occurredAt.toISOString(),
+  title: i.title,
+  subtitle: i.subtitle,
+  mint: i.mint,
+  logoUrl: i.logoUrl,
+  amountUsd: i.amountUsd,
+  txSignature: i.txSignature,
+});
+
 export function activityRoutes(deps: ActivityDeps): Hono {
   const app = new Hono();
 
@@ -69,23 +91,25 @@ export function activityRoutes(deps: ActivityDeps): Hono {
     const last = items[items.length - 1];
 
     return c.json({
-      items: items.map((i) => ({
-        id: i.id,
-        kind: i.kind,
-        occurredAt: i.occurredAt.toISOString(),
-        title: i.title,
-        subtitle: i.subtitle,
-        mint: i.mint,
-        logoUrl: i.logoUrl,
-        amountUsd: i.amountUsd,
-        txSignature: i.txSignature,
-      })),
+      items: items.map(wire),
       // A full page means there is probably another. An empty one never has.
       nextCursor:
         items.length === limit && last !== undefined
           ? encodeCursor({ occurredAt: last.occurredAt, id: last.id })
           : null,
     });
+  });
+
+  /*
+   * A receipt: the row again, with the record behind it read back — the fee
+   * in a trade, both halves of a pledge-and-borrow, who a send went to. Fetched
+   * when somebody opens a row, so the feed itself stays one cheap query.
+   */
+  app.get("/v1/activity/:id", async (c) => {
+    const identity = c.get("identity");
+    const found = await deps.receipt(identity.userId, identity.walletAddress, c.req.param("id"));
+    if (found === null) return c.json(fail("not_found", "There is no such event on this account."), 404);
+    return c.json({ item: wire(found.row), detail: found.detail });
   });
 
   return app;

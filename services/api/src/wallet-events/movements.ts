@@ -116,7 +116,11 @@ const basketFor = (tx: TransactionDetail, ctx: MovementContext): string | undefi
  * making a transfer, not paying a fee, and reporting it as $0 would be worse
  * than the error this exists to fix.
  */
-const sponsorCharge = (tx: TransactionDetail, ctx: MovementContext, movedOut: bigint): bigint => {
+const sponsorCharge = (
+  tx: TransactionDetail,
+  ctx: Pick<MovementContext, "wallet" | "relayer">,
+  movedOut: bigint,
+): bigint => {
   if (ctx.relayer === undefined || ctx.relayer === ctx.wallet) return 0n;
   const gain =
     sumOwned(tx.postTokens, ctx.relayer, USDC_MINT) - sumOwned(tx.preTokens, ctx.relayer, USDC_MINT);
@@ -186,10 +190,10 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
             ? "Added cash"
             : "Sent cash"
           : usdc > 0n
-            ? "Cash from a basket"
-            : "Cash to a basket",
+            ? "Moved from basket"
+            : "Moved to basket",
       subtitle:
-        charge === 0n ? null : `Plus $${trim(scaled(charge, USDC_DECIMALS), 2)} to open their USDC account`,
+        charge === 0n ? null : `Plus $${trim(scaled(charge, USDC_DECIMALS), 2)} recipient account setup`,
       // USDC is a dollar. No price lookup, and none to be wrong about.
       amountUsd: amount,
       ...(basket === undefined ? {} : { basketPortfolioId: basket }),
@@ -227,3 +231,48 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
 
   return moved;
 }
+
+/**
+ * Who was on the other side of a transfer, and what a send paid to open their
+ * account: what a receipt says about a "Sent cash" or "Added cash" row.
+ *
+ * Not stored on the row, because nothing needed it until a receipt did, and
+ * every past transfer can answer it from its own transaction. The other side
+ * is whoever's balance of the same asset moved the opposite way, the most —
+ * never the relayer, which takes its charge in the same message and is not who
+ * the money was for. Null when nobody's did, which is the honest answer for a
+ * transaction this cannot read plainly.
+ */
+export const transferParties = (
+  tx: TransactionDetail,
+  ctx: { readonly wallet: string; readonly mint: string; readonly relayer?: string },
+): { readonly counterparty: string | null; readonly accountSetupUsd: Decimal | null } => {
+  const sol = ctx.mint === NATIVE_SOL_MINT;
+  // The fee payer's lamports carry the network fee, which was not sent to anybody.
+  const lamports = (i: number) =>
+    (tx.postLamports[i] ?? 0n) - (tx.preLamports[i] ?? 0n) + (i === 0 ? tx.feeLamports : 0n);
+  const change = (who: string) =>
+    sol
+      ? tx.accountKeys.includes(who)
+        ? lamports(tx.accountKeys.indexOf(who))
+        : 0n
+      : sumOwned(tx.postTokens, who, ctx.mint) - sumOwned(tx.preTokens, who, ctx.mint);
+
+  const mine = change(ctx.wallet);
+  const others = sol
+    ? tx.accountKeys
+    : [...tx.preTokens, ...tx.postTokens].filter((e) => e.mint === ctx.mint).map((e) => e.owner);
+
+  let counterparty: string | null = null;
+  let most = 0n;
+  for (const who of new Set(others)) {
+    if (who === null || who === ctx.wallet || who === ctx.relayer) continue;
+    const moved = change(who);
+    if (moved === 0n || moved > 0n === mine > 0n || abs(moved) <= most) continue;
+    most = abs(moved);
+    counterparty = who;
+  }
+
+  const charge = ctx.mint === USDC_MINT && mine < 0n ? sponsorCharge(tx, ctx, abs(mine)) : 0n;
+  return { counterparty, accountSetupUsd: charge === 0n ? null : scaled(charge, USDC_DECIMALS) };
+};

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { ActivityReceipt } from "./ActivityReceipt";
 import { AddCash } from "./AddCash";
 import { BorrowSheet, type Tab } from "./borrow/BorrowSheet";
 import { Invite } from "./Invite";
@@ -8,13 +9,14 @@ import { Send } from "./Send";
 const BORROW_TABS: readonly Tab[] = ["borrow", "repay", "pledge", "withdraw"];
 
 /** The query keys a panel owns, so opening one never leaves another's behind. */
-const KEYS = ["add", "send", "borrow", "ticker", "only", "invite"] as const;
+const KEYS = ["add", "send", "borrow", "ticker", "only", "event", "invite"] as const;
 
 /**
  * Opens and closes the app's side panels from anywhere, on top of whatever page
  * you are on: each panel is a query on the current URL (`?add=cash`,
  * `?send=usdc`, `?borrow=repay&ticker=SPY`; add `&only=1` to keep the borrow
- * panel to that one stock), so a button on Portfolio opens it
+ * panel to that one stock; `?event=<id>` for an activity row's receipt), so a
+ * button on Portfolio opens it
  * over Portfolio, a link can open it, and Back closes it.
  */
 export const usePanels = () => {
@@ -34,6 +36,7 @@ export const usePanels = () => {
     send: () => set({ send: "usdc" }),
     invite: () => set({ invite: "1" }),
     borrow: (tab: Tab = "borrow", ticker?: string) => set({ borrow: tab, ticker }),
+    receipt: (id: string) => set({ event: id }),
     close: () =>
       setParams(
         (p) => {
@@ -63,11 +66,16 @@ export const GlobalPanels = () => {
   const tab = params.get("borrow") as Tab | null;
   const borrowing = tab !== null && BORROW_TABS.includes(tab);
   const inviting = params.get("invite") === "1";
+  const event = params.get("event");
 
   const addSeen = useSeen(adding);
   const sendSeen = useSeen(sending);
   const borrowSeen = useSeen(borrowing);
   const inviteSeen = useSeen(inviting);
+  const receiptSeen = useSeen(event !== null);
+  // The last receipt asked for, so it keeps its contents while it fades away.
+  const [lastEvent, setLastEvent] = useState<string | null>(event);
+  if (event !== null && event !== lastEvent) setLastEvent(event);
   // The last tab asked for, so the borrow panel keeps its title while it slides away.
   const [lastTab, setLastTab] = useState<Tab>("borrow");
   if (borrowing && tab !== lastTab) setLastTab(tab);
@@ -86,6 +94,7 @@ export const GlobalPanels = () => {
           only={params.get("only") === "1"}
         />
       )}
+      {receiptSeen && <ActivityReceipt id={event ?? lastEvent} open={event !== null} onClose={close} />}
     </>
   );
 };

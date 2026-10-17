@@ -5,7 +5,10 @@ export interface Alert {
   readonly health: Health;
   readonly subject: string;
   readonly body: string;
-  /** For the feed, where there is no room for the body. */
+  /**
+   * For the feed, where there is no room for the body: a label, as every row's
+   * title is. The mail is written to somebody and says "your"; the feed does not.
+   */
   readonly title: string;
 }
 
@@ -52,7 +55,7 @@ export const alertFor = (
     case "liquidation":
       return {
         health: now,
-        title: "Kamino is selling your collateral",
+        title: "Liquidation in progress",
         subject: "Your collateral is being sold",
         body:
           `Your loan of ${owed} has reached the point where Kamino sells the stock behind it, ` +
@@ -61,7 +64,7 @@ export const alertFor = (
     case "margin_call":
       return {
         health: now,
-        title: "Your loan needs attention today",
+        title: "Liquidation risk",
         subject: "Repay now, or your shares will be sold",
         body:
           `Your stocks have fallen far enough that your loan of ${owed} is close to the point ` +
@@ -74,7 +77,7 @@ export const alertFor = (
     case "over_limit":
       return {
         health: now,
-        title: "Your loan is past its limit",
+        title: "Loan over limit",
         subject: "Your loan is past its safe limit",
         body:
           `Your stocks have fallen and your loan of ${owed} is now past the limit we lend to. ` +

@@ -1,6 +1,6 @@
 import type { Money, Portfolio } from "@mercury/types";
 import type { Dashboard } from "../api/dashboard";
-import type { Event } from "@mercury/view";
+import { toEvent, type ActivityReceipt, type Event } from "@mercury/view";
 
 /**
  * SAMPLE DATA, FOR LOOKING AT THE DESIGN.
@@ -230,97 +230,229 @@ const SOL = "So11111111111111111111111111111111111111112";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const xstock = (symbol: string) => `https://xstocks-metadata.backed.fi/logos/tokens/${symbol}.png`;
 
-export const SAMPLE_EVENTS: Event[] = [
+/**
+ * The sample feed, as the API sends it, with the receipt behind each row.
+ *
+ * Kept as wire rows rather than screen events so sample mode runs the same
+ * mapping a real feed does — `toEvent` for the list, `receiptOf` for a row
+ * opened — and a broken one shows in design review rather than in production.
+ */
+const at = (offset: number, time = "14:32") => `${day(offset)}T${time}:00.000Z`;
+const FRIEND = "FMVHP1xw6ZHB9zLGyrJeeAvEzCBgouH8bPzdkYqq2C5W";
+/** A signature-shaped string, distinct per row. Sample mode never sends one anywhere. */
+const sampleSig = (n: number) =>
+  `${n}MRg8vcaYzjDoU1ZBuMgCncMQe5DSUPeVvDc4wTXKQatxWoTeDuAMzWz7SEyLj39bFWmaVQZRDiHwersgCVT4bw`;
+
+/** One pledge-and-borrow: both of its rows open the same receipt. */
+const sampleLoan: ActivityReceipt["detail"] = {
+  type: "loan",
+  legs: [
+    { kind: "pledge", usdAmount: null, ticker: "SPY", tokens: "5.95" },
+    { kind: "borrow", usdAmount: "1975", ticker: "SPY", tokens: null },
+  ],
+  borrowApy: "0.058",
+  debtAfterUsd: "1975",
+  collateralAfterUsd: "4115.02",
+  openedAccount: true,
+  interestPaidUsd: null,
+};
+
+const SAMPLE_RECEIPTS: ActivityReceipt[] = [
   {
-    date: day(0),
-    kind: "receive",
-    title: "Added cash",
-    sub: "",
-    amount: "$250.00",
-    flow: "in",
-    mint: USDC,
-    details: [],
+    item: {
+      id: "s-deposit",
+      kind: "transfer_in",
+      occurredAt: at(0, "15:10"),
+      title: "Added cash",
+      subtitle: "From Base · cbBTC",
+      amountUsd: "250",
+      txSignature: sampleSig(1),
+      mint: USDC,
+      logoUrl: null,
+    },
+    detail: {
+      type: "deposit",
+      fromChain: "Base",
+      fromToken: "cbBTC",
+      mercuryFeeUsd: "0.63",
+      sourceTx: "0x8f2c41d07be3a95c6f1e0d2b7a4c9e81f3d5b6a7c8e9f0a1b2c3d4e5f6a7b8c9",
+    },
   },
   {
-    date: day(0),
-    kind: "receive",
-    title: "Received SOL",
-    sub: "",
-    amount: "$2.31",
-    flow: "in",
-    mint: SOL,
-    details: [],
+    item: {
+      id: "s-sol",
+      kind: "transfer_in",
+      occurredAt: at(0, "11:02"),
+      title: "Received SOL",
+      subtitle: "0.0154 SOL",
+      amountUsd: null,
+      txSignature: sampleSig(2),
+      mint: SOL,
+      logoUrl: null,
+    },
+    detail: { type: "transfer", counterparty: FRIEND, accountSetupUsd: null },
   },
   {
-    date: day(0),
-    kind: "buy",
-    title: "Bought SpaceX",
-    sub: "0.0335 shares at $149.17",
-    amount: "$5.00",
-    flow: "out",
-    logo: xstock("SPCXx"),
-    details: [],
+    item: {
+      id: "s-buy-spacex",
+      kind: "buy",
+      occurredAt: at(0, "10:41"),
+      title: "Bought SpaceX",
+      subtitle: "0.03191 shares at $149.17",
+      amountUsd: "5",
+      txSignature: sampleSig(3),
+      mint: "SPCXxSample1111111111111111111111111111111",
+      logoUrl: xstock("SPCXx"),
+    },
+    detail: {
+      type: "trade",
+      side: "buy",
+      ticker: "SPCX",
+      shares: "0.03191",
+      pricePerShare: "149.17",
+      referencePricePerShare: "149.01",
+      sharesUsd: "4.76",
+      mercuryFeeUsd: "0.03",
+      networkFeeUsd: "0.21",
+      realisedPnlUsd: null,
+      issuer: "backed",
+      route: ["Meteora DLMM"],
+    },
   },
   {
-    date: day(0),
-    kind: "queued",
-    title: "Order queued",
-    sub: "",
-    amount: "$100.00",
-    flow: "out",
-    pending: true,
-    details: [],
+    item: {
+      id: "s-queued",
+      kind: "queued",
+      occurredAt: at(0, "09:30"),
+      title: "Order queued",
+      subtitle: null,
+      // Money that will leave when it fills: the sign is what says so.
+      amountUsd: "-100",
+      txSignature: null,
+      mint: null,
+      logoUrl: null,
+    },
+    detail: null,
   },
   {
-    date: day(-1),
-    kind: "buy",
-    title: "Bought Meta",
-    sub: "",
-    amount: "$500.00",
-    flow: "out",
-    logo: xstock("METAx"),
-    details: [],
+    item: {
+      id: "s-buy-meta",
+      kind: "buy",
+      occurredAt: at(-1, "16:05"),
+      title: "Bought Meta",
+      subtitle: "0.673725 shares at $738.12",
+      amountUsd: "500",
+      txSignature: sampleSig(4),
+      mint: "METAxSample1111111111111111111111111111111",
+      logoUrl: xstock("METAx"),
+    },
+    detail: {
+      type: "trade",
+      side: "buy",
+      ticker: "META",
+      shares: "0.673725",
+      pricePerShare: "738.12",
+      referencePricePerShare: "739.4",
+      sharesUsd: "497.29",
+      mercuryFeeUsd: "2.5",
+      networkFeeUsd: "0.21",
+      realisedPnlUsd: null,
+      issuer: "ondo",
+      route: ["Raydium", "Orca"],
+    },
   },
   {
-    date: day(-1),
-    kind: "send",
-    title: "Sent USDC",
-    sub: "",
-    amount: "$250.00",
-    flow: "out",
-    mint: USDC,
-    details: [],
+    item: {
+      id: "s-sell-tsla",
+      kind: "sell",
+      occurredAt: at(-1, "13:18"),
+      title: "Sold Tesla",
+      subtitle: "0.25 shares at $431.20",
+      amountUsd: "107.26",
+      txSignature: sampleSig(5),
+      mint: "TSLAxSample1111111111111111111111111111111",
+      logoUrl: xstock("TSLAx"),
+    },
+    detail: {
+      type: "trade",
+      side: "sell",
+      ticker: "TSLA",
+      shares: "0.25",
+      pricePerShare: "431.2",
+      referencePricePerShare: "431.05",
+      sharesUsd: "107.8",
+      mercuryFeeUsd: "0.54",
+      networkFeeUsd: "0",
+      realisedPnlUsd: "12.4",
+      issuer: "backed",
+      route: ["Meteora DLMM"],
+    },
   },
   {
-    date: day(-1),
-    kind: "interest",
-    title: "Interest paid",
-    sub: "",
-    amount: "$12.42",
-    flow: "in",
-    details: [],
+    item: {
+      id: "s-send",
+      kind: "transfer_out",
+      occurredAt: at(-1, "10:12"),
+      title: "Sent cash",
+      subtitle: "Plus $0.25 recipient account setup",
+      amountUsd: "250",
+      txSignature: sampleSig(6),
+      mint: USDC,
+      logoUrl: null,
+    },
+    detail: { type: "transfer", counterparty: FRIEND, accountSetupUsd: "0.25" },
   },
   {
-    date: day(-3),
-    kind: "borrow",
-    title: "Borrowed $2,500.00 against SPYx",
-    sub: "",
-    amount: "$2,500.00",
-    flow: "in",
-    logo: xstock("SPYx"),
-    details: [],
+    item: {
+      id: "s-dividend",
+      kind: "dividend",
+      occurredAt: at(-2, "08:00"),
+      title: "SPY dividend",
+      subtitle: "Paid as 0.0118 shares",
+      amountUsd: "8.16",
+      txSignature: null,
+      mint: null,
+      logoUrl: null,
+    },
+    detail: null,
   },
   {
-    date: day(-3),
-    kind: "pledge",
-    title: "Pledged 3.85 SPYx",
-    sub: "Held by Kamino as collateral",
-    amount: null,
-    flow: null,
-    logo: xstock("SPYx"),
-    details: [],
+    item: {
+      id: "s-borrow",
+      kind: "borrow",
+      occurredAt: at(-3, "12:44"),
+      title: "Borrowed USDC",
+      subtitle: "Against SPY",
+      amountUsd: "1975",
+      txSignature: sampleSig(7),
+      mint: USDC,
+      logoUrl: null,
+    },
+    detail: sampleLoan,
   },
-] as Event[];
+  {
+    item: {
+      id: "s-pledge",
+      kind: "pledge",
+      occurredAt: at(-3, "12:44"),
+      title: "Added collateral",
+      subtitle: "5.95 SPY",
+      amountUsd: null,
+      txSignature: sampleSig(7),
+      mint: "SPYxSample11111111111111111111111111111111",
+      logoUrl: xstock("SPYx"),
+    },
+    detail: sampleLoan,
+  },
+];
+
+export const SAMPLE_EVENTS: Event[] = SAMPLE_RECEIPTS.map((r) => ({
+  ...toEvent(r.item),
+  ...(r.item.kind === "queued" ? { pending: true } : {}),
+}));
+
+const sampleReceipt = (id: string): ActivityReceipt | undefined =>
+  SAMPLE_RECEIPTS.find((r) => r.item.id === id);
 
 /** The last month of account value, ending at the design's +$547.62. */
 const series = (n: number, stepMs: number): { at: string; valueUsd: string }[] => {
@@ -845,6 +977,8 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
     return exposure(decodeURIComponent(route.split("/").at(-1) ?? ""));
   if (route === "/v1/baskets") return { baskets };
   if (route === "/v1/activity") return { items: [], nextCursor: null };
+  if (route.startsWith("/v1/activity/"))
+    return sampleReceipt(decodeURIComponent(route.split("/").at(-1) ?? ""));
   if (route === "/v1/money/fund/sources") return { chains: SAMPLE_CHAINS, minimumUsd: "10" };
   if (route === "/v1/money/fund/tokens") return sampleTokens(path);
   if (route === "/v1/money/fund/intents") return { intents: [] };

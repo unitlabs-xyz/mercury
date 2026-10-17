@@ -7,6 +7,7 @@ import { Alert, Clock } from "../../ui/icons";
 import { REFUSE_COPY, refuseCopy } from "../OrderSheet";
 import { pct, usd } from "@mercury/view";
 import { RailLine } from "./Panels";
+import { usePanels } from "../Panels";
 
 type Side = "buy" | "sell";
 
@@ -323,17 +324,14 @@ export const Ticket = ({
   const tooSmall =
     (decision?.kind === "refuse" && decision.reason === "below_minimum") ||
     (!max && settled > 0 && settled < MIN_ORDER_USD);
+  /* A buy over the cash on hand is not explained here: the button below
+     becomes Add cash, which is both the explanation and the way out. */
+  const needsCash = over && !selling;
+  const panels = usePanels();
   const amountHint = over ? (
     selling ? (
       <>More than you can sell. The most is {usd(sellableUsd ?? 0)}.</>
-    ) : (
-      <>
-        More than your cash.{" "}
-        <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
-          Add cash
-        </Link>
-      </>
-    )
+    ) : null
   ) : tooSmall ? (
     REFUSE_COPY.below_minimum.body
   ) : null;
@@ -398,7 +396,7 @@ export const Ticket = ({
           the amount is capped, and the cap is what wants explaining. */}
       {partlyPledged && !over && (
         <p className="mx-5 mt-2.5 text-[12px] leading-[1.45] text-ds-muted">
-          {(pledgedShares ?? 0).toFixed(4)} of your shares are pledged to Kamino.{" "}
+          {(pledgedShares ?? 0).toFixed(4)} of your shares are held as collateral on Kamino.{" "}
           <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
             Withdraw them
           </Link>{" "}
@@ -414,7 +412,7 @@ export const Ticket = ({
       <div aria-live="polite">
         {allPledged && (
           <Note tone="warn" icon={<Alert />}>
-            All {(pledgedShares ?? 0).toFixed(4)} of your shares are pledged to Kamino as collateral.{" "}
+            All {(pledgedShares ?? 0).toFixed(4)} of your shares are held as collateral on Kamino.{" "}
             <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
               Withdraw them
             </Link>{" "}
@@ -475,24 +473,27 @@ export const Ticket = ({
           variant="primary"
           size="lg"
           onClick={() => {
+            if (needsCash) return panels.addCash();
             /* Accepting is the press: the warning above already said what it costs. */
             if (impactRefused) onAcceptImpact(true);
             else onReview();
           }}
           disabled={
-            (max ? false : amount <= 0) ||
-            over ||
-            tooSmall ||
-            allPledged ||
-            fair === null ||
-            (decision?.kind === "refuse" && !impactRefused) ||
-            /* A sell never queues — `decide` sees to that — but saying so here
+            needsCash
+              ? false
+              : (max ? false : amount <= 0) ||
+                over ||
+                tooSmall ||
+                allPledged ||
+                fair === null ||
+                (decision?.kind === "refuse" && !impactRefused) ||
+                /* A sell never queues — `decide` sees to that — but saying so here
                keeps the rule visible at the call site rather than implied. */
-            (!selling && decision?.kind === "offer_queue")
+                (!selling && decision?.kind === "offer_queue")
           }
           className="w-full"
         >
-          {impactRefused ? (selling ? "Sell anyway" : "Buy anyway") : "Review order"}
+          {needsCash ? "Add cash" : impactRefused ? (selling ? "Sell anyway" : "Buy anyway") : "Review order"}
         </Button>
       </div>
     </section>

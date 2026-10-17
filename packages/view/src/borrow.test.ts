@@ -269,7 +269,7 @@ describe("Kamino's one-cent minimum", () => {
   it("will not pledge less than a cent of a stock", () => {
     const b = position();
     expect(planBorrow(b, "pledge", b.collateral[0], 0.00001).blocked).toBe(
-      "Pledge at least $0.01 of NVDAx: Kamino does not take less.",
+      "Add at least $0.01 of NVDAx as collateral: Kamino does not take less.",
     );
   });
 
