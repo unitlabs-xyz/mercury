@@ -10,7 +10,7 @@ import { RailLine } from "./Panels";
 
 type Side = "buy" | "sell";
 
-/* Three amounts and then Max, which is the cash on hand. */
+/* Three amounts. Max, the cash on hand, sits in the field rather than with them. */
 const BUY_PRESETS = [50, 100, 250];
 
 const MIN_ORDER_USD = DEFAULT_POLICY.minOrderUsd.toNumber();
@@ -92,6 +92,9 @@ export const Note = ({
 /**
  * The amount, in a white well on the grey panel 4px in from the card's edge,
  * with the presets under it. The stock ticket and the basket ticket share it.
+ *
+ * Max sits in the field, as it does on the swap: it is the answer to "how much
+ * can I put here", which is a question about the field, not one more preset.
  */
 export const AmountWell = ({
   raw,
@@ -100,7 +103,6 @@ export const AmountWell = ({
   positionUsd = null,
   max = false,
   onMax,
-  maxLabel,
   cash = null,
 }: {
   raw: string;
@@ -110,27 +112,25 @@ export const AmountWell = ({
   positionUsd?: number | null;
   max?: boolean;
   onMax?: (v: boolean) => void;
-  /**
-   * What the last chip promises.
-   *
-   * "Sell all" that leaves the user still holding the stock is the interface
-   * lying to them, and with two issuers one order only ever empties one. The
-   * label names which.
-   */
-  maxLabel?: string;
-  /** Cash on hand: what Max fills in on a buy. Null until it is known, which disables Max. */
+  /** Cash on hand: what Max fills in on a buy. Null until it is known, which hides Max. */
   cash?: number | null;
 }) => {
   const amount = Number(raw) || 0;
   /* Down to the cent, never up: a rounded-up Max would be more than the cash. */
   const allCash = cash === null ? 0 : Math.floor(cash * 100) / 100;
   const selling = side === "sell";
-  const label = maxLabel ?? "Sell all";
+  /*
+   * On a sale Max is "everything", not a dollar figure: the server sells the
+   * whole position rather than what it was worth when the price was read, so
+   * nothing is left behind as dust. On a buy it is the cash, to the cent.
+   */
+  const canMax = selling ? positionUsd !== null && positionUsd > 0 : allCash > 0;
+  const maxOn = selling ? max : allCash > 0 && amount === allCash;
 
   return (
     <div className="mt-[11px] rounded-lg bg-ds-panel p-1">
-      <label className="flex h-15 items-center gap-1 rounded-md bg-white px-4 outline-offset-0 focus-within:outline-1 focus-within:outline-black/10">
-        <span className="text-[28px] leading-none font-medium text-ds-muted">$</span>
+      <label className="flex h-15 items-center gap-2 rounded-md bg-white px-4 outline-offset-0 focus-within:outline-1 focus-within:outline-black/10">
+        <span className="-mr-1 text-[28px] leading-none font-medium text-ds-muted">$</span>
         <input
           value={raw}
           onChange={(e) => {
@@ -141,11 +141,33 @@ export const AmountWell = ({
           }}
           inputMode="decimal"
           aria-label="Amount in dollars"
-          className="w-full bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none"
+          className="w-full min-w-0 bg-transparent text-[28px] leading-none font-medium text-ds-ink outline-none"
         />
+        {/* Nothing to offer before the cash or the position is known, and
+            offering zero would be a number we made up. */}
+        {canMax && (
+          <button
+            type="button"
+            onClick={() => {
+              if (selling) {
+                onMax?.(true);
+                onRaw((positionUsd ?? 0).toFixed(2));
+              } else onRaw(allCash.toFixed(2));
+            }}
+            aria-label={selling ? "Sell all" : "Max, all your cash"}
+            aria-pressed={maxOn}
+            className={`h-[26px] shrink-0 rounded-full border px-3 text-[12px] leading-none transition-colors ${
+              maxOn
+                ? "border-ds-ink bg-ds-ink text-white"
+                : "border-black/10 bg-linear-to-b from-white to-[#eeeeee] text-ds-ink"
+            }`}
+          >
+            Max
+          </button>
+        )}
         <span className="shrink-0 text-[12px] text-ds-muted">USD</span>
       </label>
-      <div className="mt-1 grid grid-cols-4 gap-1" role="group" aria-label="Amount presets">
+      <div className="mt-1 grid grid-cols-3 gap-1" role="group" aria-label="Amount presets">
         {selling
           ? SELL_PRESETS.map((f) => {
               const value = positionUsd === null ? 0 : Number((positionUsd * f).toFixed(2));
@@ -177,32 +199,6 @@ export const AmountWell = ({
                 ${p}
               </button>
             ))}
-        {!selling && (
-          <button
-            type="button"
-            disabled={allCash <= 0}
-            onClick={() => onRaw(allCash.toFixed(2))}
-            aria-pressed={allCash > 0 && amount === allCash}
-            className={chip(allCash > 0 && amount === allCash)}
-          >
-            Max
-          </button>
-        )}
-
-        {selling && (
-          <button
-            type="button"
-            disabled={positionUsd === null}
-            onClick={() => {
-              onMax?.(true);
-              onRaw(positionUsd === null ? "" : positionUsd.toFixed(2));
-            }}
-            aria-pressed={max}
-            className={chip(max)}
-          >
-            {label}
-          </button>
-        )}
       </div>
     </div>
   );
@@ -306,15 +302,6 @@ export const Ticket = ({
   const allPledged = selling && (sellableShares ?? 0) <= 0 && (pledgedShares ?? 0) > 0;
 
   /*
-   * With one wrapper, "Sell all" empties the position and the plain label is
-   * true. With two, one order only ever empties one of them — so the chip says
-   * which, and the note below says what is left. The alternative is a button
-   * that promises a clean exit and quietly delivers half of one.
-   */
-  /* Which token a sale comes out of is chosen in the review, so the chip makes no promise about it. */
-  const maxLabel = "Sell all";
-
-  /*
    * Whether the note belongs under the amount or above the button.
    *
    * The test is whether typing a different number fixes it. Too small, or more
@@ -381,7 +368,6 @@ export const Ticket = ({
         positionUsd={sellableUsd}
         max={max}
         onMax={onMax}
-        maxLabel={maxLabel}
         cash={cash}
       />
 
