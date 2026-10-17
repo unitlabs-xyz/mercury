@@ -1,11 +1,19 @@
 import { usd } from "@mercury/view";
 
+/** Why Mercury's rate is lower than published: an invited friend's first 90 days. */
+export interface FeeDiscount {
+  readonly pct: number;
+  /** ISO. When the full rate applies again. */
+  readonly until: string;
+}
+
 /** A trade's charge in dollars, by part. `total` is what comes off the amount or the proceeds. */
 export interface Charge {
   readonly total: number;
   readonly network: number;
   readonly mercury: number;
   readonly mercuryBps: number;
+  readonly discount?: FeeDiscount;
 }
 
 /** The charge as `/v1/quote` sends it. The parts are optional because older servers sent `usdc` alone. */
@@ -14,6 +22,7 @@ export interface WireCharge {
   readonly network?: string;
   readonly mercury?: string;
   readonly mercuryBps?: number;
+  readonly discount?: FeeDiscount;
 }
 
 const num = (v: string | undefined): number | null => {
@@ -33,11 +42,12 @@ export const chargeFromWire = (fee: WireCharge): Charge => {
     network: num(fee.network) ?? total,
     mercury: num(fee.mercury) ?? 0,
     mercuryBps: fee.mercuryBps ?? 0,
+    ...(fee.discount === undefined ? {} : { discount: fee.discount }),
   };
 };
 
-/* 50 is "0.5%": as written, without the zeros, and never rounded to a rate we did not charge. */
-export const rateLabel = (bps: number): string => `${Number((bps / 100).toFixed(2))}%`;
+/* 50 is "0.5%", 37.5 is "0.375%": as written, without the zeros, and never rounded to a rate we did not charge. */
+export const rateLabel = (bps: number): string => `${Number((bps / 100).toFixed(3))}%`;
 
 export interface FeeLine {
   readonly key: "mercury" | "network";
@@ -61,9 +71,13 @@ export const feeLines = (
       key: "mercury",
       label: `Mercury fee (${rateLabel(charge.mercuryBps)})`,
       value: charge.mercury,
-      tip: ctx.selling
-        ? `${rateLabel(charge.mercuryBps)} of what the shares sell for. Taken from the proceeds.`
-        : `${rateLabel(charge.mercuryBps)} of the ${usd(ctx.amount)}. Taken from it, with the network fee, so ${usd(ctx.invested)} is invested.`,
+      tip:
+        (ctx.selling
+          ? `${rateLabel(charge.mercuryBps)} of what the shares sell for. Taken from the proceeds.`
+          : `${rateLabel(charge.mercuryBps)} of the ${usd(ctx.amount)}. Taken from it, with the network fee, so ${usd(ctx.invested)} is invested.`) +
+        (charge.discount === undefined
+          ? ""
+          : ` ${charge.discount.pct}% off as an invited friend, until ${new Date(charge.discount.until).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}.`),
     });
   }
   if (charge.network > 0) {

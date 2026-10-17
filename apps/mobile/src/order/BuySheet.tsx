@@ -471,7 +471,7 @@ const Preview = ({
   /* The same charge by part. With no breakdown it was the network's alone. */
   const network = Number(quote?.fee.network ?? quote?.fee.usdc ?? 0);
   const mercury = Number(quote?.fee.mercury ?? 0);
-  const rate = `${Number(((quote?.fee.mercuryBps ?? 0) / 100).toFixed(2))}%`;
+  const rate = `${Number(((quote?.fee.mercuryBps ?? 0) / 100).toFixed(3))}%`;
 
   return (
     <View style={s.lines}>
