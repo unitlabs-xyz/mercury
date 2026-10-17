@@ -99,4 +99,13 @@ describe("claim", () => {
     const { store, friend } = await setup();
     expect(await store.referredAt(friend.id)).toBeNull();
   });
+
+  /* Their card's link said ?ref=<slug> before they ever opened the Invite panel; it still means them. */
+  it("finds a waitlist member by their card's slug before they have a code", async () => {
+    const { db, store, friend } = await setup();
+    await seedWaitlist(db, { email: "ada@example.com", slug: "3kQ9xZ1bTq7w", position: 12 });
+    const ada = await seedUser(db, 5, { email: "Ada@Example.com" });
+    expect(await store.claim(friend.id, "3kQ9xZ1bTq7w", now)).toEqual({ kind: "claimed", inviterId: ada.id });
+    expect(await store.codeFor(ada.id)).toBe("3kQ9xZ1bTq7w");
+  });
 });

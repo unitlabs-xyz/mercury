@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { orders, referrals, users, waitlist } from "../db/schema.js";
 import { CLAIM_WINDOW_DAYS, newCode } from "./rules.js";
@@ -65,14 +65,33 @@ export const createReferralStore = (db: Db): ReferralStore => {
   const existing = async (friendId: string) =>
     (await db.select().from(referrals).where(eq(referrals.friendId, friendId)))[0] ?? null;
 
+  /*
+   * Who holds this code. A waitlist slug whose holder has not opened the
+   * Invite panel yet is still theirs: their card's link is out there, so it
+   * is claimed for them here, the same way `codeFor` would.
+   */
+  const holderOf = async (code: string): Promise<string | null> => {
+    const [held] = await db.select({ id: users.id }).from(users).where(eq(users.referralCode, code));
+    if (held !== undefined) return held.id;
+    const [row] = await db.select({ email: waitlist.email }).from(waitlist).where(eq(waitlist.slug, code));
+    if (row === undefined) return null;
+    const [owner] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(sql`lower(${users.email}) = ${row.email}`)
+      .limit(1);
+    if (owner === undefined) return null;
+    return (await codeFor(owner.id)) === code ? owner.id : null;
+  };
+
   const claim = async (friendId: string, code: string, now: Date): Promise<ClaimResult> => {
-    const [inviter] = await db.select({ id: users.id }).from(users).where(eq(users.referralCode, code));
-    if (inviter === undefined) return { kind: "unknown_code" };
-    if (inviter.id === friendId) return { kind: "self" };
+    const inviterId = await holderOf(code);
+    if (inviterId === null) return { kind: "unknown_code" };
+    if (inviterId === friendId) return { kind: "self" };
 
     const prior = await existing(friendId);
     if (prior !== null)
-      return prior.inviterId === inviter.id ? { kind: "already", inviterId: inviter.id } : { kind: "taken" };
+      return prior.inviterId === inviterId ? { kind: "already", inviterId } : { kind: "taken" };
 
     const [friend] = await db
       .select({ createdAt: users.createdAt })
@@ -90,14 +109,14 @@ export const createReferralStore = (db: Db): ReferralStore => {
 
     const written = await db
       .insert(referrals)
-      .values({ inviterId: inviter.id, friendId, code, createdAt: now })
+      .values({ inviterId, friendId, code, createdAt: now })
       .onConflictDoNothing()
       .returning({ id: referrals.id });
-    if (written.length === 1) return { kind: "claimed", inviterId: inviter.id };
+    if (written.length === 1) return { kind: "claimed", inviterId };
 
     /* Two claims raced and the other one landed first: answer as if this were the repeat. */
     const won = await existing(friendId);
-    return won?.inviterId === inviter.id ? { kind: "already", inviterId: inviter.id } : { kind: "taken" };
+    return won?.inviterId === inviterId ? { kind: "already", inviterId } : { kind: "taken" };
   };
 
   return {
