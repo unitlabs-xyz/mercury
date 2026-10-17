@@ -5,8 +5,19 @@ import { Button } from "../../ui/Button";
 import { PanelHeader, SidePanel } from "../../ui/Dialog";
 import { StatusChip } from "../../ui/ds";
 import { Alert, Check } from "../../ui/icons";
-import { borrowChoices, pct, pickRow, planBorrow, usd, type BorrowRow, type BorrowTab } from "@mercury/view";
+import {
+  borrowChoices,
+  ceilCents,
+  interestText,
+  pct,
+  pickRow,
+  planBorrow,
+  usd,
+  type BorrowRow,
+  type BorrowTab,
+} from "@mercury/view";
 import { Mark } from "../invest/shared";
+import { TipLine } from "../review";
 import { LoanMeter, loanNow, loanShape } from "../money/LoanMeter";
 import { Skeleton, SkeletonRows } from "../portfolio/ui";
 import { Fact, RailLine } from "../stock/Panels";
@@ -275,7 +286,7 @@ export const BorrowSheet = ({
                       max - b.borrowableNowUsd,
                     )} more by pledging ${row.ticker}`
                   : `${pctOf(b.borrowApy)} a year, variable · inside our 80% safety target`)}
-              {tab === "repay" && `Owed ${usd(b.debtUsd)} · ${usd(b.cashUsd)} cash in the wallet`}
+              {tab === "repay" && `${usd(b.cashUsd)} cash in the wallet`}
               {tab === "pledge" &&
                 row &&
                 `${row.depositableTokens.toFixed(4)} ${row.ticker}x free in the wallet · no loan is taken`}
@@ -313,14 +324,15 @@ export const BorrowSheet = ({
                   </div>
                   {/* The figures on the white, under the meter's panel. */}
                   <dl className="mt-5 flex flex-col gap-3 px-1">
+                    {/* In USDC, interest included: the figure "to repay in full" is made of. */}
                     <RailLine k={next ? "Loan after" : "Loan now"}>
                       {next ? (
                         <>
-                          <span className="font-normal text-ds-muted">{usd(b.debtUsd)} → </span>
-                          {usd(preview!.debt)}
+                          <span className="font-normal text-ds-muted">{usd(b.owedUsdc)} → </span>
+                          {usd(preview!.owed)}
                         </>
                       ) : (
-                        usd(b.debtUsd)
+                        usd(b.owedUsdc)
                       )}
                     </RailLine>
                     <RailLine k="Safe unless collateral falls">
@@ -335,8 +347,32 @@ export const BorrowSheet = ({
                         {pctOf(next ? preview!.drop : b.safeUntilDrop)}
                       </span>
                     </RailLine>
-                    <RailLine k="Interest">{pctOf(b.borrowApy)} a year</RailLine>
+                    <RailLine k="Interest rate">{pctOf(b.borrowApy)} a year</RailLine>
                   </dl>
+                  {/*
+                   * What the loan is made of, as rows that add up, the way the
+                   * ticket splits a trade's fees: what was lent, the interest on
+                   * it, and their total, which is what "All" repays. Without the
+                   * ledger's split there is only the total to show.
+                   */}
+                  {tab === "repay" && b.owedUsdc > 0 && (
+                    <dl className="mt-3 flex flex-col gap-3 border-t border-ds-divider px-1 pt-3">
+                      {b.principalUsdc !== null && b.interestUsdc !== null && (
+                        <>
+                          <TipLine k="Borrowed" tip="What you borrowed and have not repaid yet.">
+                            {usd(b.principalUsdc)}
+                          </TipLine>
+                          <TipLine
+                            k="Interest so far"
+                            tip={`Builds by the second at ${pctOf(b.borrowApy)} a year, variable, and is paid off with the loan.`}
+                          >
+                            {interestText(b.interestUsdc)}
+                          </TipLine>
+                        </>
+                      )}
+                      <TipLine k="To repay in full">{usd(ceilCents(b.owedUsdc))}</TipLine>
+                    </dl>
+                  )}
                   {next && preview!.note && (
                     <p className="mt-3 px-1 text-[12px] leading-[1.45] text-ds-muted">{preview!.note}</p>
                   )}

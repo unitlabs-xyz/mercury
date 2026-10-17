@@ -70,6 +70,19 @@ export type Borrow = {
    * server could not price it.
    */
   readonly setupCostUsd: number | null;
+  /**
+   * What is owed in USDC, interest included: what a repay of everything sends.
+   * `debtUsd` is the same debt at Kamino's USDC price, a hair under a dollar.
+   */
+  readonly owedUsdc: number;
+  /** What was lent and not yet repaid. Null when the ledger cannot account for the debt. */
+  readonly principalUsdc: number | null;
+  /** What is owed beyond what was lent. Null alongside the principal. */
+  readonly interestUsdc: number | null;
+  /** What the wallet must hold to repay all of it: what is owed and an hour of interest. */
+  readonly closeLoanUsdc: number;
+  /** The least Kamino lets a debt or a stock's collateral be left worth: $0.01. */
+  readonly minPositionUsd: number;
   readonly collateral: readonly BorrowRow[];
 };
 
@@ -101,6 +114,12 @@ export const borrowFromWire = (w: BorrowWire): Borrow => ({
   borrowApy: Number(w["borrowApy"]),
   obligation: typeof w["obligation"] === "string" ? w["obligation"] : null,
   setupCostUsd: n(w["setupCostUsd"]),
+  // A server from before these said only the debt, and asked 0.1% of it as headroom to close.
+  owedUsdc: Number(w["owedUsdc"] ?? w["debtUsd"]),
+  principalUsdc: n(w["principalUsdc"]),
+  interestUsdc: n(w["interestUsdc"]),
+  closeLoanUsdc: w["closeLoanUsdc"] === undefined ? Number(w["debtUsd"]) * 1.001 : Number(w["closeLoanUsdc"]),
+  minPositionUsd: Number(w["minPositionUsd"] ?? 0.01),
   collateral: w.collateral.map((r) => ({
     ticker: String(r["ticker"]),
     isStock: r["isStock"] === true,
@@ -156,6 +175,36 @@ const safePledged = (b: Borrow, deposits: (r: BorrowRow) => number) =>
  */
 export const floorCents = (usdValue: number) => Math.floor(usdValue * 100) / 100;
 
+/**
+ * Up to the cent, for a figure less than which would not be enough: what it
+ * takes to close a loan. The nudge keeps a whole cent whole, because 2.12 × 100
+ * is 212.00000000000003 in floating point and would otherwise round up to 2.13.
+ */
+export const ceilCents = (usdValue: number) => Math.ceil(usdValue * 100 - 1e-9) / 100;
+
+/**
+ * Kamino's price for a USDC, from its two figures for the debt, never above $1:
+ * what its one-cent minimum is measured at. The server checks the same.
+ */
+const usdcPrice = (b: Borrow) => (b.owedUsdc > 0 ? Math.min(1, b.debtUsd / b.owedUsdc) : 1);
+
+/**
+ * Interest as the card says it. Minutes into a small loan it is a fraction of a
+ * cent, and "$0.00" would say there is none; null is a debt the ledger cannot
+ * split, so it says nothing rather than guess.
+ */
+export const interestText = (interest: number | null) =>
+  interest === null ? "—" : interest > 0 && interest < 0.01 ? "Less than 1¢" : usd(interest);
+
+/** Roughly a month of interest on what is owed now, at today's rate. */
+export const monthlyInterestText = (b: Borrow) => {
+  const month = (b.owedUsdc * b.borrowApy) / 12;
+  return month < 0.01 ? "under 1¢ a month" : `about ${usd(month)} a month`;
+};
+
+/** Whether a position would be left worth more than nothing but less than Kamino's minimum. */
+const leavesDust = (b: Borrow, worthUsd: number) => worthUsd > 1e-12 && worthUsd < b.minPositionUsd - 1e-12;
+
 /** The same, for a token amount against the six decimals the field shows. */
 export const floorTokens = (tokens: number) => Math.floor(tokens * 1e6) / 1e6;
 
@@ -194,7 +243,10 @@ export interface BorrowPlan {
   /** The most this tab allows: dollars for borrow and repay, tokens for pledge and withdraw. */
   readonly max: number;
   readonly preview: {
+    /** The debt after, at Kamino's prices: what the meter and the limits are measured in. */
     readonly debt: number;
+    /** What will be owed after, in USDC: what "to repay in full" would then say. */
+    readonly owed: number;
     readonly drop: number | null;
     readonly deposits: (r: BorrowRow) => number;
     readonly note?: string;
@@ -242,6 +294,7 @@ export const planBorrow = (
     const after = (r: BorrowRow) => r.depositedTokens + (r.ticker === row.ticker ? tokens : 0);
     preview = {
       debt: b.debtUsd + value,
+      owed: b.owedUsdc + value,
       drop: safeUntil(b, b.debtUsd + value, after),
       deposits: after,
       ...(tokens > 0
@@ -249,30 +302,51 @@ export const planBorrow = (
         : {}),
     };
     if (value > max + 0.005) blocked = `At most ${usd(max)} at the 80% safety target.`;
+    else if (value > 0 && leavesDust(b, (b.owedUsdc + value) * usdcPrice(b)))
+      blocked = `Borrow at least ${usd(b.minPositionUsd)}: Kamino does not lend less.`;
   } else if (b && tab === "repay") {
-    max = Math.min(b.debtUsd, b.cashUsd);
-    intent = {
-      kind: "repay",
-      usd: value >= b.debtUsd - 0.005 && b.cashUsd >= b.debtUsd * 1.001 ? "all" : value.toFixed(2),
-    };
+    /*
+     * In USDC, interest included, and in whole loans: an amount that would
+     * leave less than Kamino's minimum owing — the whole debt, or all but a
+     * fraction of a cent of it — is a repay of everything, because Kamino
+     * refuses to leave a debt that small. "All" is what is owed, rounded up to
+     * the cent: the total of the rows under it. The wallet has to hold a little
+     * more — an hour of interest, `closeLoanUsdc` — and only that check sees it.
+     */
+    const price = usdcPrice(b);
+    const left = (b.owedUsdc - value) * price;
+    const closing = b.owedUsdc > 0 && value > 0 && (left <= 1e-12 || leavesDust(b, left));
+    max = ceilCents(b.owedUsdc);
+    intent = { kind: "repay", usd: closing ? "all" : value.toFixed(2) };
+    const debtAfter = closing ? 0 : Math.max(0, b.debtUsd - value * price);
     preview = {
-      debt: Math.max(0, b.debtUsd - value),
-      drop: safeUntil(b, Math.max(0, b.debtUsd - value), (r) => r.depositedTokens),
+      debt: debtAfter,
+      owed: closing ? 0 : Math.max(0, b.owedUsdc - value),
+      drop: safeUntil(b, debtAfter, (r) => r.depositedTokens),
       deposits: (r) => r.depositedTokens,
     };
-    if (b.debtUsd <= 0) blocked = "There is no loan to repay.";
-    else if (value > b.cashUsd) blocked = `Only ${usd(b.cashUsd)} of cash in the wallet.`;
+    if (b.owedUsdc <= 0) blocked = "There is no loan to repay.";
+    else if (closing && b.cashUsd < b.closeLoanUsdc) {
+      const most = floorCents(b.owedUsdc - b.minPositionUsd / price);
+      blocked =
+        `Repaying all of it needs ${usd(ceilCents(b.closeLoanUsdc))} in the wallet. You have ${usd(floorCents(b.cashUsd))}: ` +
+        `add ${usd(ceilCents(b.closeLoanUsdc - b.cashUsd))} of USDC` +
+        (most > 0 ? `, or repay up to ${usd(most)}.` : ".");
+    } else if (!closing && value > b.cashUsd) blocked = `Only ${usd(b.cashUsd)} of cash in the wallet.`;
   } else if (b && tab === "pledge" && row) {
     max = row.depositableTokens;
     intent = { kind: "deposit", ticker: row.ticker, tokensRaw: tokensToRaw(value, row.decimals, "down") };
     const after = (r: BorrowRow) => r.depositedTokens + (r.ticker === row.ticker ? value : 0);
     preview = {
       debt: b.debtUsd,
+      owed: b.owedUsdc,
       drop: safeUntil(b, b.debtUsd, after),
       deposits: after,
       note: "Adds collateral without borrowing. The shares stay yours and can be withdrawn later.",
     };
     if (value > max + 1e-9) blocked = `Only ${max.toFixed(4)} ${row.ticker}x is free in the wallet.`;
+    else if (value > 0 && leavesDust(b, (row.depositedTokens + value) * row.pricePerToken))
+      blocked = `Pledge at least ${usd(b.minPositionUsd)} of ${row.ticker}x: Kamino does not take less.`;
   } else if (b && tab === "withdraw" && row) {
     const spare = safePledged(b, (r) => r.depositedTokens) - b.debtUsd;
     const perToken = row.pricePerToken * row.ltv * b.safetyTarget;
@@ -292,12 +366,14 @@ export const planBorrow = (
       tokensRaw: all ? "all" : tokensToRaw(value, row.decimals, "down"),
     };
     const after = (r: BorrowRow) => r.depositedTokens - (r.ticker === row.ticker ? value : 0);
-    preview = { debt: b.debtUsd, drop: safeUntil(b, b.debtUsd, after), deposits: after };
+    preview = { debt: b.debtUsd, owed: b.owedUsdc, drop: safeUntil(b, b.debtUsd, after), deposits: after };
     if (value > max + 1e-9)
       blocked =
         b.debtUsd > 0
           ? "Repay some of the loan first to take that much back."
           : `Only ${max.toFixed(4)} ${row.ticker}x is pledged.`;
+    else if (!all && value > 0 && leavesDust(b, (row.depositedTokens - value) * row.pricePerToken))
+      blocked = `That would leave less than ${usd(b.minPositionUsd)} of ${row.ticker}x pledged, which Kamino does not allow. Take all of it back, or leave more.`;
   }
 
   // Shares of the most for a borrow, pledge or withdrawal; the figures that

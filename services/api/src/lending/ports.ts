@@ -38,6 +38,13 @@ export interface PoolTerms {
 export interface LendingTerms {
   readonly collateral: readonly CollateralTerms[];
   readonly pool: PoolTerms;
+  /**
+   * The least a position may be left worth, at Kamino's prices: the market's
+   * `min_net_value_in_obligation`, $0.01 on the xStocks market. After every
+   * borrow, repay, pledge and withdrawal, each debt and each stock's collateral
+   * must be worth nothing or at least this, or Kamino refuses the transaction.
+   */
+  readonly minPositionUsd: Decimal;
 }
 
 /** A wallet's Kamino obligation, valued at Kamino's oracle prices. */
@@ -54,6 +61,12 @@ export interface LendingPosition {
     readonly valueUsd: Decimal;
   }[];
   readonly debtUsd: Decimal;
+  /**
+   * What is owed in USDC, interest to this moment included: what a repay of
+   * everything sends. Not `debtUsd`, which is the same debt at Kamino's USDC
+   * price — a hair under $1, so the dollar figure is short of the USDC it takes.
+   */
+  readonly owedUsdc: Decimal;
   readonly debtBfAdjustedUsd: Decimal;
   /** Σ deposit × LTV: Kamino's own ceiling on debt. */
   readonly allowedBorrowUsd: Decimal;
@@ -91,4 +104,37 @@ export interface LendingSource {
   position(wallet: string): Promise<LendingPosition | null>;
   /** `sponsor`, when given, pays the fees and any rent the wallet cannot. */
   build(wallet: string, intent: LendingIntent, sponsor?: string): Promise<BuiltTransactions>;
+}
+
+/**
+ * Kamino would refuse this transaction: its simulation failed with one of the
+ * lending program's own errors, numbered from 6000 (`code`), named as the SDK
+ * names them (`reason`). The route turns it into something a borrower can read
+ * instead of an internal error.
+ */
+export class LendingRefused extends Error {
+  constructor(
+    readonly code: number,
+    readonly reason: string,
+  ) {
+    super(`kamino: the transaction would fail with ${reason} (${code})`);
+    this.name = "LendingRefused";
+  }
+}
+
+/**
+ * The relayer holds too little SOL to sponsor this: a first loan's account
+ * setup, most likely, which is about 0.03 SOL of rent. Not the borrower's
+ * doing and not theirs to fix, so it is said as an outage, and logged for
+ * whoever tops the relayer up.
+ */
+export class SponsorShort extends Error {
+  constructor(
+    readonly relayer: string,
+    readonly heldLamports: bigint,
+    readonly neededLamports: bigint,
+  ) {
+    super(`kamino: the relayer holds ${heldLamports} lamports and this needs ${neededLamports}`);
+    this.name = "SponsorShort";
+  }
 }

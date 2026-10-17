@@ -32,6 +32,7 @@ const nvda: CollateralTerms = {
 
 const terms = (over: Partial<LendingTerms["pool"]> = {}, collateral = [spy, nvda]): LendingTerms => ({
   collateral,
+  minPositionUsd: D("0.01"),
   pool: {
     reserve: "UsdcReserve",
     availableUsd: D(500_000),
@@ -58,6 +59,7 @@ const pledged = (debt: number): LendingPosition => ({
     },
   ],
   debtUsd: D(debt),
+  owedUsdc: D(debt),
   debtBfAdjustedUsd: D(debt),
   allowedBorrowUsd: D(8_000 * 0.73),
   liquidationBorrowUsd: D(8_000 * 0.75),

@@ -44,10 +44,11 @@ export const Attention = ({
               ? "Repay soon to keep your shares"
               : "Kamino is selling collateral"
         }
+        // What is owed, interest included: what repaying it takes, which "borrowed" undersold.
         body={
           borrow.safeUntilDrop === null
-            ? `${usd(borrow.debtUsd)} borrowed`
-            : `${usd(borrow.debtUsd)} borrowed · safe to a ${pct(borrow.safeUntilDrop * 100, 0)} fall`
+            ? `${usd(borrow.owedUsdc)} owed`
+            : `${usd(borrow.owedUsdc)} owed · safe to a ${pct(borrow.safeUntilDrop * 100, 0)} fall`
         }
         action="Repay"
         onPress={onBorrow}
