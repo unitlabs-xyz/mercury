@@ -175,7 +175,7 @@ const Borrowing = ({
               value={usd(num(borrow.borrowableUsd))}
               sub="At our safety target"
             />
-            <Figure label="Pledged" value={usd(num(borrow.collateralUsd))} sub="Held as collateral" />
+            <Figure label="Collateral" value={usd(num(borrow.collateralUsd))} sub="Still yours" />
             {owes && borrow.safeUntilDrop !== null && (
               <Figure
                 label="Safe until"

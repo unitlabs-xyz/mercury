@@ -26,7 +26,7 @@ export const loanShape = (b: Borrow, debt: number, deposits: (r: BorrowRow) => n
 export const LoanMeter = ({
   now,
   next,
-  of = "what is pledged",
+  of = "current collateral",
 }: {
   now: ReturnType<typeof loanShape>;
   next?: ReturnType<typeof loanShape> | undefined;
