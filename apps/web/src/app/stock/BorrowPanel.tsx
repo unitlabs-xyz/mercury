@@ -130,7 +130,7 @@ export const BorrowPanel = ({ ticker, name }: { ticker: string; name: string }) 
               {unlendableShares.toFixed(4)} shares
             </Fact>
           )}
-          {row.depositedTokens > 0 && <Fact k="Pledged">{usd(row.depositedUsd)}</Fact>}
+          {row.depositedTokens > 0 && <Fact k="Collateral">{usd(row.depositedUsd)}</Fact>}
           {row.depositedTokens > 0 && row.liquidationPrice !== null && row.liquidationDistance !== null && (
             <Fact k="Sold if it reaches">
               <span className={TONE_TEXT[distanceTone ?? "none"]}>

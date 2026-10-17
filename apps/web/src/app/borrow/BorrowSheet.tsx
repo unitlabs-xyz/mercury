@@ -102,7 +102,7 @@ export const BorrowSheet = ({
       : tab === "repay"
         ? "Repay your loan"
         : tab === "pledge"
-          ? "Pledge more stock"
+          ? "Add collateral"
           : "Take collateral back";
 
   return (
@@ -147,7 +147,7 @@ export const BorrowSheet = ({
             <p className="mt-2 text-[12px] leading-[1.5]">
               Prices fell, so your loan is past the 80% limit. We pause new borrowing and withdrawals well
               before Kamino&apos;s line, so your shares are not sold on a small dip. Repay{" "}
-              {usd(b.overTargetUsd)}, or pledge more stock, to unlock both.
+              {usd(b.overTargetUsd)}, or add collateral, to unlock both.
             </p>
             <div className="mt-3 flex gap-1">
               <Button
@@ -157,7 +157,7 @@ export const BorrowSheet = ({
                 Repay {usd(b.overTargetUsd)}
               </Button>
               {borrowChoices(b, "pledge").length > 0 && (
-                <Button onClick={() => (setTab("pledge"), setAmount(""))}>Pledge more</Button>
+                <Button onClick={() => (setTab("pledge"), setAmount(""))}>Add collateral</Button>
               )}
             </div>
           </div>
@@ -169,9 +169,9 @@ export const BorrowSheet = ({
               (choices.length === 0 ? (
                 <p className="mt-5 flex h-[52px] items-center rounded-lg bg-ds-panel px-4 text-[14px] text-ds-muted">
                   {tab === "pledge"
-                    ? "No accepted stock is free in the wallet to pledge."
+                    ? "No accepted stock is free in the wallet to add as collateral."
                     : tab === "withdraw"
-                      ? "Nothing is pledged yet."
+                      ? "No collateral yet."
                       : "None of your stocks can be borrowed against yet."}
                 </p>
               ) : (
@@ -232,7 +232,7 @@ export const BorrowSheet = ({
                       ) : (
                         <Fact k="Can come back">{max.toFixed(4)}</Fact>
                       )}
-                      <Fact k="Pledged">
+                      <Fact k="Collateral">
                         {row.depositedTokens > 0 ? row.depositedTokens.toFixed(4) : "None yet"}
                       </Fact>
                       <Fact k="Lends">{pct(row.ltv * b.safetyTarget * 100, 0)} of value</Fact>
@@ -282,9 +282,9 @@ export const BorrowSheet = ({
               {tab === "borrow" &&
                 row &&
                 (b.borrowableNowUsd > 0.005 && max - b.borrowableNowUsd > 0.005
-                  ? `Up to ${usd(max)}: ${usd(b.borrowableNowUsd)} against what is pledged, ${usd(
+                  ? `Up to ${usd(max)}: ${usd(b.borrowableNowUsd)} against current collateral, ${usd(
                       max - b.borrowableNowUsd,
-                    )} more by pledging ${row.ticker}`
+                    )} more by adding ${row.ticker} as collateral`
                   : `${pctOf(b.borrowApy)} a year, variable · inside our 80% safety target`)}
               {tab === "repay" && `${usd(b.cashUsd)} cash in the wallet`}
               {tab === "pledge" &&
@@ -292,7 +292,7 @@ export const BorrowSheet = ({
                 `${row.depositableTokens.toFixed(4)} ${row.ticker}x free in the wallet · no loan is taken`}
               {tab === "withdraw" &&
                 row &&
-                `${row.depositedTokens.toFixed(4)} ${row.ticker}x pledged · up to ${max.toFixed(4)} can come back`}
+                `${row.depositedTokens.toFixed(4)} ${row.ticker}x in collateral · up to ${max.toFixed(4)} can come back`}
             </p>
 
             {/* What the change does to the loan, as it is typed: the meter with the
@@ -318,7 +318,11 @@ export const BorrowSheet = ({
                     <p className="text-[14px] leading-none font-medium text-ds-ink">Your loan</p>
                     {shows && (
                       <div className="mt-4">
-                        <LoanMeter now={now} next={next} of={basis ? "what you can pledge" : undefined} />
+                        <LoanMeter
+                          now={now}
+                          next={next}
+                          of={basis ? "what you could add as collateral" : undefined}
+                        />
                       </div>
                     )}
                   </div>
@@ -400,7 +404,7 @@ export const BorrowSheet = ({
                 : tab === "repay"
                   ? `Repay ${value > 0 ? usd(value) : ""}`.trim()
                   : tab === "pledge"
-                    ? "Pledge"
+                    ? "Add collateral"
                     : "Withdraw"}
             </Button>
             {/* Opening the Kamino account is Mercury's to pay. The relayer covers its

@@ -75,7 +75,7 @@ export const BorrowSection = () => {
               {b.locked ? "Repay to unlock" : "Borrow"}
             </Button>
             {b.collateral.some((r) => r.isStock && r.depositableTokens > 0) && (
-              <Button onClick={() => openSheet("pledge")}>Pledge more</Button>
+              <Button onClick={() => openSheet("pledge")}>Add collateral</Button>
             )}
             {b.debtUsd > 0 && !b.locked && <Button onClick={() => openSheet("repay")}>Repay</Button>}
             {b.collateralUsd > 0 && <Button onClick={() => openSheet("withdraw")}>Withdraw</Button>}
@@ -111,12 +111,14 @@ export const BorrowSection = () => {
                 label="Can still borrow"
                 value={usd(b.borrowableUsd)}
                 sub={
-                  b.borrowableUsd > b.borrowableNowUsd ? "Pledges stock as needed" : "Against what is pledged"
+                  b.borrowableUsd > b.borrowableNowUsd
+                    ? "Adds collateral as needed"
+                    : "Against current collateral"
                 }
               />
               <HeaderFigure
                 size="md"
-                label="Pledged"
+                label="Collateral"
                 value={usd(b.collateralUsd)}
                 sub="Still yours, still moving"
               />
@@ -152,7 +154,7 @@ export const BorrowSection = () => {
                   className={`grid ${COLS} px-4 pt-[10px] pb-[5px] text-[12px] leading-none text-ds-muted`}
                 >
                   <span>Stock</span>
-                  <span className="text-right">Pledged</span>
+                  <span className="text-right">Collateral</span>
                   <span className="text-right">Today</span>
                   <span className="text-right">Price · sold at</span>
                   <span className="text-right">Room to fall</span>
@@ -214,10 +216,10 @@ const Line = ({
           <span className="shrink-0">
             {r.depositedTokens > 0 ? (
               <span className="inline-flex h-[17px] items-center rounded bg-ds-act-buy-bg px-1.5 text-[10px] leading-none text-ds-act-buy">
-                Pledged
+                Collateral
               </span>
             ) : (
-              <StatusChip tone="neutral">Not pledged</StatusChip>
+              <StatusChip tone="neutral">Not used</StatusChip>
             )}
           </span>
         </p>

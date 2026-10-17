@@ -81,12 +81,12 @@ export default function BorrowScreen() {
         : chosen === undefined
           ? tab === "pledge"
             ? "You have no stock Kamino accepts free in your wallet."
-            : "Nothing is pledged yet."
+            : "No collateral yet."
           : tab === "pledge"
             ? `${chosen.depositableTokens.toFixed(4)} ${chosen.ticker}x free · ${usd(chosen.depositableUsd)}`
-            : `${chosen.depositedTokens.toFixed(4)} ${chosen.ticker}x pledged · up to ${plan.max.toFixed(4)} can come back`;
+            : `${chosen.depositedTokens.toFixed(4)} ${chosen.ticker}x in collateral · up to ${plan.max.toFixed(4)} can come back`;
 
-  const verb = { borrow: "Borrow", repay: "Repay", pledge: "Pledge", withdraw: "Withdraw" }[tab];
+  const verb = { borrow: "Borrow", repay: "Repay", pledge: "Add collateral", withdraw: "Withdraw" }[tab];
   const health = b ? HEALTH[b.health] : undefined;
   const busy = action.isPending;
   const canSubmit =
@@ -114,7 +114,9 @@ export default function BorrowScreen() {
     : value > 0 && !plan.inTokens
       ? `${verb} ${usd(value)}`
       : value > 0
-        ? `${verb} ${value.toFixed(4)} ${unit}`
+        ? tab === "pledge"
+          ? `Add ${value.toFixed(4)} ${unit} as collateral`
+          : `${verb} ${value.toFixed(4)} ${unit}`
         : verb;
 
   return (
@@ -159,7 +161,7 @@ export default function BorrowScreen() {
                   <View style={s.figures}>
                     <Figure label="Borrowed" value={usd(debt)} />
                     <Figure label="Can still borrow" value={usd(b.borrowableUsd)} />
-                    <Figure label="Pledged" value={usd(b.collateralUsd)} />
+                    <Figure label="Collateral" value={usd(b.collateralUsd)} />
                     <Figure
                       label="Safe until"
                       value={b.safeUntilDrop === null ? "—" : `a ${pct(b.safeUntilDrop * 100, 0)} fall`}
@@ -184,7 +186,7 @@ export default function BorrowScreen() {
 
                 {plan.paused && b !== undefined ? (
                   <Note tone="warn">
-                    {`${tab === "borrow" ? "Borrowing" : "Withdrawals"} paused until the loan is back inside the limit. Prices fell, so your loan is past the 80% limit. Repay ${usd(b.overTargetUsd)}, or pledge more stock, to unlock both.`}
+                    {`${tab === "borrow" ? "Borrowing" : "Withdrawals"} paused until the loan is back inside the limit. Prices fell, so your loan is past the 80% limit. Repay ${usd(b.overTargetUsd)}, or add collateral, to unlock both.`}
                   </Note>
                 ) : (
                   <>
@@ -208,7 +210,7 @@ export default function BorrowScreen() {
                     <AmountWell
                       label={
                         plan.inTokens
-                          ? `${chosen?.ticker ?? "Stock"} to ${tab === "pledge" ? "pledge" : "take back"}`
+                          ? `${chosen?.ticker ?? "Stock"} to ${tab === "pledge" ? "add" : "take back"}`
                           : `Amount to ${verb.toLowerCase()}`
                       }
                       value={text}
