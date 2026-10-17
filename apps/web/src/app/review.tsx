@@ -16,8 +16,12 @@ export const Well = ({
 }) => (
   <div className="min-w-0 rounded-md bg-white px-4 pt-3.5 pb-4">
     <p className="text-[12px] leading-none text-ds-muted">{label}</p>
-    <p className="mt-3 flex min-w-0 items-baseline gap-1.5">
-      <span className="truncate text-[24px] leading-none font-medium text-ds-ink">{value}</span>
+    {/* On a phone a well is about 110px wide: the figure steps down and its unit wraps under it,
+        rather than "0.673725 shares" truncating to "0.6…". */}
+    <p className="mt-3 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1">
+      <span className="truncate text-[24px] leading-none font-medium text-ds-ink max-sm:text-[20px]">
+        {value}
+      </span>
       <span className="shrink-0 text-[12px] leading-none text-ds-muted">{unit}</span>
     </p>
     {sub && <p className="mt-2 truncate text-[11px] leading-none text-ds-muted">{sub}</p>}
@@ -78,5 +82,33 @@ export const SwapPanel = ({
       </span>
     </div>
     {children && <div className="px-4 pt-4 pb-3">{children}</div>}
+  </div>
+);
+
+/**
+ * Who issues the token, then where it trades: one white pill, the issuer set
+ * in grey, each venue after a chevron. The order review shows the route it is
+ * about to take; a receipt shows the one it took.
+ */
+export const RouteLine = ({ issuer, venues }: { issuer: string; venues: readonly string[] }) => (
+  <div className="flex items-center justify-between gap-4 text-[14px] leading-5">
+    <dt className="text-ds-muted">Route</dt>
+    <dd className="inline-flex min-w-0 items-center rounded-full bg-white p-[3px] text-[12px] leading-none">
+      <span className="rounded-full bg-ds-panel px-2.5 py-1.5 font-medium text-ds-ink">{issuer}</span>
+      {venues.map((venue, i) => (
+        <span key={`${venue}-${i}`} className="flex items-center text-ds-ink">
+          <svg viewBox="0 0 8 14" width={5} height={9} fill="none" aria-hidden className="ml-2 text-ds-muted">
+            <path
+              d="M1 13L7 7L1 1"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <span className="px-2">{venue}</span>
+        </span>
+      ))}
+    </dd>
   </div>
 );

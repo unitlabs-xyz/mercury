@@ -54,6 +54,14 @@ export const ArrowRight = (p: Icon) => (
   </svg>
 );
 
+/** Leaves the app: a link out to an explorer. */
+export const ArrowUpRight = (p: Icon) => (
+  <svg {...base} {...p}>
+    <path d="M7 17L17 7" />
+    <path d="M8 7h9v9" />
+  </svg>
+);
+
 export const ArrowUp = (p: Icon) => (
   <svg {...base} strokeWidth={2.6} {...p}>
     <path d="M12 19V5" />

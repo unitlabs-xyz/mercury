@@ -1,6 +1,7 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { HistoryRange, MarketStatus, Money, Portfolio, PortfolioHistory } from "@mercury/types";
+import type { ActivityReceipt } from "@mercury/view";
 import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { apiFetch } from "./client";
 import { LIVE } from "./live";
@@ -87,6 +88,24 @@ export const useActivityFeed = () => {
     queryFn: () => apiFetch<{ items: ActivityItem[]; nextCursor: string | null }>("/v1/activity?limit=100"),
     enabled: signedIn,
     ...LIVE,
+  });
+};
+
+/**
+ * One feed row and the record behind it, fetched when the row is opened.
+ *
+ * Not polled: a receipt is about something that already happened, and the
+ * only thing that changes it is a confirm arriving late, which the feed's own
+ * polling will show first.
+ */
+export const useActivityReceipt = (id: string | null) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "activity", id],
+    queryFn: () => apiFetch<ActivityReceipt>(`/v1/activity/${encodeURIComponent(id ?? "")}`),
+    enabled: signedIn && id !== null,
+    staleTime: 5 * 60_000,
+    retry: (attempt) => attempt < 1,
   });
 };
 
