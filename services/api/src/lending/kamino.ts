@@ -30,8 +30,11 @@ import { D, ZERO, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { createLendingRpc } from "./rpc.js";
 import { batchedLoader } from "./batch.js";
+import { fromCode } from "@kamino-finance/klend-sdk/dist/@codegen/klend/errors/index.js";
 import { topUp, transferSol } from "./sponsor.js";
+import { kaminoSetupRent } from "./setup.js";
 import { WALLET_BYTES, rentFor } from "../rent.js";
+import { LendingRefused, SponsorShort } from "./ports.js";
 import type {
   BuiltTransactions,
   CollateralTerms,
@@ -184,6 +187,8 @@ export class KaminoLending implements LendingSource {
         // Interest compounds continuously, so APY is e^APR − 1.
         borrowApy: D(usdc.calculateBorrowAPR(instant, market.state.referralFeeBps)).exp().sub(1),
       },
+      // A scaled fraction, as Kamino stores every value: the number over 2^60.
+      minPositionUsd: dec(market.state.minNetValueInObligationSf).div(D(2).pow(60)),
     };
   }
 
@@ -311,7 +316,10 @@ export class KaminoLending implements LendingSource {
       return { wire: getBase64EncodedWireTransaction(tx), messageBytes: Uint8Array.from(tx.messageBytes) };
     };
 
-    const ixs = sponsor === undefined ? actionIxs : await this.fund(owner.address, payer, actionIxs, compile);
+    const ixs =
+      sponsor === undefined
+        ? actionIxs
+        : await this.fund(owner.address, payer, actionIxs, compile, firstTime);
 
     const compiled = compile(ixs);
     const bytes = getBase64Encoder().encode(compiled.wire).length;
@@ -338,20 +346,27 @@ export class KaminoLending implements LendingSource {
    * account setup rides in the same transaction, so its rent is measured
    * exactly like everything else's, and paid only if the loan lands with it.
    * See `sponsor.ts`.
+   *
+   * That setup is about 0.03 SOL, far more than anything else a loan asks of
+   * the relayer, so a relayer that cannot cover it is told apart before the
+   * simulation runs out of SOL halfway through creating accounts — which is
+   * how it was first found, as a bare `Custom: 1` and a 500.
    */
   private async fund(
     owner: Address,
     relayer: Address,
     ixs: readonly Instruction[],
     compile: (ixs: readonly Instruction[]) => { wire: string },
+    opensAccount: boolean,
   ): Promise<readonly Instruction[]> {
-    const [{ value: ownerBalance }, { value: relayerBalance }, walletRent] = await Promise.all([
+    const [{ value: ownerBalance }, { value: relayerBalance }, walletRent, setupRent] = await Promise.all([
       this.rpc.getBalance(owner).send(),
       this.rpc.getBalance(relayer).send(),
       rentFor(this.rent, WALLET_BYTES),
+      opensAccount ? kaminoSetupRent(this.rent) : Promise.resolve(0n),
     ]);
-    const probe: bigint = relayerBalance - FEE_RESERVE;
-    if (probe <= 0n) throw new Error("kamino: the relayer has no SOL to sponsor with");
+    const needs = opensAccount ? setupRent + walletRent : 0n;
+    const probe = probeFor(relayer, relayerBalance, needs);
 
     const sim = await this.rpc
       .simulateTransaction(compile([transferSol(relayer, owner, probe), ...ixs]).wire as never, {
@@ -362,6 +377,11 @@ export class KaminoLending implements LendingSource {
       })
       .send();
     if (sim.value.err !== null) {
+      // The probe's transfer is instruction 0, so the message's instruction i is ixs[i - 1].
+      const refused = refusalOf(sim.value.err, (i) =>
+        i === 0 ? undefined : String(ixs[i - 1]?.programAddress ?? ""),
+      );
+      if (refused !== null) throw refused;
       throw new Error(
         `kamino: the sponsored transaction would fail: ${JSON.stringify(sim.value.err, (_, v) => (typeof v === "bigint" ? String(v) : v))}`,
       );
@@ -370,7 +390,7 @@ export class KaminoLending implements LendingSource {
     const spend = ownerBalance + probe - BigInt(after);
 
     const send = topUp(ownerBalance, spend, walletRent);
-    if (send > probe) throw new Error("kamino: the relayer does not hold enough SOL to sponsor this");
+    if (send > probe) throw new SponsorShort(relayer, relayerBalance, send + FEE_RESERVE);
     return send > 0n ? [transferSol(relayer, owner, send), ...ixs] : ixs;
   }
 }
@@ -381,7 +401,44 @@ const MAX_TRANSACTION_BYTES = 1232;
 /** SOL the relayer keeps for its own signature fees while probing what a top-up needs. */
 const FEE_RESERVE = 1_000_000n;
 
-const toPosition = (market: KaminoMarket, ob: KaminoObligation): LendingPosition => ({
+/**
+ * What the relayer can lend the simulation to measure a top-up: all it holds
+ * but its reserve. Refused outright when that cannot cover `needs`, the least
+ * this transaction is known to take, so a relayer short of SOL is reported as
+ * one instead of as whichever instruction ran dry first. Exported for its tests.
+ */
+export const probeFor = (relayer: string, heldLamports: bigint, needs: bigint): bigint => {
+  const probe = heldLamports - FEE_RESERVE;
+  if (probe <= 0n || probe < needs) throw new SponsorShort(relayer, heldLamports, needs + FEE_RESERVE);
+  return probe;
+};
+
+/**
+ * A simulation's failure as Kamino's own refusal, when it is one.
+ *
+ * Kamino's lending program numbers its errors from 6000, and the SDK names
+ * them; `programAt` says which program the failing instruction belongs to,
+ * because the farms program is Anchor too and numbers its errors from 6000 as
+ * well. Anything else — a system or token program code, a failure that is not
+ * an instruction's — is not Kamino's to explain, and is left as it came.
+ */
+export const refusalOf = (
+  err: unknown,
+  programAt: (index: number) => string | undefined,
+): LendingRefused | null => {
+  const failure = (err as { InstructionError?: unknown } | null)?.InstructionError;
+  if (!Array.isArray(failure)) return null;
+  const [index, detail] = failure as [unknown, unknown];
+  const custom = (detail as { Custom?: unknown } | null)?.Custom;
+  if (custom === undefined) return null;
+  const code = Number(custom);
+  if (!Number.isInteger(code) || code < 6000) return null;
+  if (programAt(Number(index)) !== String(PROGRAM_ID)) return null;
+  return new LendingRefused(code, fromCode(code)?.name ?? `error ${code}`);
+};
+
+/** Exported for its tests: it is where Kamino's units become ours. */
+export const toPosition = (market: KaminoMarket, ob: KaminoObligation): LendingPosition => ({
   obligation: ob.obligationAddress,
   deposits: ob.getDeposits().flatMap((p) => {
     const r = market.getReserveByAddress(p.reserveAddress);
@@ -400,6 +457,16 @@ const toPosition = (market: KaminoMarket, ob: KaminoObligation): LendingPosition
     ];
   }),
   debtUsd: ob.getBorrows().reduce((s, b) => s.add(dec(b.marketValueRefreshed)), ZERO),
+  // The SDK's amount is the stored borrow scaled by Kamino's interest index to
+  // now, in base units. Only USDC is lent here; anything else was borrowed
+  // elsewhere and is not repaid in USDC.
+  owedUsdc: ob
+    .getBorrows()
+    .filter((b) => String(b.mintAddress) === String(USDC))
+    .reduce((s, b) => {
+      const r = market.getReserveByAddress(b.reserveAddress);
+      return r === undefined ? s : s.add(dec(b.amount).div(D(10).pow(r.getMintDecimals())));
+    }, ZERO),
   // `refreshedStats`, not the `get*Value()` getters: those read the obligation's stored
   // `*Sf` fields, written by the last on-chain refresh. A borrow refreshes *before* it
   // borrows, so right after one they still say nothing is owed.

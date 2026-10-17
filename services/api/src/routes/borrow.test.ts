@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { D } from "@mercury/core";
-import type { LendingIntent, LendingSource, LendingTerms } from "../lending/ports.js";
+import {
+  LendingRefused,
+  SponsorShort,
+  type LendingIntent,
+  type LendingSource,
+  type LendingTerms,
+} from "../lending/ports.js";
+import type { LedgerRow } from "../lending/interest.js";
 import type { PlannedLoanEvent } from "../lending/events.js";
 import type { PriceBoard, TokenPrice } from "@mercury/market";
 import { borrowRoutes, type BorrowDeps } from "./borrow.js";
@@ -25,6 +32,7 @@ const terms: LendingTerms = {
       depositedTokens: D(0),
     },
   ],
+  minPositionUsd: D("0.01"),
   pool: {
     reserve: "UsdcReserve",
     availableUsd: D(500_000),
@@ -55,6 +63,7 @@ const lending = (debt = 0, pledgedTokens = 10): LendingSource => ({
             },
           ],
           debtUsd: D(debt),
+          owedUsdc: D(debt),
           debtBfAdjustedUsd: D(debt),
           allowedBorrowUsd: D(pledgedTokens * 800 * 0.73),
           liquidationBorrowUsd: D(pledgedTokens * 800 * 0.75),
@@ -105,6 +114,7 @@ const deps = (
     recorded.push(...planned);
     return { written: planned.length };
   },
+  ledger: async () => [],
 });
 
 /** What `record` was handed, per test. */
@@ -402,5 +412,193 @@ describe("POST /v1/borrow/confirm", () => {
       body: JSON.stringify({ signature: "SIG", action: { kind: "borrow", usd: "1" } }),
     });
     expect(res.status).toBe(401);
+  });
+});
+
+/**
+ * A loan as it really stands a few minutes after borrowing: 2,110,008 micro-USDC
+ * owed, which Kamino values at $2.10974 because its USDC price is $0.99988.
+ */
+const owing = (owedUsdc: string, debtUsd: string): LendingSource => {
+  const l = lending(1);
+  return {
+    ...l,
+    position: async () => ({ ...(await l.position("WaLLeT"))!, debtUsd: D(debtUsd), owedUsdc: D(owedUsdc) }),
+  };
+};
+const ledgerOf =
+  (...rows: [string, string | null, string][]) =>
+  async (): Promise<readonly LedgerRow[]> =>
+    rows.map(([kind, usd, after]) => ({
+      kind,
+      usdAmount: usd === null ? null : D(usd),
+      debtAfterUsd: D(after),
+    }));
+
+const errorOf = async (res: Response) =>
+  ((await res.json()) as { error: { code: string; message: string } }).error;
+
+describe("GET /v1/borrow, what a loan is made of", () => {
+  it("says what is owed in USDC, what was borrowed, and the interest on it", async () => {
+    const d = { ...deps(owing("2.110008", "2.10974")), ledger: ledgerOf(["borrow", "2.11", "2.11"]) };
+    const body = (await (await app(d).request("/v1/borrow")).json()) as Record<string, string | null>;
+    expect(body).toMatchObject({ owedUsdc: "2.110008", principalUsdc: "2.11", interestUsdc: "0.000008" });
+  });
+
+  /* Owed plus an hour of interest at the pool's 6%: 2.110008 × (1 + 0.06 / 8,760), up to the micro-USDC. */
+  it("says what the wallet must hold to repay all of it", async () => {
+    const body = (await (
+      await app(deps(owing("2.110008", "2.10974"))).request("/v1/borrow")
+    ).json()) as Record<string, string>;
+    expect(body.closeLoanUsdc).toBe("2.110023");
+    expect(body.minPositionUsd).toBe("0.01");
+  });
+
+  it("leaves the split out when the ledger has no borrow to explain the debt", async () => {
+    const body = (await (await app(deps(owing("5", "5"))).request("/v1/borrow")).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(body.owedUsdc).toBe("5");
+    expect(body.principalUsdc).toBeNull();
+    expect(body.interestUsdc).toBeNull();
+  });
+
+  /*
+   * Kamino's own figures run to forty digits — 2.110015389120025549923551862617188642438
+   * USDC owed, read from mainnet on 17 October. The wire carries micro-USDC, the
+   * smallest amount there is: what is owed rounded up, so it is never short.
+   */
+  it("says the loan in micro-USDC, what is owed rounded up", async () => {
+    const d = {
+      ...deps(owing("2.110015389120025549923551862617188642438", "2.10981808")),
+      ledger: ledgerOf(["borrow", "2.11", "2.11"]),
+    };
+    const body = (await (await app(d).request("/v1/borrow")).json()) as Record<string, string>;
+    expect(body).toMatchObject({ owedUsdc: "2.110016", principalUsdc: "2.11", interestUsdc: "0.000016" });
+  });
+
+  it("says Kamino's minimum as the cent it is", async () => {
+    const l = lending(1);
+    const precise: LendingSource = {
+      ...l,
+      terms: async () => ({
+        ...(await l.terms()),
+        minPositionUsd: D("0.01000000000000000020816681711721685132943"),
+      }),
+    };
+    const body = (await (await app(deps(precise)).request("/v1/borrow")).json()) as Record<string, string>;
+    expect(body.minPositionUsd).toBe("0.01");
+  });
+
+  it("owes nothing, and splits nothing, with no loan", async () => {
+    const body = (await (await app(deps(lending(0, 0))).request("/v1/borrow")).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(body).toMatchObject({ owedUsdc: "0", principalUsdc: "0", interestUsdc: "0", closeLoanUsdc: "0" });
+  });
+});
+
+describe("POST /v1/borrow/transactions, repaying in full", () => {
+  /* The borrower who hit this: $2.11 borrowed, $2.11 held, a few minutes of interest owed on top. */
+  it("refuses a repay of everything the wallet cannot cover, and says what it takes", async () => {
+    const res = await post(deps(owing("2.110008", "2.10974"), 2_110_000n), { kind: "repay", usd: "all" });
+    expect(res.status).toBe(409);
+    const error = await errorOf(res);
+    expect(error.code).toBe("insufficient_cash");
+    expect(error.message).toContain("$2.12");
+    expect(error.message).toContain("$2.11");
+  });
+
+  it("repays everything once the wallet holds what closing it takes", async () => {
+    const res = await post(deps(owing("2.110008", "2.10974"), 2_120_000n), { kind: "repay", usd: "all" });
+    expect(res.status).toBe(200);
+  });
+
+  /* What 0.1% of headroom refused: $1,000 owed and $1,000.50 held is plenty to close it. */
+  it("asks only for an hour of interest as headroom, not a tenth of a percent", async () => {
+    const res = await post(deps(lending(1_000), 1_000_500_000n), { kind: "repay", usd: "all" });
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a repay that would leave less than a cent owing, before Kamino does", async () => {
+    built.length = 0;
+    const res = await post(deps(owing("2.110008", "2.10974"), 2_110_000n), { kind: "repay", usd: "2.11" });
+    expect(res.status).toBe(409);
+    const error = await errorOf(res);
+    expect(error.code).toBe("dust_left");
+    expect(error.message).toContain("$2.10");
+    expect(built).toEqual([]);
+  });
+
+  it("repays part of a loan that leaves at least a cent owing", async () => {
+    const res = await post(deps(owing("2.110008", "2.10974"), 2_110_000n), { kind: "repay", usd: "2.10" });
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("POST /v1/borrow/transactions, Kamino's one-cent minimum", () => {
+  /* 10 SPYx at $800 pledged, nothing owed; taking back all but one base unit leaves $0.000008 of it. */
+  it("refuses a withdrawal that would leave less than a cent of a stock pledged", async () => {
+    const res = await post(deps(lending(0, 10)), { kind: "withdraw", ticker: "SPY", tokensRaw: "999999999" });
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("dust_left");
+  });
+
+  it("refuses a first loan of less than a cent", async () => {
+    const res = await post(deps(lending(0, 10)), { kind: "borrow", usd: "0.005" });
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("dust_left");
+  });
+
+  /* 0.00001 SPYx at $800 is $0.008. */
+  it("refuses a first pledge worth less than a cent", async () => {
+    const res = await post(deps(lending(0, 0)), { kind: "deposit", ticker: "SPY", tokensRaw: "1000" });
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("dust_left");
+  });
+});
+
+describe("POST /v1/borrow/transactions, when Kamino or the relayer refuses", () => {
+  const refusing = (e: Error): LendingSource => ({
+    ...lending(1_000),
+    build: async () => {
+      throw e;
+    },
+  });
+
+  it("says plainly when Kamino would leave less than a cent", async () => {
+    // $1,000 in the wallet, so the repay itself is fine and only Kamino objects.
+    const res = await post(
+      deps(refusing(new LendingRefused(6092, "NetValueRemainingTooSmall")), 1_000_000_000n),
+      {
+        kind: "repay",
+        usd: "500",
+      },
+    );
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("dust_left");
+  });
+
+  it("names any other refusal of Kamino's, rather than calling it an internal error", async () => {
+    const res = await post(deps(refusing(new LendingRefused(6017, "ObligationStale")), 1_000_000_000n), {
+      kind: "repay",
+      usd: "500",
+    });
+    expect(res.status).toBe(409);
+    const error = await errorOf(res);
+    expect(error.code).toBe("kamino_refused");
+    expect(error.message).toContain("ObligationStale");
+  });
+
+  /* What a first loan met on 17 October: 0.0144 SOL in the relayer against 0.0295 of setup. */
+  it("says borrowing is unavailable when the relayer cannot pay for it", async () => {
+    const res = await post(deps(refusing(new SponsorShort("ReLaYeR", 14_440_977n, 30_504_640n))), {
+      kind: "borrow",
+      usd: "100",
+    });
+    expect(res.status).toBe(503);
+    expect((await errorOf(res)).code).toBe("upstream_unavailable");
   });
 });
