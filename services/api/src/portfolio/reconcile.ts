@@ -152,8 +152,10 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
         });
         activity.push({
           kind: "dividend",
-          title: `${token.ticker} paid a dividend`,
-          subtitle: `${plural(gained)} added, at no cost`,
+          // Labelled like every row, and said as what it was paid in: the
+          // multiplier rose, so the dividend arrived as shares, at no cost.
+          title: `${token.ticker} dividend`,
+          subtitle: `Paid as ${plural(gained)}`,
           amountUsd: token.referencePricePerShare === null ? null : gained.mul(token.referencePricePerShare),
           refTable: "token",
           refId: token.tokenId,

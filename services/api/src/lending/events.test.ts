@@ -25,8 +25,9 @@ describe("planLoanEvents", () => {
       decimalsOf,
     );
     expect(events.map((e) => e.kind)).toEqual(["pledge", "borrow"]);
-    expect(events[1]!.title).toBe("Borrowed $500.00 against SPACEX");
-    expect(events[0]!.title).toBe("Pledged 2.4 SPACEX");
+    // The amount is the row's own column; the title says what happened, the subtitle what to.
+    expect([events[1]!.title, events[1]!.subtitle]).toEqual(["Borrowed USDC", "Against SPACEX"]);
+    expect([events[0]!.title, events[0]!.subtitle]).toEqual(["Added collateral", "2.4 SPACEX"]);
   });
 
   /*
@@ -43,14 +44,14 @@ describe("planLoanEvents", () => {
 
   it("names no ticker when the loan draws on everything already pledged", () => {
     const [event] = planLoanEvents({ kind: "borrow", usd: D("500") }, decimalsOf);
-    expect(event!.title).toBe("Borrowed $500.00");
+    expect(event!.title).toBe("Borrowed USDC");
     expect(event!.ticker).toBeNull();
-    expect(event!.subtitle).toBe("Against your pledged stock");
+    expect(event!.subtitle).toBe("Against collateral");
   });
 
   it("carries the figure on a repay of a stated amount", () => {
     const [event] = planLoanEvents({ kind: "repay", usd: D("250.5") }, decimalsOf);
-    expect(event!.title).toBe("Repaid $250.50");
+    expect([event!.title, event!.subtitle]).toEqual(["Repaid loan", "Partial repayment"]);
     expect(event!.usdAmount?.toFixed(2)).toBe("250.50");
   });
 
@@ -61,13 +62,13 @@ describe("planLoanEvents", () => {
    */
   it("states no figure for repaying everything, because we do not know it yet", () => {
     const [event] = planLoanEvents({ kind: "repay", usd: "all" }, decimalsOf);
-    expect(event!.title).toBe("Repaid your loan in full");
+    expect([event!.title, event!.subtitle]).toEqual(["Repaid loan", "Paid in full"]);
     expect(event!.usdAmount).toBeNull();
   });
 
   it("does the same for withdrawing everything", () => {
     const [event] = planLoanEvents({ kind: "withdraw", ticker: "SPACEX", tokensRaw: "all" }, decimalsOf);
-    expect(event!.title).toBe("Withdrew all your SPACEX");
+    expect([event!.title, event!.subtitle]).toEqual(["Withdrew collateral", "All SPACEX"]);
     expect(event!.tokensRaw).toBeNull();
   });
 
@@ -75,7 +76,7 @@ describe("planLoanEvents", () => {
     const [event] = planLoanEvents({ kind: "deposit", ticker: "SPACEX", tokensRaw: "240000000" }, decimalsOf);
     expect(event!.kind).toBe("pledge");
     expect(event!.usdAmount).toBeNull();
-    expect(event!.subtitle).toBe("Held by Kamino as collateral");
+    expect([event!.title, event!.subtitle]).toEqual(["Added collateral", "2.4 SPACEX"]);
   });
 
   it("reports a withdrawal of a stated size with that size", () => {
@@ -83,7 +84,7 @@ describe("planLoanEvents", () => {
       { kind: "withdraw", ticker: "SPACEX", tokensRaw: "240000000" },
       decimalsOf,
     );
-    expect(event!.title).toBe("Withdrew 2.4 SPACEX");
+    expect([event!.title, event!.subtitle]).toEqual(["Withdrew collateral", "2.4 SPACEX"]);
   });
 });
 
@@ -125,7 +126,7 @@ describe("landedAmounts", () => {
       ctx,
     );
     expect(repay!.usdAmount?.toFixed()).toBe("2.110015");
-    expect(repay!.title).toBe("Repaid your loan in full");
+    expect(repay!.title).toBe("Repaid loan");
   });
 
   it("reads what a withdrawal of everything actually returned", () => {
@@ -135,6 +136,8 @@ describe("landedAmounts", () => {
       ctx,
     );
     expect(withdraw!.tokensRaw).toBe("2239976");
+    // "All NVDA" was the best the request could say; the chain says how much.
+    expect(withdraw!.subtitle).toBe("0.02239976 NVDA");
   });
 
   /* A figure the request named is the figure; the chain is only read for the ones it could not. */

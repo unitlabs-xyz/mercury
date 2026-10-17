@@ -52,7 +52,7 @@ describe("enrichDepositActivity", () => {
     expect(await enrichDepositActivity(db, advanced!)).toBe(true);
 
     const [row] = await feed(db, userId);
-    expect(row).toMatchObject({ subtitle: "USDT from tron", refTable: "funding_intent" });
+    expect(row).toMatchObject({ subtitle: "From tron · USDT", refTable: "funding_intent" });
   });
 
   it("leaves the amount and the kind alone", async () => {
@@ -103,7 +103,7 @@ describe("enrichDepositActivity", () => {
 
     const rows = await feed(db, userId);
     expect(rows).toHaveLength(1);
-    expect(rows[0]!.subtitle).toBe("USDT from tron");
+    expect(rows[0]!.subtitle).toBe("From tron · USDT");
   });
 
   it("leaves a row that is no longer generic alone", async () => {
@@ -143,7 +143,7 @@ describe("reconcileFundingDeposits", () => {
     expect(await reconcileFundingDeposits(db)).toBe(1);
 
     const [row] = await feed(db, userId);
-    expect(row!.subtitle).toBe("USDT from tron");
+    expect(row!.subtitle).toBe("From tron · USDT");
   });
 
   it("is free to run when there is nothing to do", async () => {
