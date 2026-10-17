@@ -24,6 +24,7 @@ const nvda: CollateralTerms = {
 
 const terms: LendingTerms = {
   collateral: [nvda],
+  minPositionUsd: D("0.01"),
   pool: {
     reserve: "UsdcReserve",
     availableUsd: D(500_000),
@@ -116,6 +117,7 @@ describe("GET /v1/money", () => {
             },
           ],
           debtUsd: ZERO,
+          owedUsdc: ZERO,
           debtBfAdjustedUsd: ZERO,
           allowedBorrowUsd: D(20_000).mul(D("0.55")),
           liquidationBorrowUsd: D(20_000).mul(D("0.65")),
