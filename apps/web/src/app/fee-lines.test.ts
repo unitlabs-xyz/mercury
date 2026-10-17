@@ -50,6 +50,7 @@ describe("rateLabel", () => {
 
   it("keeps a discounted rate exact", () => {
     expect(rateLabel(37.5)).toBe("0.375%");
+    expect(rateLabel(26.25)).toBe("0.2625%");
   });
 });
 

@@ -46,8 +46,13 @@ export const chargeFromWire = (fee: WireCharge): Charge => {
   };
 };
 
-/* 50 is "0.5%", 37.5 is "0.375%": as written, without the zeros, and never rounded to a rate we did not charge. */
-export const rateLabel = (bps: number): string => `${Number((bps / 100).toFixed(3))}%`;
+/*
+ * 50 is "0.5%", 37.5 is "0.375%", 26.25 is "0.2625%": as written, without the
+ * zeros, and never rounded to a rate we did not charge. A whole-bps base times
+ * the three-quarters a friend pays has at most two decimals of a basis point,
+ * which is four of a percent, so four decimals are always exact.
+ */
+export const rateLabel = (bps: number): string => `${Number((bps / 100).toFixed(4))}%`;
 
 export interface FeeLine {
   readonly key: "mercury" | "network";
