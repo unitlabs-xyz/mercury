@@ -2,7 +2,7 @@ import { USDC_MINT } from "@mercury/chain";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { activities, orders, referrals, users, waitlist } from "../db/schema.js";
-import { CLAIM_WINDOW_DAYS, QUALIFYING_FUNDING_USD, newCode } from "./rules.js";
+import { CLAIM_WINDOW_DAYS, FUNDING_SETTLE_MINUTES, QUALIFYING_FUNDING_USD, newCode } from "./rules.js";
 
 /** The waitlist's founding cohort: the first 500 places. */
 const FOUNDING = 500;
@@ -130,6 +130,10 @@ export const createReferralStore = (db: Db): ReferralStore => {
    * A transfer whose signature also appears in the inviter's own activity is
    * the inviter's money going round. A row tagged `referral_payout` is a
    * reward, not funding.
+   *
+   * The inviter exclusion is best-effort. It relies on the inviter's row
+   * having been written within the settle window, so a transfer is missed
+   * only if the inviter's wallet has failed to sync for longer than that.
    */
   const qualifyPending = async (now: Date): Promise<number> => {
     const fundedUsd = sql`(
@@ -141,6 +145,7 @@ export const createReferralStore = (db: Db): ReferralStore => {
         and a.basket_portfolio_id is null
         and a.amount_usd is not null
         and a.ref_table is distinct from 'referral_payout'
+        and a.occurred_at <= ${now}::timestamptz - (${FUNDING_SETTLE_MINUTES} * interval '1 minute')
         and not exists (
           select 1 from ${activities} b
           where b.user_id = ${referrals.inviterId} and b.tx_signature = a.tx_signature

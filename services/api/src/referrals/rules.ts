@@ -9,6 +9,13 @@ import { ReferralCode } from "@mercury/types";
 export const FRIEND_DISCOUNT = D("0.25");
 export const FRIEND_DISCOUNT_DAYS = 90;
 export const QUALIFYING_FUNDING_USD = D(50);
+/**
+ * Money counts towards funding only once it has been in the friend's wallet
+ * this long. `wallet-events` writes each wallet separately, every 30 seconds,
+ * so an hour is long enough for the inviter's side of a transfer between
+ * them to have been written too, and for `qualifyPending` to see it.
+ */
+export const FUNDING_SETTLE_MINUTES = 60;
 /** A code claimed later than this did not bring the person in. */
 export const CLAIM_WINDOW_DAYS = 7;
 

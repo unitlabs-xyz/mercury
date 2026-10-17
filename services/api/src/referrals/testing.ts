@@ -48,6 +48,7 @@ export const seedUsdcIn = async (
     signature: string;
     kind?: "transfer_in" | "transfer_out";
     refTable?: string;
+    occurredAt?: Date;
   },
 ) =>
   db.insert(activities).values({
@@ -58,4 +59,5 @@ export const seedUsdcIn = async (
     mint: USDC_MINT,
     txSignature: a.signature,
     ...(a.refTable === undefined ? {} : { refTable: a.refTable }),
+    ...(a.occurredAt === undefined ? {} : { occurredAt: a.occurredAt }),
   });
