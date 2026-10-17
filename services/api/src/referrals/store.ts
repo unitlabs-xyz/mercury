@@ -134,8 +134,13 @@ export const createReferralStore = (db: Db): ReferralStore => {
    * The inviter exclusion is best-effort. It relies on the inviter's row
    * having been written within the settle window, so a transfer is missed
    * only if the inviter's wallet has failed to sync for longer than that.
+   * The window is measured from `occurred_at`, the transaction's block time,
+   * not from when `wallet-events` wrote the row, so a row that arrives late,
+   * after an outage or a first sync, may already be past the window and is
+   * not held back.
    */
   const qualifyPending = async (now: Date): Promise<number> => {
+    /* postgres-js sends a bare Date in a raw `sql` template unencoded, so the cutoff goes as an ISO string. */
     const fundedUsd = sql`(
       select coalesce(sum(a.amount_usd), 0)
       from ${activities} a
@@ -145,7 +150,7 @@ export const createReferralStore = (db: Db): ReferralStore => {
         and a.basket_portfolio_id is null
         and a.amount_usd is not null
         and a.ref_table is distinct from 'referral_payout'
-        and a.occurred_at <= ${now}::timestamptz - (${FUNDING_SETTLE_MINUTES} * interval '1 minute')
+        and a.occurred_at <= ${now.toISOString()}::timestamptz - (${FUNDING_SETTLE_MINUTES} * interval '1 minute')
         and not exists (
           select 1 from ${activities} b
           where b.user_id = ${referrals.inviterId} and b.tx_signature = a.tx_signature
