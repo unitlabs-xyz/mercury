@@ -74,4 +74,9 @@ describe("settles", () => {
     expect(settles(refused(503))).toBe(false);
     expect(settles(new TypeError("Failed to fetch"))).toBe(false);
   });
+  it("is false for a sign-in that has not landed yet, a timeout, or a rate limit", () => {
+    expect(settles(refused(401))).toBe(false);
+    expect(settles(refused(408))).toBe(false);
+    expect(settles(refused(429))).toBe(false);
+  });
 });

@@ -56,12 +56,16 @@ export const clearRef = (store: Store | null = browser()): void => {
   }
 };
 
+/* Not answers about the code: the request was not authorised yet, timed out, or was rate limited. */
+const TRANSIENT = new Set([401, 408, 429]);
+
 /**
  * Whether an attempt to claim is over for good. Only a refusal is: an
- * `ApiError` with a 4xx status. Read by shape rather than `instanceof`, so this
- * module stays free of `api/client.ts` and the Privy import that comes with it.
+ * `ApiError` with a 4xx status other than the transient ones above. Read by
+ * shape rather than `instanceof`, so this module stays free of `api/client.ts`
+ * and the Privy import that comes with it.
  */
 export const settles = (err: unknown): boolean => {
   const status = (err as { status?: unknown } | null)?.status;
-  return typeof status === "number" && status >= 400 && status < 500;
+  return typeof status === "number" && status >= 400 && status < 500 && !TRANSIENT.has(status);
 };
