@@ -465,4 +465,44 @@ describe("an invited friend's fee", () => {
     const order = (await (await h.get(`/v1/orders/${orderId}`)).json()) as { mercuryFeeUsd: string | null };
     expect(order.mercuryFeeUsd).toBe("1.87");
   });
+
+  /*
+   * Five shares at $100 is $500 gross, the same figure the full-rate sell above
+   * is charged on: 0.375% of it is $1.875, floored to $1.87. The network cost is
+   * the $0.18 of a seller with no USDC account yet, and the discount does not
+   * touch it.
+   */
+  it("quotes a sale a quarter off too, on the proceeds, with the network fee unchanged", async () => {
+    const { post } = await harness({ referredAt: new Date(Date.now() - 10 * DAY) });
+    const res = await post("/v1/quote", { ticker: "NVDA", side: "sell", amount: "500" });
+    const body = (await res.json()) as {
+      proceeds: string;
+      fee: {
+        usdc: string;
+        mercury: string;
+        mercuryBps: number;
+        network: string;
+        discount?: { pct: number; until: string };
+      };
+    };
+    expect(body.fee).toMatchObject({
+      mercury: "1.87",
+      mercuryBps: 37.5,
+      network: "0.18",
+      usdc: "2.05",
+      discount: { pct: 25 },
+    });
+    expect(body.proceeds).toBe("497.95");
+  });
+
+  it("records the discounted fee on the sell order it executes", async () => {
+    const h = await harness({ referredAt: new Date(Date.now() - 10 * DAY) });
+    const { orderId } = (await (
+      await h.post("/v1/orders", { ticker: "NVDA", side: "sell", amount: "500" })
+    ).json()) as { orderId: string };
+    const res = await h.post(`/v1/orders/${orderId}/execute`, {});
+    expect(res.status).toBe(200);
+    const order = (await (await h.get(`/v1/orders/${orderId}`)).json()) as { mercuryFeeUsd: string | null };
+    expect(order.mercuryFeeUsd).toBe("1.87");
+  });
 });
