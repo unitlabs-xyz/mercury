@@ -20,7 +20,7 @@ import {
   type LendingPosition,
   type LendingSource,
 } from "../lending/ports.js";
-import { planLoanEvents, type PlannedLoanEvent } from "../lending/events.js";
+import { landedAmounts, planLoanEvents, type PlannedLoanEvent } from "../lending/events.js";
 import type { RecordInput } from "../lending/record.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
@@ -493,7 +493,12 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
       terms?.collateral.find((t) => t.isStock && t.ticker === ticker.toUpperCase());
 
     const intent = intentFrom(action, (ticker) => collateralOf(ticker)?.ticker ?? ticker.toUpperCase());
-    const planned = planLoanEvents(intent, (ticker) => collateralOf(ticker)?.decimals ?? 0);
+    // "All" is sized by the chain as it lands, so the figure is read off the transaction.
+    const planned = landedAmounts(
+      planLoanEvents(intent, (ticker) => collateralOf(ticker)?.decimals ?? 0),
+      tx,
+      { wallet, usdcMint: deps.usdcMint, mintOf: (ticker) => collateralOf(ticker)?.mint ?? null },
+    );
 
     const usdc = deps.usdcMint;
     const written = await deps.record(planned, {
@@ -503,7 +508,13 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
       borrowApy: terms?.pool.borrowApy ?? null,
       debtAfterUsd: position?.debtUsd ?? ZERO,
       collateralAfterUsd: (position?.deposits ?? []).reduce((s, d) => s.add(d.valueUsd), ZERO),
-      mintFor: (event) => (event.ticker === null ? usdc : (collateralOf(event.ticker)?.mint ?? usdc)),
+      // Money moved in USDC and collateral in the stock, whatever stock the borrow names: the
+      // feed's unique index is on the mint, and a pledge-and-borrow filed twice under the stock
+      // kept only the pledge.
+      mintFor: (event) => {
+        const stock = event.kind === "pledge" || event.kind === "unpledge" ? event.ticker : null;
+        return stock === null ? usdc : (collateralOf(stock)?.mint ?? usdc);
+      },
     });
 
     return c.json({ recorded: written.written, events: planned.map((e) => e.kind) });

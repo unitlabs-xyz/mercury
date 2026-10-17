@@ -108,14 +108,24 @@ const deps = (
     transaction: async (signature: string) =>
       signature === "MISSING"
         ? null
-        : ({ signature, accountKeys: ["WaLLeT"], blockTime: 1_790_000_000 } as never),
+        : ({
+            signature,
+            accountKeys: ["WaLLeT"],
+            blockTime: 1_790_000_000,
+            preTokens: [],
+            postTokens: [],
+          } as never),
   } as unknown as BorrowDeps["history"],
-  record: async (planned) => {
+  record: async (planned, input) => {
     recorded.push(...planned);
+    mints.push(...planned.map((e) => input.mintFor(e)));
     return { written: planned.length };
   },
   ledger: async () => [],
 });
+
+/** The mint each recorded event's feed row was filed under, per test. */
+const mints: string[] = [];
 
 /** What `record` was handed, per test. */
 const recorded: PlannedLoanEvent[] = [];
@@ -360,6 +370,21 @@ describe("POST /v1/borrow/confirm", () => {
     expect(recorded[1]!.title).toBe("Borrowed $500.00 against SPY");
   });
 
+  /*
+   * The feed's unique index is (user, signature, mint). Filed under the stock
+   * like the pledge beside it, the borrow collided with it and was dropped,
+   * and a first loan showed only "Pledged" in the feed.
+   */
+  it("files the borrow half of a pledge-and-borrow under USDC and the pledge under the stock", async () => {
+    recorded.length = 0;
+    mints.length = 0;
+    await confirm(deps(lending()), {
+      signature: "SIG1",
+      action: { kind: "deposit_and_borrow", ticker: "SPY", tokensRaw: "100000000", usd: "500" },
+    });
+    expect(mints).toEqual([SPYX, USDC]);
+  });
+
   it("refuses a signature the chain has not seen with a code the client can retry on", async () => {
     const res = await confirm(deps(lending()), {
       signature: "MISSING",
@@ -386,6 +411,27 @@ describe("POST /v1/borrow/confirm", () => {
     await confirm(deps(lending()), { signature: "SIG2", action: { kind: "repay", usd: "all" } });
     expect(recorded[0]!.kind).toBe("repay");
     expect(recorded[0]!.usdAmount).toBeNull();
+    expect(recorded[0]!.title).toBe("Repaid your loan in full");
+  });
+
+  /* The figure the request could not name is on the chain once it lands, interest to that slot included. */
+  it("records what a repay of everything actually sent", async () => {
+    recorded.length = 0;
+    const d = deps(lending());
+    const landed = {
+      ...d,
+      history: {
+        transaction: async (signature: string) => ({
+          signature,
+          accountKeys: ["WaLLeT"],
+          blockTime: 1_790_000_000,
+          preTokens: [{ mint: USDC, owner: "WaLLeT", rawAmount: 5_000_000n, decimals: 6 }],
+          postTokens: [{ mint: USDC, owner: "WaLLeT", rawAmount: 2_889_985n, decimals: 6 }],
+        }),
+      } as unknown as BorrowDeps["history"],
+    };
+    await confirm(landed, { signature: "SIG2", action: { kind: "repay", usd: "all" } });
+    expect(recorded[0]!.usdAmount?.toFixed()).toBe("2.110015");
     expect(recorded[0]!.title).toBe("Repaid your loan in full");
   });
 
