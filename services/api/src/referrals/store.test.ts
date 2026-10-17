@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { referrals } from "../db/schema.js";
 import { testDb } from "../db/testing.js";
 import { createReferralStore } from "./store.js";
-import { seedInstrument, seedOrder, seedUser, seedWaitlist } from "./testing.js";
+import { seedInstrument, seedOrder, seedUsdcIn, seedUser, seedWaitlist } from "./testing.js";
 
 describe("codeFor", () => {
   it("makes a code once and keeps it", async () => {
@@ -107,5 +108,68 @@ describe("claim", () => {
     const ada = await seedUser(db, 5, { email: "Ada@Example.com" });
     expect(await store.claim(friend.id, "3kQ9xZ1bTq7w", now)).toEqual({ kind: "claimed", inviterId: ada.id });
     expect(await store.codeFor(ada.id)).toBe("3kQ9xZ1bTq7w");
+  });
+});
+
+describe("qualifyPending", () => {
+  const now = new Date("2026-10-17T12:00:00Z");
+  const setup = async () => {
+    const db = await testDb();
+    const store = createReferralStore(db);
+    const inviter = await seedUser(db, 1, { referralCode: "inviter1" });
+    const friend = await seedUser(db, 2);
+    await store.claim(friend.id, "inviter1", now);
+    const nvda = await seedInstrument(db);
+    const trade = () =>
+      seedOrder(db, { userId: friend.id, instrumentId: nvda.id, side: "buy", status: "filled" });
+    const qualifiedAt = async () => (await db.select().from(referrals))[0]!.qualifiedAt;
+    return { db, store, inviter, friend, trade, qualifiedAt };
+  };
+
+  it("counts a friend once they have put in $50 and traded", async () => {
+    const { db, store, friend, trade, qualifiedAt } = await setup();
+    await seedUsdcIn(db, { userId: friend.id, usd: "30", signature: "sig-1" });
+    await seedUsdcIn(db, { userId: friend.id, usd: "20", signature: "sig-2" });
+    await trade();
+    expect(await store.qualifyPending(now)).toBe(1);
+    expect(await qualifiedAt()).toEqual(now);
+  });
+
+  it("waits for the trade", async () => {
+    const { db, store, friend } = await setup();
+    await seedUsdcIn(db, { userId: friend.id, usd: "500", signature: "sig-1" });
+    expect(await store.qualifyPending(now)).toBe(0);
+  });
+
+  it("waits for the full $50", async () => {
+    const { db, store, friend, trade } = await setup();
+    await seedUsdcIn(db, { userId: friend.id, usd: "49.99", signature: "sig-1" });
+    await trade();
+    expect(await store.qualifyPending(now)).toBe(0);
+  });
+
+  /* Otherwise $50 passed around a ring of accounts would buy a tier. */
+  it("does not count money the inviter sent them", async () => {
+    const { db, store, inviter, friend, trade } = await setup();
+    await seedUsdcIn(db, { userId: inviter.id, usd: "50", signature: "sig-gift", kind: "transfer_out" });
+    await seedUsdcIn(db, { userId: friend.id, usd: "50", signature: "sig-gift" });
+    await trade();
+    expect(await store.qualifyPending(now)).toBe(0);
+  });
+
+  it("does not count a referral payout as funding", async () => {
+    const { db, store, friend, trade } = await setup();
+    await seedUsdcIn(db, { userId: friend.id, usd: "50", signature: "sig-1", refTable: "referral_payout" });
+    await trade();
+    expect(await store.qualifyPending(now)).toBe(0);
+  });
+
+  it("dates a friend from the first pass that counted them, not the latest", async () => {
+    const { db, store, friend, trade, qualifiedAt } = await setup();
+    await seedUsdcIn(db, { userId: friend.id, usd: "50", signature: "sig-1" });
+    await trade();
+    await store.qualifyPending(now);
+    expect(await store.qualifyPending(new Date(now.getTime() + 60_000))).toBe(0);
+    expect(await qualifiedAt()).toEqual(now);
   });
 });

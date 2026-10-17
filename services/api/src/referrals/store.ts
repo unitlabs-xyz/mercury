@@ -1,7 +1,8 @@
+import { USDC_MINT } from "@mercury/chain";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { orders, referrals, users, waitlist } from "../db/schema.js";
-import { CLAIM_WINDOW_DAYS, newCode } from "./rules.js";
+import { activities, orders, referrals, users, waitlist } from "../db/schema.js";
+import { CLAIM_WINDOW_DAYS, QUALIFYING_FUNDING_USD, newCode } from "./rules.js";
 
 /** The waitlist's founding cohort: the first 500 places. */
 const FOUNDING = 500;
@@ -20,6 +21,8 @@ export interface ReferralStore {
   claim(friendId: string, code: string, now: Date): Promise<ClaimResult>;
   /** When this person was referred, or null if nobody did. The discount runs from here. */
   referredAt(userId: string): Promise<Date | null>;
+  /** Mark every invited friend who now has $50 in and one filled trade. Returns how many changed. */
+  qualifyPending(now: Date): Promise<number>;
 }
 
 export const createReferralStore = (db: Db): ReferralStore => {
@@ -119,6 +122,43 @@ export const createReferralStore = (db: Db): ReferralStore => {
     return won?.inviterId === inviterId ? { kind: "already", inviterId } : { kind: "taken" };
   };
 
+  /*
+   * One statement, so a friend is counted at most once however often it runs.
+   *
+   * Money in is the same rows the performance line reads as flows: USDC
+   * `transfer_in` to the wallet itself, not a basket. Two kinds are left out.
+   * A transfer whose signature also appears in the inviter's own activity is
+   * the inviter's money going round. A row tagged `referral_payout` is a
+   * reward, not funding.
+   */
+  const qualifyPending = async (now: Date): Promise<number> => {
+    const fundedUsd = sql`(
+      select coalesce(sum(a.amount_usd), 0)
+      from ${activities} a
+      where a.user_id = ${referrals.friendId}
+        and a.kind = 'transfer_in'
+        and a.mint = ${USDC_MINT}
+        and a.basket_portfolio_id is null
+        and a.amount_usd is not null
+        and a.ref_table is distinct from 'referral_payout'
+        and not exists (
+          select 1 from ${activities} b
+          where b.user_id = ${referrals.inviterId} and b.tx_signature = a.tx_signature
+        )
+    )`;
+    const traded = sql`exists (
+      select 1 from ${orders} o where o.user_id = ${referrals.friendId} and o.status = 'filled'
+    )`;
+    const changed = await db
+      .update(referrals)
+      .set({ qualifiedAt: now })
+      .where(
+        and(isNull(referrals.qualifiedAt), traded, sql`${fundedUsd} >= ${QUALIFYING_FUNDING_USD.toString()}`),
+      )
+      .returning({ id: referrals.id });
+    return changed.length;
+  };
+
   return {
     codeFor,
     isFounding: async (userId) => {
@@ -127,5 +167,6 @@ export const createReferralStore = (db: Db): ReferralStore => {
     },
     claim,
     referredAt: async (userId) => (await existing(userId))?.createdAt ?? null,
+    qualifyPending,
   };
 };

@@ -19,6 +19,7 @@ import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
 import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
 import { watchAllLoans } from "./lending/watch-loans.js";
+import { createReferralStore } from "./referrals/store.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
@@ -223,6 +224,7 @@ const read = buildReadDeps(auth.db, deps, config, relay, fund);
  * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers               |
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                 |
  * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email               |
+ * | `referral-qualify`   | 10m     | `referral.qualified_at`                              |
  *
  * One job the design called for is not here: a poller for Jupiter trigger
  * orders. Trigger orders are not built, and `gateExecution` turns the decision
@@ -380,6 +382,17 @@ every("loan-watch", 5 * 60 * 1000, async () => {
     `${s.alerted} alerts across ${s.loans} loans, ${s.delivered} delivered` +
     (s.failed > 0 ? `, ${s.failed} failed` : "")
   );
+});
+
+/**
+ * Ten minutes, because nobody is watching for the moment a friend starts to
+ * count. It reads money in from the rows `wallet-events` writes and trades
+ * from `order`, so it can only be as current as they are.
+ */
+const referralStore = createReferralStore(auth.db);
+every("referral-qualify", 10 * 60 * 1000, async () => {
+  const n = await referralStore.qualifyPending(new Date());
+  return n === 0 ? null : `${n} invited ${n === 1 ? "friend" : "friends"} now count as funded`;
 });
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
