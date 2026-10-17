@@ -77,7 +77,7 @@ const held = (mint: string, whole: string, decimals: number): TokenBalance => ({
  * below the route can observe.
  */
 const harness = async (
-  over: { balances?: TokenBalance[]; sponsored?: boolean; tradingFeeBps?: number } = {},
+  over: { balances?: TokenBalance[]; sponsored?: boolean; tradingFeeBps?: number; referredAt?: Date } = {},
 ) => {
   const db = await testDb();
   const priced: string[] = [];
@@ -172,6 +172,9 @@ const harness = async (
     activity: {},
     fills: {},
     borrow: {},
+    ...(over.referredAt === undefined
+      ? {}
+      : { referrals: { store: { referredAt: async () => over.referredAt ?? null } } }),
   } as unknown as ReadDeps;
 
   const auth = {
@@ -410,5 +413,50 @@ describe("POST /v1/orders/:id/execute", () => {
     const res = await execute(h, { ticker: "NVDA", side: "sell", amount: "0.30" });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { error: { message: string } }).error.message).toContain("$0.33");
+  });
+});
+
+/*
+ * A quarter off 0.5% is 0.375%. On $500 that is $1.875, floored to the cent
+ * like every Mercury fee: $1.87.
+ */
+describe("an invited friend's fee", () => {
+  const DAY = 86_400_000;
+
+  it("quotes a quarter off for their first 90 days, and says so", async () => {
+    const { post } = await harness({ referredAt: new Date(Date.now() - 10 * DAY) });
+    const res = await post("/v1/quote", { ticker: "NVDA", side: "buy", amount: "500" });
+    const body = (await res.json()) as {
+      fee: {
+        mercury: string;
+        mercuryBps: number;
+        network: string;
+        discount?: { pct: number; until: string };
+      };
+    };
+    expect(body.fee).toMatchObject({
+      mercury: "1.87",
+      mercuryBps: 37.5,
+      network: "0.01",
+      discount: { pct: 25 },
+    });
+  });
+
+  it("quotes the full rate once the 90 days are up", async () => {
+    const { post } = await harness({ referredAt: new Date(Date.now() - 91 * DAY) });
+    const res = await post("/v1/quote", { ticker: "NVDA", side: "buy", amount: "500" });
+    const body = (await res.json()) as { fee: { mercury: string; discount?: unknown } };
+    expect(body.fee.mercury).toBe("2.5");
+    expect(body.fee.discount).toBeUndefined();
+  });
+
+  it("records the discounted fee on the order it executes", async () => {
+    const h = await harness({ referredAt: new Date(Date.now() - 10 * DAY) });
+    const { orderId } = (await (
+      await h.post("/v1/orders", { ticker: "NVDA", side: "buy", amount: "500" })
+    ).json()) as { orderId: string };
+    await h.post(`/v1/orders/${orderId}/execute`, {});
+    const order = (await (await h.get(`/v1/orders/${orderId}`)).json()) as { mercuryFeeUsd: string | null };
+    expect(order.mercuryFeeUsd).toBe("1.87");
   });
 });
