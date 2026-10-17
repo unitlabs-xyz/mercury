@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -13,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * The read model, per docs/05. Two rules hold throughout and have no exceptions:
@@ -44,8 +46,17 @@ export const users = pgTable(
     email: text("email"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     displayCurrency: text("display_currency").notNull().default("USD"),
+    /**
+     * What this person's invite link carries. Null until they first open the
+     * Invite panel. A waitlist member gets their old card's slug, so the
+     * links they posted on X keep working.
+     */
+    referralCode: text("referral_code"),
   },
-  (t) => [uniqueIndex("user_privy_user_id_idx").on(t.privyUserId)],
+  (t) => [
+    uniqueIndex("user_privy_user_id_idx").on(t.privyUserId),
+    uniqueIndex("user_referral_code_idx").on(t.referralCode),
+  ],
 );
 
 export const wallets = pgTable(
@@ -531,6 +542,38 @@ export const waitlist = pgTable(
     uniqueIndex("waitlist_slug_idx").on(t.slug),
   ],
 );
+
+/**
+ * Who invited whom. One row per invited friend, written once.
+ *
+ * `qualified_at` is when the friend first counted as funded — $50 in and one
+ * filled trade — which is what the inviter's tier counts. The discount the
+ * friend gets runs 90 days from `created_at`.
+ */
+export const referrals = pgTable(
+  "referral",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inviterId: uuid("inviter_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    friendId: uuid("friend_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The code as claimed, kept because a code can be a waitlist slug and that history is worth having. */
+    code: text("code").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    qualifiedAt: timestamp("qualified_at", { withTimezone: true }),
+  },
+  (t) => [
+    /* One inviter, set once. */
+    uniqueIndex("referral_friend_idx").on(t.friendId),
+    /* The Invite panel's counts and the tier both read one inviter's rows. */
+    index("referral_inviter_idx").on(t.inviterId, t.qualifiedAt),
+    check("referral_not_self", sql`${t.inviterId} <> ${t.friendId}`),
+  ],
+);
+export type Referral = typeof referrals.$inferSelect;
 
 /**
  * What an account was worth, once an hour.

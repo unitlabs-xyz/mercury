@@ -169,6 +169,13 @@
       "when": 1792065604187,
       "tag": "0023_admin_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792247782228,
+      "tag": "0024_referral",
+      "breakpoints": true
     }
   ]
 }
