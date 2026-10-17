@@ -4,7 +4,7 @@ import type { OfferQueueDecision, ExecuteDecision, PricedCandidate, RefuseDecisi
 import { Dialog } from "../ui/Dialog";
 import { Alert, Clock } from "../ui/icons";
 import { Mark } from "./invest/shared";
-import { SwapPanel, TipLine, Well } from "./review";
+import { RouteLine, SwapPanel, TipLine, Well } from "./review";
 import { InfoTip, StatusChip } from "../ui/ds";
 import { localTime } from "../ui/localTime";
 import { lendableIssuer, TOKEN_NAME, useHeldAs } from "./stock/heldAs";
@@ -255,36 +255,7 @@ const Execute = ({
                 {usd(line.value)}
               </TipLine>
             ))}
-          {/* Who issues the token, then where it trades: one white pill, the issuer set in grey. */}
-          <div className="flex items-center justify-between gap-4 text-[14px] leading-5">
-            <dt className="text-ds-muted">Route</dt>
-            <dd className="inline-flex min-w-0 items-center rounded-full bg-white p-[3px] text-[12px] leading-none">
-              <span className="rounded-full bg-ds-panel px-2.5 py-1.5 font-medium text-ds-ink">
-                {TOKEN_NAME[pick.issuer]}
-              </span>
-              {pick.routeLabels.map((venue, i) => (
-                <span key={`${venue}-${i}`} className="flex items-center text-ds-ink">
-                  <svg
-                    viewBox="0 0 8 14"
-                    width={5}
-                    height={9}
-                    fill="none"
-                    aria-hidden
-                    className="ml-2 text-ds-muted"
-                  >
-                    <path
-                      d="M1 13L7 7L1 1"
-                      stroke="currentColor"
-                      strokeWidth={1.8}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <span className="px-2">{venue}</span>
-                </span>
-              ))}
-            </dd>
-          </div>
+          <RouteLine issuer={TOKEN_NAME[pick.issuer]} venues={pick.routeLabels} />
         </dl>
       </SwapPanel>
       {d.warning && pick.mint === d.best.mint && (

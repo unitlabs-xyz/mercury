@@ -1,6 +1,4 @@
-import { AnimatePresence, motion } from "motion/react";
-import { useId, useMemo, useState, type ReactNode } from "react";
-import { EASE } from "../motion/config";
+import { useMemo, type ReactNode } from "react";
 import { Button, ButtonLink } from "../ui/Button";
 import { Chevron, InfoTip, Pagination, StatusChip } from "../ui/ds";
 import { Close, Download, Search } from "../ui/icons";
@@ -13,6 +11,7 @@ import { Skeleton } from "./portfolio/ui";
 import { Select } from "../ui/Select";
 import { useActivityParams } from "./useActivityParams";
 import { AppShell } from "./AppShell";
+import { usePanels } from "./Panels";
 
 /** "+$12.42", "−$200.00": one true sign, money in green. */
 const Amount = ({ event }: { event: Event }) => {
@@ -28,11 +27,6 @@ const Amount = ({ event }: { event: Event }) => {
   );
 };
 
-/**
- * One event: a 60px row on the grey panel, as the list rows are, that turns
- * white under the pointer and opens in place to its details and the
- * transaction behind it.
- */
 /*
  * The shape of the list, before the list.
  *
@@ -69,106 +63,43 @@ const LoadingRows = () => (
   </div>
 );
 
+/**
+ * One event: a 60px row on the grey panel, as the list rows are, that turns
+ * white under the pointer and opens its receipt — what it was made of, and
+ * the transaction behind it.
+ */
 const Row = ({ event }: { event: Event }) => {
-  const [open, setOpen] = useState(false);
-  const id = useId();
+  const panels = usePanels();
+  const { id } = event;
   return (
-    <div className={`rounded-md transition-colors ${open ? "bg-white" : "hover:bg-white"}`}>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={`event-${id}`}
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-15 w-full items-center gap-3 px-4 text-left"
-      >
-        <ActivityMark event={event} />
-        <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-[5px]">
-            <span className="truncate text-[14px] leading-[18px] font-medium text-ds-ink">{event.title}</span>
-            {event.pending && (
-              <span className="shrink-0">
-                <StatusChip tone="pending">Pending</StatusChip>
-              </span>
-            )}
-          </span>
-          {event.sub && (
-            <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">{event.sub}</span>
+    <button
+      type="button"
+      onClick={id === undefined ? undefined : () => panels.receipt(id)}
+      disabled={id === undefined}
+      aria-haspopup="dialog"
+      className="flex h-15 w-full items-center gap-3 rounded-md px-4 text-left transition-colors hover:bg-white disabled:cursor-default disabled:hover:bg-transparent"
+    >
+      <ActivityMark event={event} />
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-[5px]">
+          <span className="truncate text-[14px] leading-[18px] font-medium text-ds-ink">{event.title}</span>
+          {event.pending && (
+            <span className="shrink-0">
+              <StatusChip tone="pending">Pending</StatusChip>
+            </span>
           )}
         </span>
-        <span className="flex shrink-0 items-center gap-3">
-          <Amount event={event} />
-          <motion.span
-            animate={{ rotate: open ? 90 : 0 }}
-            transition={{ duration: 0.25, ease: EASE }}
-            className="inline-flex text-ds-muted"
-          >
-            <Chevron />
-          </motion.span>
-        </span>
-      </button>
-
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            id={`event-${id}`}
-            role="region"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ height: { duration: 0.3, ease: EASE }, opacity: { duration: 0.2 } }}
-            className="overflow-hidden"
-          >
-            <div className="px-4 pb-4 pl-[64px]">
-              {event.details.length > 0 && (
-                <dl className="flex flex-col gap-3">
-                  {event.details.map((d) => (
-                    <div
-                      key={d.label}
-                      className="flex h-5 items-center justify-between gap-6 text-[14px] leading-none"
-                    >
-                      <dt className="text-ds-muted">{d.label}</dt>
-                      <dd
-                        className={`text-right font-medium ${
-                          d.tone === "up"
-                            ? "text-ds-up"
-                            : d.tone === "down"
-                              ? "text-ds-down"
-                              : d.tone === "muted"
-                                ? "text-ds-muted"
-                                : "text-ds-ink"
-                        }`}
-                      >
-                        {d.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-              {event.signature ? (
-                <a
-                  href={`https://solscan.io/tx/${event.signature}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={`${event.details.length ? "mt-4" : ""} flex items-center justify-between gap-4 rounded-lg bg-ds-panel px-3 py-2.5 text-[12px] text-ds-muted transition-colors hover:text-ds-ink`}
-                >
-                  <span className="truncate font-mono">{event.signature}</span>
-                  <span className="flex shrink-0 items-center gap-[5px] font-medium text-ds-link">
-                    View on chain
-                    <Chevron />
-                  </span>
-                </a>
-              ) : (
-                <p
-                  className={`${event.details.length ? "mt-4" : ""} rounded-lg bg-ds-panel px-3 py-2.5 text-[12px] text-ds-muted`}
-                >
-                  Nothing on chain yet. The order rests until its price is met.
-                </p>
-              )}
-            </div>
-          </motion.div>
+        {event.sub && (
+          <span className="mt-0.5 block truncate text-[12px] leading-4 text-ds-muted">{event.sub}</span>
         )}
-      </AnimatePresence>
-    </div>
+      </span>
+      <span className="flex shrink-0 items-center gap-3">
+        <Amount event={event} />
+        <span className="inline-flex text-ds-muted">
+          <Chevron />
+        </span>
+      </span>
+    </button>
   );
 };
 
@@ -230,8 +161,8 @@ export const Activity = () => {
               )}
             </span>
             <InfoTip label="About this list" align="start">
-              Every row links to the transaction on Solana. Nothing here is a number you have to take on
-              trust.
+              Open any row for what it was made of and the transaction behind it on Solana. Nothing here is a
+              number you have to take on trust.
             </InfoTip>
           </div>
           <Button
@@ -325,10 +256,14 @@ export const Activity = () => {
                 </h2>
                 <div className="flex flex-col gap-1">
                   {/* Date and title are not unique: two "Received SOL" on one day
-                      collide, and React drops one of them. The signature is the
-                      real identity; only rows without one fall back to position. */}
+                      collide, and React drops one of them. Nor is the signature:
+                      a pledge-and-borrow is two rows from one transaction. The
+                      row's id is the identity; only rows without one fall back. */}
                   {day.events.map((event, i) => (
-                    <Row key={event.signature ?? `${event.date}-${event.title}-${i}`} event={event} />
+                    <Row
+                      key={event.id ?? event.signature ?? `${event.date}-${event.title}-${i}`}
+                      event={event}
+                    />
                   ))}
                 </div>
               </div>

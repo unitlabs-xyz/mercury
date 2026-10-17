@@ -23,8 +23,8 @@ export interface ActivityItem {
  *
  * The server's feed is deliberately thin — docs/05 calls it denormalised on
  * purpose, read constantly and never joined — so `details` is empty here rather
- * than invented. The rows that carry detail are fills, and those arrive with
- * execution in subsystem 3.
+ * than invented. What a row is made of is its receipt, fetched by `id` when the
+ * row is opened; see `receipt.ts`.
  */
 const KIND: Record<string, EventKind> = {
   transfer_in: "receive",
@@ -66,6 +66,7 @@ const FLOW: Partial<Record<EventKind, "in" | "out">> = {
 export const toEvent = (i: ActivityItem): Event => {
   const kind = KIND[i.kind] ?? "receive";
   return {
+    id: i.id,
     date: i.occurredAt.slice(0, 10),
     kind,
     title: i.title,

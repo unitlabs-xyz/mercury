@@ -25,8 +25,12 @@ const MONEY: Record<string, { src: string; bare: boolean }> = {
   },
 };
 
+type MarkSize = 32 | 36 | 40;
+const BOX: Record<MarkSize, string> = { 32: "size-8", 36: "size-9", 40: "size-10" };
+const GLYPH: Record<MarkSize, string> = { 32: "[&>svg]:size-8", 36: "[&>svg]:size-9", 40: "[&>svg]:size-10" };
+
 /** The same Solana USDC coin in activity and balance lists. */
-export const UsdcMark = ({ size = 36, src = MONEY[USDC_MINT]!.src }: { size?: 32 | 36; src?: string }) => (
+export const UsdcMark = ({ size = 36, src = MONEY[USDC_MINT]!.src }: { size?: MarkSize; src?: string }) => (
   <span className="relative shrink-0">
     <img
       src={src}
@@ -34,7 +38,7 @@ export const UsdcMark = ({ size = 36, src = MONEY[USDC_MINT]!.src }: { size?: 32
       width={size}
       height={size}
       loading="lazy"
-      className={`${size === 32 ? "size-8" : "size-9"} rounded-full bg-page object-cover`}
+      className={`${BOX[size]} rounded-full bg-page object-cover`}
     />
     <img
       src="/logos/solana.svg"
@@ -55,21 +59,17 @@ export const UsdcMark = ({ size = 36, src = MONEY[USDC_MINT]!.src }: { size?: 32
  * Everything in a list is one size in the same circle, because the mark is the
  * leftmost column and a row that sizes differently breaks the line the eye
  * follows down the page. 36px on the Activity page; 32px in the portfolio's
- * Recent activity, where the rows are a summary.
+ * Recent activity, where the rows are a summary; 40px heading a receipt, as a
+ * stock's mark heads the order sheet.
  */
-export const ActivityMark = ({ event, size = 36 }: { event: Event; size?: 32 | 36 }) => {
+export const ActivityMark = ({ event, size = 36 }: { event: Event; size?: MarkSize }) => {
   const money = event.mint === undefined ? undefined : MONEY[event.mint];
   /* A stock's own art wins: it is already a full-bleed circle of the right
      shape, which is why only the bare marks need insetting. */
   const src = event.logo ?? money?.src;
-  const box = size === 32 ? "size-8" : "size-9";
+  const box = BOX[size];
 
-  if (src === undefined)
-    return (
-      <span className={`shrink-0 ${size === 32 ? "[&>svg]:size-8" : "[&>svg]:size-9"}`}>
-        {EVENT_ICON[event.kind]}
-      </span>
-    );
+  if (src === undefined) return <span className={`shrink-0 ${GLYPH[size]}`}>{EVENT_ICON[event.kind]}</span>;
 
   const mark = (
     <img

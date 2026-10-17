@@ -5,6 +5,7 @@ import type { Event } from "@mercury/view";
 import { RailCard, RailHead, StatusChip } from "../../ui/ds";
 import { usd } from "@mercury/view";
 import { ActivityMark } from "../activity-mark";
+import { usePanels } from "../Panels";
 import { UPCOMING_ICON } from "./icons";
 import { Skeleton, relDay, shortDate } from "./ui";
 
@@ -78,31 +79,60 @@ const signed = (e: Event) =>
  * both places. 32px rather than the page's 36: this is a summary in a rail.
  * The amount and date columns are fixed from the right, so the wider mark
  * takes from the label and the amounts still line up with Coming up.
+ *
+ * With `onOpen` the row is a button that opens its receipt, as an Activity
+ * row does; without it, as on a basket page whose rows are not feed rows,
+ * it is only a line.
  */
-export const EventRow = ({ e, showSubtitle = false }: { e: Event; showSubtitle?: boolean }) => (
-  <li
-    className={`grid grid-cols-[32px_minmax(0,1fr)_87px_64px] items-center gap-x-[13px] text-[14px] leading-none ${showSubtitle ? "min-h-9" : "h-8"}`}
-  >
-    <ActivityMark event={e} size={32} />
-    <span className="flex min-w-0 flex-col gap-1">
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate text-ds-muted">{e.title}</span>
-        {e.pending && (
-          <span className="shrink-0">
-            <StatusChip tone="pending">Pending</StatusChip>
+export const EventRow = ({
+  e,
+  showSubtitle = false,
+  onOpen,
+}: {
+  e: Event;
+  showSubtitle?: boolean;
+  onOpen?: () => void;
+}) => {
+  const line = `grid w-full grid-cols-[32px_minmax(0,1fr)_87px_64px] items-center gap-x-[13px] text-left text-[14px] leading-none ${showSubtitle ? "min-h-9" : "h-8"}`;
+  const body = (
+    <>
+      <ActivityMark event={e} size={32} />
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={`truncate text-ds-muted ${onOpen ? "transition-colors group-hover:text-ds-ink" : ""}`}
+          >
+            {e.title}
           </span>
-        )}
+          {e.pending && (
+            <span className="shrink-0">
+              <StatusChip tone="pending">Pending</StatusChip>
+            </span>
+          )}
+        </span>
+        {showSubtitle && e.sub && <span className="truncate text-[11px] text-ds-muted">{e.sub}</span>}
       </span>
-      {showSubtitle && e.sub && <span className="truncate text-[11px] text-ds-muted">{e.sub}</span>}
-    </span>
-    <span className={`whitespace-nowrap font-medium ${e.flow === "in" ? "text-ds-up" : "text-ds-ink"}`}>
-      {signed(e)}
-    </span>
-    <span className="text-right text-ds-muted">{shortDate(e.date)}</span>
-  </li>
-);
+      <span className={`whitespace-nowrap font-medium ${e.flow === "in" ? "text-ds-up" : "text-ds-ink"}`}>
+        {signed(e)}
+      </span>
+      <span className="text-right text-ds-muted">{shortDate(e.date)}</span>
+    </>
+  );
+  return (
+    <li>
+      {onOpen ? (
+        <button type="button" onClick={onOpen} aria-haspopup="dialog" className={`group ${line}`}>
+          {body}
+        </button>
+      ) : (
+        <div className={line}>{body}</div>
+      )}
+    </li>
+  );
+};
 
 export const Recent = ({ events, loading }: { events: readonly Event[]; loading: boolean }) => {
+  const panels = usePanels();
   const shown = events.slice(0, 6);
   if (!loading && shown.length === 0) return null;
   return (
@@ -116,9 +146,16 @@ export const Recent = ({ events, loading }: { events: readonly Event[]; loading:
         </div>
       ) : (
         <ul className="mt-[15px] flex flex-col gap-2">
-          {shown.map((e, i) => (
-            <EventRow key={`${e.date}-${i}`} e={e} />
-          ))}
+          {shown.map((e, i) => {
+            const id = e.id;
+            return (
+              <EventRow
+                key={id ?? `${e.date}-${i}`}
+                e={e}
+                {...(id === undefined ? {} : { onOpen: () => panels.receipt(id) })}
+              />
+            );
+          })}
         </ul>
       )}
     </RailCard>

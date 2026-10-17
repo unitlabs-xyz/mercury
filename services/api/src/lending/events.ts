@@ -1,4 +1,5 @@
-import type { Decimal } from "@mercury/core";
+import { D, type Decimal } from "@mercury/core";
+import type { TokenBalanceEntry, TransactionDetail } from "@mercury/chain";
 import type { LendingIntent } from "./ports.js";
 
 /** One thing a lending transaction did, ready for `loan_event` and the feed. */
@@ -30,12 +31,11 @@ const money = (d: Decimal): string => `$${d.toFixed(2)}`;
  * at once, and a feed that reported only the cash would lose the pledge while a
  * feed that reported only the pledge would lose the loan.
  *
- * **"all" carries no figure.** A repay of everything and a withdrawal of
+ * **"all" carries no figure here.** A repay of everything and a withdrawal of
  * everything are sized by the chain at the moment they land, not by the request,
  * and the difference is the interest that accrued in between. Rather than put a
- * number in the feed that is nearly right, these say what happened and leave the
- * amount out; `debt_after_usd` on consecutive rows recovers it exactly, later,
- * for anyone who needs it.
+ * number in the feed that is nearly right, these leave the amount out, and
+ * `landedAmounts` fills it in from the transaction once it has landed.
  */
 export const planLoanEvents = (
   intent: LendingIntent,
@@ -117,4 +117,50 @@ export const planLoanEvents = (
         },
       ];
   }
+};
+
+const sumOwned = (entries: readonly TokenBalanceEntry[], owner: string, mint: string): bigint =>
+  entries.reduce((total, e) => (e.owner === owner && e.mint === mint ? total + e.rawAmount : total), 0n);
+
+/**
+ * The figures "all" could not name, read off the transaction that landed.
+ *
+ * A repay of everything sends exactly what was owed at its slot, so the USDC
+ * that left the wallet is the repayment, interest included; a withdrawal of
+ * everything returns the whole of the collateral to it. Without this the feed
+ * printed "Repaid your loan in full" with no amount beside it, and the receipt
+ * had no way to say how much of it was interest.
+ *
+ * Only the gaps are filled. An amount the request named is what Kamino was
+ * asked for and stays the figure; a transaction that shows nothing moved
+ * leaves the gap a gap rather than writing a zero.
+ */
+export const landedAmounts = (
+  planned: readonly PlannedLoanEvent[],
+  tx: TransactionDetail,
+  ctx: {
+    readonly wallet: string;
+    readonly usdcMint: string;
+    readonly mintOf: (ticker: string) => string | null;
+  },
+): readonly PlannedLoanEvent[] => {
+  const change = (mint: string) =>
+    sumOwned(tx.postTokens, ctx.wallet, mint) - sumOwned(tx.preTokens, ctx.wallet, mint);
+  const decimalsOf = (mint: string) =>
+    [...tx.preTokens, ...tx.postTokens].find((e) => e.mint === mint)?.decimals ?? 6;
+
+  return planned.map((event) => {
+    if (event.kind === "repay" && event.usdAmount === null) {
+      const sent = -change(ctx.usdcMint);
+      return sent > 0n
+        ? { ...event, usdAmount: D(sent.toString()).div(D(10).pow(decimalsOf(ctx.usdcMint))) }
+        : event;
+    }
+    if (event.kind === "unpledge" && event.tokensRaw === null && event.ticker !== null) {
+      const mint = ctx.mintOf(event.ticker);
+      const returned = mint === null ? 0n : change(mint);
+      return returned > 0n ? { ...event, tokensRaw: returned.toString() } : event;
+    }
+    return event;
+  });
 };

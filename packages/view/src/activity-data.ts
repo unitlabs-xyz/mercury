@@ -16,6 +16,8 @@ export type EventKind =
 export type Detail = { label: string; value: string; tone?: "up" | "down" | "muted" };
 
 export type Event = {
+  /** The feed row's id, which its receipt is fetched by. Absent on a row that is not one. */
+  id?: string;
   /** ISO date, so month and year can be filtered on. */
   date: string;
   kind: EventKind;
