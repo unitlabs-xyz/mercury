@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { testDb } from "../db/testing.js";
 import { createReferralStore } from "./store.js";
-import { seedUser, seedWaitlist } from "./testing.js";
+import { seedInstrument, seedOrder, seedUser, seedWaitlist } from "./testing.js";
 
 describe("codeFor", () => {
   it("makes a code once and keeps it", async () => {
@@ -38,5 +38,65 @@ describe("isFounding", () => {
     expect(await store.isFounding((await seedUser(db, 1, { email: "ada@example.com" })).id)).toBe(true);
     expect(await store.isFounding((await seedUser(db, 2, { email: "bo@example.com" })).id)).toBe(false);
     expect(await store.isFounding((await seedUser(db, 3)).id)).toBe(false);
+  });
+});
+
+describe("claim", () => {
+  const DAY = 86_400_000;
+  const now = new Date("2026-10-17T12:00:00Z");
+  const setup = async () => {
+    const db = await testDb();
+    const store = createReferralStore(db);
+    const inviter = await seedUser(db, 1, { referralCode: "inviter1" });
+    const friend = await seedUser(db, 2, { createdAt: new Date(now.getTime() - DAY) });
+    return { db, store, inviter, friend };
+  };
+
+  it("records the inviter once", async () => {
+    const { store, inviter, friend } = await setup();
+    expect(await store.claim(friend.id, "inviter1", now)).toEqual({ kind: "claimed", inviterId: inviter.id });
+    expect(await store.referredAt(friend.id)).toEqual(now);
+  });
+
+  /* The web retries a claim it never heard back from; the second answer must not be an error. */
+  it("answers a repeat of the same claim calmly", async () => {
+    const { store, inviter, friend } = await setup();
+    await store.claim(friend.id, "inviter1", now);
+    expect(await store.claim(friend.id, "inviter1", now)).toEqual({ kind: "already", inviterId: inviter.id });
+  });
+
+  it("keeps the first inviter when a second code arrives", async () => {
+    const { db, store, friend } = await setup();
+    await seedUser(db, 3, { referralCode: "inviter2" });
+    await store.claim(friend.id, "inviter1", now);
+    expect(await store.claim(friend.id, "inviter2", now)).toEqual({ kind: "taken" });
+  });
+
+  it("refuses your own code", async () => {
+    const { store, inviter } = await setup();
+    expect(await store.claim(inviter.id, "inviter1", now)).toEqual({ kind: "self" });
+  });
+
+  it("does not know a code nobody holds", async () => {
+    const { store, friend } = await setup();
+    expect(await store.claim(friend.id, "nobody00", now)).toEqual({ kind: "unknown_code" });
+  });
+
+  it("is too late for an account more than a week old", async () => {
+    const { db, store } = await setup();
+    const old = await seedUser(db, 4, { createdAt: new Date(now.getTime() - 8 * DAY) });
+    expect(await store.claim(old.id, "inviter1", now)).toEqual({ kind: "too_late" });
+  });
+
+  it("is too late for someone who has already traded", async () => {
+    const { db, store, friend } = await setup();
+    const nvda = await seedInstrument(db);
+    await seedOrder(db, { userId: friend.id, instrumentId: nvda.id, side: "buy", status: "filled" });
+    expect(await store.claim(friend.id, "inviter1", now)).toEqual({ kind: "too_late" });
+  });
+
+  it("says nobody referred a person nobody referred", async () => {
+    const { store, friend } = await setup();
+    expect(await store.referredAt(friend.id)).toBeNull();
   });
 });

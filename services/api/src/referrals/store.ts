@@ -1,16 +1,25 @@
 import { and, eq, isNull } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { users, waitlist } from "../db/schema.js";
-import { newCode } from "./rules.js";
+import { orders, referrals, users, waitlist } from "../db/schema.js";
+import { CLAIM_WINDOW_DAYS, newCode } from "./rules.js";
 
 /** The waitlist's founding cohort: the first 500 places. */
 const FOUNDING = 500;
+
+/** What a claim came to. Only `claimed` writes anything. */
+export type ClaimResult =
+  | { readonly kind: "claimed" | "already"; readonly inviterId: string }
+  | { readonly kind: "unknown_code" | "self" | "taken" | "too_late" };
 
 export interface ReferralStore {
   /** This person's code, made the first time anyone asks for it. */
   codeFor(userId: string): Promise<string>;
   /** Among the first 500 on the waitlist, matched by the email Privy gave us. */
   isFounding(userId: string): Promise<boolean>;
+  /** Attach a code to a new account. Set once, never yourself, never late. */
+  claim(friendId: string, code: string, now: Date): Promise<ClaimResult>;
+  /** When this person was referred, or null if nobody did. The discount runs from here. */
+  referredAt(userId: string): Promise<Date | null>;
 }
 
 export const createReferralStore = (db: Db): ReferralStore => {
@@ -51,11 +60,53 @@ export const createReferralStore = (db: Db): ReferralStore => {
     throw new Error("referrals: no free code after four tries");
   };
 
+  const DAY = 86_400_000;
+
+  const existing = async (friendId: string) =>
+    (await db.select().from(referrals).where(eq(referrals.friendId, friendId)))[0] ?? null;
+
+  const claim = async (friendId: string, code: string, now: Date): Promise<ClaimResult> => {
+    const [inviter] = await db.select({ id: users.id }).from(users).where(eq(users.referralCode, code));
+    if (inviter === undefined) return { kind: "unknown_code" };
+    if (inviter.id === friendId) return { kind: "self" };
+
+    const prior = await existing(friendId);
+    if (prior !== null)
+      return prior.inviterId === inviter.id ? { kind: "already", inviterId: inviter.id } : { kind: "taken" };
+
+    const [friend] = await db
+      .select({ createdAt: users.createdAt })
+      .from(users)
+      .where(eq(users.id, friendId));
+    if (friend === undefined || now.getTime() - friend.createdAt.getTime() > CLAIM_WINDOW_DAYS * DAY) {
+      return { kind: "too_late" };
+    }
+    const traded = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(and(eq(orders.userId, friendId), eq(orders.status, "filled")))
+      .limit(1);
+    if (traded.length > 0) return { kind: "too_late" };
+
+    const written = await db
+      .insert(referrals)
+      .values({ inviterId: inviter.id, friendId, code, createdAt: now })
+      .onConflictDoNothing()
+      .returning({ id: referrals.id });
+    if (written.length === 1) return { kind: "claimed", inviterId: inviter.id };
+
+    /* Two claims raced and the other one landed first: answer as if this were the repeat. */
+    const won = await existing(friendId);
+    return won?.inviterId === inviter.id ? { kind: "already", inviterId: inviter.id } : { kind: "taken" };
+  };
+
   return {
     codeFor,
     isFounding: async (userId) => {
       const row = await waitlistRow(userId);
       return row !== null && row.position <= FOUNDING;
     },
+    claim,
+    referredAt: async (userId) => (await existing(userId))?.createdAt ?? null,
   };
 };
