@@ -1,5 +1,5 @@
 import type { Event } from "@mercury/view";
-import { EVENT_ICON } from "./portfolio/Feed";
+import { EVENT_ICON } from "./portfolio/icons";
 
 /** Native SOL has no mint of its own; the feed records it under wrapped SOL. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -52,30 +52,37 @@ export const UsdcMark = ({ size = 36, src = MONEY[USDC_MINT]!.src }: { size?: 32
  * token's for cash and SOL, and the kind icon for anything with no asset
  * behind it — a queued order, an interest payment.
  *
- * Everything is 36px in the same circle, because the mark is the leftmost
- * column of a list and a row that sizes differently breaks the line the eye
- * follows down the page.
+ * Everything in a list is one size in the same circle, because the mark is the
+ * leftmost column and a row that sizes differently breaks the line the eye
+ * follows down the page. 36px on the Activity page; 32px in the portfolio's
+ * Recent activity, where the rows are a summary.
  */
-export const ActivityMark = ({ event }: { event: Event }) => {
+export const ActivityMark = ({ event, size = 36 }: { event: Event; size?: 32 | 36 }) => {
   const money = event.mint === undefined ? undefined : MONEY[event.mint];
   /* A stock's own art wins: it is already a full-bleed circle of the right
      shape, which is why only the bare marks need insetting. */
   const src = event.logo ?? money?.src;
+  const box = size === 32 ? "size-8" : "size-9";
 
-  if (src === undefined) return <span className="shrink-0 [&>svg]:size-9">{EVENT_ICON[event.kind]}</span>;
+  if (src === undefined)
+    return (
+      <span className={`shrink-0 ${size === 32 ? "[&>svg]:size-8" : "[&>svg]:size-9"}`}>
+        {EVENT_ICON[event.kind]}
+      </span>
+    );
 
   const mark = (
     <img
       src={src}
       alt=""
-      width={36}
-      height={36}
+      width={size}
+      height={size}
       loading="lazy"
       /* page grey, not panel grey: the row is already panel, so a panel circle
          is no circle at all, and the row turns white under the pointer. One
          step down reads as a coin against both. It also gives a remote mark
          somewhere to be while it loads. */
-      className={`size-9 rounded-full bg-page ${money?.bare === true ? "p-2" : "object-cover"}`}
+      className={`${box} rounded-full bg-page ${money?.bare === true ? "p-2" : "object-cover"}`}
     />
   );
 
@@ -88,7 +95,7 @@ export const ActivityMark = ({ event }: { event: Event }) => {
    * row turning white on hover.
    */
   if (event.mint === USDC_MINT) {
-    return <UsdcMark src={src} />;
+    return <UsdcMark src={src} size={size} />;
   }
 
   return <span className="shrink-0">{mark}</span>;
