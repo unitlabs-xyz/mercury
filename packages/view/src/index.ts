@@ -22,3 +22,4 @@ export * from "./refuse-copy.js";
 export * from "./borrow.js";
 export * from "./baskets.js";
 export * from "./send.js";
+export * from "./receipt.js";
