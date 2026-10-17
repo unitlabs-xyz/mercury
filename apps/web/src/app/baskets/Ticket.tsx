@@ -9,11 +9,11 @@ import type {
 } from "@mercury/types";
 import { usd } from "@mercury/view";
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { RailHead } from "../../ui/ds";
 import { RailLine } from "../stock/Panels";
+import { usePanels } from "../Panels";
 import { Alert, Check, Clock } from "../../ui/icons";
 import { Skeleton } from "../portfolio/ui";
 import { AmountWell } from "../stock/Ticket";
@@ -71,6 +71,9 @@ export const EnrollmentRail = ({
     .at(-1);
   const valid = validUsdc(amount);
   const overCash = cash !== null && valid && Number(amount) > cash;
+  /* Over the cash on hand, the button becomes Add cash: the way out, not a dead end. */
+  const needsCash = overCash && signedIn && !lookupFailed;
+  const panels = usePanels();
   const notice = checking
     ? null
     : lookupFailed
@@ -94,14 +97,6 @@ export const EnrollmentRail = ({
         </div>
       ) : (
         <AmountWell raw={amount} onRaw={onAmount} cash={cash} />
-      )}
-      {overCash && (
-        <p className="mx-5 mt-2.5 text-[12px] leading-[1.45] text-ds-muted">
-          More than your cash.{" "}
-          <Link to="/money" className="font-medium text-ds-ink underline underline-offset-2">
-            Add cash
-          </Link>
-        </p>
       )}
       <dl className="flex flex-col gap-3 px-5 pt-5">
         <RailLine k="Target assets">{assetCount}</RailLine>
@@ -129,26 +124,28 @@ export const EnrollmentRail = ({
         <Button
           variant="primary"
           size="lg"
-          onClick={lookupFailed ? onRetry : onReview}
+          onClick={lookupFailed ? onRetry : needsCash ? panels.addCash : onReview}
           disabled={
             !signedIn ||
             walletMissing ||
             busy ||
             checking ||
             (blocked && !lookupFailed) ||
-            (!lookupFailed && (!valid || overCash || cash === null))
+            (!lookupFailed && !needsCash && (!valid || overCash || cash === null))
           }
           className="w-full"
         >
           {checking
             ? "Checking portfolio…"
-            : lookupFailed
-              ? "Retry portfolio check"
-              : busy
-                ? "Setting up portfolio…"
-                : valid
-                  ? `Review ${usd(Number(amount))}`
-                  : "Review"}
+            : needsCash
+              ? "Add cash"
+              : lookupFailed
+                ? "Retry portfolio check"
+                : busy
+                  ? "Setting up portfolio…"
+                  : valid
+                    ? `Review ${usd(Number(amount))}`
+                    : "Review"}
         </Button>
       </div>
     </section>
