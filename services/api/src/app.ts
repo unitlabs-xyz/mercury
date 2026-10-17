@@ -10,7 +10,7 @@ import { planFill } from "./orders/fill.js";
 import { decisionToWire } from "./serialize.js";
 import { NO_FEE, quoteFee } from "./relay/quote.js";
 import { tradeCharge, type TradeCharge } from "./relay/fee.js";
-import { pricingFor, type FeePricing } from "./referrals/rules.js";
+import { isCode, pricingFor, type FeePricing } from "./referrals/rules.js";
 import { buildSponsored } from "./relay/build.js";
 import { rpcLookupTables } from "./relay/lookups.js";
 import { createSolanaRpc } from "@solana/kit";
@@ -21,7 +21,7 @@ import { requestId } from "./telemetry/request-id.js";
 import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
-import { referralRoutes } from "./routes/referrals.js";
+import { referralRoutes, SITE } from "./routes/referrals.js";
 import { borrowRoutes } from "./routes/borrow.js";
 import { sendRoutes } from "./routes/send.js";
 import { instrumentRoutes } from "./routes/instruments.js";
@@ -174,7 +174,11 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
    * founding cards on X, and those posts still point here: each is sent on to
    * the site rather than to a 404. See docs/archive/waitlist.
    */
-  app.get("/f/:slug", (c) => c.redirect("https://trymercury.xyz", 301));
+  /* The card's slug is its holder's invite code (see referrals/store.ts), so it goes along. */
+  app.get("/f/:slug", (c) => {
+    const slug = c.req.param("slug");
+    return c.redirect(isCode(slug) ? `${SITE}/?ref=${encodeURIComponent(slug)}` : SITE, 301);
+  });
 
   // The in-app feedback button. Public: signing in may be the thing that broke.
   if (read.feedback) app.route("/", feedbackRoutes(read.feedback));

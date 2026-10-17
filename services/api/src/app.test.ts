@@ -343,10 +343,16 @@ describe("GET /f/:slug", () => {
    * The waitlist is gone, but its share links are still in people's posts on
    * X. Each one sends a reader on to the site rather than to an error page.
    */
-  it("sends a founding card's old share link on to the site", async () => {
+  it("sends a founding card's old share link on to the site, with the card's code", async () => {
     const { get } = await harness();
     const res = await get("/f/3kQ9xZ1bTq7w");
     expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe("https://trymercury.xyz/?ref=3kQ9xZ1bTq7w");
+  });
+
+  it("sends anything that is not a code on to the site bare", async () => {
+    const { get } = await harness();
+    const res = await get("/f/x");
     expect(res.headers.get("location")).toBe("https://trymercury.xyz");
   });
 });
