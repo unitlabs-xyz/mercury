@@ -76,9 +76,16 @@ describe("GET /v1/money", () => {
     expect(body.balanceUsd).toBe("250.5");
   });
 
-  it("quotes the supply rate Kamino is paying right now", async () => {
+  it("quotes the Earn vault's rate, after its fees", async () => {
+    const earn = async () => ({ balance: D("10.6"), apy: D("0.0408") });
+    const body = await moneyOf(await appWith(deps({ earn })).request("/v1/money"));
+    expect(body.yieldApr).toBe("0.0408");
+    expect(body.earnUsd).toBe("10.6");
+  });
+
+  it("quotes no rate without Earn, never the lending market's supply rate", async () => {
     const body = await moneyOf(await appWith(deps()).request("/v1/money"));
-    expect(body.yieldApr).toBe("0.00095");
+    expect(body.yieldApr).toBe("0");
   });
 
   it("says zero interest earned, because nothing is supplied anywhere", async () => {

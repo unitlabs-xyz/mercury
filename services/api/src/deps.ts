@@ -39,6 +39,11 @@ import type { ActivityDeps } from "./routes/activity.js";
 import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
+import { KaminoEarn } from "./earn/kamino-vault.js";
+import { pgEarnLedger } from "./earn/store.js";
+import { earnBalance, earnDirectory, earnSummary, type EarnDirectory } from "./earn/directory.js";
+import { kaminoApi } from "./earn/kamino-api.js";
+import type { EarnDeps } from "./routes/earn.js";
 import { debtFrom } from "./lending/debt.js";
 import { loanLedger, recordLoanEvents } from "./lending/record.js";
 import { pledgedByMint, withPledged } from "./lending/pledged.js";
@@ -96,6 +101,8 @@ export interface Deps {
   readonly baskets: BasketVenue;
   /** Kamino's xStocks market through the klend SDK: reads, and unsigned transactions. */
   readonly lending: LendingSource;
+  /** The Kamino Earn vaults idle cash can be lent through. */
+  readonly earn: EarnDirectory;
   /** Optional Glider capability shared by routes and the wallet-events exit reconciler. */
   readonly basketProvider?: BasketProvider;
 }
@@ -143,6 +150,12 @@ export interface Config {
    * the relayer's USDC transfer, and without one a trade would fill for free.
    */
   readonly relayerSecretKey?: string;
+  /**
+   * The Earn vault a person gets until they choose another. Defaults to
+   * Steakhouse USDC, the first of Mercury's picks (see `earn/catalog.ts`).
+   * Any vault holding USDC works, and is offered first if it is not one of them.
+   */
+  readonly earnVault: string;
   /**
    * Mercury's own fee on a stock trade, in basis points of what the trade is
    * worth: 50 is 0.5%. Charged in the same USDC transfer that repays the
@@ -237,6 +250,9 @@ const evmAddress = (env: NodeJS.ProcessEnv, key: string): string | undefined => 
   return raw;
 };
 
+/** Steakhouse Financial's USDC vault on Kamino Earn. */
+const STEAKHOUSE_USDC = "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E";
+
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
   const depositFeeRecipient = evmAddress(env, "DEPOSIT_FEE_RECIPIENT");
@@ -259,6 +275,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["RELAY_API_KEY"] ? { relayApiKey: env["RELAY_API_KEY"] } : {}),
     fundMinimumUsd: Number(env["FUND_MINIMUM_USD"] ?? 10),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
+    earnVault: env["EARN_VAULT_ADDRESS"] || STEAKHOUSE_USDC,
     tradingFeeBps: basisPoints(env, "TRADING_FEE_BPS", DEFAULT_TRADING_FEE_BPS),
     depositFeeBps: basisPoints(env, "DEPOSIT_FEE_BPS", DEFAULT_DEPOSIT_FEE_BPS),
     ...(depositFeeRecipient === undefined ? {} : { depositFeeRecipient }),
@@ -367,6 +384,20 @@ export function buildDeps(config: Config): Deps {
       ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
       rent: chain,
     }),
+    earn: earnDirectory({
+      api: kaminoApi(),
+      usdcMint: USDC_MINT,
+      rpcUrl: config.solanaRpcUrl,
+      defaultVault: config.earnVault,
+      make: (vault) =>
+        new KaminoEarn({
+          rpcUrl: config.solanaRpcUrl,
+          ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
+          vault,
+          usdcMint: USDC_MINT,
+          rent: chain,
+        }),
+    }),
     ...(basketProvider ? { basketProvider } : {}),
   };
 }
@@ -393,6 +424,7 @@ export interface ReadDeps {
   readonly orders: OrderStore;
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
+  readonly earn: EarnDeps;
   readonly send: SendDeps;
   /** Mercury's fee on every stock trade, in basis points. See `Config.tradingFeeBps`. */
   readonly tradingFeeBps: number;
@@ -445,6 +477,7 @@ export function buildReadDeps(
   fund?: ReadDeps["fund"],
 ): ReadDeps {
   const basketStore = new JsonBasketStore(config.databaseUrl, undefined, db);
+  const earnLedger = pgEarnLedger(db);
   const baskets = basketValueReader(deps.basketProvider, basketStore);
   return {
     basketTemplates: new BasketService({
@@ -477,8 +510,24 @@ export function buildReadDeps(
       basketReturns: basketReturnsReader(deps.basketProvider),
       flows: (userId, from) => readFlows(db, userId, from),
       basketMovements: (userId) => readBasketMovements(db, userId),
+      earn: (wallet) => earnBalance(deps.earn, wallet),
     },
-    money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
+    money: {
+      chain: deps.chain,
+      credit: deps.credit,
+      lending: deps.lending,
+      earn: (wallet) => earnSummary(deps.earn, wallet),
+      usdcMint: USDC_MINT,
+    },
+    earn: {
+      directory: deps.earn,
+      api: deps.earn.api,
+      chain: deps.chain,
+      history: deps.history,
+      usdcMint: USDC_MINT,
+      ledger: earnLedger,
+      ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
+    },
     activity: {
       read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor),
       receipt: (userId, wallet, id) =>

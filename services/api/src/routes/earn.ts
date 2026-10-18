@@ -1,0 +1,328 @@
+import { Hono } from "hono";
+import { z } from "zod";
+import { D, Decimal, toWire, ZERO } from "@mercury/core";
+import type { ChainHistory, ChainReader, TransactionDetail } from "@mercury/chain";
+import { SponsorShort } from "../lending/ports.js";
+import { EarnRefused } from "../earn/kamino-vault.js";
+import type { EarnDirectory, EarnListing } from "../earn/directory.js";
+import type { KaminoApi, VaultPoint } from "../earn/kamino-api.js";
+import type { EarnLedger } from "../earn/store.js";
+// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+import type {} from "../auth/middleware.js";
+import type { SponsoredBuilds } from "../relay/builds.js";
+import { logger } from "../log/index.js";
+
+const log = logger("earn");
+
+export interface EarnDeps {
+  readonly directory: EarnDirectory;
+  /** Kamino's API, for history and market names. */
+  readonly api: KaminoApi;
+  readonly chain: ChainReader;
+  readonly history: ChainHistory;
+  readonly usdcMint: string;
+  readonly ledger: EarnLedger;
+  /** The relayer, when sponsorship is on: it pays every fee, as it does for loans. */
+  readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
+}
+
+const fail = (code: string, message: string) => ({ error: { code, message } });
+
+const Amount = z.string().regex(/^\d+(\.\d+)?$/, "expected a decimal string");
+
+const Request = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("deposit"),
+    usd: z.union([Amount, z.literal("all")]),
+    vault: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal("withdraw"),
+    usd: z.union([Amount, z.literal("all")]),
+    vault: z.string().optional(),
+  }),
+]);
+
+const ConfirmRequest = z.object({ signature: z.string().min(1), action: Request });
+
+const Settings = z.object({ vault: z.string() });
+
+const RANGES = { "1M": 30, "3M": 90, "1Y": 365 } as const;
+
+const usd = (d: Decimal) => toWire(d.toDecimalPlaces(2, Decimal.ROUND_DOWN));
+const ratio = (d: Decimal | null) => (d === null ? null : toWire(d.toDecimalPlaces(6)));
+const tiny = (d: Decimal) => toWire(d.toDecimalPlaces(6, Decimal.ROUND_DOWN));
+
+/** A listed vault on the wire. Mercury's picks carry our own words; the rest carry nulls there. */
+export const vaultJson = (l: EarnListing) => ({
+  address: l.address,
+  name: l.name,
+  picked: l.picked !== null,
+  curator: l.curator,
+  kind: l.picked?.kind ?? null,
+  logo: l.logo,
+  blurb: l.picked?.blurb ?? null,
+  apy: ratio(l.apy),
+  apy7d: ratio(l.apy7d),
+  apy30d: ratio(l.apy30d),
+  apy365d: ratio(l.apy365d),
+  tvlUsd: usd(l.tvlUsd),
+  holders: l.holders,
+  performanceFee: toWire(l.performanceFee),
+  managementFee: toWire(l.managementFee),
+  minDepositUsd: toWire(l.minDepositUsdc),
+  full: l.full,
+});
+
+/** The wallet's USDC before and after a transaction, as a signed change in dollars. */
+export const usdcMoved = (tx: TransactionDetail, wallet: string, mint: string): Decimal => {
+  const sum = (entries: TransactionDetail["preTokens"]) =>
+    entries
+      .filter((e) => e.owner === wallet && e.mint === mint)
+      .reduce((s, e) => s.add(D(e.rawAmount.toString()).div(D(10).pow(e.decimals))), ZERO);
+  return sum(tx.postTokens).sub(sum(tx.preTokens));
+};
+
+/**
+ * One point a day: the day's average rate and its last size.
+ *
+ * Kamino answers hourly for a month or less, and an hour's rate swings with
+ * one borrower — 4% to 9.7% inside a day, measured on Steakhouse USDC in
+ * October 2026. Drawn hour by hour that is noise somebody would read as the
+ * rate; a day's average is what a deposit actually earned that day.
+ */
+export const daily = (points: readonly VaultPoint[]): VaultPoint[] => {
+  const days = new Map<string, VaultPoint[]>();
+  for (const p of points) {
+    const day = p.at.slice(0, 10);
+    days.set(day, [...(days.get(day) ?? []), p]);
+  }
+  return [...days].map(([day, ps]) => ({
+    at: `${day}T00:00:00.000Z`,
+    apy: ps.reduce((s, p) => s.add(p.apy), ZERO).div(ps.length),
+    tvlUsd: ps.at(-1)!.tvlUsd,
+    sharePrice: ps.at(-1)!.sharePrice,
+  }));
+};
+
+/**
+ * What a vault has earned for this wallet: its value now, less what was put
+ * in, plus what came back. Nothing recorded against it — shares bought outside
+ * the app, or a confirm that never arrived — has no basis to measure from, and
+ * reports nothing earned rather than its whole value.
+ */
+const earnedOn = (balance: Decimal, net: Decimal | undefined) =>
+  net === undefined || balance.isZero() ? ZERO : Decimal.max(ZERO, balance.sub(net));
+
+/**
+ * Earn: idle USDC lent out through Kamino Earn vaults, put in and taken back
+ * by the person, a vault at a time. Mercury's picks come first; every other
+ * USDC vault that clears the bar is offered after them. Nothing moves on its
+ * own. Writes return unsigned transactions for the wallet to sign, with the
+ * relayer paying.
+ */
+export function earnRoutes(deps: EarnDeps): Hono {
+  const app = new Hono();
+
+  const walletUsdc = async (wallet: string) => {
+    const balances = await deps.chain.tokenBalances(wallet);
+    const b = balances.find((x) => x.mint === deps.usdcMint);
+    return b === undefined ? ZERO : D(b.rawAmount.toString()).div(D(10).pow(b.decimals));
+  };
+
+  /** Where new cash goes by default: the vault last moved into, or the first of Mercury's picks. */
+  const defaultFor = async (userId: string) => {
+    const { vault } = await deps.ledger.settings(userId);
+    return vault !== null && (await deps.directory.find(vault)) ? vault : deps.directory.defaultVault;
+  };
+
+  /** What this account has in Earn, vault by vault. */
+  app.get("/v1/earn", async (c) => {
+    const identity = c.get("identity");
+    const wallet = identity.walletAddress;
+    const [selected, net, cash, holdings] = await Promise.all([
+      defaultFor(identity.userId),
+      deps.ledger.netDeposited(identity.userId),
+      wallet === null ? ZERO : walletUsdc(wallet),
+      wallet === null ? [] : deps.directory.holdings(wallet),
+    ]);
+    const rows = holdings.map((h) => ({
+      ...vaultJson(h.listing),
+      balanceUsd: usd(h.usdc),
+      earnedUsd: tiny(earnedOn(h.usdc, net.get(h.listing.address))),
+    }));
+    const total = holdings.reduce((s, h) => s.add(h.usdc), ZERO);
+    const earned = holdings.reduce((s, h) => s.add(earnedOn(h.usdc, net.get(h.listing.address))), ZERO);
+    return c.json({
+      selected,
+      holdings: rows,
+      balanceUsd: usd(total),
+      earnedUsd: tiny(earned),
+      // The rate the whole balance earns now: each vault's, weighted by what is in it.
+      apy: total.isZero()
+        ? null
+        : ratio(holdings.reduce((s, h) => s.add(h.listing.apy.mul(h.usdc)), ZERO).div(total)),
+      walletUsd: usd(cash),
+    });
+  });
+
+  /** Every vault on offer, Mercury's picks first. The page searches and pages through it. */
+  app.get("/v1/earn/vaults", async (c) => {
+    const list = await deps.directory.list();
+    return c.json({ vaults: list.map(vaultJson) });
+  });
+
+  /** A vault's rate and size over time, and where its money is lent right now. */
+  app.get("/v1/earn/vaults/:address", async (c) => {
+    const address = c.req.param("address");
+    if ((await deps.directory.find(address)) === undefined) {
+      return c.json(fail("not_found", "Mercury does not offer that vault."), 404);
+    }
+    const range = (c.req.query("range") ?? "1M") as keyof typeof RANGES;
+    const days = RANGES[range];
+    if (days === undefined) return c.json(fail("bad_range", "Ranges are 1M, 3M and 1Y."), 400);
+
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86_400_000);
+    const [points, allocation, names] = await Promise.all([
+      deps.api.history(address, from, to),
+      // `?lite=1` is a card's sparkline: the rate alone, without reading the vault's holdings off the chain.
+      c.req.query("lite") === "1"
+        ? []
+        : deps.directory
+            .source(address)
+            .allocation()
+            .catch(() => []),
+      deps.api.marketNames(),
+    ]);
+    const lent = allocation.reduce((s, a) => s.add(a.usdc), ZERO);
+    return c.json({
+      range,
+      points: daily(points ?? []).map((p) => ({ at: p.at, apy: ratio(p.apy), tvlUsd: usd(p.tvlUsd) })),
+      allocation: allocation.map((a) => ({
+        market: a.market,
+        name: (names.get(a.market) ?? "Kamino market").replace(/ Market$/, ""),
+        share: lent.isZero() ? "0" : toWire(a.usdc.div(lent).toDecimalPlaces(4)),
+      })),
+    });
+  });
+
+  /** The vault new cash goes to by default. Only the preference: no money moves. */
+  app.put("/v1/earn/settings", async (c) => {
+    const parsed = Settings.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+    if ((await deps.directory.find(parsed.data.vault)) === undefined) {
+      return c.json(fail("not_found", "Mercury does not offer that vault."), 404);
+    }
+    await deps.ledger.save(c.get("identity").userId, { vault: parsed.data.vault });
+    return c.json({ vault: parsed.data.vault });
+  });
+
+  app.post("/v1/earn/transactions", async (c) => {
+    const identity = c.get("identity");
+    const wallet = identity.walletAddress;
+    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const parsed = Request.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+    const body = parsed.data;
+
+    const vault = body.vault ?? (await defaultFor(identity.userId));
+    const listing = await deps.directory.find(vault);
+    if (listing === undefined) return c.json(fail("not_found", "Mercury does not offer that vault."), 404);
+    const source = deps.directory.source(vault);
+
+    let intent;
+    if (body.kind === "deposit") {
+      if (listing.full) return c.json(fail("vault_full", "This vault is full. Pick another."), 409);
+      const cash = await walletUsdc(wallet);
+      const amount = body.usd === "all" ? cash : D(body.usd);
+      if (amount.lte(0)) return c.json(fail("insufficient_cash", "No cash to move."), 409);
+      if (amount.lt(listing.minDepositUsdc)) {
+        return c.json(
+          fail("below_minimum", `The least you can move is $${listing.minDepositUsdc.toFixed(2)}.`),
+          409,
+        );
+      }
+      if (amount.gt(cash)) return c.json(fail("insufficient_cash", "Not enough cash."), 409);
+      intent = { kind: "deposit", usdc: amount } as const;
+    } else {
+      // Read off the chain, not the list: what is withdrawn has to be exact.
+      const position = await source.position(wallet);
+      if (position === null) return c.json(fail("nothing_to_withdraw", "Nothing in this vault."), 409);
+      // Asking for all of it, or near enough, takes every share, so no dust is left behind.
+      const all = body.usd === "all" || D(body.usd).gte(position.usdc.sub(D("0.01")));
+      intent = { kind: "withdraw", usdc: all ? "all" : D(body.usd) } as const;
+    }
+
+    let built;
+    try {
+      built = await source.build(wallet, intent, deps.relay?.relayer);
+    } catch (error: unknown) {
+      if (error instanceof SponsorShort) {
+        log.error(
+          {
+            relayer: error.relayer,
+            heldLamports: String(error.heldLamports),
+            neededLamports: String(error.neededLamports),
+          },
+          "the relayer is short of SOL to sponsor an Earn move",
+        );
+        return c.json(fail("upstream_unavailable", "Earn is unavailable right now. Try again shortly."), 503);
+      }
+      if (error instanceof EarnRefused) {
+        log.warn({ vault, detail: error.detail, logs: error.logs.slice(-8) }, "the vault would refuse this");
+        return c.json(fail("vault_refused", "This vault can't take that right now. Try another."), 409);
+      }
+      throw error;
+    }
+    if (deps.relay !== undefined) for (const m of built.messages) deps.relay.builds.remember(m);
+    return c.json({ transactions: built.transactions, vault, expiresAt: built.expiresAt.toISOString() });
+  });
+
+  /**
+   * Record what a signed Earn transaction moved, read off the chain rather than
+   * the request: the amount is the change in the wallet's USDC, which for a
+   * withdrawal of everything is the only place the figure exists. A deposit
+   * also makes its vault the default for the next one.
+   */
+  app.post("/v1/earn/confirm", async (c) => {
+    const identity = c.get("identity");
+    const wallet = identity.walletAddress;
+    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const parsed = ConfirmRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+    const { signature, action } = parsed.data;
+
+    const tx = await deps.history.transaction(signature);
+    if (tx === null) {
+      return c.json(fail("transaction_pending", "Transaction is not settled yet. Try again shortly."), 409);
+    }
+    if (!tx.accountKeys.includes(wallet)) {
+      return c.json(fail("validation_failed", "That transaction is not this wallet's."), 422);
+    }
+    if (!tx.succeeded) return c.json(fail("transaction_failed", "That transaction failed."), 422);
+    // The vault has to be one this transaction touched, so a confirm cannot file money under another.
+    const vault = action.vault ?? (await defaultFor(identity.userId));
+    if ((await deps.directory.find(vault)) === undefined || !tx.accountKeys.includes(vault)) {
+      return c.json(fail("validation_failed", "That transaction did not use this vault."), 422);
+    }
+
+    const moved = usdcMoved(tx, wallet, deps.usdcMint);
+    // A deposit takes USDC out, a withdrawal brings it back; anything else is not what was asked.
+    const amount = action.kind === "deposit" ? moved.neg() : moved;
+    if (amount.lte(0)) return c.json(fail("validation_failed", "That transaction moved no cash."), 422);
+
+    const written = await deps.ledger.record({
+      userId: identity.userId,
+      kind: action.kind,
+      usdc: amount,
+      vault,
+      signature,
+      occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
+    });
+    if (action.kind === "deposit") await deps.ledger.save(identity.userId, { vault });
+    return c.json({ recorded: written, usd: usd(amount) });
+  });
+
+  return app;
+}

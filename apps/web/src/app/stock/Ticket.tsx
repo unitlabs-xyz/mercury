@@ -1,3 +1,4 @@
+import { useEarn } from "../../api/earn";
 import { DEFAULT_POLICY, type Decision } from "@mercury/core";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -328,6 +329,9 @@ export const Ticket = ({
      becomes Add cash, which is both the explanation and the way out. */
   const needsCash = over && !selling;
   const panels = usePanels();
+  /* Cash in Earn is the nearer way out than adding more: one tap brings it back. */
+  const inEarn = useEarn().data?.balanceUsd ?? 0;
+  const fromEarn = needsCash && inEarn > 0;
   const amountHint = over ? (
     selling ? (
       <>More than you can sell. The most is {usd(sellableUsd ?? 0)}.</>
@@ -473,6 +477,7 @@ export const Ticket = ({
           variant="primary"
           size="lg"
           onClick={() => {
+            if (fromEarn) return panels.earn("withdraw");
             if (needsCash) return panels.addCash();
             /* Accepting is the press: the warning above already said what it costs. */
             if (impactRefused) onAcceptImpact(true);
@@ -493,7 +498,15 @@ export const Ticket = ({
           }
           className="w-full"
         >
-          {needsCash ? "Add cash" : impactRefused ? (selling ? "Sell anyway" : "Buy anyway") : "Review order"}
+          {fromEarn
+            ? "Withdraw from Earn"
+            : needsCash
+              ? "Add cash"
+              : impactRefused
+                ? selling
+                  ? "Sell anyway"
+                  : "Buy anyway"
+                : "Review order"}
         </Button>
       </div>
     </section>

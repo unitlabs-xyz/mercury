@@ -76,6 +76,12 @@ export interface PortfolioDeps {
   /** Hourly readings of the account's value, no older than `from`. */
   readonly snapshots: (userId: string, from: Date) => Promise<readonly Reading[]>;
   readonly baskets: BasketValueReader;
+  /**
+   * USDC this wallet holds in the Earn vault. Absent when Earn is not set up.
+   * It is the wallet's money, out of the wallet, so it counts in the total
+   * the way pledged stock does; without it a deposit would chart as a loss.
+   */
+  readonly earn?: (walletAddress: string) => Promise<Decimal>;
   readonly basketReturns?: BasketReturnsReader;
   /** Deposits and withdrawals since `from`, signed, so the chart can show performance without them. */
   readonly flows?: (userId: string, from: Date) => Promise<readonly Flow[]>;
@@ -95,6 +101,7 @@ const fail = (code: string, message: string) => ({ error: { code, message } });
 const EMPTY = {
   totalValueUsd: "0",
   cashUsd: "0",
+  earnUsd: "0",
   basketUsd: "0",
   debtUsd: "0",
   debtIsStale: false,
@@ -172,16 +179,19 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         ...basketStockMints(basketValue.baskets),
       ]),
     ];
-    const [board, balances] = await Promise.all([
+    const [board, balances, earnUsd] = await Promise.all([
       deps.prices.pricesFor(mints),
       deps.chain.tokenBalances(identity.walletAddress),
+      // Unreadable reads as nothing in Earn, for this page only: the snapshot
+      // job refuses to record a total it could not read whole.
+      deps.earn?.(identity.walletAddress).catch(() => ZERO) ?? ZERO,
     ]);
 
     // The figures are `valuePortfolio`'s, so that the hourly snapshot behind the
     // chart and the number at the top of this page cannot drift apart. The loop
     // below is only about the per-holding rows.
     const cashUsd = cashFrom(balances, deps.usdcMint);
-    const value = valuePortfolio(rows, board, cashUsd, debtUsd, basketValue.totalUsd);
+    const value = valuePortfolio(rows, board, cashUsd, debtUsd, basketValue.totalUsd, earnUsd);
     const holdings = [];
 
     for (const row of rows) {
@@ -242,6 +252,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     return c.json({
       totalValueUsd: toWire(value.totalUsd),
       cashUsd: toWire(value.cashUsd),
+      earnUsd: toWire(value.earnUsd),
       basketUsd: toWire(value.basketUsd),
       debtUsd: toWire(value.debtUsd),
       debtIsStale,

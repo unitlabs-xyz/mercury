@@ -21,6 +21,7 @@ import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
 import { borrowRoutes } from "./routes/borrow.js";
+import { earnRoutes } from "./routes/earn.js";
 import { sendRoutes } from "./routes/send.js";
 import { instrumentRoutes } from "./routes/instruments.js";
 import { moneyRoutes } from "./routes/money.js";
@@ -178,6 +179,14 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.onError((err, c) => {
     if (err.message.startsWith("buildDeps:")) return c.json(NOT_READY, 503);
     /*
+     * The Solana node turning us away for going too fast. Not a bug and not the
+     * person's doing: it passes in seconds, and saying so beats a bare 500.
+     */
+    if ((err as { context?: { statusCode?: unknown } }).context?.statusCode === 429) {
+      httpLog.warn({ method: c.req.method, route: c.req.routePath }, "the Solana node rate-limited us");
+      return c.json(fail("rate_limited", "The network is busy. Try again in a few seconds."), 503);
+    }
+    /*
      * The id in the log line and in the body, so the sentence somebody reads
      * on screen and the line an engineer greps for name the same request.
      *
@@ -196,6 +205,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", moneyRoutes(read.money));
   app.route("/", activityRoutes(read.activity));
   app.route("/", borrowRoutes(read.borrow));
+  app.route("/", earnRoutes(read.earn));
   app.route("/", sendRoutes(read.send));
   /* Absent when Relay or the treasury is not configured, so the routes 404 and
      the interface hides the method rather than offering one that cannot work. */

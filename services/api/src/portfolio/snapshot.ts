@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { logger } from "../log/index.js";
-import { toWire, type Decimal } from "@mercury/core";
+import { toWire, ZERO, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
@@ -19,6 +19,8 @@ export interface SnapshotDeps {
   readonly chain: ChainReader;
   readonly usdcMint: string;
   readonly baskets: BasketValueReader;
+  /** USDC in the Earn vault. Throws when unreadable, which costs this account its reading. */
+  readonly earn?: (walletAddress: string) => Promise<Decimal>;
 }
 
 export interface SnapshotSummary {
@@ -61,10 +63,12 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
       const row = rows[next++];
       if (row === undefined) return;
       try {
-        const [held, debtUsd, basketValue] = await Promise.all([
+        const [held, debtUsd, basketValue, earnUsd] = await Promise.all([
           deps.holdings(row.userId),
           deps.debt(row.address),
           deps.baskets(row.userId, row.address),
+          // Unreadable throws, and the reading is skipped, for the reason below.
+          deps.earn?.(row.address) ?? ZERO,
         ]);
         /*
          * A reading with unknown debt is not a reading. Every other job can
@@ -88,6 +92,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
           cashFrom(balances, deps.usdcMint),
           debtUsd,
           basketValue.totalUsd,
+          earnUsd,
         );
         await db
           .insert(portfolioSnapshots)

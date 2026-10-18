@@ -44,6 +44,12 @@ export const users = pgTable(
     email: text("email"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     displayCurrency: text("display_currency").notNull().default("USD"),
+    /**
+     * The Earn vault new cash goes to by default: the last one this person moved
+     * money into. Null is the app's default. Nothing moves on its own; this only
+     * preselects a vault.
+     */
+    earnVault: text("earn_vault"),
   },
   (t) => [uniqueIndex("user_privy_user_id_idx").on(t.privyUserId)],
 );
@@ -754,3 +760,34 @@ export const fundingIntents = pgTable(
   ],
 );
 export type FundingIntent = typeof fundingIntents.$inferSelect;
+
+/**
+ * Money moved into and out of the Earn vault, one row per transaction.
+ *
+ * What makes "earned so far" knowable: the vault reports only what the shares
+ * are worth now, so what was earned is that, less what went in, plus what came
+ * back out. The chain has the same facts, but reading every past transaction
+ * back to answer one number on a screen is not something to do per request.
+ */
+export const earnEvents = pgTable(
+  "earn_event",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** deposit or withdraw. */
+    kind: text("kind").notNull(),
+    /** USDC that left the wallet (deposit) or arrived in it (withdraw). */
+    usdcAmount: usd("usdc_amount").notNull(),
+    vault: text("vault").notNull(),
+    txSignature: text("tx_signature").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("earn_event_user_idx").on(t.userId, t.vault),
+    // Confirming the same transaction twice writes nothing new.
+    uniqueIndex("earn_event_signature_idx").on(t.txSignature),
+  ],
+);

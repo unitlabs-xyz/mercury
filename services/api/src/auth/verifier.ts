@@ -7,8 +7,26 @@ import { createRemoteJWKSet, type JWTVerifyGetKey } from "jose";
  * handles itself. Privy's own client treats a pasted PEM as an override of
  * this, which is the same shape we offer below.
  */
-export const privyJwks = (appId: string): JWTVerifyGetKey =>
-  createRemoteJWKSet(new URL(`https://auth.privy.io/api/v1/apps/${appId}/jwks.json`));
+const jwksByApp = new Map<string, JWTVerifyGetKey>();
+
+/**
+ * Privy's published keys for an app, fetched once and then kept.
+ *
+ * One set per app for the life of the process, not one per call. `jose`
+ * caches the keys inside each set it makes, so a new set per request meant a
+ * fresh download from auth.privy.io for every request — and when a page fired
+ * five at once and one download was slow, Privy's verifier reported that as
+ * an invalid token and a signed-in person got "That session is not valid."
+ * (18 October 2026, on the Earn page).
+ */
+export const privyJwks = (appId: string): JWTVerifyGetKey => {
+  let jwks = jwksByApp.get(appId);
+  if (jwks === undefined) {
+    jwks = createRemoteJWKSet(new URL(`https://auth.privy.io/api/v1/apps/${appId}/jwks.json`));
+    jwksByApp.set(appId, jwks);
+  }
+  return jwks;
+};
 
 /** What the rest of the server is allowed to believe about a caller. */
 export interface VerifiedToken {
@@ -20,6 +38,14 @@ export interface VerifiedToken {
 
 export interface TokenVerifier {
   verify(token: string): Promise<VerifiedToken>;
+}
+
+/** The token could not be checked at all — Privy's keys unreachable — which says nothing about the token. */
+export class AuthUnavailable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AuthUnavailable";
+  }
 }
 
 export class InvalidToken extends Error {
@@ -52,8 +78,16 @@ export const createPrivyVerifier = (opts: {
         expiresAt: new Date(claims.expiration * 1000),
       };
     } catch (cause) {
-      if (cause instanceof InvalidAuthTokenError) throw new InvalidToken("rejected by Privy");
-      throw cause;
+      /*
+       * Privy reports every failure as InvalidAuthTokenError, including not
+       * being able to fetch its own keys. Only an expired or malformed token is
+       * the caller's: anything else is ours, and is not a reason to tell
+       * somebody their session is gone.
+       */
+      if (cause instanceof InvalidAuthTokenError && /expired|invalid/i.test(cause.message)) {
+        throw new InvalidToken(cause.message);
+      }
+      throw new AuthUnavailable(cause instanceof Error ? cause.message : String(cause));
     }
   },
 });

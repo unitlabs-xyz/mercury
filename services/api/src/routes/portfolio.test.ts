@@ -455,6 +455,7 @@ describe("GET /v1/portfolio", () => {
     expect(body).toEqual({
       totalValueUsd: "0",
       cashUsd: "0",
+      earnUsd: "0",
       basketUsd: "0",
       debtUsd: "0",
       debtIsStale: false,

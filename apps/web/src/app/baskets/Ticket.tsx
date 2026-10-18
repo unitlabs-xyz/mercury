@@ -1,3 +1,4 @@
+import { useEarn } from "../../api/earn";
 import { exitAssets, fullSelection, rawTokenAmount, tokenAmount } from "@mercury/view";
 import type {
   BasketExitAsset,
@@ -74,6 +75,9 @@ export const EnrollmentRail = ({
   /* Over the cash on hand, the button becomes Add cash: the way out, not a dead end. */
   const needsCash = overCash && signedIn && !lookupFailed;
   const panels = usePanels();
+  /* Cash in Earn is the nearer way out than adding more: one tap brings it back. */
+  const inEarn = useEarn().data?.balanceUsd ?? 0;
+  const fromEarn = needsCash && inEarn > 0;
   const notice = checking
     ? null
     : lookupFailed
@@ -124,7 +128,15 @@ export const EnrollmentRail = ({
         <Button
           variant="primary"
           size="lg"
-          onClick={lookupFailed ? onRetry : needsCash ? panels.addCash : onReview}
+          onClick={
+            lookupFailed
+              ? onRetry
+              : fromEarn
+                ? () => panels.earn("withdraw")
+                : needsCash
+                  ? panels.addCash
+                  : onReview
+          }
           disabled={
             !signedIn ||
             walletMissing ||
@@ -137,15 +149,17 @@ export const EnrollmentRail = ({
         >
           {checking
             ? "Checking portfolio…"
-            : needsCash
-              ? "Add cash"
-              : lookupFailed
-                ? "Retry portfolio check"
-                : busy
-                  ? "Setting up portfolio…"
-                  : valid
-                    ? `Review ${usd(Number(amount))}`
-                    : "Review"}
+            : fromEarn
+              ? "Withdraw from Earn"
+              : needsCash
+                ? "Add cash"
+                : lookupFailed
+                  ? "Retry portfolio check"
+                  : busy
+                    ? "Setting up portfolio…"
+                    : valid
+                      ? `Review ${usd(Number(amount))}`
+                      : "Review"}
         </Button>
       </div>
     </section>

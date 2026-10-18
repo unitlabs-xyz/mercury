@@ -191,12 +191,13 @@ const TodayMove = ({
 export const AccountHeader = ({
   m,
   dash,
-  apr,
+  inEarn,
   failed = false,
 }: {
   m: Model | undefined;
   dash: Dashboard | undefined;
-  apr: number;
+  /** Cash in the Earn vault. Not in `m.cash`, which is what can be spent now. */
+  inEarn: number;
   /** The refresh failed. The banner above says so; these figures must not
       pulse as though an answer were still coming. */
   failed?: boolean;
@@ -276,7 +277,7 @@ export const AccountHeader = ({
           label="Cash"
           loading={waiting}
           value={m ? usd(m.cash) : "—"}
-          sub={`Earning ${pct(apr * 100, 1)} a year`}
+          sub={inEarn > 0 ? `+ ${usd(inEarn)} in Earn` : "Ready to invest"}
         />
         <HeaderFigure
           label="Borrowed"

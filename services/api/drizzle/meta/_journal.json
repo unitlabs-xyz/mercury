@@ -169,6 +169,27 @@
       "when": 1792065604187,
       "tag": "0023_admin_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792252101818,
+      "tag": "0024_earn",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792259023751,
+      "tag": "0025_earn_vault",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792304097958,
+      "tag": "0026_earn_no_switch",
+      "breakpoints": true
     }
   ]
 }
