@@ -108,24 +108,34 @@ Mercury sell from last month to shares that were not here yet. The replay orders
 
 **A sell** writes a `sell` disposal inside `settleOrder`'s existing database transaction, linked to
 its order. A second settle of the same order is already refused by the conditional claim, and the
-unique `order_id` refuses a second disposal regardless.
+unique `order_id` refuses a second disposal regardless. Before writing it, the sell takes back any
+`transfer_out` of that token recorded since the order was created: that was this sell, seen on the
+chain before the client confirmed it. If part of that drop really was a transfer, the next pass
+finds the gap again.
 
 **A transfer out** is noticed by position-sync, which runs every two seconds. When the chain,
 counting shares pledged to Kamino as held (`withPledged`, `deps.ts`), holds fewer tokens than the
-open records do, it writes a `transfer_out` disposal for the gap. If the user has a sell of that
-token `pending` or `executing`, it waits a pass instead, because the settled sell will explain the
-drop and writing both would remove the same shares twice.
+open records do, it writes a `transfer_out` disposal for the gap.
+
+**A sell in flight** holds its stock still. Position-sync reads the finalized balance and a sell
+settles against the confirmed one, so for a few seconds the two disagree about a sell that is fine.
+While the user has a sell of a stock `executing` and created within the last 10 minutes, or
+`filled` within the last 2, every wrapper of that stock sits the pass out and its position row stays
+as it was. Past 10 minutes an unconfirmed order is taken as abandoned; nothing else ever settles
+one, so an unbounded wait would hold the stock still forever.
 
 Shares that arrive unwitnessed are unchanged from today: counted as held, with no cost.
 
 ### The replay
 
 A pure function in `packages/core`, `replayPosition`, takes a token's lots and disposals ordered by
-`recorded_at` (then `id`) and returns open token quantity, open shares, cost, reference basis, fee,
-`heldSince` and whether any open cost is estimated. Lots go through `applyBuy` (dividend lots
-through `applyDividend`); disposals through `applySell`, with the reference basis and the fee scaled
-by the same fraction as the cost so the market and premium lines still sum. When open shares reach
-zero the run ends, and `heldSince` is the earliest `acquired_at` among lots recorded after that.
+`recorded_at` (in microseconds, lots before disposals at the same instant, then `id`) and returns
+open token quantity, open shares, cost, reference basis, fee, `heldSince` and whether any open cost
+is estimated. A lot adds its figures. A disposal takes the same fraction of every figure as the
+fraction of tokens it took, which is average cost, and keeps the market and premium lines summing.
+The fraction is counted in tokens because tokens are exact, and a dividend not yet written would
+make shares disagree. When open tokens reach zero the run ends, and `heldSince` is the earliest
+`acquired_at` among lots recorded after that.
 
 Reconcile then does what it does now, on open figures rather than lifetime ones: `shares` from the
 chain, `sharesWithBasis = min(open, chain)`, and dividend detection on the open token quantity, so a
@@ -136,8 +146,9 @@ dividend is no longer credited on tokens already sold.
 ### What is already in the database
 
 A migration adds `lot.recorded_at` (backfilled from `acquired_at`), creates `disposal`, and writes a
-`sell` disposal for every filled sell order from its filled amount and fill time. It is idempotent
-on `order_id`. After deploy, the first position-sync records any remaining gap per token as one
+`sell` disposal for every filled sell order from its stored decision and fill time. A sell is an
+exact-in swap, so the chosen candidate's `filledShares` is exactly what left. It is idempotent on
+`order_id`. After deploy, the first position-sync records any remaining gap per token as one
 `transfer_out`, dated then. History before deploy is approximate in that one respect; everything
 after is exact.
 
@@ -148,6 +159,7 @@ after is exact.
 - Transfer out, then buy.
 - A dividend after a partial sell is credited on the open tokens only.
 - A sell `executing` while the chain has already dropped writes one disposal, not two.
+- A confirm that arrives after the 10 minutes takes back the transfer out it was read as.
 - Pledging to Kamino writes no disposal.
 - The backfill run twice writes each disposal once.
 - The replay against a hand-worked table of mixed events, as `packages/core` tests are written.
