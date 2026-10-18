@@ -42,6 +42,7 @@ export const es: Dict = {
     heading: ["La cuenta financiera creada", "para el mundo onchain."],
     lead: "Ten acciones globales reales desde $5, invierte en temas completos con canastas y pide prestado contra tus acciones en lugar de venderlas. Todo desde una wallet que es tuya, abierta solo con un correo.",
     imageLabel: "Imagen principal",
+    builtOn: ["Construido en", ""],
   },
 
   trust: {

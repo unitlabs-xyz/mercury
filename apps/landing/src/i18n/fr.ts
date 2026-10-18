@@ -42,6 +42,7 @@ export const fr: Dict = {
     heading: ["Le compte financier conçu", "pour le monde onchain."],
     lead: "Détenez de vraies actions internationales dès $5, investissez dans des thèmes entiers avec les paniers et empruntez sur vos actions au lieu de les vendre. Le tout depuis un wallet qui vous appartient, ouvert avec une simple adresse e-mail.",
     imageLabel: "Image principale",
+    builtOn: ["Construit sur", ""],
   },
 
   trust: {

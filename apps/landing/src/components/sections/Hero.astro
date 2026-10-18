@@ -20,6 +20,25 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
        so it is not capped — Artnik runs a touch wider than the drawn line and a
        520px cap would drop "built" onto a line of its own. -->
   <div>
+    <!-- What it runs on, in the page's own greys: a translucent capsule on a
+         hairline, Solana's mark in ink (its one-colour version) on a white
+         disc. The motion is the colour: a soft glint runs round the edge, the
+         mark's bars slide in as the hero arrives, and a light sheen crosses
+         the name now and then. All of it stops for reduced motion. -->
+    <p data-enter class="built-on relative mb-5 inline-flex h-8 items-center gap-2 rounded-full pr-3.5 pl-1 text-[13px] leading-none tracking-[-0.02em] text-copy">
+      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-white text-ink shadow-[0_0_0_1px_var(--color-hairline),0_1px_2px_rgba(27,26,23,0.06)]">
+        <svg class="mark size-3 shrink-0" viewBox="0 0 397.7 311.7" aria-hidden="true">
+          <path class="bar" style="--i:0" fill="currentColor" d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" />
+          <path class="bar" style="--i:1" fill="currentColor" d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" />
+          <path class="bar" style="--i:2" fill="currentColor" d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" />
+        </svg>
+      </span>
+      {/* One run of text, so the words sit a space apart, not a flex gap. */}
+      <span>
+        {t.hero.builtOn[0] && `${t.hero.builtOn[0]} `}<span class="name font-medium">Solana</span>{t.hero.builtOn[1] && ` ${t.hero.builtOn[1]}`}
+      </span>
+    </p>
+
     <h1 data-enter class="display-xl text-headline">
       {content.heading[0]}{" "}<br />{content.heading[1]}
     </h1>
@@ -145,6 +164,103 @@ const content = { ...t.hero, primary: { label: t.ui.cta, href: site.app } };
 </Band>
 
 <style>
+  /* Barely there: a little lighter than the page, on a hairline. */
+  .built-on {
+    background: rgb(255 255 255 / 0.55);
+    isolation: isolate;
+  }
+
+  /* The edge: a 1px hairline ring, with a soft white glint that runs round
+     it once every few seconds. */
+  @property --edge-angle {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+
+  .built-on::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    padding: 1px;
+    border-radius: inherit;
+    background: conic-gradient(
+      from var(--edge-angle),
+      var(--color-cardline) 0deg,
+      var(--color-cardline) 250deg,
+      #ffffff 300deg,
+      var(--color-cardline) 350deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: edge-turn 6s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes edge-turn {
+    to {
+      --edge-angle: 360deg;
+    }
+  }
+
+  /* The mark's bars, one after another, sliding in from the left. */
+  .built-on .bar {
+    animation: bar-in 520ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1)) both;
+    animation-delay: calc(260ms + var(--i) * 110ms);
+  }
+
+  @keyframes bar-in {
+    from {
+      opacity: 0;
+      transform: translateX(-80px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Ink, with a soft band of Solana's violet and mint passing over it now and
+     then — its colours, kept pale. Most of each cycle is still. */
+  .built-on .name {
+    background: linear-gradient(
+        100deg,
+        var(--color-ink) 0%,
+        var(--color-ink) 40%,
+        #b49cf0 47%,
+        #7fd8b4 54%,
+        var(--color-ink) 64%,
+        var(--color-ink) 100%
+      )
+      0 0 / 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: sheen 6s ease-in-out 1.2s infinite;
+  }
+
+  @keyframes sheen {
+    0% {
+      background-position: 100% 0;
+    }
+    35%,
+    100% {
+      background-position: 0% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .built-on .bar,
+    .built-on .name,
+    .built-on::before {
+      animation: none;
+    }
+  }
+
   .screen {
     position: absolute;
     inset: 0;
