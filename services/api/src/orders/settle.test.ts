@@ -329,6 +329,32 @@ describe("settleOrder: the shares a sell removes", () => {
     expect(await s.db.select({ kind: disposals.kind }).from(disposals)).toEqual([{ kind: "sell" }]);
   });
 
+  it("puts the sell where the transfer out it replaces sat in the records", async () => {
+    // The replay orders by when each row was recorded. A sell that took the
+    // place of a transfer out but was dated now would jump a lot recorded
+    // between the two, and cost it as if it had been bought before the sell.
+    const s = await seed();
+    const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
+    const first = new Date(Date.now() - 12 * 60_000);
+    await transferOut(s, new Date(Date.now() - 5 * 60_000));
+    await transferOut(s, first);
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+
+    const rows = await s.db.select().from(disposals);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.kind).toBe("sell");
+    expect(rows[0]!.recordedAt).toEqual(first);
+  });
+
+  it("dates a sell that took nothing back when it is written", async () => {
+    const s = await seed();
+    const orderId = await sellOrder(s);
+    const before = Date.now();
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+    const [row] = await s.db.select().from(disposals);
+    expect(row!.recordedAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+  });
+
   it("leaves a transfer out from before the order alone", async () => {
     const s = await seed();
     await transferOut(s, new Date(Date.now() - 60 * 60_000));

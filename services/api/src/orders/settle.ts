@@ -155,9 +155,14 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
        * A transfer out position-sync recorded since this order began is this
        * sell, seen on the chain before the client came back to confirm it. It
        * is taken back, so the shares leave once. If any of that drop really
-       * was a transfer, the next pass finds the gap again and records it.
+       * was a transfer, the next pass finds the gap again.
+       *
+       * The sell takes the place of the earliest it took back, in the order
+       * rows were recorded. The replay is by that order, and a sell dated now
+       * would jump any lot recorded between the two, costing it as if it had
+       * been bought before the shares left.
        */
-      await tx
+      const takenBack = await tx
         .delete(disposals)
         .where(
           and(
@@ -166,7 +171,12 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
             eq(disposals.kind, "transfer_out"),
             gte(disposals.recordedAt, claimed[0]!.createdAt),
           ),
-        );
+        )
+        .returning({ recordedAt: disposals.recordedAt });
+      const sat = takenBack.reduce<Date | undefined>(
+        (earliest, t) => (earliest === undefined || t.recordedAt < earliest ? t.recordedAt : earliest),
+        undefined,
+      );
       await tx
         .insert(disposals)
         .values({
@@ -178,6 +188,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
           kind: "sell",
           orderId: input.orderId,
           occurredAt: fill.occurredAt,
+          ...(sat === undefined ? {} : { recordedAt: sat }),
         })
         // The claim already refuses a second settle; the unique order id
         // refuses a second disposal whatever reaches this line.
