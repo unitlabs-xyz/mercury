@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { testDb } from "../db/testing.js";
-import { disposals, instruments, lots, orders, positions, tokens, users } from "../db/schema.js";
+import { activities, disposals, instruments, lots, orders, positions, tokens, users } from "../db/schema.js";
 import { withPledged } from "../lending/pledged.js";
 import type { LendingSource } from "../lending/ports.js";
 import type { Fill } from "../orders/fill.js";
@@ -260,5 +260,41 @@ describe("the books, end to end", () => {
     const p = await b.position();
     expect(sharesOf(p.sharesWithBasis)).toBe("1.5");
     expect(usdOf(p.costBasisUsd)).toBe("100.00");
+  });
+
+  it("credit a dividend once when tokens leave in the same pass the multiplier rises", async () => {
+    /*
+     * One token, one share, $200. Then half the token is sent away and the
+     * multiplier rises to 1.5, and a single pass sees both. The dividend is on
+     * the half token still here: 0.5 x (1.5 - 1) = 0.25 shares, so the holding
+     * is 0.5 x 1.5 = 0.75 shares, still costing the $100 that stayed.
+     *
+     * The pass writes the transfer out and the dividend in one transaction, so
+     * the two share a timestamp. The next pass replays them, and if it put the
+     * dividend first it would scale it down with the transfer, read 0.625
+     * shares, and credit another 0.125 as a second dividend.
+     */
+    const b = await books();
+    await b.buy(ONE, 200);
+    await b.pass();
+    b.state.wallet -= ONE / 2n; // sent from another app
+    b.state.multiplier = D("1.5");
+    await b.pass();
+
+    const settled = await b.position();
+    expect(sharesOf(settled.shares)).toBe("0.75");
+    expect(sharesOf(settled.sharesWithBasis)).toBe("0.75");
+    expect(usdOf(settled.costBasisUsd)).toBe("100.00");
+
+    await b.pass();
+
+    const dividends = await b.db.select().from(lots).where(eq(lots.source, "dividend"));
+    expect(dividends.map((l) => sharesOf(l.shares))).toEqual(["0.25"]);
+    const feed = await b.db.select().from(activities).where(eq(activities.kind, "dividend"));
+    expect(feed).toHaveLength(1);
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+    const after = await b.position();
+    expect(sharesOf(after.sharesWithBasis)).toBe("0.75");
+    expect(usdOf(after.costBasisUsd)).toBe("100.00");
   });
 });

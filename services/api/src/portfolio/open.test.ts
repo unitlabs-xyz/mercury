@@ -50,6 +50,26 @@ describe("movementsByToken", () => {
     expect(moves.map((m) => m.kind)).toEqual(["in", "out"]);
   });
 
+  it("puts a dividend lot after a disposal recorded in the same instant", () => {
+    // A pass writes its transfer out and its dividend in one transaction, so
+    // they share a timestamp. The dividend was worked out on the tokens left
+    // after the transfer, so it has to replay after it.
+    const moves = movementsByToken([lot({ tokenQty: 0n })], [disposal({})]).get("token-nvdax")!;
+    expect(moves.map((m) => m.kind)).toEqual(["out", "in"]);
+  });
+
+  it("still puts a lot with tokens ahead of a dividend and a disposal recorded in the same instant", () => {
+    const moves = movementsByToken(
+      [lot({ id: "dividend", tokenQty: 0n, shares: "0.25" }), lot({ id: "buy" })],
+      [disposal({})],
+    ).get("token-nvdax")!;
+    expect(moves.map((m) => (m.kind === "in" ? `in:${m.tokenQty}` : "out"))).toEqual([
+      "in:100",
+      "out",
+      "in:0",
+    ]);
+  });
+
   it("keeps tokens apart", () => {
     const byToken = movementsByToken([lot({}), lot({ id: "lot-b", tokenId: "token-spyx" })], []);
     expect([...byToken.keys()].sort()).toEqual(["token-nvdax", "token-spyx"]);

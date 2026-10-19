@@ -30,8 +30,8 @@ export interface DisposalRow {
 interface Entry {
   readonly tokenId: string;
   readonly at: number;
-  /** In before out, at the same instant. */
-  readonly rank: 0 | 1;
+  /** A lot with tokens, then a disposal, then a lot without, at the same instant. */
+  readonly rank: 0 | 1 | 2;
   readonly id: string;
   readonly movement: Movement;
 }
@@ -40,10 +40,16 @@ interface Entry {
  * Each token's lots and disposals as one sequence, in the order they entered
  * and left Mercury, ready for `replayPosition`.
  *
- * A lot and a disposal recorded in the same instant go in before out, so a buy
- * and a sell in one millisecond cannot empty a holding that was never empty.
- * The id breaks any tie that is left, so the same rows always replay the same
- * way.
+ * Rows recorded in the same instant go in a fixed order: a lot that brings
+ * tokens, then a disposal, then a lot that brings none. A buy and a sell are
+ * never one transaction, but if they land together the buy goes in first, so
+ * a sell cannot empty a holding that was never empty. A lot with no tokens is
+ * a dividend, and a pass writes its transfer out and its dividend in one
+ * transaction, so they share `now()`. The dividend was worked out on the
+ * tokens left after the transfer, so it replays after it; ahead of it, the
+ * transfer would scale the dividend away with everything else and the next
+ * pass would credit it a second time. The id breaks any tie that is left, so
+ * the same rows always replay the same way.
  */
 export function movementsByToken(
   lots: readonly LotRow[],
@@ -55,7 +61,7 @@ export function movementsByToken(
       return {
         tokenId: l.tokenId,
         at: l.recordedAtUs,
-        rank: 0,
+        rank: l.tokenQty === 0n ? 2 : 0,
         id: l.id,
         movement: {
           kind: "in",
