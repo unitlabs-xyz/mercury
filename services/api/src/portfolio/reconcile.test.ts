@@ -299,9 +299,10 @@ describe("planReconciliation: tokens that left", () => {
     expect(plan.disposals).toEqual([]);
   });
 
-  it("credits a dividend only on the tokens still held", () => {
-    // Half the tokens left, then the multiplier rose by half. The dividend is
-    // half a share on the half token still here, not on the token that went.
+  it("waits to credit a dividend in the pass that records a transfer out", () => {
+    // Half the tokens left, then the multiplier rose by half. Which tokens are
+    // still held is not settled until the transfer out stands or is taken
+    // back, so the dividend is not written yet.
     const plan = planReconciliation(
       [
         held({
@@ -309,6 +310,31 @@ describe("planReconciliation: tokens that left", () => {
           recordedRawAmount: ONE_TOKEN,
           recordedShares: D(1),
           recordedCostUsd: D(200),
+          multiplier: D("1.5"),
+        }),
+      ],
+      NOW,
+    );
+    expect(plan.disposals).toHaveLength(1);
+    expect(plan.lots).toEqual([]);
+    expect(plan.activity).toEqual([]);
+    expect(plan.positions[0]).toMatchObject({
+      shares: D("0.75"),
+      sharesWithBasisUsd: D("0.5"),
+      costBasisUsd: D(100),
+    });
+  });
+
+  it("credits a dividend only on the tokens still held, once the transfer out stands", () => {
+    // Half the token left in an earlier pass and stands, then the multiplier
+    // rose by half: half a share on the half token still here.
+    const plan = planReconciliation(
+      [
+        held({
+          chainRawAmount: ONE_TOKEN / 2n,
+          recordedRawAmount: ONE_TOKEN / 2n,
+          recordedShares: D("0.5"),
+          recordedCostUsd: D(100),
           multiplier: D("1.5"),
         }),
       ],
@@ -473,6 +499,27 @@ describe("planReconciliation: a transfer out that may yet be a lagging read", ()
       sharesWithBasisUsd: D("0.5"),
       costBasisUsd: D(100),
     });
+  });
+
+  it("writes no dividend while it is young, however far the multiplier has risen", () => {
+    // The dividend would be on the tokens held now. If the transfer out is then
+    // taken back, a second dividend would follow on the tokens that returned,
+    // and one dividend would be paid as two rows in the feed.
+    const plan = planReconciliation(
+      [afterTransfer({ chainRawAmount: ONE_TOKEN / 2n, multiplier: D("1.5") })],
+      NOW,
+    );
+    expect(plan.lots).toEqual([]);
+    expect(plan.activity).toEqual([]);
+    expect(plan.positions[0]).toMatchObject({ shares: D("0.75"), sharesWithBasisUsd: D("0.5") });
+  });
+
+  it("credits it once the transfer out is no longer young", () => {
+    const plan = planReconciliation(
+      [afterTransfer({ chainRawAmount: ONE_TOKEN / 2n, multiplier: D("1.5"), provisional: [] })],
+      NOW,
+    );
+    expect(plan.lots.map((l) => l.shares)).toEqual([D("0.25")]);
   });
 
   it("holds every wrapper of that stock for the pass", () => {

@@ -125,9 +125,14 @@ lagging node shows its tokens. While a `transfer_out` is under two minutes old, 
 reads above the open records means the low reading has come back: position-sync deletes the
 transfer out and leaves that stock's position to the next pass. Past two minutes it stands, and
 tokens that arrive after are unwitnessed arrivals, as below. Only a `transfer_out` is ever taken
-back; a sell is a fact. This runs for a stock with a sell in flight as well, which is otherwise held,
-because that hold can outlast the two minutes. If it takes back a transfer out that was genuine, the
-first pass after the hold records it again from the gap.
+back; a sell is a fact. This runs for a stock with a sell in flight as well, held or not: a sell can
+sit executing for ten minutes, longer than the two. If it takes back a transfer out that was
+genuine, the first pass after the hold records it again from the gap.
+
+A dividend on a token waits while a transfer out of it is young or being written. Which tokens are
+held is not settled until that transfer out stands or is taken back, and a dividend credited on the
+tokens left, followed by another on the tokens that return, would be one dividend paid as two rows
+in the feed.
 
 **A sell in flight** holds its stock still, but only against a drop. The balance position-sync
 reads can trail the transaction a sell is settled from, because a node is behind or a confirm raced
@@ -139,7 +144,7 @@ an unconfirmed sell waits. Past 10 minutes an unconfirmed order is taken as aban
 ever settles one, so an unbounded wait would hold the stock still forever. For about thirteen
 seconds after a sell settles, the finalized balance lags above the records. That reads as shares not
 yet gone, which is what it read as before this change, and any young transfer out is taken back as
-usual. A stock that is held still has its young transfer outs retracted all the same.
+usual.
 
 Shares that arrive unwitnessed are unchanged from today: counted as held, with no cost.
 

@@ -222,7 +222,8 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
      * Scaled by tokens rather than shares, as the replay is: tokens are exact,
      * and a dividend not yet written would make shares disagree.
      */
-    if (token.chainRawAmount < recordedRaw) {
+    const leaving = token.chainRawAmount < recordedRaw;
+    if (leaving) {
       const goneRaw = recordedRaw - token.chainRawAmount;
       disposals.push({
         tokenId: token.tokenId,
@@ -250,8 +251,17 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     // driven by a gap between the chain and our records: a gap upward means
     // tokens arrived from somewhere we did not witness, and calling that a
     // dividend would hand the holder free shares in the accounts.
+    //
+    // It waits while a transfer out of the token is young or is being written
+    // now. Which tokens are held is not settled until that transfer out stands
+    // or is taken back, and a dividend credited on the tokens left, followed by
+    // another on the tokens that return, would be one dividend paid as two
+    // rows in the feed. The shares it would add are in the chain's count
+    // already, so the holding is right in the meantime, and the shares with a
+    // cost catch up when the dividend is written.
     const recordedQty = scaled(recordedRaw, token.decimals);
-    if (recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
+    const standing = !leaving && token.provisional.length === 0;
+    if (standing && recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
       const recordedMultiplier = recordedShares.div(recordedQty);
       const gained = recordedQty.mul(token.multiplier.sub(recordedMultiplier));
       if (gained.gte(DIVIDEND_FLOOR)) {

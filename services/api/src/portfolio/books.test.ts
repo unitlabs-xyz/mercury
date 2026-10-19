@@ -488,31 +488,34 @@ describe("the books, end to end", () => {
     expect(usdOf(p.costBasisUsd)).toBe("100.00");
   });
 
-  it("credit a dividend once when tokens leave in the same pass the multiplier rises", async () => {
+  it("credit a dividend once, on the tokens that remain, when tokens leave in the pass the multiplier rises", async () => {
     /*
      * One token, one share, $200. Then half the token is sent away and the
-     * multiplier rises to 1.5, and a single pass sees both. The dividend is on
-     * the half token still here: 0.5 x (1.5 - 1) = 0.25 shares, so the holding
-     * is 0.5 x 1.5 = 0.75 shares, still costing the $100 that stayed.
-     *
-     * The pass writes the transfer out and the dividend in one transaction, so
-     * the two share a timestamp. The next pass replays them, and if it put the
-     * dividend first it would scale it down with the transfer, read 0.625
-     * shares, and credit another 0.125 as a second dividend.
+     * multiplier rises to 1.5, and a single pass sees both. The pass records
+     * the transfer out and waits to credit the dividend, since which tokens are
+     * held is not settled while the transfer out is young. Once it stands the
+     * dividend is on the half token still here: 0.5 x (1.5 - 1) = 0.25 shares,
+     * so the holding is 0.5 x 1.5 = 0.75 shares, still costing the $100 that
+     * stayed. Credited in the first pass and the transfer out then taken back,
+     * a second dividend would have followed on the tokens that returned.
      */
     const b = await books();
     await b.buy(ONE, 200);
     await b.pass();
     b.state.wallet -= ONE / 2n; // sent from another app
     b.state.multiplier = D("1.5");
-    await b.pass();
+    const now = new Date();
+    await b.pass(now);
 
-    const settled = await b.position();
-    expect(sharesOf(settled.shares)).toBe("0.75");
-    expect(sharesOf(settled.sharesWithBasis)).toBe("0.75");
-    expect(usdOf(settled.costBasisUsd)).toBe("100.00");
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+    expect(await b.db.select().from(lots).where(eq(lots.source, "dividend"))).toEqual([]);
+    const waiting = await b.position();
+    expect(sharesOf(waiting.shares)).toBe("0.75");
+    expect(sharesOf(waiting.sharesWithBasis)).toBe("0.5");
+    expect(usdOf(waiting.costBasisUsd)).toBe("100.00");
 
-    await b.pass();
+    await b.pass(new Date(now.getTime() + 3 * MINUTE)); // the transfer out stands
+    await b.pass(new Date(now.getTime() + 3 * MINUTE));
 
     const dividends = await b.db.select().from(lots).where(eq(lots.source, "dividend"));
     expect(dividends.map((l) => sharesOf(l.shares))).toEqual(["0.25"]);
@@ -520,6 +523,7 @@ describe("the books, end to end", () => {
     expect(feed).toHaveLength(1);
     expect(await b.disposalKinds()).toEqual(["transfer_out"]);
     const after = await b.position();
+    expect(sharesOf(after.shares)).toBe("0.75");
     expect(sharesOf(after.sharesWithBasis)).toBe("0.75");
     expect(usdOf(after.costBasisUsd)).toBe("100.00");
   });
