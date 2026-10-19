@@ -355,6 +355,61 @@ describe("settleOrder: the shares a sell removes", () => {
     expect(row!.recordedAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
   });
 
+  it("leaves a transfer out of another token alone", async () => {
+    // The take-back is for the token this sell removed. Another wrapper of the
+    // same stock, dropping in the same minutes, is a different drop.
+    const s = await seed();
+    const [other] = await s.db
+      .insert(tokens)
+      .values({
+        instrumentId: s.instrumentId,
+        mint: "OtherMint",
+        symbol: "NVDAon",
+        issuer: "ondo",
+        decimals: 6,
+      })
+      .returning();
+    const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
+    await s.db.insert(disposals).values({
+      userId: s.userId,
+      tokenId: other!.id,
+      instrumentId: s.instrumentId,
+      tokenQty: 1_000_000n,
+      shares: "1",
+      kind: "transfer_out",
+      occurredAt: new Date(),
+    });
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+
+    const rows = await s.db.select().from(disposals).orderBy(disposals.recordedAt);
+    expect(rows.map((r) => [r.kind, r.tokenId])).toEqual([
+      ["transfer_out", other!.id],
+      ["sell", s.tokenId],
+    ]);
+  });
+
+  it("leaves another user's transfer out alone", async () => {
+    const s = await seed();
+    const [stranger] = await s.db.insert(users).values({ privyUserId: "did:privy:stranger" }).returning();
+    const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
+    await s.db.insert(disposals).values({
+      userId: stranger!.id,
+      tokenId: s.tokenId,
+      instrumentId: s.instrumentId,
+      tokenQty: 44_901_800n,
+      shares: "0.44978187",
+      kind: "transfer_out",
+      occurredAt: new Date(),
+    });
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+
+    const rows = await s.db.select().from(disposals).orderBy(disposals.recordedAt);
+    expect(rows.map((r) => [r.kind, r.userId])).toEqual([
+      ["transfer_out", stranger!.id],
+      ["sell", s.userId],
+    ]);
+  });
+
   it("leaves a transfer out from before the order alone", async () => {
     const s = await seed();
     await transferOut(s, new Date(Date.now() - 60 * 60_000));

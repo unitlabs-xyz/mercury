@@ -19,7 +19,7 @@ import type { LendingSource } from "../lending/ports.js";
 import type { Fill } from "../orders/fill.js";
 import { settleOrder } from "../orders/settle.js";
 import { applyReconciliation, loadHeldTokens, type ReconcileDeps } from "./apply.js";
-import { planReconciliation } from "./reconcile.js";
+import { planReconciliation, type Reconciliation } from "./reconcile.js";
 import { syncAllPositions } from "./sync.js";
 
 /*
@@ -170,10 +170,11 @@ const books = async () => {
     await (await order("sell", raw, usd)).settle();
     state.wallet -= raw;
   };
-  const pass = async (now = new Date()) => {
-    const held = await loadHeldTokens(db, deps, userId, WALLET, now);
-    await applyReconciliation(db, userId, planReconciliation(held, now));
-  };
+  /** The read and the plan of a pass, apart from its write. */
+  const plan = async (now = new Date()) =>
+    planReconciliation(await loadHeldTokens(db, deps, userId, WALLET, now), now);
+  const apply = (p: Reconciliation) => applyReconciliation(db, userId, p);
+  const pass = async (now = new Date()) => apply(await plan(now));
   /** A pass as position-sync runs it, wallet lookup and all. */
   const sync = () => syncAllPositions(db, deps);
   const position = async () => {
@@ -185,7 +186,22 @@ const books = async () => {
       (d) => d.kind,
     );
 
-  return { db, userId, instrumentId, tokenId, state, order, buy, sell, pass, sync, position, disposalKinds };
+  return {
+    db,
+    userId,
+    instrumentId,
+    tokenId,
+    state,
+    order,
+    buy,
+    sell,
+    plan,
+    apply,
+    pass,
+    sync,
+    position,
+    disposalKinds,
+  };
 };
 
 const usdOf = (v: string): string => D(v).toFixed(2);
@@ -439,6 +455,35 @@ describe("the books, end to end", () => {
     expect(warned).toHaveBeenCalledTimes(1);
     // The user and a count, and no address.
     expect(warned).toHaveBeenCalledWith({ userId: b.userId, count: 1 }, expect.any(String));
+  });
+
+  it("take back the stray transfer out a pass writes after a late confirm has already settled the sell", async () => {
+    /*
+     * A pass reads, a confirm settles, and the pass writes. The sell was made
+     * long ago, so nothing holds the stock for it. The pass saw the drop before
+     * the sell was recorded and writes it as a transfer out beside the sell, and
+     * the shares leave twice. The next pass finds the chain above the records,
+     * which is a young transfer out being wrong, and takes it back.
+     */
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+
+    const late = await b.order("sell", ONE, 150, { createdAt: ago(20 * MINUTE) });
+    b.state.wallet -= ONE; // landed
+    const stale = await b.plan();
+    expect(stale.disposals).toHaveLength(1);
+    await late.settle();
+    await b.apply(stale);
+    expect(await b.disposalKinds()).toEqual(["sell", "transfer_out"]);
+
+    await b.pass();
+    expect(await b.disposalKinds()).toEqual(["sell"]);
+    await b.pass();
+
+    const p = await b.position();
+    expect(sharesOf(p.sharesWithBasis)).toBe("1");
+    expect(usdOf(p.costBasisUsd)).toBe("100.00");
   });
 
   it("keep the cost of a buy read on a node that has not seen the tokens yet", async () => {
