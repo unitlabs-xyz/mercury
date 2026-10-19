@@ -150,8 +150,12 @@ variables. The server refuses to start without all three. Do not mount a `.env`
 file — the image deliberately has none, and `.dockerignore` keeps the local one
 out of the build context.
 
-Migrations do not run on deploy. Apply them yourself against the deployed
-database before the first boot:
+Migrations run when the API boots (`applyMigrations`, in
+`services/api/src/db/migrate.ts`), before it answers anything, so a new image
+brings the schema it needs. Two containers booting together take a Postgres
+advisory lock and do not race, and a failed migration ends the process, which on
+a rolling deploy leaves the previous container taking traffic. To apply them by
+hand instead, against a database you are about to point the app at:
 
 ```bash
 DATABASE_URL=<the deployed one> pnpm --filter @mercury/api exec drizzle-kit migrate

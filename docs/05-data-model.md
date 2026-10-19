@@ -112,7 +112,8 @@ A derived rollup per user per instrument, maintained on write.
 user_id, instrument_id, shares, cost_basis_usd, avg_unit_cost_usd, updated_at
 ```
 
-Rebuildable from lots at any time. A reconciliation job asserts it matches.
+Rebuildable from lots and disposals at any time: a replay of both, in the order they were recorded,
+at average cost. A reconciliation job asserts it matches.
 
 ### `order`
 
@@ -210,6 +211,10 @@ from lot where user_id = $1 and instrument_id = $2;
 
 Never `sum(token_qty)` across tokens. Different wrappers, different multipliers, different
 things.
+
+This query predates disposals. It sums every lot ever recorded, the shares since sold included, so
+it overstates exposure after a sell. Read the `position` row instead, which is the replay of lots
+and disposals.
 
 ## What is not stored
 

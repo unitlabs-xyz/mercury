@@ -89,10 +89,12 @@ const realisedOn = (
  *
  * A sell writes no lot, on purpose: lots record what was acquired, and selling
  * acquires nothing. It writes a disposal instead, the tokens that left, and
- * the position follows from `planReconciliation`, which replays lots and
- * disposals in the order they were recorded at average cost. The cost per
- * share of what remains is exactly what it was, and the cost of what was sold
- * goes with it rather than staying to be mixed into the next purchase.
+ * the position follows from position-sync, which replays lots and disposals in
+ * the order they were recorded at average cost (`loadHeldTokens`,
+ * `replayPosition`) and reconciles the result with the chain
+ * (`planReconciliation`). The cost per share of what remains is exactly what
+ * it was, and the cost of what was sold goes with it rather than staying to
+ * be mixed into the next purchase.
  */
 export async function settleOrder(db: Db, input: SettleInput): Promise<SettleResult> {
   const { fill } = input;
@@ -160,7 +162,9 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
        * The sell takes the place of the earliest it took back, in the order
        * rows were recorded. The replay is by that order, and a sell dated now
        * would jump any lot recorded between the two, costing it as if it had
-       * been bought before the shares left.
+       * been bought before the shares left. It lands within a millisecond of
+       * that transfer out rather than on it: the driver hands the time back as
+       * a Date, which keeps milliseconds.
        */
       const takenBack = await tx
         .delete(disposals)

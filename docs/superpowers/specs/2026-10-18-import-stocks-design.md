@@ -146,7 +146,9 @@ seconds after a sell settles, the finalized balance lags above the records. That
 yet gone, which is what it read as before this change, and any young transfer out is taken back as
 usual.
 
-Shares that arrive unwitnessed are unchanged from today: counted as held, with no cost.
+Shares that arrive unwitnessed are unchanged from today: counted as held, with no cost. A sell takes
+from the shares we hold a cost for first, because the replay knows only those: with one bought
+token and one unwitnessed, selling one leaves the remaining token with no basis.
 
 ### The replay
 
