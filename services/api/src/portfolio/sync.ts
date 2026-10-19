@@ -61,6 +61,16 @@ export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<Syn
         if (held.length === 0) continue;
         const plan = planReconciliation(held, new Date());
         await applyReconciliation(db, row.userId, plan);
+        // A transfer out is only taken back when the chain read low and then
+        // recovered, which is a lagging read at work. Rare enough to say so,
+        // and a rise in them is the first sign a node is behind. The user,
+        // never the address.
+        if (plan.retracted.length > 0) {
+          log.warn(
+            { userId: row.userId, count: plan.retracted.length },
+            "took back transfer outs that the chain has since outgrown",
+          );
+        }
         reconciled += 1;
         written += plan.lots.length + plan.disposals.length + plan.retracted.length + plan.activity.length;
       } catch (error: unknown) {

@@ -1,15 +1,44 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { testDb } from "../db/testing.js";
-import { activities, disposals, instruments, lots, orders, positions, tokens, users } from "../db/schema.js";
+import {
+  activities,
+  disposals,
+  instruments,
+  lots,
+  orders,
+  positions,
+  tokens,
+  users,
+  wallets,
+} from "../db/schema.js";
 import { withPledged } from "../lending/pledged.js";
 import type { LendingSource } from "../lending/ports.js";
 import type { Fill } from "../orders/fill.js";
 import { settleOrder } from "../orders/settle.js";
 import { applyReconciliation, loadHeldTokens, type ReconcileDeps } from "./apply.js";
 import { planReconciliation } from "./reconcile.js";
+import { syncAllPositions } from "./sync.js";
+
+/*
+ * The position-sync logger's `warn`, watched. The rest of the logger is the
+ * real one, so nothing else in these tests changes.
+ */
+const warned = vi.hoisted(() => vi.fn());
+vi.mock("../log/index.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../log/index.js")>();
+  return {
+    ...real,
+    logger: (scope: string) => {
+      const log = real.logger(scope);
+      return scope === "position-sync"
+        ? new Proxy(log, { get: (target, key) => (key === "warn" ? warned : Reflect.get(target, key)) })
+        : log;
+    },
+  };
+});
 
 const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
 const WALLET = "Wa11et00000000000000000000000000000000000000";
@@ -37,6 +66,9 @@ const books = async () => {
   const userId = user!.id;
   const instrumentId = instrument!.id;
   const tokenId = token!.id;
+  await db
+    .insert(wallets)
+    .values({ userId: user!.id, address: WALLET, kind: "privy_embedded", isPrimary: true });
 
   const state = { wallet: 0n, pledged: 0n, multiplier: D(1) };
 
@@ -142,6 +174,8 @@ const books = async () => {
     const held = await loadHeldTokens(db, deps, userId, WALLET, now);
     await applyReconciliation(db, userId, planReconciliation(held, now));
   };
+  /** A pass as position-sync runs it, wallet lookup and all. */
+  const sync = () => syncAllPositions(db, deps);
   const position = async () => {
     const [row] = await db.select().from(positions).where(eq(positions.userId, userId));
     return row!;
@@ -151,7 +185,7 @@ const books = async () => {
       (d) => d.kind,
     );
 
-  return { db, userId, instrumentId, tokenId, state, order, buy, sell, pass, position, disposalKinds };
+  return { db, userId, instrumentId, tokenId, state, order, buy, sell, pass, sync, position, disposalKinds };
 };
 
 const usdOf = (v: string): string => D(v).toFixed(2);
@@ -386,6 +420,25 @@ describe("the books, end to end", () => {
     expect(sharesOf(p.shares)).toBe("2");
     expect(sharesOf(p.sharesWithBasis)).toBe("2");
     expect(usdOf(p.costBasisUsd)).toBe("200.00");
+  });
+
+  it("say so, and for whom, when a pass takes back a transfer out", async () => {
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+    warned.mockClear();
+
+    b.state.wallet = 0n; // a low reading
+    await b.sync();
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+    expect(warned).not.toHaveBeenCalled();
+
+    b.state.wallet = 2n * ONE; // and it comes back
+    await b.sync();
+    expect(await b.disposalKinds()).toEqual([]);
+    expect(warned).toHaveBeenCalledTimes(1);
+    // The user and a count, and no address.
+    expect(warned).toHaveBeenCalledWith({ userId: b.userId, count: 1 }, expect.any(String));
   });
 
   it("keep the cost of a buy read on a node that has not seen the tokens yet", async () => {
