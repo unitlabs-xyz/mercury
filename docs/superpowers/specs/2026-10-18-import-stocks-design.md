@@ -148,7 +148,10 @@ dividend is no longer credited on tokens already sold.
 A migration adds `lot.recorded_at` (backfilled from `acquired_at`), creates `disposal`, and writes a
 `sell` disposal for every filled sell order from its stored decision and fill time. A sell is an
 exact-in swap, so the chosen candidate's `filledShares` is exactly what left. It is idempotent on
-`order_id`. After deploy, the first position-sync records any remaining gap per token as one
+`order_id`. The old reconcile also credited every dividend on all the tokens ever bought, so the same
+migration cuts each dividend lot that follows a sell back to the tokens still held when it was
+credited (acquired less disposed, over acquired); that statement runs once, with the migration, and
+is not idempotent. After deploy, the first position-sync records any remaining gap per token as one
 `transfer_out`, dated then. History before deploy is approximate in that one respect; everything
 after is exact.
 

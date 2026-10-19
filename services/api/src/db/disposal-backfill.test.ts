@@ -31,7 +31,8 @@ const decision = (filledShares: string | null, multiplier = "1.001") => ({
   ],
 });
 
-const seeded = async () => {
+/** One account, one stock, and a way to place orders against it. No lots, no orders. */
+const world = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:backfill" }).returning();
   const [instrument] = await db
@@ -57,22 +58,29 @@ const seeded = async () => {
         ...over,
       })
       .returning();
+  const lot = (over: Partial<typeof lots.$inferInsert>) =>
+    db.insert(lots).values({
+      userId: user!.id,
+      tokenId: token!.id,
+      instrumentId: instrument!.id,
+      tokenQty: 100_000_000n,
+      shares: "1",
+      unitCostUsd: "200",
+      acquiredAt: BOUGHT,
+      source: "buy",
+      ...over,
+    });
+  return { db, order, lot, tokenId: token!.id };
+};
 
+const seeded = async () => {
+  const { db, order, lot, tokenId } = await world();
   const [sold] = await order();
   await order({ side: "buy" });
   await order({ status: "executing", filledAt: null });
   await order({ decision: decision(null) });
-  await db.insert(lots).values({
-    userId: user!.id,
-    tokenId: token!.id,
-    instrumentId: instrument!.id,
-    tokenQty: 100_000_000n,
-    shares: "1",
-    unitCostUsd: "200",
-    acquiredAt: BOUGHT,
-    source: "buy",
-  });
-  return { db, order, soldId: sold!.id, tokenId: token!.id };
+  await lot({});
+  return { db, order, soldId: sold!.id, tokenId };
 };
 
 /** What the migration wrote for one order. */
@@ -139,11 +147,56 @@ describe("0026_disposal_backfill", () => {
     expect(lot!.recordedAt).toEqual(BOUGHT);
   });
 
-  /* A retried deploy runs it again over rows it already wrote. */
+  /*
+   * The twice property is about the sells, and this seed has no dividend lots on
+   * purpose. The repair below scales a dividend each time it runs, so it is not
+   * idempotent. It does not need to be: drizzle applies a migration once, in one
+   * transaction, and records it, so a retried deploy that finds the migration
+   * applied does not run it again.
+   */
   it("writes each sell once when it runs twice", async () => {
     const { db } = await seeded();
     await run(db);
     await run(db);
     expect(await db.select().from(disposals)).toHaveLength(1);
+  });
+});
+
+/*
+ * Before this branch a dividend was credited on every token ever bought, tokens
+ * since sold included. One recorded after a sell carries shares for tokens that
+ * were already gone, so the replay holds more shares than the chain does, and
+ * the cap on the shares with a cost scales the cost down with the excess.
+ */
+describe("0026_disposal_backfill: dividends credited on tokens already sold", () => {
+  const AFTER_SELL = new Date("2026-10-02T09:00:00Z");
+  const BEFORE_SELL = new Date("2026-09-25T09:00:00Z");
+
+  /** Two tokens bought, one sold, and a one-share dividend: 2 tokens x (1.5 - 1) under the old model. */
+  const bookWithDividendAt = async (acquiredAt: Date) => {
+    const { db, order, lot } = await world();
+    await lot({ tokenQty: 200_000_000n, shares: "2", unitCostUsd: "100" });
+    // 1.001 shares at a multiplier of 1.001 is one token.
+    await order({ decision: decision("1.001") });
+    await lot({ tokenQty: 0n, shares: "1", unitCostUsd: "0", source: "dividend", acquiredAt });
+    return db;
+  };
+
+  const dividendShares = async (db: Awaited<ReturnType<typeof testDb>>) => {
+    const rows = await db.select().from(lots).where(eq(lots.source, "dividend"));
+    return rows.map((l) => l.shares);
+  };
+
+  it("scales a dividend recorded after the sell to the tokens that were still held", async () => {
+    const db = await bookWithDividendAt(AFTER_SELL);
+    await run(db);
+    // Two tokens acquired, one disposed: the dividend was on one token, not two.
+    expect(await dividendShares(db)).toEqual(["0.500000000000000000"]);
+  });
+
+  it("leaves a dividend recorded before the sell as it was", async () => {
+    const db = await bookWithDividendAt(BEFORE_SELL);
+    await run(db);
+    expect(await dividendShares(db)).toEqual(["1.000000000000000000"]);
   });
 });
