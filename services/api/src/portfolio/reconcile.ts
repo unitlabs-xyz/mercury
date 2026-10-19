@@ -31,12 +31,19 @@ export interface HeldToken {
   /**
    * A sell of this stock is executing, or settled moments ago.
    *
-   * The pass reads the finalized balance and a sell settles against the
-   * confirmed one, so for a few seconds the chain and the records disagree
-   * about a sell that is fine. The pass leaves the stock as it was, rather than
-   * reading the gap as a transfer out and removing the same shares twice.
+   * The balance the pass reads can trail the transaction a sell is settled
+   * from, whether the node behind it is slow or a confirm raced the pass, so
+   * for a while the chain and the records disagree about a sell that is fine.
+   * The pass leaves the stock as it was, rather than reading the gap as a
+   * transfer out and removing the same shares twice.
    */
   readonly settling: boolean;
+  /**
+   * The ids of this token's `transfer_out` disposals recorded within the last
+   * couple of minutes. Young enough that the low reading behind them may yet
+   * come back (see `planReconciliation`). Older ones are not listed, and stand.
+   */
+  readonly provisional: readonly string[];
 }
 
 export interface LotWrite {
@@ -89,6 +96,8 @@ export interface Reconciliation {
   readonly lots: readonly LotWrite[];
   readonly activity: readonly ActivityWrite[];
   readonly disposals: readonly DisposalWrite[];
+  /** Ids of recent transfer outs to take back: the low reading behind each has come back. */
+  readonly retracted: readonly string[];
   readonly positions: readonly PositionWrite[];
 }
 
@@ -140,12 +149,38 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
   >();
 
   // Every wrapper of a stock with a sell in flight sits this pass out. See
-  // `HeldToken.settling`. Its position row stays as it was: stale for seconds,
-  // and right.
+  // `HeldToken.settling`. Its position row stays as it was: stale for as long
+  // as the sell is in flight, up to ten minutes, and right.
   const settling = new Set(held.filter((t) => t.settling).map((t) => t.instrumentId));
 
+  /*
+   * A transfer out is provisional while it is young. The low reading behind it
+   * can be a lag rather than a send: the pledged side of the balance is read at
+   * confirmed and the wallet at finalized, so a Kamino withdrawal shows the
+   * pledge gone before the wallet has the tokens, and a buy's lot can be
+   * written before a lagging node shows its tokens. The open records already
+   * count the transfer out, so a chain that now reads above them means the low
+   * reading has come back, and the transfer is taken back. Left standing, the
+   * tokens returning would count as arrivals we did not witness, and the cost
+   * they carried would be gone for good.
+   *
+   * The stock's position waits for the next pass, which finds the records and
+   * the chain in agreement. Working it out now would price it against records
+   * that are about to change. Once a transfer out is old enough to leave
+   * `provisional` it stands, and a chain above the records is an arrival.
+   */
+  const retracted: string[] = [];
+  const retracting = new Set<string>();
   for (const token of held) {
     if (settling.has(token.instrumentId)) continue;
+    if (token.provisional.length > 0 && token.chainRawAmount > token.recordedRawAmount) {
+      retracted.push(...token.provisional);
+      retracting.add(token.instrumentId);
+    }
+  }
+
+  for (const token of held) {
+    if (settling.has(token.instrumentId) || retracting.has(token.instrumentId)) continue;
 
     // What the chain says you hold. This is a fact and it is never inferred.
     const chainShares = scaled(token.chainRawAmount, token.decimals).mul(token.multiplier);
@@ -269,5 +304,5 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     avgUnitCostUsd: r.withBasis.isZero() ? ZERO : r.cost.div(r.withBasis),
   }));
 
-  return { lots, activity, disposals, positions };
+  return { lots, activity, disposals, retracted, positions };
 }

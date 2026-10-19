@@ -1,4 +1,4 @@
-import { and, eq, gt, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
 import { D, EMPTY_OPEN, replayPosition, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
@@ -23,6 +23,19 @@ const EXECUTING_WINDOW_MS = 10 * 60_000;
 
 /** How long after a sell settles before the finalized balance has caught up with it. */
 const SETTLED_WINDOW_MS = 2 * 60_000;
+
+/**
+ * How long a transfer out is provisional. A drop in the chain is not always a
+ * send. Kamino is read at confirmed and the wallet at finalized, so on every
+ * withdrawal the obligation empties some seconds before the wallet regains the
+ * tokens, and for those seconds the chain reads low. A buy's lot can be
+ * written before a lagging node shows its tokens, and a late confirm can race
+ * the gap between a pass's read and its write. Each would otherwise become a
+ * permanent transfer out, and the tokens coming back would count as arrivals
+ * with no cost. Within this window a chain that reads above the records takes
+ * the transfer out back (`planReconciliation`). Past it, the transfer stands.
+ */
+const PROVISIONAL_MS = 2 * 60_000;
 
 /**
  * Everything `planReconciliation` needs: what the chain holds, what we recorded,
@@ -80,6 +93,7 @@ export async function loadHeldTokens(
         id: disposals.id,
         tokenId: disposals.tokenId,
         tokenQty: disposals.tokenQty,
+        kind: disposals.kind,
         recordedAtUs: sql<number>`(extract(epoch from ${disposals.recordedAt}) * 1000000)::bigint`.mapWith(
           Number,
         ),
@@ -113,6 +127,17 @@ export async function loadHeldTokens(
     [...movementsByToken(lotRows, disposalRows)].map(([tokenId, moves]) => [tokenId, replayPosition(moves)]),
   );
   const settling = new Set(settlingRows.map((r) => r.instrumentId));
+  // Every disposal is replayed, young or not, so a dividend written beside a
+  // transfer out keeps replaying after it. Only the young transfers out are
+  // listed here, to be taken back if the chain reads above the records.
+  const youngAfterUs = (now.getTime() - PROVISIONAL_MS) * 1000;
+  const provisional = new Map<string, string[]>();
+  for (const d of disposalRows) {
+    if (d.kind !== "transfer_out" || d.recordedAtUs <= youngAfterUs) continue;
+    const ids = provisional.get(d.tokenId);
+    if (ids === undefined) provisional.set(d.tokenId, [d.id]);
+    else ids.push(d.id);
+  }
   const relevant = known.filter((t) => onChain.has(t.mint) || open.has(t.tokenId));
   if (relevant.length === 0) return [];
 
@@ -149,6 +174,7 @@ export async function loadHeldTokens(
       recordedReferenceUsd: held.referenceUsd,
       recordedFeeUsd: held.feeUsd,
       settling: settling.has(token.instrumentId),
+      provisional: provisional.get(token.tokenId) ?? [],
     } satisfies HeldToken;
   });
 }
@@ -157,9 +183,22 @@ const fixed = (v: Decimal): string => v.toFixed(18);
 
 /** Writes what the plan decided. One transaction, so a half-written pass cannot exist. */
 export async function applyReconciliation(db: Db, userId: string, plan: Reconciliation): Promise<void> {
-  if (plan.lots.length === 0 && plan.disposals.length === 0 && plan.positions.length === 0) return;
+  if (
+    plan.lots.length === 0 &&
+    plan.disposals.length === 0 &&
+    plan.retracted.length === 0 &&
+    plan.positions.length === 0
+  ) {
+    return;
+  }
 
   await db.transaction(async (tx) => {
+    if (plan.retracted.length > 0) {
+      await tx
+        .delete(disposals)
+        .where(and(eq(disposals.userId, userId), inArray(disposals.id, [...plan.retracted])));
+    }
+
     if (plan.lots.length > 0) {
       await tx.insert(lots).values(
         plan.lots.map((l) => ({

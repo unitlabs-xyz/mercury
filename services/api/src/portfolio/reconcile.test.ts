@@ -24,6 +24,7 @@ const held = (over: Partial<HeldToken> = {}): HeldToken => ({
   recordedReferenceUsd: over.recordedCostUsd ?? ZERO,
   recordedFeeUsd: ZERO,
   settling: false,
+  provisional: [],
   ...over,
 });
 
@@ -320,9 +321,10 @@ describe("planReconciliation: tokens that left", () => {
 
 describe("planReconciliation: a sell in flight", () => {
   /*
-   * The pass reads the finalized balance, and a sell settles against the
-   * confirmed one, so for a few seconds the two disagree about a sell that is
-   * fine. Reading that as a transfer would remove the shares twice.
+   * The balance the pass reads can trail the transaction a sell is settled
+   * from, whether the node is behind or the confirm raced the pass, so for a
+   * while the chain and the records disagree about a sell that is fine.
+   * Reading that as a transfer would remove the shares twice.
    */
   it("leaves the stock as it was for the pass", () => {
     const plan = planReconciliation(
@@ -337,7 +339,7 @@ describe("planReconciliation: a sell in flight", () => {
       ],
       NOW,
     );
-    expect(plan).toEqual({ lots: [], activity: [], disposals: [], positions: [] });
+    expect(plan).toEqual({ lots: [], activity: [], disposals: [], retracted: [], positions: [] });
   });
 
   it("leaves every wrapper of that stock as it was", () => {
@@ -367,6 +369,84 @@ describe("planReconciliation: a sell in flight", () => {
     expect(planReconciliation([nvda, spy], NOW).positions.map((p) => p.instrumentId)).toEqual([
       "instrument-spy",
     ]);
+  });
+});
+
+describe("planReconciliation: a transfer out that may yet be a lagging read", () => {
+  /*
+   * A low reading is not always a transfer. The pledged side of the balance is
+   * read at confirmed and the wallet at finalized, so on a Kamino withdrawal
+   * the pledge drops some seconds before the wallet regains the tokens. A transfer
+   * out is therefore provisional while it is young: if the chain then reads
+   * above the records, the low reading has come back, and the row is taken back.
+   */
+  const afterTransfer = (over: Partial<HeldToken> = {}) =>
+    held({
+      // Half the token left and was recorded, so the open records hold half.
+      recordedRawAmount: ONE_TOKEN / 2n,
+      recordedShares: D("0.5"),
+      recordedCostUsd: D(100),
+      provisional: ["d1"],
+      ...over,
+    });
+
+  it("takes it back when the chain reads above the records, and leaves the position to the next pass", () => {
+    const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN })], NOW);
+    expect(plan).toEqual({ lots: [], activity: [], disposals: [], retracted: ["d1"], positions: [] });
+  });
+
+  it("takes back every recent transfer out of the token at once", () => {
+    const plan = planReconciliation(
+      [afterTransfer({ chainRawAmount: ONE_TOKEN, provisional: ["d1", "d2"] })],
+      NOW,
+    );
+    expect(plan.retracted).toEqual(["d1", "d2"]);
+  });
+
+  it("leaves it standing while the reading agrees with the records", () => {
+    const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN / 2n })], NOW);
+    expect(plan.retracted).toEqual([]);
+    expect(plan.disposals).toEqual([]);
+    expect(plan.positions[0]).toMatchObject({ shares: D("0.5"), costBasisUsd: D(100) });
+  });
+
+  it("writes a further transfer out when the chain drops again", () => {
+    const plan = planReconciliation([afterTransfer({ chainRawAmount: 0n })], NOW);
+    expect(plan.retracted).toEqual([]);
+    expect(plan.disposals.map((d) => d.tokenQty)).toEqual([ONE_TOKEN / 2n]);
+  });
+
+  it("reads a chain above the records as an arrival, as it always has, when none is recent", () => {
+    const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN, provisional: [] })], NOW);
+    expect(plan.retracted).toEqual([]);
+    expect(plan.positions[0]).toMatchObject({
+      shares: D(1),
+      sharesWithBasisUsd: D("0.5"),
+      costBasisUsd: D(100),
+    });
+  });
+
+  it("holds every wrapper of that stock for the pass", () => {
+    const ondo = held({ tokenId: "token-nvdaon", mint: "OnDo", decimals: 6, chainRawAmount: 2_000_000n });
+    const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN }), ondo], NOW);
+    expect(plan).toEqual({ lots: [], activity: [], disposals: [], retracted: ["d1"], positions: [] });
+  });
+
+  it("goes on reconciling other stocks", () => {
+    const spy = held({
+      tokenId: "token-spyx",
+      instrumentId: "instrument-spy",
+      ticker: "SPY",
+      chainRawAmount: ONE_TOKEN,
+    });
+    const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN }), spy], NOW);
+    expect(plan.positions.map((p) => p.instrumentId)).toEqual(["instrument-spy"]);
+    expect(plan.retracted).toEqual(["d1"]);
+  });
+
+  it("takes nothing back from a stock whose sell is in flight", () => {
+    const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN, settling: true })], NOW);
+    expect(plan.retracted).toEqual([]);
   });
 });
 

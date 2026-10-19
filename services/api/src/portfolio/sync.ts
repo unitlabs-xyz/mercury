@@ -11,7 +11,7 @@ export interface SyncSummary {
   readonly wallets: number;
   readonly reconciled: number;
   readonly failed: number;
-  /** Lots, disposals and activity rows written. Zero on a pass that found nothing new. */
+  /** Lots, disposals, retractions and activity rows written. Zero on a pass that found nothing new. */
   readonly written: number;
 }
 
@@ -62,7 +62,7 @@ export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<Syn
         const plan = planReconciliation(held, new Date());
         await applyReconciliation(db, row.userId, plan);
         reconciled += 1;
-        written += plan.lots.length + plan.disposals.length + plan.activity.length;
+        written += plan.lots.length + plan.disposals.length + plan.retracted.length + plan.activity.length;
       } catch (error: unknown) {
         failed += 1;
         // The wallet, never the address: an address in a log is a person's

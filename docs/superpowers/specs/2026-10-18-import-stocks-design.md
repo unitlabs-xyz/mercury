@@ -111,25 +111,37 @@ its order. A second settle of the same order is already refused by the condition
 unique `order_id` refuses a second disposal regardless. Before writing it, the sell takes back any
 `transfer_out` of that token recorded since the order was created: that was this sell, seen on the
 chain before the client confirmed it. If part of that drop really was a transfer, the next pass
-finds the gap again.
+finds the gap again. The sell is recorded at the time of the earliest transfer out it took back, so
+it replays where the drop was first seen.
 
 **A transfer out** is noticed by position-sync, which runs every two seconds. When the chain,
 counting shares pledged to Kamino as held (`withPledged`, `deps.ts`), holds fewer tokens than the
 open records do, it writes a `transfer_out` disposal for the gap.
 
-**A sell in flight** holds its stock still. Position-sync reads the finalized balance and a sell
-settles against the confirmed one, so for a few seconds the two disagree about a sell that is fine.
-While the user has a sell of a stock `executing` and created within the last 10 minutes, or
-`filled` within the last 2, every wrapper of that stock sits the pass out and its position row stays
-as it was. Past 10 minutes an unconfirmed order is taken as abandoned; nothing else ever settles
-one, so an unbounded wait would hold the stock still forever.
+**A transfer out is provisional for its first two minutes.** A drop in the chain is not always a
+send. Kamino is read at confirmed and the wallet at finalized, so on a withdrawal the obligation
+empties some seconds before the wallet regains the tokens, and a buy's lot can be written before a
+lagging node shows its tokens. While a `transfer_out` is under two minutes old, a chain that then
+reads above the open records means the low reading has come back: position-sync deletes the
+transfer out and leaves that stock's position to the next pass. Past two minutes it stands, and
+tokens that arrive after are unwitnessed arrivals, as below. Only a `transfer_out` is ever taken
+back; a sell is a fact.
+
+**A sell in flight** holds its stock still. The balance position-sync reads can trail the
+transaction a sell is settled from, because a node is behind or a confirm raced the pass, so for a
+while the two disagree about a sell that is fine. While the user has a sell of a stock `executing`
+and created within the last 10 minutes, or `filled` within the last 2, every wrapper of that stock
+sits the pass out and its position row stays as it was. Past 10 minutes an unconfirmed order is
+taken as abandoned; nothing else ever settles one, so an unbounded wait would hold the stock still
+forever.
 
 Shares that arrive unwitnessed are unchanged from today: counted as held, with no cost.
 
 ### The replay
 
 A pure function in `packages/core`, `replayPosition`, takes a token's lots and disposals ordered by
-`recorded_at` (in microseconds, lots before disposals at the same instant, then `id`) and returns
+`recorded_at` (in microseconds; at the same instant a lot with tokens, then a disposal, then a
+dividend lot, then `id`) and returns
 open token quantity, open shares, cost, reference basis, fee, `heldSince` and whether any open cost
 is estimated. A lot adds its figures. A disposal takes the same fraction of every figure as the
 fraction of tokens it took, which is average cost, and keeps the market and premium lines summing.
@@ -164,6 +176,8 @@ after is exact.
 - A sell `executing` while the chain has already dropped writes one disposal, not two.
 - A confirm that arrives after the 10 minutes takes back the transfer out it was read as.
 - Pledging to Kamino writes no disposal.
+- A Kamino withdrawal whose wallet read lags, and a buy read on a lagging node, leave no disposal
+  behind once the chain catches up. A transfer out older than two minutes stands.
 - The backfill run twice writes each disposal once.
 - The replay against a hand-worked table of mixed events, as `packages/core` tests are written.
 

@@ -278,6 +278,87 @@ describe("the books, end to end", () => {
     expect(usdOf(p.costBasisUsd)).toBe("200.00");
   });
 
+  it("keep the cost through a Kamino withdrawal whose wallet read lags", async () => {
+    /*
+     * The obligation is read at confirmed and the wallet at finalized, so on a
+     * withdrawal the pledge drops before the wallet regains the tokens. For a
+     * pass the chain reads zero. That is not a transfer out, and the cost must
+     * not go with it.
+     */
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+    b.state.wallet = 0n;
+    b.state.pledged = 2n * ONE;
+    await b.pass();
+
+    b.state.pledged = 0n; // withdrawn: the obligation is empty, the wallet not yet
+    await b.pass();
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+
+    b.state.wallet = 2n * ONE; // finalized catches up
+    await b.pass();
+    await b.pass();
+
+    expect(await b.disposalKinds()).toEqual([]);
+    const p = await b.position();
+    expect(sharesOf(p.shares)).toBe("2");
+    expect(sharesOf(p.sharesWithBasis)).toBe("2");
+    expect(usdOf(p.costBasisUsd)).toBe("200.00");
+  });
+
+  it("keep the cost of a buy read on a node that has not seen the tokens yet", async () => {
+    const b = await books();
+    await (await b.order("buy", 2n * ONE, 200)).settle(); // the lot is written, the wallet reads zero
+    await b.pass();
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+
+    b.state.wallet = 2n * ONE; // the node catches up
+    await b.pass();
+    await b.pass();
+
+    expect(await b.disposalKinds()).toEqual([]);
+    const p = await b.position();
+    expect(sharesOf(p.sharesWithBasis)).toBe("2");
+    expect(usdOf(p.costBasisUsd)).toBe("200.00");
+  });
+
+  it("let a transfer out stand once two minutes have passed", async () => {
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+
+    const now = new Date();
+    b.state.wallet -= ONE; // sent from another app
+    await b.pass(now);
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+    await b.pass(new Date(now.getTime() + 3 * MINUTE));
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+
+    // Tokens arrive from somewhere we did not see. The send is not undone by
+    // them: they are held with no cost, as any arrival is.
+    b.state.wallet += ONE;
+    await b.pass(new Date(now.getTime() + 4 * MINUTE));
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+    const p = await b.position();
+    expect(sharesOf(p.shares)).toBe("2");
+    expect(sharesOf(p.sharesWithBasis)).toBe("1");
+    expect(usdOf(p.costBasisUsd)).toBe("100.00");
+  });
+
+  it("never take back a sell, whatever the chain reads after it", async () => {
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+
+    // Filled an hour ago and confirmed just now, so no window holds the stock
+    // still, and the balance read still shows both tokens. A sell is a fact the
+    // user made; only a transfer out is ever a guess to be taken back.
+    await (await b.order("sell", ONE, 150)).settle();
+    await b.pass();
+    expect(await b.disposalKinds()).toEqual(["sell"]);
+  });
+
   it("credit a dividend after a partial sell on the shares still held", async () => {
     const b = await books();
     await b.buy(2n * ONE, 200);
