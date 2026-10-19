@@ -444,9 +444,16 @@ describe("planReconciliation: a transfer out that may yet be a lagging read", ()
     expect(plan.retracted).toEqual(["d1"]);
   });
 
-  it("takes nothing back from a stock whose sell is in flight", () => {
+  it("takes it back while a sell of the stock is in flight, and holds everything else", () => {
+    // The hold can outlast the two minutes a transfer out is provisional, so
+    // waiting for it to end would let the transfer out mature behind it.
     const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN, settling: true })], NOW);
-    expect(plan.retracted).toEqual([]);
+    expect(plan).toEqual({ lots: [], activity: [], disposals: [], retracted: ["d1"], positions: [] });
+  });
+
+  it("writes nothing for a stock whose sell is in flight while the reading agrees", () => {
+    const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN / 2n, settling: true })], NOW);
+    expect(plan).toEqual({ lots: [], activity: [], disposals: [], retracted: [], positions: [] });
   });
 });
 

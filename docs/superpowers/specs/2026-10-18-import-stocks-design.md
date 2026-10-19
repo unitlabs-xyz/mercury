@@ -125,7 +125,9 @@ lagging node shows its tokens. While a `transfer_out` is under two minutes old, 
 reads above the open records means the low reading has come back: position-sync deletes the
 transfer out and leaves that stock's position to the next pass. Past two minutes it stands, and
 tokens that arrive after are unwitnessed arrivals, as below. Only a `transfer_out` is ever taken
-back; a sell is a fact.
+back; a sell is a fact. This runs for a stock with a sell in flight as well, which is otherwise held,
+because that hold can outlast the two minutes. If it takes back a transfer out that was genuine, the
+first pass after the hold records it again from the gap.
 
 **A sell in flight** holds its stock still. The balance position-sync reads can trail the
 transaction a sell is settled from, because a node is behind or a confirm raced the pass, so for a

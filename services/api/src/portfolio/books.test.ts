@@ -307,6 +307,65 @@ describe("the books, end to end", () => {
     expect(usdOf(p.costBasisUsd)).toBe("200.00");
   });
 
+  it("write no transfer out for a Kamino withdrawal while a sell is open", async () => {
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+    b.state.wallet = 0n;
+    b.state.pledged = 2n * ONE;
+    await b.pass();
+
+    const now = new Date();
+    await b.order("sell", ONE, 150); // opened, and the dialog closed
+    b.state.pledged = 0n; // withdrawn, the wallet not yet
+    await b.pass(now);
+    b.state.wallet = 2n * ONE;
+    await b.pass(now);
+    await b.pass(new Date(now.getTime() + 11 * MINUTE));
+
+    expect(await b.disposalKinds()).toEqual([]);
+    const p = await b.position();
+    expect(sharesOf(p.sharesWithBasis)).toBe("2");
+    expect(usdOf(p.costBasisUsd)).toBe("200.00");
+  });
+
+  it("take back a transfer out whose tokens return while a sell opened after it holds the stock", async () => {
+    /*
+     * A withdrawal's lag writes a transfer out, then the user starts a sell
+     * inside it and closes the dialog. The sell holds the stock for ten
+     * minutes, longer than the two a transfer out is provisional. If the pass
+     * sat the hold out, the transfer out would mature behind it, and the
+     * tokens that came back would be left with no cost.
+     */
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+    b.state.wallet = 0n;
+    b.state.pledged = 2n * ONE;
+    await b.pass();
+
+    b.state.pledged = 0n; // withdrawn, the wallet not yet
+    await b.pass();
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
+    const held = await b.position();
+
+    const now = new Date();
+    await b.order("sell", ONE, 150); // opened inside the lag, then abandoned
+    b.state.wallet = 2n * ONE; // finalized catches up
+    await b.pass(now);
+    expect(await b.disposalKinds()).toEqual([]);
+    expect(await b.position()).toEqual(held); // the hold keeps the position as it was
+
+    await b.pass(new Date(now.getTime() + 3 * MINUTE)); // past the two minutes, still held
+    await b.pass(new Date(now.getTime() + 11 * MINUTE)); // the hold has ended
+
+    expect(await b.disposalKinds()).toEqual([]);
+    const p = await b.position();
+    expect(sharesOf(p.shares)).toBe("2");
+    expect(sharesOf(p.sharesWithBasis)).toBe("2");
+    expect(usdOf(p.costBasisUsd)).toBe("200.00");
+  });
+
   it("keep the cost of a buy read on a node that has not seen the tokens yet", async () => {
     const b = await books();
     await (await b.order("buy", 2n * ONE, 200)).settle(); // the lot is written, the wallet reads zero
