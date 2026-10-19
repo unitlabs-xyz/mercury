@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { testDb } from "./testing.js";
 import { disposals, instruments, lots, orders, tokens, users } from "./schema.js";
 
@@ -72,8 +72,12 @@ const seeded = async () => {
     acquiredAt: BOUGHT,
     source: "buy",
   });
-  return { db, soldId: sold!.id, tokenId: token!.id };
+  return { db, order, soldId: sold!.id, tokenId: token!.id };
 };
+
+/** What the migration wrote for one order. */
+const disposalsOf = async (db: Awaited<ReturnType<typeof testDb>>, orderId: string) =>
+  db.select().from(disposals).where(eq(disposals.orderId, orderId));
 
 const run = async (db: Awaited<ReturnType<typeof testDb>>) => {
   for (const statement of migration) await db.execute(sql.raw(statement));
@@ -94,7 +98,38 @@ describe("0026_disposal_backfill", () => {
       occurredAt: FILLED,
       recordedAt: FILLED,
     });
-    expect(Number(rows[0]!.shares)).toBe(0.5005);
+    expect(rows[0]!.shares).toBe("0.500500000000000000");
+  });
+
+  /* The division rarely comes out clean, and a token is not divisible past its decimals. */
+  it("rounds the tokens to the nearest, not down", async () => {
+    const { db, order } = await seeded();
+    const [odd] = await order({ decision: decision("0.5019", "1.0123456789") });
+    await run(db);
+    const [row] = await disposalsOf(db, odd!.id);
+    // 0.5019 shares over 1.0123456789 is 0.4957792683... tokens, which at eight
+    // decimals is 49,577,926.83 of the smallest unit: 49,577,927 rounded,
+    // 49,577,926 truncated.
+    expect(row!.tokenQty).toBe(49_577_927n);
+  });
+
+  /*
+   * Migrations run when the API boots, so a decision that cannot say what left
+   * must be left out rather than stop the deploy. The good sell beside it is
+   * how this knows the migration carried on.
+   */
+  it.each([
+    ["a multiplier of zero", decision("0.5", "0")],
+    ["a multiplier that is not a number", decision("0.5", "soon")],
+    ["shares filled that are not a number", decision("lots")],
+    ["no candidates at all", { kind: "execute", candidates: null }],
+    ["candidates that are an object rather than a list", { kind: "execute", candidates: { mint: NVDAX } }],
+  ])("leaves out a filled sell whose decision has %s", async (_, bad) => {
+    const { db, order, soldId } = await seeded();
+    const [odd] = await order({ decision: bad });
+    await run(db);
+    expect(await disposalsOf(db, odd!.id)).toEqual([]);
+    expect(await disposalsOf(db, soldId)).toHaveLength(1);
   });
 
   it("dates every lot written before it as recorded when it was acquired", async () => {
