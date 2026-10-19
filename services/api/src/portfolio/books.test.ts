@@ -209,11 +209,43 @@ describe("the books, end to end", () => {
     expect(await b.disposalKinds()).toEqual([]);
 
     await inFlight.settle();
-    await b.pass(now); // settled moments ago: still left alone
     await b.pass(new Date(now.getTime() + 3 * MINUTE));
 
     expect(await b.disposalKinds()).toEqual(["sell"]);
     expect(usdOf((await b.position()).costBasisUsd)).toBe("100.00");
+  });
+
+  it("hold a stock still for two minutes after its sell settles, while the balance lags", async () => {
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+    const before = await b.position();
+
+    const now = new Date();
+    const sale = await b.order("sell", ONE, 150, { at: now });
+    // Settled, but the finalized balance still shows both tokens. Read as it
+    // stands, the records would hold one and the chain two.
+    await sale.settle();
+    await b.pass(now);
+    expect(await b.position()).toEqual(before);
+
+    b.state.wallet -= ONE; // caught up
+    await b.pass(new Date(now.getTime() + 3 * MINUTE));
+    const p = await b.position();
+    expect(sharesOf(p.sharesWithBasis)).toBe("1");
+    expect(usdOf(p.costBasisUsd)).toBe("100.00");
+    expect(await b.disposalKinds()).toEqual(["sell"]);
+  });
+
+  it("do not hold a stock still for a buy in flight", async () => {
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+
+    await b.order("buy", ONE, 100); // executing, and nothing says it will land
+    b.state.wallet -= ONE; // sent from another app
+    await b.pass();
+    expect(await b.disposalKinds()).toEqual(["transfer_out"]);
   });
 
   it("take back the transfer out a late confirm turns out to have been", async () => {
