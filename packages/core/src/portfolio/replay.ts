@@ -51,15 +51,24 @@ export const EMPTY_OPEN: OpenPosition = {
   isEstimated: false,
 };
 
-const enter = (open: OpenPosition, m: MovementIn): OpenPosition => ({
-  tokenQty: open.tokenQty + m.tokenQty,
-  shares: open.shares.add(m.shares),
-  costUsd: open.costUsd.add(m.costUsd),
-  referenceUsd: open.referenceUsd.add(m.referenceUsd),
-  feeUsd: open.feeUsd.add(m.feeUsd),
-  heldSince: open.heldSince === null || m.acquiredAt < open.heldSince ? m.acquiredAt : open.heldSince,
-  isEstimated: open.isEstimated || m.isEstimated,
-});
+/*
+ * A lot that brings no tokens is a dividend, and a dividend on an empty run is
+ * on nothing: a legacy dividend credited on tokens since sold, or one the
+ * migration scaled to zero. It adds no shares, and it must not date the run,
+ * or the next purchase would be held since a day it was not.
+ */
+const enter = (open: OpenPosition, m: MovementIn): OpenPosition =>
+  open.tokenQty === 0n && m.tokenQty === 0n
+    ? open
+    : {
+        tokenQty: open.tokenQty + m.tokenQty,
+        shares: open.shares.add(m.shares),
+        costUsd: open.costUsd.add(m.costUsd),
+        referenceUsd: open.referenceUsd.add(m.referenceUsd),
+        feeUsd: open.feeUsd.add(m.feeUsd),
+        heldSince: open.heldSince === null || m.acquiredAt < open.heldSince ? m.acquiredAt : open.heldSince,
+        isEstimated: open.isEstimated || m.isEstimated,
+      };
 
 /*
  * Average cost: whatever leaves takes the same fraction of every figure, so the

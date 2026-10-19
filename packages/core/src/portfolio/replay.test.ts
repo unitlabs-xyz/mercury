@@ -66,6 +66,25 @@ describe("replayPosition", () => {
     expect(open.heldSince).toEqual(JAN);
   });
 
+  it("is held since the earliest purchase when the earlier one is recorded first", () => {
+    const open = replayPosition([buy(1, 100, { acquiredAt: JAN }), buy(1, 100, { acquiredAt: MAR })]);
+    expect(open.heldSince).toEqual(JAN);
+  });
+
+  it("ignores a dividend on an empty run, so it sets no heldSince and adds no shares", () => {
+    // A legacy dividend that 0026 scaled to nothing, or one credited on tokens
+    // since sold, lands where there is nothing for it to be a dividend on.
+    expect(replayPosition([dividend("0.5")])).toEqual(EMPTY_OPEN);
+    const open = replayPosition([
+      buy(1, 100, { acquiredAt: JAN }),
+      out(1),
+      dividend("0"),
+      buy(1, 200, { acquiredAt: MAR }),
+    ]);
+    expect(open.heldSince).toEqual(MAR);
+    expect(open.shares.toFixed()).toBe("1");
+  });
+
   it("stays estimated while an estimated lot is open, and clears once the holding is emptied", () => {
     const partly = replayPosition([buy(2, 100, { isEstimated: true }), out(1)]);
     expect(partly.isEstimated).toBe(true);
