@@ -322,9 +322,10 @@ describe("planReconciliation: tokens that left", () => {
 describe("planReconciliation: a sell in flight", () => {
   /*
    * The balance the pass reads can trail the transaction a sell is settled
-   * from, whether the node is behind or the confirm raced the pass, so for a
-   * while the chain and the records disagree about a sell that is fine.
-   * Reading that as a transfer would remove the shares twice.
+   * from, whether the node is behind or the confirm raced the pass, so a sell
+   * that is fine can look like a drop. Reading that as a transfer would remove
+   * the shares twice, so a drop beside an executing sell is held. Without a
+   * drop there is nothing to misread, and the stock goes on as usual.
    */
   it("leaves the stock as it was for the pass", () => {
     const plan = planReconciliation(
@@ -351,6 +352,54 @@ describe("planReconciliation: a sell in flight", () => {
     });
     const ondo = held({ tokenId: "token-nvdaon", mint: "OnDo", decimals: 6, chainRawAmount: 2_000_000n });
     expect(planReconciliation([backed, ondo], NOW).positions).toEqual([]);
+  });
+
+  it("holds every wrapper when any one of them has dropped", () => {
+    const backed = held({
+      chainRawAmount: ONE_TOKEN,
+      recordedRawAmount: ONE_TOKEN,
+      recordedShares: D(1),
+      recordedCostUsd: D(200),
+      settling: true,
+    });
+    const ondo = held({
+      tokenId: "token-nvdaon",
+      mint: "OnDo",
+      decimals: 6,
+      chainRawAmount: 1_000_000n,
+      recordedRawAmount: 2_000_000n,
+      recordedShares: D(2),
+      recordedCostUsd: D(400),
+      settling: true,
+    });
+    expect(planReconciliation([backed, ondo], NOW)).toEqual({
+      lots: [],
+      activity: [],
+      disposals: [],
+      retracted: [],
+      positions: [],
+    });
+  });
+
+  it("goes on with a stock whose sell is in flight when nothing has dropped", () => {
+    const nvda = held({
+      chainRawAmount: ONE_TOKEN,
+      recordedRawAmount: ONE_TOKEN,
+      recordedShares: D(1),
+      recordedCostUsd: D(200),
+      settling: true,
+    });
+    expect(planReconciliation([nvda], NOW).positions).toEqual([
+      {
+        instrumentId: "instrument-nvda",
+        shares: D(1),
+        sharesWithBasisUsd: D(1),
+        costBasisUsd: D(200),
+        referenceBasisUsd: D(200),
+        feeUsd: ZERO,
+        avgUnitCostUsd: D(200),
+      },
+    ]);
   });
 
   it("goes on reconciling other stocks", () => {
@@ -445,15 +494,16 @@ describe("planReconciliation: a transfer out that may yet be a lagging read", ()
   });
 
   it("takes it back while a sell of the stock is in flight, and holds everything else", () => {
-    // The hold can outlast the two minutes a transfer out is provisional, so
-    // waiting for it to end would let the transfer out mature behind it.
+    // A sell can sit executing for ten minutes, longer than a transfer out is
+    // provisional, so the retraction does not wait on it.
     const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN, settling: true })], NOW);
     expect(plan).toEqual({ lots: [], activity: [], disposals: [], retracted: ["d1"], positions: [] });
   });
 
-  it("writes nothing for a stock whose sell is in flight while the reading agrees", () => {
+  it("does not hold a stock whose sell is in flight while no token of it has dropped", () => {
     const plan = planReconciliation([afterTransfer({ chainRawAmount: ONE_TOKEN / 2n, settling: true })], NOW);
-    expect(plan).toEqual({ lots: [], activity: [], disposals: [], retracted: [], positions: [] });
+    expect(plan.retracted).toEqual([]);
+    expect(plan.positions[0]).toMatchObject({ shares: D("0.5"), costBasisUsd: D(100) });
   });
 });
 

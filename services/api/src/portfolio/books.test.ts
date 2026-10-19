@@ -215,26 +215,47 @@ describe("the books, end to end", () => {
     expect(usdOf((await b.position()).costBasisUsd)).toBe("100.00");
   });
 
-  it("hold a stock still for two minutes after its sell settles, while the balance lags", async () => {
+  it("read a sell that has settled but not yet landed as shares not yet gone", async () => {
     const b = await books();
     await b.buy(2n * ONE, 200);
     await b.pass();
-    const before = await b.position();
 
     const now = new Date();
     const sale = await b.order("sell", ONE, 150, { at: now });
-    // Settled, but the finalized balance still shows both tokens. Read as it
-    // stands, the records would hold one and the chain two.
+    // Settled, but the finalized balance still shows both tokens for a few
+    // seconds. The cost has left with the sell; the token has not left the
+    // wallet yet, so the chain reads above the records. That is an arrival we
+    // did not see, not a transfer out, and the position moves with the cash.
     await sale.settle();
     await b.pass(now);
-    expect(await b.position()).toEqual(before);
+    expect(await b.disposalKinds()).toEqual(["sell"]);
+    const lagging = await b.position();
+    expect(sharesOf(lagging.shares)).toBe("2");
+    expect(sharesOf(lagging.sharesWithBasis)).toBe("1");
+    expect(usdOf(lagging.costBasisUsd)).toBe("100.00");
 
     b.state.wallet -= ONE; // caught up
     await b.pass(new Date(now.getTime() + 3 * MINUTE));
     const p = await b.position();
+    expect(sharesOf(p.shares)).toBe("1");
     expect(sharesOf(p.sharesWithBasis)).toBe("1");
     expect(usdOf(p.costBasisUsd)).toBe("100.00");
     expect(await b.disposalKinds()).toEqual(["sell"]);
+  });
+
+  it("show a buy of a stock whose sell sits executing, because nothing has dropped", async () => {
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+
+    await b.order("sell", ONE, 150); // opened, and the dialog closed
+    await b.buy(ONE, 100);
+    await b.pass();
+
+    const p = await b.position();
+    expect(sharesOf(p.shares)).toBe("3");
+    expect(sharesOf(p.sharesWithBasis)).toBe("3");
+    expect(usdOf(p.costBasisUsd)).toBe("300.00");
   });
 
   it("do not hold a stock still for a buy in flight", async () => {
@@ -319,6 +340,7 @@ describe("the books, end to end", () => {
     await b.order("sell", ONE, 150); // opened, and the dialog closed
     b.state.pledged = 0n; // withdrawn, the wallet not yet
     await b.pass(now);
+    expect(await b.disposalKinds()).toEqual([]); // the open sell holds the stock through the lag
     b.state.wallet = 2n * ONE;
     await b.pass(now);
     await b.pass(new Date(now.getTime() + 11 * MINUTE));
@@ -329,12 +351,12 @@ describe("the books, end to end", () => {
     expect(usdOf(p.costBasisUsd)).toBe("200.00");
   });
 
-  it("take back a transfer out whose tokens return while a sell opened after it holds the stock", async () => {
+  it("take back a transfer out whose tokens return while a sell opened after it sits executing", async () => {
     /*
      * A withdrawal's lag writes a transfer out, then the user starts a sell
-     * inside it and closes the dialog. The sell holds the stock for ten
-     * minutes, longer than the two a transfer out is provisional. If the pass
-     * sat the hold out, the transfer out would mature behind it, and the
+     * inside it and closes the dialog. The sell sits executing for ten minutes,
+     * longer than the two a transfer out is provisional. Taking the transfer
+     * out back must not wait for it, or it would mature behind the sell and the
      * tokens that came back would be left with no cost.
      */
     const b = await books();
@@ -354,10 +376,10 @@ describe("the books, end to end", () => {
     b.state.wallet = 2n * ONE; // finalized catches up
     await b.pass(now);
     expect(await b.disposalKinds()).toEqual([]);
-    expect(await b.position()).toEqual(held); // the hold keeps the position as it was
+    expect(await b.position()).toEqual(held); // the stock waits a pass for its records to settle
 
-    await b.pass(new Date(now.getTime() + 3 * MINUTE)); // past the two minutes, still held
-    await b.pass(new Date(now.getTime() + 11 * MINUTE)); // the hold has ended
+    await b.pass(new Date(now.getTime() + 3 * MINUTE)); // past the two minutes
+    await b.pass(new Date(now.getTime() + 11 * MINUTE)); // the sell is no longer awaited
 
     expect(await b.disposalKinds()).toEqual([]);
     const p = await b.position();

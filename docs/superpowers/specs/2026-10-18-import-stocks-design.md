@@ -129,13 +129,17 @@ back; a sell is a fact. This runs for a stock with a sell in flight as well, whi
 because that hold can outlast the two minutes. If it takes back a transfer out that was genuine, the
 first pass after the hold records it again from the gap.
 
-**A sell in flight** holds its stock still. The balance position-sync reads can trail the
-transaction a sell is settled from, because a node is behind or a confirm raced the pass, so for a
-while the two disagree about a sell that is fine. While the user has a sell of a stock `executing`
-and created within the last 10 minutes, or `filled` within the last 2, every wrapper of that stock
-sits the pass out and its position row stays as it was. Past 10 minutes an unconfirmed order is
-taken as abandoned; nothing else ever settles one, so an unbounded wait would hold the stock still
-forever.
+**A sell in flight** holds its stock still, but only against a drop. The balance position-sync
+reads can trail the transaction a sell is settled from, because a node is behind or a confirm raced
+the pass, so a sell that is fine can look like tokens leaving. While the user has a sell of a stock
+`executing` and created within the last 10 minutes, a pass in which any wrapper of that stock reads
+below the open records makes every wrapper sit the pass out, and its position row stays as it was.
+With no drop there is nothing to misread, so the stock goes on as usual and a buy of it shows while
+an unconfirmed sell waits. Past 10 minutes an unconfirmed order is taken as abandoned; nothing else
+ever settles one, so an unbounded wait would hold the stock still forever. For about thirteen
+seconds after a sell settles, the finalized balance lags above the records. That reads as shares not
+yet gone, which is what it read as before this change, and any young transfer out is taken back as
+usual. A stock that is held still has its young transfer outs retracted all the same.
 
 Shares that arrive unwitnessed are unchanged from today: counted as held, with no cost.
 
@@ -176,6 +180,7 @@ after is exact.
 - Transfer out, then buy.
 - A dividend after a partial sell is credited on the open tokens only.
 - A sell `executing` while the chain has already dropped writes one disposal, not two.
+- An `executing` sell with no drop does not hold the stock: a buy of it shows in the position.
 - A confirm that arrives after the 10 minutes takes back the transfer out it was read as.
 - Pledging to Kamino writes no disposal.
 - A Kamino withdrawal whose wallet read lags, and a buy read on a lagging node, leave no disposal

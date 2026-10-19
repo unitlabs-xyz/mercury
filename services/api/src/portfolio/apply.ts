@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { D, EMPTY_OPEN, replayPosition, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
@@ -20,9 +20,6 @@ export interface ReconcileDeps {
  * that does arrive later takes that transfer back (`settleOrder`).
  */
 const EXECUTING_WINDOW_MS = 10 * 60_000;
-
-/** How long after a sell settles before the finalized balance has caught up with it. */
-const SETTLED_WINDOW_MS = 2 * 60_000;
 
 /**
  * How long a transfer out is provisional. A drop in the chain is not always a
@@ -100,7 +97,8 @@ export async function loadHeldTokens(
       })
       .from(disposals)
       .where(eq(disposals.userId, userId)),
-    // Stocks with a sell in flight. See `HeldToken.settling`.
+    // Stocks with a sell executing. See `HeldToken.settling`. Whether one
+    // holds its stock is for the plan to say, from what the chain reads.
     db
       .selectDistinct({ instrumentId: orders.instrumentId })
       .from(orders)
@@ -108,16 +106,8 @@ export async function loadHeldTokens(
         and(
           eq(orders.userId, userId),
           eq(orders.side, "sell"),
-          or(
-            and(
-              eq(orders.status, "executing"),
-              gt(orders.createdAt, new Date(now.getTime() - EXECUTING_WINDOW_MS)),
-            ),
-            and(
-              eq(orders.status, "filled"),
-              gt(orders.filledAt, new Date(now.getTime() - SETTLED_WINDOW_MS)),
-            ),
-          ),
+          eq(orders.status, "executing"),
+          gt(orders.createdAt, new Date(now.getTime() - EXECUTING_WINDOW_MS)),
         ),
       ),
   ]);

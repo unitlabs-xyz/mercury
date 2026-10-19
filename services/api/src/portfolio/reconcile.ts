@@ -29,14 +29,18 @@ export interface HeldToken {
   /** Fees paid to acquire the open shares. */
   readonly recordedFeeUsd: Decimal;
   /**
-   * A sell of this stock is executing, or settled moments ago.
+   * A sell of this stock is executing, created within the last ten minutes.
    *
    * The balance the pass reads can trail the transaction a sell is settled
    * from, whether the node behind it is slow or a confirm raced the pass, so
-   * for a while the chain and the records disagree about a sell that is fine.
-   * The pass leaves the stock as it was, rather than reading the gap as a
-   * transfer out and removing the same shares twice. The one thing it still
-   * does is take back a young transfer out the chain has since outgrown.
+   * a sell that is fine can look like a drop in the chain. In a pass where
+   * any wrapper of the stock reads below the records, the pass leaves the
+   * stock as it was, rather than reading the gap as a transfer out and
+   * removing the same shares twice. With no drop there is nothing to misread,
+   * and the pass goes on, so a buy of the stock shows while a sell sits
+   * unconfirmed. For a few seconds after a sell settles the finalized balance
+   * lags above the records, which reads as shares not yet gone. Held or not,
+   * the pass still takes back a young transfer out the chain has outgrown.
    */
   readonly settling: boolean;
   /**
@@ -149,10 +153,18 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     { shares: Decimal; withBasis: Decimal; cost: Decimal; reference: Decimal; fee: Decimal }
   >();
 
-  // Every wrapper of a stock with a sell in flight sits this pass out. See
-  // `HeldToken.settling`. Its position row stays as it was: stale for as long
-  // as the sell is in flight, up to ten minutes, and right.
-  const settling = new Set(held.filter((t) => t.settling).map((t) => t.instrumentId));
+  // A stock with a sell in flight sits this pass out when any wrapper of it
+  // reads below the records: that gap may be the sell, seen on the chain before
+  // it settles. See `HeldToken.settling`. Every wrapper sits out, and its
+  // position row stays as it was: stale for as long as the drop lasts, never
+  // more than the ten minutes a sell is awaited, and right. With no drop,
+  // nothing is held.
+  const sellInFlight = new Set(held.filter((t) => t.settling).map((t) => t.instrumentId));
+  const settling = new Set(
+    held
+      .filter((t) => sellInFlight.has(t.instrumentId) && t.chainRawAmount < t.recordedRawAmount)
+      .map((t) => t.instrumentId),
+  );
 
   /*
    * A transfer out is provisional while it is young. The low reading behind it
@@ -170,13 +182,13 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
    * that are about to change. Once a transfer out is old enough to leave
    * `provisional` it stands, and a chain above the records is an arrival.
    *
-   * This runs for a stock with a sell in flight too, though that stock is
-   * otherwise held. The hold can outlast the two minutes a transfer out is
-   * provisional, and a transfer out written in the lag just before a sell
-   * began would mature behind it, leaving the returned tokens with no cost.
-   * Only the retraction happens: no position, no new disposal, no dividend. If
-   * it takes back a transfer out that was genuine, the first pass after the
-   * hold finds the gap again and records it.
+   * This runs for every stock, one with a sell in flight included. A sell can
+   * sit executing for ten minutes, longer than a transfer out is provisional,
+   * and a transfer out written in the lag just before it began would mature
+   * behind it, leaving the returned tokens with no cost. For a stock held
+   * because of a drop, only the retraction happens: no position, no new
+   * disposal, no dividend. If it takes back a transfer out that was genuine,
+   * the first pass after the hold finds the gap again and records it.
    */
   const retracted: string[] = [];
   const retracting = new Set<string>();
