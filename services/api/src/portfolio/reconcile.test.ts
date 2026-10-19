@@ -23,6 +23,7 @@ const held = (over: Partial<HeldToken> = {}): HeldToken => ({
   // is not what most of these tests are about.
   recordedReferenceUsd: over.recordedCostUsd ?? ZERO,
   recordedFeeUsd: ZERO,
+  settling: false,
   ...over,
 });
 
@@ -192,7 +193,7 @@ describe("planReconciliation: a dividend", () => {
 });
 
 describe("planReconciliation: tokens that left", () => {
-  it("follows the chain down and leaves the lots as history", () => {
+  it("follows the chain down, and records the tokens that left", () => {
     const plan = planReconciliation(
       [
         held({
@@ -205,6 +206,16 @@ describe("planReconciliation: tokens that left", () => {
       NOW,
     );
     expect(plan.lots).toEqual([]);
+    expect(plan.disposals).toEqual([
+      {
+        tokenId: "token-nvdax",
+        instrumentId: "instrument-nvda",
+        tokenQty: ONE_TOKEN / 2n,
+        shares: D("0.5"),
+        kind: "transfer_out",
+        occurredAt: NOW,
+      },
+    ]);
     expect(plan.positions[0]).toEqual({
       instrumentId: "instrument-nvda",
       shares: D("0.5"),
@@ -255,6 +266,7 @@ describe("planReconciliation: tokens that left", () => {
       NOW,
     );
     expect(plan.activity).toEqual([]);
+    expect(plan.disposals.map((d) => d.tokenQty)).toEqual([ONE_TOKEN]);
     expect(plan.positions[0]).toEqual({
       instrumentId: "instrument-nvda",
       shares: ZERO,
@@ -264,6 +276,97 @@ describe("planReconciliation: tokens that left", () => {
       feeUsd: ZERO,
       avgUnitCostUsd: ZERO,
     });
+  });
+
+  it("records nothing on the pass after, once the records have caught up", () => {
+    const plan = planReconciliation(
+      [
+        held({
+          chainRawAmount: ONE_TOKEN / 2n,
+          recordedRawAmount: ONE_TOKEN / 2n,
+          recordedShares: D("0.5"),
+          recordedCostUsd: D(100),
+        }),
+      ],
+      NOW,
+    );
+    expect(plan.disposals).toEqual([]);
+  });
+
+  it("records nothing for tokens that arrived, which have no cost to take away", () => {
+    const plan = planReconciliation([held({ chainRawAmount: ONE_TOKEN })], NOW);
+    expect(plan.disposals).toEqual([]);
+  });
+
+  it("credits a dividend only on the tokens still held", () => {
+    // Half the tokens left, then the multiplier rose by half. The dividend is
+    // half a share on the half token still here, not on the token that went.
+    const plan = planReconciliation(
+      [
+        held({
+          chainRawAmount: ONE_TOKEN / 2n,
+          recordedRawAmount: ONE_TOKEN,
+          recordedShares: D(1),
+          recordedCostUsd: D(200),
+          multiplier: D("1.5"),
+        }),
+      ],
+      NOW,
+    );
+    expect(plan.lots.map((l) => l.shares)).toEqual([D("0.25")]);
+    expect(plan.positions[0]).toMatchObject({ shares: D("0.75"), costBasisUsd: D(100) });
+  });
+});
+
+describe("planReconciliation: a sell in flight", () => {
+  /*
+   * The pass reads the finalized balance, and a sell settles against the
+   * confirmed one, so for a few seconds the two disagree about a sell that is
+   * fine. Reading that as a transfer would remove the shares twice.
+   */
+  it("leaves the stock as it was for the pass", () => {
+    const plan = planReconciliation(
+      [
+        held({
+          chainRawAmount: ONE_TOKEN / 2n,
+          recordedRawAmount: ONE_TOKEN,
+          recordedShares: D(1),
+          recordedCostUsd: D(200),
+          settling: true,
+        }),
+      ],
+      NOW,
+    );
+    expect(plan).toEqual({ lots: [], activity: [], disposals: [], positions: [] });
+  });
+
+  it("leaves every wrapper of that stock as it was", () => {
+    const backed = held({
+      chainRawAmount: 0n,
+      recordedRawAmount: ONE_TOKEN,
+      recordedShares: D(1),
+      settling: true,
+    });
+    const ondo = held({ tokenId: "token-nvdaon", mint: "OnDo", decimals: 6, chainRawAmount: 2_000_000n });
+    expect(planReconciliation([backed, ondo], NOW).positions).toEqual([]);
+  });
+
+  it("goes on reconciling other stocks", () => {
+    const nvda = held({
+      chainRawAmount: 0n,
+      recordedRawAmount: ONE_TOKEN,
+      recordedShares: D(1),
+      settling: true,
+    });
+    const spy = held({
+      tokenId: "token-spyx",
+      instrumentId: "instrument-spy",
+      ticker: "SPY",
+      chainRawAmount: ONE_TOKEN,
+    });
+    expect(planReconciliation([nvda, spy], NOW).positions.map((p) => p.instrumentId)).toEqual([
+      "instrument-spy",
+    ]);
   });
 });
 

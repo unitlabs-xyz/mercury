@@ -14,20 +14,29 @@ export interface HeldToken {
   readonly referencePricePerShare: Decimal | null;
   /** What the chain says, in the mint's smallest unit. */
   readonly chainRawAmount: bigint;
-  /** The sum of our lots' token quantities. */
+  /** Tokens our records still hold: every lot, less every disposal, replayed (`replayPosition`). */
   readonly recordedRawAmount: bigint;
-  /** The sum of our lots' share counts. */
+  /** The shares those open records come to. */
   readonly recordedShares: Decimal;
-  /** The sum of our lots' shares x unit cost. Fees are not in it. */
+  /** What those open shares cost, shares x unit cost. Fees are not in it. */
   readonly recordedCostUsd: Decimal;
   /**
-   * The sum of our lots' shares x the price the stock was quoted at when each
-   * was acquired. A lot with no reference recorded contributes its execution
-   * price instead, which reads as no premium paid rather than as a guess.
+   * The same open shares at the price the stock was quoted at when each was
+   * acquired. A lot with no reference recorded contributes its execution price
+   * instead, which reads as no premium paid rather than as a guess.
    */
   readonly recordedReferenceUsd: Decimal;
-  /** The sum of our lots' fees. */
+  /** Fees paid to acquire the open shares. */
   readonly recordedFeeUsd: Decimal;
+  /**
+   * A sell of this stock is executing, or settled moments ago.
+   *
+   * The pass reads the finalized balance and a sell settles against the
+   * confirmed one, so for a few seconds the chain and the records disagree
+   * about a sell that is fine. The pass leaves the stock as it was, rather than
+   * reading the gap as a transfer out and removing the same shares twice.
+   */
+  readonly settling: boolean;
 }
 
 export interface LotWrite {
@@ -39,6 +48,17 @@ export interface LotWrite {
   readonly source: LotSource;
   readonly isEstimated: boolean;
   readonly acquiredAt: Date;
+}
+
+/** Tokens that left by a path other than a sell, which writes its own. */
+export interface DisposalWrite {
+  readonly tokenId: string;
+  readonly instrumentId: string;
+  readonly tokenQty: bigint;
+  /** At the multiplier in force now. For reading; the replay counts tokens. */
+  readonly shares: Decimal;
+  readonly kind: "transfer_out";
+  readonly occurredAt: Date;
 }
 
 export interface ActivityWrite {
@@ -68,6 +88,7 @@ export interface PositionWrite {
 export interface Reconciliation {
   readonly lots: readonly LotWrite[];
   readonly activity: readonly ActivityWrite[];
+  readonly disposals: readonly DisposalWrite[];
   readonly positions: readonly PositionWrite[];
 }
 
@@ -112,30 +133,69 @@ const plural = (shares: Decimal): string => {
 export function planReconciliation(held: readonly HeldToken[], now: Date): Reconciliation {
   const lots: LotWrite[] = [];
   const activity: ActivityWrite[] = [];
+  const disposals: DisposalWrite[] = [];
   const byInstrument = new Map<
     string,
     { shares: Decimal; withBasis: Decimal; cost: Decimal; reference: Decimal; fee: Decimal }
   >();
 
+  // Every wrapper of a stock with a sell in flight sits this pass out. See
+  // `HeldToken.settling`. Its position row stays as it was: stale for seconds,
+  // and right.
+  const settling = new Set(held.filter((t) => t.settling).map((t) => t.instrumentId));
+
   for (const token of held) {
+    if (settling.has(token.instrumentId)) continue;
+
     // What the chain says you hold. This is a fact and it is never inferred.
     const chainShares = scaled(token.chainRawAmount, token.decimals).mul(token.multiplier);
 
+    let recordedRaw = token.recordedRawAmount;
     let recordedShares = token.recordedShares;
-    const cost = token.recordedCostUsd;
-    const reference = token.recordedReferenceUsd;
-    const fee = token.recordedFeeUsd;
+    let cost = token.recordedCostUsd;
+    let reference = token.recordedReferenceUsd;
+    let fee = token.recordedFeeUsd;
+
+    /*
+     * Tokens that left by a path other than a sell: a send from another app,
+     * or anything we do not watch. A sell writes its own disposal when it
+     * settles, so a gap here is everything else. It is recorded, so the cost
+     * leaves with the shares rather than staying behind to be mixed into the
+     * next purchase, which is what made a sell followed by a buy report the
+     * wrong cost.
+     *
+     * Scaled by tokens rather than shares, as the replay is: tokens are exact,
+     * and a dividend not yet written would make shares disagree.
+     */
+    if (token.chainRawAmount < recordedRaw) {
+      const goneRaw = recordedRaw - token.chainRawAmount;
+      disposals.push({
+        tokenId: token.tokenId,
+        instrumentId: token.instrumentId,
+        tokenQty: goneRaw,
+        shares: scaled(goneRaw, token.decimals).mul(token.multiplier),
+        kind: "transfer_out",
+        occurredAt: now,
+      });
+      const kept = D(token.chainRawAmount.toString()).div(D(recordedRaw.toString()));
+      recordedRaw = token.chainRawAmount;
+      recordedShares = recordedShares.mul(kept);
+      cost = cost.mul(kept);
+      reference = reference.mul(kept);
+      fee = fee.mul(kept);
+    }
 
     // A dividend: the multiplier rose, so the tokens we have lots for are worth
     // more shares than those lots record. Zero cost, so the average cost per
     // share falls — the same money now buys more shares, which is the figure
     // other integrations get wrong.
     //
-    // Driven by the multiplier on the lots we hold, never by a gap between the
-    // chain and our records. A gap means tokens arrived from somewhere we did
-    // not witness, and calling that a dividend would hand the holder free
-    // shares in the accounts.
-    const recordedQty = scaled(token.recordedRawAmount, token.decimals);
+    // Driven by the multiplier on the open records, after any transfer out, so
+    // a dividend is never credited on tokens that have already left. Never
+    // driven by a gap between the chain and our records: a gap upward means
+    // tokens arrived from somewhere we did not witness, and calling that a
+    // dividend would hand the holder free shares in the accounts.
+    const recordedQty = scaled(recordedRaw, token.decimals);
     if (recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
       const recordedMultiplier = recordedShares.div(recordedQty);
       const gained = recordedQty.mul(token.multiplier.sub(recordedMultiplier));
@@ -168,15 +228,14 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     // Two separate truths, kept separate.
     //
     // `shares` is the chain's answer to what you hold. `withBasis` is how much
-    // of it we can prove a cost for, which is whatever our lots cover — a
-    // deposit we did not witness has no lot, so it counts toward the holding
+    // of it we can prove a cost for, which is whatever our open records cover —
+    // a deposit we did not witness has no lot, so it counts toward the holding
     // and not toward the basis. Nothing here invents a price: a share with no
     // lot behind it is reported as one we have no cost for, and the screens say
     // so rather than showing a profit measured against a guess.
     //
-    // Lots can also exceed the chain, when tokens left the wallet by a path we
-    // do not track yet. The basis is then capped and its cost scaled with it,
-    // which leaves the average untouched — that is average-cost accounting.
+    // After a transfer out the records equal the chain, so this cap only bites
+    // when shares arrived unwitnessed.
     const withBasis = Decimal.min(recordedShares, chainShares);
     const ratio = recordedShares.isZero() ? ZERO : withBasis.div(recordedShares);
 
@@ -210,5 +269,5 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     avgUnitCostUsd: r.withBasis.isZero() ? ZERO : r.cost.div(r.withBasis),
   }));
 
-  return { lots, activity, positions };
+  return { lots, activity, disposals, positions };
 }
