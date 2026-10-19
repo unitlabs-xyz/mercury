@@ -151,7 +151,7 @@ const books = async () => {
       (d) => d.kind,
     );
 
-  return { db, state, order, buy, sell, pass, position, disposalKinds };
+  return { db, userId, instrumentId, tokenId, state, order, buy, sell, pass, position, disposalKinds };
 };
 
 const usdOf = (v: string): string => D(v).toFixed(2);
@@ -430,6 +430,38 @@ describe("the books, end to end", () => {
     const dividends = await b.db.select().from(lots).where(eq(lots.source, "dividend"));
     expect(dividends.map((l) => sharesOf(l.shares))).toEqual(["0.5"]);
     const p = await b.position();
+    expect(sharesOf(p.sharesWithBasis)).toBe("1.5");
+    expect(usdOf(p.costBasisUsd)).toBe("100.00");
+  });
+
+  it("keep the cost when an old instance credits a dividend the replay already holds", async () => {
+    /*
+     * A rolling deploy: 0026 has cut the dividends back, and a pass of the code
+     * from before it, still running, credits the half share again. The replay
+     * then holds 2 shares against the chain's 1.5. The tokens are the same, so
+     * the cost must not move.
+     */
+    const b = await books();
+    await b.buy(2n * ONE, 200);
+    await b.pass();
+    await b.sell(ONE, 150);
+    await b.pass();
+    b.state.multiplier = D("1.5");
+    await b.pass();
+    await b.db.insert(lots).values({
+      userId: b.userId,
+      tokenId: b.tokenId,
+      instrumentId: b.instrumentId,
+      tokenQty: 0n,
+      shares: "0.5",
+      unitCostUsd: "0",
+      acquiredAt: new Date(),
+      source: "dividend",
+    });
+    await b.pass();
+
+    const p = await b.position();
+    expect(sharesOf(p.shares)).toBe("1.5");
     expect(sharesOf(p.sharesWithBasis)).toBe("1.5");
     expect(usdOf(p.costBasisUsd)).toBe("100.00");
   });

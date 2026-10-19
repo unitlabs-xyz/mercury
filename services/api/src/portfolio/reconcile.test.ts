@@ -457,6 +457,39 @@ describe("planReconciliation: a transfer out that may yet be a lagging read", ()
   });
 });
 
+describe("planReconciliation: open shares above the chain's", () => {
+  /*
+   * Equal tokens, but the open records hold more shares than the chain shows,
+   * as they do when a dividend is credited twice (an instance still running
+   * the old code writes one the migration had just cut back). The tokens are
+   * all here, so the cost is all here: shares are only what a token is worth
+   * at a multiplier, and the cost of a token does not move with it.
+   */
+  it("keeps the whole cost, and prices it over the shares the chain shows", () => {
+    const plan = planReconciliation(
+      [
+        held({
+          chainRawAmount: ONE_TOKEN,
+          recordedRawAmount: ONE_TOKEN,
+          recordedShares: D("1.5"),
+          recordedCostUsd: D(200),
+          recordedFeeUsd: D("0.46"),
+        }),
+      ],
+      NOW,
+    );
+    expect(plan.positions[0]).toEqual({
+      instrumentId: "instrument-nvda",
+      shares: D(1),
+      sharesWithBasisUsd: D(1),
+      costBasisUsd: D(200),
+      referenceBasisUsd: D(200),
+      feeUsd: D("0.46"),
+      avgUnitCostUsd: D(200),
+    });
+  });
+});
+
 describe("planReconciliation: rolling up", () => {
   it("adds two wrappers of one company into one position", () => {
     const backed = held({ chainRawAmount: ONE_TOKEN });

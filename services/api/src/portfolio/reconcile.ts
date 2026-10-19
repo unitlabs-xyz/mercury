@@ -277,10 +277,17 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     // lot behind it is reported as one we have no cost for, and the screens say
     // so rather than showing a profit measured against a guess.
     //
-    // After a transfer out the records equal the chain, so this cap only bites
-    // when shares arrived unwitnessed.
+    // The shares are capped in shares, and the cost in tokens. A token's cost
+    // does not move with the multiplier, so the cost is capped only by the
+    // tokens the chain has to match it. Capped by shares, a dividend credited
+    // twice — an instance still running the old code during a deploy writes
+    // one the migration had just cut back — would take its excess out of the
+    // cost for good. After a transfer out the records equal the chain in
+    // tokens, and an arrival leaves them below it, so this ratio is one
+    // whenever there is anything to price.
     const withBasis = Decimal.min(recordedShares, chainShares);
-    const ratio = recordedShares.isZero() ? ZERO : withBasis.div(recordedShares);
+    const keptRaw = recordedRaw < token.chainRawAmount ? recordedRaw : token.chainRawAmount;
+    const ratio = recordedRaw === 0n ? ZERO : D(keptRaw.toString()).div(D(recordedRaw.toString()));
 
     const running = byInstrument.get(token.instrumentId) ?? {
       shares: ZERO,
@@ -294,7 +301,7 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
       withBasis: running.withBasis.add(withBasis),
       cost: running.cost.add(cost.mul(ratio)),
       // Scaled by the same ratio as the cost, and they have to be: a capped
-      // basis whose reference was not capped with it would report the shares
+      // cost whose reference was not capped with it would report the tokens
       // that left as a market move, and the two lines would stop summing to
       // the dollars.
       reference: running.reference.add(reference.mul(ratio)),
