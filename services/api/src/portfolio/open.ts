@@ -88,6 +88,10 @@ export function movementsByToken(
   ].sort((a, b) => a.at - b.at || a.rank - b.rank || a.id.localeCompare(b.id));
 
   const byToken = new Map<string, Movement[]>();
-  for (const e of entries) byToken.set(e.tokenId, [...(byToken.get(e.tokenId) ?? []), e.movement]);
+  for (const e of entries) {
+    const moves = byToken.get(e.tokenId);
+    if (moves === undefined) byToken.set(e.tokenId, [e.movement]);
+    else moves.push(e.movement);
+  }
   return byToken;
 }
