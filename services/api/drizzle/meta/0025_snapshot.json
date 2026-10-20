@@ -1,5 +1,5 @@
 {
-  "id": "a6b2a13c-a524-46cd-a0fb-1e278d1ece01",
+  "id": "8be532dc-1b63-4a1c-8645-7bcc587e5af8",
   "prevId": "373fcd52-377a-4e7d-afbd-8b155cc5fa3b",
   "version": "7",
   "dialect": "postgresql",
@@ -482,6 +482,158 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.disposal": {
+      "name": "disposal",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_id": {
+          "name": "token_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instrument_id": {
+          "name": "instrument_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_qty": {
+          "name": "token_qty",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "shares": {
+          "name": "shares",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "disposal_user_token_idx": {
+          "name": "disposal_user_token_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "token_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "disposal_order_idx": {
+          "name": "disposal_order_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "disposal_user_id_user_id_fk": {
+          "name": "disposal_user_id_user_id_fk",
+          "tableFrom": "disposal",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "disposal_token_id_token_id_fk": {
+          "name": "disposal_token_id_token_id_fk",
+          "tableFrom": "disposal",
+          "tableTo": "token",
+          "columnsFrom": [
+            "token_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "disposal_instrument_id_instrument_id_fk": {
+          "name": "disposal_instrument_id_instrument_id_fk",
+          "tableFrom": "disposal",
+          "tableTo": "instrument",
+          "columnsFrom": [
+            "instrument_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -1020,6 +1172,13 @@
         },
         "acquired_at": {
           "name": "acquired_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "recorded_at": {
+          "name": "recorded_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -1784,126 +1943,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.referral": {
-      "name": "referral",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "inviter_id": {
-          "name": "inviter_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "friend_id": {
-          "name": "friend_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "qualified_at": {
-          "name": "qualified_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "referral_friend_idx": {
-          "name": "referral_friend_idx",
-          "columns": [
-            {
-              "expression": "friend_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "referral_inviter_idx": {
-          "name": "referral_inviter_idx",
-          "columns": [
-            {
-              "expression": "inviter_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "qualified_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "referral_inviter_id_user_id_fk": {
-          "name": "referral_inviter_id_user_id_fk",
-          "tableFrom": "referral",
-          "tableTo": "user",
-          "columnsFrom": [
-            "inviter_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "referral_friend_id_user_id_fk": {
-          "name": "referral_friend_id_user_id_fk",
-          "tableFrom": "referral",
-          "tableTo": "user",
-          "columnsFrom": [
-            "friend_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "referral_not_self": {
-          "name": "referral_not_self",
-          "value": "\"referral\".\"inviter_id\" <> \"referral\".\"friend_id\""
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.token": {
       "name": "token",
       "schema": "",
@@ -2062,12 +2101,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'USD'"
-        },
-        "referral_code": {
-          "name": "referral_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -2076,21 +2109,6 @@
           "columns": [
             {
               "expression": "privy_user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "user_referral_code_idx": {
-          "name": "user_referral_code_idx",
-          "columns": [
-            {
-              "expression": "referral_code",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

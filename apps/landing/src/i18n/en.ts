@@ -48,6 +48,8 @@ export const en = {
     heading: ["The financial account built", "for the onchain world."],
     lead: "Own real global stocks from $5, invest in whole themes with baskets, and borrow against your shares instead of selling them. All from a wallet that is yours, opened with just an email.",
     imageLabel: "Hero image",
+    /** Either side of the Solana mark: some languages put the name first. */
+    builtOn: ["Built on", ""],
   },
 
   trust: {

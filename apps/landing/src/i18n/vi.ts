@@ -42,6 +42,7 @@ export const vi: Dict = {
     heading: ["Tài khoản tài chính", "dành cho thế giới onchain."],
     lead: "Sở hữu cổ phiếu toàn cầu thật chỉ từ $5, đầu tư vào cả một chủ đề với rổ đầu tư, và vay dựa trên cổ phiếu thay vì bán chúng. Tất cả từ một ví thuộc về bạn, mở chỉ bằng một email.",
     imageLabel: "Hình ảnh chính",
+    builtOn: ["Xây dựng trên", ""],
   },
 
   trust: {

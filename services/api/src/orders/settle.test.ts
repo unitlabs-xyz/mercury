@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import { testDb } from "../db/testing.js";
-import { activities, instruments, lots, orders, positions, tokens, users } from "../db/schema.js";
+import { activities, disposals, instruments, lots, orders, positions, tokens, users } from "../db/schema.js";
 import { settleOrder, tokenRefFor } from "./settle.js";
 import type { Fill } from "./fill.js";
 
@@ -257,5 +257,171 @@ describe("settleOrder", () => {
       instrumentId: s.instrumentId,
     });
     expect(await tokenRefFor(s.db, "NotAMint")).toBeNull();
+  });
+});
+
+describe("settleOrder: the shares a sell removes", () => {
+  const sold: Fill = { ...aFill, usd: D(110) };
+
+  /** A sell of the seeded token, executing, created at `createdAt`. */
+  const sellOrder = async (s: Awaited<ReturnType<typeof seed>>, createdAt?: Date) => {
+    const [order] = await s.db
+      .insert(orders)
+      .values({
+        userId: s.userId,
+        instrumentId: s.instrumentId,
+        side: "sell",
+        usdAmount: "110",
+        decision: { kind: "execute" },
+        chosenTokenId: s.tokenId,
+        status: "executing",
+        ...(createdAt === undefined ? {} : { createdAt }),
+      })
+      .returning();
+    return order!.id;
+  };
+
+  const transferOut = (s: Awaited<ReturnType<typeof seed>>, recordedAt: Date) =>
+    s.db.insert(disposals).values({
+      userId: s.userId,
+      tokenId: s.tokenId,
+      instrumentId: s.instrumentId,
+      tokenQty: 44_901_800n,
+      shares: "0.44978187",
+      kind: "transfer_out",
+      occurredAt: recordedAt,
+      recordedAt,
+    });
+
+  it("records them, linked to the order", async () => {
+    const s = await seed();
+    const orderId = await sellOrder(s);
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+
+    const rows = await s.db.select().from(disposals);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: "sell",
+      orderId,
+      tokenId: s.tokenId,
+      instrumentId: s.instrumentId,
+      tokenQty: 44_901_800n,
+      occurredAt: AT,
+    });
+    expect(Number(rows[0]!.shares)).toBeCloseTo(0.44978187, 8);
+  });
+
+  it("removes them once when the sell is settled twice", async () => {
+    const s = await seed();
+    const orderId = await sellOrder(s);
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+    expect(await s.db.select().from(disposals)).toHaveLength(1);
+  });
+
+  it("takes back a transfer out recorded while the sell was in flight", async () => {
+    // Confirmed late: position-sync saw the tokens leave before the client
+    // came back, and read it as a transfer. It was this sell.
+    const s = await seed();
+    const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
+    await transferOut(s, new Date());
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+    expect(await s.db.select({ kind: disposals.kind }).from(disposals)).toEqual([{ kind: "sell" }]);
+  });
+
+  it("puts the sell where the transfer out it replaces sat in the records", async () => {
+    // The replay orders by when each row was recorded. A sell that took the
+    // place of a transfer out but was dated now would jump a lot recorded
+    // between the two, and cost it as if it had been bought before the sell.
+    const s = await seed();
+    const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
+    const first = new Date(Date.now() - 12 * 60_000);
+    await transferOut(s, new Date(Date.now() - 5 * 60_000));
+    await transferOut(s, first);
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+
+    const rows = await s.db.select().from(disposals);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.kind).toBe("sell");
+    expect(rows[0]!.recordedAt).toEqual(first);
+  });
+
+  it("dates a sell that took nothing back when it is written", async () => {
+    const s = await seed();
+    const orderId = await sellOrder(s);
+    const before = Date.now();
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+    const [row] = await s.db.select().from(disposals);
+    expect(row!.recordedAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+  });
+
+  it("leaves a transfer out of another token alone", async () => {
+    // The take-back is for the token this sell removed. Another wrapper of the
+    // same stock, dropping in the same minutes, is a different drop.
+    const s = await seed();
+    const [other] = await s.db
+      .insert(tokens)
+      .values({
+        instrumentId: s.instrumentId,
+        mint: "OtherMint",
+        symbol: "NVDAon",
+        issuer: "ondo",
+        decimals: 6,
+      })
+      .returning();
+    const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
+    await s.db.insert(disposals).values({
+      userId: s.userId,
+      tokenId: other!.id,
+      instrumentId: s.instrumentId,
+      tokenQty: 1_000_000n,
+      shares: "1",
+      kind: "transfer_out",
+      occurredAt: new Date(),
+    });
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+
+    const rows = await s.db.select().from(disposals).orderBy(disposals.recordedAt);
+    expect(rows.map((r) => [r.kind, r.tokenId])).toEqual([
+      ["transfer_out", other!.id],
+      ["sell", s.tokenId],
+    ]);
+  });
+
+  it("leaves another user's transfer out alone", async () => {
+    const s = await seed();
+    const [stranger] = await s.db.insert(users).values({ privyUserId: "did:privy:stranger" }).returning();
+    const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
+    await s.db.insert(disposals).values({
+      userId: stranger!.id,
+      tokenId: s.tokenId,
+      instrumentId: s.instrumentId,
+      tokenQty: 44_901_800n,
+      shares: "0.44978187",
+      kind: "transfer_out",
+      occurredAt: new Date(),
+    });
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+
+    const rows = await s.db.select().from(disposals).orderBy(disposals.recordedAt);
+    expect(rows.map((r) => [r.kind, r.userId])).toEqual([
+      ["transfer_out", stranger!.id],
+      ["sell", s.userId],
+    ]);
+  });
+
+  it("leaves a transfer out from before the order alone", async () => {
+    const s = await seed();
+    await transferOut(s, new Date(Date.now() - 60 * 60_000));
+    const orderId = await sellOrder(s);
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold }));
+    const kinds = await s.db.select({ kind: disposals.kind }).from(disposals).orderBy(disposals.recordedAt);
+    expect(kinds).toEqual([{ kind: "transfer_out" }, { kind: "sell" }]);
+  });
+
+  it("records none for a buy", async () => {
+    const s = await seed();
+    await settleOrder(s.db, inputFor(s));
+    expect(await s.db.select().from(disposals)).toEqual([]);
   });
 });

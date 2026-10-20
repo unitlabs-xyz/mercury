@@ -42,6 +42,7 @@ export const id: Dict = {
     heading: ["Akun keuangan yang dibangun", "untuk dunia onchain."],
     lead: "Miliki saham global sungguhan mulai dari $5, investasi di satu tema utuh lewat keranjang, dan pinjam dengan jaminan sahammu tanpa harus menjualnya. Semua dari wallet milikmu, dibuka hanya dengan email.",
     imageLabel: "Gambar utama",
+    builtOn: ["Dibangun di", ""],
   },
 
   trust: {

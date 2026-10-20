@@ -42,6 +42,7 @@ export const tr: Dict = {
     heading: ["Zincir üstü dünya için", "tasarlanmış finansal hesap."],
     lead: "$5’tan başlayarak gerçek global hisselere sahip ol, sepetlerle tüm temalara yatırım yap ve hisselerini satmak yerine onlara karşı borç al. Hepsi sana ait, yalnızca bir e-postayla açılan bir cüzdandan.",
     imageLabel: "Ana görsel",
+    builtOn: ["", "üzerinde"],
   },
 
   trust: {

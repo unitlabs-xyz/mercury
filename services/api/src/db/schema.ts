@@ -313,6 +313,15 @@ export const lots = pgTable(
      */
     referencePriceUsd: usd("reference_price_usd"),
     acquiredAt: timestamp("acquired_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * When the lot entered Mercury, which a position is replayed in order of.
+     *
+     * The same moment as `acquiredAt` for everything written so far. An imported
+     * lot is the first that differs: bought in March, recorded today. Replaying
+     * it by when it was bought would apply last month's sell to shares that were
+     * not here yet.
+     */
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
     source: text("source", { enum: ["buy", "transfer_in", "dividend", "basket"] }).notNull(),
     /** True when we inferred the cost. The UI has to say so. */
     isEstimated: boolean("is_estimated").notNull().default(false),
@@ -321,7 +330,43 @@ export const lots = pgTable(
   (t) => [index("lot_user_token_idx").on(t.userId, t.tokenId)],
 );
 
-/** A derived rollup, per user per instrument. Rebuildable from lots at any time. */
+/**
+ * Shares that left: a sell, or a transfer out position-sync noticed. The other
+ * half of `lot`. A position is a replay of the two in the order they were
+ * recorded, at average cost (`replayPosition` in @mercury/core), so the cost of
+ * shares that left goes with them rather than staying to be mixed into the next
+ * purchase.
+ */
+export const disposals = pgTable(
+  "disposal",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenId: uuid("token_id")
+      .notNull()
+      .references(() => tokens.id),
+    instrumentId: uuid("instrument_id")
+      .notNull()
+      .references(() => instruments.id),
+    /** Smallest unit, as it left. */
+    tokenQty: bigint("token_qty", { mode: "bigint" }).notNull(),
+    /** token_qty x the multiplier in force when it left. For reading; the replay counts tokens. */
+    shares: usd("shares").notNull(),
+    kind: text("kind", { enum: ["sell", "transfer_out"] }).notNull(),
+    /** The sell that wrote it. Unique, so a sell settled twice removes its shares once. */
+    orderId: uuid("order_id"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("disposal_user_token_idx").on(t.userId, t.tokenId),
+    uniqueIndex("disposal_order_idx").on(t.orderId),
+  ],
+);
+
+/** A derived rollup, per user per instrument. Rebuildable from lots and disposals at any time. */
 export const positions = pgTable(
   "position",
   {

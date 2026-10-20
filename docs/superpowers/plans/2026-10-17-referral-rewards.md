@@ -112,7 +112,7 @@ git commit -m "docs: ADR 0017, referral payouts from the relayer"
 **Files:**
 
 - Modify: `services/api/src/db/schema.ts` (two tables after `referrals`)
-- Create: `services/api/drizzle/0025_referral_rewards.sql` and its `meta/` snapshot (generated)
+- Create: `services/api/drizzle/0028_referral_rewards.sql` (the next free number after `0027_referral`) and its `meta/` snapshot (generated)
 - Modify: `services/api/src/referrals/rules.ts`
 - Test: `services/api/src/referrals/rules.test.ts`
 
@@ -268,7 +268,7 @@ export type ReferralReward = typeof referralRewards.$inferSelect;
 - [ ] **Step 5: Generate the migration**
 
 Run: `cd services/api && DATABASE_URL="postgres://unused" pnpm drizzle-kit generate --name referral_rewards`
-Expected: `drizzle/0025_referral_rewards.sql`, holding the two `CREATE TABLE`s, their foreign keys and six indexes, and nothing else. Read it.
+Expected: `drizzle/0028_referral_rewards.sql`, holding the two `CREATE TABLE`s, their foreign keys and six indexes, and nothing else. Read it.
 
 - [ ] **Step 6: Run the tests to see them pass**
 
