@@ -214,15 +214,15 @@ const read = buildReadDeps(auth.db, deps, config, relay, fund);
  * its job plan was deleted rather than left to describe a system that does not
  * exist — and no serverless cron, because this is not deployed as functions.
  *
- * | Job                  | Cadence | Writes                                               |
- * | -------------------- | ------- | ---------------------------------------------------- |
- * | `prices`             | 20s     | `price_bar`, and it fills the shared price board     |
- * | `price-bar-prune`    | 6h      | deletes minute bars past thirty days                 |
- * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`            |
- * | `position-sync`      | 2s      | `lot`, `position`, `activity` — including dividends  |
- * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers               |
- * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                 |
- * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email               |
+ * | Job                  | Cadence | Writes                                                                        |
+ * | -------------------- | ------- | ----------------------------------------------------------------------------- |
+ * | `prices`             | 20s     | `price_bar`, and it fills the shared price board                              |
+ * | `price-bar-prune`    | 6h      | deletes minute bars past thirty days                                          |
+ * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`                                     |
+ * | `position-sync`      | 2s      | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
+ * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers                                        |
+ * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                                          |
+ * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email                                        |
  *
  * One job the design called for is not here: a poller for Jupiter trigger
  * orders. Trigger orders are not built, and `gateExecution` turns the decision

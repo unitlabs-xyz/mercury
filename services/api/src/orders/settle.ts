@@ -1,7 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { applySell, D, ZERO, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
-import { activities, instruments, lots, orders, positions, tokens } from "../db/schema.js";
+import { activities, disposals, instruments, lots, orders, positions, tokens } from "../db/schema.js";
 import type { Fill } from "./fill.js";
 import { logger } from "../log/index.js";
 
@@ -87,12 +87,14 @@ const realisedOn = (
  * nothing. That is what makes this safe to retry from a flaky client, and it is
  * why the signature is recorded on the same statement that flips the status.
  *
- * A sell writes no lot, on purpose. Lots record what was acquired and what it
- * cost; selling acquires nothing. The position follows from
- * `planReconciliation`, which caps the basis at what the chain says is held and
- * scales the recorded cost by the same ratio — which leaves the average unit
- * cost of what remains exactly as it was. That is average-cost accounting, and
- * it is already how a sell is absorbed today.
+ * A sell writes no lot, on purpose: lots record what was acquired, and selling
+ * acquires nothing. It writes a disposal instead, the tokens that left, and
+ * the position follows from position-sync, which replays lots and disposals in
+ * the order they were recorded at average cost (`loadHeldTokens`,
+ * `replayPosition`) and reconciles the result with the chain
+ * (`planReconciliation`). The cost per share of what remains is exactly what
+ * it was, and the cost of what was sold goes with it rather than staying to
+ * be mixed into the next purchase.
  */
 export async function settleOrder(db: Db, input: SettleInput): Promise<SettleResult> {
   const { fill } = input;
@@ -115,7 +117,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
           inArray(orders.status, ["pending", "executing"]),
         ),
       )
-      .returning({ id: orders.id });
+      .returning({ id: orders.id, createdAt: orders.createdAt });
 
     if (claimed.length === 0) {
       /*
@@ -148,6 +150,53 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         isEstimated: false,
         orderId: input.orderId,
       });
+    }
+
+    if (input.side === "sell") {
+      /*
+       * A transfer out position-sync recorded since this order began is this
+       * sell, seen on the chain before the client came back to confirm it. It
+       * is taken back, so the shares leave once. If any of that drop really
+       * was a transfer, the next pass finds the gap again.
+       *
+       * The sell takes the place of the earliest it took back, in the order
+       * rows were recorded. The replay is by that order, and a sell dated now
+       * would jump any lot recorded between the two, costing it as if it had
+       * been bought before the shares left. It lands within a millisecond of
+       * that transfer out rather than on it: the driver hands the time back as
+       * a Date, which keeps milliseconds.
+       */
+      const takenBack = await tx
+        .delete(disposals)
+        .where(
+          and(
+            eq(disposals.userId, input.userId),
+            eq(disposals.tokenId, input.tokenId),
+            eq(disposals.kind, "transfer_out"),
+            gte(disposals.recordedAt, claimed[0]!.createdAt),
+          ),
+        )
+        .returning({ recordedAt: disposals.recordedAt });
+      const sat = takenBack.reduce<Date | undefined>(
+        (earliest, t) => (earliest === undefined || t.recordedAt < earliest ? t.recordedAt : earliest),
+        undefined,
+      );
+      await tx
+        .insert(disposals)
+        .values({
+          userId: input.userId,
+          tokenId: input.tokenId,
+          instrumentId: input.instrumentId,
+          tokenQty: fill.tokensRaw,
+          shares: fixed(fill.shares),
+          kind: "sell",
+          orderId: input.orderId,
+          occurredAt: fill.occurredAt,
+          ...(sat === undefined ? {} : { recordedAt: sat }),
+        })
+        // The claim already refuses a second settle; the unique order id
+        // refuses a second disposal whatever reaches this line.
+        .onConflictDoNothing();
     }
 
     const [position] =

@@ -176,6 +176,20 @@
       "when": 1792250897787,
       "tag": "0024_activity_copy",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792377749363,
+      "tag": "0025_disposal",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792377755844,
+      "tag": "0026_disposal_backfill",
+      "breakpoints": true
     }
   ]
 }
