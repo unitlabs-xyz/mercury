@@ -93,6 +93,14 @@ export const reordered = (composition: Composition, movedId: string, beforeId: s
   return { ...composition, picks };
 };
 
+/** Move a stock below every other one: the drop past the last row. */
+export const movedToEnd = (composition: Composition, movedId: string): Composition => {
+  const at = composition.picks.findIndex((pick) => pick.assetId === movedId);
+  if (at === -1 || at === composition.picks.length - 1) return composition;
+  const picks = composition.picks.filter((pick) => pick.assetId !== movedId);
+  return { ...composition, picks: [...picks, composition.picks[at]!] };
+};
+
 /** Holding a weight, or letting it move again. */
 export const toggledLock = (composition: Composition, assetId: string): Composition => ({
   ...composition,

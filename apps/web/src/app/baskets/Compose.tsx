@@ -1,19 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { DESCRIPTION_MAX, NAME_MAX, TOTAL_BPS, type DraftProblem } from "@mercury/core";
 import { shelfOf, weightLabel } from "@mercury/view";
 import type { Basket, PickableBasketAsset } from "@mercury/types";
 import { useBasketAssets, useBaskets, useCreateBasket, useUpdateBasket } from "../../api/baskets";
 import { ApiError } from "../../api/client";
-import { priceInstrument, useHistories, useInstruments } from "../../market/hooks";
+import { priceInstrument, useHistories, useInstruments, useUniverse } from "../../market/hooks";
 import { Button } from "../../ui/Button";
 import { PanelHeader, SidePanel } from "../../ui/Dialog";
-import { GlideRows, InfoTip, SearchField, SegmentMeter } from "../../ui/ds";
+import { FilterPills, GlideRows, InfoTip, SearchField, SegmentMeter } from "../../ui/ds";
 import { STOCK_ROW, StockRowBody } from "../invest/Rail";
 import { Skeleton } from "../portfolio/ui";
 import { AssetIcon } from "./AssetIcon";
-import { ASSET_DRAG, Weights } from "./Weights";
-import { EMPTY, added, asDraft, distributed, from, problem, remaining } from "./composition";
+import { ASSET_DRAG, PICK_DRAG, Weights } from "./Weights";
+import {
+  EMPTY,
+  added,
+  asDraft,
+  distributed,
+  from,
+  movedToEnd,
+  problem,
+  remaining,
+  removed,
+} from "./composition";
 
 /** What stops the create button, said on the rule beside it. */
 const BLOCKED: Record<DraftProblem, string> = {
@@ -29,6 +39,28 @@ const BLOCKED: Record<DraftProblem, string> = {
 /* Both reads are batched into one call apiece, so the cost of a longer list
    is the rows themselves — and six left most of the shelf empty. */
 const MATCHES = 10;
+
+type Order = "popular" | "gainers" | "losers" | "volume";
+
+const ORDERS: readonly { key: Order; label: string }[] = [
+  { key: "popular", label: "Popular" },
+  { key: "gainers", label: "Gainers" },
+  { key: "losers", label: "Losers" },
+  { key: "volume", label: "Most traded" },
+];
+
+/** Said over the shelf, so the order it is in is never a guess. */
+const CAPTION: Record<Order, string> = {
+  popular: "Most used in strategies",
+  gainers: "Up most today",
+  losers: "Down most today",
+  volume: "Most traded, last 24 hours",
+};
+
+const ALL = "All";
+
+/** What a sort or a sector reads off a stock. Absent for one the featured list does not carry. */
+type Facts = { sector: string; todayPct: number | null; volume24h: number };
 
 /**
  * The one authoring surface, for a basket being written and one being changed.
@@ -50,6 +82,20 @@ export const Compose = ({
   const [composition, setComposition] = useState(EMPTY);
   const [query, setQuery] = useState("");
   const [dropping, setDropping] = useState(false);
+  const [order, setOrder] = useState<Order>("popular");
+  const [sector, setSector] = useState(ALL);
+  /* The weights box, for telling the drop past its last row from one on a row. */
+  const area = useRef<HTMLElement>(null);
+  const [tail, setTail] = useState(false);
+  /* A pick in hand, and whether it is out of the box: let go there and it goes.
+     The ref is what the drag's end reads, since that can land before a render. */
+  const [lifted, setLifted] = useState<string | null>(null);
+  const [outside, setOutside] = useState(false);
+  const outsideRef = useRef(false);
+  const goOutside = (value: boolean) => {
+    outsideRef.current = value;
+    setOutside(value);
+  };
   const catalogue = useBasketAssets(open);
   const create = useCreateBasket();
   /* Only ever fired with a basket in hand; the slug is a hook's argument, and
@@ -76,7 +122,6 @@ export const Compose = ({
     () => new Set((catalogue.data ?? []).map((asset) => asset.assetId)),
     [catalogue.data],
   );
-  const picked = new Set(composition.picks.map((pick) => pick.assetId));
   /* Each match costs a price and a history read, so wait for the typing to settle. */
   const [term, setTerm] = useState("");
   useEffect(() => {
@@ -102,16 +147,63 @@ export const Compose = ({
       });
   }, [shelf.data, catalogue.data]);
 
-  const matches =
-    term === ""
-      ? popular.filter((asset) => !picked.has(asset.assetId)).slice(0, MATCHES)
-      : (catalogue.data ?? [])
-          .filter(
-            (asset) =>
-              !picked.has(asset.assetId) &&
-              (asset.ticker.toLowerCase().startsWith(term) || asset.name.toLowerCase().includes(term)),
+  /* The featured list carries each stock's sector, today and volume, so the
+     chips sort and narrow the whole catalogue without a read per stock. */
+  const universe = useUniverse();
+  const facts = useMemo(
+    () =>
+      new Map<string, Facts>(
+        (universe.data ?? []).map((instrument) => {
+          const priced = priceInstrument(instrument, undefined);
+          return [
+            instrument.ticker,
+            { sector: instrument.sector, todayPct: priced.todayPct, volume24h: priced.volume24h },
+          ];
+        }),
+      ),
+    [universe.data],
+  );
+  const sectors = useMemo(() => {
+    const held = new Set((catalogue.data ?? []).flatMap((asset) => facts.get(asset.ticker)?.sector ?? []));
+    // "Other" goes last, after the named sectors, as Invest has it.
+    return [ALL, ...[...held].sort((a, b) => (a === "Other" ? 1 : b === "Other" ? -1 : a.localeCompare(b)))];
+  }, [catalogue.data, facts]);
+
+  const matches = useMemo(() => {
+    const all = catalogue.data ?? [];
+    /* Popular leads with what strategies hold, then the rest, so a sector the
+       strategies barely touch still fills its shelf. */
+    const pool =
+      term !== ""
+        ? all.filter(
+            (asset) => asset.ticker.toLowerCase().startsWith(term) || asset.name.toLowerCase().includes(term),
           )
-          .slice(0, MATCHES);
+        : order === "popular"
+          ? [...popular, ...all.filter((asset) => !popular.includes(asset))]
+          : all;
+    const chosen = new Set(composition.picks.map((pick) => pick.assetId));
+    const kept = pool.filter(
+      (asset) => !chosen.has(asset.assetId) && (sector === ALL || facts.get(asset.ticker)?.sector === sector),
+    );
+    const today = (ticker: string) => facts.get(ticker)?.todayPct ?? null;
+    const sorted =
+      order === "popular"
+        ? kept
+        : order === "volume"
+          ? [...kept].sort(
+              (a, b) => (facts.get(b.ticker)?.volume24h ?? -1) - (facts.get(a.ticker)?.volume24h ?? -1),
+            )
+          : /* A stock with no move today is in neither list. */
+            kept
+              .filter((asset) => today(asset.ticker) !== null)
+              .sort((a, b) =>
+                order === "gainers"
+                  ? today(b.ticker)! - today(a.ticker)!
+                  : today(a.ticker)! - today(b.ticker)!,
+              );
+    return sorted.slice(0, MATCHES);
+  }, [catalogue.data, popular, term, order, sector, facts, composition.picks]);
+  const filtered = order !== "popular" || sector !== ALL;
 
   /* The picker shows what Invest shows — name, price, today, a sparkline — so
      the catalogue row is married to the market read for the few on screen. */
@@ -162,6 +254,13 @@ export const Compose = ({
     onClose();
   };
 
+  /* Whether the pointer is past the last row, where a drop lands at the end. */
+  const pastLast = (event: DragEvent) => {
+    const rows = area.current?.querySelectorAll("[data-row]");
+    const last = rows?.[rows.length - 1];
+    return last === undefined || event.clientY > last.getBoundingClientRect().bottom - 4;
+  };
+
   const add = (asset: PickableBasketAsset) => {
     setComposition(added(composition, asset));
     setQuery("");
@@ -188,7 +287,7 @@ export const Compose = ({
       <PanelHeader
         id="compose-heading"
         title={
-          <span className="text-[11px] leading-none tracking-[0.12em] text-ds-muted uppercase">
+          <span className="text-[14px] leading-none font-normal text-ds-muted">
             {basket ? "Edit basket" : "Build a basket"}
           </span>
         }
@@ -197,14 +296,14 @@ export const Compose = ({
       {/* One rule under both, which is also the header's own separator — so the
           focus state is that line going brand, rather than a ring or a fill
           arriving around a field the width of the panel. */}
-      <div className="mx-6 mt-3 shrink-0 border-b-2 border-ds-divider pb-3 transition-colors focus-within:border-brand">
+      <div className="mx-6 mt-3 shrink-0 border-b border-ds-divider pb-3 transition-colors focus-within:border-brand">
         <input
           value={composition.name}
           onChange={(event) => setComposition({ ...composition, name: event.target.value })}
           placeholder="Name your basket"
           maxLength={NAME_MAX}
           aria-label="Basket name"
-          className="w-full bg-transparent text-[26px] leading-tight font-medium text-ds-ink outline-none placeholder:font-normal placeholder:text-ds-muted/60"
+          className="w-full bg-transparent text-[20px] leading-tight font-medium text-ds-ink outline-none placeholder:text-ds-muted/60"
         />
         {/* Optional, and said so: the catalogue shows it under the name, and a
             basket with nothing written there reads fine without it. */}
@@ -214,46 +313,74 @@ export const Compose = ({
           placeholder="What it is for — optional"
           maxLength={DESCRIPTION_MAX}
           aria-label="Basket description"
-          className="mt-1.5 w-full bg-transparent text-[14px] leading-tight text-ds-muted outline-none placeholder:text-ds-muted/60"
+          className="mt-1 w-full bg-transparent text-[14px] leading-tight text-ds-muted outline-none placeholder:text-ds-muted/60"
         />
       </div>
 
       <div className="grid min-h-0 flex-1 gap-3 px-6 pt-4 pb-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]">
         {/* The basket being written: a white sheet, against the grey shelf it is drawn from. */}
         <section
+          ref={area}
           onDragOver={(event) => {
-            /* A reorder bubbles through here too; leaving its effect alone
-               is what lets the row's own drop go ahead. */
-            if (!event.dataTransfer.types.includes(ASSET_DRAG)) return;
-            event.dataTransfer.dropEffect = "copy";
+            const moving = event.dataTransfer.types.includes(PICK_DRAG);
+            if (!moving && !event.dataTransfer.types.includes(ASSET_DRAG)) return;
+            /* Taken here as well as on the rows, so a drop anywhere in the box
+               is a drop somebody took, and only one outside it removes. */
+            event.dataTransfer.dropEffect = moving ? "move" : "copy";
             event.preventDefault();
-            setDropping(true);
+            if (outsideRef.current) goOutside(false);
+            setDropping(!moving);
+            setTail(pastLast(event));
           }}
-          onDragLeave={() => setDropping(false)}
+          onDragLeave={(event) => {
+            /* Moving between rows leaves one child for another; only leaving
+               the box itself counts. */
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            setDropping(false);
+            setTail(false);
+            if (lifted !== null) goOutside(true);
+          }}
           onDrop={(event) => {
             event.preventDefault();
             setDropping(false);
+            setTail(false);
+            const moved = event.dataTransfer.getData(PICK_DRAG);
+            if (moved !== "") {
+              /* A row takes its own drop; reaching here is the gap, or past the end. */
+              if (pastLast(event)) setComposition(movedToEnd(composition, moved));
+              return;
+            }
             const id = event.dataTransfer.getData(ASSET_DRAG);
             const asset = (catalogue.data ?? []).find((item) => item.assetId === id);
             if (asset) setComposition(added(composition, asset));
           }}
           className={`group/list flex min-h-0 flex-col overflow-hidden rounded-xl transition-shadow ${
-            dropping ? "shadow-[0_0_0_2px_var(--color-ds-link)]" : "shadow-[0_0_0_1px_rgb(0_0_0/0.07)]"
+            outside
+              ? "shadow-[0_0_0_2px_var(--color-ds-meter-danger)]"
+              : dropping
+                ? "shadow-[0_0_0_2px_var(--color-ds-link)]"
+                : "shadow-[0_0_0_1px_rgb(0_0_0/0.07)]"
           }`}
         >
           <header className="shrink-0 px-4 pt-3.5 pb-2">
             <div className="flex items-center justify-between gap-3 text-[12px] leading-none">
               <span className="text-ds-muted">Target weights</span>
-              {composition.picks.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setComposition(distributed(composition))}
-                  disabled={free === 0}
-                  className="font-medium text-ds-link hover:underline disabled:text-ds-muted disabled:no-underline"
-                  title={free === 0 ? "Every weight is held" : undefined}
-                >
-                  Distribute evenly
-                </button>
+              {outside && lifted !== null ? (
+                <span className="font-medium text-ds-down">
+                  Let go to remove {composition.picks.find((pick) => pick.assetId === lifted)?.ticker}
+                </span>
+              ) : (
+                composition.picks.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setComposition(distributed(composition))}
+                    disabled={free === 0}
+                    className="font-medium text-ds-link hover:underline disabled:text-ds-muted disabled:no-underline"
+                    title={free === 0 ? "Every weight is held" : undefined}
+                  >
+                    Distribute evenly
+                  </button>
+                )
               )}
             </div>
             {/* A cluster rather than a ribbon: across the whole card the meter's
@@ -296,7 +423,22 @@ export const Compose = ({
                 </p>
               </div>
             ) : (
-              <Weights composition={composition} instruments={byTicker} onChange={setComposition} />
+              <Weights
+                composition={composition}
+                instruments={byTicker}
+                onChange={setComposition}
+                tail={tail && lifted !== null}
+                leaving={outside ? lifted : null}
+                onLift={setLifted}
+                onSettle={(assetId, effect) => {
+                  /* "none" is a drop nobody took; out of the box, that is a removal.
+                     Let go inside, it stays where it was. */
+                  if (effect === "none" && outsideRef.current) setComposition((now) => removed(now, assetId));
+                  setLifted(null);
+                  goOutside(false);
+                  setTail(false);
+                }}
+              />
             )}
           </div>
         </section>
@@ -309,19 +451,45 @@ export const Compose = ({
             label="Search stocks"
             className="h-11 shrink-0 sm:w-full"
           />
+          <FilterPills
+            options={ORDERS}
+            value={order}
+            onChange={setOrder}
+            label="Order stocks by"
+            className="shrink-0"
+          />
+          {sectors.length > 2 && (
+            <FilterPills
+              options={sectors.map((name) => ({ key: name, label: name }))}
+              value={sector}
+              onChange={setSector}
+              label="Sector"
+              className="shrink-0"
+            />
+          )}
           {/* Held at the sheet's full height whatever it holds, so the shelf
               reads as the other half of the pair rather than a stub above it. */}
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto rounded-xl bg-ds-panel p-1">
             {matches.length === 0 ? (
-              term !== "" && (
+              term !== "" ? (
                 <p className="px-3 py-4 text-[13px] text-ds-muted">
-                  No stock matches “{query.trim()}”. Baskets hold Ondo equities on Solana.
+                  No stock matches “{query.trim()}”{sector !== ALL ? ` in ${sector}` : ""}. Baskets hold Ondo
+                  equities on Solana.
                 </p>
+              ) : (
+                filtered && (
+                  <p className="px-3 py-4 text-[13px] text-ds-muted">
+                    Nothing left {sector !== ALL ? `in ${sector} ` : ""}that is not already in the basket.
+                  </p>
+                )
               )
             ) : (
               <>
                 {term === "" && (
-                  <p className="px-3 pt-2 pb-1 text-[12px] text-ds-muted">Most used in strategies</p>
+                  <p className="px-3 pt-2 pb-1 text-[12px] text-ds-muted">
+                    {CAPTION[order]}
+                    {sector !== ALL && ` · ${sector}`}
+                  </p>
                 )}
                 <GlideRows as="ul">
                   {matches.map((asset) => {

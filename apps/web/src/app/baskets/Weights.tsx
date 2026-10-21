@@ -37,10 +37,21 @@ export const Weights = ({
   composition,
   instruments,
   onChange,
+  tail,
+  leaving,
+  onLift,
+  onSettle,
 }: {
   composition: Composition;
   instruments: ReadonlyMap<string, Instrument>;
   onChange: (next: Composition) => void;
+  /** The drag is past the last row, so it lands at the end: the line goes under that row. */
+  tail: boolean;
+  /** A pick dragged out of the box, which goes when it is let go. */
+  leaving: string | null;
+  onLift: (assetId: string) => void;
+  /** Where the drag ended; "none" is a drop nobody took. */
+  onSettle: (assetId: string, effect: DataTransfer["dropEffect"]) => void;
 }) => {
   const [editing, setEditing] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -67,7 +78,7 @@ export const Weights = ({
         </>
       }
     >
-      {composition.picks.map((pick) => (
+      {composition.picks.map((pick, index) => (
         <li
           key={pick.assetId}
           data-row
@@ -84,10 +95,16 @@ export const Weights = ({
           onDrop={dropOn(pick.assetId)}
         >
           {/* Where it would land, drawn on the gap rather than by moving rows. */}
-          {over === pick.assetId && (
+          {over === pick.assetId && !tail && (
             <span
               aria-hidden="true"
               className="pointer-events-none absolute -top-px right-2 left-2 z-10 h-0.5 rounded-full bg-ds-link"
+            />
+          )}
+          {tail && index === composition.picks.length - 1 && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute right-2 -bottom-px left-2 z-10 h-0.5 rounded-full bg-ds-link"
             />
           )}
           <div
@@ -95,9 +112,15 @@ export const Weights = ({
             onDragStart={(event) => {
               event.dataTransfer.setData(PICK_DRAG, pick.assetId);
               event.dataTransfer.effectAllowed = "move";
+              onLift(pick.assetId);
             }}
-            onDragEnd={() => setOver(null)}
-            className={`relative grid h-13 ${COLS} cursor-grab items-center gap-x-3 rounded-md px-4 active:cursor-grabbing`}
+            onDragEnd={(event) => {
+              setOver(null);
+              onSettle(pick.assetId, event.dataTransfer.dropEffect);
+            }}
+            className={`relative grid h-13 ${COLS} cursor-grab items-center gap-x-3 rounded-md px-4 transition-opacity active:cursor-grabbing ${
+              leaving === pick.assetId ? "opacity-40" : ""
+            }`}
           >
             <span className="text-ds-muted/40 transition-colors group-hover/list:text-ds-muted/70">
               <Grip />
@@ -140,7 +163,7 @@ export const Weights = ({
                     }
                     aria-label={`${pick.ticker} weight, percent`}
                     /* The browser's spinners are heavier than the figure beside them. */
-                    className="w-full bg-transparent text-right text-[14px] font-medium tabular-nums text-ds-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="w-full bg-transparent text-right text-[14px] font-medium text-ds-ink outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                   <span className="pl-0.5 text-[12px] text-ds-muted">%</span>
                 </span>
@@ -149,7 +172,7 @@ export const Weights = ({
                   type="button"
                   onClick={() => setEditing(pick.assetId)}
                   aria-label={`Set ${pick.ticker} weight`}
-                  className="w-[76px] rounded-md px-2 py-1 text-right text-[14px] font-medium tabular-nums text-ds-ink transition-shadow hover:shadow-[0_0_0_1px_rgb(0_0_0/0.08)]"
+                  className="w-[76px] rounded-md px-2 py-1 text-right text-[14px] font-medium text-ds-ink transition-shadow hover:shadow-[0_0_0_1px_rgb(0_0_0/0.08)]"
                 >
                   {weightLabel(pick.weightBps)}
                 </button>
