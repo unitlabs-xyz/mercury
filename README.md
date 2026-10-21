@@ -28,20 +28,21 @@ Built on Solana for Colosseum's Crypto World's Fair. Submissions close **12 Octo
 
 ## Read the docs in this order
 
-| Doc                                                | What it covers                                                |
-| -------------------------------------------------- | ------------------------------------------------------------- |
-| [00 Overview](docs/00-overview.md)                 | What we are building and for whom, in one page                |
-| [01 Evidence](docs/01-evidence.md)                 | What we measured on-chain, and why it justifies the product   |
-| [02 Product](docs/02-product.md)                   | Every feature, in scope and out                               |
-| [03 Architecture](docs/03-architecture.md)         | Monorepo layout, stack, and why each choice                   |
-| [04 Execution engine](docs/04-execution-engine.md) | The core algorithm. Read this one properly                    |
-| [05 Data model](docs/05-data-model.md)             | Entities, and the cost-basis rules that are easy to get wrong |
-| [06 API](docs/06-api.md)                           | Endpoint contract between apps and server                     |
-| [07 Design](docs/07-design.md)                     | Screens, states, and the apps we are copying                  |
-| [08 Roadmap](docs/08-roadmap.md)                   | What ships by 12 October, and what comes after                |
-| [09 Open questions](docs/09-open-questions.md)     | What is settled, and what is still open                       |
-| [10 Baskets](docs/10-baskets.md)                   | The vault, and how a basket becomes one token                 |
-| [11 References](docs/11-references.md)             | What to read and look at before writing code                  |
+| Doc                                                | What it covers                                                  |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| [00 Overview](docs/00-overview.md)                 | What we are building and for whom, in one page                  |
+| [01 Evidence](docs/01-evidence.md)                 | What we measured on-chain, and why it justifies the product     |
+| [02 Product](docs/02-product.md)                   | Every feature, in scope and out                                 |
+| [03 Architecture](docs/03-architecture.md)         | Monorepo layout, stack, and why each choice                     |
+| [04 Execution engine](docs/04-execution-engine.md) | The core algorithm. Read this one properly                      |
+| [05 Data model](docs/05-data-model.md)             | Entities, and the cost-basis rules that are easy to get wrong   |
+| [06 API](docs/06-api.md)                           | Endpoint contract between apps and server                       |
+| [07 Design](docs/07-design.md)                     | Screens, states, and the apps we are copying                    |
+| [08 Roadmap](docs/08-roadmap.md)                   | What ships by 12 October, and what comes after                  |
+| [09 Open questions](docs/09-open-questions.md)     | What is settled, and what is still open                         |
+| [10 Baskets](docs/10-baskets.md)                   | The vault, and how a basket becomes one token                   |
+| [11 References](docs/11-references.md)             | What to read and look at before writing code                    |
+| [12 Roadmap to 2028](docs/12-roadmap-2028.md)      | Where Mercury is heading, and what it owns and rents on the way |
 
 Decisions live in [`docs/adr`](docs/adr). The backend design and its implementation plans are in
 [`docs/superpowers`](docs/superpowers).
