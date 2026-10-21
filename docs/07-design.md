@@ -20,7 +20,7 @@ with no return.
 | **Colour**   | One green carries both the brand and a gain, which is Robinhood's move and one colour fewer to manage. Red for a loss. Amber only for the market being shut |
 | **Charts**   | A single line with a soft fill, drawn once on mount. No axes, grid or crosshair                                                                             |
 
-The implementation lives in `apps/web/src/tokens.css` and `apps/web/src/ui/primitives.tsx`.
+The implementation lives in `apps/web/src/tokens.css` and `apps/web/src/ui/ds.tsx`.
 
 Reference sheets are in `docs/refs` and `docs/refs/crypto`.
 

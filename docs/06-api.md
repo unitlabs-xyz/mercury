@@ -1,127 +1,136 @@
 # 06 · API
 
-Hono on Node. Base path `/v1`. JSON in, JSON out. Zod schemas in `packages/types` are the single
-definition, imported by the server for validation and by the SDK for types.
+Hono on Node. JSON in, JSON out. Zod schemas in `packages/types` define the request and response
+shapes, and the routes live in `services/api/src/app.ts` and `services/api/src/routes`. This page
+lists what is registered and why it is shaped the way it is. For the exact fields, read the schema.
 
 ## Conventions
 
-- **Auth** is a bearer token from the wallet session. Every route except market status needs it.
+- **Auth** is a Privy access token as a bearer token, and the identity token in
+  `X-Privy-Identity-Token` when the client has one. Everything under `/v1` needs it, except market data and the basket
+  templates (see Public below).
 - **Money in requests** is a decimal string in USD, for example `"250.00"`. Never a number.
-- **Errors** are `{ error: { code, message, details? } }` with a stable `code`.
-- **Idempotency**: any POST that moves money accepts an `Idempotency-Key` header.
-- **The server never signs.** Routes that touch chain return an unsigned transaction.
+- **Errors** are `{ error: { code, message } }` with a stable `code`. A 500 also carries the
+  `requestId` that its log line has.
+- **The server never signs for the user.** Routes that touch chain return an unsigned
+  transaction for the user's wallet. On a sponsored one the relayer co-signs as fee payer, and
+  `POST /v1/transactions/send` checks the transaction before it does.
 
-## Discovery
+## Public
 
 ```
-GET  /v1/market/status
-     → { session, openState, nextOpenAt, nextCloseAt, isWeekend }
-
-GET  /v1/instruments?q=&shelf=popular|movers|sector&sector=
-     → { instruments: [{ ticker, name, sector, price, changePct24h, logoUrl }] }
-
+GET  /health
+GET  /v1/instruments?q=&shelf=&sector=&scope=
 GET  /v1/instruments/:ticker
-     → { instrument, price, changePct24h, chart, wrappers: [{ issuer, symbol, mint,
-         multiplier, isRoutable }] }
+GET  /v1/instruments/:ticker/history?span=
+GET  /v1/instruments/history?span=&tickers=     several sparklines in one call
+GET  /v1/basket-templates
+GET  /v1/basket-templates/:slug
+GET  /v1/basket-templates/:slug/insights
+POST /feedback                                   the in-app feedback button
+POST /webhooks/relay                             signed by Relay, not by a session
+GET  /f/:slug                                    old waitlist share links, sent on to the site
+```
 
-GET  /v1/instruments/:ticker/chart?range=1d|1w|1m|1y|all
+Market data is public so a visitor can browse prices before signing in.
+
+## Account
+
+```
+GET  /v1/me                                      who is calling, and which wallet is theirs
+GET  /v1/market/status
 ```
 
 ## Orders
 
 ```
-POST /v1/orders
-     { ticker, side, usdAmount }
-     → { orderId, decision }
-
-     decision is the object from packages/core verbatim: kind, best candidate,
-     premiumPct, every candidate with its price per share, impact and verdict.
-     Nothing has happened on chain yet.
-
-POST /v1/orders/:id/execute
-     → { unsignedTransaction, expiresAt }
-
-POST /v1/orders/:id/confirm
-     { signature }
-     → { order }          server verifies on chain, writes the lot, updates the position
-
-POST /v1/orders/:id/queue
-     { triggerPricePerShare }
-     → { unsignedTransaction }     a Jupiter trigger order
-
-POST /v1/orders/:id/cancel
-GET  /v1/orders?status=&limit=&cursor=
+POST /v1/quote                                   the decision and the charge, nothing recorded
+POST /v1/orders                                  → { orderId, decision }
+POST /v1/orders/:id/execute                      → the unsigned transaction
+POST /v1/orders/:id/confirm  { signature }       verifies the fill on chain, writes the lot
 GET  /v1/orders/:id
+POST /v1/transactions/send                       a signed transaction, co-signed and sent
 ```
 
-The three-step create, execute, confirm shape exists so the decision can be shown to the user
-before anything is signed, and so a signature is always tied to a decision we recorded.
+The three steps (create, execute, confirm) exist so the decision can be shown to the user before
+anything is signed, and so a signature is always tied to a decision we recorded. `decision` is
+the object from `packages/core`, kept verbatim on the order row.
+
+Trigger orders are not built. A decision that would queue one is refused instead.
 
 ## Portfolio
 
 ```
 GET  /v1/portfolio
-     → { totalValueUsd, cashUsd, changeUsd, changePct,
-         holdings: [{ instrument, shares, valueUsd, costBasisUsd, unrealisedPnlUsd,
-                      changePct24h, wrapperCount }],
-         baskets: [...] }
-
 GET  /v1/portfolio/exposure/:ticker
-     → { shares, valueUsd,
-         wrappers: [{ issuer, symbol, shares, valueUsd, sharePct, multiplier }],
-         warnings: [{ code, message }] }
-
-GET  /v1/portfolio/history?range=
+GET  /v1/portfolio/history?range=1D|1W|1M
+GET  /v1/portfolio/basket-returns
 ```
 
 ## Baskets
 
+Two kinds. `/v1/baskets` is the original curated set, priced leg by leg. `/v1/basket-templates`
+is Glider's managed portfolios.
+
 ```
 GET  /v1/baskets
-GET  /v1/baskets/:slug
-     → { basket, constituents: [{ instrument, weightBps }], performance, minimumUsd }
-
 POST /v1/baskets/:slug/preview
-     { usdAmount }
-     → { legs: [{ instrument, usdAmount, decision }], overall: "executable"|"partial"|"refused" }
 
-POST /v1/baskets/:slug/invest
-     { usdAmount, acceptQueued: boolean }
-     → { basketInvestmentId, transactions: [unsigned...] }
+GET  /v1/basket-portfolios
+GET  /v1/basket-templates/:slug/portfolio
+GET  /v1/basket-templates/:slug/activity
+GET  /v1/basket-templates/:slug/enrollment
+POST /v1/basket-templates/:slug/enrollment/prepare
+POST /v1/basket-templates/:slug/enrollment
+POST /v1/basket-templates/:slug/funding/prepare
+POST /v1/basket-templates/:slug/funding/confirm
+POST /v1/basket-templates/:slug/rebalance
+POST /v1/basket-templates/:slug/exit/:mode/prepare
+POST /v1/basket-templates/:slug/exit/:mode
+GET  /v1/basket-templates/:slug/operations/:operationId
 ```
 
-`preview` runs the full decision on every leg without executing, which is what makes the
-all-or-nothing rule in [04](04-execution-engine.md) visible to the user before they commit.
+`preview` runs the full decision on every leg without executing, which makes the all-or-nothing
+rule in [04](04-execution-engine.md) visible to the user before they commit.
 
 ## Money
 
 ```
 GET  /v1/money
-     → { balanceUsd, yieldAprPct, interestEarnedYtdUsd, depositAddress,
-         borrowingPower: { availableUsd, enabled: false } }
+POST /v1/money/send/quote
+POST /v1/money/send/prepare                      → the unsigned transfer, then /v1/transactions/send
+```
 
-POST /v1/money/send
-     { toAddress, usdAmount }
-     → { unsignedTransaction }
+### Funding from another chain
+
+Registered only when Relay is configured, so without it these answer 404 and the app hides the
+method.
+
+```
+GET  /v1/money/fund/sources
+GET  /v1/money/fund/tokens?q=&chainId=
+POST /v1/money/fund/swap
+POST /v1/money/fund/submitted
+GET  /v1/money/fund/intents
+```
+
+## Borrowing
+
+```
+GET  /v1/borrow
+GET  /v1/borrow/:ticker
+POST /v1/borrow/transactions                     deposit, borrow, both, repay or withdraw; unsigned
+POST /v1/borrow/confirm
 ```
 
 ## Activity
 
 ```
 GET  /v1/activity?limit=&cursor=
-     → { items: [{ id, kind, occurredAt, title, subtitle, amountUsd, txSignature }], nextCursor }
-
-GET  /v1/activity/export.csv
+GET  /v1/activity/:id                            the receipt
 ```
 
-## Webhooks and realtime
+## Realtime
 
-Version one polls with TanStack Query. A single server-sent events stream at
-`/v1/stream` pushes order status changes and fills once polling starts to hurt. Not needed for
-the hackathon build.
-
-## Rate limits
-
-Per wallet: 120 requests a minute, 10 order creations a minute. The quote endpoints behind
-`/instruments/:ticker` are cached for fifteen seconds while the market is open and sixty seconds
-when it is shut.
+None. The clients poll with TanStack Query, and the background jobs in `services/api/src/index.ts`
+keep what they poll current.
