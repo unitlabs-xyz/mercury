@@ -15,8 +15,7 @@ import { Link } from "react-router-dom";
 
 /**
  * Design-system pieces shared by the portfolio's right rail and anything built
- * to the same designs. Measurements are from the design SVGs; the written
- * guide is docs/design/design-system.md.
+ * to the same designs. Measurements are from the design SVGs.
  */
 
 /** The link chevron: a 3 × 6 stroke, as drawn in card.svg and borrowing.svg. */

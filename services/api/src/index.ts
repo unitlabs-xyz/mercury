@@ -221,6 +221,7 @@ const read = buildReadDeps(auth.db, deps, config, relay, fund);
  * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`                                     |
  * | `position-sync`      | 2s      | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
  * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers                                        |
+ * | `funding-poll`       | 60s     | `funding_intent`, Relay's verdict on a deposit; only when Relay is configured |
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                                          |
  * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email                                        |
  *
@@ -301,14 +302,6 @@ every("position-sync", 2_000, async () => {
   );
 });
 
-/**
- * Thirty seconds, because this answers "what happened" and `position-sync`
- * already answers "what do I hold" every two. The balance a user checks is the
- * fresh one; only the row in the feed waits.
- *
- * Two streams per wallet — its own address for native SOL, its USDC account for
- * cash — so a quiet pass is four calls a minute per wallet and says nothing.
- */
 /*
  * Relay's own verdict, pulled rather than pushed.
  *
@@ -327,6 +320,14 @@ if (fund !== undefined) {
   });
 }
 
+/**
+ * Thirty seconds, because this answers "what happened" and `position-sync`
+ * already answers "what do I hold" every two. The balance a user checks is the
+ * fresh one; only the row in the feed waits.
+ *
+ * Two streams per wallet — its own address for native SOL, its USDC account for
+ * cash — so a quiet pass is four calls a minute per wallet and says nothing.
+ */
 every("wallet-events", 30_000, async () => {
   const s = await syncAllWalletEvents(auth.db, {
     history: deps.history,
