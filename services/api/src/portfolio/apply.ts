@@ -14,10 +14,13 @@ export interface ReconcileDeps {
 }
 
 /**
- * How long an executing sell holds its stock still. Long enough for a person
- * to sign and the network to land it. Past it, an order nobody confirmed is
- * taken as abandoned, and a drop in the chain is read as a transfer; a confirm
- * that does arrive later takes that transfer back (`settleOrder`).
+ * How long an executing sell can hold its stock still. Long enough for a
+ * person to sign and the network to land it. Within it, the stock sits a pass
+ * out only while a wrapper of it reads below the records, since that drop may
+ * be the sell; with no drop, nothing is held (`planReconciliation`). Past it,
+ * an order nobody confirmed is taken as abandoned, and a drop in the chain is
+ * read as a transfer; a confirm that does arrive later takes that transfer
+ * back (`settleOrder`).
  */
 const EXECUTING_WINDOW_MS = 10 * 60_000;
 

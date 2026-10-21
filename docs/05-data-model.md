@@ -96,13 +96,37 @@ id, user_id, token_id, instrument_id,
 token_qty bigint,              -- smallest unit, as acquired
 shares numeric(38,18),         -- token_qty × multiplier AT ACQUISITION
 unit_cost_usd numeric(38,18),  -- cost per share, not per token
-acquired_at, source ('buy'|'transfer_in'|'dividend'|'basket'),
+acquired_at,                   -- when it was bought
+recorded_at,                   -- when it entered Mercury
+source ('buy'|'transfer_in'|'dividend'|'basket'),
 is_estimated boolean,          -- true when we inferred the cost
 order_id nullable
 ```
 
 `shares` is frozen at acquisition. If the multiplier later rises, a **new lot** is written with
 `source = 'dividend'` and `unit_cost_usd = 0`.
+
+`acquired_at` and `recorded_at` are the same moment for a buy. They differ for an imported lot:
+bought in March, recorded today. A position replays in `recorded_at` order, so last month's sell is
+never applied to shares that were not here yet.
+
+### `disposal`
+
+The other half of `lot`. One row per time tokens left.
+
+```
+id, user_id, token_id, instrument_id,
+token_qty bigint,              -- smallest unit, as it left
+shares numeric(38,18),         -- token_qty × multiplier when it left, for reading
+kind ('sell'|'transfer_out'),
+order_id nullable unique,      -- the sell that wrote it, so a sell settled twice counts once
+occurred_at, recorded_at
+```
+
+A sell writes one when it settles. Position-sync writes a `transfer_out` when the chain holds fewer
+tokens than the records say. A transfer out is provisional for its first two minutes: if the
+chain reads above the records in that time, the row is deleted, because the drop was a lagging
+read and not a send.
 
 ### `position`
 
@@ -171,10 +195,14 @@ Writes one lot. Position shares and cost basis both increase.
 Proportional reduction. Average unit cost does not change.
 
 ```
-realised_pnl = proceeds_usd − (shares_sold × avg_unit_cost)
-cost_basis  −= shares_sold × avg_unit_cost
-shares      −= shares_sold
+fraction_left = tokens_left / tokens_held
+realised_pnl  = proceeds_usd − cost_basis × (1 − fraction_left)
+cost_basis   ×= fraction_left
+shares       ×= fraction_left
 ```
+
+The fraction is taken in tokens, not shares. Tokens are exact. A token's shares move with the
+multiplier, and a dividend not yet written would make the two disagree. Writes one disposal.
 
 We do not offer lot selection in version one. If tax reporting ever matters this becomes a real
 decision, which is one reason the tax centre is out of scope.
@@ -200,21 +228,25 @@ We cannot know what it cost. Mark the lot at the reference price on the block it
 `is_estimated = true`, and let the user correct it. Surface estimated lots in the UI so profit
 and loss is not quietly wrong.
 
+### A transfer out
+
+The same reduction as a sell, with no proceeds. The cost of the shares that left goes with them.
+Leaving it behind would mix it into the next purchase and overstate that one's cost.
+
 ## Exposure
 
 ```sql
 -- true exposure to one instrument
-select sum(shares)         as shares,
-       sum(shares * price) as value
-from lot where user_id = $1 and instrument_id = $2;
+select shares,
+       shares * $3 as value        -- $3: the instrument's price now
+from position where user_id = $1 and instrument_id = $2;
 ```
+
+Never `sum(shares)` over `lot`. It counts every share ever acquired, the ones since sold or sent
+included.
 
 Never `sum(token_qty)` across tokens. Different wrappers, different multipliers, different
 things.
-
-This query predates disposals. It sums every lot ever recorded, the shares since sold included, so
-it overstates exposure after a sell. Read the `position` row instead, which is the replay of lots
-and disposals.
 
 ## What is not stored
 
