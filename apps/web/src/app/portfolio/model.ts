@@ -141,11 +141,8 @@ export const useModel = (
       const shares = Number(h.shares);
       const sharesWithBasis = Number(h.sharesWithBasis ?? 0);
       const returnUsd = Number(h.unrealisedPnlUsd);
-      // A server that has not been told about the split sends neither figure,
-      // and then the whole return is read as market move with nothing charged
-      // for trading — which is what it used to claim anyway.
-      const tradingCostUsd = Number(h.tradingCostUsd ?? 0);
-      const marketReturnUsd = h.marketPnlUsd === undefined ? returnUsd : Number(h.marketPnlUsd);
+      const tradingCostUsd = Number(h.tradingCostUsd);
+      const marketReturnUsd = Number(h.marketPnlUsd);
       const inst = universe?.find((i) => i.ticker === h.ticker);
       const ltv = ltvOf(h.ticker);
       // The loan read is xStocks only, so it already leaves out any Ondo tokens of the

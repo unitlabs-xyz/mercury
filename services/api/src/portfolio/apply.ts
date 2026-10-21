@@ -5,7 +5,7 @@ import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
 import { activities, disposals, instruments, lots, orders, positions, tokens } from "../db/schema.js";
 import { movementsByToken } from "./open.js";
-import { planReconciliation, type HeldToken, type Reconciliation } from "./reconcile.js";
+import type { HeldToken, Reconciliation } from "./reconcile.js";
 
 export interface ReconcileDeps {
   readonly chain: ChainReader;
@@ -265,22 +265,4 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
         });
     }
   });
-}
-
-/**
- * Read, plan, write. This was how the portfolio followed the chain while the
- * read did the writing; the `position-sync` job took it over, and the read
- * stopped writing, exactly as planned.
- *
- * Nothing calls it now.
- */
-export async function reconcile(
-  db: Db,
-  deps: ReconcileDeps,
-  userId: string,
-  walletAddress: string,
-): Promise<void> {
-  const held = await loadHeldTokens(db, deps, userId, walletAddress);
-  if (held.length === 0) return;
-  await applyReconciliation(db, userId, planReconciliation(held, new Date()));
 }

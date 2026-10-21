@@ -167,7 +167,7 @@ export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<Orde
       shares: string;
       pricePerShare: string;
       usd: string;
-      realisedPnlUsd?: string | null;
+      realisedPnlUsd: string | null;
     }>(`/v1/orders/${created.orderId}/confirm`, { signature: sent.signature });
 
   let filled: Awaited<ReturnType<typeof confirm>> | null = null;
@@ -184,5 +184,5 @@ export async function placeOrder(io: OrderIo, intent: OrderIntent): Promise<Orde
 
   io.onRecorded?.({ orderId: created.orderId, signature: sent.signature });
   io.onStep("done");
-  return { orderId: created.orderId, ...filled, realisedPnlUsd: filled.realisedPnlUsd ?? null };
+  return { orderId: created.orderId, ...filled };
 }

@@ -14,6 +14,8 @@ it("shows basket value in a stock position without assigning it wallet shares or
     valueUsd: "100",
     costBasisUsd: "80",
     unrealisedPnlUsd: "20",
+    marketPnlUsd: "20",
+    tradingCostUsd: "0",
     changePct24h: "2",
     wrapperCount: 1,
   };
