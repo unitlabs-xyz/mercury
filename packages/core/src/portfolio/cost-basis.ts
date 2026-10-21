@@ -1,4 +1,4 @@
-import { D, ZERO, type Decimal } from "../money.js";
+import { ZERO, type Decimal } from "../money.js";
 
 export type LotSource = "buy" | "transfer_in" | "dividend" | "basket";
 
@@ -79,14 +79,6 @@ export const positionFromLots = (lots: readonly Lot[]): Position =>
 
 export const unrealisedPnl = (p: Position, pricePerShare: Decimal): Decimal =>
   p.shares.mul(pricePerShare).sub(p.costBasisUsd);
-
-export const dividendLot = (sharesGained: Decimal, at: Date): Lot => ({
-  shares: sharesGained,
-  unitCostUsd: D(0),
-  acquiredAt: at,
-  source: "dividend",
-  isEstimated: false,
-});
 
 /**
  * A position, reduced to what splitting its return needs.

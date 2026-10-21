@@ -46,8 +46,6 @@ export interface BasketBasis {
   readonly isComplete: boolean;
 }
 
-export const EMPTY_BASIS: BasketBasis = { investedUsd: ZERO, isComplete: true };
-
 /**
  * Net invested per basket.
  *
