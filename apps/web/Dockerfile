@@ -26,6 +26,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/market/package.json packages/market/
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/types/package.json packages/types/
+COPY packages/view/package.json packages/view/
 COPY tooling/tsconfig/package.json tooling/tsconfig/
 COPY apps/web/package.json apps/web/
 
@@ -39,6 +40,7 @@ COPY apps/web/ apps/web/
 ARG VITE_API_URL
 ARG VITE_PRIVY_APP_ID
 ARG VITE_SOLANA_RPC_URL
+ARG VITE_REOWN_PROJECT_ID
 
 # Fail here rather than ship a broken bundle. Both variables have quiet
 # failure modes: VITE_API_URL falls back to http://localhost:8787, so every
@@ -58,9 +60,15 @@ RUN test -n "$VITE_PRIVY_APP_ID" \
 RUN test -n "$VITE_SOLANA_RPC_URL" \
   || echo "WARNING: VITE_SOLANA_RPC_URL is not set as a BUILD argument (Coolify: tick 'Build Variable'). Falling back to the shared public endpoint, which is rate limited."
 
+# Optional, and only a warning: without it the deposit methods that need a
+# wallet somebody already holds are hidden, and nothing else changes.
+RUN test -n "$VITE_REOWN_PROJECT_ID" \
+  || echo "WARNING: VITE_REOWN_PROJECT_ID is not set as a BUILD argument (Coolify: tick 'Build Variable'). Funding from a connected wallet will be hidden."
+
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_PRIVY_APP_ID=$VITE_PRIVY_APP_ID
 ENV VITE_SOLANA_RPC_URL=$VITE_SOLANA_RPC_URL
+ENV VITE_REOWN_PROJECT_ID=$VITE_REOWN_PROJECT_ID
 
 RUN pnpm --filter @mercury/web build
 
