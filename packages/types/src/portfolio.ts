@@ -9,13 +9,10 @@ export const Holding = z.object({
   costBasisUsd: Usd,
   /** The dollars the position is up or down: `marketPnlUsd` less `tradingCostUsd`. */
   unrealisedPnlUsd: Usd,
-  /**
-   * Of that, what the stock did — today's quote against the quote it was
-   * bought against. Optional for a client reading an older server.
-   */
-  marketPnlUsd: Usd.optional(),
+  /** Of that, what the stock did — today's quote against the quote it was bought against. */
+  marketPnlUsd: Usd,
   /** And what it cost to get in: premium and spread paid, plus fees. Positive is a cost. */
-  tradingCostUsd: Usd.optional(),
+  tradingCostUsd: Usd,
   /** Shares covered by recorded purchase lots; other shares have unknown basis. */
   sharesWithBasis: Usd.optional(),
   changePct24h: Ratio,
@@ -88,9 +85,9 @@ export const HistoryPoint = z.object({
   /**
    * Deposits less withdrawals since the first point. `valueUsd - netFlowUsd` is
    * what the account would be worth had no money come or gone: its change is
-   * performance. Optional so an older server still parses.
+   * performance.
    */
-  netFlowUsd: Usd.optional(),
+  netFlowUsd: Usd,
 });
 
 /**

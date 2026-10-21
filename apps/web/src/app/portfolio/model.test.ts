@@ -24,6 +24,8 @@ it("keeps basket value in net worth without folding its assets into direct stock
         valueUsd: "10",
         costBasisUsd: "8",
         unrealisedPnlUsd: "2",
+        marketPnlUsd: "2",
+        tradingCostUsd: "0",
         sharesWithBasis: "0.05",
         changePct24h: "1",
         wrapperCount: 1,
@@ -154,21 +156,6 @@ it("measures the move against what the shares were quoted at, not against what w
   // of the price paid would fold the premium back into the figure it came out of.
   expect(m.marketReturnPct).toBeCloseTo((104 / 295.54) * 100, 6);
   expect(m.rows[0]!.marketReturnPct).toBeCloseTo((104 / 295.54) * 100, 6);
-});
-
-it("reads a whole return as market move when the server does not send the split", () => {
-  // An older server, or a client deployed ahead of one. Nothing is charged for
-  // trading, which is exactly what the single figure used to claim.
-  const older = stacked();
-  const holdings = older.holdings.map((h) => {
-    const rest: Record<string, unknown> = { ...h };
-    delete rest["marketPnlUsd"];
-    delete rest["tradingCostUsd"];
-    return rest as Portfolio["holdings"][number];
-  });
-  const m = modelOf({ ...older, holdings });
-  expect(m.marketReturnUsd).toBeCloseTo(99.54, 6);
-  expect(m.tradingCostUsd).toBe(0);
 });
 
 it("reports no market move on a stock sitting exactly where it was bought", () => {

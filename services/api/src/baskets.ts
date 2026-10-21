@@ -35,8 +35,3 @@ export const BASKETS: readonly BasketDef[] = [
     ],
   },
 ];
-
-export const CANDIDATE_BASKETS = {
-  "big-tech": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA"],
-  "ai-and-semis": ["NVDA", "AVGO", "AMD", "TSM", "ASML", "MU"],
-} as const;

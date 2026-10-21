@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chargeFromWire, feeLines, rateLabel } from "./fee-lines";
 
-/**
- * The quote's charge, as the ticket reads it.
- *
- * `usdc` is the whole charge and always was; the parts are newer. A server
- * that predates them sent the network cost alone, so that is what a missing
- * breakdown has to mean — never a Mercury fee nobody was charged.
- */
+/** The quote's charge, as the ticket reads it. `usdc` is the whole charge. */
 describe("chargeFromWire", () => {
   it("reads the parts the server breaks the charge into", () => {
     expect(chargeFromWire({ usdc: "2.51", network: "0.01", mercury: "2.5", mercuryBps: 50 })).toEqual({
@@ -15,15 +9,6 @@ describe("chargeFromWire", () => {
       network: 0.01,
       mercury: 2.5,
       mercuryBps: 50,
-    });
-  });
-
-  it("reads a charge with no breakdown as the network cost alone", () => {
-    expect(chargeFromWire({ usdc: "0.25" })).toEqual({
-      total: 0.25,
-      network: 0.25,
-      mercury: 0,
-      mercuryBps: 0,
     });
   });
 });

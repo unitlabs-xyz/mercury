@@ -36,10 +36,10 @@ export const LABEL: Record<Range, (at: Date) => string> = {
  * always true, so fall back to them and stop claiming otherwise.
  */
 export const drawnSeries = (
-  points: readonly { valueUsd: string; netFlowUsd?: string | undefined }[],
+  points: readonly { valueUsd: string; netFlowUsd: string }[],
 ): { values: readonly number[]; excludesTransfers: boolean } => {
   const raw = points.map((p) => Number(p.valueUsd));
-  const net = points.map((p) => Number(p.netFlowUsd ?? 0));
+  const net = points.map((p) => Number(p.netFlowUsd));
   const excludesTransfers = raw.every((value, i) => value - net[i]! > 0 || value <= 0);
   return {
     values: excludesTransfers ? raw.map((value, i) => value - net[i]!) : raw,

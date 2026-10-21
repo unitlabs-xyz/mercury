@@ -129,9 +129,6 @@ export const useValued = (baskets: readonly Basket[] | undefined, span: Span) =>
   };
 };
 
-/** "0.5%", "0.25%", "None". */
-export const feeLabel = (bps: number | undefined) => (!bps ? "None" : `${Number((bps / 100).toFixed(2))}%`);
-
 /** "7xQm…Rk9": an address short enough for a fact. */
 export const shortAddress = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 
