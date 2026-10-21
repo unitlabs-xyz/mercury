@@ -41,14 +41,3 @@ export const jobMetrics = (): JobMetrics => {
   };
   return cached;
 };
-
-/**
- * Drop the cached instruments.
- *
- * For tests, which would otherwise share one set — built against whichever
- * meter happened to be registered when the first test file ran — across every
- * file in the suite.
- */
-export const resetJobMetrics = (): void => {
-  cached = null;
-};

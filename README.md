@@ -60,7 +60,8 @@ packages/
   chain/      Solana adapters. Jupiter, Kamino, RPC, token registry.
   market/     Reference prices, market hours, multipliers.
   types/      Shared types and Zod schemas.
-  sdk/        Typed API client used by web and mobile.
+  view/       What web and mobile both compute: formatting, the feed, orders, borrowing.
+  sdk/        Typed API client. Neither app imports it.
 tooling/      Shared tsconfig. Eslint and prettier are configured at the root.
 docs/brand/   The wordmark and the mark.
 ```
@@ -98,7 +99,7 @@ docker run -d --name mercury-pg \
   -e POSTGRES_USER=mercury -e POSTGRES_PASSWORD=mercury -e POSTGRES_DB=mercury \
   -p 5432:5432 -v mercury-pg-data:/var/lib/postgresql/data postgres:16-alpine
 
-cp services/api/.env.example services/api/.env   # then fill PRIVY_APP_ID
+cp services/api/.env.example services/api/.env   # then fill DATABASE_URL, SOLANA_RPC_URL, PRIVY_APP_ID
 pnpm --filter @mercury/api exec drizzle-kit migrate
 pnpm --filter @mercury/api dev                   # http://localhost:8787
 pnpm --filter @mercury/web dev                   # http://localhost:5173
@@ -150,8 +151,12 @@ variables. The server refuses to start without all three. Do not mount a `.env`
 file — the image deliberately has none, and `.dockerignore` keeps the local one
 out of the build context.
 
-Migrations do not run on deploy. Apply them yourself against the deployed
-database before the first boot:
+Migrations run when the API boots (`applyMigrations`, in
+`services/api/src/db/migrate.ts`), before it answers anything, so a new image
+brings the schema it needs. Two containers booting together take a Postgres
+advisory lock and do not race, and a failed migration ends the process, which on
+a rolling deploy leaves the previous container taking traffic. To apply them by
+hand instead, against a database you are about to point the app at:
 
 ```bash
 DATABASE_URL=<the deployed one> pnpm --filter @mercury/api exec drizzle-kit migrate
@@ -199,17 +204,18 @@ Changing either one needs a rebuild, not a restart.
 
 ## State of the build
 
-| Package           | State                                                                                                                                                                                                                                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/core`   | **Done and tested.** 40 tests. Execution engine, cost basis, exposure, basket allocation                                                                                                                                                                                                                                   |
-| `packages/types`  | Done. Zod wire schemas                                                                                                                                                                                                                                                                                                     |
-| `packages/chain`  | Registry, Solana reads, and Jupiter's keyless endpoints — which both price an order and build the transaction that fills it. Baskets run on Glider from `services/api/src/baskets`                                                                                                                                         |
-| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic                                                                                                                                                                                           |
-| `packages/sdk`    | Done. Typed client, every response parsed                                                                                                                                                                                                                                                                                  |
-| `services/api`    | **Identity, read models and execution done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity answer from Postgres and chain; an order prices, builds, settles and writes its own lot. Four clocked jobs run in-process. Trigger orders are the one piece still missing |
-| `apps/web`        | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet, and the buy sheet places a real order                                                                                                                                                                                       |
-| `apps/landing`    | **Scaffolded on Astro.** Eight sections of the designed page, placeholder artwork, SEO and sitemap wired                                                                                                                                                                                                                   |
-| `apps/mobile`     | Not started, on purpose                                                                                                                                                                                                                                                                                                    |
+| Package           | State                                                                                                                                                                                                                                                                                                                                               |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core`   | **Done and tested.** Execution engine, cost basis, exposure, basket allocation                                                                                                                                                                                                                                                                      |
+| `packages/types`  | Done. Zod wire schemas                                                                                                                                                                                                                                                                                                                              |
+| `packages/chain`  | Registry, Solana reads, and Jupiter's keyless endpoints — which both price an order and build the transaction that fills it. Baskets run on Glider from `services/api/src/baskets`                                                                                                                                                                  |
+| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic                                                                                                                                                                                                                    |
+| `packages/sdk`    | Typed client, every response parsed. Neither app imports it                                                                                                                                                                                                                                                                                         |
+| `packages/view`   | **Done.** What web and mobile both compute: formatting, the activity feed, the order and borrow models, receipts. No DOM, by compiler                                                                                                                                                                                                               |
+| `services/api`    | **Identity, read models and execution done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity answer from Postgres and chain; an order prices, builds, settles and writes its own lot. The clocked jobs run in-process, listed in `src/index.ts`. Trigger orders are the one piece still missing |
+| `apps/web`        | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet, and the buy sheet places a real order                                                                                                                                                                                                                |
+| `apps/landing`    | **Scaffolded on Astro.** Eight sections of the designed page, placeholder artwork, SEO and sitemap wired                                                                                                                                                                                                                                            |
+| `apps/mobile`     | **In progress.** Sign-in, the four tabs, stock pages, buying and selling, send, borrow, baskets and adding cash, on the same API and `packages/view`. Needs a custom dev client for Privy                                                                                                                                                           |
 
 ## Ground rules
 

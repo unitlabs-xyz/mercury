@@ -65,8 +65,15 @@ describe("alertFor", () => {
 
   it("tells somebody being liquidated that it is happening now", () => {
     const alert = alertFor("margin_call", at("liquidation"));
-    expect(alert?.title).toBe("Kamino is selling your collateral");
+    expect(alert?.title).toBe("Liquidation in progress");
     expect(alert?.body).toContain("happening now");
+  });
+
+  /* The feed's line is a label, like every row's; the mail beside it is the one written to somebody. */
+  it("titles each warning in the feed as a label, not a sentence to somebody", () => {
+    expect(alertFor(null, at("over_limit"))?.title).toBe("Loan over limit");
+    expect(alertFor(null, at("margin_call"))?.title).toBe("Liquidation risk");
+    expect(alertFor(null, at("liquidation"))?.title).toBe("Liquidation in progress");
   });
 
   it("copes with no cushion figure rather than printing an empty sentence", () => {

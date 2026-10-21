@@ -241,7 +241,7 @@ export const Position = ({
   // What the stock did, and what being in it cost, rather than one figure that
   // reported a loss on a stock sitting exactly where it was bought.
   const tradingCost = Number(h?.tradingCostUsd ?? 0);
-  const move = h?.marketPnlUsd === undefined ? ret : Number(h.marketPnlUsd);
+  const move = Number(h?.marketPnlUsd ?? 0);
   const movePct = cost - tradingCost > 0 ? (move / (cost - tradingCost)) * 100 : 0;
   const pledged = Number(h?.pledgedShares ?? 0);
   const today = h ? Number(h.changePct24h) : stockTodayPct;

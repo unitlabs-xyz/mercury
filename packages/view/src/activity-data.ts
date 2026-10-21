@@ -62,7 +62,7 @@ export const KIND_LABEL: Record<EventKind, string> = {
   queued: "Queued",
   borrow: "Borrowed",
   repay: "Repaid",
-  pledge: "Pledged",
-  unpledge: "Withdrew",
+  pledge: "Added collateral",
+  unpledge: "Withdrew collateral",
   loan_alert: "Alert",
 };

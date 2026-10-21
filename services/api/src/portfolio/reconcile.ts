@@ -14,20 +14,41 @@ export interface HeldToken {
   readonly referencePricePerShare: Decimal | null;
   /** What the chain says, in the mint's smallest unit. */
   readonly chainRawAmount: bigint;
-  /** The sum of our lots' token quantities. */
+  /** Tokens our records still hold: every lot, less every disposal, replayed (`replayPosition`). */
   readonly recordedRawAmount: bigint;
-  /** The sum of our lots' share counts. */
+  /** The shares those open records come to. */
   readonly recordedShares: Decimal;
-  /** The sum of our lots' shares x unit cost. Fees are not in it. */
+  /** What those open shares cost, shares x unit cost. Fees are not in it. */
   readonly recordedCostUsd: Decimal;
   /**
-   * The sum of our lots' shares x the price the stock was quoted at when each
-   * was acquired. A lot with no reference recorded contributes its execution
-   * price instead, which reads as no premium paid rather than as a guess.
+   * The same open shares at the price the stock was quoted at when each was
+   * acquired. A lot with no reference recorded contributes its execution price
+   * instead, which reads as no premium paid rather than as a guess.
    */
   readonly recordedReferenceUsd: Decimal;
-  /** The sum of our lots' fees. */
+  /** Fees paid to acquire the open shares. */
   readonly recordedFeeUsd: Decimal;
+  /**
+   * A sell of this stock is executing, created within the last ten minutes.
+   *
+   * The balance the pass reads can trail the transaction a sell is settled
+   * from, whether the node behind it is slow or a confirm raced the pass, so
+   * a sell that is fine can look like a drop in the chain. In a pass where
+   * any wrapper of the stock reads below the records, the pass leaves the
+   * stock as it was, rather than reading the gap as a transfer out and
+   * removing the same shares twice. With no drop there is nothing to misread,
+   * and the pass goes on, so a buy of the stock shows while a sell sits
+   * unconfirmed. For a few seconds after a sell settles the finalized balance
+   * lags above the records, which reads as shares not yet gone. Held or not,
+   * the pass still takes back a young transfer out the chain has outgrown.
+   */
+  readonly settling: boolean;
+  /**
+   * The ids of this token's `transfer_out` disposals recorded within the last
+   * couple of minutes. Young enough that the low reading behind them may yet
+   * come back (see `planReconciliation`). Older ones are not listed, and stand.
+   */
+  readonly provisional: readonly string[];
 }
 
 export interface LotWrite {
@@ -39,6 +60,17 @@ export interface LotWrite {
   readonly source: LotSource;
   readonly isEstimated: boolean;
   readonly acquiredAt: Date;
+}
+
+/** Tokens that left by a path other than a sell, which writes its own. */
+export interface DisposalWrite {
+  readonly tokenId: string;
+  readonly instrumentId: string;
+  readonly tokenQty: bigint;
+  /** At the multiplier in force now. For reading; the replay counts tokens. */
+  readonly shares: Decimal;
+  readonly kind: "transfer_out";
+  readonly occurredAt: Date;
 }
 
 export interface ActivityWrite {
@@ -68,6 +100,9 @@ export interface PositionWrite {
 export interface Reconciliation {
   readonly lots: readonly LotWrite[];
   readonly activity: readonly ActivityWrite[];
+  readonly disposals: readonly DisposalWrite[];
+  /** Ids of recent transfer outs to take back: the low reading behind each has come back. */
+  readonly retracted: readonly string[];
   readonly positions: readonly PositionWrite[];
 }
 
@@ -112,31 +147,121 @@ const plural = (shares: Decimal): string => {
 export function planReconciliation(held: readonly HeldToken[], now: Date): Reconciliation {
   const lots: LotWrite[] = [];
   const activity: ActivityWrite[] = [];
+  const disposals: DisposalWrite[] = [];
   const byInstrument = new Map<
     string,
     { shares: Decimal; withBasis: Decimal; cost: Decimal; reference: Decimal; fee: Decimal }
   >();
 
+  // A stock with a sell in flight sits this pass out when any wrapper of it
+  // reads below the records: that gap may be the sell, seen on the chain before
+  // it settles. See `HeldToken.settling`. Every wrapper sits out, and its
+  // position row stays as it was: stale for as long as the drop lasts, never
+  // more than the ten minutes a sell is awaited, and right. With no drop,
+  // nothing is held.
+  const sellInFlight = new Set(held.filter((t) => t.settling).map((t) => t.instrumentId));
+  const settling = new Set(
+    held
+      .filter((t) => sellInFlight.has(t.instrumentId) && t.chainRawAmount < t.recordedRawAmount)
+      .map((t) => t.instrumentId),
+  );
+
+  /*
+   * A transfer out is provisional while it is young. The low reading behind it
+   * can be a lag rather than a send: the pledged side of the balance is read at
+   * confirmed and the wallet at finalized, so a Kamino withdrawal shows the
+   * pledge gone before the wallet has the tokens, and a buy's lot can be
+   * written before a lagging node shows its tokens. The open records already
+   * count the transfer out, so a chain that now reads above them means the low
+   * reading has come back, and the transfer is taken back. Left standing, the
+   * tokens returning would count as arrivals we did not witness, and the cost
+   * they carried would be gone for good.
+   *
+   * The stock's position waits for the next pass, which finds the records and
+   * the chain in agreement. Working it out now would price it against records
+   * that are about to change. Once a transfer out is old enough to leave
+   * `provisional` it stands, and a chain above the records is an arrival.
+   *
+   * This runs for every stock, one with a sell in flight included. A sell can
+   * sit executing for ten minutes, longer than a transfer out is provisional,
+   * and a transfer out written in the lag just before it began would mature
+   * behind it, leaving the returned tokens with no cost. For a stock held
+   * because of a drop, only the retraction happens: no position, no new
+   * disposal, no dividend. If it takes back a transfer out that was genuine,
+   * the first pass after the hold finds the gap again and records it.
+   */
+  const retracted: string[] = [];
+  const retracting = new Set<string>();
   for (const token of held) {
+    if (token.provisional.length > 0 && token.chainRawAmount > token.recordedRawAmount) {
+      retracted.push(...token.provisional);
+      retracting.add(token.instrumentId);
+    }
+  }
+
+  for (const token of held) {
+    if (settling.has(token.instrumentId) || retracting.has(token.instrumentId)) continue;
+
     // What the chain says you hold. This is a fact and it is never inferred.
     const chainShares = scaled(token.chainRawAmount, token.decimals).mul(token.multiplier);
 
+    let recordedRaw = token.recordedRawAmount;
     let recordedShares = token.recordedShares;
-    const cost = token.recordedCostUsd;
-    const reference = token.recordedReferenceUsd;
-    const fee = token.recordedFeeUsd;
+    let cost = token.recordedCostUsd;
+    let reference = token.recordedReferenceUsd;
+    let fee = token.recordedFeeUsd;
+
+    /*
+     * Tokens that left by a path other than a sell: a send from another app,
+     * or anything we do not watch. A sell writes its own disposal when it
+     * settles, so a gap here is everything else. It is recorded, so the cost
+     * leaves with the shares rather than staying behind to be mixed into the
+     * next purchase, which is what made a sell followed by a buy report the
+     * wrong cost.
+     *
+     * Scaled by tokens rather than shares, as the replay is: tokens are exact,
+     * and a dividend not yet written would make shares disagree.
+     */
+    const leaving = token.chainRawAmount < recordedRaw;
+    if (leaving) {
+      const goneRaw = recordedRaw - token.chainRawAmount;
+      disposals.push({
+        tokenId: token.tokenId,
+        instrumentId: token.instrumentId,
+        tokenQty: goneRaw,
+        shares: scaled(goneRaw, token.decimals).mul(token.multiplier),
+        kind: "transfer_out",
+        occurredAt: now,
+      });
+      const kept = D(token.chainRawAmount.toString()).div(D(recordedRaw.toString()));
+      recordedRaw = token.chainRawAmount;
+      recordedShares = recordedShares.mul(kept);
+      cost = cost.mul(kept);
+      reference = reference.mul(kept);
+      fee = fee.mul(kept);
+    }
 
     // A dividend: the multiplier rose, so the tokens we have lots for are worth
     // more shares than those lots record. Zero cost, so the average cost per
     // share falls — the same money now buys more shares, which is the figure
     // other integrations get wrong.
     //
-    // Driven by the multiplier on the lots we hold, never by a gap between the
-    // chain and our records. A gap means tokens arrived from somewhere we did
-    // not witness, and calling that a dividend would hand the holder free
-    // shares in the accounts.
-    const recordedQty = scaled(token.recordedRawAmount, token.decimals);
-    if (recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
+    // Driven by the multiplier on the open records, after any transfer out, so
+    // a dividend is never credited on tokens that have already left. Never
+    // driven by a gap between the chain and our records: a gap upward means
+    // tokens arrived from somewhere we did not witness, and calling that a
+    // dividend would hand the holder free shares in the accounts.
+    //
+    // It waits while a transfer out of the token is young or is being written
+    // now. Which tokens are held is not settled until that transfer out stands
+    // or is taken back, and a dividend credited on the tokens left, followed by
+    // another on the tokens that return, would be one dividend paid as two
+    // rows in the feed. The shares it would add are in the chain's count
+    // already, so the holding is right in the meantime, and the shares with a
+    // cost catch up when the dividend is written.
+    const recordedQty = scaled(recordedRaw, token.decimals);
+    const standing = !leaving && token.provisional.length === 0;
+    if (standing && recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
       const recordedMultiplier = recordedShares.div(recordedQty);
       const gained = recordedQty.mul(token.multiplier.sub(recordedMultiplier));
       if (gained.gte(DIVIDEND_FLOOR)) {
@@ -152,8 +277,10 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
         });
         activity.push({
           kind: "dividend",
-          title: `${token.ticker} paid a dividend`,
-          subtitle: `${plural(gained)} added, at no cost`,
+          // Labelled like every row, and said as what it was paid in: the
+          // multiplier rose, so the dividend arrived as shares, at no cost.
+          title: `${token.ticker} dividend`,
+          subtitle: `Paid as ${plural(gained)}`,
           amountUsd: token.referencePricePerShare === null ? null : gained.mul(token.referencePricePerShare),
           refTable: "token",
           refId: token.tokenId,
@@ -166,17 +293,23 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     // Two separate truths, kept separate.
     //
     // `shares` is the chain's answer to what you hold. `withBasis` is how much
-    // of it we can prove a cost for, which is whatever our lots cover — a
-    // deposit we did not witness has no lot, so it counts toward the holding
+    // of it we can prove a cost for, which is whatever our open records cover —
+    // a deposit we did not witness has no lot, so it counts toward the holding
     // and not toward the basis. Nothing here invents a price: a share with no
     // lot behind it is reported as one we have no cost for, and the screens say
     // so rather than showing a profit measured against a guess.
     //
-    // Lots can also exceed the chain, when tokens left the wallet by a path we
-    // do not track yet. The basis is then capped and its cost scaled with it,
-    // which leaves the average untouched — that is average-cost accounting.
+    // The shares are capped in shares, and the cost in tokens. A token's cost
+    // does not move with the multiplier, so the cost is capped only by the
+    // tokens the chain has to match it. Capped by shares, a dividend credited
+    // twice — an instance still running the old code during a deploy writes
+    // one the migration had just cut back — would take its excess out of the
+    // cost for good. After a transfer out the records equal the chain in
+    // tokens, and an arrival leaves them below it, so this ratio is one
+    // whenever there is anything to price.
     const withBasis = Decimal.min(recordedShares, chainShares);
-    const ratio = recordedShares.isZero() ? ZERO : withBasis.div(recordedShares);
+    const keptRaw = recordedRaw < token.chainRawAmount ? recordedRaw : token.chainRawAmount;
+    const ratio = recordedRaw === 0n ? ZERO : D(keptRaw.toString()).div(D(recordedRaw.toString()));
 
     const running = byInstrument.get(token.instrumentId) ?? {
       shares: ZERO,
@@ -190,7 +323,7 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
       withBasis: running.withBasis.add(withBasis),
       cost: running.cost.add(cost.mul(ratio)),
       // Scaled by the same ratio as the cost, and they have to be: a capped
-      // basis whose reference was not capped with it would report the shares
+      // cost whose reference was not capped with it would report the tokens
       // that left as a market move, and the two lines would stop summing to
       // the dollars.
       reference: running.reference.add(reference.mul(ratio)),
@@ -208,5 +341,5 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     avgUnitCostUsd: r.withBasis.isZero() ? ZERO : r.cost.div(r.withBasis),
   }));
 
-  return { lots, activity, positions };
+  return { lots, activity, disposals, retracted, positions };
 }

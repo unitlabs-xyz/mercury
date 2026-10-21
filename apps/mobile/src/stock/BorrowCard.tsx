@@ -57,7 +57,7 @@ export const BorrowCard = ({ ticker, name }: { ticker: string; name: string }) =
       <View style={s.panel}>
         <Fact k="Lends up to" v={`${pct(target * 100, 1)}`} sub={`Kamino's max ${pct(row.ltv * 100, 0)}`} />
         <Fact k="Safe unless it falls" v={pct(row.cushionAtTarget * 100, 0)} />
-        {holds && row.depositedTokens > 0 && <Fact k="Pledged" v={usd(row.depositedUsd)} />}
+        {holds && row.depositedTokens > 0 && <Fact k="Collateral" v={usd(row.depositedUsd)} />}
         {holds &&
           row.depositedTokens > 0 &&
           row.liquidationPrice !== null &&

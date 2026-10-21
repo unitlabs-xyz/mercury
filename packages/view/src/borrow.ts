@@ -100,10 +100,10 @@ export const borrowFromWire = (w: BorrowWire): Borrow => ({
   debtUsd: Number(w["debtUsd"]),
   borrowableNowUsd: Number(w["borrowableNowUsd"]),
   overTargetUsd: Number(w["overTargetUsd"]),
-  health: (w["health"] ?? "healthy") as Health,
+  health: w["health"] as Health,
   locked: String(w["locked"]) === "true",
   usage: n(w["usage"]),
-  repayToClearMarginCallUsd: Number(w["repayToClearMarginCallUsd"] ?? 0),
+  repayToClearMarginCallUsd: Number(w["repayToClearMarginCallUsd"]),
   dropToMarginCall: n(w["dropToMarginCall"]),
   borrowableUsd: Number(w["borrowableUsd"]),
   spendableUsd: Number(w["spendableUsd"]),
@@ -114,12 +114,11 @@ export const borrowFromWire = (w: BorrowWire): Borrow => ({
   borrowApy: Number(w["borrowApy"]),
   obligation: typeof w["obligation"] === "string" ? w["obligation"] : null,
   setupCostUsd: n(w["setupCostUsd"]),
-  // A server from before these said only the debt, and asked 0.1% of it as headroom to close.
-  owedUsdc: Number(w["owedUsdc"] ?? w["debtUsd"]),
+  owedUsdc: Number(w["owedUsdc"]),
   principalUsdc: n(w["principalUsdc"]),
   interestUsdc: n(w["interestUsdc"]),
-  closeLoanUsdc: w["closeLoanUsdc"] === undefined ? Number(w["debtUsd"]) * 1.001 : Number(w["closeLoanUsdc"]),
-  minPositionUsd: Number(w["minPositionUsd"] ?? 0.01),
+  closeLoanUsdc: Number(w["closeLoanUsdc"]),
+  minPositionUsd: Number(w["minPositionUsd"]),
   collateral: w.collateral.map((r) => ({
     ticker: String(r["ticker"]),
     isStock: r["isStock"] === true,
@@ -298,7 +297,7 @@ export const planBorrow = (
       drop: safeUntil(b, b.debtUsd + value, after),
       deposits: after,
       ...(tokens > 0
-        ? { note: `Pledges ${tokens.toFixed(4)} ${row.ticker}x to Kamino. The shares stay yours.` }
+        ? { note: `Adds ${tokens.toFixed(4)} ${row.ticker}x as collateral on Kamino. The shares stay yours.` }
         : {}),
     };
     if (value > max + 0.005) blocked = `At most ${usd(max)} at the 80% safety target.`;
@@ -346,7 +345,7 @@ export const planBorrow = (
     };
     if (value > max + 1e-9) blocked = `Only ${max.toFixed(4)} ${row.ticker}x is free in the wallet.`;
     else if (value > 0 && leavesDust(b, (row.depositedTokens + value) * row.pricePerToken))
-      blocked = `Pledge at least ${usd(b.minPositionUsd)} of ${row.ticker}x: Kamino does not take less.`;
+      blocked = `Add at least ${usd(b.minPositionUsd)} of ${row.ticker}x as collateral: Kamino does not take less.`;
   } else if (b && tab === "withdraw" && row) {
     const spare = safePledged(b, (r) => r.depositedTokens) - b.debtUsd;
     const perToken = row.pricePerToken * row.ltv * b.safetyTarget;

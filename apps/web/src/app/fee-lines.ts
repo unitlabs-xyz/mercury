@@ -8,33 +8,25 @@ export interface Charge {
   readonly mercuryBps: number;
 }
 
-/** The charge as `/v1/quote` sends it. The parts are optional because older servers sent `usdc` alone. */
+/** The charge as `/v1/quote` sends it. */
 export interface WireCharge {
   readonly usdc: string;
-  readonly network?: string;
-  readonly mercury?: string;
-  readonly mercuryBps?: number;
+  readonly network: string;
+  readonly mercury: string;
+  readonly mercuryBps: number;
 }
 
-const num = (v: string | undefined): number | null => {
-  const n = v === undefined ? NaN : Number(v);
-  return Number.isFinite(n) ? n : null;
+const num = (v: string): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 };
 
-/*
- * A missing breakdown is the network cost alone, because that is all the
- * charge was before Mercury had a fee. Reading it any other way would show a
- * fee nobody was charged.
- */
-export const chargeFromWire = (fee: WireCharge): Charge => {
-  const total = num(fee.usdc) ?? 0;
-  return {
-    total,
-    network: num(fee.network) ?? total,
-    mercury: num(fee.mercury) ?? 0,
-    mercuryBps: fee.mercuryBps ?? 0,
-  };
-};
+export const chargeFromWire = (fee: WireCharge): Charge => ({
+  total: num(fee.usdc),
+  network: num(fee.network),
+  mercury: num(fee.mercury),
+  mercuryBps: fee.mercuryBps,
+});
 
 /* 50 is "0.5%": as written, without the zeros, and never rounded to a rate we did not charge. */
 export const rateLabel = (bps: number): string => `${Number((bps / 100).toFixed(2))}%`;

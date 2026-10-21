@@ -87,16 +87,6 @@ export function fundRoutes(deps: FundDeps): Hono {
         name: s.name,
         vmType: s.vmType,
         iconUrl: s.iconUrl,
-        /*
-         * Kept for the frontend that is deployed right now, which builds its
-         * token list out of this and would throw on `undefined.map` without
-         * it. The one replacing it reads /tokens instead and ignores this.
-         *
-         * Remove it once that build is live — a second list of tokens, served
-         * beside the searchable one and shorter than it, is exactly the kind
-         * of thing that is still here in a year.
-         */
-        currencies: s.currencies,
       }));
       return c.json({ chains, minimumUsd: String(deps.minimumUsd) });
     } catch (err) {

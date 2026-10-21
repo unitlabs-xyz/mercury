@@ -86,9 +86,6 @@ export const useBasketReturns = (enabled: boolean) => {
   });
 };
 
-/** Where anyone can see, and withdraw from, the vault without us. */
-export const symmetryUrl = (mint: string) => `https://beta.symmetry.fi/dashboard/view/${mint}`;
-
 /** Glider templates are managed portfolios, not the pooled Symmetry baskets above. */
 export const useBasketTemplates = () =>
   useQuery({

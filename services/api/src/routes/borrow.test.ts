@@ -367,7 +367,7 @@ describe("POST /v1/borrow/confirm", () => {
     });
     expect(res.status).toBe(200);
     expect(recorded.map((e) => e.kind)).toEqual(["pledge", "borrow"]);
-    expect(recorded[1]!.title).toBe("Borrowed $500.00 against SPY");
+    expect(recorded[1]!.subtitle).toBe("Against SPY");
   });
 
   /*
@@ -411,7 +411,7 @@ describe("POST /v1/borrow/confirm", () => {
     await confirm(deps(lending()), { signature: "SIG2", action: { kind: "repay", usd: "all" } });
     expect(recorded[0]!.kind).toBe("repay");
     expect(recorded[0]!.usdAmount).toBeNull();
-    expect(recorded[0]!.title).toBe("Repaid your loan in full");
+    expect(recorded[0]!.subtitle).toBe("Paid in full");
   });
 
   /* The figure the request could not name is on the chain once it lands, interest to that slot included. */
@@ -432,7 +432,7 @@ describe("POST /v1/borrow/confirm", () => {
     };
     await confirm(landed, { signature: "SIG2", action: { kind: "repay", usd: "all" } });
     expect(recorded[0]!.usdAmount?.toFixed()).toBe("2.110015");
-    expect(recorded[0]!.title).toBe("Repaid your loan in full");
+    expect(recorded[0]!.subtitle).toBe("Paid in full");
   });
 
   /*
@@ -448,7 +448,7 @@ describe("POST /v1/borrow/confirm", () => {
       action: { kind: "repay", usd: "250" },
     });
     expect(res.status).toBe(200);
-    expect(recorded[0]!.title).toBe("Repaid $250.00");
+    expect(recorded[0]!.usdAmount?.toFixed(2)).toBe("250.00");
   });
 
   it("says no wallet rather than recording against nobody", async () => {

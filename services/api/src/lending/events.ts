@@ -22,10 +22,14 @@ export const tokenText = (raw: string, decimals: number): string => {
   return `${negative ? "-" : ""}${whole}${frac ? `.${frac}` : ""}`;
 };
 
-const money = (d: Decimal): string => `$${d.toFixed(2)}`;
-
 /**
  * What a lending action did, as events.
+ *
+ * Worded as the rest of the feed is: a past-tense verb and what it acted on
+ * for the title, the one detail that tells two rows apart for the line under
+ * it. Never the amount, which the row's own column already shows, and never
+ * "your" — the whole feed is the borrower's. "Collateral" rather than Kamino's
+ * "pledge", which is the word the borrow sheet uses too.
  *
  * One transaction can be two events: `deposit_and_borrow` pledges and borrows
  * at once, and a feed that reported only the cash would lose the pledge while a
@@ -46,8 +50,8 @@ export const planLoanEvents = (
     usdAmount: null,
     ticker,
     tokensRaw,
-    title: `Pledged ${tokenText(tokensRaw, decimalsOf(ticker))} ${ticker}`,
-    subtitle: "Held by Kamino as collateral",
+    title: "Added collateral",
+    subtitle: `${tokenText(tokensRaw, decimalsOf(ticker))} ${ticker}`,
   });
 
   switch (intent.kind) {
@@ -62,8 +66,8 @@ export const planLoanEvents = (
           usdAmount: intent.usd,
           ticker: intent.ticker,
           tokensRaw: null,
-          title: `Borrowed ${money(intent.usd)} against ${intent.ticker}`,
-          subtitle: null,
+          title: "Borrowed USDC",
+          subtitle: `Against ${intent.ticker}`,
         },
       ];
 
@@ -76,8 +80,8 @@ export const planLoanEvents = (
           usdAmount: intent.usd,
           ticker: null,
           tokensRaw: null,
-          title: `Borrowed ${money(intent.usd)}`,
-          subtitle: "Against your pledged stock",
+          title: "Borrowed USDC",
+          subtitle: "Against collateral",
         },
       ];
 
@@ -89,16 +93,16 @@ export const planLoanEvents = (
               usdAmount: null,
               ticker: null,
               tokensRaw: null,
-              title: "Repaid your loan in full",
-              subtitle: null,
+              title: "Repaid loan",
+              subtitle: "Paid in full",
             }
           : {
               kind: "repay",
               usdAmount: intent.usd,
               ticker: null,
               tokensRaw: null,
-              title: `Repaid ${money(intent.usd)}`,
-              subtitle: null,
+              title: "Repaid loan",
+              subtitle: "Partial repayment",
             },
       ];
 
@@ -109,11 +113,11 @@ export const planLoanEvents = (
           usdAmount: null,
           ticker: intent.ticker,
           tokensRaw: intent.tokensRaw === "all" ? null : intent.tokensRaw,
-          title:
+          title: "Withdrew collateral",
+          subtitle:
             intent.tokensRaw === "all"
-              ? `Withdrew all your ${intent.ticker}`
-              : `Withdrew ${tokenText(intent.tokensRaw, decimalsOf(intent.ticker))} ${intent.ticker}`,
-          subtitle: "Back in your wallet",
+              ? `All ${intent.ticker}`
+              : `${tokenText(intent.tokensRaw, decimalsOf(intent.ticker))} ${intent.ticker}`,
         },
       ];
   }
@@ -128,8 +132,9 @@ const sumOwned = (entries: readonly TokenBalanceEntry[], owner: string, mint: st
  * A repay of everything sends exactly what was owed at its slot, so the USDC
  * that left the wallet is the repayment, interest included; a withdrawal of
  * everything returns the whole of the collateral to it. Without this the feed
- * printed "Repaid your loan in full" with no amount beside it, and the receipt
- * had no way to say how much of it was interest.
+ * printed a repay in full with no amount beside it, and the receipt had no way
+ * to say how much of it was interest; a withdrawal of everything said "All
+ * NVDA" where it can say how much.
  *
  * Only the gaps are filled. An amount the request named is what Kamino was
  * asked for and stays the figure; a transaction that shows nothing moved
@@ -159,7 +164,12 @@ export const landedAmounts = (
     if (event.kind === "unpledge" && event.tokensRaw === null && event.ticker !== null) {
       const mint = ctx.mintOf(event.ticker);
       const returned = mint === null ? 0n : change(mint);
-      return returned > 0n ? { ...event, tokensRaw: returned.toString() } : event;
+      if (mint === null || returned <= 0n) return event;
+      return {
+        ...event,
+        tokensRaw: returned.toString(),
+        subtitle: `${tokenText(returned.toString(), decimalsOf(mint))} ${event.ticker}`,
+      };
     }
     return event;
   });

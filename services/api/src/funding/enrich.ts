@@ -11,7 +11,7 @@ import { activities, fundingIntents, type FundingIntent } from "../db/schema.js"
  * on the stream it already walks and writes a `transfer_in` with the amount it
  * read off the chain — that is the fact, and `portfolio/queries.ts:118` reads
  * its `kind` for the performance line's flow sign. This only adds the origin:
- * "Added cash" becomes "Added cash · USDT from tron".
+ * "Added cash" gets "From Tron · USDT" under it.
  *
  * The shape is `baskets/glider/reconcile.ts`'s, including the `setWhere` guard,
  * so a repeat or a late arrival can never overwrite something better.
@@ -27,7 +27,7 @@ const log = logger("funding");
 export const enrichDepositActivity = async (db: Db, intent: FundingIntent): Promise<boolean> => {
   if (intent.outTxHash === null || intent.status !== "success") return false;
 
-  const subtitle = `${intent.originCurrencySymbol} from ${intent.originChainName}`;
+  const subtitle = `From ${intent.originChainName} · ${intent.originCurrencySymbol}`;
   const updated = await db
     .update(activities)
     .set({ subtitle, refTable: "funding_intent", refId: intent.id })

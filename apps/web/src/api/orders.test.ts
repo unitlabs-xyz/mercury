@@ -12,7 +12,12 @@ const io = (over: Record<string, unknown> = {}) => {
     "/v1/orders": { orderId: "order-1", decision: EXECUTE },
     "/v1/orders/order-1/execute": { transactions: ["UNSIGNED"] },
     "/v1/transactions/send": { signature: "SIG", status: "confirmed" },
-    "/v1/orders/order-1/confirm": { shares: "0.4498", pricePerShare: "222.33", usd: "100" },
+    "/v1/orders/order-1/confirm": {
+      shares: "0.4498",
+      pricePerShare: "222.33",
+      usd: "100",
+      realisedPnlUsd: null,
+    },
     ...over,
   };
   const deps: OrderIo = {

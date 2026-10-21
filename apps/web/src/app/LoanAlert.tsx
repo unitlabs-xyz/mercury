@@ -36,7 +36,7 @@ export const alarmFor = (b: Borrow): Alarm | null => {
         title: "Your loan is past the 80% limit",
         body: `Prices fell, so borrowing more and withdrawing shares are paused. Repay ${usd(
           b.overTargetUsd,
-        )} or pledge more stock to unlock them. A margin call starts ${pctOf(b.dropToMarginCall)} lower.`,
+        )} or add collateral to unlock them. A margin call starts ${pctOf(b.dropToMarginCall)} lower.`,
         cta: "Repay",
       };
     case "healthy":

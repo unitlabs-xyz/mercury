@@ -173,22 +173,29 @@
     {
       "idx": 24,
       "version": "7",
-      "when": 1792252101818,
-      "tag": "0024_earn",
+      "when": 1792250897787,
+      "tag": "0024_activity_copy",
       "breakpoints": true
     },
     {
       "idx": 25,
       "version": "7",
-      "when": 1792259023751,
-      "tag": "0025_earn_vault",
+      "when": 1792377749363,
+      "tag": "0025_disposal",
       "breakpoints": true
     },
     {
       "idx": 26,
       "version": "7",
-      "when": 1792304097958,
-      "tag": "0026_earn_no_switch",
+      "when": 1792377755844,
+      "tag": "0026_disposal_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792554860727,
+      "tag": "0027_earn",
       "breakpoints": true
     }
   ]

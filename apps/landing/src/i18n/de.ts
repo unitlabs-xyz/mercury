@@ -42,6 +42,7 @@ export const de: Dict = {
     heading: ["Das Finanzkonto", "für die Onchain-Welt."],
     lead: "Besitze echte Aktien aus aller Welt ab $5, investiere mit Baskets in ganze Themen und leih dir Geld gegen deine Aktien, statt sie zu verkaufen. Alles aus einer Wallet, die dir gehört, eröffnet mit nur einer E-Mail.",
     imageLabel: "Titelbild",
+    builtOn: ["Gebaut auf", ""],
   },
 
   trust: {

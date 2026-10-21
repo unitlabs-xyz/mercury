@@ -1,6 +1,6 @@
 {
-  "id": "6c70a0c2-2276-46e6-88a4-f151fb8aed29",
-  "prevId": "7065bae1-fb17-4c11-a763-501a34abe30a",
+  "id": "8be532dc-1b63-4a1c-8645-7bcc587e5af8",
+  "prevId": "373fcd52-377a-4e7d-afbd-8b155cc5fa3b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -491,8 +491,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.earn_event": {
-      "name": "earn_event",
+    "public.disposal": {
+      "name": "disposal",
       "schema": "",
       "columns": {
         "id": {
@@ -508,29 +508,41 @@
           "primaryKey": false,
           "notNull": true
         },
+        "token_id": {
+          "name": "token_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "instrument_id": {
+          "name": "instrument_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_qty": {
+          "name": "token_qty",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "shares": {
+          "name": "shares",
+          "type": "numeric(38, 18)",
+          "primaryKey": false,
+          "notNull": true
+        },
         "kind": {
           "name": "kind",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "usdc_amount": {
-          "name": "usdc_amount",
-          "type": "numeric(38, 18)",
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
           "primaryKey": false,
-          "notNull": true
-        },
-        "vault": {
-          "name": "vault",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tx_signature": {
-          "name": "tx_signature",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "occurred_at": {
           "name": "occurred_at",
@@ -547,8 +559,8 @@
         }
       },
       "indexes": {
-        "earn_event_user_idx": {
-          "name": "earn_event_user_idx",
+        "disposal_user_token_idx": {
+          "name": "disposal_user_token_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -557,7 +569,7 @@
               "nulls": "last"
             },
             {
-              "expression": "vault",
+              "expression": "token_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -568,11 +580,11 @@
           "method": "btree",
           "with": {}
         },
-        "earn_event_signature_idx": {
-          "name": "earn_event_signature_idx",
+        "disposal_order_idx": {
+          "name": "disposal_order_idx",
           "columns": [
             {
-              "expression": "tx_signature",
+              "expression": "order_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -585,9 +597,9 @@
         }
       },
       "foreignKeys": {
-        "earn_event_user_id_user_id_fk": {
-          "name": "earn_event_user_id_user_id_fk",
-          "tableFrom": "earn_event",
+        "disposal_user_id_user_id_fk": {
+          "name": "disposal_user_id_user_id_fk",
+          "tableFrom": "disposal",
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
@@ -596,6 +608,32 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "disposal_token_id_token_id_fk": {
+          "name": "disposal_token_id_token_id_fk",
+          "tableFrom": "disposal",
+          "tableTo": "token",
+          "columnsFrom": [
+            "token_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "disposal_instrument_id_instrument_id_fk": {
+          "name": "disposal_instrument_id_instrument_id_fk",
+          "tableFrom": "disposal",
+          "tableTo": "instrument",
+          "columnsFrom": [
+            "instrument_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
@@ -1134,6 +1172,13 @@
         },
         "acquired_at": {
           "name": "acquired_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "recorded_at": {
+          "name": "recorded_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -2056,19 +2101,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'USD'"
-        },
-        "earn_on": {
-          "name": "earn_on",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "earn_vault": {
-          "name": "earn_vault",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
