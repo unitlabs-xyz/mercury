@@ -51,7 +51,12 @@ export const requireAuth = (deps: AuthDeps, resolve: Resolve = resolveIdentity):
       // Not the session's fault: say so, and keep the person signed in.
       if (cause instanceof AuthUnavailable) {
         return c.json(
-          { error: { code: "auth_unavailable", message: "Couldn't check your sign-in. Try again in a moment." } },
+          {
+            error: {
+              code: "auth_unavailable",
+              message: "Couldn't check your sign-in. Try again in a moment.",
+            },
+          },
           503,
         );
       }
