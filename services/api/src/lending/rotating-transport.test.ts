@@ -24,8 +24,8 @@ const transports = (script: Record<string, (Error | "ok")[]>) => {
   return { asked, make };
 };
 
-const call = (t: RpcTransport) =>
-  t({ payload: { method: "getSlot", params: [] } } as Parameters<RpcTransport>[0]);
+const call = (t: RpcTransport, method = "getSlot") =>
+  t({ payload: { method, params: [] } } as Parameters<RpcTransport>[0]);
 
 describe("rotatingTransport", () => {
   it("sends a refused request straight on to the next URL, and rests the one that refused", async () => {
@@ -57,5 +57,51 @@ describe("rotatingTransport", () => {
     expect(r.strainedAt).toBe(7);
     const resting = await call(rotatingTransport(r, t.make)).catch((e: unknown) => e);
     expect((resting as { context?: { statusCode?: number } }).context?.statusCode).toBe(429);
+  });
+});
+
+describe("rotatingTransport, method by method", () => {
+  it("rests an endpoint for the method it refused, and keeps it for the others", async () => {
+    const asked: [string, string][] = [];
+    const make =
+      (url: string): RpcTransport =>
+      async <T>(config: Parameters<RpcTransport>[0]) => {
+        const method = (config.payload as { method: string }).method;
+        asked.push([url, method]);
+        if (url === A && method === "getTokenAccountsByOwner") throw refused(403);
+        return { jsonrpc: "2.0", id: 0, result: url } as T;
+      };
+    const t = rotatingTransport(rotation([A, B]), make);
+    await call(t, "getTokenAccountsByOwner");
+    await call(t, "getTokenAccountsByOwner");
+    await call(t, "getSlot");
+    expect(asked).toEqual([
+      [A, "getTokenAccountsByOwner"],
+      [B, "getTokenAccountsByOwner"],
+      [B, "getTokenAccountsByOwner"],
+      [A, "getSlot"],
+    ]);
+  });
+
+  /* Pocket answers getTokenAccountsByOwner with a 200 and "Method not found". */
+  it("treats a refusal inside a 200 as one", async () => {
+    const make =
+      (url: string): RpcTransport =>
+      async <T>() =>
+        (url === A
+          ? { jsonrpc: "2.0", id: 0, error: { code: -32601, message: "Method not found" } }
+          : { jsonrpc: "2.0", id: 0, result: url }) as T;
+    expect(await call(rotatingTransport(rotation([A, B]), make), "getTokenAccountsByOwner")).toMatchObject({
+      result: B,
+    });
+  });
+
+  it("passes back a call's own error, such as a bad parameter", async () => {
+    const own = { jsonrpc: "2.0", id: 0, error: { code: -32602, message: "Invalid param: WrongSize" } };
+    const make =
+      (): RpcTransport =>
+      async <T>() =>
+        own as T;
+    expect(await call(rotatingTransport(rotation([A, B]), make))).toEqual(own);
   });
 });

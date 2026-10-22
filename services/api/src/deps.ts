@@ -137,7 +137,8 @@ export interface Config {
   /**
    * Public endpoints the background jobs read through, taken in turn, so they
    * stop spending the paid plan: `SOLANA_PUBLIC_RPC_URLS`, comma-separated.
-   * Unset, Solana's own; set empty, the jobs use `solanaRpcUrl` as before. Everything a person waits on, every read on a screen and every
+   * Unset, the keyless ones that serve the jobs (`PUBLIC_RPC_URLS`); set
+   * empty, the jobs use `solanaRpcUrl` as before. Everything a person waits on, every read on a screen and every
    * transaction, keeps `solanaRpcUrl`.
    */
   readonly solanaPublicRpcUrls: readonly string[];
@@ -259,11 +260,17 @@ const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): num
  * Solana address here would be taken by nothing and found out at the claim.
  */
 /**
- * Free, keyless, and answering every method the background jobs read, batched.
- * Measured 22 October 2026: PublicNode answered the same batch "Request
- * blocked" and dRPC's free plan "chain is not available", so neither is here.
+ * The free, keyless endpoints that answered every read the background jobs
+ * make, correctly, measured 22 October 2026 call by call.
+ *
+ * Left out, and why. PublicNode and Pocket answer a real transaction with
+ * `null`, and PublicNode a busy wallet's signatures with none: no history, and
+ * no error to say so, so the jobs would take it for "nothing happened". dRPC's
+ * free plan, Ankr, OnFinality, BlockPI, Tatum and the rest refused without a
+ * key, or did not answer. A new endpoint goes in only after a check against a
+ * wallet with history, not just a 200.
  */
-const PUBLIC_RPC_URLS = ["https://api.mainnet-beta.solana.com"];
+const PUBLIC_RPC_URLS = ["https://api.mainnet-beta.solana.com", "https://public.rpc.solanavibestation.com"];
 
 const publicRpcUrls = (env: NodeJS.ProcessEnv): readonly string[] => {
   const raw = env["SOLANA_PUBLIC_RPC_URLS"];
@@ -465,7 +472,8 @@ export function backgroundDeps(
 ): { readonly deps: Deps; readonly lane: Rotation | null } {
   if (config.solanaPublicRpcUrls.length === 0) return { deps, lane: null };
   const lane = rotation(config.solanaPublicRpcUrls);
-  const chain = new SolanaRpc({ rpcUrl: lane.urls[0]!, fetch: rotatingFetch(lane) });
+  // One call per request: Solana Vibe Station and Pocket refuse a batch.
+  const chain = new SolanaRpc({ rpcUrl: lane.urls[0]!, fetch: rotatingFetch(lane), maxBatch: 1 });
   return {
     lane,
     deps: {

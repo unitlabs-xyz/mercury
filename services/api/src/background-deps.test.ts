@@ -35,6 +35,20 @@ describe("backgroundDeps", () => {
     expect(jobs.lane?.urls).toEqual(["https://one.example", "https://two.example"]);
   });
 
+  /* Solana Vibe Station and Pocket refuse batches; each call goes on its own. */
+  it("sends each call on its own rather than batched", async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal("fetch", async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { id: number };
+      bodies.push(body);
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { value: [] } }));
+    });
+    const config = readConfig({ ...base, SOLANA_PUBLIC_RPC_URLS: "https://one.example" });
+    await backgroundDeps(buildDeps(config), config).deps.chain.tokenBalances("WaLLeT");
+    expect(bodies).toHaveLength(2);
+    expect(bodies.some(Array.isArray)).toBe(false);
+  });
+
   it("rebuilds only what reads the chain, and shares the rest", () => {
     const config = readConfig(base);
     const deps = buildDeps(config);

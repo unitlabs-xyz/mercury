@@ -115,9 +115,15 @@ describe("readConfig", () => {
 });
 
 describe("readConfig, the background jobs' RPC endpoints", () => {
-  /* PublicNode and dRPC's free plan both refused the jobs' batched reads when measured. */
-  it("takes Solana's own public endpoint when nothing is set", () => {
-    expect(readConfig({ ...base }).solanaPublicRpcUrls).toEqual(["https://api.mainnet-beta.solana.com"]);
+  /*
+   * The keyless endpoints that answered every read correctly, measured 22
+   * October 2026. PublicNode and Pocket answer a real transaction with null.
+   */
+  it("takes the keyless endpoints that serve the jobs correctly when nothing is set", () => {
+    expect(readConfig({ ...base }).solanaPublicRpcUrls).toEqual([
+      "https://api.mainnet-beta.solana.com",
+      "https://public.rpc.solanavibestation.com",
+    ]);
   });
 
   it("takes the list it is given, in order", () => {
