@@ -115,11 +115,9 @@ describe("readConfig", () => {
 });
 
 describe("readConfig, the background jobs' RPC endpoints", () => {
-  it("takes Solana's and PublicNode's public endpoints when nothing is set", () => {
-    expect(readConfig({ ...base }).solanaPublicRpcUrls).toEqual([
-      "https://api.mainnet-beta.solana.com",
-      "https://solana-rpc.publicnode.com",
-    ]);
+  /* PublicNode and dRPC's free plan both refused the jobs' batched reads when measured. */
+  it("takes Solana's own public endpoint when nothing is set", () => {
+    expect(readConfig({ ...base }).solanaPublicRpcUrls).toEqual(["https://api.mainnet-beta.solana.com"]);
   });
 
   it("takes the list it is given, in order", () => {

@@ -137,8 +137,7 @@ export interface Config {
   /**
    * Public endpoints the background jobs read through, taken in turn, so they
    * stop spending the paid plan: `SOLANA_PUBLIC_RPC_URLS`, comma-separated.
-   * Unset, Solana's and PublicNode's; set empty, the jobs use `solanaRpcUrl`
-   * as before. Everything a person waits on, every read on a screen and every
+   * Unset, Solana's own; set empty, the jobs use `solanaRpcUrl` as before. Everything a person waits on, every read on a screen and every
    * transaction, keeps `solanaRpcUrl`.
    */
   readonly solanaPublicRpcUrls: readonly string[];
@@ -259,8 +258,12 @@ const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): num
  * Relay pays app fees to an EVM address only, Solana deposits included. A
  * Solana address here would be taken by nothing and found out at the claim.
  */
-/** Free, keyless, and answering every method the background jobs read. */
-const PUBLIC_RPC_URLS = ["https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com"];
+/**
+ * Free, keyless, and answering every method the background jobs read, batched.
+ * Measured 22 October 2026: PublicNode answered the same batch "Request
+ * blocked" and dRPC's free plan "chain is not available", so neither is here.
+ */
+const PUBLIC_RPC_URLS = ["https://api.mainnet-beta.solana.com"];
 
 const publicRpcUrls = (env: NodeJS.ProcessEnv): readonly string[] => {
   const raw = env["SOLANA_PUBLIC_RPC_URLS"];

@@ -102,6 +102,41 @@ describe("rotatingFetch", () => {
     expect(n.asked).toEqual([A, B]);
   });
 
+  /*
+   * Measured 22 October 2026: PublicNode answered a batch with HTTP 200 and
+   * "Request blocked" for every call, and dRPC with "chain is not available on
+   * free plan". Taken at face value, every other background read would fail.
+   */
+  it("passes a request on from an endpoint that refuses every call inside a 200", async () => {
+    const blocked = JSON.stringify([
+      { jsonrpc: "2.0", id: 0, error: { code: -32602, message: "Request blocked" } },
+      { jsonrpc: "2.0", id: 1, error: { code: -32602, message: "Request blocked" } },
+    ]);
+    const asked: string[] = [];
+    const doFetch = (async (input: Parameters<typeof fetch>[0]) => {
+      asked.push(String(input));
+      return String(input) === A
+        ? new Response(blocked, { status: 200 })
+        : new Response('[{"jsonrpc":"2.0","id":0,"result":1},{"jsonrpc":"2.0","id":1,"result":2}]', {
+            status: 200,
+          });
+    }) as typeof fetch;
+    const r = rotation([A, B]);
+    const res = await rotatingFetch(r, doFetch)("x", { method: "POST", body: "[]" });
+    expect(await res.json()).toEqual([
+      { jsonrpc: "2.0", id: 0, result: 1 },
+      { jsonrpc: "2.0", id: 1, result: 2 },
+    ]);
+    expect(asked).toEqual([A, B]);
+  });
+
+  it("passes back an error that is the call's own, such as a bad parameter", async () => {
+    const own = '{"jsonrpc":"2.0","id":0,"error":{"code":-32602,"message":"Invalid param: WrongSize"}}';
+    const doFetch = (async () => new Response(own, { status: 200 })) as unknown as typeof fetch;
+    const res = await rotatingFetch(rotation([A, B]), doFetch)("x", {});
+    expect(await res.text()).toBe(own);
+  });
+
   it("passes any other answer back as it is", async () => {
     const n = nodes({ [A]: [400] });
     const res = await rotatingFetch(rotation([A, B]), n.doFetch)("x", {});

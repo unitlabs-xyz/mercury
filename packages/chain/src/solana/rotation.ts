@@ -77,6 +77,28 @@ export const rotation = (urls: readonly string[], config: RotationConfig = {}): 
 const REFUSED = (status: number) => status === 429 || status === 403 || status >= 500;
 
 /**
+ * Words an endpoint uses when it refuses a request it answered with a 200:
+ * PublicNode's "Request blocked", dRPC's "chain is not available on free plan",
+ * and the rate limits some put in the body instead of the status.
+ */
+const REFUSAL = /blocked|not available|upgrade|rate limit|too many requests|limit exceeded/i;
+
+/**
+ * Every call in the answer refused in words like those: the endpoint refused
+ * the request, not the calls. One call's own error, a bad parameter say, is
+ * not this, and is passed back as it is.
+ */
+const refusedInside = async (res: Response): Promise<boolean> => {
+  try {
+    const parsed: unknown = await res.clone().json();
+    const replies = (Array.isArray(parsed) ? parsed : [parsed]) as { error?: { message?: unknown } }[];
+    return replies.length > 0 && replies.every((r) => REFUSAL.test(String(r?.error?.message ?? "")));
+  } catch {
+    return false;
+  }
+};
+
+/**
  * `fetch` over a rotation, for `SolanaRpc`. The URL it is called with is
  * ignored: each request goes to the rotation's next URL, and one that refuses
  * passes the same request on to the next at once. When every one refuses, the
@@ -93,7 +115,7 @@ export const rotatingFetch =
       if (url === null) break;
       try {
         const res = await doFetch(url, init);
-        if (!REFUSED(res.status)) {
+        if (!REFUSED(res.status) && !(res.ok && (await refusedInside(res)))) {
           r.served(url);
           return res;
         }
