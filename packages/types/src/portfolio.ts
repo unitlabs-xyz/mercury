@@ -27,6 +27,8 @@ export const Portfolio = z.object({
   cashUsd: Usd,
   /** Cash in the Earn vault, counted in the total but not spendable this second. Optional for older servers. */
   earnUsd: Usd.optional(),
+  /** Kamino could not be read, so `earnUsd` is the last hourly reading's. Optional for older servers. */
+  earnIsStale: z.boolean().optional(),
   basketUsd: Usd,
   /** Owed to Kamino. Borrowed cash is inside `cashUsd`; this is the other side of it. */
   debtUsd: Usd,

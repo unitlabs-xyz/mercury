@@ -29,7 +29,9 @@ function MoneyScreen() {
   const money = useMoney();
   const borrow = useBorrow();
   const m = money.data;
+  // What Earn pays, and what is in it. Cash in the wallet earns nothing, and is said to nowhere.
   const apr = num(m?.yieldApr);
+  const inEarn = num(m?.earnUsd);
   const b = borrow.data;
 
   /* Only a pull shows the spinner; the background polls must not move the page. */
@@ -65,10 +67,12 @@ function MoneyScreen() {
             ) : (
               <Skeleton width={180} height={36} style={s.figureSkeleton} />
             )}
-            <View style={s.earning}>
-              <StatusChip tone="up" size="md">{`Earning ${pct(apr * 100)}`}</StatusChip>
-              <RNText style={s.earningNote}>paid into this balance</RNText>
-            </View>
+            {inEarn > 0 && (
+              <View style={s.earning}>
+                <StatusChip tone="up" size="md">{`+ ${usd(inEarn)} in Earn`}</StatusChip>
+                {apr > 0 && <RNText style={s.earningNote}>{`at ${pct(apr * 100)} a year`}</RNText>}
+              </View>
+            )}
             <View style={s.verbs}>
               <View style={s.verb}>
                 <Button size="md" label="Invest" onPress={() => router.navigate("/invest")} />
@@ -86,13 +90,15 @@ function MoneyScreen() {
           </View>
 
           <View style={s.panel}>
-            <Figure
-              label="Interest this year"
-              value={m ? usd(m.interestEarnedYtdUsd) : "—"}
-              sub="Paid into your cash"
-              up={m !== undefined && num(m.interestEarnedYtdUsd) > 0}
-            />
-            <Figure label="Yield" value={pct(apr * 100)} sub="A year, variable" />
+            {inEarn > 0 ? (
+              <Figure label="In Earn" value={usd(inEarn)} sub={`${pct(apr * 100)} a year, variable`} />
+            ) : (
+              <Figure
+                label="Can borrow"
+                value={b ? usd(num(b.borrowableUsd)) : "—"}
+                sub="Against your stocks"
+              />
+            )}
             <Figure
               label="Spendable"
               value={b ? usd(num(b.spendableUsd)) : "—"}

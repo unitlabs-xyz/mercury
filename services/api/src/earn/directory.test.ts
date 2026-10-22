@@ -122,15 +122,27 @@ describe("curators of vaults Mercury did not pick", () => {
 });
 
 describe("earnDirectory.holdings", () => {
-  it("values a vault on the list at the list's share price", async () => {
-    const [h] = await dir(
+  /* The list's price is Kamino's API, up to twenty minutes old: a fresh deposit read below what went in. */
+  it("values a vault on the list at the chain's share price", async () => {
+    const d = dir(
       [vault(STEADY)],
       { [STEADY]: metrics(1_000_000, 3000) },
-      {
-        [`shares-${STEADY}`]: 2_000_000n,
-      },
-    ).holdings("wallet");
+      { [`shares-${STEADY}`]: 2_000_000n },
+    );
+    const [h] = await d.holdings("wallet");
     expect(h!.listing.offered).toBe(true);
+    expect(h!.usdc.toString()).toBe("2.4");
+  });
+
+  it("falls back to the list's share price when the chain cannot be read", async () => {
+    const d = earnDirectory({
+      api: api([vault(STEADY)], { [STEADY]: metrics(1_000_000, 3000) }),
+      usdcMint: USDC,
+      rpcUrl: "http://localhost:1",
+      make: () => ({ vault: async () => Promise.reject(new Error("429")) }) as unknown as EarnSource,
+      shareBalances: async () => new Map([[`shares-${STEADY}`, D(2_000_000)]]),
+    });
+    const [h] = await d.holdings("wallet");
     expect(h!.usdc.toString()).toBe("2.2");
   });
 
@@ -173,5 +185,61 @@ describe("earnDirectory.known", () => {
     expect(await d.known("Tiny")).toBe(true);
     expect(await d.known("Sol")).toBe(false);
     expect(await d.known("Nowhere")).toBe(false);
+  });
+});
+
+describe("earnDirectory.list, once its time is up", () => {
+  /** An API whose vault list waits for `release` from the second call on, counting calls. */
+  const slow = () => {
+    let calls = 0;
+    let fail = false;
+    let release = () => {};
+    const kamino: KaminoApi = {
+      ...api([vault(STEADY)], { [STEADY]: metrics(1_000_000, 3000) }),
+      vaults: async () => {
+        calls += 1;
+        if (calls > 1) await new Promise<void>((resolve) => (release = resolve));
+        if (fail) {
+          fail = false;
+          throw new Error("kamino down");
+        }
+        return [vault(STEADY)];
+      },
+    };
+    return { kamino, calls: () => calls, release: () => release(), failNext: () => (fail = true) };
+  };
+
+  const timed = (k: ReturnType<typeof slow>, now: () => number, ttlMs: number) =>
+    earnDirectory({ api: k.kamino, usdcMint: USDC, rpcUrl: "x", make: () => onChain(), ttlMs, now });
+
+  it("answers with the last list at once, while the new one is built", async () => {
+    let now = 0;
+    const k = slow();
+    const d = timed(k, () => now, 10);
+    expect(await d.list()).toHaveLength(1);
+    now = 11;
+    // These resolve although the rebuild is still waiting on Kamino.
+    expect(await d.list()).toHaveLength(1);
+    expect(await d.list()).toHaveLength(1);
+    expect(k.calls()).toBe(2);
+    k.release();
+  });
+
+  it("keeps the last list when a rebuild fails, and tries again soon after", async () => {
+    let now = 0;
+    const k = slow();
+    const d = timed(k, () => now, 60_000);
+    await d.list();
+    now = 60_001;
+    k.failNext();
+    expect(await d.list()).toHaveLength(1);
+    k.release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await d.list()).toHaveLength(1);
+    expect(k.calls()).toBe(2);
+    now += 31_000;
+    expect(await d.list()).toHaveLength(1);
+    expect(k.calls()).toBe(3);
+    k.release();
   });
 });

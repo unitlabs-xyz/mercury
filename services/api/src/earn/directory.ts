@@ -100,11 +100,12 @@ export const earnDirectory = (opts: {
   ttlMs?: number;
   /** This wallet's raw balance of every token it holds, by mint. Read from the node when left out. */
   shareBalances?: (wallet: string) => Promise<ReadonlyMap<string, Decimal>>;
+  now?: () => number;
 }): EarnDirectory => {
   const rpc = createLendingRpc(opts.rpcUrl);
   const ttlMs = opts.ttlMs ?? 10 * 60_000;
+  const now = opts.now ?? Date.now;
   const picks = new Map(EARN_VAULTS.map((v, i) => [v.address, { listing: v, rank: i }]));
-  let cached: { at: number; list: Promise<readonly EarnListing[]> } | null = null;
   const sources = new Map<string, EarnSource>();
 
   const build = async (): Promise<readonly EarnListing[]> => {
@@ -148,17 +149,35 @@ export const earnDirectory = (opts: {
       .sort((a, b) => rank(a) - rank(b) || b.tvlUsd.comparedTo(a.tvlUsd));
   };
 
-  const list = () => {
-    const now = Date.now();
-    if (cached !== null && now - cached.at < ttlMs) return cached.list;
+  /*
+   * Built once, then rebuilt in the background when its time is up: the last
+   * good list answers meanwhile, so nobody waits on a hundred calls to Kamino.
+   * Only the very first build is waited for, there being nothing to answer
+   * with yet. A failed rebuild keeps the old list and tries again in 30s.
+   */
+  let good: { at: number; list: readonly EarnListing[] } | null = null;
+  let building: Promise<readonly EarnListing[]> | null = null;
+
+  const rebuild = () => {
+    if (building !== null) return building;
     const fresh = build();
-    // While a rebuild runs, the last good list keeps answering.
-    const previous = cached?.list;
-    fresh.catch(
-      () => (cached = previous === undefined ? null : { at: now - ttlMs + 30_000, list: previous }),
+    building = fresh;
+    fresh.then(
+      (list) => {
+        good = { at: now(), list };
+      },
+      () => {
+        if (good !== null) good = { ...good, at: now() - ttlMs + 30_000 };
+      },
     );
-    cached = { at: now, list: previous === undefined ? fresh : fresh.catch(() => previous) };
-    return cached.list;
+    void fresh.finally(() => (building = null)).catch(() => undefined);
+    return fresh;
+  };
+
+  const list = async (): Promise<readonly EarnListing[]> => {
+    if (good === null) return rebuild();
+    if (now() - good.at >= ttlMs) void rebuild().catch(() => undefined);
+    return good.list;
   };
 
   const source = (vault: string) => {
@@ -249,11 +268,22 @@ export const earnDirectory = (opts: {
         shareBalances(wallet),
       ]);
       const has = (mint: string) => (held.get(mint) ?? ZERO).gt(0);
-      const listed = listings.flatMap((l) => {
-        if (!has(l.sharesMint)) return [];
-        const shares = held.get(l.sharesMint)!.div(D(10).pow(l.sharesDecimals));
-        return [{ listing: l, shares, usdc: shares.mul(l.tokensPerShare) }];
-      });
+      const listed = await Promise.all(
+        listings
+          .filter((l) => has(l.sharesMint))
+          .map(async (l) => {
+            const shares = held.get(l.sharesMint)!.div(D(10).pow(l.sharesDecimals));
+            // The chain's price now. The list's is Kamino's API, up to twenty
+            // minutes old, and is only the fallback when the chain can't be read.
+            const price = await source(l.address)
+              .vault()
+              .then(
+                (v) => v.sharePrice,
+                () => l.tokensPerShare,
+              );
+            return { listing: l, shares, usdc: shares.mul(price) };
+          }),
+      );
       const onList = new Set(listings.map((l) => l.sharesMint));
       const off = (every ?? []).filter((v) => !onList.has(v.sharesMint) && has(v.sharesMint));
       return [...listed, ...(await Promise.all(off.map((v) => unlisted(v, held.get(v.sharesMint)!))))];

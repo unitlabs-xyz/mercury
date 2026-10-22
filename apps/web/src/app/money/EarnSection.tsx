@@ -24,7 +24,8 @@ export const EarnSection = () => {
           <h2 className="font-medium text-ds-ink">Earning</h2>
           <InfoTip label="How Earn works" align="start">
             Your USDC is lent out through Kamino vaults and earns interest by the second. The rate moves with
-            demand. Withdraw any time. Not a bank account and not insured.
+            demand. Withdrawals usually take seconds, and can wait when a vault has lent nearly everything.
+            Not a bank account and not insured.
           </InfoTip>
         </div>
         <div className="flex flex-wrap gap-1">

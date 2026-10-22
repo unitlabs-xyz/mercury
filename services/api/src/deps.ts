@@ -64,6 +64,7 @@ import {
   readFlows,
   readHoldings,
   readLatestDebt,
+  readLatestEarn,
   readSnapshots,
 } from "./portfolio/queries.js";
 import { basketReturnsReader, basketValueReader } from "./portfolio/baskets.js";
@@ -154,8 +155,9 @@ export interface Config {
   readonly relayerSecretKey?: string;
   /**
    * The Earn vault a person gets until they choose another. Defaults to
-   * Steakhouse USDC, the first of Mercury's picks (see `earn/catalog.ts`).
-   * Any vault holding USDC works, and is offered first if it is not one of them.
+   * Steakhouse USDC, the first of Mercury's picks (see `earn/catalog.ts`). It
+   * has to be on the list (`earn/directory.ts`); one that is not is passed over
+   * for the first vault that is.
    */
   readonly earnVault: string;
   /**
@@ -514,6 +516,7 @@ export function buildReadDeps(
       pledged: (wallet) => pledgedByMint(deps.lending, wallet),
       debt: (wallet) => debtFrom(deps.lending, wallet),
       lastKnownDebt: (userId) => readLatestDebt(db, userId),
+      lastKnownEarn: (userId) => readLatestEarn(db, userId),
       snapshots: (userId, from) => readSnapshots(db, userId, from),
       baskets,
       basketReturns: basketReturnsReader(deps.basketProvider),

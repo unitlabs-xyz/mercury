@@ -10,6 +10,7 @@ import type { EarnDirectory, EarnHolding, EarnListing } from "../earn/directory.
 import { EARN_VAULTS } from "../earn/catalog.js";
 import type { KaminoApi } from "../earn/kamino-api.js";
 import { EarnRefused } from "../earn/kamino-vault.js";
+import { EARN_RISK_VERSION } from "../earn/risk.js";
 import { SponsorShort } from "../lending/ports.js";
 
 /** The fields these tests read, off any of the routes' answers. */
@@ -21,6 +22,7 @@ type Body = {
   earnedUsd: string;
   apy: string | null;
   walletUsd: string;
+  riskAccepted: boolean;
   points: { apy: string }[];
   allocation: { name: string; share: string }[];
   error: { code: string };
@@ -103,8 +105,12 @@ const api: KaminoApi = {
   marketNames: async () => new Map([["Main", "Main Market"]]),
 };
 
-const ledger = (net: Record<string, Decimal> = {}, records: EarnRecord[] = []) => {
-  let settings: EarnSettings = { vault: null };
+const ledger = (
+  net: Record<string, Decimal> = {},
+  records: EarnRecord[] = [],
+  riskAccepted: string | null = EARN_RISK_VERSION,
+) => {
+  let settings: EarnSettings = { vault: null, riskAccepted };
   const l: EarnLedger = {
     settings: async () => settings,
     save: async (_u, change) => {
@@ -191,6 +197,11 @@ describe("GET /v1/earn", () => {
     expect((await json(await appWith(deps()).request("/v1/earn"))).apy).toBeNull();
   });
 
+  it("falls back to the first vault on offer when the configured default is not one", async () => {
+    const d = deps({ directory: { ...directory(), defaultVault: "NotListed" } });
+    expect((await json(await appWith(d).request("/v1/earn"))).selected).toBe(STEADY);
+  });
+
   it("defaults to the vault last moved into", async () => {
     const d = deps();
     await d.ledger.save("user-1", { vault: OTHER });
@@ -221,13 +232,56 @@ describe("GET /v1/earn/vaults/:address", () => {
   it("refuses a vault Mercury does not offer", async () => {
     expect((await appWith(deps()).request("/v1/earn/vaults/Elsewhere")).status).toBe(404);
   });
+
+  it("refuses a range it does not know, including the names every object inherits", async () => {
+    for (const range of ["5Y", "constructor", "toString", "__proto__"]) {
+      const res = await appWith(deps()).request(`/v1/earn/vaults/${STEADY}?range=${range}`);
+      expect(res.status, range).toBe(400);
+    }
+  });
+});
+
+describe("Earn's risks", () => {
+  /* Money went in with no word that a vault can lose it or make you wait. */
+  it("refuses a first deposit until the current wording is accepted", async () => {
+    const d = deps({ ledger: ledger({}, [], null) });
+    expect((await json(await appWith(d).request("/v1/earn"))).riskAccepted).toBe(false);
+    const res = await send(appWith(d), "POST", "/v1/earn/transactions", { kind: "deposit", usd: "1" });
+    expect(res.status).toBe(409);
+    expect((await json(res)).error.code).toBe("risk_not_accepted");
+  });
+
+  it("takes a deposit once accepted", async () => {
+    const d = deps({ ledger: ledger({}, [], null) });
+    const accepted = await send(appWith(d), "PUT", "/v1/earn/risk", { version: EARN_RISK_VERSION });
+    expect(accepted.status).toBe(200);
+    expect((await json(await appWith(d).request("/v1/earn"))).riskAccepted).toBe(true);
+    const res = await send(appWith(d), "POST", "/v1/earn/transactions", { kind: "deposit", usd: "1" });
+    expect(res.status).toBe(200);
+  });
+
+  it("asks again when the wording has changed since", async () => {
+    const d = deps({ ledger: ledger({}, [], "2026-01-01") });
+    expect((await json(await appWith(d).request("/v1/earn"))).riskAccepted).toBe(false);
+    const stale = await send(appWith(d), "PUT", "/v1/earn/risk", { version: "2026-01-01" });
+    expect((await json(stale)).error.code).toBe("risk_changed");
+  });
+
+  it("never stands between a person and their withdrawal", async () => {
+    const d = deps({
+      ledger: ledger({}, [], null),
+      directory: directory({ [STEADY]: { position: { shares: D(1), usdc: D(5) } } }),
+    });
+    const res = await send(appWith(d), "POST", "/v1/earn/transactions", { kind: "withdraw", usd: "all" });
+    expect(res.status).toBe(200);
+  });
 });
 
 describe("PUT /v1/earn/settings", () => {
   it("keeps the default vault", async () => {
     const d = deps();
     await send(appWith(d), "PUT", "/v1/earn/settings", { vault: OTHER });
-    expect(await d.ledger.settings("user-1")).toEqual({ vault: OTHER });
+    expect((await d.ledger.settings("user-1")).vault).toBe(OTHER);
   });
 
   it("refuses a vault Mercury does not offer", async () => {
@@ -315,6 +369,16 @@ describe("POST /v1/earn/transactions", () => {
       vault: "Elsewhere",
     });
     expect(res.status).toBe(404);
+  });
+
+  it("refuses to withdraw nothing", async () => {
+    const res = await send(
+      appWith(deps({ directory: directory({ [STEADY]: { position: { shares: D(10), usdc: D(20) } } }) })),
+      "POST",
+      "/v1/earn/transactions",
+      { kind: "withdraw", usd: "0.00", vault: STEADY },
+    );
+    expect((await json(res)).error.code).toBe("validation_failed");
   });
 
   it("refuses a withdrawal with nothing in the vault", async () => {

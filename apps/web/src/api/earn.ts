@@ -41,6 +41,8 @@ type EarnWire = {
   earnedUsd: string;
   apy: string | null;
   walletUsd: string;
+  /** Absent from an older server, which asked nothing before a deposit. */
+  riskAccepted?: boolean;
 };
 
 export type EarnVault = {
@@ -86,6 +88,8 @@ export type Earn = {
   apy: number | null;
   /** Idle in the wallet: what could move in. */
   walletUsd: number;
+  /** The current wording of Earn's risks is accepted. Until it is, a deposit asks first. */
+  riskAccepted: boolean;
 };
 
 const n = (v: string | null) => (v === null ? null : Number(v));
@@ -131,6 +135,7 @@ export const useEarn = () => {
         earnedUsd: Number(w.earnedUsd),
         apy: n(w.apy),
         walletUsd: Number(w.walletUsd),
+        riskAccepted: w.riskAccepted ?? true,
       };
     },
     enabled: signedIn,
@@ -180,6 +185,16 @@ export const useEarnVault = (address: string | null, range: VaultRange, lite = f
     // another vault's chart standing in for this one's is wrong, not just stale.
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[3] === address ? keepPreviousData(previous) : undefined,
+  });
+};
+
+/** Accept Earn's risks as worded at `version`: the wording the sheet showed. */
+export const useAcceptEarnRisk = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (version: string) =>
+      apiFetch("/v1/earn/risk", { method: "PUT", body: JSON.stringify({ version }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: EARN_KEY }),
   });
 };
 

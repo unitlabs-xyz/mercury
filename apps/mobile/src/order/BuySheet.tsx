@@ -579,7 +579,7 @@ const Queued = ({ decision, amount }: { decision: QueueDecision; amount: number 
       <Line label="Your amount" value={usd(amount)} muted />
       <Line label="Market opens" value={opensAt(decision.marketOpensAt)} muted />
       <Text variant="small" tone="muted">
-        Your cash stays yours in the meantime, and keeps earning.
+        Your cash stays yours in the meantime.
       </Text>
     </View>
   );

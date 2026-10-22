@@ -50,6 +50,12 @@ export const users = pgTable(
      * preselects a vault.
      */
     earnVault: text("earn_vault"),
+    /**
+     * When this person accepted Earn's risks, and which wording they saw.
+     * Deposits need the current wording accepted; a new wording asks again.
+     */
+    earnRiskAcceptedAt: timestamp("earn_risk_accepted_at", { withTimezone: true }),
+    earnRiskVersion: text("earn_risk_version"),
   },
   (t) => [uniqueIndex("user_privy_user_id_idx").on(t.privyUserId)],
 );
@@ -635,6 +641,11 @@ export const portfolioSnapshots = pgTable(
      * for them would be inventing a reading nobody took.
      */
     debtUsd: usd("debt_usd").notNull().default("0"),
+    /**
+     * What was in Earn, apart from the total that counts it. Null on readings
+     * from before Earn. Read back when Kamino cannot be, as debt is.
+     */
+    earnUsd: usd("earn_usd"),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.capturedAt] }),

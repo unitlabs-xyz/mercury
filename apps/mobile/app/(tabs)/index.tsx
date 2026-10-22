@@ -82,7 +82,9 @@ function PortfolioScreen() {
   const basketUsd = num(p?.basketUsd);
   const cashUsd = num(p?.cashUsd);
   const debtUsd = num(p?.debtUsd);
+  // What Earn pays, and on what: the wallet's own cash earns nothing.
   const apr = num(money.data?.yieldApr) * 100;
+  const earnUsd = num(p?.earnUsd);
 
   const events = useMemo(() => (activity.data?.items ?? []).map(toEvent), [activity.data]);
   const kinds = KINDS_OF(filter);
@@ -222,7 +224,7 @@ function PortfolioScreen() {
                 masked={hidden}
                 label="Cash"
                 value={figure(cashUsd)}
-                sub={money.data ? `${pct(apr, 1)} a year` : "In your account"}
+                sub={earnUsd > 0 ? `+ ${usd(earnUsd)} in Earn` : "In your account"}
                 loading={waiting}
                 onPress={() => router.navigate("/money")}
               />
@@ -326,7 +328,7 @@ function PortfolioScreen() {
 
         {/* ── What you're watching, and what's ahead ─────────────────────── */}
         <Watching />
-        {!hidden && <ComingUp borrow={borrow.data} cashUsd={cashUsd} apr={apr} />}
+        {!hidden && <ComingUp borrow={borrow.data} earnUsd={earnUsd} apr={apr} />}
 
         {/* ── What has happened ─────────────────────────────────────────── */}
         <View style={s.card}>

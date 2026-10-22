@@ -101,6 +101,7 @@ export const Portfolio = () => {
   const m = useModel(portfolio.data, universe.data, credit.data, dash.data, borrow.data);
   const failed = portfolio.isError;
   const inEarn = Number(portfolio.data?.earnUsd ?? 0);
+  const earnIsStale = portfolio.data?.earnIsStale === true;
 
   return (
     <AppShell current="portfolio" title="Portfolio" quiet>
@@ -126,7 +127,7 @@ export const Portfolio = () => {
 
       <div className="flex flex-col gap-4 md:gap-6">
         {/* 2 — the account, and what you can do with it. */}
-        <AccountHeader m={m} dash={dash.data} inEarn={inEarn} failed={failed} />
+        <AccountHeader m={m} dash={dash.data} inEarn={inEarn} earnIsStale={earnIsStale} failed={failed} />
 
         <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
           {/* 3 — what you own, then how it has moved and where it sits. */}

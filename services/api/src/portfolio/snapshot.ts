@@ -105,6 +105,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
             cashUsd: toWire(value.cashUsd),
             basketUsd: toWire(value.basketUsd),
             debtUsd: toWire(value.debtUsd),
+            earnUsd: toWire(value.earnUsd),
           })
           // A deploy mid-hour re-reads the same hour. The later reading is the
           // better one — it is closer to the top of the next hour — so it wins.
@@ -117,6 +118,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
               cashUsd: toWire(value.cashUsd),
               basketUsd: toWire(value.basketUsd),
               debtUsd: toWire(value.debtUsd),
+              earnUsd: toWire(value.earnUsd),
             },
           });
         written += 1;

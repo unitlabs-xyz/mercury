@@ -51,7 +51,10 @@ const KIND_NOTE: Record<NonNullable<EarnVault["kind"]>, string> = {
 const STEPS = [
   { title: "Pick a vault", body: "Mercury's picks are first. Each lends USDC on Kamino." },
   { title: "Move cash in", body: "One tap to sign. Mercury pays the network fee." },
-  { title: "Withdraw any time", body: "Your cash and what it earned, back in seconds." },
+  {
+    title: "Take it back",
+    body: "Usually back in seconds. A vault pays out cash it has not lent, so a busy one can make you wait.",
+  },
 ] as const;
 
 /**

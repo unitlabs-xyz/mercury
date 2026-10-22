@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   earnErrorText,
+  useAcceptEarnRisk,
   useEarn,
   useEarnAction,
   useEarnVaults,
@@ -20,6 +21,23 @@ import { RailLine } from "../stock/Panels";
 import { chip } from "../stock/Ticket";
 
 export type EarnTab = "add" | "withdraw";
+
+/**
+ * Earn's risks, in the words a first deposit is accepted under. `version` is
+ * the server's `EARN_RISK_VERSION` (services/api/src/earn/risk.ts): change the
+ * two together, and everyone is asked again before their next deposit. A draft
+ * until counsel has read it.
+ */
+const RISKS = {
+  version: "2026-10-22",
+  points: [
+    "Your USDC is lent out through a Kamino vault, run by its curator, not by Mercury.",
+    "The rate changes every day, and can fall close to zero.",
+    "A withdrawal is paid from cash the vault has not lent out. When it has lent nearly all of it, you may have to wait.",
+    "If borrowers fail to repay or a protocol is exploited, you can lose money. Earn is not a bank account and is not insured.",
+  ],
+  accept: "I understand that money in Earn can be lost, and that it is not a bank account.",
+} as const;
 
 /**
  * Which vault a move is for. Into: the one asked for, else the last one moved
@@ -63,14 +81,18 @@ export const EarnSheet = ({
   const earn = useEarn();
   const vaults = useEarnVaults();
   const action = useEarnAction();
+  const accept = useAcceptEarnRisk();
   const [amount, setAmount] = useState("");
+  const [agreed, setAgreed] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setAmount("");
+    setAgreed(false);
     action.reset();
+    accept.reset();
     // Only on opening: the action object is new each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `action` on purpose, per above
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `action` and `accept` on purpose, per above
   }, [open, tab]);
 
   const e = earn.data;
@@ -78,7 +100,9 @@ export const EarnSheet = ({
   const adding = tab === "add";
   const max = e && target ? floorCents(adding ? e.walletUsd : target.balanceUsd) : 0;
   const value = Number(amount) || 0;
-  const busy = action.isPending;
+  const busy = action.isPending || accept.isPending;
+  // Money going in asks first, until the current wording is accepted. Money coming out never does.
+  const asking = adding && e !== undefined && !e.riskAccepted;
   const close = () => {
     if (!busy) onClose();
   };
@@ -92,11 +116,20 @@ export const EarnSheet = ({
     !tooMuch &&
     !tooLittle &&
     !busy &&
+    (!asking || agreed) &&
     action.walletReady;
   const all = !adding && e !== undefined && value >= max - 0.005;
 
-  const submit = () => {
+  const submit = async () => {
     if (!e || !target) return;
+    if (asking) {
+      // Shown below if it fails; nothing moves without it.
+      const ok = await accept.mutateAsync(RISKS.version).then(
+        () => true,
+        () => false,
+      );
+      if (!ok) return;
+    }
     action.mutate({
       intents: [
         adding
@@ -131,11 +164,7 @@ export const EarnSheet = ({
       <PanelHeader
         id="earn-title"
         title={adding ? "Move cash to Earn" : "Withdraw from Earn"}
-        sub={
-          adding
-            ? "It starts earning as soon as it lands. Withdraw any time."
-            : "Back in your cash right away."
-        }
+        sub={adding ? "It starts earning as soon as it lands." : "Usually back in your cash in seconds."}
         onClose={close}
       />
 
@@ -240,16 +269,36 @@ export const EarnSheet = ({
                   <RailLine k="Left in Earn">
                     {usd(Math.max(0, all ? 0 : target.balanceUsd - value))}
                   </RailLine>
-                  <RailLine k="Arrives">Right away</RailLine>
+                  <RailLine k="Arrives">Usually in seconds</RailLine>
                 </>
               )}
               <RailLine k="Network fee">Paid by Mercury</RailLine>
             </dl>
 
-            {!busy && action.error && (
+            {asking && (
+              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-4">
+                <p className="text-[14px] leading-[18px] font-medium text-ds-ink">Before you move cash in</p>
+                <ul className="mt-2.5 flex list-disc flex-col gap-1.5 pl-4 text-[12px] leading-[1.45] text-ds-muted">
+                  {RISKS.points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+                <label className="mt-3.5 flex items-start gap-2.5 text-[12px] leading-[1.45] text-ds-ink">
+                  <input
+                    type="checkbox"
+                    checked={agreed}
+                    onChange={(ev) => setAgreed(ev.target.checked)}
+                    className="mt-0.5 size-4 shrink-0 accent-black"
+                  />
+                  {RISKS.accept}
+                </label>
+              </div>
+            )}
+
+            {!busy && (action.error ?? accept.error) && (
               <p className="mt-4 flex gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-down">
                 <Alert className="mt-px size-3.5 shrink-0" />
-                {earnErrorText(action.error)}
+                {earnErrorText(action.error ?? accept.error)}
               </p>
             )}
 
@@ -258,7 +307,7 @@ export const EarnSheet = ({
               size="lg"
               disabled={!canSubmit}
               loading={busy}
-              onClick={submit}
+              onClick={() => void submit()}
               className="mt-6 w-full"
             >
               {label}

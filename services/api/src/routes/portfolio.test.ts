@@ -77,6 +77,7 @@ const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   pledged: async () => [],
   debt: async () => ZERO,
   lastKnownDebt: async () => null,
+  lastKnownEarn: async () => null,
   snapshots: async () => [],
   baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
   ...over,
@@ -459,6 +460,7 @@ describe("GET /v1/portfolio", () => {
       basketUsd: "0",
       debtUsd: "0",
       debtIsStale: false,
+      earnIsStale: false,
       changeUsd: "0",
       changePct: "0",
       holdings: [],
@@ -693,5 +695,43 @@ describe("GET /v1/portfolio, against a loan", () => {
     const body = await portfolioOf(await appWith(deps()).request("/v1/portfolio"));
     expect(body.debtUsd).toBe("0");
     expect(body.debtIsStale).toBe(false);
+  });
+});
+
+describe("GET /v1/portfolio, with money in Earn", () => {
+  it("counts Earn in the total, read fresh", async () => {
+    const body = await portfolioOf(
+      await appWith(deps({ earn: async () => D("300") })).request("/v1/portfolio"),
+    );
+    expect(body.earnUsd).toBe("300");
+    expect(body.earnIsStale).toBe(false);
+  });
+
+  /* Unreadable used to count as $0: net worth fell by the whole Earn balance, and nothing said why. */
+  it("serves the last recorded Earn balance when Kamino cannot be read, and says so", async () => {
+    const fresh = await portfolioOf(
+      await appWith(deps({ earn: async () => D("300") })).request("/v1/portfolio"),
+    );
+    const body = await portfolioOf(
+      await appWith(
+        deps({
+          earn: async () => Promise.reject(new Error("kamino down")),
+          lastKnownEarn: async () => D("300"),
+        }),
+      ).request("/v1/portfolio"),
+    );
+    expect(body.earnUsd).toBe("300");
+    expect(body.earnIsStale).toBe(true);
+    expect(body.totalValueUsd).toBe(fresh.totalValueUsd);
+  });
+
+  it("says so too when there is no reading to fall back on", async () => {
+    const body = await portfolioOf(
+      await appWith(deps({ earn: async () => Promise.reject(new Error("kamino down")) })).request(
+        "/v1/portfolio",
+      ),
+    );
+    expect(body.earnUsd).toBe("0");
+    expect(body.earnIsStale).toBe(true);
   });
 });

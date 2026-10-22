@@ -25,7 +25,7 @@ export type Recorded =
 export interface RecordDeps {
   readonly history: ChainHistory;
   readonly ledger: EarnLedger;
-  readonly directory: Pick<EarnDirectory, "known">;
+  readonly directory: Pick<EarnDirectory, "known" | "find">;
   readonly usdcMint: string;
 }
 
@@ -79,6 +79,8 @@ export async function recordMove(
     kind: move.kind,
     usdc,
     vault: move.vault,
+    // A vault off the list has no name here; the feed still says what happened.
+    vaultName: (await deps.directory.find(move.vault))?.name ?? "Kamino vault",
     signature: move.signature,
     occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
   });

@@ -8,6 +8,7 @@ import type { EarnDirectory, EarnListing } from "../earn/directory.js";
 import type { KaminoApi, VaultPoint } from "../earn/kamino-api.js";
 import type { EarnLedger } from "../earn/store.js";
 import { recordMove } from "../earn/record.js";
+import { EARN_RISK_VERSION } from "../earn/risk.js";
 import type { EarnSends } from "../earn/sends.js";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
@@ -50,6 +51,8 @@ const Request = z.discriminatedUnion("kind", [
 const ConfirmRequest = z.object({ signature: z.string().min(1), action: Request });
 
 const Settings = z.object({ vault: z.string() });
+
+const RiskAccepted = z.object({ version: z.string() });
 
 const RANGES = { "1M": 30, "3M": 90, "1Y": 365 } as const;
 
@@ -126,18 +129,26 @@ export function earnRoutes(deps: EarnDeps): Hono {
     return b === undefined ? ZERO : D(b.rawAmount.toString()).div(D(10).pow(b.decimals));
   };
 
-  /** Where new cash goes by default: the vault last moved into, or the first of Mercury's picks. */
+  /**
+   * Where new cash goes by default: the vault last moved into, else the
+   * configured default, else the first on offer. Each only while it is on the
+   * list, or a deposit nobody pointed at a vault would be refused.
+   */
   const defaultFor = async (userId: string) => {
     const { vault } = await deps.ledger.settings(userId);
-    return vault !== null && (await deps.directory.find(vault)) ? vault : deps.directory.defaultVault;
+    for (const v of [vault, deps.directory.defaultVault]) {
+      if (v !== null && (await deps.directory.find(v)) !== undefined) return v;
+    }
+    return (await deps.directory.list())[0]?.address ?? deps.directory.defaultVault;
   };
 
   /** What this account has in Earn, vault by vault. */
   app.get("/v1/earn", async (c) => {
     const identity = c.get("identity");
     const wallet = identity.walletAddress;
-    const [selected, net, cash, holdings] = await Promise.all([
+    const [selected, settings, net, cash, holdings] = await Promise.all([
       defaultFor(identity.userId),
+      deps.ledger.settings(identity.userId),
       deps.ledger.netDeposited(identity.userId),
       wallet === null ? ZERO : walletUsdc(wallet),
       wallet === null ? [] : deps.directory.holdings(wallet),
@@ -159,7 +170,23 @@ export function earnRoutes(deps: EarnDeps): Hono {
         ? null
         : ratio(holdings.reduce((s, h) => s.add(h.listing.apy.mul(h.usdc)), ZERO).div(total)),
       walletUsd: usd(cash),
+      // Whether the current wording of the risks is accepted: the first deposit asks until it is.
+      riskAccepted: settings.riskAccepted === EARN_RISK_VERSION,
     });
+  });
+
+  /**
+   * Accept Earn's risks, as worded at `version`. Only the current wording
+   * counts: an app showing older words is told to show the new ones.
+   */
+  app.put("/v1/earn/risk", async (c) => {
+    const parsed = RiskAccepted.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+    if (parsed.data.version !== EARN_RISK_VERSION) {
+      return c.json(fail("risk_changed", "The wording has changed since. Read it again."), 409);
+    }
+    await deps.ledger.save(c.get("identity").userId, { riskAccepted: EARN_RISK_VERSION });
+    return c.json({ accepted: EARN_RISK_VERSION });
   });
 
   /** Every vault on offer, Mercury's picks first. The page searches and pages through it. */
@@ -175,9 +202,10 @@ export function earnRoutes(deps: EarnDeps): Hono {
     if (!(await deps.directory.known(address))) {
       return c.json(fail("not_found", "Mercury does not offer that vault."), 404);
     }
-    const range = (c.req.query("range") ?? "1M") as keyof typeof RANGES;
-    const days = RANGES[range];
-    if (days === undefined) return c.json(fail("bad_range", "Ranges are 1M, 3M and 1Y."), 400);
+    const range = c.req.query("range") ?? "1M";
+    // Own keys only: `RANGES["constructor"]` is a function, not a missing range.
+    if (!Object.hasOwn(RANGES, range)) return c.json(fail("bad_range", "Ranges are 1M, 3M and 1Y."), 400);
+    const days = RANGES[range as keyof typeof RANGES];
 
     const to = new Date();
     const from = new Date(to.getTime() - days * 86_400_000);
@@ -235,6 +263,10 @@ export function earnRoutes(deps: EarnDeps): Hono {
     let intent;
     if (body.kind === "deposit") {
       if (listing === undefined) return unknown();
+      // Withdrawals never wait on this: it is about putting money at risk, not taking it back.
+      if ((await deps.ledger.settings(identity.userId)).riskAccepted !== EARN_RISK_VERSION) {
+        return c.json(fail("risk_not_accepted", "Read and accept how Earn works first."), 409);
+      }
       if (listing.full) return c.json(fail("vault_full", "This vault is full. Pick another."), 409);
       const cash = await walletUsdc(wallet);
       const amount = body.usd === "all" ? cash : D(body.usd);
@@ -252,6 +284,9 @@ export function earnRoutes(deps: EarnDeps): Hono {
       // Read off the chain, not the list: what is withdrawn has to be exact.
       const position = await deps.directory.source(vault).position(wallet);
       if (position === null) return c.json(fail("nothing_to_withdraw", "Nothing in this vault."), 409);
+      if (body.usd !== "all" && D(body.usd).lte(0)) {
+        return c.json(fail("validation_failed", "Withdraw more than nothing."), 400);
+      }
       // Asking for all of it, or near enough, takes every share, so no dust is left behind.
       const all = body.usd === "all" || D(body.usd).gte(position.usdc.sub(D("0.01")));
       intent = { kind: "withdraw", usdc: all ? "all" : D(body.usd) } as const;

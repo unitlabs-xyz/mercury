@@ -188,16 +188,25 @@ const TodayMove = ({
  * and the verbs on the left; the supporting figures in a grey panel inset 4px
  * on the right, spread evenly from 85px in. Below xl the panel stacks under.
  */
+/** Under the cash figure: what is in Earn besides, and how fresh that is. */
+export const earnSub = (inEarn: number, stale: boolean) => {
+  if (stale) return inEarn > 0 ? `+ ${usd(inEarn)} in Earn, as of an hour ago` : "Earn could not be read";
+  return inEarn > 0 ? `+ ${usd(inEarn)} in Earn` : "Ready to invest";
+};
+
 export const AccountHeader = ({
   m,
   dash,
   inEarn,
+  earnIsStale = false,
   failed = false,
 }: {
   m: Model | undefined;
   dash: Dashboard | undefined;
   /** Cash in the Earn vault. Not in `m.cash`, which is what can be spent now. */
   inEarn: number;
+  /** Kamino could not be read, so `inEarn` is the last hourly reading. */
+  earnIsStale?: boolean;
   /** The refresh failed. The banner above says so; these figures must not
       pulse as though an answer were still coming. */
   failed?: boolean;
@@ -277,7 +286,7 @@ export const AccountHeader = ({
           label="Cash"
           loading={waiting}
           value={m ? usd(m.cash) : "—"}
-          sub={inEarn > 0 ? `+ ${usd(inEarn)} in Earn` : "Ready to invest"}
+          sub={earnSub(inEarn, earnIsStale)}
         />
         <HeaderFigure
           label="Borrowed"

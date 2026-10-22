@@ -385,6 +385,8 @@ const earn = {
   earnedUsd: earning ? "8.42" : "0",
   apy: earning ? earnVaults[0]!.apy : null,
   walletUsd: cash.toFixed(2),
+  // As if the wording changed since the last deposit: the next one asks again, which is the state to review.
+  riskAccepted: false,
 };
 
 /** GET /v1/earn/vaults/:address: a month of daily rates around 4–6%, and where it lends. */
@@ -1237,6 +1239,7 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
   if (route === "/v1/money") return money;
   if (route === "/v1/borrow") return borrow;
   if (route === "/v1/earn") return earn;
+  if (route === "/v1/earn/risk") return { accepted: "2026-10-22" };
   if (route === "/v1/earn/vaults") return { vaults: earnVaults };
   if (route.startsWith("/v1/earn/vaults/")) return earnHistory(path);
   if (route === "/v1/quote") return quote(body);

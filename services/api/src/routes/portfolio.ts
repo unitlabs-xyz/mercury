@@ -82,6 +82,8 @@ export interface PortfolioDeps {
    * the way pledged stock does; without it a deposit would chart as a loss.
    */
   readonly earn?: (walletAddress: string) => Promise<Decimal>;
+  /** The Earn balance in the latest hourly reading, for when it cannot be read now. */
+  readonly lastKnownEarn?: (userId: string) => Promise<Decimal | null>;
   readonly basketReturns?: BasketReturnsReader;
   /** Deposits and withdrawals since `from`, signed, so the chart can show performance without them. */
   readonly flows?: (userId: string, from: Date) => Promise<readonly Flow[]>;
@@ -105,6 +107,7 @@ const EMPTY = {
   basketUsd: "0",
   debtUsd: "0",
   debtIsStale: false,
+  earnIsStale: false,
   changeUsd: "0",
   changePct: "0",
   holdings: [] as const,
@@ -179,13 +182,18 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         ...basketStockMints(basketValue.baskets),
       ]),
     ];
-    const [board, balances, earnUsd] = await Promise.all([
+    const [board, balances, liveEarn] = await Promise.all([
       deps.prices.pricesFor(mints),
       deps.chain.tokenBalances(identity.walletAddress),
-      // Unreadable reads as nothing in Earn, for this page only: the snapshot
-      // job refuses to record a total it could not read whole.
-      deps.earn?.(identity.walletAddress).catch(() => ZERO) ?? ZERO,
+      deps.earn?.(identity.walletAddress).catch(() => null) ?? ZERO,
     ]);
+    /*
+     * As with debt: an unreadable Earn is the last hourly reading, flagged.
+     * Zero would take the whole Earn balance off net worth and draw it on the
+     * chart as a loss.
+     */
+    const earnUsd = liveEarn ?? (await deps.lastKnownEarn?.(identity.userId)) ?? ZERO;
+    const earnIsStale = liveEarn === null;
 
     // The figures are `valuePortfolio`'s, so that the hourly snapshot behind the
     // chart and the number at the top of this page cannot drift apart. The loop
@@ -256,6 +264,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       basketUsd: toWire(value.basketUsd),
       debtUsd: toWire(value.debtUsd),
       debtIsStale,
+      earnIsStale,
       changeUsd: toWire(changeUsd),
       changePct: toWire(changePct),
       holdings,
