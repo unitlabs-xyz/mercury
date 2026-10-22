@@ -309,7 +309,16 @@ export function earnRoutes(deps: EarnDeps): Hono {
       }
       if (error instanceof EarnRefused) {
         log.warn({ vault, detail: error.detail, logs: error.logs.slice(-8) }, "the vault would refuse this");
-        return c.json(fail("vault_refused", "This vault can't take that right now. Try another."), 409);
+        /*
+         * Going in, the vault is full or closed, and another vault will take it.
+         * Coming out, it has lent out nearly all its cash, and only time or a
+         * smaller amount helps: no other vault holds this person's shares.
+         */
+        const message =
+          body.kind === "deposit"
+            ? "This vault can't take that right now. Try another."
+            : "This vault can't pay that out right now: it has lent out nearly all its cash. Try a smaller amount, or again shortly.";
+        return c.json(fail("vault_refused", message), 409);
       }
       throw error;
     }

@@ -1,4 +1,5 @@
 import { useEarn } from "../../api/earn";
+import { earnCovers } from "../earn/moves";
 import { exitAssets, fullSelection, rawTokenAmount, tokenAmount } from "@mercury/view";
 import type {
   BasketExitAsset,
@@ -75,9 +76,9 @@ export const EnrollmentRail = ({
   /* Over the cash on hand, the button becomes Add cash: the way out, not a dead end. */
   const needsCash = overCash && signedIn && !lookupFailed;
   const panels = usePanels();
-  /* Cash in Earn is the nearer way out than adding more: one tap brings it back. */
-  const inEarn = useEarn().data?.balanceUsd ?? 0;
-  const fromEarn = needsCash && inEarn > 0;
+  /* Cash in Earn is the nearer way out than adding more, when one vault holds what is short. */
+  const earn = useEarn().data;
+  const fromEarn = needsCash && cash !== null && earnCovers(earn?.holdings, Number(amount) - cash);
   const notice = checking
     ? null
     : lookupFailed

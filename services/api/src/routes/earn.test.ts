@@ -399,6 +399,24 @@ describe("POST /v1/earn/transactions", () => {
     expect(res.status).toBe(503);
   });
 
+  it("says a refused withdrawal is about the vault's cash, not to try another vault", async () => {
+    const res = await send(
+      appWith(
+        deps({
+          directory: directory({
+            [STEADY]: { position: { shares: D(10), usdc: D(20) }, fail: new EarnRefused("{}", []) },
+          }),
+        }),
+      ),
+      "POST",
+      "/v1/earn/transactions",
+      { kind: "withdraw", usd: "all", vault: STEADY },
+    );
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("vault_refused");
+    expect(body.error.message).toMatch(/can't pay that out right now/);
+  });
+
   it("says a vault refusal plainly", async () => {
     const res = await send(
       appWith(deps({ directory: directory({ [STEADY]: { fail: new EarnRefused("{}", []) } }) })),

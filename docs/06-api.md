@@ -123,6 +123,29 @@ POST /v1/borrow/transactions                     deposit, borrow, both, repay or
 POST /v1/borrow/confirm
 ```
 
+## Earn
+
+Idle USDC lent through Kamino Earn vaults, a vault at a time, put in and taken out by the person.
+Nothing moves on its own.
+
+```
+GET  /v1/earn                                    what is in Earn, vault by vault; whether the risks are accepted
+GET  /v1/earn/vaults                             every vault on offer, Mercury's picks first
+GET  /v1/earn/vaults/:address?range=1M|3M|1Y     a vault's rate over time and where it lends
+PUT  /v1/earn/settings  { vault }                the vault new cash goes to by default
+PUT  /v1/earn/risk  { version }                  accept the risks, as worded at `version`
+POST /v1/earn/transactions                       deposit or withdraw; unsigned, the relayer paying
+POST /v1/earn/confirm  { signature, action }     files what the transaction moved
+```
+
+- **Deposits need the current wording of the risks accepted** (`risk_not_accepted` otherwise).
+  Withdrawals never wait on it.
+- **Money goes in only to a vault on the list, and comes out of any Kamino USDC vault**, so a
+  vault that drops off the list never strands what is in it.
+- **The send path records each move itself.** `POST /v1/transactions/send` tells Earn about every
+  transaction the node takes, and Earn files the ones it built once they can be read. Confirm is
+  the fast path, not the only one; both are idempotent on the signature.
+
 ## Activity
 
 ```

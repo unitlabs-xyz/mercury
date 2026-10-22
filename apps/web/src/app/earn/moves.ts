@@ -13,6 +13,14 @@ export const floorCents = (n: number) => Math.floor(n * 100 + 1e-6) / 100;
 export const switchDeposit = (shown: number, cameOut: number | null) =>
   floorCents(cameOut === null ? shown : Math.min(shown, cameOut));
 
+/**
+ * Whether Earn can cover a purchase's shortfall. The withdraw sheet takes from
+ * one vault at a time, so one vault alone has to hold it; anything less and
+ * the way out is adding cash.
+ */
+export const earnCovers = (holdings: readonly { balanceUsd: number }[] | undefined, shortfall: number) =>
+  shortfall > 0 && (holdings ?? []).some((h) => h.balanceUsd >= shortfall);
+
 /** A move that stopped part way: what already happened, then why the rest did not. */
 export const partialMoveText = (cameOut: number | null, reason: string) =>
   `${cameOut === null ? "Your money" : usd(cameOut)} came out of Earn and is in your cash. ` +

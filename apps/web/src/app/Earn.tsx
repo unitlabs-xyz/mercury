@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   earnErrorText,
   useEarn,
+  useAcceptEarnRisk,
   useEarnAction,
   useEarnVault,
   useEarnVaults,
@@ -19,6 +20,7 @@ import { AppShell } from "./AppShell";
 import { DotChart } from "./DotChart";
 import { KIND_LABEL, VaultMark, rate } from "./earn/VaultMark";
 import { floorCents } from "./earn/moves";
+import { RISKS, RiskConsent } from "./earn/RiskConsent";
 import { usePanels } from "./Panels";
 import { HeaderFigure } from "./portfolio/Summary";
 import { Skeleton } from "./portfolio/ui";
@@ -68,6 +70,7 @@ export const Earn = () => {
   const earn = useEarn();
   const vaults = useEarnVaults();
   const action = useEarnAction();
+  const accept = useAcceptEarnRisk();
   const panels = usePanels();
   const e = earn.data;
   const [query, setQuery] = useState("");
@@ -89,7 +92,7 @@ export const Earn = () => {
   const [last, setLast] = useState<string | null>(null);
   if (open !== null && open !== last) setLast(open);
 
-  const busy = action.isPending;
+  const busy = action.isPending || accept.isPending;
   const idle = e ? floorCents(e.walletUsd) : 0;
   const earning = (e?.holdings.length ?? 0) > 0;
 
@@ -123,6 +126,23 @@ export const Earn = () => {
         { kind: "deposit", usd: { cameOutUpTo: elsewhereUsd(e, v) }, vault: v.address },
       ],
     });
+  };
+
+  /**
+   * A switch puts money into a vault, so it asks first, as a deposit does.
+   * Accepted before anything moves: a refusal after the withdrawals would
+   * leave the money as idle cash.
+   */
+  const switchTo = async (v: EarnVault) => {
+    if (!e || busy) return;
+    if (!e.riskAccepted) {
+      const ok = await accept.mutateAsync(RISKS.version).then(
+        () => true,
+        () => false,
+      );
+      if (!ok) return;
+    }
+    moveAllTo(v);
   };
 
   return (
@@ -233,12 +253,14 @@ export const Earn = () => {
           </div>
         </section>
 
-        {(busy || action.error) && (
+        {(busy || action.error || accept.error) && (
           <p
             className={`flex gap-2 rounded-lg px-4 py-3 text-[12px] leading-[1.45] ${busy ? "bg-white text-ds-muted" : "bg-ds-down-chip text-ds-chip-down"}`}
           >
             {!busy && <Alert className="mt-px size-3.5 shrink-0" />}
-            {busy ? "Moving your cash… confirm in your wallet if it asks." : earnErrorText(action.error)}
+            {busy
+              ? "Moving your cash… confirm in your wallet if it asks."
+              : earnErrorText(action.error ?? accept.error)}
           </p>
         )}
 
@@ -357,7 +379,7 @@ export const Earn = () => {
             panels.earn("withdraw", panelVault.address);
           }}
           onMoveAll={() => {
-            moveAllTo(panelVault);
+            void switchTo(panelVault);
             setOpen(null);
           }}
         />
@@ -440,9 +462,11 @@ const VaultPanel = ({
   onMoveAll: () => void;
 }) => {
   const [range, setRange] = useState<VaultRange>("1M");
+  const [agreed, setAgreed] = useState(false);
   const history = useEarnVault(open ? vault.address : null, range);
   const held = earn.holdings.find((h) => h.address === vault.address);
   const elsewhere = elsewhereUsd(earn, vault);
+  const canSwitch = elsewhere > 0 && elsewhere >= vault.minDepositUsd && !vault.full && vault.offered;
   const chart = (history.data?.points ?? []).map((p) => ({
     label: new Date(p.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     value: p.apy * 100,
@@ -568,8 +592,19 @@ const VaultPanel = ({
               Withdraw
             </Button>
           )}
-          {elsewhere > 0 && !vault.full && vault.offered && (
-            <Button size="lg" disabled={busy} onClick={onMoveAll} className="w-full">
+          {/*
+           * Only where all of it can go in: a vault that is full, off the list,
+           * or whose minimum is more than there is to move would refuse the
+           * deposit after the withdrawals had already landed.
+           */}
+          {canSwitch && !earn.riskAccepted && <RiskConsent agreed={agreed} onAgreed={setAgreed} />}
+          {canSwitch && (
+            <Button
+              size="lg"
+              disabled={busy || (!earn.riskAccepted && !agreed)}
+              onClick={onMoveAll}
+              className="w-full"
+            >
               Move my {usd(elsewhere)} from other vaults here
             </Button>
           )}

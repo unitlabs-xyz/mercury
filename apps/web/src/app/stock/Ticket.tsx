@@ -1,4 +1,5 @@
 import { useEarn } from "../../api/earn";
+import { earnCovers } from "../earn/moves";
 import { DEFAULT_POLICY, type Decision } from "@mercury/core";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -329,9 +330,9 @@ export const Ticket = ({
      becomes Add cash, which is both the explanation and the way out. */
   const needsCash = over && !selling;
   const panels = usePanels();
-  /* Cash in Earn is the nearer way out than adding more: one tap brings it back. */
-  const inEarn = useEarn().data?.balanceUsd ?? 0;
-  const fromEarn = needsCash && inEarn > 0;
+  /* Cash in Earn is the nearer way out than adding more, when one vault holds what is short. */
+  const earn = useEarn().data;
+  const fromEarn = needsCash && cash !== null && earnCovers(earn?.holdings, amount - cash);
   const amountHint = over ? (
     selling ? (
       <>More than you can sell. The most is {usd(sellableUsd ?? 0)}.</>

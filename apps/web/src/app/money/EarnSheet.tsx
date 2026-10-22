@@ -12,6 +12,7 @@ import {
 } from "../../api/earn";
 import { VaultMark, rate } from "../earn/VaultMark";
 import { floorCents } from "../earn/moves";
+import { RISKS, RiskConsent } from "../earn/RiskConsent";
 import { Button } from "../../ui/Button";
 import { PanelHeader, SidePanel } from "../../ui/Dialog";
 import { Alert, Check } from "../../ui/icons";
@@ -21,23 +22,6 @@ import { RailLine } from "../stock/Panels";
 import { chip } from "../stock/Ticket";
 
 export type EarnTab = "add" | "withdraw";
-
-/**
- * Earn's risks, in the words a first deposit is accepted under. `version` is
- * the server's `EARN_RISK_VERSION` (services/api/src/earn/risk.ts): change the
- * two together, and everyone is asked again before their next deposit. A draft
- * until counsel has read it.
- */
-const RISKS = {
-  version: "2026-10-22",
-  points: [
-    "Your USDC is lent out through a Kamino vault, run by its curator, not by Mercury.",
-    "The rate changes every day, and can fall close to zero.",
-    "A withdrawal is paid from cash the vault has not lent out. When it has lent nearly all of it, you may have to wait.",
-    "If borrowers fail to repay or a protocol is exploited, you can lose money. Earn is not a bank account and is not insured.",
-  ],
-  accept: "I understand that money in Earn can be lost, and that it is not a bank account.",
-} as const;
 
 /**
  * Which vault a move is for. Into: the one asked for, else the last one moved
@@ -275,25 +259,7 @@ export const EarnSheet = ({
               <RailLine k="Network fee">Paid by Mercury</RailLine>
             </dl>
 
-            {asking && (
-              <div className="mt-5 rounded-lg bg-ds-panel px-4 py-4">
-                <p className="text-[14px] leading-[18px] font-medium text-ds-ink">Before you move cash in</p>
-                <ul className="mt-2.5 flex list-disc flex-col gap-1.5 pl-4 text-[12px] leading-[1.45] text-ds-muted">
-                  {RISKS.points.map((point) => (
-                    <li key={point}>{point}</li>
-                  ))}
-                </ul>
-                <label className="mt-3.5 flex items-start gap-2.5 text-[12px] leading-[1.45] text-ds-ink">
-                  <input
-                    type="checkbox"
-                    checked={agreed}
-                    onChange={(ev) => setAgreed(ev.target.checked)}
-                    className="mt-0.5 size-4 shrink-0 accent-black"
-                  />
-                  {RISKS.accept}
-                </label>
-              </div>
-            )}
+            {asking && <RiskConsent agreed={agreed} onAgreed={setAgreed} className="mt-5" />}
 
             {!busy && (action.error ?? accept.error) && (
               <p className="mt-4 flex gap-2 rounded-lg bg-ds-down-chip px-3 py-2.5 text-[12px] leading-[1.45] text-ds-chip-down">

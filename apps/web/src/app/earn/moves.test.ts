@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { floorCents, partialMoveText, runSteps, switchDeposit } from "./moves";
+import { earnCovers, floorCents, partialMoveText, runSteps, switchDeposit } from "./moves";
 import type { EarnIntent, EarnStep } from "../../api/earn";
 
 describe("switchDeposit", () => {
@@ -98,5 +98,22 @@ describe("runSteps", () => {
     await expect(runSteps([{ kind: "deposit", usd: "20", vault: "B" }], r.io)).rejects.toThrow(
       /^Not enough cash\.$/,
     );
+  });
+});
+
+describe("earnCovers", () => {
+  /*
+   * A $500 buy with $40 of cash and $3 in Earn used to offer only "Withdraw
+   * from Earn": three dollars back, and no way to add the rest.
+   */
+  it("is true only when one vault alone holds the shortfall", () => {
+    expect(earnCovers([{ balanceUsd: 3 }], 460)).toBe(false);
+    expect(earnCovers([{ balanceUsd: 300 }, { balanceUsd: 200 }], 460)).toBe(false);
+    expect(earnCovers([{ balanceUsd: 3 }, { balanceUsd: 500 }], 460)).toBe(true);
+  });
+
+  it("is false with nothing short, or nothing in Earn", () => {
+    expect(earnCovers([{ balanceUsd: 500 }], 0)).toBe(false);
+    expect(earnCovers(undefined, 10)).toBe(false);
   });
 });
