@@ -23,7 +23,7 @@ import {
 } from "@kamino-finance/klend-sdk";
 import Decimal from "decimal.js";
 import { D, type Decimal as OurDecimal } from "@mercury/core";
-import type { ChainReader } from "@mercury/chain";
+import type { ChainReader, Rotation } from "@mercury/chain";
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { createLendingRpc } from "../lending/rpc.js";
 import { topUp, transferSol } from "../lending/sponsor.js";
@@ -52,6 +52,8 @@ const RELAYER_KEEPS = 5_000_000n;
 export interface KaminoEarnConfig {
   readonly rpcUrl: string;
   readonly scanRpcUrl?: string;
+  /** The background jobs' public endpoints, taken in turn instead of `rpcUrl`. */
+  readonly rotation?: Rotation;
   /** Which Kamino Earn vault. It has to hold USDC; nothing else is cash here. */
   readonly vault: string;
   readonly usdcMint: string;
@@ -78,7 +80,7 @@ export class KaminoEarn implements EarnSource {
   private cached: { at: number; vault: Promise<KaminoVault> } | null = null;
 
   constructor(private readonly config: KaminoEarnConfig) {
-    this.rpc = createLendingRpc(config.rpcUrl, config.scanRpcUrl);
+    this.rpc = createLendingRpc(config.rpcUrl, config.scanRpcUrl, config.rotation);
     this.ttlMs = config.ttlMs ?? 60_000;
     this.rent = config.rent ?? {};
     this.address = address(config.vault);

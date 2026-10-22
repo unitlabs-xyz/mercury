@@ -5,6 +5,9 @@ import {
   parseJupiterKeys,
   SolanaRpc,
   SymmetryVenue,
+  rotatingFetch,
+  rotation,
+  type Rotation,
   USDC_MINT,
   type BasketVenue,
   type SupportedStocks,
@@ -46,7 +49,7 @@ import { onlyIfUsed } from "./earn/gate.js";
 import { recordMove } from "./earn/record.js";
 import { earnSends } from "./earn/sends.js";
 import { earnBalance, earnDirectory, earnSummary, type EarnDirectory } from "./earn/directory.js";
-import { kaminoApi } from "./earn/kamino-api.js";
+import { kaminoApi, type KaminoApi } from "./earn/kamino-api.js";
 import type { EarnDeps } from "./routes/earn.js";
 import { debtFrom } from "./lending/debt.js";
 import { loanLedger, recordLoanEvents } from "./lending/record.js";
@@ -131,6 +134,14 @@ export interface Config {
   readonly solanaRpcUrl: string;
   /** Optional. Program scans (Kamino's reserve lookup), if the main RPC plan refuses them. */
   readonly solanaScanRpcUrl?: string;
+  /**
+   * Public endpoints the background jobs read through, taken in turn, so they
+   * stop spending the paid plan: `SOLANA_PUBLIC_RPC_URLS`, comma-separated.
+   * Unset, the keyless ones that serve the jobs (`PUBLIC_RPC_URLS`); set
+   * empty, the jobs use `solanaRpcUrl` as before. Everything a person waits on, every read on a screen and every
+   * transaction, keeps `solanaRpcUrl`.
+   */
+  readonly solanaPublicRpcUrls: readonly string[];
   /**
    * Optional. Jupiter API keys, rotated one per request. Set, every Jupiter call
    * goes to the paid host (api.jup.ag) for its higher rate limits; empty, they
@@ -248,6 +259,34 @@ const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): num
  * Relay pays app fees to an EVM address only, Solana deposits included. A
  * Solana address here would be taken by nothing and found out at the claim.
  */
+/**
+ * The free, keyless endpoints that answered every read the background jobs
+ * make, correctly, measured 22 October 2026 call by call.
+ *
+ * Left out, and why. PublicNode and Pocket answer a real transaction with
+ * `null`, and PublicNode a busy wallet's signatures with none: no history, and
+ * no error to say so, so the jobs would take it for "nothing happened". dRPC's
+ * free plan, Ankr, OnFinality, BlockPI, Tatum and the rest refused without a
+ * key, or did not answer. A new endpoint goes in only after a check against a
+ * wallet with history, not just a 200.
+ */
+const PUBLIC_RPC_URLS = ["https://api.mainnet-beta.solana.com", "https://public.rpc.solanavibestation.com"];
+
+const publicRpcUrls = (env: NodeJS.ProcessEnv): readonly string[] => {
+  const raw = env["SOLANA_PUBLIC_RPC_URLS"];
+  if (raw === undefined) return PUBLIC_RPC_URLS;
+  const urls = raw
+    .split(",")
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0);
+  for (const url of urls) {
+    if (!/^https:\/\/[^\s/]+/.test(url)) {
+      throw new Error(`SOLANA_PUBLIC_RPC_URLS: ${url} is not an https URL`);
+    }
+  }
+  return urls;
+};
+
 const evmAddress = (env: NodeJS.ProcessEnv, key: string): string | undefined => {
   const raw = env[key];
   if (raw === undefined || raw.length === 0) return undefined;
@@ -271,6 +310,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     feedbackTo: env["FEEDBACK_TO"] ?? "hello@trymercury.xyz",
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
+    solanaPublicRpcUrls: publicRpcUrls(env),
     /*
      * The singular name as well, because it is the one everybody reaches for
      * and a key set under it was discarded without a word: no error, no empty
@@ -385,26 +425,65 @@ export function buildDeps(config: Config): Deps {
     chain,
     history: chain,
     baskets: new SymmetryVenue({ rpcUrl: config.solanaRpcUrl }),
-    lending: new KaminoLending({
-      rpcUrl: config.solanaRpcUrl,
-      ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
-      rent: chain,
-    }),
-    earn: earnDirectory({
-      api: kaminoApi(),
-      usdcMint: USDC_MINT,
-      rpcUrl: config.solanaRpcUrl,
-      defaultVault: config.earnVault,
-      make: (vault) =>
-        new KaminoEarn({
-          rpcUrl: config.solanaRpcUrl,
-          ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
-          vault,
-          usdcMint: USDC_MINT,
-          rent: chain,
-        }),
-    }),
+    lending: lendingOver(config, chain),
+    earn: earnOver(config, chain, kaminoApi()),
     ...(basketProvider ? { basketProvider } : {}),
+  };
+}
+
+/** Kamino's xStocks market, read through `chain` for rent and over `lane` when given. */
+const lendingOver = (config: Config, chain: ChainReader, lane?: Rotation) =>
+  new KaminoLending({
+    rpcUrl: config.solanaRpcUrl,
+    ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
+    ...(lane === undefined ? {} : { rotation: lane }),
+    rent: chain,
+  });
+
+/** Kamino Earn's vaults, the same way. One Kamino API, so its caches are shared across lanes. */
+const earnOver = (config: Config, chain: ChainReader, api: KaminoApi, lane?: Rotation) =>
+  earnDirectory({
+    api,
+    usdcMint: USDC_MINT,
+    rpcUrl: config.solanaRpcUrl,
+    ...(lane === undefined ? {} : { rotation: lane }),
+    defaultVault: config.earnVault,
+    make: (vault) =>
+      new KaminoEarn({
+        rpcUrl: config.solanaRpcUrl,
+        ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
+        ...(lane === undefined ? {} : { rotation: lane }),
+        vault,
+        usdcMint: USDC_MINT,
+        rent: chain,
+      }),
+  });
+
+/**
+ * The background jobs' own chain readers: `deps` with every RPC reader rebuilt
+ * over the public endpoints taken in turn (`Config.solanaPublicRpcUrls`), and
+ * everything else shared. The jobs read every wallet on a clock; on the paid
+ * plan, a deploy had them refused every call for its first minute. `lane` is
+ * what a job backs off on; null when the jobs stay on the paid endpoint.
+ */
+export function backgroundDeps(
+  deps: Deps,
+  config: Config,
+): { readonly deps: Deps; readonly lane: Rotation | null } {
+  if (config.solanaPublicRpcUrls.length === 0) return { deps, lane: null };
+  const lane = rotation(config.solanaPublicRpcUrls);
+  // One call per request: Solana Vibe Station and Pocket refuse a batch.
+  const chain = new SolanaRpc({ rpcUrl: lane.urls[0]!, fetch: rotatingFetch(lane), maxBatch: 1 });
+  return {
+    lane,
+    deps: {
+      ...deps,
+      chain,
+      history: chain,
+      multipliers: new MintMultipliers({ chain }),
+      lending: lendingOver(config, chain, lane),
+      earn: earnOver(config, chain, deps.earn.api, lane),
+    },
   };
 }
 

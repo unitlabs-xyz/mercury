@@ -1,4 +1,5 @@
 import { createDefaultRpcTransport, createSolanaRpcFromTransport, type RpcTransport } from "@solana/kit";
+import { isRefusalMessage, type Rotation } from "@mercury/chain";
 
 /** Solana's own public endpoint. Slow and rate-limited, but it answers a full program scan. */
 export const PUBLIC_RPC = "https://api.mainnet-beta.solana.com";
@@ -27,12 +28,68 @@ const withRetry =
     }
   };
 
+const statusOf = (e: unknown) => (e as { context?: { statusCode?: unknown } } | null)?.context?.statusCode;
+
+/** Worth another endpoint: any answer but a 2xx, or a dropped connection. */
+const isRefusal = (e: unknown) => typeof statusOf(e) === "number" || e instanceof TypeError;
+
+/** An answer whose error says the endpoint refused the call (`isRefusalMessage`), not that the call was wrong. */
+const refusedInside = (answer: unknown) => {
+  const message = (answer as { error?: { message?: unknown } } | null)?.error?.message;
+  return typeof message === "string" && isRefusalMessage(message);
+};
+
+/**
+ * A transport over a rotation of endpoints (see `rotation` in @mercury/chain),
+ * for the background jobs' Kamino reads, resting each per method. One that
+ * refuses passes the request on to the next at once: any answer but a 2xx, or
+ * a 200 refusing the call in words. When every one refuses, the last refusal
+ * is the answer, or a 429 if all are resting, so `withRetry` backs off as it
+ * does for one endpoint.
+ */
+export const rotatingTransport = (
+  r: Rotation,
+  make: (url: string) => RpcTransport = (url) => createDefaultRpcTransport({ url }),
+): RpcTransport => {
+  const transports = new Map(r.urls.map((url) => [url, make(url)]));
+  return async <T>(config: Parameters<RpcTransport>[0]): Promise<T> => {
+    const method = (config.payload as { method?: string } | null)?.method;
+    let thrown: unknown = null;
+    let answered: { readonly answer: T } | null = null;
+    for (let i = 0; i < r.urls.length; i++) {
+      const url = r.next(method);
+      if (url === null) break;
+      try {
+        const answer = await transports.get(url)!<T>(config);
+        if (!refusedInside(answer)) {
+          r.served(url, method);
+          return answer;
+        }
+        r.refused(url, method);
+        answered = { answer };
+      } catch (error: unknown) {
+        if (!isRefusal(error)) throw error;
+        r.refused(url, method);
+        thrown = error;
+      }
+    }
+    r.strained();
+    if (answered !== null) return answered.answer;
+    throw (
+      thrown ?? Object.assign(new Error("every RPC endpoint is resting"), { context: { statusCode: 429 } })
+    );
+  };
+};
+
 /**
  * One RPC client over two endpoints: `rpcUrl` for everything, `scanRpcUrl` for
- * program scans. Both retry on a 429.
+ * program scans. Both retry on a 429. With `rotation`, everything but the
+ * scans goes over it instead of `rpcUrl`.
  */
-export function createLendingRpc(rpcUrl: string, scanRpcUrl: string = PUBLIC_RPC) {
-  const main = withRetry(createDefaultRpcTransport({ url: rpcUrl }));
+export function createLendingRpc(rpcUrl: string, scanRpcUrl: string = PUBLIC_RPC, rotation?: Rotation) {
+  const main = withRetry(
+    rotation === undefined ? createDefaultRpcTransport({ url: rpcUrl }) : rotatingTransport(rotation),
+  );
   const scan = withRetry(createDefaultRpcTransport({ url: scanRpcUrl }));
   const transport: RpcTransport = (config) => {
     const method = (config.payload as { method?: string } | null)?.method;

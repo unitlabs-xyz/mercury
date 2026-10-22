@@ -113,3 +113,33 @@ describe("readConfig", () => {
     );
   });
 });
+
+describe("readConfig, the background jobs' RPC endpoints", () => {
+  /*
+   * The keyless endpoints that answered every read correctly, measured 22
+   * October 2026. PublicNode and Pocket answer a real transaction with null.
+   */
+  it("takes the keyless endpoints that serve the jobs correctly when nothing is set", () => {
+    expect(readConfig({ ...base }).solanaPublicRpcUrls).toEqual([
+      "https://api.mainnet-beta.solana.com",
+      "https://public.rpc.solanavibestation.com",
+    ]);
+  });
+
+  it("takes the list it is given, in order", () => {
+    expect(
+      readConfig({ ...base, SOLANA_PUBLIC_RPC_URLS: " https://a.example , https://b.example" })
+        .solanaPublicRpcUrls,
+    ).toEqual(["https://a.example", "https://b.example"]);
+  });
+
+  it("puts the jobs back on the paid endpoint when set empty", () => {
+    expect(readConfig({ ...base, SOLANA_PUBLIC_RPC_URLS: "" }).solanaPublicRpcUrls).toEqual([]);
+  });
+
+  it("refuses an address that is not https, at boot", () => {
+    expect(() => readConfig({ ...base, SOLANA_PUBLIC_RPC_URLS: "http://a.example" })).toThrow(
+      "SOLANA_PUBLIC_RPC_URLS",
+    );
+  });
+});

@@ -27,7 +27,7 @@ import {
 } from "@kamino-finance/klend-sdk";
 import BN from "bn.js";
 import { D, ZERO, type Decimal } from "@mercury/core";
-import type { ChainReader } from "@mercury/chain";
+import type { ChainReader, Rotation } from "@mercury/chain";
 import { createLendingRpc } from "./rpc.js";
 import { batchedLoader } from "./batch.js";
 import { fromCode } from "@kamino-finance/klend-sdk/dist/@codegen/klend/errors/index.js";
@@ -90,6 +90,8 @@ export interface KaminoLendingConfig {
   readonly rpcUrl: string;
   /** For program scans, which a starter RPC plan may refuse. Defaults to Solana's public RPC. */
   readonly scanRpcUrl?: string;
+  /** The background jobs' public endpoints, taken in turn instead of `rpcUrl`. See `backgroundDeps`. */
+  readonly rotation?: Rotation;
   /** How long a loaded market is reused. Loading reads every reserve and its oracle. */
   readonly ttlMs?: number;
   /**
@@ -124,7 +126,7 @@ export class KaminoLending implements LendingSource {
   private readonly rent: Pick<ChainReader, "rentExemption">;
 
   constructor(config: KaminoLendingConfig) {
-    this.rpc = createLendingRpc(config.rpcUrl, config.scanRpcUrl);
+    this.rpc = createLendingRpc(config.rpcUrl, config.scanRpcUrl, config.rotation);
     this.ttlMs = config.ttlMs ?? 30_000;
     this.rent = config.rent ?? {};
     this.positionOf = batchedLoader((wallets) => this.positions(wallets), null);

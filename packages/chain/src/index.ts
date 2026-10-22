@@ -6,4 +6,5 @@ export * from "./jupiter/lite.js";
 export * from "./jupiter/keys.js";
 export * from "./jupiter/pace.js";
 export * from "./solana/rpc.js";
+export * from "./solana/rotation.js";
 export * from "./fetch.js";
