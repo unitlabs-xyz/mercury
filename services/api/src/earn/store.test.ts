@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
 import { USDC_MINT } from "@mercury/chain";
 import { testDb } from "../db/testing.js";
-import { activities, users } from "../db/schema.js";
-import { pgEarnLedger, type EarnRecord } from "./store.js";
+import { activities, users, wallets } from "../db/schema.js";
+import { hasEarnHistory, pgEarnLedger, type EarnRecord } from "./store.js";
 
 const setup = async () => {
   const db = await testDb();
@@ -64,5 +64,16 @@ describe("pgEarnLedger settings", () => {
     expect(await ledger.settings(userId)).toEqual({ vault: null, riskAccepted: "2026-10-22" });
     await ledger.save(userId, { vault: "Vault" });
     expect(await ledger.settings(userId)).toEqual({ vault: "Vault", riskAccepted: "2026-10-22" });
+  });
+});
+
+describe("hasEarnHistory", () => {
+  it("is true only for a wallet whose account has moved money through Earn", async () => {
+    const { db, ledger, userId } = await setup();
+    await db.insert(wallets).values({ userId, address: "WaLLeT", kind: "privy_embedded", isPrimary: true });
+    expect(await hasEarnHistory(db, "WaLLeT")).toBe(false);
+    await ledger.record(move(userId));
+    expect(await hasEarnHistory(db, "WaLLeT")).toBe(true);
+    expect(await hasEarnHistory(db, "SomeoneElse")).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { D, toWire, type Decimal } from "@mercury/core";
 import { USDC_MINT } from "@mercury/chain";
 import type { Db } from "../db/client.js";
-import { activities, earnEvents, users } from "../db/schema.js";
+import { activities, earnEvents, users, wallets } from "../db/schema.js";
 
 export interface EarnRecord {
   readonly userId: string;
@@ -107,3 +107,14 @@ export const pgEarnLedger = (db: Db): EarnLedger => ({
     });
   },
 });
+
+/** Whether this wallet's account has ever moved money into or out of Earn. One indexed lookup. */
+export const hasEarnHistory = async (db: Db, wallet: string): Promise<boolean> => {
+  const [row] = await db
+    .select({ id: earnEvents.id })
+    .from(earnEvents)
+    .innerJoin(wallets, eq(wallets.userId, earnEvents.userId))
+    .where(eq(wallets.address, wallet))
+    .limit(1);
+  return row !== undefined;
+};

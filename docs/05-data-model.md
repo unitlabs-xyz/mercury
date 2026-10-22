@@ -195,6 +195,8 @@ id, user_id, kind ('deposit'|'withdraw'), usdc_amount, vault, tx_signature, occu
 The vault reports only what the shares are worth now, so "earned so far" is that, less what went
 in, plus what came out. The amount is read off the chain, as the change in the wallet's USDC.
 Unique on the signature, so the confirm route and the send path never write a move twice.
+It is also what decides who is read for Earn at all: an account with no row here is not asked
+about, so the portfolio, money and snapshot reads of everyone else never touch Kamino.
 
 `portfolio_snapshot.earn_usd` keeps the Earn balance of each hourly reading apart from the total
 that counts it. When Kamino cannot be read, the portfolio serves that figure and flags it, as it

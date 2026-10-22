@@ -40,7 +40,9 @@ import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
 import { KaminoEarn } from "./earn/kamino-vault.js";
-import { pgEarnLedger } from "./earn/store.js";
+import { ZERO } from "@mercury/core";
+import { hasEarnHistory, pgEarnLedger } from "./earn/store.js";
+import { onlyIfUsed } from "./earn/gate.js";
 import { recordMove } from "./earn/record.js";
 import { earnSends } from "./earn/sends.js";
 import { earnBalance, earnDirectory, earnSummary, type EarnDirectory } from "./earn/directory.js";
@@ -482,6 +484,8 @@ export function buildReadDeps(
 ): ReadDeps {
   const basketStore = new JsonBasketStore(config.databaseUrl, undefined, db);
   const earnLedger = pgEarnLedger(db);
+  // Earn is read only for accounts that have used it; see `earn/gate.ts`.
+  const usedEarn = (wallet: string) => hasEarnHistory(db, wallet);
   // The send path records each Earn move it sends, so the ledger does not hang on the app's confirm.
   const earnMoves = earnSends((move) =>
     recordMove(
@@ -522,13 +526,13 @@ export function buildReadDeps(
       basketReturns: basketReturnsReader(deps.basketProvider),
       flows: (userId, from) => readFlows(db, userId, from),
       basketMovements: (userId) => readBasketMovements(db, userId),
-      earn: (wallet) => earnBalance(deps.earn, wallet),
+      earn: onlyIfUsed(usedEarn, (wallet) => earnBalance(deps.earn, wallet), ZERO),
     },
     money: {
       chain: deps.chain,
       credit: deps.credit,
       lending: deps.lending,
-      earn: (wallet) => earnSummary(deps.earn, wallet),
+      earn: onlyIfUsed(usedEarn, (wallet) => earnSummary(deps.earn, wallet), { balance: ZERO, apy: null }),
       usdcMint: USDC_MINT,
     },
     earn: {
