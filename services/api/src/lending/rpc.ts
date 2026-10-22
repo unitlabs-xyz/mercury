@@ -52,6 +52,7 @@ export const rotatingTransport = (
   make: (url: string) => RpcTransport = (url) => createDefaultRpcTransport({ url }),
 ): RpcTransport => {
   const transports = new Map(r.urls.map((url) => [url, make(url)]));
+  const fallback = r.fallback === null ? null : make(r.fallback);
   return async <T>(config: Parameters<RpcTransport>[0]): Promise<T> => {
     const method = (config.payload as { method?: string } | null)?.method;
     let thrown: unknown = null;
@@ -59,6 +60,7 @@ export const rotatingTransport = (
     for (let i = 0; i < r.urls.length; i++) {
       const url = r.next(method);
       if (url === null) break;
+      await r.wait();
       try {
         const answer = await transports.get(url)!<T>(config);
         if (!refusedInside(answer)) {
@@ -70,6 +72,16 @@ export const rotatingTransport = (
       } catch (error: unknown) {
         if (!isRefusal(error)) throw error;
         r.refused(url, method);
+        thrown = error;
+      }
+    }
+    if (fallback !== null) {
+      try {
+        const answer = await fallback<T>(config);
+        if (!refusedInside(answer)) return answer;
+        answered = { answer };
+      } catch (error: unknown) {
+        if (!isRefusal(error)) throw error;
         thrown = error;
       }
     }

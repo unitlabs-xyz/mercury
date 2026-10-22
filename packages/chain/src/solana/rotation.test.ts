@@ -200,3 +200,95 @@ describe("rotatingFetch, method by method", () => {
     expect(asked).toEqual([A, B]);
   });
 });
+
+describe("rotation, by what each endpoint keeps and how fast it may be asked", () => {
+  /*
+   * Measured 22 October 2026: Solana Vibe Station keeps only recent history,
+   * and answers a signature cursor older than that with "Transaction … not
+   * found". Solana's own keeps all of it.
+   */
+  it("never offers an endpoint for a method it is known not to serve", () => {
+    const r = rotation([A, B], { skips: new Map([[B, new Set(["getTransaction"])]]) });
+    expect([r.next("getTransaction"), r.next("getTransaction"), r.next("getTransaction")]).toEqual([A, A, A]);
+    expect([r.next("getSlot"), r.next("getSlot")]).toEqual(expect.arrayContaining([A, B]));
+  });
+
+  it("spaces requests to `perSecond`, so a burst does not meet the endpoint's limit all at once", async () => {
+    const slept: number[] = [];
+    // Three requests asked for at the same instant: the clock does not move between them.
+    const r = rotation([A], {
+      now: () => 0,
+      perSecond: 4,
+      sleep: async (ms) => void slept.push(ms),
+    });
+    await Promise.all([r.wait(), r.wait(), r.wait()]);
+    expect(slept).toEqual([250, 500]);
+  });
+
+  it("does not wait at all without `perSecond`", async () => {
+    const r = rotation([A], { sleep: async () => expect.unreachable() });
+    await r.wait();
+  });
+});
+
+describe("rotatingFetch, history", () => {
+  it("passes a cursor an endpoint has no history for on to the next", async () => {
+    const asked: string[] = [];
+    const doFetch = (async (input: Parameters<typeof fetch>[0]) => {
+      asked.push(String(input));
+      return String(input) === A
+        ? new Response(
+            '{"jsonrpc":"2.0","id":0,"error":{"code":-32020,"message":"Transaction 2YDpeWgV not found"}}',
+            {
+              status: 200,
+            },
+          )
+        : new Response('{"jsonrpc":"2.0","id":0,"result":[]}', { status: 200 });
+    }) as typeof fetch;
+    const res = await rotatingFetch(rotation([A, B]), doFetch)("x", {
+      body: '{"jsonrpc":"2.0","id":0,"method":"getSignaturesForAddress","params":[]}',
+    });
+    expect(await res.json()).toMatchObject({ result: [] });
+    expect(asked).toEqual([A, B]);
+  });
+
+  it("waits its turn before every request it sends", async () => {
+    let waits = 0;
+    const r = rotation([A, B]);
+    const paced = { ...r, wait: async () => void (waits += 1) };
+    const n = nodes({ [A]: [429] });
+    await rotatingFetch(paced as typeof r, n.doFetch)("x", {});
+    expect(waits).toBe(2);
+  });
+});
+
+describe("rotatingFetch, with a fallback", () => {
+  const P = "https://paid.example";
+
+  /*
+   * Measured 22 October 2026: Solana's public endpoint refused one transaction
+   * read in five even at two a second, and the only other keyless endpoint
+   * keeps no history. What every public endpoint refuses goes to the paid one.
+   */
+  it("sends what every endpoint refuses to the fallback, and does not count it as strain", async () => {
+    const n = nodes({ [A]: [429], [B]: [429] });
+    const r = rotation([A, B], { fallback: P });
+    const res = await rotatingFetch(r, n.doFetch)("x", {});
+    expect(res.status).toBe(200);
+    expect(n.asked).toEqual([A, B, P]);
+    expect(r.strainedAt).toBe(0);
+  });
+
+  it("never asks the fallback while an endpoint in turn answers", async () => {
+    const n = nodes({});
+    await rotatingFetch(rotation([A, B], { fallback: P }), n.doFetch)("x", {});
+    expect(n.asked).toEqual([A]);
+  });
+
+  it("counts strain only when the fallback refuses too", async () => {
+    const n = nodes({ [A]: [429], [P]: [429] });
+    const r = rotation([A], { fallback: P, now: () => 9 });
+    expect((await rotatingFetch(r, n.doFetch)("x", {})).status).toBe(429);
+    expect(r.strainedAt).toBe(9);
+  });
+});

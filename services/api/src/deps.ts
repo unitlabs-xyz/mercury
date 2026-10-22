@@ -139,7 +139,8 @@ export interface Config {
    * stop spending the paid plan: `SOLANA_PUBLIC_RPC_URLS`, comma-separated.
    * Unset, the keyless ones that serve the jobs (`PUBLIC_RPC_URLS`); set
    * empty, the jobs use `solanaRpcUrl` as before. Everything a person waits on, every read on a screen and every
-   * transaction, keeps `solanaRpcUrl`.
+   * transaction, keeps `solanaRpcUrl`, and so does a job's request that every
+   * public endpoint refuses.
    */
   readonly solanaPublicRpcUrls: readonly string[];
   /**
@@ -271,6 +272,25 @@ const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): num
  * wallet with history, not just a 200.
  */
 const PUBLIC_RPC_URLS = ["https://api.mainnet-beta.solana.com", "https://public.rpc.solanavibestation.com"];
+
+/**
+ * Methods a public endpoint is known not to serve, so the rotation never asks
+ * it for them. Solana Vibe Station keeps only recent history: a signature
+ * cursor older than that is "Transaction … not found", and an older
+ * transaction is null (22 October 2026). History goes to Solana's own.
+ */
+const PUBLIC_RPC_SKIPS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["https://public.rpc.solanavibestation.com", new Set(["getSignaturesForAddress", "getTransaction"])],
+]);
+
+/**
+ * Requests a second across the public lane. Solana's endpoint documents forty
+ * of one method in ten seconds and refused well under that when measured: one
+ * transaction read in five at two a second, more at five (22 October 2026).
+ * Three a second turns a job's first pass after boot from a burst into a
+ * queue, and what is still refused falls back to the paid endpoint.
+ */
+const PUBLIC_RPC_PER_SECOND = 3;
 
 const publicRpcUrls = (env: NodeJS.ProcessEnv): readonly string[] => {
   const raw = env["SOLANA_PUBLIC_RPC_URLS"];
@@ -471,7 +491,12 @@ export function backgroundDeps(
   config: Config,
 ): { readonly deps: Deps; readonly lane: Rotation | null } {
   if (config.solanaPublicRpcUrls.length === 0) return { deps, lane: null };
-  const lane = rotation(config.solanaPublicRpcUrls);
+  // What every public endpoint refuses goes to the paid one, so the jobs do not fail it.
+  const lane = rotation(config.solanaPublicRpcUrls, {
+    skips: PUBLIC_RPC_SKIPS,
+    perSecond: PUBLIC_RPC_PER_SECOND,
+    fallback: config.solanaRpcUrl,
+  });
   // One call per request: Solana Vibe Station and Pocket refuse a batch.
   const chain = new SolanaRpc({ rpcUrl: lane.urls[0]!, fetch: rotatingFetch(lane), maxBatch: 1 });
   return {

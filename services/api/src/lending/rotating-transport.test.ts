@@ -105,3 +105,24 @@ describe("rotatingTransport, method by method", () => {
     expect(await call(rotatingTransport(rotation([A, B]), make))).toEqual(own);
   });
 });
+
+describe("rotatingTransport, paced", () => {
+  it("waits its turn before every request it sends", async () => {
+    let waits = 0;
+    const r = rotation([A, B]);
+    const paced = { ...r, wait: async () => void (waits += 1) } as typeof r;
+    const t = transports({ [A]: [refused(429)] });
+    await call(rotatingTransport(paced, t.make));
+    expect(waits).toBe(2);
+  });
+});
+
+describe("rotatingTransport, with a fallback", () => {
+  it("sends what every endpoint refuses to the fallback", async () => {
+    const P = "https://paid.example";
+    const t = transports({ [A]: [refused(429)], [B]: [refused(429)] });
+    const r = rotation([A, B], { fallback: P });
+    expect(await call(rotatingTransport(r, t.make))).toMatchObject({ result: P });
+    expect(r.strainedAt).toBe(0);
+  });
+});
