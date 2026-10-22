@@ -345,11 +345,42 @@ const earnVaults = [
     7,
   ),
 ];
-/** GET /v1/earn: $1,240.50 in Steakhouse, earning. Set VITE_SAMPLE_EARN=0 to see the page before any deposit. */
+/**
+ * A vault still held after it left the list: Kamino could not be read for it,
+ * or it shrank under the bar. Read off the chain, so no size or averages.
+ */
+const leftTheList = {
+  ...sampleVault(
+    "GoneVau1tUSDC1111111111111111111111111111111",
+    "Elaris USDC",
+    "Elaris",
+    null,
+    null,
+    null,
+    ["0.0412", "0", "0", "0"],
+    "0",
+    0,
+  ),
+  apy7d: null,
+  apy30d: null,
+  apy365d: null,
+  offered: false,
+};
+const inLeftTheList = 210.3;
+
+/**
+ * GET /v1/earn: $1,240.50 in all, most of it in Steakhouse and the rest in a
+ * vault no longer listed. Set VITE_SAMPLE_EARN=0 to see the page before any deposit.
+ */
 const earning = import.meta.env.VITE_SAMPLE_EARN !== "0";
 const earn = {
   selected: earnVaults[0]!.address,
-  holdings: earning ? [{ ...earnVaults[0]!, balanceUsd: inEarn.toFixed(2), earnedUsd: "8.42" }] : [],
+  holdings: earning
+    ? [
+        { ...earnVaults[0]!, balanceUsd: (inEarn - inLeftTheList).toFixed(2), earnedUsd: "8.42" },
+        { ...leftTheList, balanceUsd: inLeftTheList.toFixed(2), earnedUsd: "0" },
+      ]
+    : [],
   balanceUsd: earning ? inEarn.toFixed(2) : "0",
   earnedUsd: earning ? "8.42" : "0",
   apy: earning ? earnVaults[0]!.apy : null,

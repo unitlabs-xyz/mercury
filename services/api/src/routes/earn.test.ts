@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { D, type Decimal } from "@mercury/core";
 import type { TransactionDetail } from "@mercury/chain";
-import { earnRoutes, usdcMoved, type EarnDeps } from "./earn.js";
+import { earnRoutes, type EarnDeps } from "./earn.js";
+import { usdcMoved } from "../earn/record.js";
 import type { EarnIntent, EarnPosition, EarnSource } from "../earn/ports.js";
 import type { EarnLedger, EarnRecord, EarnSettings } from "../earn/store.js";
 import type { EarnDirectory, EarnHolding, EarnListing } from "../earn/directory.js";
@@ -28,6 +29,8 @@ type Body = {
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const WALLET = "WaLLeT";
 const [STEADY, OTHER] = [EARN_VAULTS[0]!.address, "OtherVault"];
+/** A Kamino USDC vault this wallet holds that Mercury no longer lists. */
+const GONE = "GoneVault";
 
 const listing = (address: string, over: Partial<EarnListing> = {}): EarnListing => ({
   address,
@@ -48,6 +51,7 @@ const listing = (address: string, over: Partial<EarnListing> = {}): EarnListing 
   sharesMint: `shares-${address}`,
   sharesDecimals: 6,
   tokensPerShare: D("1.06"),
+  offered: true,
   ...over,
 });
 
@@ -82,6 +86,7 @@ const directory = (
 ): EarnDirectory => ({
   list: async () => listings,
   find: async (a) => listings.find((l) => l.address === a),
+  known: async (a) => a === GONE || listings.some((l) => l.address === a),
   source: (a) => source(a, fakes[a]),
   holdings: async () => holdings,
   defaultVault: STEADY,
@@ -241,6 +246,13 @@ describe("POST /v1/earn/transactions", () => {
     expect(built[0]).toEqual({ kind: "deposit", usdc: D(20) });
   });
 
+  it("remembers each move it builds, so the move is recorded even if the app never confirms", async () => {
+    const remembered: unknown[] = [];
+    const d = deps({ sends: { remember: (bytes, move) => remembered.push([[...bytes], move]) } });
+    await send(appWith(d), "POST", "/v1/earn/transactions", { kind: "deposit", usd: "20" });
+    expect(remembered).toEqual([[[1], { userId: "user-1", wallet: WALLET, kind: "deposit", vault: STEADY }]]);
+  });
+
   it("moves all the wallet's cash when asked for all", async () => {
     const built: EarnIntent[] = [];
     await send(
@@ -273,6 +285,36 @@ describe("POST /v1/earn/transactions", () => {
       { kind: "withdraw", usd: "20.40", vault: OTHER },
     );
     expect(built[0]).toEqual({ kind: "withdraw", usdc: "all" });
+  });
+
+  it("withdraws from a vault the wallet holds that Mercury no longer lists", async () => {
+    const built: EarnIntent[] = [];
+    const res = await send(
+      appWith(deps({ directory: directory({ [GONE]: { position: { shares: D(1), usdc: D(5) }, built } }) })),
+      "POST",
+      "/v1/earn/transactions",
+      { kind: "withdraw", usd: "all", vault: GONE },
+    );
+    expect(res.status).toBe(200);
+    expect(built[0]).toEqual({ kind: "withdraw", usdc: "all" });
+  });
+
+  it("never deposits into a vault Mercury no longer lists", async () => {
+    const res = await send(appWith(deps()), "POST", "/v1/earn/transactions", {
+      kind: "deposit",
+      usd: "1",
+      vault: GONE,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses to withdraw from something that is not a Kamino USDC vault", async () => {
+    const res = await send(appWith(deps()), "POST", "/v1/earn/transactions", {
+      kind: "withdraw",
+      usd: "all",
+      vault: "Elsewhere",
+    });
+    expect(res.status).toBe(404);
   });
 
   it("refuses a withdrawal with nothing in the vault", async () => {
@@ -314,6 +356,22 @@ describe("POST /v1/earn/confirm", () => {
     expect(res.status).toBe(200);
     expect(records[0]).toMatchObject({ kind: "deposit", vault: STEADY, signature: "sig" });
     expect(records[0]?.usdc.toString()).toBe("20");
+  });
+
+  it("records a withdrawal from a vault Mercury no longer lists", async () => {
+    const records: EarnRecord[] = [];
+    const d = deps({ ledger: ledger({}, records) });
+    const res = await send(
+      appWith({
+        ...d,
+        history: { ...d.history, transaction: async () => tx(0n, 5_000_000n, [WALLET, GONE]) },
+      }),
+      "POST",
+      "/v1/earn/confirm",
+      { signature: "sig", action: { kind: "withdraw", usd: "all", vault: GONE } },
+    );
+    expect(res.status).toBe(200);
+    expect(records[0]).toMatchObject({ kind: "withdraw", vault: GONE });
   });
 
   it("refuses to file a transaction under a vault it never touched", async () => {

@@ -3,7 +3,7 @@ import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { D, ZERO, type Decimal } from "@mercury/core";
 import { createLendingRpc } from "../lending/rpc.js";
 import { EARN_VAULTS, HIDDEN_VAULTS, curatorOf, type VaultListing } from "./catalog.js";
-import type { KaminoApi } from "./kamino-api.js";
+import type { KaminoApi, ListedVault } from "./kamino-api.js";
 import type { EarnSource } from "./ports.js";
 
 /** A vault Mercury offers, as the list shows it. Everything here comes from Kamino's API; nothing reads the chain. */
@@ -32,6 +32,12 @@ export interface EarnListing {
   readonly sharesDecimals: number;
   /** USDC one share withdraws as, at Kamino's last reading. */
   readonly tokensPerShare: Decimal;
+  /**
+   * On the list today. False for a vault this wallet still holds after it
+   * dropped off: Kamino's API could not be read for it, or it shrank under the
+   * bar. It can be withdrawn from, never deposited into.
+   */
+  readonly offered: boolean;
 }
 
 export interface EarnHolding {
@@ -46,8 +52,14 @@ export interface EarnDirectory {
   find(vault: string): Promise<EarnListing | undefined>;
   /** The adapter that reads a vault on the chain and builds its transactions. */
   source(vault: string): EarnSource;
-  /** Every listed vault this wallet holds shares in: one RPC call, whatever the number of vaults. */
+  /**
+   * Every vault this wallet holds shares in: the listed ones at the list's
+   * price, and any Kamino USDC vault no longer listed read off the chain, so
+   * money never drops off the screen because a vault dropped off the list.
+   */
   holdings(wallet: string): Promise<readonly EarnHolding[]>;
+  /** Any Kamino USDC vault, offered or not: what can be withdrawn from and confirmed. */
+  known(vault: string): Promise<boolean>;
   readonly defaultVault: string;
   /** Kamino's API, shared, so its caches are too. */
   readonly api: KaminoApi;
@@ -86,6 +98,8 @@ export const earnDirectory = (opts: {
   defaultVault?: string;
   /** How long a built list is reused. */
   ttlMs?: number;
+  /** This wallet's raw balance of every token it holds, by mint. Read from the node when left out. */
+  shareBalances?: (wallet: string) => Promise<ReadonlyMap<string, Decimal>>;
 }): EarnDirectory => {
   const rpc = createLendingRpc(opts.rpcUrl);
   const ttlMs = opts.ttlMs ?? 10 * 60_000;
@@ -124,6 +138,7 @@ export const earnDirectory = (opts: {
         sharesMint: v.sharesMint,
         sharesDecimals: v.sharesDecimals,
         tokensPerShare: m.tokensPerShare,
+        offered: true,
       };
       return listing;
     });
@@ -146,30 +161,28 @@ export const earnDirectory = (opts: {
     return cached.list;
   };
 
-  return {
-    list,
-    api: opts.api,
-    defaultVault: opts.defaultVault ?? EARN_VAULTS[0]!.address,
-    find: async (vault) => (await list()).find((l) => l.address === vault),
-    source: (vault) => {
-      let s = sources.get(vault);
-      if (s === undefined) {
-        s = opts.make(vault);
-        sources.set(vault, s);
-      }
-      return s;
-    },
-    holdings: async (wallet) => {
-      const [listings, accounts] = await Promise.all([
-        list(),
-        rpc
-          .getTokenAccountsByOwner(
-            address(wallet),
-            { programId: TOKEN_PROGRAM_ADDRESS as Address },
-            { encoding: "jsonParsed" },
-          )
-          .send(),
-      ]);
+  const source = (vault: string) => {
+    let s = sources.get(vault);
+    if (s === undefined) {
+      s = opts.make(vault);
+      sources.set(vault, s);
+    }
+    return s;
+  };
+
+  /** Every USDC vault Kamino runs, offered or not, hidden ones included: shares in any of them are cash. */
+  const usdcVaults = async () => (await opts.api.vaults()).filter((v) => v.tokenMint === opts.usdcMint);
+
+  const shareBalances =
+    opts.shareBalances ??
+    (async (wallet: string) => {
+      const accounts = await rpc
+        .getTokenAccountsByOwner(
+          address(wallet),
+          { programId: TOKEN_PROGRAM_ADDRESS as Address },
+          { encoding: "jsonParsed" },
+        )
+        .send();
       const held = new Map<string, Decimal>();
       for (const a of accounts.value) {
         const info = (
@@ -178,12 +191,72 @@ export const earnDirectory = (opts: {
         if (info?.mint === undefined || info.tokenAmount?.amount === undefined) continue;
         held.set(info.mint, (held.get(info.mint) ?? ZERO).add(D(info.tokenAmount.amount)));
       }
-      return listings.flatMap((l) => {
-        const raw = held.get(l.sharesMint);
-        if (raw === undefined || raw.lte(0)) return [];
-        const shares = raw.div(D(10).pow(l.sharesDecimals));
+      return held;
+    });
+
+  /**
+   * A vault this wallet holds that the list does not carry, read off the chain:
+   * its share price and rate now, without Kamino's API. Its size, depositors
+   * and averages are not known here, and nothing reads them for a vault that
+   * is only there to be withdrawn from.
+   */
+  const unlisted = async (v: ListedVault, raw: Decimal): Promise<EarnHolding> => {
+    const chain = await source(v.address).vault();
+    const pick = picks.get(v.address)?.listing ?? null;
+    const named = curatorOf(v.name);
+    const shares = raw.div(D(10).pow(v.sharesDecimals));
+    return {
+      listing: {
+        address: v.address,
+        name: v.name || chain.name,
+        picked: pick,
+        curator: pick?.curator ?? named?.curator ?? null,
+        logo: pick?.logo ?? named?.logo ?? null,
+        apy: chain.apy,
+        apy7d: null,
+        apy30d: null,
+        apy365d: null,
+        tvlUsd: ZERO,
+        holders: 0,
+        performanceFee: chain.performanceFee,
+        managementFee: chain.managementFee,
+        minDepositUsdc: chain.minDepositUsdc,
+        full: false,
+        sharesMint: v.sharesMint,
+        sharesDecimals: v.sharesDecimals,
+        tokensPerShare: chain.sharePrice,
+        offered: false,
+      },
+      shares,
+      usdc: shares.mul(chain.sharePrice),
+    };
+  };
+
+  return {
+    list,
+    api: opts.api,
+    defaultVault: opts.defaultVault ?? EARN_VAULTS[0]!.address,
+    find: async (vault) => (await list()).find((l) => l.address === vault),
+    source,
+    known: async (vault) =>
+      (await list().catch(() => [])).some((l) => l.address === vault) ||
+      (await usdcVaults()).some((v) => v.address === vault),
+    holdings: async (wallet) => {
+      const [listings, every, held] = await Promise.all([
+        list(),
+        // Unreadable, the list is all there is to go on, as before.
+        usdcVaults().catch(() => null),
+        shareBalances(wallet),
+      ]);
+      const has = (mint: string) => (held.get(mint) ?? ZERO).gt(0);
+      const listed = listings.flatMap((l) => {
+        if (!has(l.sharesMint)) return [];
+        const shares = held.get(l.sharesMint)!.div(D(10).pow(l.sharesDecimals));
         return [{ listing: l, shares, usdc: shares.mul(l.tokensPerShare) }];
       });
+      const onList = new Set(listings.map((l) => l.sharesMint));
+      const off = (every ?? []).filter((v) => !onList.has(v.sharesMint) && has(v.sharesMint));
+      return [...listed, ...(await Promise.all(off.map((v) => unlisted(v, held.get(v.sharesMint)!))))];
     },
   };
 };

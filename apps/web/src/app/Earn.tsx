@@ -18,6 +18,7 @@ import { interestText, pct, usd, usdCompact } from "@mercury/view";
 import { AppShell } from "./AppShell";
 import { DotChart } from "./DotChart";
 import { KIND_LABEL, VaultMark, rate } from "./earn/VaultMark";
+import { floorCents } from "./earn/moves";
 import { usePanels } from "./Panels";
 import { HeaderFigure } from "./portfolio/Summary";
 import { Skeleton } from "./portfolio/ui";
@@ -86,7 +87,7 @@ export const Earn = () => {
   if (open !== null && open !== last) setLast(open);
 
   const busy = action.isPending;
-  const idle = e ? Math.floor(e.walletUsd * 100 + 1e-6) / 100 : 0;
+  const idle = e ? floorCents(e.walletUsd) : 0;
   const earning = (e?.holdings.length ?? 0) > 0;
 
   const shown = useMemo(() => {
@@ -100,16 +101,23 @@ export const Earn = () => {
   }, [vaults.data, query, sort]);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const at = Math.min(page, pages - 1);
-  const panelVault = vaults.data?.find((v) => v.address === (open ?? last)) ?? null;
+  // A vault held after it left the list is not among the vaults on offer, and still opens.
+  const panelVault =
+    vaults.data?.find((v) => v.address === (open ?? last)) ??
+    e?.holdings.find((h) => h.address === (open ?? last)) ??
+    null;
 
-  /** Everything in Earn moves to this vault: out of each other one, then the wallet's cash in. */
+  /**
+   * Everything in Earn moves to this vault: out of each other one, then what
+   * came out goes in. Only that: the wallet's own cash stays where it is.
+   */
   const moveAllTo = (v: EarnVault) => {
     if (!e || busy) return;
     const elsewhere = e.holdings.filter((h) => h.address !== v.address);
     action.mutate({
       intents: [
         ...elsewhere.map((h) => ({ kind: "withdraw", usd: "all", vault: h.address }) as const),
-        { kind: "deposit", usd: "all", vault: v.address } as const,
+        { kind: "deposit", usd: { cameOutUpTo: elsewhereUsd(e, v) }, vault: v.address },
       ],
     });
   };
@@ -355,6 +363,10 @@ export const Earn = () => {
   );
 };
 
+/** What sits in every vault but this one: the figure the switch button shows, and the most it moves. */
+const elsewhereUsd = (e: EarnData, v: EarnVault) =>
+  floorCents(e.holdings.filter((h) => h.address !== v.address).reduce((s, h) => s + h.balanceUsd, 0));
+
 /** One vault as a card: its mark, the rate in large type, a month of it as dots, and its size. */
 const VaultCard = ({ vault, held, onOpen }: { vault: EarnVault; held: number; onOpen: () => void }) => {
   const history = useEarnVault(vault.address, "1M", true);
@@ -427,9 +439,7 @@ const VaultPanel = ({
   const [range, setRange] = useState<VaultRange>("1M");
   const history = useEarnVault(open ? vault.address : null, range);
   const held = earn.holdings.find((h) => h.address === vault.address);
-  const elsewhere = earn.holdings
-    .filter((h) => h.address !== vault.address)
-    .reduce((s, h) => s + h.balanceUsd, 0);
+  const elsewhere = elsewhereUsd(earn, vault);
   const chart = (history.data?.points ?? []).map((p) => ({
     label: new Date(p.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     value: p.apy * 100,
@@ -445,7 +455,11 @@ const VaultPanel = ({
             <span className="min-w-0 truncate">{vault.name}</span>
           </span>
         }
-        sub={vault.blurb ?? "Listed as Kamino reports it. Not reviewed by Mercury."}
+        sub={
+          !vault.offered
+            ? "No longer on Mercury's list."
+            : (vault.blurb ?? "Listed as Kamino reports it. Not reviewed by Mercury.")
+        }
         onClose={onClose}
       />
       <div className="pt-1 pb-6">
@@ -473,43 +487,56 @@ const VaultPanel = ({
          * panels do, and their contents on the same 24px line as the header.
          */}
         <div className="mt-10 flex flex-col gap-1 px-1">
-          <div className="rounded-lg bg-ds-panel px-5 py-5">
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
-              <HeaderFigure
-                size="md"
-                label="30-day average"
-                value={rate(vault.apy30d)}
-                sub={`1 year ${rate(vault.apy365d)}`}
-              />
-              <HeaderFigure
-                size="md"
-                label="Deposits"
-                value={usdCompact(vault.tvlUsd)}
-                sub={`${vault.holders.toLocaleString("en-US")} depositors`}
-              />
-              <HeaderFigure
-                size="md"
-                label="Fee"
-                value={pct(vault.performanceFee * 100, 0)}
-                sub={
-                  vault.managementFee > 0
-                    ? `Of interest, plus ${pct(vault.managementFee * 100)} a year`
-                    : "Of interest, to the curator"
-                }
-              />
-              <HeaderFigure
-                size="md"
-                label="Curator"
-                value={vault.curator ?? "—"}
-                sub={vault.kind ? KIND_LABEL[vault.kind] : "Not reviewed by Mercury"}
-              />
-            </dl>
-            {vault.kind && (
-              <p className="mt-5 border-t border-black/5 pt-4 text-[12px] leading-[1.5] text-ds-muted">
-                {KIND_NOTE[vault.kind]}
-              </p>
-            )}
-          </div>
+          {/*
+           * Off the list, what Kamino's API says about its size and averages is
+           * not known here, and nothing more can go in. What is in it is still
+           * this person's, and comes out the usual way.
+           */}
+          {!vault.offered && (
+            <p className="rounded-lg bg-ds-panel px-5 py-4 text-[12px] leading-[1.5] text-ds-muted">
+              Mercury no longer lists this vault, so nothing more can go in. What you have here is still yours
+              and still earning, and you can withdraw it.
+            </p>
+          )}
+          {vault.offered && (
+            <div className="rounded-lg bg-ds-panel px-5 py-5">
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-5">
+                <HeaderFigure
+                  size="md"
+                  label="30-day average"
+                  value={rate(vault.apy30d)}
+                  sub={`1 year ${rate(vault.apy365d)}`}
+                />
+                <HeaderFigure
+                  size="md"
+                  label="Deposits"
+                  value={usdCompact(vault.tvlUsd)}
+                  sub={`${vault.holders.toLocaleString("en-US")} depositors`}
+                />
+                <HeaderFigure
+                  size="md"
+                  label="Fee"
+                  value={pct(vault.performanceFee * 100, 0)}
+                  sub={
+                    vault.managementFee > 0
+                      ? `Of interest, plus ${pct(vault.managementFee * 100)} a year`
+                      : "Of interest, to the curator"
+                  }
+                />
+                <HeaderFigure
+                  size="md"
+                  label="Curator"
+                  value={vault.curator ?? "—"}
+                  sub={vault.kind ? KIND_LABEL[vault.kind] : "Not reviewed by Mercury"}
+                />
+              </dl>
+              {vault.kind && (
+                <p className="mt-5 border-t border-black/5 pt-4 text-[12px] leading-[1.5] text-ds-muted">
+                  {KIND_NOTE[vault.kind]}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Keyed by vault, so a newly opened vault starts folded. */}
           <Allocation key={vault.address} allocation={history.data?.allocation ?? null} />
@@ -522,21 +549,23 @@ const VaultPanel = ({
         </div>
 
         <div className="mt-6 flex flex-col gap-2 px-6">
-          <Button
-            variant="primary"
-            size="lg"
-            disabled={busy || vault.full}
-            onClick={onMoveIn}
-            className="w-full"
-          >
-            {vault.full ? "This vault is full" : held ? "Move more in" : "Move cash in"}
-          </Button>
+          {vault.offered && (
+            <Button
+              variant="primary"
+              size="lg"
+              disabled={busy || vault.full}
+              onClick={onMoveIn}
+              className="w-full"
+            >
+              {vault.full ? "This vault is full" : held ? "Move more in" : "Move cash in"}
+            </Button>
+          )}
           {held && (
             <Button size="lg" disabled={busy} onClick={onWithdraw} className="w-full">
               Withdraw
             </Button>
           )}
-          {elsewhere > 0 && !vault.full && (
+          {elsewhere > 0 && !vault.full && vault.offered && (
             <Button size="lg" disabled={busy} onClick={onMoveAll} className="w-full">
               Move my {usd(elsewhere)} from other vaults here
             </Button>

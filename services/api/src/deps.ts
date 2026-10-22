@@ -41,6 +41,8 @@ import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
 import { KaminoEarn } from "./earn/kamino-vault.js";
 import { pgEarnLedger } from "./earn/store.js";
+import { recordMove } from "./earn/record.js";
+import { earnSends } from "./earn/sends.js";
 import { earnBalance, earnDirectory, earnSummary, type EarnDirectory } from "./earn/directory.js";
 import { kaminoApi } from "./earn/kamino-api.js";
 import type { EarnDeps } from "./routes/earn.js";
@@ -478,6 +480,13 @@ export function buildReadDeps(
 ): ReadDeps {
   const basketStore = new JsonBasketStore(config.databaseUrl, undefined, db);
   const earnLedger = pgEarnLedger(db);
+  // The send path records each Earn move it sends, so the ledger does not hang on the app's confirm.
+  const earnMoves = earnSends((move) =>
+    recordMove(
+      { history: deps.history, ledger: earnLedger, directory: deps.earn, usdcMint: USDC_MINT },
+      move,
+    ),
+  );
   const baskets = basketValueReader(deps.basketProvider, basketStore);
   return {
     basketTemplates: new BasketService({
@@ -526,6 +535,7 @@ export function buildReadDeps(
       history: deps.history,
       usdcMint: USDC_MINT,
       ledger: earnLedger,
+      sends: earnMoves,
       ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
     activity: {
@@ -563,6 +573,7 @@ export function buildReadDeps(
     send: {
       rpcUrl: config.solanaRpcUrl,
       fees: { chain: deps.chain, prices: deps.prices },
+      accepted: earnMoves.accepted,
       ...(relay === undefined ? {} : { relay }),
     },
   };

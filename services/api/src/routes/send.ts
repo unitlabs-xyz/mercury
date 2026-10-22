@@ -57,6 +57,14 @@ export interface SendDeps {
         readonly allowedPrograms?: readonly string[] | undefined;
       }
     | undefined;
+  /**
+   * Told about each transaction the node takes, with the message it signs, for
+   * bookkeeping that must not wait on the app to confirm: Earn's ledger. Every
+   * transaction the app sends passes through here, so nothing is missed. It
+   * runs before the transaction lands, so it waits for that itself, and the
+   * answer to the person waits for none of it.
+   */
+  readonly accepted?: (messageBytes: Uint8Array, signature: string) => Promise<void>;
 }
 
 /** The transaction id is the fee payer's signature, which is the first one. */
@@ -403,6 +411,7 @@ export function sendRoutes(deps: SendDeps): Hono {
       // Preflight failures carry the program's own reason; pass it on rather than a generic 500.
       return c.json(fail("send_failed", reasonFrom(failureText(err))), 422);
     }
+    void deps.accepted?.(decoded.messageBytes, signature).catch(() => undefined);
 
     const deadline = Date.now() + confirmMs;
     while (Date.now() < deadline) {

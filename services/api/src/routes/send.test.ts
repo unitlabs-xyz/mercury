@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import {
@@ -332,5 +334,64 @@ describe("POST /v1/money/send/quote", () => {
   it("refuses a session with no wallet", async () => {
     const res = await quote({ wallet: null });
     expect(res.status).toBe(401);
+  });
+});
+
+/**
+ * A Solana node that takes every transaction and reports it confirmed at once,
+ * for the one path these tests otherwise never reach: after the send.
+ */
+const acceptingNode = async () => {
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      const { id, method } = JSON.parse(body) as { id: number; method: string };
+      const result =
+        method === "sendTransaction"
+          ? "sig"
+          : {
+              context: { slot: 1 },
+              value: [{ slot: 1, confirmations: null, err: null, confirmationStatus: "confirmed" }],
+            };
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ jsonrpc: "2.0", id, result }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => server.close() };
+};
+
+describe("POST /v1/transactions/send, once the node takes it", () => {
+  it("tells `accepted` which message went out, under the signature it went out as", async () => {
+    const node = await acceptingNode();
+    try {
+      const { wallet, wire } = await txFrom(true);
+      const told: [number[], string][] = [];
+      const a = new Hono();
+      a.use("*", async (c, next) => {
+        c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: wallet });
+        await next();
+      });
+      a.route(
+        "/",
+        sendRoutes({
+          rpcUrl: node.url,
+          accepted: async (bytes, signature) => {
+            told.push([[...bytes], signature]);
+          },
+        }),
+      );
+      const res = await a.request("/v1/transactions/send", {
+        method: "POST",
+        body: JSON.stringify({ transaction: wire }),
+        headers: { "content-type": "application/json" },
+      });
+      const { signature } = (await res.json()) as { signature: string };
+      const message = getTransactionDecoder().decode(getBase64Encoder().encode(wire)).messageBytes;
+      expect(told).toEqual([[[...(message as unknown as Uint8Array)], signature]]);
+    } finally {
+      node.close();
+    }
   });
 });

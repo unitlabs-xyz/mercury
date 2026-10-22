@@ -3,6 +3,7 @@ import { D } from "@mercury/core";
 import { earnDirectory } from "./directory.js";
 import { EARN_VAULTS, HIDDEN_VAULTS } from "./catalog.js";
 import type { KaminoApi, ListedVault, VaultMetrics } from "./kamino-api.js";
+import type { EarnSource, EarnVault } from "./ports.js";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const STEADY = EARN_VAULTS[0]!.address;
@@ -40,12 +41,32 @@ const api = (rows: ListedVault[], m: Record<string, VaultMetrics | null>): Kamin
   marketNames: async () => new Map(),
 });
 
-const dir = (rows: ListedVault[], m: Record<string, VaultMetrics | null>) =>
+/** A vault as the chain reads it: only `vault()` is used, for a holding no longer on the list. */
+const onChain = (over: Partial<EarnVault> = {}): EarnSource =>
+  ({
+    vault: async () => ({
+      address: "x",
+      name: "On chain",
+      apy: D("0.04"),
+      sharePrice: D("1.2"),
+      performanceFee: D("0.1"),
+      managementFee: D(0),
+      minDepositUsdc: D("0.1"),
+      ...over,
+    }),
+  }) as unknown as EarnSource;
+
+const dir = (
+  rows: ListedVault[],
+  m: Record<string, VaultMetrics | null>,
+  held: Record<string, bigint> = {},
+) =>
   earnDirectory({
     api: api(rows, m),
     usdcMint: USDC,
     rpcUrl: "http://localhost:1",
-    make: () => ({}) as never,
+    make: () => onChain(),
+    shareBalances: async () => new Map(Object.entries(held).map(([mint, raw]) => [mint, D(raw.toString())])),
   });
 
 describe("earnDirectory.list", () => {
@@ -97,5 +118,60 @@ describe("curators of vaults Mercury did not pick", () => {
       ["Plume x Re7 USDC", "Re7 Labs", "re7"],
       ["USDC Prime", null, null],
     ]);
+  });
+});
+
+describe("earnDirectory.holdings", () => {
+  it("values a vault on the list at the list's share price", async () => {
+    const [h] = await dir(
+      [vault(STEADY)],
+      { [STEADY]: metrics(1_000_000, 3000) },
+      {
+        [`shares-${STEADY}`]: 2_000_000n,
+      },
+    ).holdings("wallet");
+    expect(h!.listing.offered).toBe(true);
+    expect(h!.usdc.toString()).toBe("2.2");
+  });
+
+  /*
+   * One failed request to Kamino's API, or a vault shrinking under the bar, used
+   * to take a person's money off every screen and refuse its withdrawal.
+   */
+  it("keeps a vault the wallet holds after it drops off the list, valued on the chain", async () => {
+    const d = dir(
+      [vault(STEADY), vault("Shrunk")],
+      { [STEADY]: null, Shrunk: metrics(10_000, 2) },
+      {
+        [`shares-${STEADY}`]: 2_000_000n,
+        "shares-Shrunk": 1_000_000n,
+      },
+    );
+    expect(await d.list()).toEqual([]);
+    const held = await d.holdings("wallet");
+    expect(held.map((h) => [h.listing.address, h.listing.offered, h.usdc.toString()])).toEqual([
+      [STEADY, false, "2.4"],
+      ["Shrunk", false, "1.2"],
+    ]);
+    // Still Mercury's pick, still named for its curator.
+    expect(held[0]!.listing.curator).toBe("Steakhouse Financial");
+  });
+
+  it("ignores vaults the wallet holds nothing in", async () => {
+    expect(await dir([vault("Shrunk")], { Shrunk: metrics(10_000, 2) }).holdings("wallet")).toEqual([]);
+  });
+});
+
+describe("earnDirectory.known", () => {
+  it("knows every Kamino USDC vault, offered or not, and nothing else", async () => {
+    const d = dir([vault(STEADY), vault("Tiny"), vault("Sol", { tokenMint: "So11" })], {
+      [STEADY]: metrics(1_000_000, 3000),
+      Tiny: metrics(20_000, 100),
+      Sol: metrics(5_000_000, 400),
+    });
+    expect(await d.known(STEADY)).toBe(true);
+    expect(await d.known("Tiny")).toBe(true);
+    expect(await d.known("Sol")).toBe(false);
+    expect(await d.known("Nowhere")).toBe(false);
   });
 });

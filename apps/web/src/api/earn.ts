@@ -5,6 +5,7 @@ import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
 import { refreshAfterChain } from "./settle";
 import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { reasonOf, runSteps } from "../app/earn/moves";
 
 const KIND = "earn";
 
@@ -27,6 +28,8 @@ type VaultWire = {
   managementFee: string;
   minDepositUsd: string;
   full: boolean;
+  /** On the list today. Absent from an older server, which only ever sent listed vaults. */
+  offered?: boolean;
 };
 
 type HoldingWire = VaultWire & { balanceUsd: string; earnedUsd: string };
@@ -63,6 +66,11 @@ export type EarnVault = {
   minDepositUsd: number;
   /** At its deposit cap: takes nothing more. */
   full: boolean;
+  /**
+   * Mercury lists it today. False for a vault this account still holds after
+   * it left the list: it can be withdrawn from, never added to.
+   */
+  offered: boolean;
 };
 
 export type EarnHolding = EarnVault & { balanceUsd: number; earnedUsd: number };
@@ -100,6 +108,7 @@ const vaultFromWire = (w: VaultWire): EarnVault => ({
   managementFee: Number(w.managementFee),
   minDepositUsd: Number(w.minDepositUsd),
   full: w.full,
+  offered: w.offered ?? true,
 });
 
 export const EARN_KEY = ["api", "earn"] as const;
@@ -179,10 +188,23 @@ export type EarnIntent =
   | { kind: "deposit"; usd: string | "all"; vault: string }
   | { kind: "withdraw"; usd: string | "all"; vault: string };
 
+/**
+ * One step of a move. A switch's deposit is not a figure the page can know in
+ * advance: it is what the withdrawals before it brought back, up to the amount
+ * the button showed, so cash already in the wallet stays there.
+ */
+export type EarnStep = EarnIntent | { kind: "deposit"; usd: { cameOutUpTo: number }; vault: string };
+
 type SentEarn = { signature: string; action: EarnIntent };
 
+/** What the server filed: the USDC that actually moved, in cents. */
+type Filed = { recorded: boolean; usd: string };
+
 const confirmSent = (sent: SentEarn) =>
-  apiFetch("/v1/earn/confirm", { method: "POST", body: JSON.stringify(sent) });
+  apiFetch<Filed>("/v1/earn/confirm", {
+    method: "POST",
+    body: JSON.stringify(sent),
+  });
 
 const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
@@ -191,8 +213,8 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
  * Moves into or out of Earn, end to end, one after another: the server builds
  * each with the relayer paying, the embedded wallet signs, the server sends
  * and waits for it to land, and the confirm tells the server how much moved so
- * "earned" has a basis. Moving to another vault is two of these: everything
- * out of the old one, then everything in the wallet into the new one.
+ * "earned" has a basis. Moving to another vault is several of these:
+ * everything out of each other vault, then what came out into the new one.
  */
 export const useEarnAction = () => {
   const qc = useQueryClient();
@@ -200,36 +222,32 @@ export const useEarnAction = () => {
   const { signTransaction } = useSignTransaction();
 
   const mutation = useMutation({
-    mutationFn: async ({ intents }: { intents: EarnIntent[] }) => {
-      const signatures: string[] = [];
-      for (const intent of intents) {
-        if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
-        const built = await apiFetch<{ transactions: string[]; vault: string }>("/v1/earn/transactions", {
-          method: "POST",
-          body: JSON.stringify(intent),
-        });
-        let last: string | undefined;
-        for (const tx of built.transactions) {
+    mutationFn: async ({ intents }: { intents: EarnStep[] }) => ({
+      signatures: await runSteps(intents, {
+        build: (intent) =>
+          apiFetch<{ transactions: string[]; vault: string }>("/v1/earn/transactions", {
+            method: "POST",
+            body: JSON.stringify(intent),
+          }),
+        signAndSend: async (tx) => {
+          if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
           const { signedTransaction } = await signTransaction({ transaction: toBytes(tx), wallet });
           const sent = await apiFetch<{ signature: string; status: string; error?: string | null }>(
             "/v1/transactions/send",
             { method: "POST", body: JSON.stringify({ transaction: toBase64(signedTransaction) }) },
           );
           if (sent.status === "failed") throw new Error(sent.error ?? "The transaction failed on chain.");
-          last = sent.signature;
-          signatures.push(sent.signature);
-        }
+          return sent.signature;
+        },
         /* As a loan's confirm: the money has moved, so a failed confirm is retried later, never thrown. */
-        if (last !== undefined) {
-          const sent = { signature: last, action: { ...intent, vault: built.vault } };
+        confirm: async (sent) => {
           rememberConfirm(KIND, sent);
-          await confirmSent(sent)
-            .then(() => forgetConfirm(KIND, sent.signature))
-            .catch(() => undefined);
-        }
-      }
-      return { signatures };
-    },
+          return confirmSent(sent)
+            .then((filed) => (forgetConfirm(KIND, sent.signature), filed))
+            .catch(() => null);
+        },
+      }),
+    }),
     onSettled: () => refreshAfterChain(qc),
   });
 
@@ -249,8 +267,5 @@ export const useEarnAction = () => {
  */
 export const earnErrorText = (err: unknown): string => {
   console.error("earn: the move failed", err);
-  if (err instanceof Error && err.message) return err.message;
-  const message = (err as { message?: unknown } | null)?.message;
-  if (typeof message === "string" && message.length > 0) return message;
-  return "The move did not go through. Your money has not moved.";
+  return reasonOf(err) ?? "The move did not go through. Your money has not moved.";
 };

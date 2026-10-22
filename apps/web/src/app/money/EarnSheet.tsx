@@ -10,6 +10,7 @@ import {
   type EarnVault,
 } from "../../api/earn";
 import { VaultMark, rate } from "../earn/VaultMark";
+import { floorCents } from "../earn/moves";
 import { Button } from "../../ui/Button";
 import { PanelHeader, SidePanel } from "../../ui/Dialog";
 import { Alert, Check } from "../../ui/icons";
@@ -42,9 +43,6 @@ const pickVault = (
     ? undefined
     : { ...v, balanceUsd: e.holdings.find((h) => h.address === v.address)?.balanceUsd ?? 0 };
 };
-
-/** Cents, rounded down: never offer a cent more than is there. */
-const floorCents = (n: number) => Math.floor(n * 100 + 1e-6) / 100;
 
 /**
  * Move cash into Earn, or take it back. The amount well and presets are the
