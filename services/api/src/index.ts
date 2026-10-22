@@ -1,5 +1,6 @@
 import { serve } from "@hono/node-server";
 import {
+  backgroundDeps,
   buildAuthDeps,
   buildDeps,
   buildReadDeps,
@@ -26,7 +27,8 @@ import { keypairRelaySigner } from "./relay/signer.js";
 import { exitOnUncaught, oneLineErrors } from "./log.js";
 import { telemetryEndpoint } from "./telemetry/otel.js";
 import { forwardConsoleToOtel } from "./telemetry/console-logs.js";
-import { every } from "./jobs/every.js";
+import { every, type EveryDeps } from "./jobs/every.js";
+import { cadence, presence } from "./jobs/presence.js";
 import { logger } from "./log/index.js";
 
 /*
@@ -93,7 +95,9 @@ boot.info(
 
 await syncConfiguredCatalog(config);
 
-const auth = buildAuthDeps(config);
+/* Who is using the app right now, so position-sync can be quick for them alone. */
+const here = presence();
+const auth = { ...buildAuthDeps(config), onSeen: here.seen };
 const deps = buildDeps(config);
 /*
  * The relayer, if one is configured. Built here because loading a key is async.
@@ -204,6 +208,31 @@ if (fund !== undefined) {
 
 const read = buildReadDeps(auth.db, deps, config, relay, fund);
 
+/*
+ * The jobs' own chain readers, over the public endpoints in turn, so the paid
+ * plan is left for what a person waits on. See `backgroundDeps`.
+ */
+const jobs = backgroundDeps(deps, config);
+const jobRead = buildReadDeps(auth.db, jobs.deps, config, relay, fund);
+boot.info(
+  { lane: jobs.lane === null ? "paid" : "public", endpoints: jobs.lane?.urls.length ?? 1 },
+  jobs.lane === null
+    ? "background jobs read the paid RPC (SOLANA_PUBLIC_RPC_URLS set empty)"
+    : "background jobs read public RPCs in turn",
+);
+
+/**
+ * When a job first runs, and what it backs off on. Offsets, so a deploy does
+ * not have every job read every wallet in the same second: that is what the
+ * node refused, every call, for the first minute after the Earn deploy (22
+ * October 2026). A job on the public lane waits longer between passes while
+ * the lane is refusing.
+ */
+const jobClock = (startAfterMs: number, onLane = true): EveryDeps => ({
+  startAfterMs,
+  ...(onLane && jobs.lane !== null ? { strainedAt: () => jobs.lane!.strainedAt } : {}),
+});
+
 /**
  * The background half of the system, and the whole of it. This is the only
  * thing that writes a stock row or a position: no request does, so the same
@@ -219,11 +248,15 @@ const read = buildReadDeps(auth.db, deps, config, relay, fund);
  * | `prices`             | 20s     | `price_bar`, and it fills the shared price board                              |
  * | `price-bar-prune`    | 6h      | deletes minute bars past thirty days                                          |
  * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`                                     |
- * | `position-sync`      | 2s      | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
+ * | `position-sync`      | 2s/1m   | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
  * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers                                        |
  * | `funding-poll`       | 60s     | `funding_intent`, Relay's verdict on a deposit; only when Relay is configured |
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                                          |
  * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email                                        |
+ *
+ * `position-sync` reads a wallet every 2s while its owner is using the app,
+ * and once a minute otherwise. The jobs that read the chain do it over public
+ * endpoints in turn, and start at different offsets after boot (`jobClock`).
  *
  * One job the design called for is not here: a poller for Jupiter trigger
  * orders. Trigger orders are not built, and `gateExecution` turns the decision
@@ -275,15 +308,25 @@ every("prices", 20_000, async () => {
  * Six hours, because a minute bar thirty days old is no worse at thirty days
  * and six hours. Quiet when there was nothing to drop.
  */
-every("price-bar-prune", 6 * 60 * 60 * 1000, async () => {
-  const dropped = await prunePriceBars(auth.db, new Date());
-  return dropped === 0 ? null : `${dropped} minute bars past thirty days dropped`;
-});
+every(
+  "price-bar-prune",
+  6 * 60 * 60 * 1000,
+  async () => {
+    const dropped = await prunePriceBars(auth.db, new Date());
+    return dropped === 0 ? null : `${dropped} minute bars past thirty days dropped`;
+  },
+  jobClock(90_000, false),
+);
 
-every("stocks", 6 * 60 * 60 * 1000, async () => {
-  const s = await syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices });
-  return `${s.instruments} instruments, ${s.tokens} tokens`;
-});
+every(
+  "stocks",
+  6 * 60 * 60 * 1000,
+  async () => {
+    const s = await syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices });
+    return `${s.instruments} instruments, ${s.tokens} tokens`;
+  },
+  jobClock(60_000, false),
+);
 
 /**
  * Two seconds, so a deposit shows up while the person who made it is still
@@ -293,14 +336,20 @@ every("stocks", 6 * 60 * 60 * 1000, async () => {
  * something or failed says anything — logging every two seconds would bury the
  * passes that matter.
  */
-every("position-sync", 2_000, async () => {
-  const s = await syncAllPositions(auth.db, buildReconcileDeps(deps));
-  if (s.written === 0 && s.failed === 0) return null;
-  return (
-    `${s.written} rows across ${s.reconciled}/${s.wallets} wallets` +
-    (s.failed > 0 ? `, ${s.failed} failed` : "")
-  );
-});
+const syncCadence = cadence({ here });
+every(
+  "position-sync",
+  2_000,
+  async () => {
+    const s = await syncAllPositions(auth.db, buildReconcileDeps(jobs.deps), syncCadence);
+    if (s.written === 0 && s.failed === 0) return null;
+    return (
+      `${s.written} rows across ${s.reconciled}/${s.wallets} wallets` +
+      (s.failed > 0 ? `, ${s.failed} failed` : "")
+    );
+  },
+  jobClock(3_000),
+);
 
 /*
  * Relay's own verdict, pulled rather than pushed.
@@ -313,11 +362,16 @@ every("position-sync", 2_000, async () => {
  */
 if (fund !== undefined) {
   const funding = fund;
-  every("funding-poll", 60_000, async () => {
-    const s = await pollUnsettledDeposits({ store: funding.store, relay: funding.relay });
-    if (s.settled === 0 && s.failed === 0) return null;
-    return `${s.settled} settled of ${s.asked} asked` + (s.failed > 0 ? `, ${s.failed} failed` : "");
-  });
+  every(
+    "funding-poll",
+    60_000,
+    async () => {
+      const s = await pollUnsettledDeposits({ store: funding.store, relay: funding.relay });
+      if (s.settled === 0 && s.failed === 0) return null;
+      return `${s.settled} settled of ${s.asked} asked` + (s.failed > 0 ? `, ${s.failed} failed` : "");
+    },
+    jobClock(20_000, false),
+  );
 }
 
 /**
@@ -328,38 +382,50 @@ if (fund !== undefined) {
  * Two streams per wallet — its own address for native SOL, its USDC account for
  * cash — so a quiet pass is four calls a minute per wallet and says nothing.
  */
-every("wallet-events", 30_000, async () => {
-  const s = await syncAllWalletEvents(auth.db, {
-    history: deps.history,
-    lendingProgram: KAMINO_LENDING_PROGRAM,
-    ...(relay === undefined ? {} : { relayer: relay.signer.address }),
-    ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
-    ...(fund === undefined ? {} : { fundingDeposits: true }),
-  });
-  if (s.written === 0 && s.failed === 0) return null;
-  return (
-    `${s.written} rows across ${s.checked}/${s.wallets} wallets` +
-    (s.failed > 0 ? `, ${s.failed} failed` : "")
-  );
-});
+every(
+  "wallet-events",
+  30_000,
+  async () => {
+    const s = await syncAllWalletEvents(auth.db, {
+      history: jobs.deps.history,
+      lendingProgram: KAMINO_LENDING_PROGRAM,
+      ...(relay === undefined ? {} : { relayer: relay.signer.address }),
+      ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
+      ...(fund === undefined ? {} : { fundingDeposits: true }),
+    });
+    if (s.written === 0 && s.failed === 0) return null;
+    return (
+      `${s.written} rows across ${s.checked}/${s.wallets} wallets` +
+      (s.failed > 0 ? `, ${s.failed} failed` : "")
+    );
+  },
+  jobClock(10_000),
+);
 
 /**
  * An hour, because this is the only record of what an account used to be worth
  * and nothing can reconstruct a reading that was never taken. Everything else
  * here can catch up after an outage; this cannot.
  *
- * `every` runs a job as soon as the process starts, so a deploy takes the
- * current hour's reading immediately rather than waiting up to an hour for its
- * first one. The primary key on (user, hour) is what makes that safe.
+ * It runs 45 seconds after the process starts, so a deploy takes the current
+ * hour's reading at once rather than waiting up to an hour for its first one,
+ * without reading every wallet in the same second as every other job. The
+ * primary key on (user, hour) is what makes a second reading in one hour safe.
  *
- * `read.portfolio` is the same dependency set GET /v1/portfolio reads through,
- * so the chart and the page's headline figure cannot come from different books.
+ * `jobRead.portfolio` is built the way GET /v1/portfolio's dependencies are,
+ * over the jobs' own chain readers, so the chart and the page's headline figure
+ * cannot come from different books.
  */
-every("portfolio-snapshot", 60 * 60 * 1000, async () => {
-  const s = await snapshotAllPortfolios(auth.db, read.portfolio, new Date());
-  if (s.wallets === 0) return null;
-  return `${s.written}/${s.wallets} accounts` + (s.failed > 0 ? `, ${s.failed} failed` : "");
-});
+every(
+  "portfolio-snapshot",
+  60 * 60 * 1000,
+  async () => {
+    const s = await snapshotAllPortfolios(auth.db, jobRead.portfolio, new Date());
+    if (s.wallets === 0) return null;
+    return `${s.written}/${s.wallets} accounts` + (s.failed > 0 ? `, ${s.failed} failed` : "");
+  },
+  jobClock(45_000),
+);
 
 /**
  * Five minutes, because a loan is the only thing here that can cost somebody
@@ -374,14 +440,19 @@ every("portfolio-snapshot", 60 * 60 * 1000, async () => {
  * A quiet pass says nothing. Someone whose loan is fine does not need a line in
  * the log every five minutes, and a log that scrolls is a log nobody reads.
  */
-every("loan-watch", 5 * 60 * 1000, async () => {
-  const s = await watchAllLoans(auth.db, { ...read.borrow, notifier }, new Date());
-  if (s.alerted === 0 && s.failed === 0) return null;
-  return (
-    `${s.alerted} alerts across ${s.loans} loans, ${s.delivered} delivered` +
-    (s.failed > 0 ? `, ${s.failed} failed` : "")
-  );
-});
+every(
+  "loan-watch",
+  5 * 60 * 1000,
+  async () => {
+    const s = await watchAllLoans(auth.db, { ...jobRead.borrow, notifier }, new Date());
+    if (s.alerted === 0 && s.failed === 0) return null;
+    return (
+      `${s.alerted} alerts across ${s.loans} loans, ${s.delivered} delivered` +
+      (s.failed > 0 ? `, ${s.failed} failed` : "")
+    );
+  },
+  jobClock(30_000),
+);
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
   boot.info({ port: info.port }, "mercury api listening");

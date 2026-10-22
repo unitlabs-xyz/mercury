@@ -1,6 +1,7 @@
 import { address, type Address } from "@solana/kit";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { D, ZERO, type Decimal } from "@mercury/core";
+import type { Rotation } from "@mercury/chain";
 import { createLendingRpc } from "../lending/rpc.js";
 import { EARN_VAULTS, HIDDEN_VAULTS, curatorOf, type VaultListing } from "./catalog.js";
 import type { KaminoApi, ListedVault } from "./kamino-api.js";
@@ -94,6 +95,8 @@ export const earnDirectory = (opts: {
   api: KaminoApi;
   usdcMint: string;
   rpcUrl: string;
+  /** The background jobs' public endpoints, taken in turn instead of `rpcUrl`. */
+  rotation?: Rotation;
   make: (vault: string) => EarnSource;
   defaultVault?: string;
   /** How long a built list is reused. */
@@ -102,7 +105,7 @@ export const earnDirectory = (opts: {
   shareBalances?: (wallet: string) => Promise<ReadonlyMap<string, Decimal>>;
   now?: () => number;
 }): EarnDirectory => {
-  const rpc = createLendingRpc(opts.rpcUrl);
+  const rpc = createLendingRpc(opts.rpcUrl, undefined, opts.rotation);
   const ttlMs = opts.ttlMs ?? 10 * 60_000;
   const now = opts.now ?? Date.now;
   const picks = new Map(EARN_VAULTS.map((v, i) => [v.address, { listing: v, rank: i }]));

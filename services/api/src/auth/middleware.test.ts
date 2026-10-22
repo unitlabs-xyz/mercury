@@ -84,3 +84,26 @@ describe("requireAuth", () => {
     expect(await res.json()).toMatchObject({ walletAddress: null });
   });
 });
+
+describe("requireAuth, telling who is here", () => {
+  /* What lets position-sync read a wallet every two seconds only while its owner is looking. */
+  it("tells `onSeen` the wallet behind each signed-in request", async () => {
+    const seen: string[] = [];
+    const res = await appWith({ ...deps, onSeen: (w) => seen.push(w) }).request("/v1/me", {
+      headers: { Authorization: "Bearer good", "X-Privy-Identity-Token": "id" },
+    });
+    expect(res.status).toBe(200);
+    expect(seen).toEqual(["So1anaAddr"]);
+  });
+
+  it("tells it nothing for a request it refused, or one with no wallet yet", async () => {
+    const seen: string[] = [];
+    await appWith({ ...deps, onSeen: (w) => seen.push(w) }).request("/v1/me", {
+      headers: { Authorization: "Bearer bad" },
+    });
+    await appWith({ ...deps, onSeen: (w) => seen.push(w) }).request("/v1/me", {
+      headers: { Authorization: "Bearer good" },
+    });
+    expect(seen).toEqual([]);
+  });
+});

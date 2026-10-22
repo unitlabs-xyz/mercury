@@ -11,9 +11,9 @@
  * tick: a pass that overruns its interval must not have a second one start
  * behind it and write the same rows twice. A failure is logged and the
  * schedule continues — an upstream being down is a reason to try again later,
- * not to stop trying. And the first pass runs immediately, which is what lets
- * a deploy take the current hour's portfolio snapshot rather than waiting up
- * to an hour for it.
+ * not to stop trying. And the first pass runs immediately, or after
+ * `startAfterMs`, which is what lets a deploy take the current hour's
+ * portfolio snapshot rather than waiting up to an hour for it.
  *
  * What is new is that a pass is now measured. Before this, a failing
  * `position-sync` — every two seconds, the only writer of a position — was one
@@ -47,7 +47,23 @@ export interface EveryDeps {
   readonly setTimeout?: typeof setTimeout;
   readonly log?: Log;
   readonly tracer?: Tracer;
+  /**
+   * When the first pass runs. Immediately when left out. Jobs started together
+   * are given different offsets, so a deploy does not have every one of them
+   * read every wallet in the same second.
+   */
+  readonly startAfterMs?: number;
+  /**
+   * When the endpoints this job reads last refused a request outright, on the
+   * same clock as `now` (see `Rotation.strainedAt`). A pass that saw it waits
+   * twice as long before the next, up to two minutes, and a clean pass goes
+   * back to the job's own interval.
+   */
+  readonly strainedAt?: () => number;
 }
+
+/** The longest a strained job waits between passes, unless its own interval is longer. */
+const BACKOFF_CAP_MS = 120_000;
 
 /**
  * What a job reports: a line worth logging, or nothing.
@@ -62,8 +78,11 @@ export const every = (name: string, ms: number, run: JobRun, deps: EveryDeps = {
   const schedule = deps.setTimeout ?? setTimeout;
   const log = deps.log ?? logger("jobs");
   const tracer = deps.tracer ?? trace.getTracer("mercury-api");
+  /** Strained passes in a row. */
+  let streak = 0;
 
   const tick = async (): Promise<void> => {
+    let wait = ms;
     await tracer.startActiveSpan(`job ${name}`, async (span) => {
       const started = now();
       span.setAttribute("mercury.job", name);
@@ -90,12 +109,26 @@ export const every = (name: string, ms: number, run: JobRun, deps: EveryDeps = {
         const elapsed = now() - started;
         span.setAttribute("mercury.job.duration_ms", elapsed);
         jobMetrics().duration.record(elapsed / 1000, { mercury_job: name });
+
+        const strainedAt = deps.strainedAt?.() ?? 0;
+        if (strainedAt > 0 && strainedAt >= started) {
+          streak += 1;
+          wait = Math.min(ms * 2 ** streak, Math.max(ms, BACKOFF_CAP_MS));
+          span.setAttribute("mercury.job.backoff_ms", wait);
+          log.warn({ job: name, waitMs: wait }, "the node refused this pass; waiting longer before the next");
+        } else {
+          streak = 0;
+        }
         span.end();
       }
     });
 
-    schedule(() => void tick(), ms).unref();
+    schedule(() => void tick(), wait).unref();
   };
 
-  void tick();
+  if (deps.startAfterMs !== undefined && deps.startAfterMs > 0) {
+    schedule(() => void tick(), deps.startAfterMs).unref();
+  } else {
+    void tick();
+  }
 };
