@@ -26,6 +26,10 @@ export interface Rotation {
   strained(): void;
   /** When `strained` last happened, by the rotation's clock; 0 for never. What a job backs off on. */
   readonly strainedAt: number;
+  /** Resolves when the next request may go out, `perSecond` apart. At once without a pace. */
+  wait(): Promise<void>;
+  /** Where a request goes when every URL refuses it, if anywhere. Never rested, never paced. */
+  readonly fallback: string | null;
 }
 
 export interface RotationConfig {
@@ -34,6 +38,26 @@ export interface RotationConfig {
   readonly restMs?: number;
   /** The longest rest. Five minutes: an endpoint that never serves a method is asked again that often. */
   readonly maxRestMs?: number;
+  /**
+   * Methods an endpoint is known not to serve, by URL, so it is never asked
+   * for them. Solana Vibe Station keeps only recent history, and answers an
+   * older signature cursor with "Transaction … not found" (22 October 2026).
+   */
+  readonly skips?: ReadonlyMap<string, ReadonlySet<string>>;
+  /**
+   * Requests a second across the rotation, spaced evenly. Unset, no pacing.
+   * Public endpoints count per second and per ten; a job's first pass after
+   * boot read seventeen wallets at once and was refused nearly all of it.
+   */
+  readonly perSecond?: number;
+  readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * Where a request goes when every URL refuses it: the paid endpoint, so the
+   * jobs do not fail what free endpoints will not carry. Measured 22 October
+   * 2026, Solana's public endpoint refused one transaction read in five even at
+   * two a second, and the only other keyless one keeps no history.
+   */
+  readonly fallback?: string;
 }
 
 export const rotation = (urls: readonly string[], config: RotationConfig = {}): Rotation => {
@@ -44,14 +68,20 @@ export const rotation = (urls: readonly string[], config: RotationConfig = {}): 
   const resting = new Map<string, { readonly until: number; readonly streak: number }>();
   let turn = 0;
   let strainedAt = 0;
+  let nextSlot = 0;
   const key = (url: string, method = "") => `${url} ${method}`;
+  const sleep = config.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const skipped = (url: string, method?: string) =>
+    method !== undefined && (config.skips?.get(url)?.has(method) ?? false);
 
   return {
     urls,
+    fallback: config.fallback ?? null,
     next(method) {
       const at = now();
       for (let i = 0; i < urls.length; i++) {
         const url = urls[(turn + i) % urls.length]!;
+        if (skipped(url, method)) continue;
         const rest = resting.get(key(url, method));
         if (rest === undefined || rest.until <= at) {
           turn = (turn + i + 1) % urls.length;
@@ -76,6 +106,13 @@ export const rotation = (urls: readonly string[], config: RotationConfig = {}): 
     get strainedAt() {
       return strainedAt;
     },
+    async wait() {
+      if (config.perSecond === undefined || config.perSecond <= 0) return;
+      const at = now();
+      const slot = Math.max(at, nextSlot);
+      nextSlot = slot + 1000 / config.perSecond;
+      if (slot > at) await sleep(slot - at);
+    },
   };
 };
 
@@ -83,11 +120,12 @@ export const rotation = (urls: readonly string[], config: RotationConfig = {}): 
  * Words an endpoint uses when it refuses a request it answered with a 200:
  * PublicNode's "Request blocked", dRPC's "chain is not available on free plan",
  * Pocket's "Method not found", LeoRPC's "Internal JSON-RPC error" for a method
- * it does not serve, and the rate limits some put in the body instead of the
- * status. Measured 22 October 2026.
+ * it does not serve, Solana Vibe Station's "Transaction … not found" for a
+ * cursor older than the history it keeps, and the rate limits some put in the
+ * body instead of the status. Measured 22 October 2026.
  */
 const REFUSAL =
-  /blocked|not available|upgrade|rate limit|too many requests|limit exceeded|method not found|not supported|does not exist|internal json-rpc error/i;
+  /blocked|not available|upgrade|rate limit|too many requests|limit exceeded|method not found|not supported|does not exist|internal json-rpc error|transaction \S+ not found/i;
 
 /** An endpoint's error message that means it refused the call, not that the call was wrong. */
 export const isRefusalMessage = (message: string): boolean => REFUSAL.test(message);
@@ -124,8 +162,9 @@ const refusedInside = async (res: Response): Promise<boolean> => {
  * ignored: each request goes to the rotation's next URL for its method, and
  * one that refuses passes the same request on to the next at once. Anything
  * but a 2xx is a refusal, and so is a 200 whose every call is refused in the
- * words above. When every one refuses, the refusal is the answer, so the
- * batching above backs off and asks again as it does for a single endpoint.
+ * words above. When every one refuses, the fallback is asked, if there is
+ * one; when that refuses too, the refusal is the answer, so the batching above
+ * backs off and asks again as it does for a single endpoint.
  */
 export const rotatingFetch =
   (r: Rotation, doFetch: typeof fetch = defaultFetch()): typeof fetch =>
@@ -136,6 +175,7 @@ export const rotatingFetch =
     for (let i = 0; i < r.urls.length; i++) {
       const url = r.next(method);
       if (url === null) break;
+      await r.wait();
       try {
         const res = await doFetch(url, init);
         if (res.ok && !(await refusedInside(res))) {
@@ -148,6 +188,16 @@ export const rotatingFetch =
       } catch (error: unknown) {
         // A dropped connection, the failure too many requests at once produce.
         r.refused(url, method);
+        failure = error;
+      }
+    }
+    if (r.fallback !== null) {
+      try {
+        const res = await doFetch(r.fallback, init);
+        if (res.ok && !(await refusedInside(res))) return res;
+        void refusal?.body?.cancel();
+        refusal = res;
+      } catch (error: unknown) {
         failure = error;
       }
     }
