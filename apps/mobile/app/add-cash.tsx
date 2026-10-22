@@ -60,7 +60,7 @@ export default function AddCash() {
     <View style={s.root}>
       <PanelHeader
         title="Add cash"
-        sub="It starts earning the moment it arrives."
+        sub="From Solana, another chain, or a wallet."
         onClose={() => router.back()}
       />
       <View style={s.body}>

@@ -46,12 +46,13 @@ type Item = {
  */
 export const ComingUp = ({
   borrow,
-  cashUsd,
+  earnUsd,
   apr,
 }: {
   borrow: Borrow | undefined;
-  cashUsd: number;
-  /** Cash's yearly rate, as a percentage. */
+  /** What is in Earn. Cash in the wallet earns nothing; only this does. */
+  earnUsd: number;
+  /** What Earn pays a year, as a percentage. */
   apr: number;
 }) => {
   const router = useRouter();
@@ -119,14 +120,14 @@ export const ComingUp = ({
       onPress: () => router.push("/borrow"),
     });
   }
-  if (cashUsd > 0 && apr > 0) {
+  if (earnUsd > 0 && apr > 0) {
     items.push({
-      key: "cash",
+      key: "earn",
       kind: "interest",
-      title: "Cash earning",
-      detail: `${pct(apr, 1)} a year on ${usd(cashUsd)}`,
+      title: "Earning",
+      detail: `${pct(apr, 1)} a year on ${usd(earnUsd)} in Earn`,
       at: null,
-      right: `≈${usd((cashUsd * apr) / 100 / 12)}/mo`,
+      right: `≈${usd((earnUsd * apr) / 100 / 12)}/mo`,
       onPress: () => router.navigate("/money"),
     });
   }

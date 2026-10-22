@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { D, toWire, ZERO } from "@mercury/core";
+import { D, toWire, ZERO, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { capacity } from "../lending/capacity.js";
 import { capacityInputFor } from "../lending/input.js";
@@ -13,6 +13,8 @@ export interface MoneyDeps {
   readonly credit: CreditSource;
   /** Kamino, for what this wallet could borrow against what it holds. */
   readonly lending: LendingSource;
+  /** Earn: what this wallet has in it, and the rate that earns now. Null rate is nothing in Earn. */
+  readonly earn?: (wallet: string) => Promise<{ balance: Decimal; apy: Decimal | null }>;
   readonly usdcMint: string;
 }
 
@@ -26,17 +28,18 @@ export function moneyRoutes(deps: MoneyDeps): Hono {
         balanceUsd: "0",
         yieldApr: "0",
         interestEarnedYtdUsd: "0",
+        earnUsd: "0",
         depositAddress: null,
         borrowingPower: { availableUsd: "0", enabled: false },
       });
     }
 
     const wallet = identity.walletAddress;
-    const [balances, credit] = await Promise.all([
+    const [balances, earn] = await Promise.all([
       deps.chain.tokenBalances(wallet),
       // A missing rate is a missing rate. The balance is the number that
       // matters on this screen, and it does not depend on Kamino being up.
-      deps.credit.current().catch(() => null),
+      deps.earn?.(wallet).catch(() => null) ?? null,
     ]);
 
     const usdc = balances.find((b) => b.mint === deps.usdcMint);
@@ -51,11 +54,16 @@ export function moneyRoutes(deps: MoneyDeps): Hono {
 
     return c.json({
       balanceUsd: toWire(balanceUsd),
-      // What a supplier earns in Kamino's xStocks market right now. It is the
-      // rate available, not a rate this account is being paid: v1 supplies
-      // nothing, which is also why the interest below is zero.
-      yieldApr: toWire(credit?.supplyApy ?? ZERO),
+      /*
+       * What the money in Earn earns now, after fees, across its vaults, and
+       * zero with nothing in Earn. It used to be the xStocks market's supply
+       * rate, which nothing here supplied to, and every screen reading it said
+       * the balance was earning. Only money in Earn earns, and `/v1/earn` is
+       * where what it earned is worked out.
+       */
+      yieldApr: toWire(earn?.apy?.toDecimalPlaces(6) ?? ZERO),
       interestEarnedYtdUsd: "0",
+      earnUsd: toWire((earn?.balance ?? ZERO).toDecimalPlaces(2)),
       depositAddress: wallet,
       /*
        * ADR 0009 puts borrowing against holdings firmly in scope — "not margin

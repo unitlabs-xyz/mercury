@@ -25,6 +25,10 @@ export const Portfolio = z.object({
   /** Net worth: wallet and pledged stocks, wallet cash, and Glider baskets, less debt. */
   totalValueUsd: Usd,
   cashUsd: Usd,
+  /** Cash in the Earn vault, counted in the total but not spendable this second. Optional for older servers. */
+  earnUsd: Usd.optional(),
+  /** Kamino could not be read, so `earnUsd` is the last hourly reading's. Optional for older servers. */
+  earnIsStale: z.boolean().optional(),
   basketUsd: Usd,
   /** Owed to Kamino. Borrowed cash is inside `cashUsd`; this is the other side of it. */
   debtUsd: Usd,
@@ -128,6 +132,8 @@ export const Money = z.object({
   balanceUsd: Usd,
   yieldApr: Ratio,
   interestEarnedYtdUsd: Usd,
+  /** USDC in the Earn vault. Optional so an older server still parses. */
+  earnUsd: Usd.optional(),
   depositAddress: z.string(),
   borrowingPower: z.object({ availableUsd: Usd, enabled: z.boolean() }),
 });

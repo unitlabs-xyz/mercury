@@ -21,4 +21,7 @@ export const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
   unpledge: { icon: <Lock className="size-4" />, tone: "bg-up-tint text-up-deep" },
   // The only row in the feed that is asking for something to be done.
   loan_alert: { icon: <Alert className="size-4" />, tone: "bg-warn-tint text-warn" },
+  // Earn's own mark going in, as on its button; cash's arrow coming back.
+  earn_deposit: { icon: <Trend className="size-4" />, tone: "bg-brand-tint text-brand" },
+  earn_withdraw: { icon: <ArrowDown className="size-4" />, tone: "bg-chip text-ink-soft" },
 };

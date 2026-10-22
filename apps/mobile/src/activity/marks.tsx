@@ -64,6 +64,9 @@ const GLYPH: Record<EventKind, { tone: { bg: string; ink: string }; draw: ReactN
       </>
     ),
   },
+  // Earn's trend mark going in; cash's arrow coming back.
+  earn_deposit: { tone: BUY, draw: BUY_TREND },
+  earn_withdraw: { tone: SEND, draw: <G transform="rotate(180 12 12)">{SEND_UP}</G> },
 };
 
 /** A kind with no asset behind it — a queued order, interest — as its own mark. */

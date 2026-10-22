@@ -45,7 +45,17 @@ const KIND: Record<string, EventKind> = {
   pledge: "pledge",
   unpledge: "unpledge",
   loan_alert: "loan_alert",
+  earn_deposit: "earn_deposit",
+  earn_withdraw: "earn_withdraw",
 };
+
+const INTERNAL = new Set([
+  "basket_funding",
+  "withdraw_in_kind",
+  "liquidate_to_usdc",
+  "earn_deposit",
+  "earn_withdraw",
+]);
 
 /** Which way money moved, for the sign and the colour. */
 const FLOW: Partial<Record<EventKind, "in" | "out">> = {
@@ -77,15 +87,11 @@ export const toEvent = (i: ActivityItem): Event => {
       i.amountUsd === null
         ? null
         : Math.abs(Number(i.amountUsd)).toLocaleString("en-US", { style: "currency", currency: "USD" }),
-    flow:
-      i.kind === "basket_funding" || i.kind === "withdraw_in_kind" || i.kind === "liquidate_to_usdc"
-        ? null
-        : (FLOW[kind] ??
-          (i.amountUsd === null || Number(i.amountUsd) === 0
-            ? null
-            : Number(i.amountUsd) < 0
-              ? "out"
-              : "in")),
+    // Money moving within the account, to a basket or to Earn and back: no sign either way.
+    flow: INTERNAL.has(i.kind)
+      ? null
+      : (FLOW[kind] ??
+        (i.amountUsd === null || Number(i.amountUsd) === 0 ? null : Number(i.amountUsd) < 0 ? "out" : "in")),
     details: [],
     ...(i.txSignature ? { signature: i.txSignature } : {}),
     ...(i.mint ? { mint: i.mint } : {}),

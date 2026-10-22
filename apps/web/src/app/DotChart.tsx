@@ -52,11 +52,17 @@ export const axisBounds = (
 };
 
 /** The 1-2-2.5-5 step whose tick count comes closest to `TICKS` across the span. */
-const niceStep = (span: number) => {
-  const mag = 10 ** Math.floor(Math.log10(span / TICKS || 1));
+const niceStep = (span: number, ticks = TICKS) => {
+  const mag = 10 ** Math.floor(Math.log10(span / ticks || 1));
   const steps = [0.5, 1, 2, 2.5, 5, 10].map((f) => f * mag);
-  return steps.reduce((best, s) => (Math.abs(span / s - TICKS) < Math.abs(span / best - TICKS) ? s : best));
+  return steps.reduce((best, s) => (Math.abs(span / s - ticks) < Math.abs(span / best - ticks) ? s : best));
 };
+
+/**
+ * A rate's axis gets half the labels. It sits in a narrow side panel, and
+ * quarter-point steps down a 200px chart read as a column of numbers.
+ */
+const RATE_TICKS = 4;
 
 /** Decimals a step needs so neighbouring ticks never read the same: 2.5 → 1, 0.25 → 2, 5 → 0. */
 const digitsFor = (step: number) => {
@@ -86,8 +92,8 @@ const price = (n: number, step: number) =>
     maximumFractionDigits: digitsFor(step),
   }).format(n);
 
-const percent = (n: number, digits = 2) =>
-  `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)
+const percent = (n: number, digits = 2, signed = true) =>
+  `${signed && n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)
     .toFixed(digits)
     .replace(/\.0+$/, "")
     .replace(/(\.\d*?)0+$/, "$1")}%`;
@@ -156,8 +162,10 @@ export const DotChart = ({
    * the question: the change scale is green above $0 and red below; the price
    * scale is green where the line rises and red where it falls.
    * "percent": cumulative modeled return, with a percentage axis and tooltip.
+   * "rate": a rate over time (an Earn vault's), as percent but unsigned: a
+   * 4% rate is not "+4%".
    */
-  scale?: "change" | "price" | "percent";
+  scale?: "change" | "price" | "percent" | "rate";
 }) => {
   const [hot, setHot] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -340,17 +348,19 @@ export const DotChart = ({
   // Across the drawn axis, not the data's own range: where the floor has
   // widened the axis, labelling only the data would leave one tick on an
   // otherwise empty scale.
-  const step = niceStep(span || 1);
+  const step = niceStep(span || 1, scale === "rate" ? RATE_TICKS : TICKS);
   // Ticks are placed in change space; on a price scale they fall on round prices.
-  const base = scale === "price" || scale === "percent" ? (series[0]?.value ?? 0) : 0;
+  const pcts = scale === "percent" || scale === "rate";
+  const signed = scale !== "rate";
+  const base = scale === "price" || pcts ? (series[0]?.value ?? 0) : 0;
   const ticks: number[] = [];
   for (let t = Math.ceil((lo + base) / step) * step; t <= hi + base + 1e-9; t += step)
     ticks.push(Math.round((t - base) * 1e6) / 1e6);
   const axisLabel = (t: number) =>
     scale === "price"
       ? price(t + base, step)
-      : scale === "percent"
-        ? percent(t + base, digitsFor(step))
+      : pcts
+        ? percent(t + base, digitsFor(step), signed)
         : tick(t, step);
   // The label column only ever widens: a narrower set of labels on another range
   // would widen the dot grid by a column, and a new grid re-places every dot
@@ -425,9 +435,11 @@ export const DotChart = ({
         }}
         role="img"
         aria-label={
-          scale === "percent"
-            ? `Modeled return over ${label}: from ${percent(series[0]?.value ?? 0)} to ${percent(series[series.length - 1]?.value ?? 0)}`
-            : `${scale === "price" ? "Price" : "Change in value"} over ${label}: from ${usd(series[0]?.value)} to ${usd(series[series.length - 1]?.value)}`
+          scale === "rate"
+            ? `Rate over ${label}: from ${percent(series[0]?.value ?? 0, 2, false)} to ${percent(series[series.length - 1]?.value ?? 0, 2, false)}`
+            : scale === "percent"
+              ? `Modeled return over ${label}: from ${percent(series[0]?.value ?? 0)} to ${percent(series[series.length - 1]?.value ?? 0)}`
+              : `${scale === "price" ? "Price" : "Change in value"} over ${label}: from ${usd(series[0]?.value)} to ${usd(series[series.length - 1]?.value)}`
         }
         onPointerLeave={() => setHot(null)}
       >
@@ -462,7 +474,7 @@ export const DotChart = ({
               const leaves = !used && wasUsed;
               // An account's change: green above where the range began, red below it.
               // A stock's price: green where it rises, red where it falls.
-              const up = scale === "price" || scale === "percent" ? (rising[i] ?? true) : valueOfRow(r) >= 0;
+              const up = scale === "price" || pcts ? (rising[i] ?? true) : valueOfRow(r) >= 0;
               return (
                 <span
                   key={`m${i}-${k}`}
@@ -526,12 +538,12 @@ export const DotChart = ({
                 }}
               >
                 <p className="text-[14px] leading-none font-medium text-ds-ink">
-                  {scale === "percent" ? percent(hotCol.value) : usd(hotCol.value)}
+                  {pcts ? percent(hotCol.value, 2, signed) : usd(hotCol.value)}
                 </p>
                 <p className="mt-[6px] text-[12px] leading-none text-ds-muted">
                   {hotCol.label} ·{" "}
                   <span className={hotCol.change >= 0 ? "text-ds-up" : "text-ds-down"}>
-                    {scale === "percent" ? percent(hotCol.change) : usdSigned(hotCol.change)}
+                    {pcts ? percent(hotCol.change) : usdSigned(hotCol.change)}
                   </span>
                 </p>
               </div>

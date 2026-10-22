@@ -302,7 +302,7 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
         />
       </dl>
       <p className="mt-3 px-1 text-[12px] leading-[1.45] text-ds-muted">
-        Your cash stays yours in the meantime, and keeps earning.
+        Your cash stays yours in the meantime.
       </p>
     </>
   );

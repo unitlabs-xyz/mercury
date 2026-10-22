@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useBorrow } from "../api/borrow";
 import { useDashboard } from "../api/dashboard";
-import { useMoney, usePortfolio, useSignedIn } from "../api/hooks";
+import { usePortfolio, useSignedIn } from "../api/hooks";
 import { useCreditMarket, useInstruments } from "../market/hooks";
 import { Alert } from "../ui/icons";
 import { AppShell } from "./AppShell";
@@ -36,7 +36,6 @@ export const Portfolio = () => {
   const [range, setRange] = useState<Range>("1D");
   const signedIn = useSignedIn();
   const portfolio = usePortfolio();
-  const money = useMoney();
   const dash = useDashboard();
   // The backend owns basket valuation; templates only supply the two marks.
   const templates = useBasketTemplates();
@@ -101,7 +100,8 @@ export const Portfolio = () => {
   const borrow = useBorrow();
   const m = useModel(portfolio.data, universe.data, credit.data, dash.data, borrow.data);
   const failed = portfolio.isError;
-  const apr = Number(money.data?.yieldApr ?? 0);
+  const inEarn = Number(portfolio.data?.earnUsd ?? 0);
+  const earnIsStale = portfolio.data?.earnIsStale === true;
 
   return (
     <AppShell current="portfolio" title="Portfolio" quiet>
@@ -127,7 +127,7 @@ export const Portfolio = () => {
 
       <div className="flex flex-col gap-4 md:gap-6">
         {/* 2 — the account, and what you can do with it. */}
-        <AccountHeader m={m} dash={dash.data} apr={apr} failed={failed} />
+        <AccountHeader m={m} dash={dash.data} inEarn={inEarn} earnIsStale={earnIsStale} failed={failed} />
 
         <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
           {/* 3 — what you own, then how it has moved and where it sits. */}

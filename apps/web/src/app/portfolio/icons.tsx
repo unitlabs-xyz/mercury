@@ -124,4 +124,15 @@ export const EVENT_ICON: Record<Event["kind"], ReactNode> = {
       <path d="M12 16.2V16.3" />
     </Glyph>
   ),
+  // Earn's trend mark going in, as buying does; cash's arrow coming back, as receiving does.
+  earn_deposit: (
+    <Glyph bg="var(--color-ds-act-buy-bg)" ink="var(--color-ds-act-buy)">
+      {BUY_TREND}
+    </Glyph>
+  ),
+  earn_withdraw: (
+    <Glyph bg="var(--color-ds-act-send-bg)" ink="var(--color-ds-act-send)">
+      <g transform="rotate(180 12 12)">{SEND_UP}</g>
+    </Glyph>
+  ),
 };

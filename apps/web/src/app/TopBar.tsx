@@ -3,7 +3,7 @@ import { MercuryLogo } from "../ui/Logo";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderChrome } from "./HeaderChrome";
 
-export type NavKey = "portfolio" | "invest" | "baskets" | "money" | "activity";
+export type NavKey = "portfolio" | "invest" | "baskets" | "earn" | "money" | "activity";
 
 type Item = { key: NavKey; label: string; to: string };
 
@@ -12,6 +12,7 @@ const NAV: Item[] = [
   { key: "portfolio", label: "Portfolio", to: "/portfolio" },
   { key: "invest", label: "Invest", to: "/invest" },
   { key: "baskets", label: "Baskets", to: "/baskets" },
+  { key: "earn", label: "Earn", to: "/earn" },
   { key: "money", label: "Money", to: "/money" },
   { key: "activity", label: "Activity", to: "/activity" },
 ];

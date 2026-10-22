@@ -66,9 +66,13 @@ bars are deleted after thirty days; hours and days are kept.
 ### `user` and `wallet`
 
 ```
-user:   id, privy_user_id, email, created_at, display_currency
+user:   id, privy_user_id, email, created_at, display_currency,
+        earn_vault, earn_risk_accepted_at, earn_risk_version
 wallet: id, user_id, address, kind ('privy_embedded'|'external'), is_primary
 ```
+
+`earn_vault` only preselects a vault; nothing moves on its own. `earn_risk_version` is the wording
+of Earn's risks this person accepted, and deposits need the current one.
 
 No name, no identity documents.
 
@@ -176,6 +180,27 @@ An append-only feed. Denormalised on purpose, because it is read constantly and 
 ```
 id, user_id, kind, occurred_at, title, subtitle, amount_usd, ref_table, ref_id, tx_signature
 ```
+
+Earn's moves are `earn_deposit` and `earn_withdraw`, written beside their `earn_event` in one
+transaction. They are cash moving within the account, so they carry no sign and are not flows.
+
+### `earn_event`
+
+One row per move into or out of an Earn vault.
+
+```
+id, user_id, kind ('deposit'|'withdraw'), usdc_amount, vault, tx_signature, occurred_at, recorded_at
+```
+
+The vault reports only what the shares are worth now, so "earned so far" is that, less what went
+in, plus what came out. The amount is read off the chain, as the change in the wallet's USDC.
+Unique on the signature, so the confirm route and the send path never write a move twice.
+It is also what decides who is read for Earn at all: an account with no row here is not asked
+about, so the portfolio, money and snapshot reads of everyone else never touch Kamino.
+
+`portfolio_snapshot.earn_usd` keeps the Earn balance of each hourly reading apart from the total
+that counts it. When Kamino cannot be read, the portfolio serves that figure and flags it, as it
+does for debt.
 
 ## Cost basis
 
