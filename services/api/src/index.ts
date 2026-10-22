@@ -19,6 +19,7 @@ import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
 import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
+import { missedSnapshots } from "./portfolio/snapshot-retry.js";
 import { watchAllLoans } from "./lending/watch-loans.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
@@ -252,6 +253,7 @@ const jobClock = (startAfterMs: number, onLane = true): EveryDeps => ({
  * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers                                        |
  * | `funding-poll`       | 60s     | `funding_intent`, Relay's verdict on a deposit; only when Relay is configured |
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                                          |
+ * | `snapshot-retry`     | 5m      | `portfolio_snapshot`, for accounts the hour's pass missed, within that hour   |
  * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email                                        |
  *
  * `position-sync` reads a wallet every 2s while its owner is using the app,
@@ -407,24 +409,51 @@ every(
  * and nothing can reconstruct a reading that was never taken. Everything else
  * here can catch up after an outage; this cannot.
  *
- * It runs 45 seconds after the process starts, so a deploy takes the current
+ * It runs two minutes after the process starts, so a deploy takes the current
  * hour's reading at once rather than waiting up to an hour for its first one,
- * without reading every wallet in the same second as every other job. The
- * primary key on (user, hour) is what makes a second reading in one hour safe.
+ * and after position-sync's and wallet-events' first passes rather than on top
+ * of them. The primary key on (user, hour) is what makes a second reading in
+ * one hour safe, and an account it could not read is retried by
+ * `snapshot-retry` while it is still that hour.
  *
  * `jobRead.portfolio` is built the way GET /v1/portfolio's dependencies are,
  * over the jobs' own chain readers, so the chart and the page's headline figure
  * cannot come from different books.
  */
+const missed = missedSnapshots();
 every(
   "portfolio-snapshot",
   60 * 60 * 1000,
   async () => {
-    const s = await snapshotAllPortfolios(auth.db, jobRead.portfolio, new Date());
+    const now = new Date();
+    const s = await snapshotAllPortfolios(auth.db, jobRead.portfolio, now);
+    missed.missed(now, s.missed);
     if (s.wallets === 0) return null;
     return `${s.written}/${s.wallets} accounts` + (s.failed > 0 ? `, ${s.failed} failed` : "");
   },
-  jobClock(45_000),
+  jobClock(120_000),
+);
+
+/**
+ * Five minutes, and only for accounts the hour's pass could not read, while it
+ * is still that hour. A reading belongs to its hour: waiting for the next pass
+ * is a gap in the chart that nothing fills (five of seventeen accounts, the
+ * hour after the 22 October 2026 deploy).
+ */
+every(
+  "snapshot-retry",
+  5 * 60 * 1000,
+  async () => {
+    const now = new Date();
+    const only = missed.due(now);
+    if (only === null) return null;
+    const s = await snapshotAllPortfolios(auth.db, jobRead.portfolio, now, { only });
+    missed.missed(now, s.missed);
+    return (
+      `${s.written}/${s.wallets} missed accounts taken` + (s.failed > 0 ? `, ${s.failed} still missing` : "")
+    );
+  },
+  jobClock(7 * 60 * 1000),
 );
 
 /**
@@ -451,7 +480,8 @@ every(
       (s.failed > 0 ? `, ${s.failed} failed` : "")
     );
   },
-  jobClock(30_000),
+  // Four minutes: after the first passes of the jobs that read every wallet, not on top of them.
+  jobClock(240_000),
 );
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
