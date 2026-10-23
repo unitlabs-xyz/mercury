@@ -11,7 +11,9 @@ export type EventKind =
   | "repay"
   | "pledge"
   | "unpledge"
-  | "loan_alert";
+  | "loan_alert"
+  | "earn_deposit"
+  | "earn_withdraw";
 
 export type Detail = { label: string; value: string; tone?: "up" | "down" | "muted" };
 
@@ -43,7 +45,8 @@ export type Group = "all" | "trades" | "transfers" | "income" | "borrowing" | "p
 export const GROUPS: { key: Group; label: string; kinds: EventKind[] }[] = [
   { key: "all", label: "Everything", kinds: [] },
   { key: "trades", label: "Trades", kinds: ["buy", "sell", "basket"] },
-  { key: "transfers", label: "Transfers", kinds: ["receive", "send"] },
+  // Earn too: cash moving between the wallet and a vault, still the account's own.
+  { key: "transfers", label: "Transfers", kinds: ["receive", "send", "earn_deposit", "earn_withdraw"] },
   { key: "income", label: "Income", kinds: ["dividend", "interest"] },
   // Pledging and withdrawing sit here too: they are not transfers out of the
   // account, they are collateral moving between the wallet and Kamino.
@@ -65,4 +68,6 @@ export const KIND_LABEL: Record<EventKind, string> = {
   pledge: "Added collateral",
   unpledge: "Withdrew collateral",
   loan_alert: "Alert",
+  earn_deposit: "To Earn",
+  earn_withdraw: "From Earn",
 };

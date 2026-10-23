@@ -81,6 +81,17 @@ export async function readLatestDebt(db: Db, userId: string): Promise<Decimal | 
   return row === undefined ? null : D(row.debtUsd);
 }
 
+/** The Earn balance in the latest reading. Null with no reading, or one from before Earn. */
+export async function readLatestEarn(db: Db, userId: string): Promise<Decimal | null> {
+  const [row] = await db
+    .select({ earnUsd: portfolioSnapshots.earnUsd })
+    .from(portfolioSnapshots)
+    .where(eq(portfolioSnapshots.userId, userId))
+    .orderBy(desc(portfolioSnapshots.capturedAt))
+    .limit(1);
+  return row?.earnUsd == null ? null : D(row.earnUsd);
+}
+
 export async function readSnapshots(db: Db, userId: string, from: Date): Promise<readonly Reading[]> {
   const rows = await db
     .select({

@@ -1,6 +1,6 @@
 # ADR 0014 · Relay for funding, and a connector that is not Privy's
 
-**Status:** proposed · 13 October 2026
+**Status:** accepted · 13 October 2026, shipped 14 October 2026 (PR #68)
 
 ## Context
 

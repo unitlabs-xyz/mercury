@@ -218,7 +218,7 @@ type View = "methods" | "solana" | "networks";
 
 /** Each step's title and line of context, in the panel header. */
 const HEADS: Record<View, { title: string; sub: string }> = {
-  methods: { title: "Add cash", sub: "It starts earning the moment it arrives." },
+  methods: { title: "Add cash", sub: "From Solana, another chain, or a wallet." },
   solana: { title: "USDC on Solana", sub: "From any wallet or exchange. It arrives instantly, with no fee." },
   networks: { title: "From your wallet", sub: "Any token, any chain. We swap it to USDC for you." },
 };

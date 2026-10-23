@@ -1,12 +1,14 @@
 import type { MiddlewareHandler } from "hono";
 import type { Db } from "../db/client.js";
 import { resolveIdentity, type Identity, type UserDirectory } from "./identity.js";
-import { InvalidToken, type TokenVerifier, type VerifiedToken } from "./verifier.js";
+import { AuthUnavailable, InvalidToken, type TokenVerifier, type VerifiedToken } from "./verifier.js";
 
 export interface AuthDeps {
   readonly db: Db;
   readonly verifier: TokenVerifier;
   readonly directory: UserDirectory;
+  /** Told the wallet behind every signed-in request: who is using the app now. See `jobs/presence.ts`. */
+  readonly onSeen?: (wallet: string) => void;
 }
 
 declare module "hono" {
@@ -43,10 +45,24 @@ export const requireAuth = (deps: AuthDeps, resolve: Resolve = resolveIdentity):
     try {
       const verified = await deps.verifier.verify(token);
       const identityToken = c.req.header("X-Privy-Identity-Token") ?? null;
-      c.set("identity", await resolve(deps.db, deps.directory, verified, identityToken));
+      const identity = await resolve(deps.db, deps.directory, verified, identityToken);
+      c.set("identity", identity);
+      if (identity.walletAddress !== null) deps.onSeen?.(identity.walletAddress);
     } catch (cause) {
       if (cause instanceof InvalidToken) {
         return c.json({ error: { code: "unauthenticated", message: "That session is not valid." } }, 401);
+      }
+      // Not the session's fault: say so, and keep the person signed in.
+      if (cause instanceof AuthUnavailable) {
+        return c.json(
+          {
+            error: {
+              code: "auth_unavailable",
+              message: "Couldn't check your sign-in. Try again in a moment.",
+            },
+          },
+          503,
+        );
       }
       throw cause;
     }

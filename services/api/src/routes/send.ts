@@ -57,7 +57,30 @@ export interface SendDeps {
         readonly allowedPrograms?: readonly string[] | undefined;
       }
     | undefined;
+  /**
+   * Told about each transaction the node takes, with the message it signs, for
+   * bookkeeping that must not wait on the app to confirm: Earn's ledger. Every
+   * transaction the app sends passes through here, so nothing is missed. It
+   * runs before the transaction lands, so it waits for that itself, and the
+   * answer to the person waits for none of it.
+   */
+  readonly accepted?: (messageBytes: Uint8Array, signature: string) => Promise<void>;
+  /**
+   * Told when a wallet's transaction has landed, failed or is still on its
+   * way, just before the answer goes back: the routes keep a wallet's balances
+   * for two seconds, and the app reads them again the moment it hears.
+   */
+  readonly sent?: (wallet: string) => void;
 }
+
+/**
+ * When to ask whether a transaction landed: a second after sending, then every
+ * two. It was every 800 ms for up to 45 seconds, fifty-six status calls for a
+ * transaction still pending; most land within two, which this answers in two
+ * calls.
+ */
+const STATUS_FIRST_MS = 1_000;
+const STATUS_EVERY_MS = 2_000;
 
 /** The transaction id is the fee payer's signature, which is the first one. */
 const feePayerSignature = (wire: string): string | null => {
@@ -403,17 +426,26 @@ export function sendRoutes(deps: SendDeps): Hono {
       // Preflight failures carry the program's own reason; pass it on rather than a generic 500.
       return c.json(fail("send_failed", reasonFrom(failureText(err))), 422);
     }
+    void deps.accepted?.(decoded.messageBytes, signature).catch(() => undefined);
 
     const deadline = Date.now() + confirmMs;
-    while (Date.now() < deadline) {
+    let wait = STATUS_FIRST_MS;
+    for (;;) {
+      await new Promise((r) => setTimeout(r, Math.min(wait, Math.max(0, deadline - Date.now()))));
+      wait = STATUS_EVERY_MS;
       const { value } = await rpc.getSignatureStatuses([signature as Signature]).send();
       const status = value[0];
-      if (status?.err) return c.json({ signature, status: "failed", error: JSON.stringify(status.err) }, 422);
+      if (status?.err) {
+        deps.sent?.(wallet);
+        return c.json({ signature, status: "failed", error: JSON.stringify(status.err) }, 422);
+      }
       if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") {
+        deps.sent?.(wallet);
         return c.json({ signature, status: "confirmed" });
       }
-      await new Promise((r) => setTimeout(r, 800));
+      if (Date.now() >= deadline) break;
     }
+    deps.sent?.(wallet);
     return c.json({ signature, status: "pending" }, 202);
   });
 

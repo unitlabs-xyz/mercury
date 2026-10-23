@@ -19,8 +19,9 @@ describe("the account polling policy", () => {
     expect(LIVE.refetchInterval).toBeGreaterThan(0);
   });
 
-  it("refreshes every ten seconds", () => {
-    expect(LIVE.refetchInterval).toBe(10_000);
+  /* Each poll reads the chain on the paid RPC; at ten seconds an open tab ran a plan's month out. */
+  it("refreshes every thirty seconds", () => {
+    expect(LIVE.refetchInterval).toBe(30_000);
   });
 
   /* Two policies about one piece of data. A page remounting inside the stale

@@ -1,7 +1,11 @@
 # 08 · Roadmap
 
+> **This is the hackathon plan, kept as written.** It ran from 19 September to the submission on
+> 12 October. What comes next is [12 Roadmap to 2028](12-roadmap-2028.md), which has each step's
+> status, and everything still open is in [TODO.md](../TODO.md).
+>
 > Baskets moved from Symmetry to Glider on 5 October ([ADR 0013](adr/0013-baskets-on-glider.md)).
-> The weekly plan below is kept as written; where it says Symmetry, the shipped work is Glider.
+> Where the plan says Symmetry, the shipped work is Glider.
 
 Twenty-three days from 19 September to the deadline on 12 October. Four engineers. Web is the
 submission. Integrating Symmetry rather than writing a vault returns roughly a fortnight of one
@@ -96,6 +100,11 @@ Never cut: the issuer comparison, the premium gate, the exposure sheet. Those th
 submission.
 
 ## After the hackathon
+
+**Where it stands, 23 October 2026.** Borrowing against stocks through Kamino shipped well ahead of
+2.0, on web and iOS, with loan alerts by email. Earn on Kamino vaults went live on 22 October.
+Baskets count in net worth and are on iOS. Custom baskets, a step toward 3.0, are in review (#74).
+The card is not started.
 
 **1.1, October to December.** Baskets in net worth and on iOS, with Glider's daily rebalances in
 the activity feed. Real-funded checks for every strategy. Gifting a holding by link. More

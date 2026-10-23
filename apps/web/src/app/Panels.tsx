@@ -5,11 +5,12 @@ import { AddCash } from "./AddCash";
 import { BorrowSheet, type Tab } from "./borrow/BorrowSheet";
 import { Invite } from "./Invite";
 import { Send } from "./Send";
+import { EarnSheet, type EarnTab } from "./money/EarnSheet";
 
 const BORROW_TABS: readonly Tab[] = ["borrow", "repay", "pledge", "withdraw"];
 
 /** The query keys a panel owns, so opening one never leaves another's behind. */
-const KEYS = ["add", "send", "borrow", "ticker", "only", "event", "invite"] as const;
+const KEYS = ["add", "send", "borrow", "ticker", "only", "event", "invite", "earn", "vault"] as const;
 
 /**
  * Opens and closes the app's side panels from anywhere, on top of whatever page
@@ -37,6 +38,7 @@ export const usePanels = () => {
     invite: () => set({ invite: "1" }),
     borrow: (tab: Tab = "borrow", ticker?: string) => set({ borrow: tab, ticker }),
     receipt: (id: string) => set({ event: id }),
+    earn: (tab: EarnTab = "add", vault?: string) => set({ earn: tab, vault }),
     close: () =>
       setParams(
         (p) => {
@@ -67,6 +69,12 @@ export const GlobalPanels = () => {
   const borrowing = tab !== null && BORROW_TABS.includes(tab);
   const inviting = params.get("invite") === "1";
   const event = params.get("event");
+  const earnParam = params.get("earn");
+  const earning = earnParam === "add" || earnParam === "withdraw";
+  const earnSeen = useSeen(earning);
+  // The last side asked for, so the panel keeps its title while it slides away.
+  const [lastEarn, setLastEarn] = useState<EarnTab>("add");
+  if (earning && earnParam !== lastEarn) setLastEarn(earnParam);
 
   const addSeen = useSeen(adding);
   const sendSeen = useSeen(sending);
@@ -92,6 +100,14 @@ export const GlobalPanels = () => {
           initialTab={borrowing ? tab : lastTab}
           ticker={params.get("ticker") ?? undefined}
           only={params.get("only") === "1"}
+        />
+      )}
+      {earnSeen && (
+        <EarnSheet
+          open={earning}
+          onClose={close}
+          tab={earning ? earnParam : lastEarn}
+          vault={params.get("vault") ?? undefined}
         />
       )}
       {receiptSeen && <ActivityReceipt id={event ?? lastEvent} open={event !== null} onClose={close} />}

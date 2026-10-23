@@ -110,7 +110,13 @@ is in [10 Baskets](10-baskets.md) and the decision in [ADR 0005](adr/0005-basket
 - **Borrowing.** Live, against xStocks on Kamino, to 80% of Kamino's own limit. Borrowed USDC
   lands in the wallet as ordinary cash and can be spent on anything, including more stock — see
   the amendment to [ADR 0009](adr/0009-investing-not-trading.md). The headline figure is net of
-  the loan, and the fall that would reach liquidation is on the page.
+  the loan, and the fall that would reach liquidation is on the page. A loan near its limit is
+  emailed to its owner.
+- **Earn.** Live since 22 October 2026. Cash lent through a Kamino Earn vault the person picks, at
+  a variable rate, once they have accepted Earn's risks. One Cash balance chosen at sign-up is the next version
+  ([12 Roadmap to 2028](12-roadmap-2028.md), Phase 1 step 5).
+- **Add cash.** USDC on Solana from a connected wallet, or almost any token on another chain
+  through Relay ([ADR 0014](adr/0014-relay-funding.md)), with a 0.3% fee on anything but Circle USDC.
 
 There are no bank transfers, no card top-ups and no cash withdrawals. That is the crypto-native
 decision, recorded in [ADR 0001](adr/0001-crypto-native.md).
@@ -136,13 +142,16 @@ currency display, and a data export.
 | Tax centre                              | A different answer in every country. We export a spreadsheet                                                                                      |
 | Savings goals                           | Demonstrates well, goes unused before people have a reason to return                                                                              |
 | A full web application                  | Mobile is the product. Web is the demo build plus a shareable portfolio page                                                                      |
-| User-created baskets                    | Curated first. Tools to build your own come once people use the ones we made                                                                      |
+| User-created baskets                    | Curated first. Tools to build your own come once people use the ones we made. In review since 21 October 2026 (#74)                               |
 | An AI chat assistant                    | Everyone ships one. It adds nothing until there is a portfolio worth discussing                                                                   |
 | Perpetuals, margin trading, options     | Not an investing product. Permanently out of scope, not merely later. [ADR 0009](adr/0009-investing-not-trading.md)                               |
 | Order books, depth charts, candlesticks | Same. The chart is a line, and it has five timeframes                                                                                             |
 | User-facing limit orders                | The queued order underneath is a limit order. The user sees "wait for the real price" and never sets a trigger by hand                            |
 
 ## Version two
+
+> Borrowing shipped early, in October 2026 (see Money above). The card and creator baskets are
+> still ahead; [12 Roadmap to 2028](12-roadmap-2028.md) has the current order.
 
 Borrowing against holdings through Kamino, with a risk screen that shows both how far the
 portfolio can fall today and how far it could gap on a Monday morning. Then a card that spends

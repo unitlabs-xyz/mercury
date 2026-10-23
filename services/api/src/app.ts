@@ -12,7 +12,7 @@ import { NO_FEE, quoteFee } from "./relay/quote.js";
 import { tradeCharge, type TradeCharge } from "./relay/fee.js";
 import { isCode, pricingFor, type FeePricing } from "./referrals/rules.js";
 import { buildSponsored } from "./relay/build.js";
-import { rpcLookupTables } from "./relay/lookups.js";
+import { cachedLookupTables, rpcLookupTables } from "./relay/lookups.js";
 import { createSolanaRpc } from "@solana/kit";
 import { USDC_MINT } from "@mercury/chain";
 import { BASKETS } from "./baskets.js";
@@ -23,6 +23,7 @@ import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
 import { referralRoutes, SITE } from "./routes/referrals.js";
 import { borrowRoutes } from "./routes/borrow.js";
+import { earnRoutes } from "./routes/earn.js";
 import { sendRoutes } from "./routes/send.js";
 import { instrumentRoutes } from "./routes/instruments.js";
 import { moneyRoutes } from "./routes/money.js";
@@ -139,6 +140,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       read.referrals === undefined ? null : await read.referrals.store.referredAt(userId),
       new Date(),
     );
+  const lookupTables = cachedLookupTables(rpcLookupTables(rpc));
   /*
    * Above cors(), both of them, so a request CORS turns away is still a
    * request that was counted and traced. A rejected preflight is exactly the
@@ -197,6 +199,14 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.onError((err, c) => {
     if (err.message.startsWith("buildDeps:")) return c.json(NOT_READY, 503);
     /*
+     * The Solana node turning us away for going too fast. Not a bug and not the
+     * person's doing: it passes in seconds, and saying so beats a bare 500.
+     */
+    if ((err as { context?: { statusCode?: unknown } }).context?.statusCode === 429) {
+      httpLog.warn({ method: c.req.method, route: c.req.routePath }, "the Solana node rate-limited us");
+      return c.json(fail("rate_limited", "The network is busy. Try again in a few seconds."), 503);
+    }
+    /*
      * The id in the log line and in the body, so the sentence somebody reads
      * on screen and the line an engineer greps for name the same request.
      *
@@ -216,6 +226,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", activityRoutes(read.activity));
   if (read.referrals) app.route("/", referralRoutes(read.referrals));
   app.route("/", borrowRoutes(read.borrow));
+  app.route("/", earnRoutes(read.earn));
   app.route("/", sendRoutes(read.send));
   /* Absent when Relay or the treasury is not configured, so the routes 404 and
      the interface hides the method rather than offering one that cannot work. */
@@ -644,7 +655,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const { wire: built } = await buildSponsored(
       {
         quotes: market().quotes,
-        lookups: rpcLookupTables(rpc),
+        lookups: lookupTables,
         relay,
         blockhash: async () => {
           const { value } = await rpc.getLatestBlockhash().send();

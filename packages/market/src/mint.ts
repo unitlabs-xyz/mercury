@@ -19,12 +19,10 @@ const DEFAULT_TTL_MS = 60_000;
  * it. The cache is short and per-instance: it exists to collapse that pair, not
  * to keep prices.
  *
- * A caller wanting several mints asks for them together. Where the reader can
- * answer many accounts in one call it does; where it cannot, the calls still
- * leave in one request, because `batchedRpc` collects whatever is issued
- * together. What that does not collapse is a loop that awaits each mint before
- * asking for the next, and there is no batching anywhere that can save one of
- * those — which is why this port takes a list.
+ * A caller wanting several mints asks for them together, and the reader
+ * answers many accounts in one call where it can. What nothing collapses is a
+ * loop that awaits each mint before asking for the next — which is why this
+ * port takes a list.
  */
 export class MintMultipliers implements MultiplierSource {
   private readonly ttlMs: number;

@@ -5,6 +5,9 @@ import {
   parseJupiterKeys,
   SolanaRpc,
   SymmetryVenue,
+  rotatingFetch,
+  rotation,
+  type Rotation,
   USDC_MINT,
   type BasketVenue,
   type SupportedStocks,
@@ -39,6 +42,15 @@ import type { ActivityDeps } from "./routes/activity.js";
 import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
+import { KaminoEarn } from "./earn/kamino-vault.js";
+import { D, ZERO } from "@mercury/core";
+import { hasEarnHistory, pgEarnLedger } from "./earn/store.js";
+import { onlyIfUsed } from "./earn/gate.js";
+import { recordMove } from "./earn/record.js";
+import { earnSends } from "./earn/sends.js";
+import { earnBalance, earnDirectory, earnSummary, type EarnDirectory } from "./earn/directory.js";
+import { kaminoApi, type KaminoApi } from "./earn/kamino-api.js";
+import type { EarnDeps } from "./routes/earn.js";
 import { debtFrom } from "./lending/debt.js";
 import { loanLedger, recordLoanEvents } from "./lending/record.js";
 import { pledgedByMint, withPledged } from "./lending/pledged.js";
@@ -59,6 +71,7 @@ import {
   readFlows,
   readHoldings,
   readLatestDebt,
+  readLatestEarn,
   readSnapshots,
 } from "./portfolio/queries.js";
 import { basketReturnsReader, basketValueReader } from "./portfolio/baskets.js";
@@ -71,6 +84,7 @@ import { JsonBasketStore } from "./baskets/glider/store.js";
 import { SolanaBasketFunding } from "./baskets/glider/funding.js";
 import type { BasketProvider } from "./baskets/core/deps.js";
 import { logger } from "./log/index.js";
+import { noteStrain } from "./jobs/strain.js";
 
 /** Pyth in front of the issuer's quote, or the issuer's quote alone. */
 const withFallback = (pythApiKey: string | undefined, issuer: ReferenceSource): ReferenceSource =>
@@ -98,6 +112,8 @@ export interface Deps {
   readonly baskets: BasketVenue;
   /** Kamino's xStocks market through the klend SDK: reads, and unsigned transactions. */
   readonly lending: LendingSource;
+  /** The Kamino Earn vaults idle cash can be lent through. */
+  readonly earn: EarnDirectory;
   /** Optional Glider capability shared by routes and the wallet-events exit reconciler. */
   readonly basketProvider?: BasketProvider;
 }
@@ -122,6 +138,15 @@ export interface Config {
   /** Optional. Program scans (Kamino's reserve lookup), if the main RPC plan refuses them. */
   readonly solanaScanRpcUrl?: string;
   /**
+   * Public endpoints the background jobs read through, taken in turn, so they
+   * stop spending the paid plan: `SOLANA_PUBLIC_RPC_URLS`, comma-separated.
+   * Unset, the keyless ones that serve the jobs (`PUBLIC_RPC_URLS`); set
+   * empty, the jobs use `solanaRpcUrl` as before. Everything a person waits on, every read on a screen and every
+   * transaction, keeps `solanaRpcUrl`, and so does a job's request that every
+   * public endpoint refuses.
+   */
+  readonly solanaPublicRpcUrls: readonly string[];
+  /**
    * Optional. Jupiter API keys, rotated one per request. Set, every Jupiter call
    * goes to the paid host (api.jup.ag) for its higher rate limits; empty, they
    * stay on the keyless free tier.
@@ -145,6 +170,13 @@ export interface Config {
    * the relayer's USDC transfer, and without one a trade would fill for free.
    */
   readonly relayerSecretKey?: string;
+  /**
+   * The Earn vault a person gets until they choose another. Defaults to
+   * Steakhouse USDC, the first of Mercury's picks (see `earn/catalog.ts`). It
+   * has to be on the list (`earn/directory.ts`); one that is not is passed over
+   * for the first vault that is.
+   */
+  readonly earnVault: string;
   /**
    * Mercury's own fee on a stock trade, in basis points of what the trade is
    * worth: 50 is 0.5%. Charged in the same USDC transfer that repays the
@@ -231,6 +263,70 @@ const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): num
  * Relay pays app fees to an EVM address only, Solana deposits included. A
  * Solana address here would be taken by nothing and found out at the claim.
  */
+/**
+ * The free, keyless endpoints that answered every read the background jobs
+ * make, correctly, measured 22 October 2026 call by call.
+ *
+ * Left out, and why. PublicNode and Pocket answer a real transaction with
+ * `null`, and PublicNode a busy wallet's signatures with none: no history, and
+ * no error to say so, so the jobs would take it for "nothing happened". dRPC's
+ * free plan, Ankr, OnFinality, BlockPI, Tatum and the rest refused without a
+ * key, or did not answer. A new endpoint goes in only after a check against a
+ * wallet with history, not just a 200.
+ */
+const PUBLIC_RPC_URLS = ["https://api.mainnet-beta.solana.com", "https://public.rpc.solanavibestation.com"];
+
+/**
+ * Methods a public endpoint is known not to serve, so the rotation never asks
+ * it for them. Solana Vibe Station keeps only recent history: a signature
+ * cursor older than that is "Transaction … not found", and an older
+ * transaction is null (22 October 2026). History goes to Solana's own.
+ */
+const PUBLIC_RPC_SKIPS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["https://public.rpc.solanavibestation.com", new Set(["getSignaturesForAddress", "getTransaction"])],
+]);
+
+/**
+ * Requests a second across the public lane. Solana's endpoint documents forty
+ * of one method in ten seconds and refused well under that when measured: one
+ * transaction read in five at two a second, more at five (22 October 2026).
+ * Three a second turns a job's first pass after boot from a burst into a
+ * queue, and what is still refused falls back to the paid endpoint.
+ */
+const PUBLIC_RPC_PER_SECOND = 3;
+
+/**
+ * Requests a second the background jobs may send the paid endpoint, when every
+ * public one refuses. The routes read the same endpoint, and it is theirs
+ * first: unpaced, a job's eight workers arrived there at once (23 October
+ * 2026). Two a second is a sliver of any paid plan, and what it cannot carry
+ * waits for the job's next pass.
+ */
+const PAID_FALLBACK_PER_SECOND = 2;
+
+/**
+ * How long the routes reuse a wallet's token balances. The app polls money,
+ * portfolio and Earn together, each reading both token programs; two seconds
+ * is under its first refetch after a transaction (three seconds), and the send
+ * route forgets a wallet's balances as soon as it sends for it.
+ */
+const ROUTE_BALANCES_TTL_MS = 2_000;
+
+const publicRpcUrls = (env: NodeJS.ProcessEnv): readonly string[] => {
+  const raw = env["SOLANA_PUBLIC_RPC_URLS"];
+  if (raw === undefined) return PUBLIC_RPC_URLS;
+  const urls = raw
+    .split(",")
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0);
+  for (const url of urls) {
+    if (!/^https:\/\/[^\s/]+/.test(url)) {
+      throw new Error(`SOLANA_PUBLIC_RPC_URLS: ${url} is not an https URL`);
+    }
+  }
+  return urls;
+};
+
 const evmAddress = (env: NodeJS.ProcessEnv, key: string): string | undefined => {
   const raw = env[key];
   if (raw === undefined || raw.length === 0) return undefined;
@@ -238,6 +334,9 @@ const evmAddress = (env: NodeJS.ProcessEnv, key: string): string | undefined => 
     throw new Error(`${key} must be an EVM address (0x and 40 hex digits)`);
   return raw;
 };
+
+/** Steakhouse Financial's USDC vault on Kamino Earn. */
+const STEAKHOUSE_USDC = "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E";
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const privyVerificationKey = env["PRIVY_VERIFICATION_KEY"];
@@ -251,6 +350,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     feedbackTo: env["FEEDBACK_TO"] ?? "hello@trymercury.xyz",
     solanaRpcUrl: required(env, "SOLANA_RPC_URL"),
     ...(env["SOLANA_SCAN_RPC_URL"] ? { solanaScanRpcUrl: env["SOLANA_SCAN_RPC_URL"] } : {}),
+    solanaPublicRpcUrls: publicRpcUrls(env),
     /*
      * The singular name as well, because it is the one everybody reaches for
      * and a key set under it was discarded without a word: no error, no empty
@@ -261,6 +361,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["RELAY_API_KEY"] ? { relayApiKey: env["RELAY_API_KEY"] } : {}),
     fundMinimumUsd: Number(env["FUND_MINIMUM_USD"] ?? 10),
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
+    earnVault: env["EARN_VAULT_ADDRESS"] || STEAKHOUSE_USDC,
     tradingFeeBps: basisPoints(env, "TRADING_FEE_BPS", DEFAULT_TRADING_FEE_BPS),
     depositFeeBps: basisPoints(env, "DEPOSIT_FEE_BPS", DEFAULT_DEPOSIT_FEE_BPS),
     ...(depositFeeRecipient === undefined ? {} : { depositFeeRecipient }),
@@ -322,7 +423,7 @@ export function buildDeps(config: Config): Deps {
   // One rotation shared by every Jupiter adapter, so the keys take turns across all of them.
   const jupiter = jupiterAccess(config.jupiterApiKeys) ?? {};
   const registry = new JupiterRegistry(jupiter);
-  const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl });
+  const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl, balancesTtlMs: ROUTE_BALANCES_TTL_MS });
   const market = new JupiterMarket({ registry, ...jupiter });
   // Built here rather than inline below, because the reference reads through it.
   const prices = new CachedPriceBoard(market, { windowMs: PRICE_WINDOW_MS });
@@ -364,12 +465,85 @@ export function buildDeps(config: Config): Deps {
     chain,
     history: chain,
     baskets: new SymmetryVenue({ rpcUrl: config.solanaRpcUrl }),
-    lending: new KaminoLending({
-      rpcUrl: config.solanaRpcUrl,
-      ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
-      rent: chain,
-    }),
+    lending: lendingOver(config, chain),
+    earn: earnOver(config, chain, kaminoApi()),
     ...(basketProvider ? { basketProvider } : {}),
+  };
+}
+
+/** Kamino's xStocks market, read through `chain` for rent and over `lane` when given. */
+const lendingOver = (config: Config, chain: ChainReader, lane?: Rotation) =>
+  new KaminoLending({
+    rpcUrl: config.solanaRpcUrl,
+    ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
+    ...(lane === undefined ? {} : { rotation: lane }),
+    rent: chain,
+  });
+
+/** Kamino Earn's vaults, the same way. One Kamino API, so its caches are shared across lanes. */
+const earnOver = (config: Config, chain: ChainReader, api: KaminoApi, lane?: Rotation) =>
+  earnDirectory({
+    api,
+    usdcMint: USDC_MINT,
+    rpcUrl: config.solanaRpcUrl,
+    /*
+     * Vault shares are tokens like any other, so they come from the balances
+     * the rest of the page reads too, and the routes' copy of those is shared
+     * for two seconds. Read separately, `/v1/earn` asked the node for the same
+     * wallet's token accounts twice in one request.
+     */
+    shareBalances: async (wallet) =>
+      new Map((await chain.tokenBalances(wallet)).map((b) => [b.mint, D(b.rawAmount.toString())])),
+    ...(lane === undefined ? {} : { rotation: lane }),
+    defaultVault: config.earnVault,
+    make: (vault) =>
+      new KaminoEarn({
+        rpcUrl: config.solanaRpcUrl,
+        ...(config.solanaScanRpcUrl ? { scanRpcUrl: config.solanaScanRpcUrl } : {}),
+        ...(lane === undefined ? {} : { rotation: lane }),
+        vault,
+        usdcMint: USDC_MINT,
+        rent: chain,
+      }),
+  });
+
+/**
+ * The background jobs' own chain readers: `deps` with every RPC reader rebuilt
+ * over the public endpoints taken in turn (`Config.solanaPublicRpcUrls`), and
+ * everything else shared. The jobs read every wallet on a clock; on the paid
+ * plan, a deploy had them refused every call for its first minute. `lane` is
+ * what a job backs off on; null when the jobs stay on the paid endpoint.
+ */
+export function backgroundDeps(
+  deps: Deps,
+  config: Config,
+): { readonly deps: Deps; readonly lane: Rotation | null } {
+  if (config.solanaPublicRpcUrls.length === 0) return { deps, lane: null };
+  // What every public endpoint refuses goes to the paid one, so the jobs do not fail it.
+  const lane = rotation(config.solanaPublicRpcUrls, {
+    skips: PUBLIC_RPC_SKIPS,
+    perSecond: PUBLIC_RPC_PER_SECOND,
+    fallback: config.solanaRpcUrl,
+    fallbackPerSecond: PAID_FALLBACK_PER_SECOND,
+    // The pass whose call it was backs off, not every job running at the time.
+    onStrain: noteStrain,
+  });
+  /*
+   * Two attempts, not four: the rotation has already asked every endpoint and
+   * the paid one before a call fails here, and each retry asks them all again.
+   * A read a job could not make waits for its next pass.
+   */
+  const chain = new SolanaRpc({ rpcUrl: lane.urls[0]!, fetch: rotatingFetch(lane), attempts: 2 });
+  return {
+    lane,
+    deps: {
+      ...deps,
+      chain,
+      history: chain,
+      multipliers: new MintMultipliers({ chain }),
+      lending: lendingOver(config, chain, lane),
+      earn: earnOver(config, chain, deps.earn.api, lane),
+    },
   };
 }
 
@@ -395,6 +569,7 @@ export interface ReadDeps {
   readonly orders: OrderStore;
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
+  readonly earn: EarnDeps;
   readonly send: SendDeps;
   /** Mercury's fee on every stock trade, in basis points. See `Config.tradingFeeBps`. */
   readonly tradingFeeBps: number;
@@ -449,6 +624,16 @@ export function buildReadDeps(
   fund?: ReadDeps["fund"],
 ): ReadDeps {
   const basketStore = new JsonBasketStore(config.databaseUrl, undefined, db);
+  const earnLedger = pgEarnLedger(db);
+  // Earn is read only for accounts that have used it; see `earn/gate.ts`.
+  const usedEarn = (wallet: string) => hasEarnHistory(db, wallet);
+  // The send path records each Earn move it sends, so the ledger does not hang on the app's confirm.
+  const earnMoves = earnSends((move) =>
+    recordMove(
+      { history: deps.history, ledger: earnLedger, directory: deps.earn, usdcMint: USDC_MINT },
+      move,
+    ),
+  );
   const baskets = basketValueReader(deps.basketProvider, basketStore);
   return {
     basketTemplates: new BasketService({
@@ -476,13 +661,31 @@ export function buildReadDeps(
       pledged: (wallet) => pledgedByMint(deps.lending, wallet),
       debt: (wallet) => debtFrom(deps.lending, wallet),
       lastKnownDebt: (userId) => readLatestDebt(db, userId),
+      lastKnownEarn: (userId) => readLatestEarn(db, userId),
       snapshots: (userId, from) => readSnapshots(db, userId, from),
       baskets,
       basketReturns: basketReturnsReader(deps.basketProvider),
       flows: (userId, from) => readFlows(db, userId, from),
       basketMovements: (userId) => readBasketMovements(db, userId),
+      earn: onlyIfUsed(usedEarn, (wallet) => earnBalance(deps.earn, wallet), ZERO),
     },
-    money: { chain: deps.chain, credit: deps.credit, lending: deps.lending, usdcMint: USDC_MINT },
+    money: {
+      chain: deps.chain,
+      credit: deps.credit,
+      lending: deps.lending,
+      earn: onlyIfUsed(usedEarn, (wallet) => earnSummary(deps.earn, wallet), { balance: ZERO, apy: null }),
+      usdcMint: USDC_MINT,
+    },
+    earn: {
+      directory: deps.earn,
+      api: deps.earn.api,
+      chain: deps.chain,
+      history: deps.history,
+      usdcMint: USDC_MINT,
+      ledger: earnLedger,
+      sends: earnMoves,
+      ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
+    },
     activity: {
       read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor),
       receipt: (userId, wallet, id) =>
@@ -519,6 +722,8 @@ export function buildReadDeps(
     send: {
       rpcUrl: config.solanaRpcUrl,
       fees: { chain: deps.chain, prices: deps.prices },
+      accepted: earnMoves.accepted,
+      sent: (wallet) => deps.chain.forgetBalances?.(wallet),
       ...(relay === undefined ? {} : { relay }),
     },
   };

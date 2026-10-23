@@ -24,27 +24,30 @@ Mercury brings the simplicity of a modern financial account to the onchain world
 stablecoins, invest in stocks, ETFs, and curated portfolios, and spend everyday with the Mercury
 Card — while keeping your wealth in one place.
 
-Built on Solana for Colosseum's Crypto World's Fair. Submissions close **12 October 2026**.
+Built on Solana for Colosseum's Crypto World's Fair, submitted for its 12 October 2026 deadline.
+Everything still open, across the product, the code and the partners, is in [TODO.md](TODO.md).
 
 ## Read the docs in this order
 
-| Doc                                                | What it covers                                                |
-| -------------------------------------------------- | ------------------------------------------------------------- |
-| [00 Overview](docs/00-overview.md)                 | What we are building and for whom, in one page                |
-| [01 Evidence](docs/01-evidence.md)                 | What we measured on-chain, and why it justifies the product   |
-| [02 Product](docs/02-product.md)                   | Every feature, in scope and out                               |
-| [03 Architecture](docs/03-architecture.md)         | Monorepo layout, stack, and why each choice                   |
-| [04 Execution engine](docs/04-execution-engine.md) | The core algorithm. Read this one properly                    |
-| [05 Data model](docs/05-data-model.md)             | Entities, and the cost-basis rules that are easy to get wrong |
-| [06 API](docs/06-api.md)                           | Endpoint contract between apps and server                     |
-| [07 Design](docs/07-design.md)                     | Screens, states, and the apps we are copying                  |
-| [08 Roadmap](docs/08-roadmap.md)                   | What ships by 12 October, and what comes after                |
-| [09 Open questions](docs/09-open-questions.md)     | What is settled, and what is still open                       |
-| [10 Baskets](docs/10-baskets.md)                   | The vault, and how a basket becomes one token                 |
-| [11 References](docs/11-references.md)             | What to read and look at before writing code                  |
+| Doc                                                | What it covers                                                  |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| [00 Overview](docs/00-overview.md)                 | What we are building and for whom, in one page                  |
+| [01 Evidence](docs/01-evidence.md)                 | What we measured on-chain, and why it justifies the product     |
+| [02 Product](docs/02-product.md)                   | Every feature, in scope and out                                 |
+| [03 Architecture](docs/03-architecture.md)         | Monorepo layout, stack, and why each choice                     |
+| [04 Execution engine](docs/04-execution-engine.md) | The core algorithm. Read this one properly                      |
+| [05 Data model](docs/05-data-model.md)             | Entities, and the cost-basis rules that are easy to get wrong   |
+| [06 API](docs/06-api.md)                           | Endpoint contract between apps and server                       |
+| [07 Design](docs/07-design.md)                     | Screens, states, and the apps we are copying                    |
+| [08 Roadmap](docs/08-roadmap.md)                   | The hackathon plan, and where it stands                         |
+| [09 Open questions](docs/09-open-questions.md)     | What is settled, and what is still open                         |
+| [10 Baskets](docs/10-baskets.md)                   | The vault, and how a basket becomes one token                   |
+| [11 References](docs/11-references.md)             | What to read and look at before writing code                    |
+| [12 Roadmap to 2028](docs/12-roadmap-2028.md)      | Where Mercury is heading, and what it owns and rents on the way |
 
 Decisions live in [`docs/adr`](docs/adr). The backend design and its implementation plans are in
-[`docs/superpowers`](docs/superpowers).
+[`docs/superpowers`](docs/superpowers). Research reports, with the researchers' notes, are in
+[`docs/research`](docs/research).
 
 ## Layout
 
@@ -60,7 +63,8 @@ packages/
   chain/      Solana adapters. Jupiter, Kamino, RPC, token registry.
   market/     Reference prices, market hours, multipliers.
   types/      Shared types and Zod schemas.
-  sdk/        Typed API client used by web and mobile.
+  view/       What web and mobile both compute: formatting, the feed, orders, borrowing.
+  sdk/        Typed API client. Neither app imports it.
 tooling/      Shared tsconfig. Eslint and prettier are configured at the root.
 docs/brand/   The wordmark and the mark.
 ```
@@ -98,7 +102,7 @@ docker run -d --name mercury-pg \
   -e POSTGRES_USER=mercury -e POSTGRES_PASSWORD=mercury -e POSTGRES_DB=mercury \
   -p 5432:5432 -v mercury-pg-data:/var/lib/postgresql/data postgres:16-alpine
 
-cp services/api/.env.example services/api/.env   # then fill PRIVY_APP_ID
+cp services/api/.env.example services/api/.env   # then fill DATABASE_URL, SOLANA_RPC_URL, PRIVY_APP_ID
 pnpm --filter @mercury/api exec drizzle-kit migrate
 pnpm --filter @mercury/api dev                   # http://localhost:8787
 pnpm --filter @mercury/web dev                   # http://localhost:5173
@@ -163,7 +167,8 @@ DATABASE_URL=<the deployed one> pnpm --filter @mercury/api exec drizzle-kit migr
 
 **Run one instance.** The background jobs live inside the API process, so a
 second replica is a second writer polling the same wallets — `position-sync`
-every two seconds, `wallet-events` every thirty. Scaling this out needs the
+every ten seconds while someone has the app open, `wallet-events` every
+thirty. Scaling this out needs the
 jobs pulled into their own process first.
 
 To check the image locally before pushing:
@@ -190,7 +195,7 @@ workspace packages.
 into the bundle during `vite build`; setting them on a running container does
 nothing. In Coolify each one must be ticked **Build Variable**:
 
-- `VITE_API_URL` — e.g. `https://mercury-dev.thecircleco.xyz`
+- `VITE_API_URL` — e.g. `https://mercury-dev.unitlabs.xyz`
 - `VITE_PRIVY_APP_ID`
 
 The build refuses to run without either, on purpose. Both fail quietly
@@ -203,24 +208,27 @@ Changing either one needs a rebuild, not a restart.
 
 ## State of the build
 
-| Package           | State                                                                                                                                                                                                                                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/core`   | **Done and tested.** 40 tests. Execution engine, cost basis, exposure, basket allocation                                                                                                                                                                                                                                   |
-| `packages/types`  | Done. Zod wire schemas                                                                                                                                                                                                                                                                                                     |
-| `packages/chain`  | Registry, Solana reads, and Jupiter's keyless endpoints — which both price an order and build the transaction that fills it. Baskets run on Glider from `services/api/src/baskets`                                                                                                                                         |
-| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic                                                                                                                                                                                           |
-| `packages/sdk`    | Done. Typed client, every response parsed                                                                                                                                                                                                                                                                                  |
-| `services/api`    | **Identity, read models and execution done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity answer from Postgres and chain; an order prices, builds, settles and writes its own lot. Four clocked jobs run in-process. Trigger orders are the one piece still missing |
-| `apps/web`        | Landing, card and credit pages, and the account screens. Sign-in creates a real Solana wallet, and the buy sheet places a real order                                                                                                                                                                                       |
-| `apps/landing`    | **Scaffolded on Astro.** Eight sections of the designed page, placeholder artwork, SEO and sitemap wired                                                                                                                                                                                                                   |
-| `apps/mobile`     | Not started, on purpose                                                                                                                                                                                                                                                                                                    |
+| Package           | State                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core`   | **Done and tested.** Execution engine, cost basis, exposure, basket allocation                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `packages/types`  | Done. Zod wire schemas                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `packages/chain`  | Registry, Solana reads, and Jupiter's keyless endpoints — which both price an order and build the transaction that fills it. Baskets run on Glider from `services/api/src/baskets`                                                                                                                                                                                                                                                                                                        |
+| `packages/market` | **Done.** Sessions, prices, reference price, multipliers and the credit market, all lifted from the browser and runtime-agnostic                                                                                                                                                                                                                                                                                                                                                          |
+| `packages/sdk`    | Typed client, every response parsed. Neither app imports it                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `packages/view`   | **Done.** What web and mobile both compute: formatting, the activity feed, the order and borrow models, receipts. No DOM, by compiler                                                                                                                                                                                                                                                                                                                                                     |
+| `services/api`    | **Identity, read models and execution done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity answer from Postgres and chain; an order prices, builds, settles and writes its own lot. Borrowing against stocks and Earn run on Kamino, adding cash from another chain runs on Relay, and the relayer sponsors network fees. The clocked jobs run in-process, listed in `src/index.ts`. Trigger orders are the one piece still missing |
+| `apps/web`        | Landing, card and credit pages, and the account screens: invest, baskets, borrow, Earn, add cash and send. Sign-in creates a real Solana wallet, and the buy sheet places a real order                                                                                                                                                                                                                                                                                                    |
+| `apps/landing`    | **Scaffolded on Astro.** Eight sections of the designed page, placeholder artwork, SEO and sitemap wired                                                                                                                                                                                                                                                                                                                                                                                  |
+| `apps/mobile`     | **In progress.** Sign-in, the four tabs, stock pages, buying and selling, send, borrow, baskets and adding cash, on the same API and `packages/view`. Needs a custom dev client for Privy                                                                                                                                                                                                                                                                                                 |
 
 ## Ground rules
 
 - **TypeScript everywhere, strict.** No `any` without a comment saying why.
 - **`packages/core` performs no I/O.** It takes data in and returns decisions. That is what makes
   the execution engine testable.
-- **The server never holds a private key.** Privy does. See [ADR 0003](docs/adr/0003-custody.md).
+- **The server never holds a user's key.** Privy does. See [ADR 0003](docs/adr/0003-custody.md).
+  The one key it holds is the relayer's, which pays network fees and can spend only its own SOL and
+  USDC.
 - **Investing, not trading.** No perps, no margin, no options, no order books. See
   [ADR 0009](docs/adr/0009-investing-not-trading.md).
 - **Money is never a float.** Integers in the smallest unit, or decimal strings. See

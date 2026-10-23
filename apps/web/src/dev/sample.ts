@@ -111,9 +111,13 @@ const sampleBaskets: Portfolio["baskets"] = [
 ];
 const basketUsd = sampleBaskets.reduce((sum, b) => sum + Number(b.valueUsd), 0);
 
+/** Earn on, with this much in the vault: about two months at the vault's rate. */
+const inEarn = 1240.5;
+
 const portfolio: Portfolio = {
-  totalValueUsd: (stocks + cash + basketUsd - debt).toFixed(2),
+  totalValueUsd: (stocks + cash + basketUsd + inEarn - debt).toFixed(2),
   cashUsd: cash.toFixed(2),
+  earnUsd: inEarn.toFixed(2),
   basketUsd: basketUsd.toFixed(2),
   debtUsd: debt.toFixed(2),
   debtIsStale: false,
@@ -125,11 +129,285 @@ const portfolio: Portfolio = {
 
 const money: Money = {
   balanceUsd: cash.toFixed(2),
-  yieldApr: "0.041",
-  interestEarnedYtdUsd: "48.20",
+  yieldApr: "0.0408",
+  interestEarnedYtdUsd: "0",
+  earnUsd: inEarn.toFixed(2),
   depositAddress: "7xQmF4d8Vn2pLs9jKcRb3TyWuAeH6gZxMq1NdP4Rk9",
   borrowingPower: { availableUsd: "2700", enabled: true },
 } as Money;
+
+/** GET /v1/earn, in its wire shape: the three vaults the server offers, as Kamino reported them on 17 October 2026. */
+const sampleVault = (
+  address: string,
+  name: string,
+  curator: string | null,
+  kind: "crypto" | "mixed" | "real-world" | null,
+  logo: string | null,
+  blurb: string | null,
+  apy: [string, string, string, string],
+  tvl: string,
+  holders: number,
+) => ({
+  address,
+  name,
+  picked: kind !== null,
+  curator,
+  kind,
+  logo,
+  blurb,
+  apy: apy[0],
+  apy7d: apy[1],
+  apy30d: apy[2],
+  apy365d: apy[3],
+  tvlUsd: tvl,
+  holders,
+  performanceFee: "0.05",
+  managementFee: "0",
+  minDepositUsd: "0.1",
+  full: false,
+});
+/** GET /v1/earn/vaults: Mercury's eight picks, then the rest by size, as Kamino reported them on 18 October 2026. */
+const earnVaults = [
+  sampleVault(
+    "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E",
+    "Steakhouse USDC",
+    "Steakhouse Financial",
+    "crypto",
+    "steakhouse",
+    "Loans against SOL, Bitcoin and JLP on Kamino's largest markets.",
+    ["0.0388", "0.0535", "0.0520", "0.0470"],
+    "19841759.80",
+    3423,
+  ),
+  sampleVault(
+    "3SMNuqK7m13KorY9gX8DzjQAVXGbhgRVni65Pk6LTBgC",
+    "Solana Mobile USDC Earn Vault",
+    "Solana Mobile",
+    "crypto",
+    "solanamobile",
+    "All in Kamino's main market: loans against SOL and Bitcoin.",
+    ["0.0327", "0.0412", "0.0464", "0.0401"],
+    "1410000",
+    2615,
+  ),
+  sampleVault(
+    "3DBvs2MraKsXoLdSGsQDue3RUQKxM6dp5KWWC6PWtUcg",
+    "Squads USDC",
+    "Squads",
+    "crypto",
+    "squads",
+    "All in Kamino's main market: loans against SOL and Bitcoin.",
+    ["0.0319", "0.0398", "0.0450", "0.0379"],
+    "843100",
+    608,
+  ),
+  sampleVault(
+    "BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2",
+    "Steakhouse High Yield USDC",
+    "Steakhouse Financial",
+    "mixed",
+    "steakhouse",
+    "Mostly SOL and Bitcoin loans, with some tokenized funds.",
+    ["0.0377", "0.0471", "0.0499", "0.0591"],
+    "2550000",
+    338,
+  ),
+  sampleVault(
+    "A1USdzqDHmw5oz97AkqAGLxEQZfFjASZFuy4T6Qdvnpo",
+    "Allez USDC",
+    "Allez Labs",
+    "mixed",
+    "allez",
+    "Spread wide: OnRe reinsurance, stablecoin credit and crypto loans.",
+    ["0.0530", "0.0673", "0.0659", "0.0610"],
+    "10680000",
+    904,
+  ),
+  sampleVault(
+    "2TNCzzYJt3uHmpFpqeeJkza4pQUK9xoLa79DJH9AdgGA",
+    "Marinade USD Vault",
+    "Marinade",
+    "mixed",
+    "marinade",
+    "Mostly OnRe reinsurance credit, the rest SOL and Bitcoin loans.",
+    ["0.0517", "0.0601", "0.0643", "0.0556"],
+    "1580000",
+    450,
+  ),
+  sampleVault(
+    "DWSXb18xZApz29vnQpgR2m6MynCT7PznaXt7Ut7M7KaP",
+    "RWA USDC",
+    null,
+    "real-world",
+    null,
+    "Real-world credit through OnRe and Huma.",
+    ["0.0527", "0.0635", "0.0577", "0.0526"],
+    "61270000",
+    1225,
+  ),
+  sampleVault(
+    "EPC2N3AAv84P9TKsnDt2x41p6T7c5vTewBhQbh4RVx4r",
+    "MEV Capital USDC",
+    "MEV Capital",
+    "real-world",
+    "mevcapital",
+    "All in OnRe reinsurance credit.",
+    ["0.0550", "0.0612", "0.0632", "0.0531"],
+    "1100000",
+    127,
+  ),
+  sampleVault(
+    "B5pjfZAiKjyUEuqB2694NHrsjcaM67uuJaWqjzTVtzR6",
+    "Kamino Institutional Commodity Yield",
+    null,
+    null,
+    null,
+    null,
+    ["0.0830", "0.0802", "0.0779", "0.0614"],
+    "52580000",
+    1078,
+  ),
+  sampleVault(
+    "91b1opzHNUQobfLZxGMNYT5qDRKoqV8FdsdQBmH4wBxy",
+    "Kamino Private Credit USDC",
+    null,
+    null,
+    null,
+    null,
+    ["0.0758", "0.0758", "0.0758", "0.0619"],
+    "7280000",
+    66,
+  ),
+  sampleVault(
+    "HJFEPRRRLBfJBfSJaC69r3nMYskViL9Yy1QLLAqjvnW",
+    "Plume x Re7 USDC",
+    null,
+    null,
+    null,
+    null,
+    ["0.0321", "0.0610", "0.0899", "0.0565"],
+    "6330000",
+    164,
+  ),
+  sampleVault(
+    "ADcgKvst9u9qRXgSCxg2eZtqKNYPuMbfqjntaLepxwE5",
+    "Galaxy USDC",
+    null,
+    null,
+    null,
+    null,
+    ["0.0435", "0.0480", "0.0525", "0.0460"],
+    "2060000",
+    15,
+  ),
+  sampleVault(
+    "9E69U4GzWhryRaPe8DYpco6Z9vTZY6gg8w6W2QsBACEj",
+    "USDC Prime",
+    null,
+    null,
+    null,
+    null,
+    ["0.0410", "0.0490", "0.0523", null as unknown as string],
+    "1390000",
+    230,
+  ),
+  sampleVault(
+    "GFiW6edsrtHZd4Vnz2qTSurVasRrgKrXE1ouHNtCVsft",
+    "Gauntlet Frontier",
+    null,
+    null,
+    null,
+    null,
+    ["0.0420", "0.0530", "0.0601", "0.0487"],
+    "310000",
+    103,
+  ),
+  sampleVault(
+    "8VoxRCLSAh791MWpsYYkgbWJoek55hkiU3aHE3VQadBv",
+    "Elaris USDC Optimizer",
+    null,
+    null,
+    null,
+    null,
+    ["0.0830", "0.0850", "0.0886", "0.0829"],
+    "220000",
+    8,
+  ),
+  sampleVault(
+    "7p5PczFqftBcyfgWkozHiVEQEtK9yeDXbXwQFkxenh7C",
+    "Hyperithm USDC Apex",
+    null,
+    null,
+    null,
+    null,
+    ["0.0410", "0.0420", "0.0424", "0.0418"],
+    "210000",
+    7,
+  ),
+];
+/**
+ * A vault still held after it left the list: Kamino could not be read for it,
+ * or it shrank under the bar. Read off the chain, so no size or averages.
+ */
+const leftTheList = {
+  ...sampleVault(
+    "GoneVau1tUSDC1111111111111111111111111111111",
+    "Elaris USDC",
+    "Elaris",
+    null,
+    null,
+    null,
+    ["0.0412", "0", "0", "0"],
+    "0",
+    0,
+  ),
+  apy7d: null,
+  apy30d: null,
+  apy365d: null,
+  offered: false,
+};
+const inLeftTheList = 210.3;
+
+/**
+ * GET /v1/earn: $1,240.50 in all, most of it in Steakhouse and the rest in a
+ * vault no longer listed. Set VITE_SAMPLE_EARN=0 to see the page before any deposit.
+ */
+const earning = import.meta.env.VITE_SAMPLE_EARN !== "0";
+const earn = {
+  selected: earnVaults[0]!.address,
+  holdings: earning
+    ? [
+        { ...earnVaults[0]!, balanceUsd: (inEarn - inLeftTheList).toFixed(2), earnedUsd: "8.42" },
+        { ...leftTheList, balanceUsd: inLeftTheList.toFixed(2), earnedUsd: "0" },
+      ]
+    : [],
+  balanceUsd: earning ? inEarn.toFixed(2) : "0",
+  earnedUsd: earning ? "8.42" : "0",
+  apy: earning ? earnVaults[0]!.apy : null,
+  walletUsd: cash.toFixed(2),
+  // As if the wording changed since the last deposit: the next one asks again, which is the state to review.
+  riskAccepted: false,
+};
+
+/** GET /v1/earn/vaults/:address: a month of daily rates around 4–6%, and where it lends. */
+const earnHistory = (path: string) => {
+  const seed = (path.charCodeAt(16) % 7) / 2;
+  const days =
+    { "1M": 30, "3M": 90, "1Y": 365 }[new URLSearchParams(path.split("?")[1] ?? "").get("range") ?? "1M"] ??
+    30;
+  return {
+    points: Array.from({ length: days }, (_, i) => ({
+      at: new Date(Date.now() - (days - i) * 86_400_000).toISOString(),
+      apy: (0.047 + 0.009 * Math.sin(i / 4 + seed) + 0.004 * Math.sin(i / 1.7 + seed * 2)).toFixed(4),
+      tvlUsd: "19841759.80",
+    })),
+    allocation: [
+      { market: "7u3HeH", name: "SOL/BTC", share: "0.772" },
+      { market: "DxXdAy", name: "JLP", share: "0.217" },
+      { market: "GMqmFy", name: "Bitcoin", share: "0.011" },
+    ],
+  };
+};
 
 /** GET /v1/borrow, in its wire shape: 3 SPYx pledged, $1,988.23 owed, healthy. */
 const row = (ticker: string, ltv: number, lt: number, price: number, deposited: number, free: number) => ({
@@ -970,6 +1248,10 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
   if (route === "/v1/portfolio") return portfolio;
   if (route === "/v1/money") return money;
   if (route === "/v1/borrow") return borrow;
+  if (route === "/v1/earn") return earn;
+  if (route === "/v1/earn/risk") return { accepted: "2026-10-22" };
+  if (route === "/v1/earn/vaults") return { vaults: earnVaults };
+  if (route.startsWith("/v1/earn/vaults/")) return earnHistory(path);
   if (route === "/v1/quote") return quote(body);
   const basket = basketRoute(route);
   if (basket !== undefined) return basket;

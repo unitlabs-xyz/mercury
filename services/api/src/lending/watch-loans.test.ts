@@ -160,6 +160,33 @@ describe("watchAllLoans", () => {
     expect(summary.loans).toBe(0);
   });
 
+  /* Measured 23 October 2026: seventeen wallets' balances read every five minutes to find no loans. */
+  it("reads a wallet's balances only once it knows the wallet owes something", async () => {
+    const { db } = await seed();
+    let reads = 0;
+    const counting = (debt: string): WatchDeps => ({
+      ...deps(debt, collect().notifier),
+      chain: { tokenBalances: async () => (reads++, []), mintConfig: async () => null } as ChainReader,
+    });
+    await watchAllLoans(db, counting("none"), NOW);
+    await watchAllLoans(db, counting("0"), NOW);
+    expect(reads).toBe(0);
+    await watchAllLoans(db, counting("60"), NOW);
+    expect(reads).toBe(1);
+  });
+
+  it("counts a wallet whose loan could not be read as failed, and checks the rest", async () => {
+    const { db } = await seed();
+    const failing: WatchDeps = {
+      ...deps("60", collect().notifier),
+      lending: {
+        ...deps("60", collect().notifier).lending,
+        position: async () => Promise.reject(new Error("429")),
+      },
+    };
+    expect(await watchAllLoans(db, failing, NOW)).toMatchObject({ loans: 0, failed: 1 });
+  });
+
   it("still records the alert for somebody with no address to write to", async () => {
     const { db, userId } = await seed(null);
     const { sent, notifier } = collect();

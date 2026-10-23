@@ -65,7 +65,7 @@ describe("snapshotAllPortfolios", () => {
 
     const summary = await snapshotAllPortfolios(db, deps(), new Date("2026-09-30T12:34:56.000Z"));
 
-    expect(summary).toEqual({ wallets: 1, written: 1, failed: 0 });
+    expect(summary).toEqual({ wallets: 1, written: 1, failed: 0, missed: [] });
     const rows = await rowsFor(db, ids[0]!);
     expect(rows).toHaveLength(1);
     expect(Number(rows[0]!.stocksUsd)).toBe(100);
@@ -158,7 +158,7 @@ describe("snapshotAllPortfolios", () => {
 
     const summary = await snapshotAllPortfolios(db, flaky, new Date("2026-09-30T12:00:00.000Z"));
 
-    expect(summary).toEqual({ wallets: 3, written: 2, failed: 1 });
+    expect(summary).toEqual({ wallets: 3, written: 2, failed: 1, missed: [ids[1]] });
     expect(await rowsFor(db, ids[0]!)).toHaveLength(1);
     expect(await rowsFor(db, ids[1]!)).toHaveLength(0);
     expect(await rowsFor(db, ids[2]!)).toHaveLength(1);
@@ -170,6 +170,7 @@ describe("snapshotAllPortfolios", () => {
       wallets: 0,
       written: 0,
       failed: 0,
+      missed: [],
     });
   });
 
@@ -226,5 +227,33 @@ describe("snapshotAllPortfolios, against a loan", () => {
     const [row] = await rowsFor(db, ids[0]!);
     expect(Number(row!.debtUsd)).toBe(0);
     expect(Number(row!.totalUsd)).toBeCloseTo(114.25, 2);
+  });
+});
+
+describe("snapshotAllPortfolios, for the accounts it missed", () => {
+  const at = new Date("2026-09-30T12:34:56.000Z");
+
+  /* A reading missed is a gap in the chart forever, so it is worth saying whose. */
+  it("says which accounts it could not read", async () => {
+    const { db, ids } = await seed(3);
+    const summary = await snapshotAllPortfolios(
+      db,
+      deps({
+        holdings: async (userId) => {
+          if (userId === ids[1]) throw new Error("solana getTokenAccountsByOwner returned 429");
+          return [{ shares: D("1"), wrappers: [{ mint: MINT }] }];
+        },
+      }),
+      at,
+    );
+    expect(summary).toMatchObject({ written: 2, failed: 1, missed: [ids[1]] });
+  });
+
+  it("reads only the accounts it is given", async () => {
+    const { db, ids } = await seed(3);
+    const summary = await snapshotAllPortfolios(db, deps(), at, { only: new Set([ids[2]!]) });
+    expect(summary).toMatchObject({ wallets: 1, written: 1, missed: [] });
+    expect(await rowsFor(db, ids[0]!)).toHaveLength(0);
+    expect(await rowsFor(db, ids[2]!)).toHaveLength(1);
   });
 });

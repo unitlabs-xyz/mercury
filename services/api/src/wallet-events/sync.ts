@@ -56,6 +56,17 @@ interface Advance {
   readonly cursor: string;
 }
 
+/** How often a wallet with no USDC account is asked for one anyway. See `syncWallet`. */
+const LOOKUP_EVERY_MS = 10 * 60_000;
+
+/** When each wallet was last asked for its USDC account, by wallet id. This process only. */
+const lookedUp = new Map<string, number>();
+
+const lookupDue = (walletId: string): boolean => {
+  const at = lookedUp.get(walletId);
+  return at === undefined || Date.now() - at >= LOOKUP_EVERY_MS;
+};
+
 /**
  * One wallet's pass over both its streams.
  *
@@ -95,21 +106,6 @@ async function syncWallet(
   // stream is walked.
   const walletKnownBefore = existing.some((r) => r.address === address);
 
-  const hasTokenStream = [...byAddress.keys()].some((a) => a !== address);
-  if (!hasTokenStream) {
-    // Re-run every pass until the account exists, then stored: once
-    // discovered the address never changes. Nothing before that account
-    // existed is missed — there was nothing to find — but anything that lands
-    // between its creation and its discovery here is not caught by the
-    // wallet's own stream, which is why a stream discovered on an
-    // already-known wallet gets backfilled below rather than baselined.
-    for (const account of await deps.history.tokenAccountsFor(address, USDC_MINT)) {
-      if (byAddress.has(account)) continue;
-      await db.insert(walletStreams).values({ walletId, address: account }).onConflictDoNothing();
-      byAddress.set(account, { walletId, address: account, cursor: null, checkedAt: null });
-    }
-  }
-
   // A token stream with no cursor, on a wallet that already existed before
   // this pass, can only be a stream discovered after the wallet became known:
   // on the wallet's very first pass every stream starts with a null cursor,
@@ -118,11 +114,8 @@ async function syncWallet(
   const shouldBackfill = (s: { address: string; cursor: string | null }): boolean =>
     s.address !== address && s.cursor === null && walletKnownBefore;
 
-  const found = new Map<string, SignatureRef>();
-  const advances: Advance[] = [];
-
-  for (const stream of byAddress.values()) {
-    const walk = await walkStream(deps.history, stream.address, stream.cursor, {
+  const walkOf = (stream: { address: string; cursor: string | null }) =>
+    walkStream(deps.history, stream.address, stream.cursor, {
       backfill: shouldBackfill(stream),
       // Identifies the stream in a page-cap error without the address itself
       // — never the address, never logged. Not "its USDC stream": §9 expects
@@ -130,6 +123,40 @@ async function syncWallet(
       // than a migration, and it would not be USDC.
       label: stream.address === address ? "the wallet's own stream" : "a token stream",
     });
+
+  // The wallet's own stream first: whether it moved is what says a USDC
+  // account may have appeared.
+  const own = byAddress.get(address)!;
+  const ownWalk = await walkOf(own);
+  const ownMoved = ownWalk.newestSignature !== null && ownWalk.newestSignature !== own.cursor;
+
+  const hasTokenStream = [...byAddress.keys()].some((a) => a !== address);
+  if (!hasTokenStream && (!walletKnownBefore || ownMoved || lookupDue(walletId))) {
+    // Stored once found: once discovered the address never changes. Nothing
+    // before that account existed is missed — there was nothing to find — but
+    // anything that lands between its creation and its discovery here is not
+    // caught by the wallet's own stream, which is why a stream discovered on
+    // an already-known wallet gets backfilled below rather than baselined.
+    //
+    // Asked on the wallet's first pass, when its own address has moved, and
+    // every ten minutes. The transaction that opens an associated account
+    // names its owner, so the wallet's own stream moves with it; the ten
+    // minutes are for an account opened some other way. Asked every pass, it
+    // was a token-account read every thirty seconds for each wallet with no
+    // cash yet (23 October 2026).
+    lookedUp.set(walletId, Date.now());
+    for (const account of await deps.history.tokenAccountsFor(address, USDC_MINT)) {
+      if (byAddress.has(account)) continue;
+      await db.insert(walletStreams).values({ walletId, address: account }).onConflictDoNothing();
+      byAddress.set(account, { walletId, address: account, cursor: null, checkedAt: null });
+    }
+  }
+
+  const found = new Map<string, SignatureRef>();
+  const advances: Advance[] = [];
+
+  for (const stream of byAddress.values()) {
+    const walk = stream.address === address ? ownWalk : await walkOf(stream);
     for (const sig of walk.signatures) found.set(sig.signature, sig);
     if (walk.newestSignature !== null) {
       advances.push({ address: stream.address, cursor: walk.newestSignature });

@@ -11,7 +11,7 @@ import type {
   TokenTransfer,
   TransactionDetail,
 } from "../ports.js";
-import { batchedRpc } from "./batch.js";
+import { rpcCall } from "./call.js";
 
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 export const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
@@ -168,12 +168,18 @@ export interface SolanaRpcConfig {
   readonly rpcUrl: string;
   readonly fetch?: typeof fetch;
   readonly now?: () => number;
-  /** Most calls in one HTTP request. See `batchedRpc`. */
-  readonly maxBatch?: number;
-  /** Attempts for a request that failed as a whole. See `batchedRpc`. */
+  /** Attempts for a call that failed as a whole. See `rpcCall`. */
   readonly attempts?: number;
-  /** Hold a batch open this long. The default is the current microtask. */
-  readonly windowMs?: number;
+  /**
+   * How long a wallet's token balances are reused. Unset, never.
+   *
+   * For the routes, which the app polls together: a portfolio, a money and an
+   * Earn request for one wallet arrive within a second of each other, and each
+   * read both token programs. Two seconds is under the app's first refetch
+   * after a transaction (three), and `forgetBalances` drops a wallet's at once
+   * when we send for it.
+   */
+  readonly balancesTtlMs?: number;
 }
 
 /**
@@ -184,22 +190,31 @@ export interface SolanaRpcConfig {
 export class SolanaRpc implements ChainReader, ChainHistory {
   private readonly now: () => number;
   /**
-   * Every read goes through here, so calls issued together leave together and
-   * a rate limit is retried once for the batch rather than separately by each
-   * reader above. See `batch.ts` for what that is worth and what it costs.
+   * Every read goes through here, so a rate limit is retried the same way for
+   * every reader above, and a call identical to one in flight is not sent
+   * twice. See `call.ts`.
    */
   private readonly call: <T>(method: string, params: readonly unknown[]) => Promise<T>;
   private readonly rents = new Map<number, { readonly at: number; readonly lamports: Promise<bigint> }>();
+  private readonly balancesTtlMs: number;
+  private readonly balances = new Map<
+    string,
+    { readonly at: number; readonly value: Promise<readonly TokenBalance[]> }
+  >();
 
   constructor(config: SolanaRpcConfig) {
     this.now = config.now ?? Date.now;
-    this.call = batchedRpc({
+    this.balancesTtlMs = config.balancesTtlMs ?? 0;
+    this.call = rpcCall({
       rpcUrl: config.rpcUrl,
       ...(config.fetch ? { fetch: config.fetch } : {}),
-      ...(config.maxBatch !== undefined ? { maxBatch: config.maxBatch } : {}),
       ...(config.attempts !== undefined ? { attempts: config.attempts } : {}),
-      ...(config.windowMs !== undefined ? { windowMs: config.windowMs } : {}),
     });
+  }
+
+  /** Read this wallet's balances afresh next time: we just sent something for it. */
+  forgetBalances(owner: string): void {
+    for (const key of this.balances.keys()) if (key.startsWith(`${owner} `)) this.balances.delete(key);
   }
 
   /**
@@ -211,7 +226,27 @@ export class SolanaRpc implements ChainReader, ChainHistory {
    * built on it would be right on one RPC provider and wrong on another. The
    * multiplier is applied once, by us, from `mintConfig`.
    */
-  async tokenBalances(owner: string, commitment: Commitment = "confirmed"): Promise<readonly TokenBalance[]> {
+  tokenBalances(owner: string, commitment: Commitment = "confirmed"): Promise<readonly TokenBalance[]> {
+    if (this.balancesTtlMs <= 0) return this.readBalances(owner, commitment);
+    const key = `${owner} ${commitment}`;
+    const now = this.now();
+    const seen = this.balances.get(key);
+    if (seen !== undefined && now - seen.at < this.balancesTtlMs) return seen.value;
+    const value = this.readBalances(owner, commitment);
+    const entry = { at: now, value };
+    // A failed read is not kept, and only this read's own entry is dropped.
+    value.catch(() => {
+      if (this.balances.get(key) === entry) this.balances.delete(key);
+    });
+    this.balances.set(key, entry);
+    // Expired entries go when the map grows, so a busy day does not keep every wallet.
+    if (this.balances.size > 1_000) {
+      for (const [k, e] of this.balances) if (now - e.at >= this.balancesTtlMs) this.balances.delete(k);
+    }
+    return value;
+  }
+
+  private async readBalances(owner: string, commitment: Commitment): Promise<readonly TokenBalance[]> {
     const pages = await Promise.all(
       [TOKEN_PROGRAM, TOKEN_2022_PROGRAM].map((programId) =>
         this.call<{ value: readonly ParsedTokenAccount[] }>("getTokenAccountsByOwner", [
@@ -304,7 +339,7 @@ export class SolanaRpc implements ChainReader, ChainHistory {
     return lamports;
   }
 
-  /** One parse, so a mint read on its own and one read in a batch cannot differ. */
+  /** One parse, so a mint read on its own and one read with others cannot differ. */
   private toMintConfig(account: ParsedMint | null | undefined): MintConfig | null {
     const info = account?.data.parsed?.info;
     if (info === undefined || info.decimals === undefined) return null;

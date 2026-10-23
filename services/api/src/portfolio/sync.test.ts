@@ -52,6 +52,24 @@ const watchfulChain = (failFor: string | null = null) => {
 };
 
 describe("syncAllPositions", () => {
+  it("reads only the wallets that are due, and says which it read", async () => {
+    const db = await seed(4);
+    const asked: string[] = [];
+    const node = watchfulChain();
+    const deps: ReconcileDeps = {
+      ...node.deps,
+      chain: { ...node.deps.chain, tokenBalances: async (owner) => (asked.push(owner), []) },
+    };
+    const read: string[] = [];
+    const summary = await syncAllPositions(db, deps, {
+      due: (address) => address === ADDRESS(1) || address === ADDRESS(2),
+      read: (address) => read.push(address),
+    });
+    expect(asked.sort()).toEqual([ADDRESS(1), ADDRESS(2)]);
+    expect(read.sort()).toEqual([ADDRESS(1), ADDRESS(2)]);
+    expect(summary.wallets).toBe(2);
+  });
+
   it("reconciles wallets alongside each other rather than one after another", async () => {
     const db = await seed(20);
     const node = watchfulChain();

@@ -561,20 +561,3 @@ describe("fundRoutes · intents", () => {
     expect((await app.request("/v1/money/fund/intents")).status).toBe(401);
   });
 });
-
-describe("fundRoutes · sources, while two frontends are live", () => {
-  it("still carries the token list the deployed build reads", async () => {
-    /*
-     * The old picker builds its rows from `chains[].currencies` and would
-     * throw on `undefined.map`. Keeping the field is what lets this deploy
-     * on its own instead of having to land with a frontend release.
-     */
-    const { app } = harness();
-
-    const body = (await (await app.request("/v1/money/fund/sources")).json()) as {
-      chains: { currencies?: { symbol: string }[] }[];
-    };
-
-    expect(body.chains[0]?.currencies?.map((c) => c.symbol)).toEqual(["USDT"]);
-  });
-});

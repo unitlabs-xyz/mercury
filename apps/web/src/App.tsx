@@ -19,6 +19,7 @@ const Stock = lazy(() => import("./app/Stock").then((m) => ({ default: m.Stock }
 const Baskets = lazy(() => import("./app/Baskets").then((m) => ({ default: m.Baskets })));
 const Basket = lazy(() => import("./app/Basket").then((m) => ({ default: m.Basket })));
 const Money = lazy(() => import("./app/Money").then((m) => ({ default: m.Money })));
+const Earn = lazy(() => import("./app/Earn").then((m) => ({ default: m.Earn })));
 const Activity = lazy(() => import("./app/Activity").then((m) => ({ default: m.Activity })));
 /** The side panels (Add cash, Send, Borrow), drawn over any page; see app/Panels. */
 const GlobalPanels = lazy(() => import("./app/Panels").then((m) => ({ default: m.GlobalPanels })));
@@ -124,11 +125,20 @@ export const App = () => (
               }
             />
             <Route path="/borrow" element={<Navigate to="/portfolio" replace />} />
+            <Route path="/money/earn" element={<Navigate to="/earn" replace />} />
             <Route
               path="/money"
               element={
                 <RequireAuth>
                   <Money />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/earn"
+              element={
+                <RequireAuth>
+                  <Earn />
                 </RequireAuth>
               }
             />

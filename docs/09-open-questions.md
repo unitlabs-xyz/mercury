@@ -2,21 +2,25 @@
 
 ## Settled
 
-| Question                           | Answer                                                                                                                        |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Custody                            | **Privy embedded wallets only.** [ADR 0003](adr/0003-custody.md)                                                              |
-| Baskets                            | **User-owned Glider portfolios, no pooled token.** [ADR 0013](adr/0013-baskets-on-glider.md) (replaces the Symmetry decision) |
-| Funding an empty wallet            | **Every path Privy already offers.** We build none. [ADR 0007](adr/0007-wallet-funding.md)                                    |
-| Positioning                        | **Investing, not trading.** No perps, no margin, no options, no order books. [ADR 0009](adr/0009-investing-not-trading.md)    |
-| Jupiter integration                | **Ultra everywhere.** No Router path. [ADR 0008](adr/0008-jupiter-ultra.md)                                                   |
-| Reference price                    | **Chainlink**, with the dividend-window correction. [ADR 0006](adr/0006-pricing.md)                                           |
-| Judged surface                     | **Web is the submission.** iOS is in scope and is the first cut                                                               |
-| Team                               | **Four engineers.** Allocation in [08 Roadmap](08-roadmap.md)                                                                 |
-| Infrastructure accounts            | **Provided.** Jupiter key, RPC, Privy app, Pyth token, hosting                                                                |
-| Brand and design                   | **Designed before the screens are built.** Tokens in [07 Design](07-design.md) take the real values once they exist           |
-| Crypto-native, no ramps we operate | [ADR 0001](adr/0001-crypto-native.md)                                                                                         |
-| Solana, not Robinhood Chain        | [ADR 0002](adr/0002-solana.md)                                                                                                |
-| Monorepo and stack                 | [ADR 0004](adr/0004-stack.md)                                                                                                 |
+> Checked against the code on 23 October 2026. Rows the code has moved past say so; the open
+> questions further down are kept for history, and what is open today is in
+> [TODO.md](../TODO.md) and [12 Roadmap to 2028](12-roadmap-2028.md#open-questions).
+
+| Question                           | Answer                                                                                                                                                                                                                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Custody                            | **Privy embedded wallets only.** [ADR 0003](adr/0003-custody.md)                                                                                                                                                                                                                |
+| Baskets                            | **User-owned Glider portfolios, no pooled token.** [ADR 0013](adr/0013-baskets-on-glider.md) (replaces the Symmetry decision)                                                                                                                                                   |
+| Funding an empty wallet            | **Every path Privy already offers.** We build none. [ADR 0007](adr/0007-wallet-funding.md)                                                                                                                                                                                      |
+| Positioning                        | **Investing, not trading.** No perps, no margin, no options, no order books. [ADR 0009](adr/0009-investing-not-trading.md)                                                                                                                                                      |
+| Jupiter integration                | **Jupiter's keyless `/swap/v1`, and we build the transaction.** Ultra was dropped on 30 September ([ADR 0008](adr/0008-jupiter-ultra.md), superseded)                                                                                                                           |
+| Reference price                    | **Pyth, with the issuer's own quote behind it**; the issuer's alone while `PYTH_API_KEY` is unset. Chainlink was [ADR 0006](adr/0006-pricing.md)'s choice and is the upgrade path ([ADR 0010](adr/0010-client-side-prices.md), [ADR 0011](adr/0011-server-preferred-prices.md)) |
+| Judged surface                     | **Web is the submission.** iOS is in scope and is the first cut                                                                                                                                                                                                                 |
+| Team                               | **Four engineers.** Allocation in [08 Roadmap](08-roadmap.md)                                                                                                                                                                                                                   |
+| Infrastructure accounts            | **Provided.** Jupiter key, RPC, Privy app, Pyth token, hosting                                                                                                                                                                                                                  |
+| Brand and design                   | **Designed before the screens are built.** Tokens in [07 Design](07-design.md) take the real values once they exist                                                                                                                                                             |
+| Crypto-native, no ramps we operate | [ADR 0001](adr/0001-crypto-native.md)                                                                                                                                                                                                                                           |
+| Solana, not Robinhood Chain        | [ADR 0002](adr/0002-solana.md)                                                                                                                                                                                                                                                  |
+| Monorepo and stack                 | [ADR 0004](adr/0004-stack.md)                                                                                                                                                                                                                                                   |
 
 ---
 
@@ -61,14 +65,14 @@ baskets rather than three. Nobody should negotiate with the measurement.
 
 Recorded so they are easy to reverse.
 
-- **Jupiter Ultra, not Router.** Reasoning in [ADR 0008](adr/0008-jupiter-ultra.md). The short
-  version: composition was never possible anyway, and Jupiter handling transaction landing is
-  worth more than composability we do not need.
+- ~~**Jupiter Ultra, not Router.**~~ Reversed on 30 September: trades build their own transaction
+  from Jupiter's keyless `/swap/v1`, so the quote shown is the one filled
+  ([ADR 0008](adr/0008-jupiter-ultra.md)).
 - **Basket investment is not atomic**, and the partial state is benign. If the swaps land and the
   deposit does not, the user holds the constituents, which is what they paid for. The app offers
   to finish the deposit.
-- **Borrowed funds cannot buy stocks inside the app**, enforced in code. That is the line between
-  a Lombard loan and margin, per [ADR 0009](adr/0009-investing-not-trading.md).
+- ~~**Borrowed funds cannot buy stocks inside the app.**~~ Withdrawn by
+  [ADR 0009](adr/0009-investing-not-trading.md)'s amendment of 30 September.
 - **Card onramps are offered last** in the funding screen, after the universal deposit address.
 - **The basket page names Glider.** We are not the custodian and will not imply we are.
 - **Redemption without us is verified before launch**, and stated in the product.

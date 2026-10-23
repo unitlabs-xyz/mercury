@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Tracer } from "@opentelemetry/api";
 import { pino } from "pino";
 import { every, type EveryDeps } from "./every.js";
+import { noteStrain } from "./strain.js";
 
 /**
  * A clock and a scheduler the test drives, so nothing here waits on a real
@@ -12,13 +13,16 @@ import { every, type EveryDeps } from "./every.js";
  */
 const harness = () => {
   const pending: (() => void)[] = [];
+  /** How long each pass was scheduled after the one before, in order. */
+  const delays: number[] = [];
   const lines: string[] = [];
   let clock = 0;
 
   const deps: EveryDeps = {
     now: () => clock,
-    setTimeout: ((fn: () => void) => {
+    setTimeout: ((fn: () => void, ms: number) => {
       pending.push(fn);
+      delays.push(ms);
       return { unref: () => undefined } as unknown as NodeJS.Timeout;
     }) as unknown as typeof setTimeout,
     /* A real pino writing to an array, rather than a hand-made double: the
@@ -32,6 +36,7 @@ const harness = () => {
 
   return {
     lines,
+    delays,
     deps,
     advance: (ms: number) => {
       clock += ms;
@@ -43,6 +48,7 @@ const harness = () => {
       await Promise.resolve();
     },
     pendingCount: () => pending.length,
+    now: () => clock,
   };
 };
 
@@ -276,5 +282,77 @@ describe("every", () => {
 
     await vi.waitFor(() => expect(spans[0]?.ended).toBe(true));
     expect(spans[0]?.attributes["mercury.job.duration_ms"]).toBe(1500);
+  });
+});
+
+describe("every, when the node is refusing", () => {
+  /* After a deploy every job read every wallet in the same second, and the node refused all of it. */
+  it("waits `startAfterMs` before its first pass", async () => {
+    const h = harness();
+    const run = vi.fn(async () => null);
+    every("job", 1000, run, { ...h.deps, startAfterMs: 5000 });
+    await Promise.resolve();
+    expect(run).not.toHaveBeenCalled();
+    expect(h.delays).toEqual([5000]);
+    await h.tick();
+    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+  });
+
+  it("backs off while the endpoints it reads are strained, and comes back once a pass is clean", async () => {
+    const h = harness();
+    h.advance(1);
+    const strained = [true, true, false];
+    const run = vi.fn(async () => {
+      if (strained.shift()) noteStrain();
+      return null;
+    });
+    every("job", 1000, run, h.deps);
+    await vi.waitFor(() => expect(h.delays).toHaveLength(1));
+    h.advance(2000);
+    await h.tick();
+    await vi.waitFor(() => expect(h.delays).toHaveLength(2));
+    h.advance(4000);
+    await h.tick();
+    await vi.waitFor(() => expect(h.delays).toHaveLength(3));
+    expect(h.delays).toEqual([2000, 4000, 1000]);
+  });
+
+  it("backs off to two minutes at most, and never below its own interval", async () => {
+    const h = harness();
+    h.advance(1);
+    const strain = async () => {
+      noteStrain();
+      return null;
+    };
+    every("often", 60_000, strain, h.deps);
+    await vi.waitFor(() => expect(h.delays).toHaveLength(1));
+    await h.tick();
+    await vi.waitFor(() => expect(h.delays).toHaveLength(2));
+    expect(h.delays).toEqual([120_000, 120_000]);
+
+    const hourly = harness();
+    hourly.advance(1);
+    every("hourly", 3_600_000, strain, hourly.deps);
+    await vi.waitFor(() => expect(hourly.delays).toHaveLength(1));
+    expect(hourly.delays).toEqual([3_600_000]);
+  });
+
+  /*
+   * Measured 23 October 2026: the jobs shared one strain signal, so a
+   * snapshot that read seventeen accounts of seventeen logged a refusal, and
+   * wallet-events waited two minutes a pass for a night on other jobs' calls.
+   */
+  it("backs off on its own pass's refusals only, not another job's", async () => {
+    const h = harness();
+    h.advance(1);
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    // `quiet` is in flight while `loud` is refused.
+    every("quiet", 1000, async () => (await held, null), h.deps);
+    every("loud", 1000, async () => (noteStrain(), release(), null), h.deps);
+    await vi.waitFor(() => expect(h.delays).toHaveLength(2));
+    expect([...h.delays].sort((a, b) => a - b)).toEqual([1000, 2000]);
+    // And a refusal outside any pass, a route's, marks nothing.
+    expect(() => noteStrain()).not.toThrow();
   });
 });

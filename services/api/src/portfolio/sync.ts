@@ -32,18 +32,29 @@ export interface SyncSummary {
  *
  * Bounded, not unbounded. Firing every wallet at the node together drops
  * connections long before it meets a rate limit — a thousand parallel requests
- * measured on 29 September 2026 lost a third of themselves to ECONNRESET. A
- * handful in flight is also what gives `batchedRpc` something to collect: one
- * wallet at a time is one call at a time, and a batch of one is not a batch.
+ * measured on 29 September 2026 lost a third of themselves to ECONNRESET.
+ * And one wallet at a time would make a pass as slow as the sum of its calls.
  */
 const CONCURRENCY = 8;
 
-export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<SyncSummary> {
-  const rows = await db
+export interface SyncOptions {
+  /** Whether a wallet is read this pass. All of them when left out. See `jobs/presence.ts`. */
+  readonly due?: (address: string) => boolean;
+  /** Told each wallet read, whether or not it could be. */
+  readonly read?: (address: string) => void;
+}
+
+export async function syncAllPositions(
+  db: Db,
+  deps: ReconcileDeps,
+  opts: SyncOptions = {},
+): Promise<SyncSummary> {
+  const all = await db
     .select({ userId: users.id, address: wallets.address })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
     .where(eq(wallets.isPrimary, true));
+  const rows = opts.due === undefined ? all : all.filter((r) => opts.due!(r.address));
 
   let reconciled = 0;
   let failed = 0;
@@ -56,6 +67,7 @@ export async function syncAllPositions(db: Db, deps: ReconcileDeps): Promise<Syn
     for (;;) {
       const row = rows[next++];
       if (row === undefined) return;
+      opts.read?.(row.address);
       try {
         const held = await loadHeldTokens(db, deps, row.userId, row.address);
         if (held.length === 0) continue;

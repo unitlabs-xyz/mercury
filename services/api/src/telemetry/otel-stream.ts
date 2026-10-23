@@ -29,7 +29,7 @@
  */
 import { Writable } from "node:stream";
 import { SeverityNumber, logs, type AnyValueMap, type Logger } from "@opentelemetry/api-logs";
-import { context, trace } from "@opentelemetry/api";
+import { context } from "@opentelemetry/api";
 
 /**
  * pino's numeric levels onto OTel's.
@@ -161,10 +161,3 @@ export const otelLogStream = (getLogger: () => Logger = () => logs.getLogger("me
       callback();
     },
   });
-
-/** Whether a span is currently active, for tests that assert correlation. */
-export const activeTraceId = (): string | null => {
-  const span = trace.getActiveSpan();
-  const id = span?.spanContext().traceId;
-  return id === undefined || /^0+$/.test(id) ? null : id;
-};

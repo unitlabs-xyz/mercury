@@ -1,6 +1,5 @@
-import { address, createSolanaRpc, type Address, type Blockhash, type Signature } from "@solana/kit";
+import { address, createSolanaRpc, type Address, type Signature } from "@solana/kit";
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
-import { USDC_MINT } from "@mercury/chain";
 
 /**
  * The endpoint to fall back to, hardcoded because a fallback that has to be
@@ -80,29 +79,13 @@ const viaRpc = async <T>(run: (rpc: ReturnType<typeof createSolanaRpc>) => Promi
   throw last instanceof Error ? last : new Error(String(last));
 };
 
-export interface Lifetime {
-  readonly blockhash: Blockhash;
-  readonly lastValidBlockHeight: bigint;
-}
-
-/**
- * Read as late as possible, because it starts expiring immediately: roughly
- * 60 to 90 seconds, and the clock runs while somebody reads their wallet's
- * confirmation screen.
- */
-export const latestBlockhash = (): Promise<Lifetime> =>
-  viaRpc(async (rpc) => {
-    const { value } = await rpc.getLatestBlockhash({ commitment: "confirmed" }).send();
-    return { blockhash: value.blockhash, lastValidBlockHeight: value.lastValidBlockHeight };
-  });
-
 /** The parsed shape of a token account, which is all this reads of it. */
 interface ParsedTokenAccount {
   readonly parsed?: { readonly info?: { readonly tokenAmount?: { readonly amount?: string } } };
 }
 
 /**
- * What a wallet holds in USDC, in USDC's own units.
+ * What a wallet holds of a token, in the token's own units.
  *
  * Read with `getAccountInfo` on the derived account, for two reasons that both
  * came from getting it wrong. `getTokenAccountBalance` *throws* for an account
@@ -132,8 +115,6 @@ export const tokenBalanceRaw = async (owner: string, mint: string): Promise<bigi
     return amount === undefined ? 0n : BigInt(amount);
   });
 };
-
-export const usdcBalanceRaw = (owner: string): Promise<bigint> => tokenBalanceRaw(owner, USDC_MINT);
 
 /**
  * Native SOL, which is a lamport balance and not a token account.

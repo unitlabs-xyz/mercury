@@ -32,8 +32,6 @@ export const pct = (v: string | number | null | undefined, digits = 2): string =
 export const shares = (v: string | number | null | undefined): string =>
   v === null || v === undefined || v === "" ? "—" : Number(v).toFixed(3);
 
-export const isUp = (v: string | number | null | undefined): boolean => Number(v ?? 0) >= 0;
-
 export const count = (n: number): string => new Intl.NumberFormat("en-US").format(n);
 
 /**

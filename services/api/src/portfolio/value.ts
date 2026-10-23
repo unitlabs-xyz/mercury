@@ -17,6 +17,11 @@ export interface PortfolioValue {
   /** Owed to Kamino. Borrowed cash is counted in `cashUsd`; this is the other side of it. */
   readonly debtUsd: Decimal;
   /**
+   * Cash in the Earn vault, at what its shares would withdraw as now. Apart
+   * from `cashUsd`, which is what the wallet can spend this second.
+   */
+  readonly earnUsd: Decimal;
+  /**
    * Net worth: stocks plus cash less debt, the figure at the top of the page.
    *
    * Negative when a fall has taken the collateral below the loan. That is a
@@ -134,6 +139,7 @@ export const valuePortfolio = (
   cashUsd: Decimal,
   debtUsd: Decimal,
   basketUsd: Decimal = ZERO,
+  earnUsd: Decimal = ZERO,
 ): PortfolioValue => {
   let stocksUsd = ZERO;
   let changeUsd = ZERO;
@@ -166,7 +172,8 @@ export const valuePortfolio = (
     cashUsd,
     basketUsd,
     debtUsd,
-    totalUsd: stocksUsd.add(cashUsd).add(basketUsd).sub(debtUsd),
+    earnUsd,
+    totalUsd: stocksUsd.add(cashUsd).add(basketUsd).add(earnUsd).sub(debtUsd),
     changeUsd,
   };
 };

@@ -3,16 +3,17 @@
 Expo + React Native, iOS only. The web app in `apps/web` is the reference
 implementation — build against it, not from scratch.
 
-**Scaffolded, not implemented.** `app/` holds a placeholder screen so the
-project is valid and `expo start` runs.
+**In progress.** `app/` has sign-in, the four tabs (home, invest, money,
+activity), stock pages, buying and selling, send, borrow, baskets, adding cash
+and settings, all against the same API as the web app.
 
 ## What is shared, and what is not
 
 `@mercury/view` holds everything both clients compute: formatting, the activity
 feed's model, the wire decision. Its `tsconfig` leaves `DOM` out of `lib`, so a
 file that reaches for `document` or `localStorage` fails to build there rather
-than failing on a phone. `@mercury/core`, `@mercury/types` and `@mercury/sdk`
-are shared the same way.
+than failing on a phone. `@mercury/types` is shared the same way, and
+`@mercury/core` comes in through `@mercury/view`.
 
 Nothing under `apps/web/src` crosses. It is DOM, Tailwind and React Router.
 

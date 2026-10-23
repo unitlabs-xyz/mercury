@@ -16,10 +16,14 @@ import { apiFetch } from "./client.js";
  * which `app/_layout.tsx` wires into React Query's focus manager through
  * `AppState`. That is when these figures are most likely to have stopped being
  * true — somebody has just been somewhere else approving something.
+ *
+ * Thirty seconds, as on the web, and for the same reason: each poll of
+ * portfolio and money reads the chain on the paid RPC (23 October 2026). The
+ * app's own transactions still show at once, through `settle.ts`.
  */
 export const LIVE = {
-  staleTime: 10_000,
-  refetchInterval: 10_000,
+  staleTime: 30_000,
+  refetchInterval: 30_000,
   refetchOnWindowFocus: true,
 } as const;
 

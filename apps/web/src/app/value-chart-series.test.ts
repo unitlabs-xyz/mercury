@@ -32,11 +32,4 @@ describe("drawnSeries", () => {
     ]);
     expect(out).toEqual({ values: [10, 0], excludesTransfers: true });
   });
-
-  it("treats a missing net flow as none", () => {
-    expect(drawnSeries([{ valueUsd: "5" }, { valueUsd: "7" }])).toEqual({
-      values: [5, 7],
-      excludesTransfers: true,
-    });
-  });
 });

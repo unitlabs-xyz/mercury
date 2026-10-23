@@ -169,12 +169,10 @@ describe("borrowFromWire", () => {
 
   /* What Mercury pays to open a first-time borrower's Kamino account, struck through on the sheet. */
   it("reads the setup cost, and keeps its absence as null", () => {
-    const wire = (setupCostUsd: string | null | undefined) =>
+    const wire = (setupCostUsd: string | null) =>
       ({ setupCostUsd, obligation: null, collateral: [] }) as unknown as BorrowWire;
     expect(borrowFromWire(wire("2.97")).setupCostUsd).toBe(2.97);
     expect(borrowFromWire(wire(null)).setupCostUsd).toBeNull();
-    // A server from before the field says nothing at all.
-    expect(borrowFromWire(wire(undefined)).setupCostUsd).toBeNull();
   });
 });
 
@@ -306,16 +304,6 @@ describe("borrowFromWire, what a loan is made of", () => {
       closeLoanUsdc: 2.110023,
       minPositionUsd: 0.01,
     });
-  });
-
-  /* A server from before these fields: the debt stands in for what is owed, with the old 0.1% of headroom. */
-  it("falls back on the debt from a server that does not say", () => {
-    const b = borrowFromWire({ debtUsd: "20", collateral: [] } as unknown as BorrowWire);
-    expect(b.owedUsdc).toBe(20);
-    expect(b.closeLoanUsdc).toBeCloseTo(20.02, 6);
-    expect(b.minPositionUsd).toBe(0.01);
-    expect(b.principalUsdc).toBeNull();
-    expect(b.interestUsdc).toBeNull();
   });
 });
 

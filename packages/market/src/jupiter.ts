@@ -47,7 +47,7 @@ const RETRYABLE = (status: number) => status === 429 || status >= 500;
  * How long to wait before retry `n` (1-based).
  *
  * A rate limit gets seconds and everything else milliseconds, which is the
- * same split `batchedRpc` makes and for the same reason on each side. Jupiter
+ * same split `rpcCall` makes and for the same reason on each side. Jupiter
  * counts requests over a 60-second sliding window and sends no `Retry-After`,
  * so a retry 200ms after a 429 lands inside the same window and is refused
  * again. A 502 or a dropped connection is a different failure, and the short

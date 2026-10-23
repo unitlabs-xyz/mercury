@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { logger } from "../log/index.js";
-import { toWire, type Decimal } from "@mercury/core";
+import { toWire, ZERO, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
@@ -19,12 +19,16 @@ export interface SnapshotDeps {
   readonly chain: ChainReader;
   readonly usdcMint: string;
   readonly baskets: BasketValueReader;
+  /** USDC in the Earn vault. Throws when unreadable, which costs this account its reading. */
+  readonly earn?: (walletAddress: string) => Promise<Decimal>;
 }
 
 export interface SnapshotSummary {
   readonly wallets: number;
   readonly written: number;
   readonly failed: number;
+  /** The accounts that could not be read, for a retry inside the same hour. See `snapshot-retry.ts`. */
+  readonly missed: readonly string[];
 }
 
 /** As position-sync: enough in flight to batch, few enough that the node keeps the connections. */
@@ -42,16 +46,23 @@ const CONCURRENCY = 8;
  * the day someone's first deposit lands is the line they want to see; one that
  * starts at their first deposit's value has no beginning to measure from.
  */
-export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Date): Promise<SnapshotSummary> {
-  const rows = await db
+export async function snapshotAllPortfolios(
+  db: Db,
+  deps: SnapshotDeps,
+  now: Date,
+  opts: { readonly only?: ReadonlySet<string> } = {},
+): Promise<SnapshotSummary> {
+  const all = await db
     .select({ userId: users.id, address: wallets.address })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
     .where(eq(wallets.isPrimary, true));
+  const rows = opts.only === undefined ? all : all.filter((r) => opts.only!.has(r.userId));
 
   const capturedAt = hourOf(now);
   let written = 0;
   let failed = 0;
+  const missed: string[] = [];
 
   // A shared index rather than a chunked split, so a slow wallet holds up only
   // itself. Counters are safe to share: this runs on one thread.
@@ -61,10 +72,12 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
       const row = rows[next++];
       if (row === undefined) return;
       try {
-        const [held, debtUsd, basketValue] = await Promise.all([
+        const [held, debtUsd, basketValue, earnUsd] = await Promise.all([
           deps.holdings(row.userId),
           deps.debt(row.address),
           deps.baskets(row.userId, row.address),
+          // Unreadable throws, and the reading is skipped, for the reason below.
+          deps.earn?.(row.address) ?? ZERO,
         ]);
         /*
          * A reading with unknown debt is not a reading. Every other job can
@@ -88,6 +101,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
           cashFrom(balances, deps.usdcMint),
           debtUsd,
           basketValue.totalUsd,
+          earnUsd,
         );
         await db
           .insert(portfolioSnapshots)
@@ -100,6 +114,7 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
             cashUsd: toWire(value.cashUsd),
             basketUsd: toWire(value.basketUsd),
             debtUsd: toWire(value.debtUsd),
+            earnUsd: toWire(value.earnUsd),
           })
           // A deploy mid-hour re-reads the same hour. The later reading is the
           // better one — it is closer to the top of the next hour — so it wins.
@@ -112,11 +127,13 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
               cashUsd: toWire(value.cashUsd),
               basketUsd: toWire(value.basketUsd),
               debtUsd: toWire(value.debtUsd),
+              earnUsd: toWire(value.earnUsd),
             },
           });
         written += 1;
       } catch (error: unknown) {
         failed += 1;
+        missed.push(row.userId);
         // The wallet, never the address: an address in a log is a person's
         // holdings in a log.
         /* The only reading of what an account was worth at this hour, and
@@ -128,5 +145,5 @@ export async function snapshotAllPortfolios(db: Db, deps: SnapshotDeps, now: Dat
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rows.length) }, worker));
 
-  return { wallets: rows.length, written, failed };
+  return { wallets: rows.length, written, failed, missed };
 }
