@@ -156,4 +156,7 @@ GET  /v1/activity/:id                            the receipt
 ## Realtime
 
 None. The clients poll with TanStack Query, and the background jobs in `services/api/src/index.ts`
-keep what they poll current.
+keep what they poll current. Portfolio, money and activity every 30 seconds (`apps/web/src/api/live.ts`,
+and the same in the mobile app), and everything at once after the app's own transactions
+(`settle.ts`). Every poll of portfolio and money reads the chain on the paid RPC, which is why it is
+not faster.
