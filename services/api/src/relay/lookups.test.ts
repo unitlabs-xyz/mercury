@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Address } from "@solana/kit";
-import { parseLookupTable, rpcLookupTables } from "./lookups.js";
+import { cachedLookupTables, parseLookupTable, rpcLookupTables, type LookupTableReader } from "./lookups.js";
 
 /*
  * The header and first three addresses of a table Jupiter actually routed
@@ -70,5 +70,43 @@ describe("rpcLookupTables", () => {
     };
     expect((await rpcLookupTables(rpc).read([])).size).toBe(0);
     expect(asked).toBe(false);
+  });
+});
+
+describe("cachedLookupTables", () => {
+  const A = "A111" as Address;
+  const B = "B111" as Address;
+  const counting = (served: readonly Address[]) => {
+    const asked: (readonly Address[])[] = [];
+    const reader: LookupTableReader = {
+      read: async (addresses) => {
+        asked.push(addresses);
+        return new Map(addresses.filter((a) => served.includes(a)).map((a) => [a, [a]] as const));
+      },
+    };
+    return { reader, asked };
+  };
+
+  /* Read on every order, the same few Jupiter tables were one account call each time. */
+  it("asks only for the tables it has not seen lately, and asks again after ten minutes", async () => {
+    let now = 0;
+    const n = counting([A, B]);
+    const tables = cachedLookupTables(n.reader, { now: () => now });
+    await tables.read([A]);
+    expect([...(await tables.read([A, B])).keys()]).toEqual([A, B]);
+    expect(n.asked).toEqual([[A], [B]]);
+    await tables.read([A, B]);
+    expect(n.asked).toHaveLength(2);
+    now = 10 * 60_000;
+    await tables.read([A]);
+    expect(n.asked).toEqual([[A], [B], [A]]);
+  });
+
+  it("does not keep a table the node did not return", async () => {
+    const n = counting([]);
+    const tables = cachedLookupTables(n.reader);
+    await tables.read([A]);
+    await tables.read([A]);
+    expect(n.asked).toHaveLength(2);
   });
 });

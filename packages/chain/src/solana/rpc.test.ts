@@ -51,11 +51,6 @@ interface RpcRequest {
  * A node answers each program separately, and a mint belongs to exactly one of
  * them. The fixture holds all three accounts, so the fake splits it the way a
  * real node would rather than serving the whole list to both calls.
- *
- * It answers a batch as a real node does: an array in, an array out, each
- * entry carrying back the id it was asked under. The two programs now arrive
- * in one request, so a fake that read the whole body for a program name would
- * hand both calls the same answer.
  */
 const byProgram = (accounts = rpcTokenAccounts.result.value) => {
   const programIn = (req: RpcRequest): string => {
@@ -93,12 +88,54 @@ describe("SolanaRpc.tokenBalances", () => {
     const node = nodeServing();
     const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
     await rpc.tokenBalances(FIXTURE_OWNER);
-    // One request, both programs: the two calls are issued together, so they
-    // travel together. Asking twice is what the rate limit used to refuse.
-    expect(node.calls.length).toBe(1);
-    expect(node.calls[0]).toContain(SPL);
-    expect(node.calls[0]).toContain(TOKEN_2022);
-    expect(node.calls[0]).toContain(FIXTURE_OWNER);
+    // One call per program, each a plain request.
+    expect(node.calls.length).toBe(2);
+    expect(node.calls.join()).toContain(SPL);
+    expect(node.calls.join()).toContain(TOKEN_2022);
+    expect(node.calls.every((c) => c.includes(FIXTURE_OWNER))).toBe(true);
+  });
+
+  /*
+   * The routes the app polls together read one wallet each: a portfolio, a
+   * money and an Earn request a moment apart. Measured 23 October 2026: two
+   * token-program reads each, every ten seconds, per open tab.
+   */
+  it("reuses a wallet's balances for `balancesTtlMs`, and reads afresh once forgotten", async () => {
+    const node = nodeServing();
+    let now = 0;
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch, now: () => now, balancesTtlMs: 2_000 });
+    await rpc.tokenBalances(FIXTURE_OWNER);
+    now = 1_999;
+    await rpc.tokenBalances(FIXTURE_OWNER);
+    expect(node.calls.length).toBe(2);
+    // Another commitment is another read.
+    await rpc.tokenBalances(FIXTURE_OWNER, "finalized");
+    expect(node.calls.length).toBe(4);
+    // We sent something for the wallet: what was kept is out of date.
+    rpc.forgetBalances(FIXTURE_OWNER);
+    await rpc.tokenBalances(FIXTURE_OWNER);
+    expect(node.calls.length).toBe(6);
+    now = 10_000;
+    await rpc.tokenBalances(FIXTURE_OWNER);
+    expect(node.calls.length).toBe(8);
+  });
+
+  it("keeps nothing without `balancesTtlMs`, and never keeps a failed read", async () => {
+    const node = nodeServing();
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch });
+    await rpc.tokenBalances(FIXTURE_OWNER);
+    await rpc.tokenBalances(FIXTURE_OWNER);
+    expect(node.calls.length).toBe(4);
+
+    let fail = true;
+    const flaky = ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+      fail
+        ? Promise.resolve(new Response("nope", { status: 400 }))
+        : node.doFetch(input, init)) as typeof fetch;
+    const cached = new SolanaRpc({ rpcUrl: RPC, fetch: flaky, balancesTtlMs: 60_000 });
+    await expect(cached.tokenBalances(FIXTURE_OWNER)).rejects.toThrow("400");
+    fail = false;
+    expect((await cached.tokenBalances(FIXTURE_OWNER)).length).toBeGreaterThan(0);
   });
 
   /* Nothing type-checks this: the config object is valid without a commitment,
@@ -106,8 +143,9 @@ describe("SolanaRpc.tokenBalances", () => {
   const commitmentsAsked = async (commitment?: Commitment): Promise<unknown[]> => {
     const node = nodeServing();
     await new SolanaRpc({ rpcUrl: RPC, fetch: node.doFetch }).tokenBalances(FIXTURE_OWNER, commitment);
-    const sent = JSON.parse(node.calls[0] ?? "[]") as RpcRequest[];
-    return sent.map((req) => (req.params?.[2] as { commitment?: unknown }).commitment);
+    return node.calls.map(
+      (c) => ((JSON.parse(c) as RpcRequest).params?.[2] as { commitment?: unknown }).commitment,
+    );
   };
 
   it("reads at confirmed by default, both programs", async () => {
@@ -161,8 +199,6 @@ describe("SolanaRpc.tokenBalances", () => {
   });
 
   it("throws when the node answers an error, rather than reporting an empty wallet", async () => {
-    // A node refusing a batch answers every entry, which is what this has to
-    // survive: the failure belongs to the call, not to the request around it.
     const erroring = ((_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const sent: unknown = JSON.parse(String(init?.body));
       const error = { code: -32602, message: "bad params" };
@@ -434,8 +470,8 @@ describe("SolanaRpc.mintConfigs", () => {
 
     expect(found.size).toBe(150);
     expect(node.asked.map((a) => a.length)).toEqual([100, 50]);
-    // Issued together, so both chunks travel in one HTTP request.
-    expect(node.requests).toHaveLength(1);
+    // One call per chunk of a hundred: two, not a hundred and fifty.
+    expect(node.requests).toHaveLength(2);
   });
 
   it("agrees with reading the same mint on its own", async () => {

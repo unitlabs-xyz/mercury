@@ -165,7 +165,8 @@ DATABASE_URL=<the deployed one> pnpm --filter @mercury/api exec drizzle-kit migr
 
 **Run one instance.** The background jobs live inside the API process, so a
 second replica is a second writer polling the same wallets — `position-sync`
-every two seconds, `wallet-events` every thirty. Scaling this out needs the
+every ten seconds while someone has the app open, `wallet-events` every
+thirty. Scaling this out needs the
 jobs pulled into their own process first.
 
 To check the image locally before pushing:

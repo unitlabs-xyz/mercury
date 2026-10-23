@@ -394,4 +394,28 @@ describe("POST /v1/transactions/send, once the node takes it", () => {
       node.close();
     }
   });
+
+  /* The routes keep a wallet's balances for two seconds; the app reads them again the moment it hears. */
+  it("says whose transaction landed before answering, so their balances are read afresh", async () => {
+    const node = await acceptingNode();
+    try {
+      const { wallet, wire } = await txFrom(true);
+      const sent: string[] = [];
+      const a = new Hono();
+      a.use("*", async (c, next) => {
+        c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: wallet });
+        await next();
+      });
+      a.route("/", sendRoutes({ rpcUrl: node.url, sent: (w) => void sent.push(w) }));
+      const res = await a.request("/v1/transactions/send", {
+        method: "POST",
+        body: JSON.stringify({ transaction: wire }),
+        headers: { "content-type": "application/json" },
+      });
+      expect(await res.json()).toMatchObject({ status: "confirmed" });
+      expect(sent).toEqual([wallet]);
+    } finally {
+      node.close();
+    }
+  });
 });

@@ -102,6 +102,29 @@ describe("syncAllWalletEvents", () => {
     expect(rows[0]!.txSignature).toBe(SIG);
   });
 
+  /* Measured 23 October 2026: a token-account read every thirty seconds for each wallet with no cash yet. */
+  it("asks for a USDC account on the first pass, then only once the wallet's own address has moved", async () => {
+    const { db } = await seed();
+    let lookups = 0;
+    let moved = false;
+    const history: ChainHistory = {
+      tokenAccountsFor: () => {
+        lookups += 1;
+        return Promise.resolve(moved ? [USDC_ACCOUNT] : []);
+      },
+      signatures: (addr) => Promise.resolve(moved && (addr === WALLET || addr === USDC_ACCOUNT) ? [ref] : []),
+      transaction: (signature) => Promise.resolve(signature === SIG ? deposit : null),
+    };
+    for (let i = 0; i < 3; i++) await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
+    expect(lookups).toBe(1);
+
+    // The deposit that opens the account names the wallet, so its own stream moves with it.
+    moved = true;
+    const pass = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
+    expect(lookups).toBe(2);
+    expect(pass.written).toBe(1);
+  });
+
   it("writes a deposit once, and writes nothing at all on a second pass", async () => {
     const { db, userId } = await seed();
     // Put both streams behind the deposit, so the first pass has work to do.

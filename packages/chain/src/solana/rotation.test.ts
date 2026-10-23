@@ -103,30 +103,47 @@ describe("rotatingFetch", () => {
   });
 
   /*
-   * Measured 22 October 2026: PublicNode answered a batch with HTTP 200 and
-   * "Request blocked" for every call, and dRPC with "chain is not available on
-   * free plan". Taken at face value, every other background read would fail.
+   * Measured 22 October 2026: PublicNode answered with HTTP 200 and "Request
+   * blocked", and dRPC with "chain is not available on free plan". Taken at
+   * face value, every other background read would fail.
    */
-  it("passes a request on from an endpoint that refuses every call inside a 200", async () => {
-    const blocked = JSON.stringify([
-      { jsonrpc: "2.0", id: 0, error: { code: -32602, message: "Request blocked" } },
-      { jsonrpc: "2.0", id: 1, error: { code: -32602, message: "Request blocked" } },
-    ]);
+  it("passes a request on from an endpoint that refuses it inside a 200", async () => {
+    const blocked = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 0,
+      error: { code: -32602, message: "Request blocked" },
+    });
     const asked: string[] = [];
     const doFetch = (async (input: Parameters<typeof fetch>[0]) => {
       asked.push(String(input));
       return String(input) === A
         ? new Response(blocked, { status: 200 })
-        : new Response('[{"jsonrpc":"2.0","id":0,"result":1},{"jsonrpc":"2.0","id":1,"result":2}]', {
-            status: 200,
-          });
+        : new Response('{"jsonrpc":"2.0","id":0,"result":1}', { status: 200 });
     }) as typeof fetch;
     const r = rotation([A, B]);
-    const res = await rotatingFetch(r, doFetch)("x", { method: "POST", body: "[]" });
-    expect(await res.json()).toEqual([
-      { jsonrpc: "2.0", id: 0, result: 1 },
-      { jsonrpc: "2.0", id: 1, result: 2 },
-    ]);
+    const res = await rotatingFetch(r, doFetch)("x", { method: "POST", body: "{}" });
+    expect(await res.json()).toEqual({ jsonrpc: "2.0", id: 0, result: 1 });
+    expect(asked).toEqual([A, B]);
+  });
+
+  /* Measured 23 October 2026, on Solana's own endpoint, for a signature page. */
+  it("passes on Solana's history store failing for a moment", async () => {
+    const storage = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 0,
+      error: { code: -32019, message: "Failed to query long-term storage; please try again" },
+    });
+    const asked: string[] = [];
+    const doFetch = (async (input: Parameters<typeof fetch>[0]) => {
+      asked.push(String(input));
+      return String(input) === A
+        ? new Response(storage, { status: 200 })
+        : new Response('{"jsonrpc":"2.0","id":0,"result":[]}', { status: 200 });
+    }) as typeof fetch;
+    const res = await rotatingFetch(rotation([A, B]), doFetch)("x", {
+      body: '{"jsonrpc":"2.0","id":0,"method":"getSignaturesForAddress","params":[]}',
+    });
+    expect(await res.json()).toMatchObject({ result: [] });
     expect(asked).toEqual([A, B]);
   });
 
@@ -285,10 +302,32 @@ describe("rotatingFetch, with a fallback", () => {
     expect(n.asked).toEqual([A]);
   });
 
-  it("counts strain only when the fallback refuses too", async () => {
+  it("counts strain only when the fallback refuses too, and says so", async () => {
     const n = nodes({ [A]: [429], [P]: [429] });
-    const r = rotation([A], { fallback: P, now: () => 9 });
+    let told = 0;
+    const r = rotation([A], { fallback: P, now: () => 9, onStrain: () => void (told += 1) });
     expect((await rotatingFetch(r, n.doFetch)("x", {})).status).toBe(429);
     expect(r.strainedAt).toBe(9);
+    expect(told).toBe(1);
+  });
+
+  /*
+   * The fallback is the paid endpoint the routes use. Measured 23 October
+   * 2026: a job's eight workers that every free endpoint refused reached it at
+   * once, unpaced, and it refused them and the routes with them.
+   */
+  it("paces what it sends the fallback, apart from the rotation's own pace", async () => {
+    const slept: number[] = [];
+    const n = nodes({ [A]: [429, 429, 429] });
+    const r = rotation([A], {
+      fallback: P,
+      now: () => 0,
+      fallbackPerSecond: 2,
+      sleep: async (ms) => void slept.push(ms),
+    });
+    const f = rotatingFetch(r, n.doFetch);
+    await Promise.all([f("x", {}), f("x", {}), f("x", {})]);
+    expect(n.asked.filter((u) => u === P)).toHaveLength(3);
+    expect(slept).toEqual([500, 1_000]);
   });
 });

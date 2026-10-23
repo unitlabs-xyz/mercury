@@ -32,9 +32,8 @@ export interface SyncSummary {
  *
  * Bounded, not unbounded. Firing every wallet at the node together drops
  * connections long before it meets a rate limit — a thousand parallel requests
- * measured on 29 September 2026 lost a third of themselves to ECONNRESET. A
- * handful in flight is also what gives `batchedRpc` something to collect: one
- * wallet at a time is one call at a time, and a batch of one is not a batch.
+ * measured on 29 September 2026 lost a third of themselves to ECONNRESET.
+ * And one wallet at a time would make a pass as slow as the sum of its calls.
  */
 const CONCURRENCY = 8;
 

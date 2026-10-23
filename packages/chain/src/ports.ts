@@ -202,15 +202,19 @@ export type Commitment = "confirmed" | "finalized";
  */
 export interface ChainReader {
   tokenBalances(owner: string, commitment?: Commitment): Promise<readonly TokenBalance[]>;
+  /**
+   * Optional. Drop any balances kept for this wallet, because we just sent
+   * something for it. A reader that keeps none leaves it out.
+   */
+  forgetBalances?(owner: string): void;
   /** Null when the account does not exist or is not a Token-2022 mint. */
   mintConfig(mint: string): Promise<MintConfig | null>;
   /**
    * Optional. Many mints as one call rather than one call each.
    *
-   * `batchedRpc` already puts calls issued together into one HTTP request, so
-   * this is not about round trips — it is about what the node is asked to do.
-   * A hundred `getAccountInfo` calls are a hundred billed method calls however
-   * few requests carry them; one `getMultipleAccounts` is one. A mint absent
+   * This is about what the node is asked to do, and what it bills: a hundred
+   * `getAccountInfo` calls are a hundred billed method calls, and one
+   * `getMultipleAccounts` is one. A mint absent
    * from the map is one the node had no account for.
    *
    * Optional because it is a capability, not a contract: a reader that cannot

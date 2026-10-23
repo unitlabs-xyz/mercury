@@ -57,10 +57,31 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
   let delivered = 0;
   let failed = 0;
 
+  /*
+   * Every wallet's loan first, all at once: Kamino's reader puts what is asked
+   * together into one account read per hundred wallets. Only a wallet that owes
+   * something is read further. Reading each wallet's balances before knowing
+   * whether it had a loan cost two token-program calls a wallet, every five
+   * minutes, to find none: seventeen wallets and no loans, 23 October 2026.
+   * Gating on our own loan records instead would miss a loan opened before
+   * they were kept, and a missed loan is the one this job exists for.
+   */
+  const owing: typeof rows = [];
+  const loaded = await Promise.allSettled(rows.map((row) => deps.lending.position(row.address)));
+  loaded.forEach((result, i) => {
+    const row = rows[i]!;
+    if (result.status === "rejected") {
+      failed += 1;
+      log.error({ userId: row.userId, err: result.reason }, "could not check a loan");
+    } else if (result.value !== null && !result.value.debtUsd.isZero()) {
+      owing.push(row);
+    }
+  });
+
   let next = 0;
   const worker = async (): Promise<void> => {
     for (;;) {
-      const row = rows[next++];
+      const row = owing[next++];
       if (row === undefined) return;
       try {
         // Finalized: a dropped block would alarm a borrower who was fine, and
@@ -137,7 +158,7 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
     }
   };
 
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, rows.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, owing.length) }, worker));
 
   return { loans, alerted, delivered, failed };
 }
