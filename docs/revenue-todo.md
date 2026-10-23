@@ -107,11 +107,14 @@ mainnet's old rent rate.
 - [x] Store who invited whom: one inviter, set once, no self-referral
 - [x] Count a referral only once the friend funds $50+ and trades once
       Money counts towards the $50 an hour after it lands, so the inviter's own side of a transfer between them has been recorded and is left out.
-- [x] Friend discount: 25% off fees for 90 days, applied in the fee function from item 1
-- [x] Inviter tiers by funded friends: 0–9 → 25%, 10–49 → 30%, 50+ → 35% (computed; shown with rewards)
-      These are fee-share tiers, and the fee share was dropped on 21 October 2026 (§4). They pay
-      nothing; retire them when the flat reward is built.
-- [x] Founding 500 start at 30%: match `waitlist.email` to `user.email`
+- [x] Friend discount: 25% off fees for 90 days, applied in the fee function from item 1. **Off unless
+      `REFERRAL_DISCOUNT=on`** (23 October 2026): even a discount to the friend is a trading incentive
+      Singapore and Turkey ban, and counsel has not cleared it for the launch markets
+- [x] ~~Inviter tiers by funded friends: 0–9 → 25%, 10–49 → 30%, 50+ → 35%~~ Removed 23 October 2026,
+      before merging: they were a share of fees, which was dropped on 21 October (§4), and the API had
+      been sending each inviter their "share of Mercury's fee"
+- [x] ~~Founding 500 start at 30%~~ Removed with the tiers. What stays: a founding member's waitlist
+      slug is their invite code, matched by `waitlist.email` to `user.email`
       A waitlist slug is its holder's code even before they open the Invite panel, so old founding-card links still credit them.
 - [x] Keep `?ref=` when `/f/:slug` redirects
 - [ ] Invite screen: link, friends invited, friends funded, earned so far (link and counts built; earnings arrive with §4)

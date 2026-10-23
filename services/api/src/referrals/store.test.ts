@@ -31,18 +31,6 @@ describe("codeFor", () => {
   });
 });
 
-describe("isFounding", () => {
-  it("is the first 500 on the waitlist", async () => {
-    const db = await testDb();
-    await seedWaitlist(db, { email: "ada@example.com", slug: "3kQ9xZ1bTq7w", position: 500 });
-    await seedWaitlist(db, { email: "bo@example.com", slug: "Zz9xZ1bTq7wQ", position: 501 });
-    const store = createReferralStore(db);
-    expect(await store.isFounding((await seedUser(db, 1, { email: "ada@example.com" })).id)).toBe(true);
-    expect(await store.isFounding((await seedUser(db, 2, { email: "bo@example.com" })).id)).toBe(false);
-    expect(await store.isFounding((await seedUser(db, 3)).id)).toBe(false);
-  });
-});
-
 describe("claim", () => {
   const DAY = 86_400_000;
   const now = new Date("2026-10-17T12:00:00Z");
@@ -219,10 +207,10 @@ describe("summary", () => {
       code: "inviter1",
       invited: 2,
       funded: 1,
-      founding: false,
       discountUntil: null,
     });
-    expect(s.share.toString()).toBe("0.25");
+    // No share of anyone's fees, at any tier: the fee share was dropped on 21 October 2026.
+    expect(s).not.toHaveProperty("share");
 
     expect((await store.summary(f1.id, now)).discountUntil).toEqual(
       new Date(now.getTime() + 90 * 86_400_000),

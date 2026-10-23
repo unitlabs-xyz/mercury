@@ -2,10 +2,17 @@ import { Hono } from "hono";
 import { ClaimReferralRequest, type ReferralSummary } from "@mercury/types";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
+import { FRIEND_DISCOUNT, FRIEND_DISCOUNT_DAYS } from "../referrals/rules.js";
 import type { ReferralStore } from "../referrals/store.js";
 
 export interface ReferralDeps {
   readonly store: ReferralStore;
+  /**
+   * Whether an invited friend gets their discount (`REFERRAL_DISCOUNT`). Off
+   * unless switched on. Tracking runs either way: codes, claims and funded
+   * friends pay nothing.
+   */
+  readonly friendDiscount?: boolean;
   /** Injected so a test can stand at a chosen moment. */
   readonly now?: () => Date;
 }
@@ -21,14 +28,14 @@ export function referralRoutes(deps: ReferralDeps): Hono {
 
   app.get("/v1/referrals", async (c) => {
     const s = await deps.store.summary(c.get("identity").userId, now());
+    const on = deps.friendDiscount === true;
     const body: ReferralSummary = {
       code: s.code,
       link: `${SITE}/?ref=${encodeURIComponent(s.code)}`,
       invited: s.invited,
       funded: s.funded,
-      founding: s.founding,
-      share: s.share.toString(),
-      discountUntil: s.discountUntil?.toISOString() ?? null,
+      friendDiscount: on ? { pct: FRIEND_DISCOUNT.mul(100).toNumber(), days: FRIEND_DISCOUNT_DAYS } : null,
+      discountUntil: on ? (s.discountUntil?.toISOString() ?? null) : null,
     };
     return c.json(body);
   });

@@ -80,6 +80,8 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 **Referrals, after #97 merges**
 
+- [ ] Turn the friend's discount on (`REFERRAL_DISCOUNT=on`) only where counsel says it is allowed. It is
+      off by default
 - [ ] The flat reward per qualified friend instead of a fee share, once counsel agrees
       ([revenue TODO §4](docs/revenue-todo.md#4--referral-payouts-once-counsel-approves-the-flat-reward))
 - [ ] Rewrite the rewards plan, which still assumes the fee share

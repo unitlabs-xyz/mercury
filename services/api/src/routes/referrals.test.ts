@@ -1,18 +1,24 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
-import { D } from "@mercury/core";
 import type { ReferralStore } from "../referrals/store.js";
 import { referralRoutes } from "./referrals.js";
 
 const now = new Date("2026-10-17T12:00:00Z");
 
-const appWith = (store: Partial<ReferralStore>) => {
+const appWith = (store: Partial<ReferralStore>, friendDiscount?: boolean) => {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "WaLLeT" });
     await next();
   });
-  app.route("/", referralRoutes({ store: store as ReferralStore, now: () => now }));
+  app.route(
+    "/",
+    referralRoutes({
+      store: store as ReferralStore,
+      now: () => now,
+      ...(friendDiscount === undefined ? {} : { friendDiscount }),
+    }),
+  );
   return app;
 };
 const post = (app: Hono, body: unknown) =>
@@ -23,27 +29,44 @@ const post = (app: Hono, body: unknown) =>
   });
 
 describe("GET /v1/referrals", () => {
-  it("gives the link, the counts and the tier", async () => {
-    const summary = vi.fn(async () => ({
-      code: "abcdefgh",
-      invited: 4,
-      funded: 2,
-      founding: false,
-      share: D("0.25"),
-      discountUntil: null,
-    }));
-    const res = await appWith({ summary }).request("/v1/referrals");
+  const until = new Date("2027-01-15T12:00:00Z");
+  const summary = () =>
+    vi.fn(async () => ({ code: "abcdefgh", invited: 4, funded: 2, discountUntil: until }));
+
+  /*
+   * Off unless switched on: even a discount to the friend is a trading
+   * incentive some markets ban, and counsel has not said where it is allowed.
+   */
+  it("gives the link and the counts, and promises no discount while it is off", async () => {
+    const s = summary();
+    const res = await appWith({ summary: s }).request("/v1/referrals");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       code: "abcdefgh",
       link: "https://trymercury.xyz/?ref=abcdefgh",
       invited: 4,
       funded: 2,
-      founding: false,
-      share: "0.25",
+      friendDiscount: null,
       discountUntil: null,
     });
-    expect(summary).toHaveBeenCalledWith("user-1", now);
+    expect(s).toHaveBeenCalledWith("user-1", now);
+  });
+
+  it("says what a friend gets, and when this person's own discount ends, once it is on", async () => {
+    const res = await appWith({ summary: summary() }, true).request("/v1/referrals");
+    expect(await res.json()).toMatchObject({
+      friendDiscount: { pct: 25, days: 90 },
+      discountUntil: until.toISOString(),
+    });
+  });
+
+  /* The 21 October 2026 research: a share of the friend's fees crosses securities rules for xStocks. */
+  it("offers the inviter no share of anyone's fees", async () => {
+    const body = (await (
+      await appWith({ summary: summary() }, true).request("/v1/referrals")
+    ).json()) as object;
+    expect(body).not.toHaveProperty("share");
+    expect(body).not.toHaveProperty("founding");
   });
 });
 

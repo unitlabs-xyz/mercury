@@ -1,5 +1,4 @@
 import { USDC_MINT } from "@mercury/chain";
-import type { Decimal } from "@mercury/core";
 import { and, count, eq, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { activities, orders, referrals, users, waitlist } from "../db/schema.js";
@@ -9,12 +8,8 @@ import {
   QUALIFYING_FUNDING_USD,
   discountActive,
   discountEndsAt,
-  inviterShare,
   newCode,
 } from "./rules.js";
-
-/** The waitlist's founding cohort: the first 500 places. */
-const FOUNDING = 500;
 
 /**
  * What a claim came to. Only `claimed` writes a referral. Resolving a waitlist
@@ -29,9 +24,6 @@ export interface Summary {
   readonly code: string;
   readonly invited: number;
   readonly funded: number;
-  readonly founding: boolean;
-  /** The inviter's share at today's tier. */
-  readonly share: Decimal;
   /** When this person's own discount ends, if one is running. */
   readonly discountUntil: Date | null;
 }
@@ -39,8 +31,6 @@ export interface Summary {
 export interface ReferralStore {
   /** This person's code, made the first time anyone asks for it. */
   codeFor(userId: string): Promise<string>;
-  /** Among the first 500 on the waitlist, matched by the email Privy gave us. */
-  isFounding(userId: string): Promise<boolean>;
   /** Attach a code to a new account. Set once, never yourself, never late. */
   claim(friendId: string, code: string, now: Date): Promise<ClaimResult>;
   /** When this person was referred, or null if nobody did. The discount runs from here. */
@@ -56,10 +46,7 @@ export const createReferralStore = (db: Db): ReferralStore => {
     const [u] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
     const email = u?.email?.toLowerCase();
     if (email === undefined) return null;
-    const [row] = await db
-      .select({ slug: waitlist.slug, position: waitlist.position })
-      .from(waitlist)
-      .where(eq(waitlist.email, email));
+    const [row] = await db.select({ slug: waitlist.slug }).from(waitlist).where(eq(waitlist.email, email));
     return row ?? null;
   };
 
@@ -195,28 +182,25 @@ export const createReferralStore = (db: Db): ReferralStore => {
     return changed.length;
   };
 
-  const isFounding = async (userId: string) => {
-    const row = await waitlistRow(userId);
-    return row !== null && row.position <= FOUNDING;
-  };
-
   const summary = async (userId: string, now: Date): Promise<Summary> => {
-    const [code, founding, referred, [counts]] = await Promise.all([
+    /*
+     * No inviter's share, and no tiers or founding-member rate behind one. A
+     * share of the friend's fees is the referral design the 21 October 2026
+     * research found riskiest wherever xStocks are sold, and it was dropped
+     * for a flat reward that waits for counsel (docs/revenue-todo.md §4).
+     */
+    const [code, referred, [counts]] = await Promise.all([
       codeFor(userId),
-      isFounding(userId),
       existing(userId),
       db
         .select({ invited: count(), funded: count(referrals.qualifiedAt) })
         .from(referrals)
         .where(eq(referrals.inviterId, userId)),
     ]);
-    const funded = counts?.funded ?? 0;
     return {
       code,
       invited: counts?.invited ?? 0,
-      funded,
-      founding,
-      share: inviterShare(funded, founding),
+      funded: counts?.funded ?? 0,
       discountUntil:
         referred !== null && discountActive(referred.createdAt, now)
           ? discountEndsAt(referred.createdAt)
@@ -226,7 +210,6 @@ export const createReferralStore = (db: Db): ReferralStore => {
 
   return {
     codeFor,
-    isFounding,
     claim,
     referredAt: async (userId) => (await existing(userId))?.createdAt ?? null,
     qualifyPending,

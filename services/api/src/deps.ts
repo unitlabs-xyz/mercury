@@ -184,6 +184,16 @@ export interface Config {
    */
   readonly tradingFeeBps: number;
   /**
+   * Whether a friend who joins through an invite link gets 25% off Mercury's
+   * fee for 90 days. `REFERRAL_DISCOUNT=on` turns it on; off otherwise. Off
+   * by default because even a discount to the friend is a trading incentive
+   * some markets ban (Singapore's MAS PS-G03, Turkey's CMB), and whether it is
+   * allowed where Mercury launches is a question for counsel
+   * (docs/research/2026-10-21-referral-fee-sharing.md). Referral tracking runs
+   * either way.
+   */
+  readonly referralDiscount: boolean;
+  /**
    * Mercury's fee on a deposit Relay has to swap, in basis points of what is
    * sent: 30 is 0.3%. Circle's own USDC is never charged. Relay takes it out of
    * the deposit and holds it for us; see `depositFeeRecipient`.
@@ -249,6 +259,14 @@ const DEFAULT_DEPOSIT_FEE_BPS = 30;
  * half a percent, or a typo, would otherwise charge every trade something
  * nobody chose — and a fee is not a setting anyone checks by eye afterwards.
  */
+/** "on" or "off", and unset or empty is off. Anything else stops the server: a typo would otherwise turn a switch quietly off. */
+const onOff = (env: NodeJS.ProcessEnv, key: string): boolean => {
+  const raw = env[key];
+  if (raw === undefined || raw === "" || raw === "off") return false;
+  if (raw === "on") return true;
+  throw new Error(`${key} must be "on" or "off", not ${JSON.stringify(raw)}`);
+};
+
 const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): number => {
   const raw = env[key];
   if (raw === undefined || raw.length === 0) return fallback;
@@ -363,6 +381,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["RELAYER_SECRET_KEY"] ? { relayerSecretKey: env["RELAYER_SECRET_KEY"] } : {}),
     earnVault: env["EARN_VAULT_ADDRESS"] || STEAKHOUSE_USDC,
     tradingFeeBps: basisPoints(env, "TRADING_FEE_BPS", DEFAULT_TRADING_FEE_BPS),
+    referralDiscount: onOff(env, "REFERRAL_DISCOUNT"),
     depositFeeBps: basisPoints(env, "DEPOSIT_FEE_BPS", DEFAULT_DEPOSIT_FEE_BPS),
     ...(depositFeeRecipient === undefined ? {} : { depositFeeRecipient }),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
@@ -617,6 +636,7 @@ export function buildReadDeps(
     | "notifyFrom"
     | "feedbackTo"
     | "tradingFeeBps"
+    | "referralDiscount"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
@@ -695,7 +715,7 @@ export function buildReadDeps(
         }),
     },
     orders: pgOrderStore(db),
-    referrals: { store: createReferralStore(db) },
+    referrals: { store: createReferralStore(db), friendDiscount: config.referralDiscount },
     tradingFeeBps: config.tradingFeeBps,
     feedback: {
       to: config.feedbackTo,

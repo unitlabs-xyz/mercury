@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { D, Decimal } from "@mercury/core";
+import { D } from "@mercury/core";
 import { ReferralCode } from "@mercury/types";
 
 /**
@@ -52,9 +52,3 @@ export const pricingFor = (baseBps: number, referredAt: Date | null, now: Date):
         bps: D(baseBps).mul(D(1).sub(FRIEND_DISCOUNT)).toNumber(),
         discount: { pct: FRIEND_DISCOUNT.mul(100).toNumber(), until: discountEndsAt(referredAt) },
       };
-
-/** 25% under ten funded friends, 30% from ten, 35% from fifty. The founding 500 never drop below 30%. */
-export const inviterShare = (funded: number, founding: boolean): Decimal => {
-  const byCount = funded >= 50 ? D("0.35") : funded >= 10 ? D("0.30") : D("0.25");
-  return founding ? Decimal.max(byCount, D("0.30")) : byCount;
-};

@@ -130,14 +130,15 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   /* One client for the routes that talk to the chain directly. */
   const rpc = createSolanaRpc(read.send.rpcUrl);
   /**
-   * Mercury's rate for this person now: the configured one, or a quarter off
-   * in an invited friend's first 90 days. One lookup per request, read by the
-   * quote and by execute alike, so the two cannot disagree about who was invited.
+   * Mercury's rate for this person now: the configured one, or, while the
+   * friend's discount is switched on, a quarter off in an invited friend's
+   * first 90 days. One lookup per request, read by the quote and by execute
+   * alike, so the two cannot disagree about who was invited.
    */
   const pricing = async (userId: string): Promise<FeePricing> =>
     pricingFor(
       read.tradingFeeBps,
-      read.referrals === undefined ? null : await read.referrals.store.referredAt(userId),
+      read.referrals?.friendDiscount === true ? await read.referrals.store.referredAt(userId) : null,
       new Date(),
     );
   const lookupTables = cachedLookupTables(rpcLookupTables(rpc));

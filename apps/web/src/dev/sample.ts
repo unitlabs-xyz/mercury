@@ -1238,8 +1238,7 @@ const SAMPLE_REFERRALS = {
   link: "https://trymercury.xyz/?ref=ada-0042",
   invited: 7,
   funded: 3,
-  founding: true,
-  share: "0.3",
+  friendDiscount: null,
   discountUntil: null,
 };
 

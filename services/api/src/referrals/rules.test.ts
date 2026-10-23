@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { discountActive, inviterShare, isCode, newCode, pricingFor } from "./rules.js";
+import { discountActive, isCode, newCode, pricingFor } from "./rules.js";
 
 const DAY = 86_400_000;
 const at = new Date("2026-10-17T12:00:00Z");
@@ -28,26 +28,6 @@ describe("the friend's discount", () => {
   /* A quarter off nothing is nothing, and "25% off" next to a free trade says something false. */
   it("names no discount when there is no fee to discount", () => {
     expect(pricingFor(0, at, at)).toEqual({ bps: 0, discount: null });
-  });
-});
-
-describe("the inviter's share", () => {
-  it.each([
-    [0, "0.25"],
-    [9, "0.25"],
-    [10, "0.3"],
-    [49, "0.3"],
-    [50, "0.35"],
-  ])("is %s funded friends → %s", (funded, share) => {
-    expect(inviterShare(funded, false).toString()).toBe(share);
-  });
-
-  it("starts a founding member at 30%", () => {
-    expect(inviterShare(0, true).toString()).toBe("0.3");
-  });
-
-  it("still lifts a founding member to 35% at 50", () => {
-    expect(inviterShare(50, true).toString()).toBe("0.35");
   });
 });
 

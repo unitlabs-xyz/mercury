@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Iso, Ratio } from "./primitives.js";
+import { Iso } from "./primitives.js";
 
 /** Exact and case-sensitive: waitlist slugs are base64url, and those links are still out there. */
 export const ReferralCode = z.string().regex(/^[A-Za-z0-9_-]{6,16}$/);
@@ -13,9 +13,12 @@ export const ReferralSummary = z.object({
   invited: z.number().int().nonnegative(),
   /** Invited friends who have put in $50 and traded once. */
   funded: z.number().int().nonnegative(),
-  founding: z.boolean(),
-  /** The inviter's share of Mercury's fee at today's tier, as a ratio: "0.25". */
-  share: Ratio,
+  /**
+   * What a friend who joins through the link gets, while the discount is
+   * switched on (`REFERRAL_DISCOUNT`). Null while it is off: the Invite panel
+   * then promises nothing.
+   */
+  friendDiscount: z.object({ pct: z.number().positive(), days: z.number().int().positive() }).nullable(),
   /** When this person's own invited-friend discount ends, if they have one running. */
   discountUntil: Iso.nullable(),
 });

@@ -128,6 +128,13 @@ boot.info(
   },
   relay === undefined ? "trading fee set, but no trades without a relayer" : "trading fee collected",
 );
+// Whether invited friends pay less, so a launch market's setting can be read off the log.
+boot.info(
+  { on: config.referralDiscount },
+  config.referralDiscount
+    ? "invited friends get 25% off for 90 days"
+    : "invite links tracked, no friend's discount (REFERRAL_DISCOUNT off)",
+);
 // Which Jupiter tier the rate limits in the logs below belong to.
 boot.info(
   {

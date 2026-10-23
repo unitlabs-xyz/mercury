@@ -77,7 +77,14 @@ const held = (mint: string, whole: string, decimals: number): TokenBalance => ({
  * below the route can observe.
  */
 const harness = async (
-  over: { balances?: TokenBalance[]; sponsored?: boolean; tradingFeeBps?: number; referredAt?: Date } = {},
+  over: {
+    balances?: TokenBalance[];
+    sponsored?: boolean;
+    tradingFeeBps?: number;
+    referredAt?: Date;
+    /** `REFERRAL_DISCOUNT`. On here unless a test says otherwise, because these tests are about the discount. */
+    friendDiscount?: boolean;
+  } = {},
 ) => {
   const db = await testDb();
   const priced: string[] = [];
@@ -174,7 +181,12 @@ const harness = async (
     borrow: {},
     ...(over.referredAt === undefined
       ? {}
-      : { referrals: { store: { referredAt: async () => over.referredAt ?? null } } }),
+      : {
+          referrals: {
+            store: { referredAt: async () => over.referredAt ?? null },
+            friendDiscount: over.friendDiscount ?? true,
+          },
+        }),
   } as unknown as ReadDeps;
 
   const auth = {
@@ -446,6 +458,15 @@ describe("an invited friend's fee", () => {
       network: "0.01",
       discount: { pct: 25 },
     });
+  });
+
+  /* Off unless REFERRAL_DISCOUNT=on: counsel has not said the discount is allowed where Mercury launches. */
+  it("quotes the full rate while the discount is switched off, invited or not", async () => {
+    const { post } = await harness({ referredAt: new Date(Date.now() - 10 * DAY), friendDiscount: false });
+    const res = await post("/v1/quote", { ticker: "NVDA", side: "buy", amount: "500" });
+    const body = (await res.json()) as { fee: { mercury: string; mercuryBps: number; discount?: unknown } };
+    expect(body.fee).toMatchObject({ mercury: "2.5", mercuryBps: 50 });
+    expect(body.fee.discount).toBeUndefined();
   });
 
   it("quotes the full rate once the 90 days are up", async () => {
