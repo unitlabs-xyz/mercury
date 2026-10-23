@@ -223,16 +223,12 @@ boot.info(
 );
 
 /**
- * When a job first runs, and what it backs off on. Offsets, so a deploy does
- * not have every job read every wallet in the same second: that is what the
- * node refused, every call, for the first minute after the Earn deploy (22
- * October 2026). A job on the public lane waits longer between passes while
- * the lane is refusing.
+ * When a job first runs. Offsets, so a deploy does not have every job read
+ * every wallet in the same second: that is what the node refused, every call,
+ * for the first minute after the Earn deploy (22 October 2026). A pass whose
+ * own calls the lane refused waits longer before the next (see `strain.ts`).
  */
-const jobClock = (startAfterMs: number, onLane = true): EveryDeps => ({
-  startAfterMs,
-  ...(onLane && jobs.lane !== null ? { strainedAt: () => jobs.lane!.strainedAt } : {}),
-});
+const jobClock = (startAfterMs: number): EveryDeps => ({ startAfterMs });
 
 /**
  * The background half of the system, and the whole of it. This is the only
@@ -317,7 +313,7 @@ every(
     const dropped = await prunePriceBars(auth.db, new Date());
     return dropped === 0 ? null : `${dropped} minute bars past thirty days dropped`;
   },
-  jobClock(90_000, false),
+  jobClock(90_000),
 );
 
 every(
@@ -327,21 +323,23 @@ every(
     const s = await syncStocks(auth.db, { supportedStocks: deps.supportedStocks, prices: deps.prices });
     return `${s.instruments} instruments, ${s.tokens} tokens`;
   },
-  jobClock(60_000, false),
+  jobClock(60_000),
 );
 
 /**
- * Two seconds, so a deposit shows up while the person who made it is still
- * looking at the screen.
+ * Ten seconds for a wallet whose owner has the app open, and once a minute for
+ * anyone else's (`cadence`). It was two seconds, but the app asks for money and
+ * portfolio every thirty, and refreshes at once after its own transactions:
+ * four reads in five were ones nobody saw, each two token-program calls and a
+ * Kamino read on the background lane (23 October 2026).
  *
- * At that cadence a quiet pass is the common case, so only a pass that changed
- * something or failed says anything — logging every two seconds would bury the
- * passes that matter.
+ * A quiet pass is the common case, so only a pass that changed something or
+ * failed says anything.
  */
 const syncCadence = cadence({ here });
 every(
   "position-sync",
-  2_000,
+  10_000,
   async () => {
     const s = await syncAllPositions(auth.db, buildReconcileDeps(jobs.deps), syncCadence);
     if (s.written === 0 && s.failed === 0) return null;
@@ -372,7 +370,7 @@ if (fund !== undefined) {
       if (s.settled === 0 && s.failed === 0) return null;
       return `${s.settled} settled of ${s.asked} asked` + (s.failed > 0 ? `, ${s.failed} failed` : "");
     },
-    jobClock(20_000, false),
+    jobClock(20_000),
   );
 }
 

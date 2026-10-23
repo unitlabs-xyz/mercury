@@ -41,6 +41,7 @@ import { SpanStatusCode, trace, type Tracer } from "@opentelemetry/api";
 import { errorLine } from "../log.js";
 import { logger, type Log } from "../log/index.js";
 import { jobMetrics } from "../telemetry/metrics.js";
+import { inPass, type Pass } from "./strain.js";
 
 export interface EveryDeps {
   readonly now?: () => number;
@@ -53,16 +54,14 @@ export interface EveryDeps {
    * read every wallet in the same second.
    */
   readonly startAfterMs?: number;
-  /**
-   * When the endpoints this job reads last refused a request outright, on the
-   * same clock as `now` (see `Rotation.strainedAt`). A pass that saw it waits
-   * twice as long before the next, up to two minutes, and a clean pass goes
-   * back to the job's own interval.
-   */
-  readonly strainedAt?: () => number;
 }
 
-/** The longest a strained job waits between passes, unless its own interval is longer. */
+/**
+ * The longest a strained job waits between passes, unless its own interval is
+ * longer. A pass is strained when one of its own calls found every endpoint
+ * refusing (see `strain.ts`): it waits twice as long before the next, and a
+ * clean pass goes back to the job's own interval.
+ */
 const BACKOFF_CAP_MS = 120_000;
 
 /**
@@ -85,9 +84,10 @@ export const every = (name: string, ms: number, run: JobRun, deps: EveryDeps = {
     let wait = ms;
     await tracer.startActiveSpan(`job ${name}`, async (span) => {
       const started = now();
+      const pass: Pass = { strained: false };
       span.setAttribute("mercury.job", name);
       try {
-        const note = await run();
+        const note = await inPass(pass, run);
         /* So an idle job and a stuck one are different shapes in a trace list,
            rather than both being "a pass that said nothing". */
         span.setAttribute("mercury.job.quiet", note === null);
@@ -110,8 +110,7 @@ export const every = (name: string, ms: number, run: JobRun, deps: EveryDeps = {
         span.setAttribute("mercury.job.duration_ms", elapsed);
         jobMetrics().duration.record(elapsed / 1000, { mercury_job: name });
 
-        const strainedAt = deps.strainedAt?.() ?? 0;
-        if (strainedAt > 0 && strainedAt >= started) {
+        if (pass.strained) {
           streak += 1;
           wait = Math.min(ms * 2 ** streak, Math.max(ms, BACKOFF_CAP_MS));
           span.setAttribute("mercury.job.backoff_ms", wait);

@@ -78,7 +78,7 @@ const toBackfill: BackfillOrder[] = rows.map((row) => ({
       : { id: row.lotId, shares: D(row.lotShares!), unitCostUsd: D(row.lotUnitCost!) },
 }));
 
-/* One at a time: `batchedRpc` coalesces what it can, and a backfill is not in a hurry. */
+/* One at a time: a backfill is not in a hurry. */
 const transactions = new Map<string, TransactionDetail>();
 for (const [index, order] of toBackfill.entries()) {
   const tx = await chain.transaction(order.txSignature);

@@ -92,7 +92,7 @@ export interface KaminoLendingConfig {
   readonly scanRpcUrl?: string;
   /** The background jobs' public endpoints, taken in turn instead of `rpcUrl`. See `backgroundDeps`. */
   readonly rotation?: Rotation;
-  /** How long a loaded market is reused. Loading reads every reserve and its oracle. */
+  /** How long a loaded market is reused. Refreshing reads every reserve and its oracle. */
   readonly ttlMs?: number;
   /**
    * Where rent is asked: the app's own chain reader, so the hour it keeps an
@@ -118,10 +118,32 @@ export interface KaminoLendingConfig {
  */
 export const KAMINO_LENDING_PROGRAM: string = String(PROGRAM_ID);
 
+/**
+ * How often the market is loaded whole: its own account and a scan of the
+ * program for its reserves. Between, the reserves it already knows are
+ * refreshed in one account read. A scan is the heaviest read here and the one
+ * a starter plan refuses, and it ran every thirty seconds on each lane; a
+ * reserve Kamino adds is found within ten minutes instead.
+ */
+const FULL_LOAD_MS = 10 * 60_000;
+
+/**
+ * How long the ledger's slot and time are reused. Every loan figure is
+ * accrued to them, and terms and positions each asked, so one money request
+ * cost two slot reads and two block-time reads. Two seconds of accrual is
+ * nothing on a loan's interest. Transactions read their own.
+ */
+const INSTANT_TTL_MS = 2_000;
+
+type LedgerInstant = Awaited<ReturnType<typeof getCurrentLedgerInstant>>;
+
 export class KaminoLending implements LendingSource {
   private readonly rpc: ReturnType<typeof createLendingRpc>;
   private readonly ttlMs: number;
   private cached: { at: number; market: Promise<KaminoMarket> } | null = null;
+  /** The market as last loaded whole, refreshed in place between full loads. */
+  private loaded: { at: number; market: KaminoMarket } | null = null;
+  private instantCache: { at: number; instant: Promise<LedgerInstant> } | null = null;
   private readonly positionOf: (wallet: string) => Promise<LendingPosition | null>;
   private readonly rent: Pick<ChainReader, "rentExemption">;
 
@@ -135,18 +157,48 @@ export class KaminoLending implements LendingSource {
   private market(): Promise<KaminoMarket> {
     const now = Date.now();
     if (this.cached !== null && now - this.cached.at < this.ttlMs) return this.cached.market;
-    const market = KaminoMarket.load(this.rpc, XSTOCKS_MARKET, DEFAULT_RECENT_SLOT_DURATION_MS).then((m) => {
-      if (m === null) throw new Error("kamino: xStocks market not found");
-      return m;
-    });
+    const base = this.loaded;
+    const market =
+      base !== null && now - base.at < FULL_LOAD_MS
+        ? // The reserves it knows, in one read, with their oracles. One that fails,
+          // a reserve closed say, sends the next caller to a full load.
+          base.market.loadReserves().then(
+            () => base.market,
+            (error: unknown) => {
+              if (this.loaded === base) this.loaded = null;
+              throw error;
+            },
+          )
+        : KaminoMarket.load(this.rpc, XSTOCKS_MARKET, DEFAULT_RECENT_SLOT_DURATION_MS).then((m) => {
+            if (m === null) throw new Error("kamino: xStocks market not found");
+            this.loaded = { at: now, market: m };
+            return m;
+          });
     // A failed load is not cached; the next caller tries again.
-    market.catch(() => (this.cached = null));
-    this.cached = { at: now, market };
+    const entry = { at: now, market };
+    market.catch(() => {
+      if (this.cached === entry) this.cached = null;
+    });
+    this.cached = entry;
     return market;
   }
 
+  /** The ledger's slot and time, shared for `INSTANT_TTL_MS`. A failed read is not kept. */
+  private instant(): Promise<LedgerInstant> {
+    const now = Date.now();
+    if (this.instantCache !== null && now - this.instantCache.at < INSTANT_TTL_MS)
+      return this.instantCache.instant;
+    const instant = getCurrentLedgerInstant(this.rpc);
+    const entry = { at: now, instant };
+    instant.catch(() => {
+      if (this.instantCache === entry) this.instantCache = null;
+    });
+    this.instantCache = entry;
+    return instant;
+  }
+
   async terms(): Promise<LendingTerms> {
-    const [market, instant] = await Promise.all([this.market(), getCurrentLedgerInstant(this.rpc)]);
+    const [market, instant] = await Promise.all([this.market(), this.instant()]);
     const usdc = market.getExistingFloatRateReserveByMint(USDC);
     if (usdc === undefined) throw new Error("kamino: no USDC reserve in the xStocks market");
 
@@ -210,7 +262,7 @@ export class KaminoLending implements LendingSource {
     const vanilla = new VanillaObligation(PROGRAM_ID);
     const [pdas, instant] = await Promise.all([
       Promise.all(wallets.map((w) => vanilla.toPda(market.getAddress(), address(w)))),
-      getCurrentLedgerInstant(this.rpc),
+      this.instant(),
     ]);
     const loaded: (KaminoObligation | null)[] = [];
     // getMultipleAccounts takes at most 100 addresses.

@@ -43,7 +43,7 @@ import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
 import { KaminoEarn } from "./earn/kamino-vault.js";
-import { ZERO } from "@mercury/core";
+import { D, ZERO } from "@mercury/core";
 import { hasEarnHistory, pgEarnLedger } from "./earn/store.js";
 import { onlyIfUsed } from "./earn/gate.js";
 import { recordMove } from "./earn/record.js";
@@ -82,6 +82,7 @@ import { JsonBasketStore } from "./baskets/glider/store.js";
 import { SolanaBasketFunding } from "./baskets/glider/funding.js";
 import type { BasketProvider } from "./baskets/core/deps.js";
 import { logger } from "./log/index.js";
+import { noteStrain } from "./jobs/strain.js";
 
 /** Pyth in front of the issuer's quote, or the issuer's quote alone. */
 const withFallback = (pythApiKey: string | undefined, issuer: ReferenceSource): ReferenceSource =>
@@ -292,6 +293,23 @@ const PUBLIC_RPC_SKIPS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
  */
 const PUBLIC_RPC_PER_SECOND = 3;
 
+/**
+ * Requests a second the background jobs may send the paid endpoint, when every
+ * public one refuses. The routes read the same endpoint, and it is theirs
+ * first: unpaced, a job's eight workers arrived there at once (23 October
+ * 2026). Two a second is a sliver of any paid plan, and what it cannot carry
+ * waits for the job's next pass.
+ */
+const PAID_FALLBACK_PER_SECOND = 2;
+
+/**
+ * How long the routes reuse a wallet's token balances. The app polls money,
+ * portfolio and Earn together, each reading both token programs; two seconds
+ * is under its first refetch after a transaction (three seconds), and the send
+ * route forgets a wallet's balances as soon as it sends for it.
+ */
+const ROUTE_BALANCES_TTL_MS = 2_000;
+
 const publicRpcUrls = (env: NodeJS.ProcessEnv): readonly string[] => {
   const raw = env["SOLANA_PUBLIC_RPC_URLS"];
   if (raw === undefined) return PUBLIC_RPC_URLS;
@@ -403,7 +421,7 @@ export function buildDeps(config: Config): Deps {
   // One rotation shared by every Jupiter adapter, so the keys take turns across all of them.
   const jupiter = jupiterAccess(config.jupiterApiKeys) ?? {};
   const registry = new JupiterRegistry(jupiter);
-  const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl });
+  const chain = new SolanaRpc({ rpcUrl: config.solanaRpcUrl, balancesTtlMs: ROUTE_BALANCES_TTL_MS });
   const market = new JupiterMarket({ registry, ...jupiter });
   // Built here rather than inline below, because the reference reads through it.
   const prices = new CachedPriceBoard(market, { windowMs: PRICE_WINDOW_MS });
@@ -466,6 +484,14 @@ const earnOver = (config: Config, chain: ChainReader, api: KaminoApi, lane?: Rot
     api,
     usdcMint: USDC_MINT,
     rpcUrl: config.solanaRpcUrl,
+    /*
+     * Vault shares are tokens like any other, so they come from the balances
+     * the rest of the page reads too, and the routes' copy of those is shared
+     * for two seconds. Read separately, `/v1/earn` asked the node for the same
+     * wallet's token accounts twice in one request.
+     */
+    shareBalances: async (wallet) =>
+      new Map((await chain.tokenBalances(wallet)).map((b) => [b.mint, D(b.rawAmount.toString())])),
     ...(lane === undefined ? {} : { rotation: lane }),
     defaultVault: config.earnVault,
     make: (vault) =>
@@ -496,9 +522,16 @@ export function backgroundDeps(
     skips: PUBLIC_RPC_SKIPS,
     perSecond: PUBLIC_RPC_PER_SECOND,
     fallback: config.solanaRpcUrl,
+    fallbackPerSecond: PAID_FALLBACK_PER_SECOND,
+    // The pass whose call it was backs off, not every job running at the time.
+    onStrain: noteStrain,
   });
-  // One call per request: Solana Vibe Station and Pocket refuse a batch.
-  const chain = new SolanaRpc({ rpcUrl: lane.urls[0]!, fetch: rotatingFetch(lane), maxBatch: 1 });
+  /*
+   * Two attempts, not four: the rotation has already asked every endpoint and
+   * the paid one before a call fails here, and each retry asks them all again.
+   * A read a job could not make waits for its next pass.
+   */
+  const chain = new SolanaRpc({ rpcUrl: lane.urls[0]!, fetch: rotatingFetch(lane), attempts: 2 });
   return {
     lane,
     deps: {
@@ -685,6 +718,7 @@ export function buildReadDeps(
       rpcUrl: config.solanaRpcUrl,
       fees: { chain: deps.chain, prices: deps.prices },
       accepted: earnMoves.accepted,
+      sent: (wallet) => deps.chain.forgetBalances?.(wallet),
       ...(relay === undefined ? {} : { relay }),
     },
   };

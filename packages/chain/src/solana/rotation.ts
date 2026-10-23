@@ -22,13 +22,15 @@ export interface Rotation {
   refused(url: string, method?: string): void;
   /** It answered `method`: back in turn for it at once, its refusals forgotten. */
   served(url: string, method?: string): void;
-  /** One request found every URL refusing. */
+  /** One request found every URL refusing, the fallback too. Tells `onStrain`. */
   strained(): void;
   /** When `strained` last happened, by the rotation's clock; 0 for never. What a job backs off on. */
   readonly strainedAt: number;
   /** Resolves when the next request may go out, `perSecond` apart. At once without a pace. */
   wait(): Promise<void>;
-  /** Where a request goes when every URL refuses it, if anywhere. Never rested, never paced. */
+  /** The same for the fallback, `fallbackPerSecond` apart. */
+  waitFallback(): Promise<void>;
+  /** Where a request goes when every URL refuses it, if anywhere. Never rested. */
   readonly fallback: string | null;
 }
 
@@ -58,6 +60,16 @@ export interface RotationConfig {
    * two a second, and the only other keyless one keeps no history.
    */
   readonly fallback?: string;
+  /**
+   * Requests a second to the fallback, spaced evenly. Unset, no pacing.
+   *
+   * The fallback is the paid endpoint the app's own routes use. Unpaced, a
+   * job's eight workers that every free endpoint refused arrived there at once
+   * and were refused too, and the routes with them (23 October 2026).
+   */
+  readonly fallbackPerSecond?: number;
+  /** Told each time a request found every URL and the fallback refusing: what a job backs off on. */
+  readonly onStrain?: () => void;
 }
 
 export const rotation = (urls: readonly string[], config: RotationConfig = {}): Rotation => {
@@ -69,6 +81,7 @@ export const rotation = (urls: readonly string[], config: RotationConfig = {}): 
   let turn = 0;
   let strainedAt = 0;
   let nextSlot = 0;
+  let nextFallbackSlot = 0;
   const key = (url: string, method = "") => `${url} ${method}`;
   const sleep = config.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const skipped = (url: string, method?: string) =>
@@ -102,6 +115,7 @@ export const rotation = (urls: readonly string[], config: RotationConfig = {}): 
     },
     strained() {
       strainedAt = now();
+      config.onStrain?.();
     },
     get strainedAt() {
       return strainedAt;
@@ -113,6 +127,13 @@ export const rotation = (urls: readonly string[], config: RotationConfig = {}): 
       nextSlot = slot + 1000 / config.perSecond;
       if (slot > at) await sleep(slot - at);
     },
+    async waitFallback() {
+      if (config.fallbackPerSecond === undefined || config.fallbackPerSecond <= 0) return;
+      const at = now();
+      const slot = Math.max(at, nextFallbackSlot);
+      nextFallbackSlot = slot + 1000 / config.fallbackPerSecond;
+      if (slot > at) await sleep(slot - at);
+    },
   };
 };
 
@@ -121,37 +142,36 @@ export const rotation = (urls: readonly string[], config: RotationConfig = {}): 
  * PublicNode's "Request blocked", dRPC's "chain is not available on free plan",
  * Pocket's "Method not found", LeoRPC's "Internal JSON-RPC error" for a method
  * it does not serve, Solana Vibe Station's "Transaction … not found" for a
- * cursor older than the history it keeps, and the rate limits some put in the
- * body instead of the status. Measured 22 October 2026.
+ * cursor older than the history it keeps, Solana's own "Failed to query
+ * long-term storage; please try again" when its history store has a moment,
+ * and the rate limits some put in the body instead of the status. Measured 22
+ * and 23 October 2026.
  */
 const REFUSAL =
-  /blocked|not available|upgrade|rate limit|too many requests|limit exceeded|method not found|not supported|does not exist|internal json-rpc error|transaction \S+ not found/i;
+  /blocked|not available|upgrade|rate limit|too many requests|limit exceeded|method not found|not supported|does not exist|internal json-rpc error|transaction \S+ not found|long-term storage/i;
 
 /** An endpoint's error message that means it refused the call, not that the call was wrong. */
 export const isRefusalMessage = (message: string): boolean => REFUSAL.test(message);
 
-/** What a request asks for, for resting per method: the method, or every method of a batch. */
+/** What a request asks for, for resting per method. */
 const methodOf = (init?: RequestInit): string | undefined => {
   try {
-    const parsed: unknown = JSON.parse(String(init?.body ?? ""));
-    const calls = (Array.isArray(parsed) ? parsed : [parsed]) as { method?: unknown }[];
-    const methods = [...new Set(calls.map((c) => String(c?.method ?? "")))].sort();
-    return Array.isArray(parsed) ? `batch:${methods.join(",")}` : methods[0];
+    const parsed = JSON.parse(String(init?.body ?? "")) as { method?: unknown };
+    return typeof parsed?.method === "string" ? parsed.method : undefined;
   } catch {
     return undefined;
   }
 };
 
 /**
- * Every call in the answer refused in words like those: the endpoint refused
- * the request, not the calls. One call's own error, a bad parameter say, is
- * not this, and is passed back as it is.
+ * The answer is a refusal in words like those: the endpoint refused the
+ * request. The call's own error, a bad parameter say, is not this, and is
+ * passed back as it is.
  */
 const refusedInside = async (res: Response): Promise<boolean> => {
   try {
-    const parsed: unknown = await res.clone().json();
-    const replies = (Array.isArray(parsed) ? parsed : [parsed]) as { error?: { message?: unknown } }[];
-    return replies.length > 0 && replies.every((r) => REFUSAL.test(String(r?.error?.message ?? "")));
+    const reply = (await res.clone().json()) as { error?: { message?: unknown } };
+    return REFUSAL.test(String(reply?.error?.message ?? ""));
   } catch {
     return false;
   }
@@ -161,9 +181,9 @@ const refusedInside = async (res: Response): Promise<boolean> => {
  * `fetch` over a rotation, for `SolanaRpc`. The URL it is called with is
  * ignored: each request goes to the rotation's next URL for its method, and
  * one that refuses passes the same request on to the next at once. Anything
- * but a 2xx is a refusal, and so is a 200 whose every call is refused in the
- * words above. When every one refuses, the fallback is asked, if there is
- * one; when that refuses too, the refusal is the answer, so the batching above
+ * but a 2xx is a refusal, and so is a 200 that refuses in the words above.
+ * When every one refuses, the fallback is asked, at its own pace, if there is
+ * one; when that refuses too, the refusal is the answer, so the caller above
  * backs off and asks again as it does for a single endpoint.
  */
 export const rotatingFetch =
@@ -192,6 +212,7 @@ export const rotatingFetch =
       }
     }
     if (r.fallback !== null) {
+      await r.waitFallback();
       try {
         const res = await doFetch(r.fallback, init);
         if (res.ok && !(await refusedInside(res))) return res;

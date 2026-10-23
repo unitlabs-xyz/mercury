@@ -80,3 +80,42 @@ export const rpcLookupTables = (rpc: AccountInfoRpc): LookupTableReader => ({
     return found;
   },
 });
+
+/**
+ * How long a table's addresses are believed. A lookup table only ever grows:
+ * an address once in it keeps its index for the table's life. One kept ten
+ * minutes misses at most what was appended since, and an address it misses is
+ * written out in full instead, which costs bytes, not correctness. Read on
+ * every order, the same few Jupiter tables were one account call each time.
+ */
+const LOOKUP_TTL_MS = 10 * 60_000;
+
+/** `reader`, asking only for tables it has not seen in the last ten minutes, all in one call. */
+export const cachedLookupTables = (
+  reader: LookupTableReader,
+  opts: { readonly ttlMs?: number; readonly now?: () => number } = {},
+): LookupTableReader => {
+  const ttlMs = opts.ttlMs ?? LOOKUP_TTL_MS;
+  const now = opts.now ?? Date.now;
+  const kept = new Map<Address, { readonly at: number; readonly addresses: readonly Address[] }>();
+  return {
+    async read(addresses) {
+      const at = now();
+      const found = new Map<Address, readonly Address[]>();
+      const missing: Address[] = [];
+      for (const a of addresses) {
+        const k = kept.get(a);
+        if (k !== undefined && at - k.at < ttlMs) found.set(a, k.addresses);
+        else missing.push(a);
+      }
+      if (missing.length === 0) return found;
+      // A table the node did not return is not kept, so the next order asks again.
+      for (const [a, table] of await reader.read(missing)) {
+        kept.set(a, { at, addresses: table });
+        found.set(a, table);
+      }
+      if (kept.size > 1_000) for (const [a, k] of kept) if (at - k.at >= ttlMs) kept.delete(a);
+      return found;
+    },
+  };
+};

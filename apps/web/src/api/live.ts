@@ -6,9 +6,13 @@
  * the activity feed had no interval at all — it updated on mount and on an
  * invalidation and otherwise never. Nothing chose that spread; it accumulated.
  *
- * The server was never the slow part. `position-sync` runs every two seconds
- * and `wallet-events` every thirty, so the staleness was entirely in the
- * browser.
+ * Thirty seconds, from ten. Every poll of portfolio and money reads the chain
+ * on the paid RPC, and the account menu in the top bar mounts both on every
+ * page, so an open tab cost about thirteen calls every ten seconds and ran a
+ * plan's month out (23 October 2026). What somebody does here themselves still
+ * shows at once: `settle.ts` refreshes these after every transaction. Thirty
+ * seconds is how late cash sent from outside may show, which is also how often
+ * `wallet-events` looks for it.
  *
  * One number for the interval and the stale window, because a `staleTime` above
  * the interval would serve a cached answer to a page that had just remounted
@@ -26,7 +30,7 @@
  * quota all day on nobody.
  */
 export const LIVE = {
-  staleTime: 10_000,
-  refetchInterval: 10_000,
+  staleTime: 30_000,
+  refetchInterval: 30_000,
   refetchOnWindowFocus: true,
 } as const;

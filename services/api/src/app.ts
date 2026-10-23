@@ -11,7 +11,7 @@ import { decisionToWire } from "./serialize.js";
 import { NO_FEE, quoteFee } from "./relay/quote.js";
 import { tradeCharge, type TradeCharge } from "./relay/fee.js";
 import { buildSponsored } from "./relay/build.js";
-import { rpcLookupTables } from "./relay/lookups.js";
+import { cachedLookupTables, rpcLookupTables } from "./relay/lookups.js";
 import { createSolanaRpc } from "@solana/kit";
 import { USDC_MINT } from "@mercury/chain";
 import { BASKETS } from "./baskets.js";
@@ -125,6 +125,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
   /* One client for the routes that talk to the chain directly. */
   const rpc = createSolanaRpc(read.send.rpcUrl);
+  const lookupTables = cachedLookupTables(rpcLookupTables(rpc));
   /*
    * Above cors(), both of them, so a request CORS turns away is still a
    * request that was counted and traced. A rejected preflight is exactly the
@@ -632,7 +633,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const { wire: built } = await buildSponsored(
       {
         quotes: market().quotes,
-        lookups: rpcLookupTables(rpc),
+        lookups: lookupTables,
         relay,
         blockhash: async () => {
           const { value } = await rpc.getLatestBlockhash().send();

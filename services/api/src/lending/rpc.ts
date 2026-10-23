@@ -43,9 +43,10 @@ const refusedInside = (answer: unknown) => {
  * A transport over a rotation of endpoints (see `rotation` in @mercury/chain),
  * for the background jobs' Kamino reads, resting each per method. One that
  * refuses passes the request on to the next at once: any answer but a 2xx, or
- * a 200 refusing the call in words. When every one refuses, the last refusal
- * is the answer, or a 429 if all are resting, so `withRetry` backs off as it
- * does for one endpoint.
+ * a 200 refusing the call in words. When every one refuses, the fallback is
+ * asked at its own pace; when that refuses too, the last refusal is the
+ * answer, or a 429 if all are resting, so `withRetry` backs off as it does for
+ * one endpoint.
  */
 export const rotatingTransport = (
   r: Rotation,
@@ -76,6 +77,7 @@ export const rotatingTransport = (
       }
     }
     if (fallback !== null) {
+      await r.waitFallback();
       try {
         const answer = await fallback<T>(config);
         if (!refusedInside(answer)) return answer;
