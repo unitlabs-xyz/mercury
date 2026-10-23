@@ -4,7 +4,9 @@ Built from _How Mercury makes money_ (internal deck, 14 October 2026) and checke
 `main` at `fb3fc99`. The deck points to `docs/12-revenue.md` and `docs/13-fees-and-referrals.md`.
 Neither exists on any branch yet, so this list and the deck are the only written version.
 
-Today Mercury earns $0. The only thing a user pays is the network cost, charged at cost.
+**23 October 2026:** Mercury earns a flat 0.5% trading fee and a 0.3% add-cash fee on anything but
+Circle USDC, both since 15 October. Everything unchecked below is still to build. The whole repo's
+open work, this included, is summarised in [TODO.md](../TODO.md).
 
 ---
 
@@ -27,7 +29,12 @@ Today Mercury earns $0. The only thing a user pays is the network cost, charged 
 
 - [ ] Do we have to block restricted countries at sign-in?
 - [ ] Does adding a borrow fee on top of Kamino make us a lender in any launch market?
-- [ ] Can we pay inviters a share of stock-trading fees in our launch markets?
+- [x] ~~Can we pay inviters a share of stock-trading fees in our launch markets?~~ Answered by research
+      on 21 October 2026: not without licences Mercury lacks, and Poland prohibits it outright
+      ([research](research/2026-10-21-referral-fee-sharing.md)). The question for counsel is now the next one
+- [ ] Is a flat, capped, one-off reward per qualified friend allowed in the launch markets, with the
+      friend's 90-day discount? First: does building and routing the swaps, for a fee, make Mercury an
+      order transmitter (question 1 in the research)?
 - [ ] California DFAL, if any US users stay
 
 ---
@@ -56,7 +63,12 @@ relayer.
 - [x] Confirm screen: "Mercury fee (0.5%)" above "Network fee" on web, and on mobile
 - [x] Record Mercury's share on each order (`order.mercury_fee_usd`), apart from the total in `fee_usd`
 - [x] Refuse trades when no relayer is configured (Vercel deployment included)
-- [ ] Sweep the fees from the relayer's hot wallet to a treasury
+- [ ] Move the fees out of the relayer's hot wallet. **Designed 21–22 October 2026, not built:** every
+      trade goes through Mercury's own program, which pays Mercury's fee into a vault; the admin
+      multisig withdraws to a treasury it proposes and the treasury's owner accepts, which can be the
+      payout hot wallet ([ADR 0018](adr/0018-trade-router.md), proposed;
+      [spec](superpowers/specs/2026-10-21-trade-router-design.md);
+      [plan](superpowers/plans/2026-10-21-trade-router.md))
 - [ ] Tier function: 0.5% / 0.35% / 0.25% by trade size, with tests at the $2k and $20k edges
 - [ ] Alert when a fill comes back without a fee
 
@@ -86,9 +98,11 @@ mainnet's old rent rate.
 
 ## 3 · Referral tracking
 
-**Today:** not tracked. Nothing reads `?ref=`. The founding-card links (`/f/:slug`) now 301 to
-`trymercury.xyz` and drop any query string (`services/api/src/app.ts`). The founding 500 are still in
-the `waitlist` table (`position <= 500`).
+**Built in [PR #97](https://github.com/unitlabs-xyz/mercury/pull/97), in review, not merged.** The
+boxes below stay unchecked on `main` until it is. It conflicts with `main` today, and its migration has
+to be renumbered after `0028_earn_consent`. Until it merges, nothing reads `?ref=`, and the
+founding-card links (`/f/:slug`) 301 to `trymercury.xyz` and drop any query string
+(`services/api/src/app.ts`). The founding 500 are still in the `waitlist` table (`position <= 500`).
 
 - [ ] Give every user a referral code and a share link
 - [ ] Read `?ref=` on landing and web, keep it through Privy sign-in, then attach it at first sign-in
@@ -100,13 +114,25 @@ the `waitlist` table (`position <= 500`).
 - [ ] Keep `?ref=` when `/f/:slug` redirects
 - [ ] Invite screen: link, friends invited, friends funded, earned so far
 
-## 4 · Referral payouts (after the trade fee has run a few weeks)
+## 4 · Referral payouts (once counsel approves the flat reward)
 
-- [ ] Accrue 25/30/35% of Mercury's **net** fee (after Jupiter's cut) per friend, for 12 months from sign-up
-- [ ] 7-day hold before a reward counts
-- [ ] Claw back quick round trips (buy then sell within the hold)
-- [ ] Weekly USDC payout job, $1 minimum, with a ledger of what was paid and when
-- [ ] Payout history in the app
+**Changed 21 October 2026.** A share of the friend's fees is the riskiest referral design in nearly
+every target market, because xStocks are securities ([research](research/2026-10-21-referral-fee-sharing.md)).
+No exchange or broker reviewed shares fees on stock or stock-token trades. The fee share is dropped.
+The design now, pending counsel:
+
+- [ ] The friend keeps the 90-day discount from §3
+- [ ] The inviter gets a **flat, one-off reward per qualified friend**, never tied to how much the
+      friend trades: $10 to start, at most 20 friends a year
+- [ ] A friend qualifies under §3's rule ($50 funded and one trade) and keeps the account 30 days
+- [ ] The inviter passes KYC and sanctions checks before any payout
+- [ ] Off in countries where referral incentives are banned or reserved to licensed agents (the
+      research lists them)
+- [ ] Monthly, off-chain: the server publishes the month's total, the admin withdraws it to the
+      treasury (the payout wallet), and a payout job pays each inviter and records a `referral_payout`
+      ledger. See the router spec's "Referral payouts"
+- [ ] Rewrite #97's `docs/superpowers/plans/2026-10-17-referral-rewards.md`, which still assumes the fee share
+- [ ] Later, partners only: a revenue share for vetted, contracted partners where counsel clears it
 
 ## 5 · Glider basket fee (once Glider confirms the payout)
 
@@ -129,7 +155,8 @@ recipient set, no deposit is charged.
 - [x] Ask for the same fee in the browser's preview, from a per-token `appFee` the server sends
 - [x] Show it in `FundWalletSwap.tsx`'s fee breakdown as "Mercury (0.3%)"
 - [x] Record what Relay reported on each deposit (`funding_intent.mercury_fee_usd`)
-- [ ] Pick the EVM wallet that receives the fees (a Safe works) and set `DEPOSIT_FEE_RECIPIENT`
+- [x] Pick the EVM wallet that receives the fees (a Safe works) and set `DEPOSIT_FEE_RECIPIENT`: set on
+      the dev API by 23 October 2026 (`0x458d…2aE5`, from its boot log)
 - [ ] Claim the balance from that wallet at relay.link/claim-app-fees. Not now: decided 15 October 2026
       to leave the fees held at Relay, and build no payout yet
 
@@ -182,3 +209,7 @@ integrator fee. ADR 0008 was superseded on 30 September, and trades now go throu
 Jupiter's `platformFeeBps`, Jupiter may take nothing, and we keep 0.5% rather than 0.4%. Check this with
 Jupiter before building item 1, because it changes the referral maths too (inviters get a share of the
 net fee).
+
+_22 October 2026:_ item 1 shipped this way, and the planned router keeps it: the fee is the router's own
+transfer, so Jupiter still never sees it. The referral maths no longer depends on it, since the fee share
+was dropped (§4).

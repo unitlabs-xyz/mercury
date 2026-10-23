@@ -2,6 +2,9 @@
 
 Where Mercury is heading, what it owns and what it rents along the way, and whether it survives the
 next twelve months. Written 21 October 2026 from three research reports (listed at the end).
+Amended 22 October 2026: the trade router joins Phase 1, referrals become a flat reward, and the
+distributed dollar is set aside. Status of each Phase 1 step as of 23 October 2026 is under
+Phase 1; everything still open, across the repo, is in [TODO.md](../TODO.md).
 [08 Roadmap](08-roadmap.md) is the hackathon plan and stays as written; this one picks up after it.
 
 It assumes what the founders said on 21 October:
@@ -30,17 +33,17 @@ and only rent what should stay rented.**
 
 ### What Mercury owns, by phase
 
-| Layer                  | Today (Oct 2026)                   | Phase 1 (to Apr 2027)                                            | Phase 2 (to Oct 2027)                                                  | Phase 3 (to Oct 2028)                         |
-| ---------------------- | ---------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------- |
-| The account            | Privy wallet                       | Privy wallet, with policy-scoped signing                         | **Mercury Account**, opened when a user borrows or turns on the card   | Mercury Account for everyone                  |
-| Cash                   | USDC                               | USDC, plus a distributed dollar (USDG or OUSD) for float income  | Same                                                                   | Mercury-branded dollar, if float justifies it |
-| Earn                   | Kamino Earn vaults (PR #98)        | One Cash balance lent through a partner (Jupiter Lend or Kamino) | **Mercury earn share token**, allocating to our market and to partners | Same, larger share in our own market          |
-| Borrowing              | Kamino xStocks market              | Kamino                                                           | **Mercury credit market** (SPYx, QQQx first)                           | More collateral; spend against stocks         |
-| Card                   | None                               | Bridge card                                                      | Card buffer inside the Mercury Account                                 | Card credit mode                              |
-| Swaps                  | Jupiter                            | Jupiter RFQ                                                      | Jupiter RFQ                                                            | Jupiter RFQ, plus our own netting             |
-| Baskets                | Glider                             | Glider                                                           | Glider                                                                 | Baskets as sub-accounts                       |
-| Privacy                | None                               | Protected submission                                             | Token configured for privacy at mint                                   | **Private balances and private sends**        |
-| Stocks, oracles, chain | Backed, Chainlink and Pyth, Solana | Same                                                             | Same                                                                   | Same: these stay rented                       |
+| Layer                  | Today (Oct 2026)                   | Phase 1 (to Apr 2027)                                                        | Phase 2 (to Oct 2027)                                                  | Phase 3 (to Oct 2028)                         |
+| ---------------------- | ---------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------- |
+| The account            | Privy wallet                       | Privy wallet, with policy-scoped signing                                     | **Mercury Account**, opened when a user borrows or turns on the card   | Mercury Account for everyone                  |
+| Cash                   | USDC                               | USDC (a distributed dollar was set aside on 21 October; see Phase 1, step 6) | Same                                                                   | Mercury-branded dollar, if float justifies it |
+| Earn                   | Kamino Earn vaults (live 22 Oct)   | One Cash balance lent through a partner (Jupiter Lend or Kamino)             | **Mercury earn share token**, allocating to our market and to partners | Same, larger share in our own market          |
+| Borrowing              | Kamino xStocks market              | Kamino                                                                       | **Mercury credit market** (SPYx, QQQx first)                           | More collateral; spend against stocks         |
+| Card                   | None                               | Bridge card                                                                  | Card buffer inside the Mercury Account                                 | Card credit mode                              |
+| Swaps                  | Jupiter                            | Jupiter pool routes, wrapped by **Mercury's trade router**                   | Same                                                                   | Same, plus our own netting                    |
+| Baskets                | Glider                             | Glider                                                                       | Glider                                                                 | Baskets as sub-accounts                       |
+| Privacy                | None                               | Protected submission                                                         | Token configured for privacy at mint                                   | **Private balances and private sends**        |
+| Stocks, oracles, chain | Backed, Chainlink and Pyth, Solana | Same                                                                         | Same                                                                   | Same: these stay rented                       |
 
 ## Is the direction right?
 
@@ -107,7 +110,7 @@ climb from a private beta, and it is why the plan below spends Phase 1 on distri
 
 | Risk                                 | How it happens                                                                                                                                                                 | Answer                                                                                                              |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| **Runway runs out**                  | Building protocols before the product earns or raises                                                                                                                          | Phase 1 builds no on-chain program of our own                                                                       |
+| **Runway runs out**                  | Building protocols before the product earns or raises                                                                                                                          | Phase 1 builds no on-chain program that holds user money. Its one program, the trade router, moves only fees        |
 | **A security incident**              | Silent signing with no policy ([ADR 0012](adr/0012-silent-signing.md)) once real money arrives. Infini lost $49.5M to admin rights it kept on its contracts                    | Policy-scoped signing ships before the public launch                                                                |
 | **A partner fails or changes terms** | Kamino blocked Jupiter's program (Dec 2025). Card issuer Kulipa shut down (Jul 2026, 120,000 cards stopped). Hyperliquid's USDH was sunset (May 2026)                          | Abstract every partner behind our own interface; prefer pull-at-purchase cards, which left Kulipa users' funds safe |
 | **Regulation**                       | "Global, no focus" means exposure everywhere: EU consumer credit rules from 20 Nov 2026, the EU's ban on obfuscated accounts from 10 Jul 2027, yield rules for branded dollars | Pick one or two launch markets; one legal memo covering earn, the borrow fee and card credit                        |
@@ -118,29 +121,56 @@ climb from a private beta, and it is why the plan below spends Phase 1 on distri
 
 ### Phase 1 · Survive and prove · November 2026 to April 2027
 
-The current team. **No new on-chain programs.** Everything rides on partners.
+The current team. **One small on-chain program, and it holds no user money:** the trade router (step
+4). Everything else rides on partners.
 
 1. **Close the security gap.** Replace silent signing with Privy signing scoped by policy before
    real balances arrive ([ADR 0003](adr/0003-custody.md), [ADR 0012](adr/0012-silent-signing.md)).
 2. **Launch publicly in one or two markets.** A country check at sign-in, the restricted list, and
    a reason shown to blocked users ([revenue TODO](revenue-todo.md)).
 3. **Turn on revenue.** Fee tiers, referrals, the basket fee, and the borrow fee once counsel
-   agrees.
-4. **Earn v1 on partner rails.**
-   - Fix the top problems from the PR #98 review: switching vaults moving more than it says, held
-     vaults vanishing, "earned so far".
+   agrees. Referrals pay a flat, capped reward per qualified friend, not a share of fees: the
+   [referral research](research/2026-10-21-referral-fee-sharing.md) found the fee share is the
+   riskiest design in nearly every target market, because xStocks are securities.
+4. **Route trades through Mercury's router.** One Anchor program wraps each Jupiter swap: it takes
+   the network fee and Mercury's fee, records exactly what moved in a `TradeFilled` event, and pays
+   Mercury's fee into a vault. The admin multisig withdraws to a treasury it proposes and the
+   treasury's owner accepts, which can be the payout hot wallet. Fills no longer depend on the app
+   confirming them, fees leave the relayer's hot wallet, and Mercury's volume shows on chain. It
+   never holds a user's funds, so it is one audit. Designed and planned, not built:
+   [ADR 0018](adr/0018-trade-router.md) (proposed),
+   [spec](superpowers/specs/2026-10-21-trade-router-design.md),
+   [plan](superpowers/plans/2026-10-21-trade-router.md).
+5. **Earn v1 on partner rails.**
+   - ~~Fix the top problems from the PR #98 review: switching vaults moving more than it says, held
+     vaults vanishing, "earned so far".~~ Done, 22 October 2026.
    - Show one Cash balance earning a variable rate, chosen at sign-up and not pre-checked.
    - Put the withdrawal inside the spend's own transaction.
-5. **Distribute a dollar for float income.** Join Paxos's Global Dollar Network (USDG) or Bridge's
-   OUSD program, or negotiate USDC partner terms, while cash stays spendable at par. Then measure
-   idle balances: that one number decides the dollar track.
-6. **Card v1 with Bridge.** Bridge pulls from the user's USDC account at purchase. First confirm
+6. **~~Distribute a dollar for float income.~~ Set aside on 21 October 2026.** The idea was to join
+   Paxos's Global Dollar Network (USDG) or Bridge's OUSD program for a share of reserve income.
+   Mercury's trades, loans and card all run on USDC, so holding USDG as the main balance would mean
+   converting to and from USDC around them: extra handling, for no advantage at Mercury's size. Cash stays USDC. Measuring idle
+   balances is still worth doing: if they grow large, this is the step to reopen.
+7. **Card v1 with Bridge.** Bridge pulls from the user's USDC account at purchase. First confirm
    Bridge's non-US issuing for the chosen markets; it says EU and Asia-Pacific issuing is planned
    for 2026. If coverage is missing, Rain or Reap.
-7. **Raise.** On traction, with this document as the protocol story.
+8. **Raise.** On traction, with this document as the protocol story.
 
 **Gate to Phase 2:** funding secured (a team of six to eight), and measured demand for borrowing and
 for holding balances. The founders should set the exact thresholds.
+
+**Where each step stands, 23 October 2026**
+
+| Step                   | Status                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 · Security gap       | Not started. Signing is still silent ([ADR 0012](adr/0012-silent-signing.md))                                                                                                                                                                                                                                                                                                                        |
+| 2 · Public launch      | Not started. No country check at sign-in                                                                                                                                                                                                                                                                                                                                                             |
+| 3 · Revenue            | Partly live. A flat 0.5% trading fee and a 0.3% add-cash fee on anything but Circle USDC since 15 October. Referral tracking is in review (#97); the rewards plan needs its rewrite to a flat reward. Fee tiers, the basket fee and the borrow fee are not built                                                                                                                                     |
+| 4 · Trade router       | Designed and planned, not built ([ADR 0018](adr/0018-trade-router.md), proposed). Waits for #97 and the go-ahead                                                                                                                                                                                                                                                                                     |
+| 5 · Earn v1            | Live since 22 October (#98), with the review's fixes: a switch moves only what came out, a held vault stays listed, moves are recorded by the server, and the risks are accepted before a first deposit. Open: one Cash balance chosen at sign-up, and the withdrawal inside the spend's own transaction (today a buy points to Earn instead). The risk wording needs counsel before a public launch |
+| 6 · Distributed dollar | Set aside                                                                                                                                                                                                                                                                                                                                                                                            |
+| 7 · Card               | Not started                                                                                                                                                                                                                                                                                                                                                                                          |
+| 8 · Raise              | —                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### Phase 2 · Own the account and the credit · May to October 2027
 
@@ -204,7 +234,7 @@ share of deposits.
 | ------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | Launch markets                              | One or two focused markets, or global                                                | Phase 1, before the public launch                                                     |
 | Card issuer model                           | Bridge's pull at purchase, or a credit issuer (Rain, Reap)                           | Phase 1                                                                               |
-| Dollar partner and exit terms               | USDG, OUSD, USDC terms                                                               | Phase 1                                                                               |
+| Dollar partner and exit terms               | USDG, OUSD, USDC terms                                                               | Set aside on 21 October 2026; reopen if idle balances grow large                      |
 | Account container                           | Mercury-owned per-user account, or a smart wallet with positions held elsewhere      | Start of Phase 2                                                                      |
 | How upgradeable the core stays              | Long timelock, or immutable after a period                                           | Before Phase 2 audits                                                                 |
 | Token configuration of the earn share token | Confidential transfers, auditor key, compliance hook, pause                          | Before it is minted                                                                   |
@@ -230,9 +260,11 @@ share of deposits.
 
 - Which one or two launch markets? "Global, no focus" carries every jurisdiction's rules at once.
 - What are the burn and runway, and when is the raise?
+- Which firm audits the trade router, and when? Being looked into while it is built.
 - Which licence path, given the table above?
-- PR #98: keep its building blocks (the Kamino adapter, deposit records, relayer sponsorship) and
-  drop the vault picker?
+- ~~PR #98: keep its building blocks (the Kamino adapter, deposit records, relayer sponsorship) and
+  drop the vault picker?~~ Shipped whole, picker included, on 22 October 2026. Whether to fold the
+  picker into one Cash balance is step 5's open item.
 
 **For partners**
 
@@ -245,6 +277,11 @@ share of deposits.
   program's instruction?
 
 **For counsel**
+
+- Does building and routing Jupiter swaps for a 0.5% fee make Mercury an order transmitter (RTO in
+  the EU) in each launch market? The referral research puts this question first.
+- A flat, capped, one-off reward per qualified friend, and the friend's 90-day discount: allowed in
+  the launch markets?
 
 - Earn as an opt-in wrapper paying a variable rate: what wording and consent each launch market
   needs.
@@ -260,4 +297,6 @@ share of deposits.
   on an owned dollar, market makers and liquidity, privacy.
 - [Account protocol and privacy](research/2026-10-21-account-protocol-and-privacy.md): one account
   for earn, borrow, spend and card; card settlement; privacy across the account.
+- [Referral fee sharing](research/2026-10-21-referral-fee-sharing.md): why a share of fees to
+  inviters crosses securities rules for xStocks, market by market, and the flat-reward alternative.
 - The researchers' notes, with every source, are in [research/notes](research/notes).

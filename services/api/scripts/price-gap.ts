@@ -15,7 +15,7 @@ import { createRequire } from "node:module";
 import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import satori from "satori";
 
-const API = process.env["MERCURY_API"] ?? "https://mercury-dev.thecircleco.xyz";
+const API = process.env["MERCURY_API"] ?? "https://mercury-dev.unitlabs.xyz";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const ticker = (process.argv[2] ?? "AAPL").toUpperCase();
 const small = Number(process.argv[3] ?? 100);
