@@ -21,6 +21,7 @@ import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
 import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
 import { missedSnapshots } from "./portfolio/snapshot-retry.js";
 import { watchAllLoans } from "./lending/watch-loans.js";
+import { createReferralStore } from "./referrals/store.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
@@ -126,6 +127,13 @@ boot.info(
     ...(relay === undefined ? { collected: false } : { collected: true, collector: relay.signer.address }),
   },
   relay === undefined ? "trading fee set, but no trades without a relayer" : "trading fee collected",
+);
+// Whether invited friends pay less, so a launch market's setting can be read off the log.
+boot.info(
+  { on: config.referralDiscount },
+  config.referralDiscount
+    ? "invited friends get 25% off for 90 days"
+    : "invite links tracked, no friend's discount (REFERRAL_DISCOUNT off)",
 );
 // Which Jupiter tier the rate limits in the logs below belong to.
 boot.info(
@@ -251,6 +259,7 @@ const jobClock = (startAfterMs: number): EveryDeps => ({ startAfterMs });
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                                          |
  * | `snapshot-retry`     | 5m      | `portfolio_snapshot`, for accounts the hour's pass missed, within that hour   |
  * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email                                        |
+ * | `referral-qualify`   | 10m     | `referral.qualified_at`                                                       |
  *
  * `position-sync` reads a wallet every 2s while its owner is using the app,
  * and once a minute otherwise. The jobs that read the chain do it over public
@@ -481,6 +490,17 @@ every(
   // Four minutes: after the first passes of the jobs that read every wallet, not on top of them.
   jobClock(240_000),
 );
+
+/**
+ * Ten minutes, because nobody is watching for the moment a friend starts to
+ * count. It reads money in from the rows `wallet-events` writes and trades
+ * from `order`, so it can only be as current as they are.
+ */
+const referralStore = createReferralStore(auth.db);
+every("referral-qualify", 10 * 60 * 1000, async () => {
+  const n = await referralStore.qualifyPending(new Date());
+  return n === 0 ? null : `${n} invited ${n === 1 ? "friend" : "friends"} now count as funded`;
+});
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {
   boot.info({ port: info.port }, "mercury api listening");

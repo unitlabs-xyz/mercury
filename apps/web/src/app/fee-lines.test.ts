@@ -11,6 +11,18 @@ describe("chargeFromWire", () => {
       mercuryBps: 50,
     });
   });
+
+  it("carries an invited friend's discount through", () => {
+    expect(
+      chargeFromWire({
+        usdc: "1.88",
+        network: "0.01",
+        mercury: "1.87",
+        mercuryBps: 37.5,
+        discount: { pct: 25, until: "2027-01-15T12:00:00.000Z" },
+      }).discount,
+    ).toEqual({ pct: 25, until: "2027-01-15T12:00:00.000Z" });
+  });
 });
 
 /** The rate as a person reads it: no trailing zeros, and no rounding to a rate we did not charge. */
@@ -19,6 +31,11 @@ describe("rateLabel", () => {
     expect(rateLabel(50)).toBe("0.5%");
     expect(rateLabel(35)).toBe("0.35%");
     expect(rateLabel(100)).toBe("1%");
+  });
+
+  it("keeps a discounted rate exact", () => {
+    expect(rateLabel(37.5)).toBe("0.375%");
+    expect(rateLabel(26.25)).toBe("0.2625%");
   });
 });
 
@@ -55,5 +72,18 @@ describe("feeLines", () => {
   it("says a seller's fee comes out of the proceeds", () => {
     const lines = feeLines(both, { selling: true, amount: 500, invested: 0 });
     expect(lines.every((l) => l.tip.includes("proceeds"))).toBe(true);
+  });
+
+  it("says why an invited friend's rate is lower, and until when", () => {
+    const discounted = {
+      total: 1.88,
+      network: 0.01,
+      mercury: 1.87,
+      mercuryBps: 37.5,
+      discount: { pct: 25, until: "2027-01-15T12:00:00.000Z" },
+    };
+    const [mercury] = feeLines(discounted, buy);
+    expect(mercury?.label).toBe("Mercury fee (0.375%)");
+    expect(mercury?.tip).toContain("25% off as an invited friend, until 15 Jan");
   });
 });

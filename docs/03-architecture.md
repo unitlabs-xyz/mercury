@@ -90,17 +90,18 @@ is already long-running and the worker package could not reach the database. The
 `services/api/src/index.ts`'s interval loop, which reschedules after a pass finishes rather than
 on a fixed tick, so a slow pass never has a second one starting behind it.
 
-| Job                  | Cadence                           | Does                                                                                    |
-| -------------------- | --------------------------------- | --------------------------------------------------------------------------------------- |
-| `prices`             | 20s                               | Keeps every listed mint's price warm, and records the minute bars the charts draw       |
-| `price-bar-prune`    | 6h                                | Drops minute bars older than thirty days                                                |
-| `stocks`             | 6h                                | Refreshes the instrument and token universe, and writes a `multiplier_event` per change |
-| `position-sync`      | 10s for an open app, 1m otherwise | Reconciles our view of balances against chain, and recognises dividends                 |
-| `funding-poll`       | 60s                               | Asks Relay about deposits its webhook has not settled                                   |
-| `wallet-events`      | 30s                               | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers  |
-| `portfolio-snapshot` | 1h, two minutes after boot        | Records what every account is worth, which is the only history the chart can draw       |
-| `snapshot-retry`     | 5m, within the hour               | Takes the readings the hour's snapshot missed                                           |
-| `loan-watch`         | 5m                                | Checks every open loan and warns its owner when it crosses a line they must act on      |
+| Job                  | Cadence                           | Does                                                                                                 |
+| -------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `prices`             | 20s                               | Keeps every listed mint's price warm, and records the minute bars the charts draw                    |
+| `price-bar-prune`    | 6h                                | Drops minute bars older than thirty days                                                             |
+| `stocks`             | 6h                                | Refreshes the instrument and token universe, and writes a `multiplier_event` per change              |
+| `position-sync`      | 10s for an open app, 1m otherwise | Reconciles our view of balances against chain, and recognises dividends                              |
+| `funding-poll`       | 60s                               | Asks Relay about deposits its webhook has not settled                                                |
+| `wallet-events`      | 30s                               | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers               |
+| `portfolio-snapshot` | 1h, two minutes after boot        | Records what every account is worth, which is the only history the chart can draw                    |
+| `snapshot-retry`     | 5m, within the hour               | Takes the readings the hour's snapshot missed                                                        |
+| `loan-watch`         | 5m                                | Checks every open loan and warns its owner when it crosses a line they must act on                   |
+| `referral-qualify`   | 10m                               | Marks an invited friend qualified once they have funded $50 and traded once, from the database alone |
 
 `wallet-events` reads transaction history, not balances, and writes to the activity feed only —
 it never touches `lot` or `position`; that stays `position-sync`'s job.

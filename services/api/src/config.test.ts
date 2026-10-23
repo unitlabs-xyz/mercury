@@ -72,6 +72,20 @@ describe("readConfig", () => {
     }
   });
 
+  /* Counsel has not said a friend's discount is allowed where Mercury launches. */
+  it("gives invited friends no discount unless REFERRAL_DISCOUNT is on", () => {
+    expect(readConfig(base).referralDiscount).toBe(false);
+    expect(readConfig({ ...base, REFERRAL_DISCOUNT: "" }).referralDiscount).toBe(false);
+    expect(readConfig({ ...base, REFERRAL_DISCOUNT: "off" }).referralDiscount).toBe(false);
+    expect(readConfig({ ...base, REFERRAL_DISCOUNT: "on" }).referralDiscount).toBe(true);
+  });
+
+  it("refuses a discount switch it cannot read, rather than leave it quietly off", () => {
+    for (const bad of ["true", "ON", "yes", "1"]) {
+      expect(() => readConfig({ ...base, REFERRAL_DISCOUNT: bad })).toThrow("REFERRAL_DISCOUNT");
+    }
+  });
+
   it("charges 30 bps on a swapped deposit when nothing says otherwise", () => {
     expect(readConfig(base).depositFeeBps).toBe(30);
     expect(readConfig({ ...base, DEPOSIT_FEE_BPS: "" }).depositFeeBps).toBe(30);

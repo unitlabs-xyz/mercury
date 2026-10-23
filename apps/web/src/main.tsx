@@ -5,8 +5,12 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { PrivyBoundary } from "./auth/PrivyBoundary";
+import { captureRef } from "./referrals/pending";
 import "./tokens.css";
 import { startValueFlash } from "./ui/valueFlash";
+
+// Before the router can redirect the address away: see referrals/pending.ts.
+captureRef(window.location.search);
 
 // A value that changes on screen dips and comes back, everywhere; see ui/valueFlash.ts.
 startValueFlash();

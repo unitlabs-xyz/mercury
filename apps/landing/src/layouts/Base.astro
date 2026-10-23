@@ -117,6 +117,22 @@ const baseSchema: Record<string, unknown>[] = [
       <slot />
     </main>
     <Footer />
+    {/* An invite link lands here. Every way into the app carries its code on,
+        so the friend is still the friend once they reach sign-in, and so does
+        every link to another page of this site, so switching language or
+        going home does not lose it. Inline and after the markup, like Reveal,
+        so the links exist when it runs. */}
+    <script is:inline define:vars={{ app: site.app }}>
+      (() => {
+        const ref = new URLSearchParams(location.search).get("ref");
+        if (!ref || !/^[A-Za-z0-9_-]{6,16}$/.test(ref)) return;
+        for (const a of document.querySelectorAll(`a[href^="${app}"], a[href^="/"]:not([href^="//"])`)) {
+          const url = new URL(a.href);
+          url.searchParams.set("ref", ref);
+          a.href = url.toString();
+        }
+      })();
+    </script>
     {/* Last in the body: its inline script runs against a parsed DOM without
         waiting on DOMContentLoaded, which deferred modules hold up. */}
     <Reveal />

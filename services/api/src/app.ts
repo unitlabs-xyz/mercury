@@ -10,6 +10,7 @@ import { planFill } from "./orders/fill.js";
 import { decisionToWire } from "./serialize.js";
 import { NO_FEE, quoteFee } from "./relay/quote.js";
 import { tradeCharge, type TradeCharge } from "./relay/fee.js";
+import { isCode, pricingFor, type FeePricing } from "./referrals/rules.js";
 import { buildSponsored } from "./relay/build.js";
 import { cachedLookupTables, rpcLookupTables } from "./relay/lookups.js";
 import { createSolanaRpc } from "@solana/kit";
@@ -20,6 +21,7 @@ import { requestId } from "./telemetry/request-id.js";
 import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
+import { referralRoutes, SITE } from "./routes/referrals.js";
 import { borrowRoutes } from "./routes/borrow.js";
 import { earnRoutes } from "./routes/earn.js";
 import { sendRoutes } from "./routes/send.js";
@@ -78,12 +80,14 @@ const asUsd = (d: ReturnType<typeof D>) => `$${d.toFixed(2)}`;
  * to pay: a ticket already built takes it off the amount, so one that has not
  * learnt the breakdown still shows what actually lands.
  */
-const chargeToWire = (charge: TradeCharge) => ({
+const chargeToWire = (charge: TradeCharge, discount: FeePricing["discount"] = null) => ({
   usdc: charge.usdc.toString(),
   lamports: charge.lamports,
   network: charge.network.toString(),
   mercury: charge.mercury.toString(),
   mercuryBps: charge.mercuryBps,
+  /* Why the rate is below the published one, so the confirm screen can say so. */
+  ...(discount === null ? {} : { discount: { pct: discount.pct, until: discount.until.toISOString() } }),
 });
 
 const NOT_READY = fail(
@@ -125,6 +129,18 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
   /* One client for the routes that talk to the chain directly. */
   const rpc = createSolanaRpc(read.send.rpcUrl);
+  /**
+   * Mercury's rate for this person now: the configured one, or, while the
+   * friend's discount is switched on, a quarter off in an invited friend's
+   * first 90 days. One lookup per request, read by the quote and by execute
+   * alike, so the two cannot disagree about who was invited.
+   */
+  const pricing = async (userId: string): Promise<FeePricing> =>
+    pricingFor(
+      read.tradingFeeBps,
+      read.referrals?.friendDiscount === true ? await read.referrals.store.referredAt(userId) : null,
+      new Date(),
+    );
   const lookupTables = cachedLookupTables(rpcLookupTables(rpc));
   /*
    * Above cors(), both of them, so a request CORS turns away is still a
@@ -161,7 +177,11 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
    * founding cards on X, and those posts still point here: each is sent on to
    * the site rather than to a 404. See docs/archive/waitlist.
    */
-  app.get("/f/:slug", (c) => c.redirect("https://trymercury.xyz", 301));
+  /* The card's slug is its holder's invite code (see referrals/store.ts), so it goes along. */
+  app.get("/f/:slug", (c) => {
+    const slug = c.req.param("slug");
+    return c.redirect(isCode(slug) ? `${SITE}/?ref=${encodeURIComponent(slug)}` : SITE, 301);
+  });
 
   // The in-app feedback button. Public: signing in may be the thing that broke.
   if (read.feedback) app.route("/", feedbackRoutes(read.feedback));
@@ -205,6 +225,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", portfolioRoutes(read.portfolio));
   app.route("/", moneyRoutes(read.money));
   app.route("/", activityRoutes(read.activity));
+  if (read.referrals) app.route("/", referralRoutes(read.referrals));
   app.route("/", borrowRoutes(read.borrow));
   app.route("/", earnRoutes(read.earn));
   app.route("/", sendRoutes(read.send));
@@ -243,6 +264,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.post("/v1/quote", async (c) => {
     const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
+    const rate = await pricing(c.get("identity").userId);
 
     const wallet = c.get("identity").walletAddress;
     const sponsored = read.send.relay !== undefined && wallet !== null;
@@ -277,11 +299,11 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
           ? D(0)
           : D(wire.best.pricePerShare).mul(D(wire.best.filledShares));
       /* On what the shares fetch: the figure the ticket shows as their worth. */
-      const charge = tradeCharge(network, gross, read.tradingFeeBps);
+      const charge = tradeCharge(network, gross, rate.bps);
 
       return c.json({
         decision: wire,
-        fee: chargeToWire(charge),
+        fee: chargeToWire(charge, rate.discount),
         investable: null,
         /* What lands in the wallet, once the network and Mercury have been paid. */
         proceeds: gross.sub(charge.usdc).toString(),
@@ -304,7 +326,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
             { owner: wallet, receivingMint: probe.best.mint },
           );
     /* On what the buyer pays: the amount they typed, before anything comes out of it. */
-    const charge = tradeCharge(network, D(parsed.data.amount), read.tradingFeeBps);
+    const charge = tradeCharge(network, D(parsed.data.amount), rate.bps);
 
     /*
      * The decision shown is the one for the swap that will actually happen.
@@ -324,7 +346,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
 
     return c.json({
       decision: decisionToWire(decision),
-      fee: chargeToWire(charge),
+      fee: chargeToWire(charge, rate.discount),
       /* What the swap is actually for, once the network and Mercury have been paid. */
       investable: D(parsed.data.amount).sub(charge.usdc).toString(),
       proceeds: null,
@@ -377,6 +399,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
    */
   app.post("/v1/orders/:id/execute", async (c) => {
     const identity = c.get("identity");
+    const rate = await pricing(identity.userId);
     const order = await read.orders.byId(identity.userId, c.req.param("id"));
     if (order === null) return c.json(fail("not_found", "Unknown order."), 404);
 
@@ -464,7 +487,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * for the fresh quote below: Mercury's share is of what the shares fetch,
      * and that is the one figure the quote has yet to say.
      */
-    const buying = selling ? null : tradeCharge(network, D(shown.amount), read.tradingFeeBps);
+    const buying = selling ? null : tradeCharge(network, D(shown.amount), rate.bps);
 
     /*
      * Re-priced from the row, not from the decision on it. A stored sell's
@@ -595,7 +618,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       fresh.best.pricePerShare !== null && fresh.best.filledShares !== null
         ? fresh.best.pricePerShare.mul(fresh.best.filledShares)
         : D(0);
-    const charge = buying ?? tradeCharge(network, proceeds, read.tradingFeeBps);
+    const charge = buying ?? tradeCharge(network, proceeds, rate.bps);
 
     /*
      * The one refusal a sell keeps, and it is arithmetic rather than policy.

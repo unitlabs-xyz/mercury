@@ -1,0 +1,54 @@
+import { randomInt } from "node:crypto";
+import { D } from "@mercury/core";
+import { ReferralCode } from "@mercury/types";
+
+/**
+ * Every number in the referral programme, from section 04 of the revenue deck
+ * (14 October 2026). Nothing else in the codebase writes one of these down.
+ */
+export const FRIEND_DISCOUNT = D("0.25");
+export const FRIEND_DISCOUNT_DAYS = 90;
+export const QUALIFYING_FUNDING_USD = D(50);
+/**
+ * Money counts towards funding only once its transaction is this old, by block
+ * time (`occurred_at`), not by when `wallet-events` wrote it. `wallet-events`
+ * writes each wallet separately, every 30 seconds, so an hour is usually long
+ * enough for the inviter's side of a transfer to have been written too. A row
+ * that arrives late, after an outage, can already be this old when it lands,
+ * and gets no hold.
+ */
+export const FUNDING_SETTLE_MINUTES = 60;
+/** A code claimed later than this did not bring the person in. */
+export const CLAIM_WINDOW_DAYS = 7;
+
+const DAY = 86_400_000;
+
+export const isCode = (s: string): boolean => ReferralCode.safeParse(s).success;
+
+/* No i, l, o, 0 or 1: a code read aloud or copied by hand should survive it. */
+const ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+
+export const newCode = (): string =>
+  Array.from({ length: 8 }, () => ALPHABET[randomInt(ALPHABET.length)]).join("");
+
+export const discountEndsAt = (referredAt: Date): Date =>
+  new Date(referredAt.getTime() + FRIEND_DISCOUNT_DAYS * DAY);
+
+export const discountActive = (referredAt: Date, now: Date): boolean =>
+  now.getTime() < discountEndsAt(referredAt).getTime();
+
+export interface FeePricing {
+  /** Mercury's rate for this trade, in basis points. Not always whole: 37.5 is a quarter off 50. */
+  readonly bps: number;
+  /** Present only while an invited friend's discount runs, so the confirm screen can say why. */
+  readonly discount: { readonly pct: number; readonly until: Date } | null;
+}
+
+/** Mercury's rate for one person at one moment. Only Mercury's fee is discounted, never the network's. */
+export const pricingFor = (baseBps: number, referredAt: Date | null, now: Date): FeePricing =>
+  referredAt === null || baseBps === 0 || !discountActive(referredAt, now)
+    ? { bps: baseBps, discount: null }
+    : {
+        bps: D(baseBps).mul(D(1).sub(FRIEND_DISCOUNT)).toNumber(),
+        discount: { pct: FRIEND_DISCOUNT.mul(100).toNumber(), until: discountEndsAt(referredAt) },
+      };

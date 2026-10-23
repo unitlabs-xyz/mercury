@@ -39,6 +39,7 @@ export interface Quote {
     readonly network: string;
     readonly mercury: string;
     readonly mercuryBps: number;
+    readonly discount?: { readonly pct: number; readonly until: string };
   };
   /** What actually reaches the swap, after the charge. Null on a sell. */
   readonly investable: string | null;
