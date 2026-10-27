@@ -204,6 +204,13 @@
       "when": 1792648789388,
       "tag": "0028_earn_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793083368580,
+      "tag": "0029_notifications",
+      "breakpoints": true
     }
   ]
 }
