@@ -15,6 +15,7 @@ import { pollUnsettledDeposits } from "./funding/poll.js";
 import { syncStocks } from "./stocks/sync.js";
 import { warmPrices } from "./prices/warm.js";
 import { RECORD_MAX_AGE_MS, prunePriceBars, recordPriceBars } from "./prices/record.js";
+import { pruneNotifications } from "./notify/inbox-queries.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
@@ -314,6 +315,20 @@ every(
     return dropped === 0 ? null : `${dropped} minute bars past thirty days dropped`;
   },
   jobClock(90_000),
+);
+
+/**
+ * Once a day. A notification is news, and news past ninety days is history,
+ * which Activity already keeps. Quiet when there was nothing to drop.
+ */
+every(
+  "notification-prune",
+  24 * 60 * 60 * 1000,
+  async () => {
+    const dropped = await pruneNotifications(auth.db, new Date());
+    return dropped === 0 ? null : `${dropped} notifications past ninety days dropped`;
+  },
+  jobClock(150_000),
 );
 
 every(
