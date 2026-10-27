@@ -8,6 +8,7 @@ import { capacityInputFor } from "./input.js";
 import type { LendingSource } from "./ports.js";
 import type { ChainReader } from "@mercury/chain";
 import { alertFor, markAfter } from "./watch.js";
+import { notifyFor } from "../notify/inbox.js";
 import type { Health } from "./capacity.js";
 
 const log = logger("loan-watch");
@@ -123,19 +124,28 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
          * written first. It is the copy we control: a provider can be down and
          * an address can be wrong, but somebody who opens the app will see
          * this. The mail is what reaches somebody who does not open the app,
-         * which is the harder and more important half.
+         * which is the harder and more important half. Its notification goes
+         * with it, in the same transaction.
          */
-        await db
-          .insert(activities)
-          .values({
-            userId: row.userId,
-            kind: "loan_alert",
-            occurredAt: now,
-            title: alert.title,
-            subtitle: alert.body,
-            mint: null,
-          })
-          .onConflictDoNothing();
+        await db.transaction(async (tx) => {
+          const written = await tx
+            .insert(activities)
+            .values({
+              userId: row.userId,
+              kind: "loan_alert",
+              occurredAt: now,
+              title: alert.title,
+              subtitle: alert.body,
+              mint: null,
+            })
+            .onConflictDoNothing()
+            .returning({ id: activities.id });
+          await notifyFor(
+            tx,
+            row.userId,
+            written.map((r) => ({ activityId: r.id, kind: "loan_alert" as const })),
+          );
+        });
 
         const sent = row.email === null ? false : await deps.notifier.send({ to: row.email, ...alert });
         if (sent) delivered += 1;

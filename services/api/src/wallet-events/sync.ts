@@ -13,6 +13,7 @@ import { movementsIn, type Movement } from "./movements.js";
 import { walkStream } from "./walk.js";
 import { reconcileBasketExits } from "../baskets/glider/reconcile.js";
 import { reconcileFundingDeposits } from "../funding/enrich.js";
+import { notifyFor } from "../notify/inbox.js";
 import type { ManagedBasketOperation } from "@mercury/types";
 
 const log = logger("wallet-events");
@@ -38,6 +39,8 @@ export interface WalletEventsDeps {
    * walk itself does not have to care. See funding/enrich.ts.
    */
   readonly fundingDeposits?: boolean;
+  /** The clock, for tests. A pass's "now" decides which money is news. */
+  readonly now?: () => Date;
 }
 
 export interface EventsSummary {
@@ -58,6 +61,13 @@ interface Advance {
 
 /** How often a wallet with no USDC account is asked for one anyway. See `syncWallet`. */
 const LOOKUP_EVERY_MS = 10 * 60_000;
+
+/**
+ * How old a movement can be and still be news. A known wallet's new token
+ * stream is backfilled (see `shouldBackfill`), and its history is recorded but
+ * not announced: a deposit from last month is not something that just happened.
+ */
+const NEWS_WITHIN_MS = 24 * 60 * 60_000;
 
 /** When each wallet was last asked for its USDC account, by wallet id. This process only. */
 const lookedUp = new Map<string, number>();
@@ -183,7 +193,7 @@ async function syncWallet(
   );
 
   const moved: Movement[] = [];
-  const now = new Date();
+  const now = deps.now?.() ?? new Date();
   for (const sig of ordered) {
     const tx = await deps.history.transaction(sig.signature);
     // Stopping costs a retry. Skipping would advance a cursor past a movement
@@ -221,8 +231,16 @@ async function syncWallet(
         .onConflictDoNothing({
           target: [activities.userId, activities.txSignature, activities.mint],
         })
-        .returning({ id: activities.id });
+        .returning({ id: activities.id, kind: activities.kind, occurredAt: activities.occurredAt });
       written = inserted.length;
+
+      await notifyFor(
+        tx,
+        userId,
+        inserted
+          .filter((r) => r.kind === "transfer_in" && now.getTime() - r.occurredAt.getTime() < NEWS_WITHIN_MS)
+          .map((r) => ({ activityId: r.id, kind: "money_in" as const })),
+      );
     }
 
     // Only now. A cursor that moved before its rows were committed would step

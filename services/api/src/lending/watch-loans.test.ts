@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { testDb } from "../db/testing.js";
-import { activities, loanAlerts, users, wallets } from "../db/schema.js";
+import { activities, loanAlerts, notifications, users, wallets } from "../db/schema.js";
 import type { Notice, Notifier } from "../notify/ports.js";
 import type { LendingPosition, LendingSource, LendingTerms } from "./ports.js";
 import { watchAllLoans, type WatchDeps } from "./watch-loans.js";
@@ -94,6 +94,24 @@ const seed = async (email: string | null = "holder@example.com") => {
  * is the one not watching the page.
  */
 describe("watchAllLoans", () => {
+  it("puts the warning in the inbox too, once", async () => {
+    const { db, userId } = await seed();
+    for (let i = 0; i < 3; i++) await watchAllLoans(db, deps("60", collect().notifier), NOW);
+
+    const [row] = await db.select().from(activities).where(eq(activities.userId, userId));
+    const told = await db.select().from(notifications).where(eq(notifications.userId, userId));
+    expect(told).toHaveLength(1);
+    expect(told[0]!.kind).toBe("loan_alert");
+    expect(told[0]!.activityId).toBe(row!.id);
+  });
+
+  /* The in-app copy is the one we control: it is there even when the mail is not. */
+  it("puts it in the inbox when the mail did not get through", async () => {
+    const { db } = await seed();
+    await watchAllLoans(db, deps("60", collect(false).notifier), NOW);
+    expect(await db.select().from(notifications)).toHaveLength(1);
+  });
+
   it("warns the owner of a loan that has gone past its limit", async () => {
     const { db } = await seed();
     const { sent, notifier } = collect();

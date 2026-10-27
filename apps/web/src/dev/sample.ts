@@ -1233,8 +1233,72 @@ const sampleTokens = (path: string) => {
   return { tokens };
 };
 
+/**
+ * The inbox, kept in memory so the bell can be tried: reading an item or
+ * marking all of them changes what the next request answers. A reload starts
+ * it over. The first two point at sample receipts so a click opens one.
+ */
+const sampleInbox = (() => {
+  const item = (id: string) => SAMPLE_RECEIPTS.find((r) => r.item.id === id)!.item;
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  return [
+    {
+      id: "n-deposit",
+      kind: "money_in",
+      createdAt: ago(4),
+      readAt: null as string | null,
+      activity: item("s-deposit"),
+    },
+    {
+      id: "n-dividend",
+      kind: "dividend",
+      createdAt: ago(180),
+      readAt: null as string | null,
+      activity: item("s-dividend"),
+    },
+    {
+      id: "n-loan",
+      kind: "loan_alert",
+      createdAt: ago(60 * 26),
+      readAt: null as string | null,
+      activity: {
+        id: "s-loan-alert",
+        kind: "loan_alert",
+        occurredAt: ago(60 * 26),
+        title: "Your loan is past its safe limit",
+        subtitle: "Repay some or add collateral to stay clear of liquidation.",
+        amountUsd: null,
+        txSignature: null,
+        mint: null,
+        logoUrl: null,
+      },
+    },
+  ];
+})();
+
+const inboxResponse = (route: string, body?: string): unknown | undefined => {
+  const unread = () => sampleInbox.filter((n) => n.readAt === null).length;
+  if (route === "/v1/notifications") return { items: sampleInbox, unread: unread() };
+  if (route === "/v1/notifications/unread") return { unread: unread() };
+  const now = new Date().toISOString();
+  if (route === "/v1/notifications/read-all") {
+    const upTo = (JSON.parse(body ?? "{}") as { upTo?: string }).upTo ?? now;
+    for (const n of sampleInbox) if (n.readAt === null && n.createdAt <= upTo) n.readAt = now;
+    return null;
+  }
+  const read = /^\/v1\/notifications\/([^/]+)\/read$/.exec(route);
+  if (read) {
+    const n = sampleInbox.find((x) => x.id === decodeURIComponent(read[1]!));
+    if (n && n.readAt === null) n.readAt = now;
+    return null;
+  }
+  return undefined;
+};
+
 export const sampleResponse = (path: string, body?: string): unknown | undefined => {
   const route = path.split("?")[0] ?? path;
+  const inbox = inboxResponse(route, body);
+  if (inbox !== undefined) return inbox;
   if (route === "/v1/portfolio") return portfolio;
   if (route === "/v1/money") return money;
   if (route === "/v1/borrow") return borrow;

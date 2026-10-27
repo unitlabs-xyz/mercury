@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * The read model, per docs/05. Two rules hold throughout and have no exceptions:
@@ -738,6 +739,44 @@ export const loanAlerts = pgTable("loan_alert", {
   notifiedAt: timestamp("notified_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type LoanAlert = typeof loanAlerts.$inferSelect;
+
+/**
+ * Something worth telling, and whether it has been read.
+ *
+ * Every notification points at an `activity` row and carries none of its
+ * words: the title and subtitle are read from the row when the inbox is read,
+ * so a deposit `funding/enrich.ts` names a pass later ("From Tron · USDT")
+ * shows the better wording without anything being copied twice.
+ *
+ * The unique index on `activity_id` is the idempotency guarantee, the same job
+ * `activity_signature_mint_idx` does for `activity`: a pass that runs twice
+ * writes one notification.
+ */
+export const notifications = pgTable(
+  "notification",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["money_in", "dividend", "loan_alert"] }).notNull(),
+    activityId: uuid("activity_id")
+      .notNull()
+      .references(() => activities.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Null while unread. Set once: reading it again keeps the first time. */
+    readAt: timestamp("read_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("notification_user_created_idx").on(t.userId, t.createdAt, t.id),
+    /* The badge. Partial, so it stays as small as the unread set. */
+    index("notification_unread_idx")
+      .on(t.userId)
+      .where(sql`${t.readAt} is null`),
+    uniqueIndex("notification_activity_idx").on(t.activityId),
+  ],
+);
+export type Notification = typeof notifications.$inferSelect;
 
 /**
  * A deposit we quoted, from the moment we quoted it.

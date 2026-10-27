@@ -19,6 +19,7 @@ const base = {
   portfolio: {},
   money: {},
   activity: {},
+  notifications: {},
   fills: {},
   borrow: {},
   basketTemplates: {},

@@ -4,6 +4,7 @@ import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
 import { activities, disposals, instruments, lots, orders, positions, tokens } from "../db/schema.js";
+import { notifyFor } from "../notify/inbox.js";
 import { movementsByToken } from "./open.js";
 import type { HeldToken, Reconciliation } from "./reconcile.js";
 
@@ -223,17 +224,26 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
     }
 
     if (plan.activity.length > 0) {
-      await tx.insert(activities).values(
-        plan.activity.map((a) => ({
-          userId,
-          kind: a.kind,
-          occurredAt: a.occurredAt,
-          title: a.title,
-          subtitle: a.subtitle,
-          amountUsd: a.amountUsd === null ? null : fixed(a.amountUsd),
-          refTable: a.refTable,
-          refId: a.refId,
-        })),
+      const written = await tx
+        .insert(activities)
+        .values(
+          plan.activity.map((a) => ({
+            userId,
+            kind: a.kind,
+            occurredAt: a.occurredAt,
+            title: a.title,
+            subtitle: a.subtitle,
+            amountUsd: a.amountUsd === null ? null : fixed(a.amountUsd),
+            refTable: a.refTable,
+            refId: a.refId,
+          })),
+        )
+        .returning({ id: activities.id });
+      // Every row a pass writes here is a dividend (`ActivityWrite.kind`), and a dividend is news.
+      await notifyFor(
+        tx,
+        userId,
+        written.map((r) => ({ activityId: r.id, kind: "dividend" as const })),
       );
     }
 
