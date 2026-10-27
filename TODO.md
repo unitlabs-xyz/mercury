@@ -51,6 +51,13 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 ## Product
 
+**Notifications**
+
+- [x] Inbox on web: money in, dividends and loan warnings, read or unread, behind the bell
+      ([spec](docs/superpowers/specs/2026-10-27-notifications-inbox-design.md))
+- [ ] Queued orders filled or refused at the open, once the trigger-order poller exists
+- [ ] The inbox on mobile
+
 **Earn**
 
 - [ ] One Cash balance earning a variable rate, chosen at sign-up and not pre-checked
