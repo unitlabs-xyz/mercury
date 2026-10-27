@@ -39,6 +39,7 @@ import { createPrivyDirectory } from "./auth/identity.js";
 import { createPrivyVerifier } from "./auth/verifier.js";
 import { createDb, type Db } from "./db/client.js";
 import type { ActivityDeps } from "./routes/activity.js";
+import type { NotificationDeps } from "./routes/notifications.js";
 import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
@@ -74,6 +75,7 @@ import {
 } from "./portfolio/queries.js";
 import { basketReturnsReader, basketValueReader } from "./portfolio/baskets.js";
 import { readActivity } from "./portfolio/activity-queries.js";
+import { countUnread, markAllRead, markRead, readInbox } from "./notify/inbox-queries.js";
 import { readReceipt } from "./portfolio/receipt-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 import { BasketService } from "./baskets/core/service.js";
@@ -564,6 +566,7 @@ export interface ReadDeps {
   readonly portfolio: PortfolioDeps;
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
+  readonly notifications: NotificationDeps;
   readonly orders: OrderStore;
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
@@ -689,6 +692,12 @@ export function buildReadDeps(
           history: deps.history,
           ...(relay === undefined ? {} : { relayer: relay.signer.address }),
         }),
+    },
+    notifications: {
+      list: (userId) => readInbox(db, userId, new Date()),
+      unread: (userId) => countUnread(db, userId, new Date()),
+      read: (userId, id) => markRead(db, userId, id, new Date()),
+      readAll: (userId, upTo) => markAllRead(db, userId, upTo, new Date()),
     },
     orders: pgOrderStore(db),
     tradingFeeBps: config.tradingFeeBps,

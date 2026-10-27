@@ -170,6 +170,7 @@ const harness = async (
     portfolio: {},
     money: {},
     activity: {},
+    notifications: {},
     fills: {},
     borrow: {},
   } as unknown as ReadDeps;

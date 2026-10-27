@@ -59,7 +59,7 @@ export const decodeCursor = (raw: string): Cursor | null => {
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
-const wire = (i: ActivityRow) => ({
+export const activityWire = (i: ActivityRow) => ({
   id: i.id,
   kind: i.kind,
   occurredAt: i.occurredAt.toISOString(),
@@ -91,7 +91,7 @@ export function activityRoutes(deps: ActivityDeps): Hono {
     const last = items[items.length - 1];
 
     return c.json({
-      items: items.map(wire),
+      items: items.map(activityWire),
       // A full page means there is probably another. An empty one never has.
       nextCursor:
         items.length === limit && last !== undefined
@@ -109,7 +109,7 @@ export function activityRoutes(deps: ActivityDeps): Hono {
     const identity = c.get("identity");
     const found = await deps.receipt(identity.userId, identity.walletAddress, c.req.param("id"));
     if (found === null) return c.json(fail("not_found", "There is no such event on this account."), 404);
-    return c.json({ item: wire(found.row), detail: found.detail });
+    return c.json({ item: activityWire(found.row), detail: found.detail });
   });
 
   return app;
