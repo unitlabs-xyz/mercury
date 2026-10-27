@@ -12,11 +12,11 @@ what this builds.
 
 Three kinds, all of which already write a row to `activity` today:
 
-| Kind         | Written by                                                     | Activity `kind` | Example                                      |
-| ------------ | -------------------------------------------------------------- | --------------- | -------------------------------------------- |
+| Kind         | Written by                                                              | Activity `kind` | Example                                      |
+| ------------ | ----------------------------------------------------------------------- | --------------- | -------------------------------------------- |
 | `money_in`   | `wallet-events` (`wallet-events/sync.ts`), named by `funding/enrich.ts` | `transfer_in`   | "Added cash · From Tron · USDT · $250.00"    |
-| `dividend`   | `position-sync` (`portfolio/reconcile.ts`)                     | `dividend`      | "NVDA dividend · Paid as 0.004 shares"       |
-| `loan_alert` | The loan watcher (`lending/watch-loans.ts`)                    | `loan_alert`    | The same title and body as the warning email |
+| `dividend`   | `position-sync` (`portfolio/reconcile.ts`)                              | `dividend`      | "NVDA dividend · Paid as 0.004 shares"       |
+| `loan_alert` | The loan watcher (`lending/watch-loans.ts`)                             | `loan_alert`    | The same title and body as the warning email |
 
 Queued orders filled or refused at the open join once the trigger-order poller exists. Until then
 an order that would queue is refused at once, so there is nothing to tell.
@@ -70,7 +70,9 @@ export const notifications = pgTable(
     /** The list, newest first. */
     index("notification_user_created_idx").on(t.userId, t.createdAt, t.id),
     /** The badge. Partial, so it stays as small as the unread set. */
-    index("notification_unread_idx").on(t.userId).where(sql`${t.readAt} is null`),
+    index("notification_unread_idx")
+      .on(t.userId)
+      .where(sql`${t.readAt} is null`),
     /** One notification per activity row, however many times the writer runs. */
     uniqueIndex("notification_activity_idx").on(t.activityId),
   ],
@@ -110,12 +112,12 @@ arrived", so both are told.
 All behind `requireAuth`, scoped to the signed-in user, in `routes/notifications.ts`. None of them
 read the chain, so none of them cost RPC.
 
-| Route                                   | Returns                                                                                                                                          |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /v1/notifications`                 | `{ items, unread }`. The newest 50 from the last 90 days. Each item is `{ id, kind, createdAt, readAt, activity }`, with `activity` serialized as `/v1/activity` serializes it |
-| `GET /v1/notifications/unread`          | `{ unread }`. The badge's poll                                                                                                                   |
-| `POST /v1/notifications/:id/read`       | `204`. Idempotent: reading a read item changes nothing, and its first `readAt` stands. `404` if it isn't the caller's                            |
-| `POST /v1/notifications/read-all`       | `204`. Body `{ upTo }`, the `createdAt` of the newest item the panel showed. Marks only items at or before it                                    |
+| Route                             | Returns                                                                                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /v1/notifications`           | `{ items, unread }`. The newest 50 from the last 90 days. Each item is `{ id, kind, createdAt, readAt, activity }`, with `activity` serialized as `/v1/activity` serializes it |
+| `GET /v1/notifications/unread`    | `{ unread }`. The badge's poll                                                                                                                                                 |
+| `POST /v1/notifications/:id/read` | `204`. Idempotent: reading a read item changes nothing, and its first `readAt` stands. `404` if it isn't the caller's                                                          |
+| `POST /v1/notifications/read-all` | `204`. Body `{ upTo }`, the `createdAt` of the newest item the panel showed. Marks only items at or before it                                                                  |
 
 `upTo` exists so that "Mark all as read" can't mark something that arrived after the panel was
 drawn. The person never saw that item; it stays unread.

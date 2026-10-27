@@ -29,24 +29,24 @@
 
 ## File map
 
-| File | Responsibility |
-| --- | --- |
-| `services/api/src/db/schema.ts` | Add the `notifications` table |
-| `services/api/drizzle/0029_notifications.sql` (+ `meta/`) | Generated migration |
-| `services/api/src/notify/inbox.ts` | The write side: `notifyFor`, the one helper every writer calls |
-| `services/api/src/notify/inbox.test.ts` | Its tests |
-| `services/api/src/wallet-events/sync.ts` | Notify fresh `transfer_in` rows |
-| `services/api/src/portfolio/apply.ts` | Notify dividend rows |
-| `services/api/src/lending/watch-loans.ts` | Notify `loan_alert` rows |
-| `services/api/src/notify/inbox-queries.ts` | The read side: list, count, mark, prune |
-| `services/api/src/notify/inbox-queries.test.ts` | Its tests |
-| `services/api/src/routes/notifications.ts` | The four routes |
-| `services/api/src/routes/notifications.test.ts` | Their tests |
-| `services/api/src/routes/activity.ts` | Export `activityWire` so both routes serialize a row the same way |
-| `services/api/src/deps.ts`, `src/app.ts`, `src/index.ts` | Wiring, and the daily prune job |
-| `apps/web/src/api/notifications.ts` | Queries, mutations, and the pure helpers `badgeText` and `destinationOf` |
-| `apps/web/src/api/notifications.test.ts` | Tests for the pure helpers |
-| `apps/web/src/app/HeaderChrome.tsx` | The bell's badge and the panel |
+| File                                                      | Responsibility                                                           |
+| --------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `services/api/src/db/schema.ts`                           | Add the `notifications` table                                            |
+| `services/api/drizzle/0029_notifications.sql` (+ `meta/`) | Generated migration                                                      |
+| `services/api/src/notify/inbox.ts`                        | The write side: `notifyFor`, the one helper every writer calls           |
+| `services/api/src/notify/inbox.test.ts`                   | Its tests                                                                |
+| `services/api/src/wallet-events/sync.ts`                  | Notify fresh `transfer_in` rows                                          |
+| `services/api/src/portfolio/apply.ts`                     | Notify dividend rows                                                     |
+| `services/api/src/lending/watch-loans.ts`                 | Notify `loan_alert` rows                                                 |
+| `services/api/src/notify/inbox-queries.ts`                | The read side: list, count, mark, prune                                  |
+| `services/api/src/notify/inbox-queries.test.ts`           | Its tests                                                                |
+| `services/api/src/routes/notifications.ts`                | The four routes                                                          |
+| `services/api/src/routes/notifications.test.ts`           | Their tests                                                              |
+| `services/api/src/routes/activity.ts`                     | Export `activityWire` so both routes serialize a row the same way        |
+| `services/api/src/deps.ts`, `src/app.ts`, `src/index.ts`  | Wiring, and the daily prune job                                          |
+| `apps/web/src/api/notifications.ts`                       | Queries, mutations, and the pure helpers `badgeText` and `destinationOf` |
+| `apps/web/src/api/notifications.test.ts`                  | Tests for the pure helpers                                               |
+| `apps/web/src/app/HeaderChrome.tsx`                       | The bell's badge and the panel                                           |
 
 Run API tests from `services/api` with `pnpm vitest run <path>`; web tests from `apps/web` the same way.
 
@@ -55,12 +55,14 @@ Run API tests from `services/api` with `pnpm vitest run <path>`; web tests from 
 ### Task 1: The table and the write helper
 
 **Files:**
+
 - Modify: `services/api/src/db/schema.ts` (after `loanAlerts`, around line 744)
 - Create: `services/api/drizzle/0029_notifications.sql` (generated)
 - Create: `services/api/src/notify/inbox.ts`
 - Test: `services/api/src/notify/inbox.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `notifications` table export and `type Notification` from `db/schema.ts`
   - `type NoticeKind = "money_in" | "dividend" | "loan_alert"`
@@ -103,7 +105,9 @@ export const notifications = pgTable(
   (t) => [
     index("notification_user_created_idx").on(t.userId, t.createdAt, t.id),
     /* The badge. Partial, so it stays as small as the unread set. */
-    index("notification_unread_idx").on(t.userId).where(sql`${t.readAt} is null`),
+    index("notification_unread_idx")
+      .on(t.userId)
+      .where(sql`${t.readAt} is null`),
     uniqueIndex("notification_activity_idx").on(t.activityId),
   ],
 );
@@ -242,10 +246,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 2: Money in, from `wallet-events`
 
 **Files:**
+
 - Modify: `services/api/src/wallet-events/sync.ts` (`WalletEventsDeps` around line 20; `syncWallet` around lines 186 and 205-220)
 - Test: `services/api/src/wallet-events/sync.test.ts`
 
 **Interfaces:**
+
 - Consumes: `notifyFor`, `Noticed` from `../notify/inbox.js` (Task 1)
 - Produces: `WalletEventsDeps.now?: () => Date`, used only by tests
 
@@ -260,49 +266,49 @@ import { activities, notifications, users, walletStreams, wallets } from "../db/
 Then add inside `describe("syncAllWalletEvents", ...)`:
 
 ```ts
-  describe("the inbox", () => {
-    /** Both streams behind the deposit, as in "writes a deposit once". */
-    const behind = async () => {
-      const { db, userId } = await seed();
-      const [wallet] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
-      await db.insert(walletStreams).values([
-        { walletId: wallet!.id, address: WALLET, cursor: "older" },
-        { walletId: wallet!.id, address: USDC_ACCOUNT, cursor: "older" },
-      ]);
-      const history: ChainHistory = {
-        tokenAccountsFor: () => Promise.resolve([USDC_ACCOUNT]),
-        signatures: (address) => Promise.resolve(address === USDC_ACCOUNT ? [ref] : []),
-        transaction: () => Promise.resolve(deposit),
-      };
-      return { db, userId, history };
+describe("the inbox", () => {
+  /** Both streams behind the deposit, as in "writes a deposit once". */
+  const behind = async () => {
+    const { db, userId } = await seed();
+    const [wallet] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
+    await db.insert(walletStreams).values([
+      { walletId: wallet!.id, address: WALLET, cursor: "older" },
+      { walletId: wallet!.id, address: USDC_ACCOUNT, cursor: "older" },
+    ]);
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve([USDC_ACCOUNT]),
+      signatures: (address) => Promise.resolve(address === USDC_ACCOUNT ? [ref] : []),
+      transaction: () => Promise.resolve(deposit),
     };
-    const landed = new Date(1_790_573_221 * 1000);
-    const after = (ms: number) => () => new Date(landed.getTime() + ms);
+    return { db, userId, history };
+  };
+  const landed = new Date(1_790_573_221 * 1000);
+  const after = (ms: number) => () => new Date(landed.getTime() + ms);
 
-    it("tells the owner about money that just arrived, once", async () => {
-      const { db, userId, history } = await behind();
-      await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(60_000) });
+  it("tells the owner about money that just arrived, once", async () => {
+    const { db, userId, history } = await behind();
+    await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(60_000) });
 
-      const told = await db.select().from(notifications).where(eq(notifications.userId, userId));
-      const [row] = await db.select().from(activities).where(eq(activities.userId, userId));
-      expect(told).toHaveLength(1);
-      expect(told[0]!.kind).toBe("money_in");
-      expect(told[0]!.activityId).toBe(row!.id);
+    const told = await db.select().from(notifications).where(eq(notifications.userId, userId));
+    const [row] = await db.select().from(activities).where(eq(activities.userId, userId));
+    expect(told).toHaveLength(1);
+    expect(told[0]!.kind).toBe("money_in");
+    expect(told[0]!.activityId).toBe(row!.id);
 
-      await db.update(walletStreams).set({ cursor: "older" });
-      await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(90_000) });
-      expect(await db.select().from(notifications)).toHaveLength(1);
-    });
-
-    /* A backfilled stream brings old history, and old history is not news. */
-    it("records but does not tell about money that arrived more than a day ago", async () => {
-      const { db, history } = await behind();
-      await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(25 * 60 * 60_000) });
-
-      expect(await db.select().from(activities)).toHaveLength(1);
-      expect(await db.select().from(notifications)).toHaveLength(0);
-    });
+    await db.update(walletStreams).set({ cursor: "older" });
+    await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(90_000) });
+    expect(await db.select().from(notifications)).toHaveLength(1);
   });
+
+  /* A backfilled stream brings old history, and old history is not news. */
+  it("records but does not tell about money that arrived more than a day ago", async () => {
+    const { db, history } = await behind();
+    await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(25 * 60 * 60_000) });
+
+    expect(await db.select().from(activities)).toHaveLength(1);
+    expect(await db.select().from(notifications)).toHaveLength(0);
+  });
+});
 ```
 
 - [ ] **Step 2: Run them to see them fail**
@@ -341,7 +347,7 @@ const NEWS_WITHIN_MS = 24 * 60 * 60_000;
 4. In `syncWallet`, change `const now = new Date();` to:
 
 ```ts
-  const now = deps.now?.() ?? new Date();
+const now = deps.now?.() ?? new Date();
 ```
 
 5. In the transaction, replace the activity insert's `.returning({ id: activities.id });` and the `written = inserted.length;` line after it with:
@@ -378,10 +384,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 3: Dividends, from `position-sync`
 
 **Files:**
+
 - Modify: `services/api/src/portfolio/apply.ts` (the `plan.activity` insert, around line 226)
 - Test: `services/api/src/portfolio/apply-notify.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `notifyFor` from `../notify/inbox.js` (Task 1); `applyReconciliation(db, userId, plan: Reconciliation)` from `./apply.js`; `Reconciliation` from `./reconcile.js`
 
 - [ ] **Step 1: Write the failing test**
@@ -476,29 +484,29 @@ import { notifyFor } from "../notify/inbox.js";
 Replace the `plan.activity` block:
 
 ```ts
-    if (plan.activity.length > 0) {
-      const written = await tx
-        .insert(activities)
-        .values(
-          plan.activity.map((a) => ({
-            userId,
-            kind: a.kind,
-            occurredAt: a.occurredAt,
-            title: a.title,
-            subtitle: a.subtitle,
-            amountUsd: a.amountUsd === null ? null : fixed(a.amountUsd),
-            refTable: a.refTable,
-            refId: a.refId,
-          })),
-        )
-        .returning({ id: activities.id });
-      // Every row a pass writes here is a dividend (`ActivityWrite.kind`), and a dividend is news.
-      await notifyFor(
-        tx,
+if (plan.activity.length > 0) {
+  const written = await tx
+    .insert(activities)
+    .values(
+      plan.activity.map((a) => ({
         userId,
-        written.map((r) => ({ activityId: r.id, kind: "dividend" as const })),
-      );
-    }
+        kind: a.kind,
+        occurredAt: a.occurredAt,
+        title: a.title,
+        subtitle: a.subtitle,
+        amountUsd: a.amountUsd === null ? null : fixed(a.amountUsd),
+        refTable: a.refTable,
+        refId: a.refId,
+      })),
+    )
+    .returning({ id: activities.id });
+  // Every row a pass writes here is a dividend (`ActivityWrite.kind`), and a dividend is news.
+  await notifyFor(
+    tx,
+    userId,
+    written.map((r) => ({ activityId: r.id, kind: "dividend" as const })),
+  );
+}
 ```
 
 - [ ] **Step 4: Run the tests**
@@ -520,10 +528,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 4: Loan warnings, from the loan watcher
 
 **Files:**
+
 - Modify: `services/api/src/lending/watch-loans.ts` (the `loan_alert` insert, around lines 127-138)
 - Test: `services/api/src/lending/watch-loans.test.ts`
 
 **Interfaces:**
+
 - Consumes: `notifyFor` from `../notify/inbox.js` (Task 1)
 
 - [ ] **Step 1: Write the failing test**
@@ -537,23 +547,23 @@ import { activities, loanAlerts, notifications, users, wallets } from "../db/sch
 Add inside `describe("watchAllLoans", ...)`:
 
 ```ts
-  it("puts the warning in the inbox too, once", async () => {
-    const { db, userId } = await seed();
-    for (let i = 0; i < 3; i++) await watchAllLoans(db, deps("60", collect().notifier), NOW);
+it("puts the warning in the inbox too, once", async () => {
+  const { db, userId } = await seed();
+  for (let i = 0; i < 3; i++) await watchAllLoans(db, deps("60", collect().notifier), NOW);
 
-    const [row] = await db.select().from(activities).where(eq(activities.userId, userId));
-    const told = await db.select().from(notifications).where(eq(notifications.userId, userId));
-    expect(told).toHaveLength(1);
-    expect(told[0]!.kind).toBe("loan_alert");
-    expect(told[0]!.activityId).toBe(row!.id);
-  });
+  const [row] = await db.select().from(activities).where(eq(activities.userId, userId));
+  const told = await db.select().from(notifications).where(eq(notifications.userId, userId));
+  expect(told).toHaveLength(1);
+  expect(told[0]!.kind).toBe("loan_alert");
+  expect(told[0]!.activityId).toBe(row!.id);
+});
 
-  /* The in-app copy is the one we control: it is there even when the mail is not. */
-  it("puts it in the inbox when the mail did not get through", async () => {
-    const { db } = await seed();
-    await watchAllLoans(db, deps("60", collect(false).notifier), NOW);
-    expect(await db.select().from(notifications)).toHaveLength(1);
-  });
+/* The in-app copy is the one we control: it is there even when the mail is not. */
+it("puts it in the inbox when the mail did not get through", async () => {
+  const { db } = await seed();
+  await watchAllLoans(db, deps("60", collect(false).notifier), NOW);
+  expect(await db.select().from(notifications)).toHaveLength(1);
+});
 ```
 
 - [ ] **Step 2: Run them to see them fail**
@@ -572,25 +582,25 @@ import { notifyFor } from "../notify/inbox.js";
 Replace the activity insert (the `await db.insert(activities).values({ ... kind: "loan_alert" ... }).onConflictDoNothing();` statement) with:
 
 ```ts
-        await db.transaction(async (tx) => {
-          const written = await tx
-            .insert(activities)
-            .values({
-              userId: row.userId,
-              kind: "loan_alert",
-              occurredAt: now,
-              title: alert.title,
-              subtitle: alert.body,
-              mint: null,
-            })
-            .onConflictDoNothing()
-            .returning({ id: activities.id });
-          await notifyFor(
-            tx,
-            row.userId,
-            written.map((r) => ({ activityId: r.id, kind: "loan_alert" as const })),
-          );
-        });
+await db.transaction(async (tx) => {
+  const written = await tx
+    .insert(activities)
+    .values({
+      userId: row.userId,
+      kind: "loan_alert",
+      occurredAt: now,
+      title: alert.title,
+      subtitle: alert.body,
+      mint: null,
+    })
+    .onConflictDoNothing()
+    .returning({ id: activities.id });
+  await notifyFor(
+    tx,
+    row.userId,
+    written.map((r) => ({ activityId: r.id, kind: "loan_alert" as const })),
+  );
+});
 ```
 
 Keep the comment above it ("The feed row is written whether or not the mail lands...") and add one line to it: "Its notification goes with it, in the same transaction."
@@ -614,11 +624,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 5: The read side, and the daily prune
 
 **Files:**
+
 - Create: `services/api/src/notify/inbox-queries.ts`
 - Test: `services/api/src/notify/inbox-queries.test.ts`
 - Modify: `services/api/src/index.ts` (add a job after `price-bar-prune`, around line 317)
 
 **Interfaces:**
+
 - Consumes: `notifications`, `activities`, `tokens`, `instruments` from `../db/schema.js`; `NoticeKind` from `./inbox.js`; `ActivityRow` from `../routes/activity.js`
 - Produces:
   - `KEPT_MS = 90 * 24 * 60 * 60_000`, `LIST_LIMIT = 50`
@@ -652,7 +664,14 @@ const seed = async () => {
   const tell = async (userId: string, title: string, age: number) => {
     const [a] = await db
       .insert(activities)
-      .values({ userId, kind: "transfer_in", title, subtitle: "From Tron · USDT", amountUsd: "250", mint: null })
+      .values({
+        userId,
+        kind: "transfer_in",
+        title,
+        subtitle: "From Tron · USDT",
+        amountUsd: "250",
+        mint: null,
+      })
       .returning();
     const [n] = await db
       .insert(notifications)
@@ -908,6 +927,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 6: The routes
 
 **Files:**
+
 - Modify: `services/api/src/routes/activity.ts` (export the serializer)
 - Create: `services/api/src/routes/notifications.ts`
 - Test: `services/api/src/routes/notifications.test.ts`
@@ -915,6 +935,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `services/api/src/app.ts` (after `activityRoutes`, around line 207)
 
 **Interfaces:**
+
 - Consumes: `readInbox`, `countUnread`, `markRead`, `markAllRead`, `InboxItem` (Task 5)
 - Produces:
   - `activityWire(row: ActivityRow)` exported from `routes/activity.ts`
@@ -1016,7 +1037,10 @@ describe("POST /v1/notifications/:id/read", () => {
   });
 
   it("answers 404 when it was not", async () => {
-    const res = await appWith(stub({ read: async () => false })).request(`/v1/notifications/${ID}/read`, post());
+    const res = await appWith(stub({ read: async () => false })).request(
+      `/v1/notifications/${ID}/read`,
+      post(),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -1069,7 +1093,9 @@ import type { InboxItem } from "../notify/inbox-queries.js";
 import { activityWire } from "./activity.js";
 
 export interface NotificationDeps {
-  readonly list: (userId: string) => Promise<{ readonly items: readonly InboxItem[]; readonly unread: number }>;
+  readonly list: (
+    userId: string,
+  ) => Promise<{ readonly items: readonly InboxItem[]; readonly unread: number }>;
   readonly unread: (userId: string) => Promise<number>;
   /** False when there is no such notification on this account. */
   readonly read: (userId: string, id: string) => Promise<boolean>;
@@ -1167,7 +1193,7 @@ import { countUnread, markAllRead, markRead, readInbox } from "./notify/inbox-qu
 In `services/api/src/app.ts`, import `notificationRoutes` from `./routes/notifications.js` and add after `app.route("/", activityRoutes(read.activity));`:
 
 ```ts
-  app.route("/", notificationRoutes(read.notifications));
+app.route("/", notificationRoutes(read.notifications));
 ```
 
 In `src/app.test.ts` and `src/routes/fund-mount.test.ts`, add `notifications: {},` beside `activity: {},` in their `ReadDeps` stubs, so the stubs stay complete.
@@ -1191,10 +1217,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 7: The web client
 
 **Files:**
+
 - Create: `apps/web/src/api/notifications.ts`
 - Test: `apps/web/src/api/notifications.test.ts`
 
 **Interfaces:**
+
 - Consumes: `apiFetch` from `./client`; `useSignedIn`, `ActivityItem` from `./hooks`; `LIVE` from `./live`
 - Produces:
   - `type NoticeKind = "money_in" | "dividend" | "loan_alert"`
@@ -1317,14 +1345,17 @@ export const useNotifications = (open: boolean) => {
 export const useMarkRead = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiFetch(`/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+    mutationFn: (id: string) =>
+      apiFetch(`/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
     onMutate: (id) => {
       const now = new Date().toISOString();
       qc.setQueryData<{ items: Notification[]; unread: number }>(KEY, (prev) =>
         prev === undefined
           ? prev
           : {
-              unread: prev.items.some((n) => n.id === id && n.readAt === null) ? prev.unread - 1 : prev.unread,
+              unread: prev.items.some((n) => n.id === id && n.readAt === null)
+                ? prev.unread - 1
+                : prev.unread,
               items: prev.items.map((n) => (n.id === id && n.readAt === null ? { ...n, readAt: now } : n)),
             },
       );
@@ -1368,9 +1399,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ### Task 8: The bell and the panel
 
 **Files:**
+
 - Modify: `apps/web/src/app/HeaderChrome.tsx`
 
 **Interfaces:**
+
 - Consumes: everything Task 7 produces; `usePanels` from `./Panels`; `relTime` from `./portfolio/ui`; `usd` from `@mercury/view`; `useNavigate` from `react-router-dom`
 
 - [ ] **Step 1: Split the alerts panel from the settings placeholder**
@@ -1554,7 +1587,9 @@ const Inbox = ({ onClose }: { onClose: () => void }) => {
                 </span>
                 <span className="shrink-0 text-right">
                   {n.activity.amountUsd !== null && (
-                    <span className="block text-[13px] text-ds-ink tabular-nums">{usd(n.activity.amountUsd)}</span>
+                    <span className="block text-[13px] text-ds-ink tabular-nums">
+                      {usd(n.activity.amountUsd)}
+                    </span>
                   )}
                   <span className="block text-[12px] text-ds-muted">{relTime(n.createdAt)}</span>
                 </span>
@@ -1586,6 +1621,7 @@ on conflict do nothing;
 ```
 
 Check, with screenshots:
+
 1. The bell shows `3`, and its label reads "Notifications, 3 unread".
 2. Clicking the bell opens the panel; nothing is marked read by opening it.
 3. Clicking an item closes the panel, opens its receipt, and the bell shows `2`.
