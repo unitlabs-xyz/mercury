@@ -58,14 +58,17 @@ export const useNotifications = (open: boolean) => {
 export const useMarkRead = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiFetch(`/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
+    mutationFn: (id: string) =>
+      apiFetch(`/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" }),
     onMutate: (id) => {
       const now = new Date().toISOString();
       qc.setQueryData<Inbox>(KEY, (prev) =>
         prev === undefined
           ? prev
           : {
-              unread: prev.items.some((n) => n.id === id && n.readAt === null) ? prev.unread - 1 : prev.unread,
+              unread: prev.items.some((n) => n.id === id && n.readAt === null)
+                ? prev.unread - 1
+                : prev.unread,
               items: prev.items.map((n) => (n.id === id && n.readAt === null ? { ...n, readAt: now } : n)),
             },
       );

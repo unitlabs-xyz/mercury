@@ -5,7 +5,9 @@ import type { InboxItem } from "../notify/inbox-queries.js";
 import { activityWire } from "./activity.js";
 
 export interface NotificationDeps {
-  readonly list: (userId: string) => Promise<{ readonly items: readonly InboxItem[]; readonly unread: number }>;
+  readonly list: (
+    userId: string,
+  ) => Promise<{ readonly items: readonly InboxItem[]; readonly unread: number }>;
   readonly unread: (userId: string) => Promise<number>;
   /** False when there is no such notification on this account. */
   readonly read: (userId: string, id: string) => Promise<boolean>;

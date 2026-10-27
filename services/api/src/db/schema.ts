@@ -770,7 +770,9 @@ export const notifications = pgTable(
   (t) => [
     index("notification_user_created_idx").on(t.userId, t.createdAt, t.id),
     /* The badge. Partial, so it stays as small as the unread set. */
-    index("notification_unread_idx").on(t.userId).where(sql`${t.readAt} is null`),
+    index("notification_unread_idx")
+      .on(t.userId)
+      .where(sql`${t.readAt} is null`),
     uniqueIndex("notification_activity_idx").on(t.activityId),
   ],
 );

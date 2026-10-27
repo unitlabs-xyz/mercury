@@ -16,7 +16,14 @@ const seed = async () => {
   const tell = async (userId: string, title: string, age: number) => {
     const [a] = await db
       .insert(activities)
-      .values({ userId, kind: "transfer_in", title, subtitle: "From Tron · USDT", amountUsd: "250", mint: null })
+      .values({
+        userId,
+        kind: "transfer_in",
+        title,
+        subtitle: "From Tron · USDT",
+        amountUsd: "250",
+        mint: null,
+      })
       .returning();
     const [n] = await db
       .insert(notifications)

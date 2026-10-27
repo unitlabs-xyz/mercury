@@ -45,7 +45,6 @@ const node = (signaturesByAddress: Record<string, readonly SignatureRef[]>): Cha
 });
 
 describe("syncAllWalletEvents", () => {
-
   describe("the inbox", () => {
     /** Both streams behind the deposit, as in "writes a deposit once". */
     const behind = async () => {

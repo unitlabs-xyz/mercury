@@ -80,7 +80,10 @@ describe("POST /v1/notifications/:id/read", () => {
   });
 
   it("answers 404 when it was not", async () => {
-    const res = await appWith(stub({ read: async () => false })).request(`/v1/notifications/${ID}/read`, post());
+    const res = await appWith(stub({ read: async () => false })).request(
+      `/v1/notifications/${ID}/read`,
+      post(),
+    );
     expect(res.status).toBe(404);
   });
 
