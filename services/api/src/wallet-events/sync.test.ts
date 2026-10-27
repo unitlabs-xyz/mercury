@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import type { ChainHistory, SignatureRef, TransactionDetail } from "@mercury/chain";
 import { USDC_MINT } from "@mercury/chain";
 import { testDb } from "../db/testing.js";
-import { activities, users, walletStreams, wallets } from "../db/schema.js";
+import { activities, notifications, users, walletStreams, wallets } from "../db/schema.js";
 import { syncAllWalletEvents } from "./sync.js";
 
 const KAMINO = "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD";
@@ -45,6 +45,50 @@ const node = (signaturesByAddress: Record<string, readonly SignatureRef[]>): Cha
 });
 
 describe("syncAllWalletEvents", () => {
+
+  describe("the inbox", () => {
+    /** Both streams behind the deposit, as in "writes a deposit once". */
+    const behind = async () => {
+      const { db, userId } = await seed();
+      const [wallet] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
+      await db.insert(walletStreams).values([
+        { walletId: wallet!.id, address: WALLET, cursor: "older" },
+        { walletId: wallet!.id, address: USDC_ACCOUNT, cursor: "older" },
+      ]);
+      const history: ChainHistory = {
+        tokenAccountsFor: () => Promise.resolve([USDC_ACCOUNT]),
+        signatures: (address) => Promise.resolve(address === USDC_ACCOUNT ? [ref] : []),
+        transaction: () => Promise.resolve(deposit),
+      };
+      return { db, userId, history };
+    };
+    const landed = new Date(1_790_573_221 * 1000);
+    const after = (ms: number) => () => new Date(landed.getTime() + ms);
+
+    it("tells the owner about money that just arrived, once", async () => {
+      const { db, userId, history } = await behind();
+      await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(60_000) });
+
+      const told = await db.select().from(notifications).where(eq(notifications.userId, userId));
+      const [row] = await db.select().from(activities).where(eq(activities.userId, userId));
+      expect(told).toHaveLength(1);
+      expect(told[0]!.kind).toBe("money_in");
+      expect(told[0]!.activityId).toBe(row!.id);
+
+      await db.update(walletStreams).set({ cursor: "older" });
+      await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(90_000) });
+      expect(await db.select().from(notifications)).toHaveLength(1);
+    });
+
+    /* A backfilled stream brings old history, and old history is not news. */
+    it("records but does not tell about money that arrived more than a day ago", async () => {
+      const { db, history } = await behind();
+      await syncAllWalletEvents(db, { history, lendingProgram: KAMINO, now: after(25 * 60 * 60_000) });
+
+      expect(await db.select().from(activities)).toHaveLength(1);
+      expect(await db.select().from(notifications)).toHaveLength(0);
+    });
+  });
   it("records where each stream is on first sight, and writes nothing", async () => {
     const { db } = await seed();
     const summary = await syncAllWalletEvents(db, {
