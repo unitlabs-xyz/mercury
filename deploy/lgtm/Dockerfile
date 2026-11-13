@@ -8,7 +8,15 @@
 # faster and self-contained.
 #
 # In Coolify: Build Pack "Dockerfile", Base Directory "/deploy/lgtm",
-# Dockerfile Location "/deploy/lgtm/Dockerfile", Ports Exposes "3000".
+# Dockerfile Location "/Dockerfile", Ports Exposes "3000", Health Check Path
+# "/api/health". The location is relative to the base directory, so it is a
+# bare "/Dockerfile" here and "/services/api/Dockerfile" on the API, whose base
+# directory is the repo root.
+#
+# Also a 3 GB memory limit and a CPU weight of 512, which is half the default:
+# this container idles at up to 2 GB beside the API and Postgres, and it is the
+# one here that should lose a fight for the box. README.md has the figures and
+# the reasoning.
 #
 # Those COPY paths are relative to this directory. With Base Directory "/" the
 # build context is the repo root and every one of them fails with

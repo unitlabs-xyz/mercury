@@ -38,22 +38,57 @@ exporter drops what it cannot deliver and the request path never notices.
 
 ## Deploy
 
-Exactly as the API and the web app are deployed — same repo, same build pack,
-same base directory. There is nothing to create on the host first.
+Same repository and same build pack as the API, but **not** the same base
+directory — see below, because getting that pair wrong is the one way this
+build fails outright. There is nothing to create on the host first.
 
-| Setting             | Value                     |
-| ------------------- | ------------------------- |
-| Build Pack          | **Dockerfile**            |
-| Base Directory      | `/`                       |
-| Dockerfile Location | `/deploy/lgtm/Dockerfile` |
-| Ports Exposes       | `3000`                    |
+| Setting             | Value          |
+| ------------------- | -------------- |
+| Build Pack          | **Dockerfile** |
+| Base Directory      | `/deploy/lgtm` |
+| Dockerfile Location | `/Dockerfile`  |
+| Ports Exposes       | `3000`         |
+| Health Check Path   | `/api/health`  |
+
+**Dockerfile Location is relative to Base Directory**, which is why it is a
+bare `/Dockerfile` here and `/services/api/Dockerfile` on the API. The API's
+base directory is the repo root because it imports workspace packages; this one
+cannot be, because the `COPY` lines in the Dockerfile name paths inside
+`deploy/lgtm`. Set the base directory to `/` and the build fails on
+`"/deploy/lgtm/tempo-config.yaml": not found`.
+
+Grafana's own health endpoint reports whether its database opened, so it is
+worth checking rather than the port alone. Give it a start period of two
+minutes: four components boot in this container, and a shorter grace marks a
+healthy stack as failed while Loki is still coming up.
 
 Two environment variables, both required:
 
-| Variable                     |                                                                                                                                  |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `GF_SECURITY_ADMIN_PASSWORD` | a password you generate (`openssl rand -base64 24`). A secret, not a build arg.                                                  |
-| `GF_SERVER_ROOT_URL`         | the public URL Coolify serves this on, e.g. `https://grafana.trymercury.xyz`. Without it Grafana's own links point at localhost. |
+| Variable                     |                                                                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `GF_SECURITY_ADMIN_PASSWORD` | a password you generate (`openssl rand -base64 24`). A secret, not a build arg.                                            |
+| `GF_SERVER_ROOT_URL`         | the public URL Coolify serves this on — `https://grafana.unitlabs.xyz`. Without it Grafana's own links point at localhost. |
+
+**`GF_SERVER_ROOT_URL` has to track the resource's domain, and nothing enforces
+it.** Coolify will happily serve this container on one hostname while Grafana
+builds its links from another. The failure is quiet: the stack reports healthy,
+`/api/health` answers, and every link Grafana generates — share URLs, alert
+notifications, OAuth redirects — points somewhere that may no longer exist.
+Change one and change the other.
+
+And a memory limit, because this container is the reason the box might run out:
+
+| Setting             | Value |                                                                                                                                                        |
+| ------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Memory limit        | `3g`  | Above the 0.6–2 GB it idles at, with room for a wide query, and bounded. Prometheus will use whatever it is given for 90 days of series.               |
+| Memory reservation  | `1g`  | Its real floor. Below this it is thrashing rather than running.                                                                                        |
+| CPU limit           | `1.5` | A hard quota, unlike the API's. Compaction and a heavy query are batch work with no user waiting on them, so throttling them costs nothing that shows. |
+| CPU weight (shares) | `512` | Half the default against the API's 2048, so the API gets four times the service when both want the same core.                                          |
+
+This is the one container here that should lose a fight for the box. If it is
+killed the product keeps working — the exporter drops what it cannot deliver
+and the request path never notices — whereas an API killed to keep Grafana
+drawing graphs is the wrong trade in every case.
 
 And **one persistent volume, mounted at `/data`**. This is the only manual step
 and the only one that cannot be repaired later: all four components write
@@ -121,11 +156,11 @@ afterwards.
 Each store wants it somewhere different, which is the whole reason two config
 files are mounted:
 
-| Store      | Where                                       | Value      |
-| ---------- | ------------------------------------------- | ---------- |
-| Prometheus | `PROMETHEUS_EXTRA_ARGS` in the compose file | 90d        |
-| Loki       | `loki-config.yaml`                          | 720h (30d) |
-| Tempo      | `tempo-config.yaml`                         | 336h (14d) |
+| Store      | Where                                     | Value      |
+| ---------- | ----------------------------------------- | ---------- |
+| Prometheus | `PROMETHEUS_EXTRA_ARGS` in the Dockerfile | 90d        |
+| Loki       | `loki-config.yaml`                        | 720h (30d) |
+| Tempo      | `tempo-config.yaml`                       | 336h (14d) |
 
 All three are in the repository rather than in Coolify's UI, so the current
 value is reviewable. Both config files were taken verbatim from the image and

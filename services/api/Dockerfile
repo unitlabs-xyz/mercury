@@ -8,7 +8,15 @@
 # to carry the workspace and run TypeScript through tsx.
 #
 # In Coolify: Build Pack "Dockerfile", Base Directory "/",
-# Dockerfile Location "/services/api/Dockerfile", Ports Exposes "8787".
+# Dockerfile Location "/services/api/Dockerfile", Ports Exposes "8787", and
+# Coolify's own health check left OFF — the HEALTHCHECK below is the one that
+# runs, and the note beside it says why enabling the other breaks it.
+#
+# Also a 2 GB memory limit and a CPU weight of 2048 — twice the default, and
+# four times the telemetry stack's 512, so this container wins when the two
+# compete for a core. A weight rather than a CPU quota on purpose: a quota
+# throttles the hourly snapshot even on an idle box. The root README has the
+# figures and the reasoning.
 
 FROM node:24-slim
 
@@ -55,8 +63,14 @@ ENV NODE_ENV=production
 ENV PORT=8787
 EXPOSE 8787
 
-# Coolify may run its own check instead; this one keeps `docker run` honest.
 # node:24-slim ships no curl, and Node 24 has fetch, so ask Node.
+#
+# This is the check that runs in every environment, `docker run` and Coolify
+# alike, and Coolify's own health check has to stay switched off for it to
+# survive: turning that on supersedes this directive, and there is no curl or
+# wget here for the replacement to call. The check then fails on a server
+# answering every request, and Coolify waits on health during a deploy, so the
+# deploy fails with it. Nothing about the symptom points back at the setting.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
