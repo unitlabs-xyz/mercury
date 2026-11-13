@@ -38,12 +38,14 @@ wallet's own signature on each action.**
 4. **A linked wallet signs for itself.** Mercury builds the transaction, the linked wallet signs it
    in its own pop-up, and the relayer co-signs as fee payer, exactly as for the Mercury wallet. No
    server holds or uses a linked wallet's key.
-5. **The same fees apply** to anything Mercury builds, whichever wallet signs it.
-6. **A linked wallet's past is read by a separate worker,** `services/history`, with its own RPC
-   key, from the history of its token accounts and its Kamino loan account. It gives purchase
-   prices (exact from USDC swaps, otherwise estimated from the market price at arrival and marked
-   `~`), each loan deposit with its date and price, and Earn interest. Reading history never shares
-   the API's process or RPC allowance.
+5. **The same fees apply** to anything Mercury builds, whichever wallet signs it. Today that is
+   the trading fee on stock buys and sells; baskets, borrowing and Earn carry no Mercury fee yet
+   for any wallet.
+6. **A linked wallet's past is read by a separate worker,** `services/history`, from the history
+   of its token accounts and its Kamino loan account. It gives purchase prices (exact from USDC
+   swaps, otherwise estimated from the market price at arrival and marked `~`), each loan deposit
+   with its date and price, and Earn interest. It runs in its own process and uses the API's paid
+   RPC under a strict budget of its own, backing off whenever the node pushes back.
 7. **Only what Mercury already understands is tracked:** xStocks, USDC and SOL, loans in Kamino's
    xStocks market, Glider baskets and the Earn vault. AMM and LP positions, other lending markets
    and other protocols are out until each has its own adapter.
