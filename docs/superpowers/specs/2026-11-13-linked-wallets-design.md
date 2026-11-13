@@ -1,0 +1,698 @@
+# Linked wallets: design
+
+**Status:** draft for review, not built · 13 November 2026 · web and iOS ·
+[ADR 0019](../../adr/0019-linked-wallets.md)
+
+Someone signed in to Mercury can link Solana wallets they already hold, such as Phantom. Mercury
+then shows what those wallets hold and owe, on web and iOS, warns before their loans are
+liquidated, and on web lets the person trade, borrow, repay, invest in baskets, use Earn and move
+funds into the Mercury wallet, with the linked wallet signing each action.
+
+## Decisions already made
+
+- **Every wallet is shown everywhere,** web and iOS, the Mercury wallet first and then linked
+  wallets in the order they were linked.
+- **Actions on linked wallets are web only.** On iOS a linked wallet is read-only, with "Manage on
+  web". On web, the person is reminded (gently, dismissibly) that moving funds into the Mercury
+  wallet makes every action one tap.
+- **An unlinked wallet is hidden and untracked.** Nothing about it shows on web or iOS, no job
+  reads it, and it gets no alerts or portfolio updates until it is linked again.
+- **At most 7 linked wallets at a time,** beside the Mercury wallet. Only active links count: a
+  person can own any number of addresses and swap which 7 are linked, but the rest aren't tracked.
+- **A summary at the top of Home,** once anything is linked: net worth, P&L, income and loan
+  interest across every wallet.
+- **A linked wallet's past is rebuilt from its token accounts' history,** in a separate worker
+  process, so purchase prices, loan deposits and Earn interest are shown with dates and prices.
+  Figures that are estimated rather than read are marked `~`.
+
+## Two kinds of wallet
+
+|                     | Mercury wallet                       | Linked wallet                                    |
+| ------------------- | ------------------------------------ | ------------------------------------------------ |
+| Created by          | Privy, at sign-in                    | The person, who already holds it                 |
+| `wallet.kind`       | `privy_embedded`                     | `external`                                       |
+| `wallet.is_primary` | `true`, exactly one per user         | `false`                                          |
+| Signs with          | Privy, no pop-up (ADR 0012)          | Its own wallet, a pop-up per action              |
+| Shown on            | Web and iOS, first                   | Web and iOS, after the Mercury wallet            |
+| Acted on from       | Web and iOS                          | Web only                                         |
+| Fees                | As set (`TRADING_FEE_BPS` and so on) | The same                                         |
+| Basket rebalancing  | Glider, daily                        | Glider, daily (authorized by one signed message) |
+| First-loan setup    | Paid by Mercury (#86)                | Paid by the wallet itself                        |
+| Polled              | As today                             | By how recently it was looked at. See jobs       |
+
+## Scope
+
+**In**
+
+- Link, list, rename and unlink Solana wallets from Settings on web, up to 7 linked at a time.
+- Every wallet's positions, loans and activity on web and iOS, the Mercury wallet first.
+- A summary across all wallets at the top of Home on both.
+- Track xStocks, USDC and SOL, loans in Kamino's xStocks market, Glider baskets and the Earn vault
+  for each linked wallet.
+- Full loan health from the moment of linking: collateral, debt, LTV, liquidation price, health
+  state, and warnings in the inbox and by email.
+- The loan's history, rebuilt from the chain after linking: when it was opened, each collateral
+  deposit with its date, shares and the share price then, each borrow and repay, interest paid,
+  past liquidations.
+- What each stock held cost: exact where the wallet swapped USDC for it, `~` estimated from the
+  market price at the time it arrived otherwise. P&L from that.
+- Interest earned in Earn, from the wallet's own deposits and withdrawals.
+- A separate history worker, `services/history`, that does all of this off the API's process and
+  RPC allowance.
+- Every action the web app offers for the Mercury wallet, from a linked wallet: buy, sell, borrow,
+  repay, pledge and withdraw collateral, baskets, Earn, send.
+- Move tokens (stocks, USDC) from a linked wallet into the Mercury wallet in one click, with their
+  cost basis.
+- Move a linked wallet's Glider baskets to the Mercury wallet, run by Mercury step by step.
+
+**Out**
+
+- Sign-in with a wallet. Sign-in stays email → Privy.
+- EVM wallets. MetaMask's EVM accounts keep funding through Relay only. A MetaMask Solana account
+  links like any other Solana wallet if AppKit offers it.
+- AMM and LP positions, Kamino markets other than xStocks, Kamino Multiply, and other lending
+  protocols.
+- Acting for a linked wallet on iOS, and linking or unlinking from iOS.
+- Automation Mercury would sign itself (recurring buys). Not built for anyone yet.
+
+## Linking
+
+### Flow
+
+1. **Settings → Linked wallets → Link a wallet.** AppKit opens with Solana only (the EVM adapter is
+   not offered here).
+2. The browser asks the server for a challenge, then the wallet signs the challenge message.
+3. The server checks the signature and saves the wallet. The first sync starts at once, so the
+   dashboard fills within seconds.
+
+### Endpoints
+
+All behind `requireAuth`, in a new `routes/wallets.ts`.
+
+| Route                             | Does                                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET /v1/wallets`                 | The caller's wallets: `{ id, address, kind, isPrimary, label, linkedAt }`, primary first |
+| `POST /v1/wallets/link/challenge` | Body `{ address }`. Returns `{ challengeId, message }`. Expires in 10 minutes            |
+| `POST /v1/wallets/link`           | Body `{ challengeId, signature }`. Verifies, saves, returns the wallet. `409` if refused |
+| `PATCH /v1/wallets/:id`           | Body `{ label }`. A name like "Phantom main"                                             |
+| `DELETE /v1/wallets/:id`          | Unlinks. `?history=delete` also deletes its history. `400` on the primary wallet. `204`  |
+
+### The message
+
+Sign-In-With-Solana's plain-text form, so wallets that know it show it nicely:
+
+```
+beta.trymercury.xyz wants you to link this wallet to your Mercury account:
+<address>
+
+Linking lets Mercury show this wallet's positions and build transactions for you to sign.
+It does not let Mercury move funds without your signature.
+
+URI: https://beta.trymercury.xyz
+Version: 1
+Chain ID: mainnet
+Nonce: <random, 16 bytes, base58>
+Issued At: <ISO time>
+Expiration Time: <issued + 10 minutes>
+```
+
+### What the server checks
+
+- The challenge exists, belongs to the caller, has not expired and has not been used. It is marked
+  used in the same transaction that saves the wallet, so it can never link twice.
+- The signature is a valid ed25519 signature by `address` over the exact message stored with the
+  challenge (the message is never taken from the client).
+- The address is a valid Solana public key and is **not already in `wallet`** under anyone,
+  including as someone's Mercury wallet. `wallet_address_idx` already enforces this; the route
+  turns the conflict into a `409` that says the wallet is linked elsewhere, without saying to whom.
+- The caller has **fewer than 7 active linked wallets** (`kind = 'external'`, `unlinked_at is
+null`). The Mercury wallet doesn't count, and nor do unlinked ones. The count and the insert run
+  in one transaction under a per-user lock (`pg_advisory_xact_lock` on the user id), so two links
+  sent at once can't make 8.
+
+### The limit of 7
+
+- **Only active links count.** Someone with 10 addresses links any 7. The other 3 are not tracked:
+  no balances, no activity, no loan warnings, nothing in the summary.
+- **Swapping is unlink one, link another.** Settings shows "7 of 7 linked" and, at the limit, the
+  Link button is replaced by "Unlink a wallet to link another".
+- **Linking an unlinked wallet again counts like a new link,** and brings its kept history back.
+- At the limit, `POST /v1/wallets/link/challenge` answers `409 link_limit` before any signature is
+  asked for, so nobody signs a message only to be refused.
+- The 7 is one setting, `LINKED_WALLET_LIMIT`, defaulting to 7.
+- **Sanctions screening** passes. Until a provider is chosen this is a port with an allow-all
+  implementation and a log line, so wiring a provider later changes no route.
+
+### Unlinking
+
+**Linked is not the same as connected.** A linked wallet is tracked from its address alone.
+Phantom only needs to be connected in the browser to sign an action. Disconnecting Phantom, or
+never opening it, changes nothing about tracking or warnings.
+
+Settings offers two ways to stop following a wallet:
+
+| Option                        | What happens                                                                                                                                                        | Undo                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Unlink** (the default)      | Sets `wallet.unlinked_at`. Jobs skip it from the next pass, routes refuse to act for it, and nothing about it shows on web or iOS                                   | Link the same address again, with a new signature. Its history comes back |
+| **Unlink and delete history** | Deletes the wallet row and its positions, lots, disposals, activity, snapshots, loan events, loan alert and Earn events. The address is free to link to any account | None. The confirm screen says so                                          |
+
+Under **Unlink**, the wallet stops being followed at all:
+
+- **No updates.** `position-sync`, `wallet-events`, `portfolio-snapshot` and the history worker skip
+  it from the next pass. Its positions and chart freeze where they were, out of sight.
+- **No alerts.** `loan-watch` skips it, so no liquidation warning by inbox or email, however close
+  its loan gets. Its `loan_alert` row is cleared, so if it is linked again, a loan already in
+  trouble is warned about straight away.
+- **Nothing shown.** Every read (portfolio, activity, loans, chart, the summary, the inbox) filters
+  on `unlinked_at is null`, so an unlinked wallet's rows are invisible, not just its card. Inbox
+  items about it are hidden with it.
+
+**When the wallet has an open loan,** the unlink confirmation says so plainly: "This wallet has a
+loan. After unlinking, Mercury won't warn you if it gets close to liquidation." Unlinking still
+goes ahead if confirmed.
+
+Under **Unlink and delete history**, `order` rows are **kept** with `wallet_id` set to null. They
+record the Mercury fee charged, which the books need, and nothing reads them back to the person
+once the wallet is gone.
+
+Deleting an account deletes all its wallets and their rows, as today.
+
+## Data
+
+Migration `0030_linked_wallets.sql`.
+
+### `wallet`
+
+```ts
+label: text("label"),
+linkedAt: timestamp("linked_at", { withTimezone: true }),   // null for Mercury wallets
+unlinkedAt: timestamp("unlinked_at", { withTimezone: true }),
+lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }), // sets polling speed
+```
+
+Plus a partial unique index so a user can only ever have one primary wallet:
+`uniqueIndex("wallet_one_primary_idx").on(t.userId).where(sql\`${t.isPrimary}\`)`.
+
+### `wallet_link_challenge`
+
+```ts
+id: uuid().primaryKey().defaultRandom(),
+userId: uuid().notNull().references(() => users.id, { onDelete: "cascade" }),
+address: text().notNull(),
+message: text().notNull(),
+expiresAt: timestamp({ withTimezone: true }).notNull(),
+usedAt: timestamp({ withTimezone: true }),
+```
+
+The daily retention job deletes rows older than a day.
+
+### A wallet on every per-wallet row
+
+Today these tables are keyed by user, because a user had one wallet. Each gains
+`wallet_id uuid not null references wallet(id)`, backfilled from the user's primary wallet in the
+same migration:
+
+| Table                | Key or index that changes                                                                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `position`           | Primary key `(user_id, instrument_id)` → `(wallet_id, instrument_id)`                                                                                                           |
+| `lot`                | `lot_user_token_idx` → `(wallet_id, token_id)`. `source` gains `chain_exact`, `chain_estimated`, `declared` and `basket_exit` beside `buy`, `transfer_in`, `dividend`, `basket` |
+| `disposal`           | Gains the column. Index alongside `lot`'s                                                                                                                                       |
+| `order`              | Gains the column, **nullable**, `on delete set null`, so fee records outlive a deleted wallet                                                                                   |
+| `activity`           | `activity_signature_mint_idx` `(user_id, tx_signature, mint)` → `(wallet_id, tx_signature, mint)`                                                                               |
+| `portfolio_snapshot` | Its key gains `wallet_id`                                                                                                                                                       |
+| `loan_event`         | `loan_event_signature_kind_idx` → `(wallet_id, tx_signature, kind)`. Gains `origin` (`mercury` or `chain`) and `price_usd`, the collateral's share price at the time            |
+| `loan_alert`         | Primary key `user_id` → `wallet_id`: one remembered health per loan, not per person                                                                                             |
+| `earn_event`         | Gains the column and `origin` (`mercury` or `chain`)                                                                                                                            |
+
+The history worker's own tables (`history_job`, `history_tx`, `history_event`) are in the same
+migration; see "The history worker".
+
+The `activity` index change matters on its own: a move between the Mercury wallet and a linked
+wallet is **one signature and one mint seen by two wallets of the same user**. Under the current
+index the second row would be dropped as a duplicate.
+
+`user_id` stays on every table, so every existing "all of this user's rows" query keeps working.
+That is also what the "All wallets" view reads.
+
+`funding_intent` doesn't change: deposits always go to the Mercury wallet. `basket_account`
+doesn't change: it is already keyed by the smart account's own address, and the owner it belongs to
+is read from Glider.
+
+## Which wallet a request acts for
+
+One header, `X-Mercury-Wallet: <wallet id>`, read by a new middleware mounted after `requireAuth`:
+
+- Absent: the primary wallet. Every iOS action omits it, so iOS acts only for the Mercury wallet.
+  It can't do otherwise anyway: it has no way to get a linked wallet's signature.
+- Present: it must be one of the caller's wallets, not unlinked, or the request is a `403`.
+- The result is set on the context as `wallet: { id, address, kind }`.
+
+`identity.walletAddress` is read in 47 places across `app.ts` and `routes/`. Each one that means
+"the wallet this action is for" changes to `c.get("wallet").address`. Each one that means "the
+Mercury wallet" (deposits, funding, the first-loan setup) stays. That split, route by route, is
+most of the work in the build plan.
+
+Read routes (`/v1/portfolio`, `/v1/activity`, loans, the chart) also take `?wallet=all`, which
+sums across every active wallet. Write routes never accept `all`.
+
+## Signing and the relayer
+
+Nothing about how transactions are built changes. The owner passed to every builder is the acting
+wallet's address instead of the identity's:
+
+- **Buy and sell:** quote, review, build, sign, confirm, as today. The Mercury fee transfer is in
+  the transaction whoever signs it.
+- **The relayer** stays fee payer. `relay/validate.ts` checks the transaction needs "this
+  account's signature". "This account" becomes the acting wallet, so a linked wallet's transaction
+  is sponsored and a transaction for someone else's wallet still isn't.
+- **The web client** signs with Privy for the Mercury wallet and with the AppKit Solana provider
+  for a linked wallet. The AppKit path already exists for funding (`api/fund-swap.ts` handles the
+  differences between Phantom's API and the wallet-standard one); it moves into a shared signer the
+  trade, loan, basket, Earn and send flows choose from by wallet kind.
+- **Glider baskets:** enrollment and manual rebalances are authorized by `signMessage`
+  (`api/baskets.ts`). The same message, signed by the linked wallet, makes it the smart account's
+  owner, and Glider's daily rebalancing then runs as it does for the Mercury wallet.
+
+## Background jobs
+
+Every job that reads `wallets.isPrimary = true` today reads **active wallets**
+(`unlinked_at is null`) instead: `portfolio/sync.ts:56`, `wallet-events/sync.ts:276`,
+`portfolio/snapshot.ts:59` and `lending/watch-loans.ts:54`. Each carries the wallet id through to
+what it writes.
+
+| Job                  | Mercury wallet (as today)           | Linked wallet                                                       |
+| -------------------- | ----------------------------------- | ------------------------------------------------------------------- |
+| `position-sync`      | 10s with the app open, 1m otherwise | 10s while open, 5m if viewed in the last 7 days, **1h** otherwise   |
+| `wallet-events`      | 30s                                 | 5m if viewed in the last 7 days, **1h** otherwise                   |
+| `portfolio-snapshot` | Hourly                              | Hourly                                                              |
+| `loan-watch`         | 5m                                  | 5m. A loan in a wallet Mercury can't act for gets no slower a check |
+
+The history of a linked wallet is not one of these jobs. It runs in its own process, below.
+
+Presence (`jobs/presence.ts`) is keyed by address already. When web or iOS shows a linked
+wallet's positions (its own page, or Home, where every wallet is listed), it reports that wallet's
+address as present, and `position-sync` treats it like an open Mercury wallet. "Viewed" is the last
+time that happened, kept on `wallet.last_viewed_at`.
+
+`loan-watch` ignores how recently a wallet was viewed. Every loan is checked every 5 minutes,
+because a missed liquidation warning is the one failure the slower polling must never cause.
+
+**A new link is baselined, not backfilled**, as `wallet-events` already does for a wallet's first
+pass. Years of transfers would otherwise land in the activity feed and the inbox as if they were
+new.
+
+## What the person sees, and when
+
+| When                                            | What                                                                                                                                                                                              | From                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| **Seconds after linking**                       | Every holding with its value and day's change. The Kamino loan: collateral, debt with interest, LTV, liquidation price per stock, health, warnings                                                | The chain's current state, by the usual jobs |
+| **Minutes after linking**, once history is read | What each stock cost and its P&L. When the loan was opened, each collateral deposit (date, shares, share price then), each borrow and repay, interest paid, liquidations. Interest earned in Earn | The history worker                           |
+
+Until the history worker finishes a wallet, its P&L, loan history and Earn interest show "Reading
+history…" and the summary counts that wallet as "calculating".
+
+## The history worker
+
+A separate process, `services/history`, next to the API. It shares Postgres and the workspace
+packages, and nothing else:
+
+- **Its own RPC key** (`HISTORY_RPC_URL`), on a plan with full history (an archive node). Reading
+  years of a wallet's past can never use up the allowance the app's own reads and trades need,
+  which is what took the API down on 23 October.
+- **Its own queue,** a `history_job` table: one row per wallet to read, with its status, cursor
+  and attempts. Linking a wallet inserts one. The worker takes jobs with
+  `for update skip locked`, so a second worker could share the queue later.
+- **Its own tables for what it reads** (below), kept apart from Mercury's records. Only its last
+  step writes into `lot`, `loan_event` and `earn_event`, each row marked with where it came from,
+  so the portfolio, loan and Earn screens have one code path and can still say "found in history".
+- **Mercury's own transactions never go through it.** A trade, borrow or Earn deposit made in
+  Mercury is recorded at confirm time as today. The worker skips any signature already recorded.
+
+### It reads token accounts, not the wallet
+
+A wallet can have thousands of transactions; most are irrelevant. Each **token account** holds one
+token, so its history is only the transactions that moved that token, usually tens of them. The
+worker reads:
+
+1. **The wallet's token accounts:** `getTokenAccountsByOwner`, for both the token program and
+   Token-2022 (xStocks are Token-2022). Kept: every account whose mint Mercury lists (xStocks,
+   USDC, and the Earn vault's share token).
+2. **The wallet's Kamino loan account** in the xStocks market, which `kamino.ts` already finds by
+   owner.
+3. For each, **`getSignaturesForAddress`** back to the account's creation, then **`getTransaction`**
+   for each signature. Each transaction gives its time (`blockTime`) and every account's token
+   balance before and after it, which is all the amounts the worker needs. It doesn't decode
+   swap routes.
+
+What it reads is kept raw, so a better rule later can re-derive without reading the chain again:
+
+```ts
+history_tx:    signature (pk), slot, block_time, fetched_at, raw jsonb
+history_event: id, wallet_id, account, signature, block_time,
+               kind ("in" | "out" | "loan_open" | "loan_deposit" | "loan_withdraw" | "loan_borrow"
+                     | "loan_repay" | "loan_liquidated" | "earn_deposit" | "earn_withdraw"),
+               mint, amount_raw, counter_mint, counter_amount_raw, -- what left the wallet in the same tx
+               source_owner                                       -- for transfers in: who sent it
+```
+
+### What each stock cost
+
+For each token account, the worker walks its events oldest first.
+
+**Each arrival gets a cost:**
+
+| What the transaction shows                                 | Cost per share                                      | Marked    |
+| ---------------------------------------------------------- | --------------------------------------------------- | --------- |
+| Swap: USDC or USDT left the wallet in the same transaction | Dollars paid ÷ shares received                      | Exact     |
+| Swap: SOL or another token left the wallet                 | That token's price at that moment × amount ÷ shares | `~`       |
+| Plain transfer in (an exchange, a person, another wallet)  | The share price at that moment                      | `~`       |
+| Sent from another of the person's **linked** wallets       | The cost it had there (the lots move, as in a move) | As it was |
+
+**Each departure** takes its share of the cost by Mercury's own rule, average cost
+(`packages/core/src/portfolio/cost-basis.ts`): the average cost per share of what remains doesn't
+change. Replaying a token account's whole history is cheap because it is short, and it gives the
+same answer the Mercury wallet's positions would.
+
+**Dividends:** xStocks pay by raising a multiplier, so one token later stands for more stock. Each
+arrival is converted to shares with the multiplier in force at its time (`multiplier_event`), and
+each multiplier change after it is a dividend, at no cost, as `position-sync` already treats them.
+
+What's left after the replay is written as lots for that wallet: `source: "chain_exact"` or
+`"chain_estimated"`, with the time and price of each arrival.
+
+**Precedence:** a cost the person entered ("Set cost", `source: "declared"`) always wins. An
+estimate never replaces an exact figure. A purchase made in Mercury is always exact.
+
+### Prices at a past moment
+
+Mercury keeps minute bars for only 30 days (`price-bar-prune`). For anything older, the worker
+asks a historical source for the price at the arrival's time: **an hourly or daily price is enough
+for an estimate**, and the screen says it is one. The source is an open question (below). An
+arrival with no price found stays "Cost unknown".
+
+### The loan, deposit by deposit
+
+From the loan account's history, each Kamino lending instruction (decoded with the klend SDK the
+API already uses) becomes a `loan_event` with `source: "chain"`, its time and its amounts from the
+balance changes:
+
+| Event                   | Shown                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| The account's creation  | "Loan opened 3 March 2026"                                                   |
+| Each collateral deposit | "Pledged 10 TSLAx at $240.10 · 3 March", and what those shares are worth now |
+| Each borrow / repay     | Date and amount                                                              |
+| Withdrawals             | Date and shares                                                              |
+| Liquidations            | Date, shares taken, debt cleared                                             |
+
+The share price "at the time" of a deposit is the market price at that moment, from the same
+historical source. From these rows: **interest paid = current debt − (total borrowed − total
+repaid)**, exact once the history is complete.
+
+The loan account is read rather than the wallet because liquidations are sent by bots: they always
+touch the loan account and not always the owner's wallet.
+
+### Interest earned in Earn
+
+The Earn vault's share token is a token account like any other. Its arrivals and departures, with
+the USDC that moved in the same transactions, give the net USDC put in. **Interest earned = the
+shares' value now − net USDC put in.** Exact, written as `earn_event` rows with `source: "chain"`.
+
+### After the first read
+
+The worker keeps each account's cursor and reads only newer signatures, every 5 minutes for wallets
+viewed in the last week and hourly otherwise. New token accounts (a stock bought elsewhere for the
+first time) are found on the next pass.
+
+A token account with more than 5,000 signatures is read back to that point and marked incomplete;
+its earlier shares are priced at the oldest point reached, marked `~`.
+
+## P&L on a linked wallet
+
+- **Value and the day's change:** always, for everything held. These need only prices.
+- **Unrealised P&L:** value minus cost. If any of the cost is estimated, the figure starts with `~`:
+
+  ```
+  TSLAx · 15 shares · $6,450
+  P&L  ~+$420 (+6.9%)
+       Exact for 5 · estimated for 10 from the price when they arrived
+  ```
+
+  Shares with no cost at all (no price found) are left out and say so: "on 13 of 15 shares".
+
+- **The position page** lists each arrival: date, shares, price, and whether it is exact,
+  estimated or entered. Each has "Set cost".
+- **Realised P&L:** for sells made through Mercury, as today.
+- **Sells made elsewhere** (on Jupiter straight from Phantom) take their cost away with them, and
+  their proceeds are counted only if USDC came back in the same transaction, which the token
+  account's history shows. A sale for SOL or another token is valued at that token's price then,
+  marked `~`.
+
+## Moving holdings into the Mercury wallet
+
+### What moves, and what doesn't
+
+| Holding                                   | Moves                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------- |
+| xStocks, USDC, other tokens Mercury lists | **One click.** See below                                                  |
+| A Glider basket                           | **Run by Mercury, in steps.** See below                                   |
+| Earn                                      | Withdraw from Earn, then move the USDC                                    |
+| Collateral in a Kamino loan               | **Not in this piece.** Stays with the loan in the linked wallet           |
+| SOL                                       | Not offered: the relayer pays fees, so the Mercury wallet doesn't need it |
+
+### Tokens, in one click
+
+1. On the linked wallet's page, **Move to Mercury wallet**. Every movable token is selected, with
+   amounts editable. Each line says what its cost basis is: "TSLAx 15 · cost known for 12".
+   Pledged collateral is listed separately as "In a loan, stays here".
+2. The server builds the transfers to the person's own Mercury wallet, creating any token accounts
+   the Mercury wallet lacks. The relayer is fee payer.
+3. **Phantom asks once.** Several tokens are split into small transactions (about four tokens each)
+   and sent to the wallet together through `signAllTransactions`, so the person still approves
+   once. A single transaction that empties a wallet is what drainers send, and wallet security
+   scanners may flag it. Wallets without `signAllTransactions` fall back to one prompt per
+   transaction.
+4. When they land, **the lots move with the shares**: between two wallets of the same user, the
+   Mercury wallet inherits whatever cost the linked wallet had (including "unknown"), by #99's rule.
+
+**A send made by hand counts too.** If the person copies their Mercury address from Money →
+Receive and sends from Phantom themselves, `wallet-events` sees one signature leave one of their
+wallets and arrive in another. It records that as a move, not a transfer out and a transfer in,
+and the lots move the same way.
+
+No Mercury fee on a move between a person's own wallets. The network cost applies.
+
+This overlaps `feat/import-stocks` and its spec
+([2026-10-18 import stocks](2026-10-18-import-stocks-design.md)). The import spec's parts that
+assume the wallet isn't known to Mercury are superseded by linking; its transfer and basis rules
+are reused.
+
+### A Glider basket, run by Mercury
+
+A basket's assets sit in a Glider smart account the linked wallet owns, and Glider only ever pays
+exits to the owner ([10 Baskets](../../10-baskets.md)). So moving one is a sequence, which Mercury
+runs and the person only approves:
+
+| Step | Who signs                    | What happens                                                                                      |
+| ---- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| 1    | **Linked wallet** (prompt 1) | Exit the basket: in kind (the shares themselves) or to USDC, using the exit Glider already offers |
+| 2    | —                            | Glider settles. Mercury waits until the assets are in the linked wallet                           |
+| 3    | **Linked wallet** (prompt 2) | Move the assets to the Mercury wallet, as in "Tokens, in one click"                               |
+| 4    | Mercury wallet, no prompt    | Optional, if the person chose "Keep it as a basket": enroll in the same strategy and fund it      |
+
+The person chooses at the start:
+
+- **Hold as shares** (the default): exit in kind, move the shares. They arrive as ordinary stocks
+  in the Mercury wallet. Nothing is sold.
+- **Keep it as a basket:** exit to USDC, move the USDC, enroll and fund the same strategy from the
+  Mercury wallet. Glider only takes USDC to fund a basket, so this sells and buys again: spreads
+  are paid twice, and the money is **out of the market until Glider's next daily rebalance**. The
+  confirm screen says both.
+
+Prompt 2 can't be signed at the start: the exact amounts aren't known until Glider settles ("dust
+can remain"), and a Solana transaction expires within a couple of minutes. So the flow is
+resumable:
+
+- A `wallet_move` row records the move and its step: `exiting`, `ready_to_move`, `moving`,
+  `enrolling`, `done` or `failed`, with Glider's operation id and each signature.
+- While the page is open it shows the steps and asks for prompt 2 as soon as the assets arrive.
+- If the person leaves, Home shows "Finish moving Magnificent Seven: one approval left", and an
+  inbox notice says the same. Nothing is lost by waiting: the assets are in their own wallet.
+- Each step is safe to retry. A step whose signature is already recorded is checked on the chain,
+  not sent again.
+
+**Cost basis:** the basket's assets have no per-share lots today (Mercury records the basket's
+fundings, not Glider's buys). Shares exited in kind get a cost by splitting the basket's net
+funding across them by their value at exit, marked `source: "basket_exit"`. Under "Keep it as a
+basket", the new basket's funding is its cost, as for any basket.
+
+## Loans
+
+### Health, at once
+
+`kamino.ts` already finds a loan by owner address (`getObligationByWallet`), and `capacity.ts`
+already computes everything from the loan's current state: collateral, debt with interest accrued,
+LTV, the liquidation threshold, liquidation price per stock and the health state. None of that
+needs history. A linked wallet's loan is fully visible on the first sync.
+
+`loan-watch` warns per wallet. The email and inbox entry name the wallet by its label (or a
+shortened address), because the person may have two loans and needs to know which to repay, and
+for a linked wallet they add: "Mercury can't act for this wallet. Repay or add collateral from it
+to avoid liquidation."
+
+### History
+
+Read by the history worker: see "The loan, deposit by deposit" above. Until it finishes, the loan
+screen shows the current numbers and "Reading history…".
+
+## Fees
+
+The same everywhere, from the same settings:
+
+- Trades: `TRADING_FEE_BPS`.
+- Deposits Relay swaps: `DEPOSIT_FEE_BPS`. Deposits always go to the Mercury wallet.
+- The network cost, charged in USDC as today.
+- Moves between a person's own wallets: network cost only.
+
+`order.mercury_fee_usd` records the fee per order as today, and with `wallet_id` on `order`,
+revenue can be split by wallet kind.
+
+## Summary across wallets
+
+Shown at the top of Home, on web and iOS, whenever at least one wallet is linked. With only the
+Mercury wallet, Home looks as it does today.
+
+```
+┌──────────────────────────────────────────────┐
+│ All wallets                                   │
+│ Net worth            $20,652.40               │
+│ P&L         ~+$1,240.10 (+7.4%)               │
+│              $9,100 of cost estimated         │
+│ Income       +$86.20   Earn $71.05 · Div $15.15│
+│ Loan interest −$42.10  (1 wallet calculating) │
+└──────────────────────────────────────────────┘
+```
+
+| Line              | How it's worked out                                                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Net worth**     | Every active wallet's holdings (stocks, cash, baskets, Earn) **minus loan debt**. A large loan never inflates it                                             |
+| **P&L**           | Unrealised and realised, on shares with a cost. Starts with `~` if any of that cost is estimated, and says how much                                          |
+| **Income**        | Earn interest plus dividends. For linked wallets, from the history worker, so it covers the time before linking too                                          |
+| **Loan interest** | Interest paid across all loans: current debt − (borrowed − repaid), from `loan_event`. A linked wallet whose history is still being read shows "calculating" |
+
+Dividends before Mercury began recording multipliers (`multiplier_event`, from September 2026)
+can't be told apart from the shares themselves; the summary counts those shares at their arrival
+cost and nothing as income.
+
+Served by `GET /v1/portfolio/summary`, which reads the database only (no RPC), so it is cheap to
+poll. Tapping it opens the combined "All wallets" view.
+
+## Web
+
+- **Home:** the summary, then each wallet's card, the Mercury wallet first and then linked
+  wallets by `linked_at`. Each card shows its value, its day's change and a loan health badge
+  if it has a loan.
+- **Settings → Linked wallets:** "N of 7 linked", the list, link, rename, **Unlink** and **Unlink
+  and delete history**.
+- **A wallet switcher** in the header: "Mercury", each linked wallet by label, and "All wallets".
+  It sets `X-Mercury-Wallet` on every request. The choice is remembered per browser.
+- **"All wallets"** is a read-only view: summed portfolio, combined activity, every loan. Actions
+  are disabled with "Choose a wallet to trade from".
+- **On a linked wallet,** each confirm screen says "You'll approve this in Phantom" (the connected
+  wallet's name) above the button, and the button reads "Continue in Phantom".
+- **The move-to-Mercury reminder** is kept light:
+  - a banner at the top of each linked wallet's page: "Managing funds here means approving each
+    step in Phantom. Move them to your Mercury wallet for one-tap trading." with **Move funds** and
+    **Dismiss**. Dismissed, it stays hidden for that wallet for 30 days.
+  - one quiet line on each confirm screen: "Tip: this would be one tap from your Mercury wallet."
+    Never a pop-up, and never in the way of the button.
+- If the linked wallet isn't connected in the browser when an action needs it, AppKit opens to
+  connect it, and refuses to continue with a different address.
+
+## iOS
+
+Every wallet is **shown**. Only the Mercury wallet is **acted on**.
+
+- **Home:** the summary, then the Mercury wallet as today (fully interactive), then a **Linked
+  wallets** section with each wallet's card.
+- **A linked wallet's page:** positions, loan health with liquidation price, Earn and baskets,
+  activity. No buy, sell, borrow, repay or send buttons. In their place, one row:
+  "Manage on web" (opens the web app on that wallet) and, beside it, "Move to Mercury wallet to
+  trade here" (also on web, since the move needs the linked wallet's signature).
+- **Stock pages** show "You also hold 2.1 in Phantom main" under the Mercury position, read-only.
+- **Settings** lists linked wallets with their labels; linking and unlinking say "On web".
+- Reads use the same routes as web, with `X-Mercury-Wallet` or `?wallet=all`. Every action omits
+  the header, so it acts for the Mercury wallet as today.
+
+Loan warnings for linked wallets reach iOS users by email now, and through the inbox once the inbox
+comes to mobile (`TODO.md`, Notifications).
+
+## RPC budget
+
+The risk is load, which already took the API down once (23 October). Two things hold it: at most 7
+linked wallets per person, and polling by how recently each was viewed (every 5 minutes if viewed
+in the last week, hourly otherwise; loans keep the 5-minute check regardless). A rough worst case
+at 1,000 users with two recently viewed linked wallets each: ~400 extra balance reads and ~400
+history walks per minute on the jobs' lane, plus one loan read per loan every 5 minutes and the
+hourly snapshot. At the limit, 7 recently viewed wallets each, it is 3.5 times that. Before opening linking to everyone, either confirm the paid plan has room or move to push
+updates (Helius webhooks on account changes), which `TODO.md` already lists and which would remove
+most of this.
+
+Reading history is the history worker's cost, on its own key, and it is mostly paid once per
+wallet. A typical linked wallet: ~10 token accounts × ~30 transactions, plus the loan account,
+is a few hundred calls when linked and a handful per pass after that. The worker paces itself to
+what its plan allows, so a wallet with a long past takes longer rather than taking from anyone
+else.
+
+## Build order
+
+1. **Data.** Migration `0030`: the `wallet` columns, the challenge table, `wallet_id` on every
+   per-wallet table with the backfill. Nothing behaves differently yet.
+2. **Linking.** The challenge, link, list, rename, unlink and delete routes, and Settings on web.
+3. **Tracking.** The four jobs read active wallets and write `wallet_id`; presence and
+   `last_viewed_at` for linked wallets; polling by how recently each was viewed.
+4. **Reading on web.** The acting-wallet middleware, read routes per wallet and `?wallet=all`, the
+   summary route, Home with the summary and wallet cards, the switcher. At this point a linked
+   wallet is a working dashboard, with loan health and warnings.
+5. **Reading on iOS.** The summary, the Linked wallets section, read-only wallet pages, "Manage on
+   web".
+6. **Acting.** Routes switch to the acting wallet; the shared signer on web; buy, sell, loans,
+   baskets, Earn and send from a linked wallet; the move-to-Mercury reminder.
+7. **Moving tokens.** One-click move with lots carried across; hand-made sends between own wallets
+   recognised as moves.
+8. **Moving baskets.** `wallet_move`, the exit-wait-move steps, resuming, and "Keep it as a
+   basket".
+9. **The history worker.** `services/history` with its Dockerfile and RPC key, the `history_job`,
+   `history_tx` and `history_event` tables, reading token accounts and the loan account.
+10. **Cost and P&L from history.** Classifying arrivals, historical prices, the average-cost
+    replay, lots with `chain_exact` / `chain_estimated`, `~` on web and iOS, "Set cost".
+11. **Loan and Earn history.** The Kamino decoder, `loan_event` and `earn_event` from history,
+    deposit-by-deposit loan detail, interest paid and earned.
+
+Until 9–11 land, P&L, loan history and Earn interest for linked wallets say "calculating".
+
+Steps 1–5 make a useful release on their own.
+
+## Open questions
+
+- **Moving a loan.** Out of this piece. A later one could repay the linked wallet's loan and open
+  the same loan in the Mercury wallet in one flow.
+- **Phantom's scanner.** Test on mainnet whether a move of several tokens is flagged, and get the
+  domain verified with Phantom's security provider before launch.
+- **Sanctions provider** for link-time screening, and what happens to an already-linked wallet that
+  is later flagged.
+- **Historical prices.** For arrivals and loan deposits older than 30 days. Candidates:
+  `packages/market/src/yahoo.ts` (does it return past daily or hourly prices?) or Pyth's historical
+  prices (`PYTH_API_KEY` is already a setting). Hourly is enough.
+- **Raw RPC or a provider's history API.** Reading raw transactions works with any archive RPC. A
+  provider's parsed-history API (Helius's, for example) would save some decoding. Compare cost per
+  wallet before building step 9.
+- **Kamino's API.** Earn already calls Kamino's API (`earn/kamino-api.ts`). If it returns a loan
+  account's transaction history, it could replace the decoder in step 11. Check before building.
+- **Ondo tokens.** Baskets hold Ondo tokens (`NVDAon`), not xStocks. Check whether `position-sync`
+  and the stock pages count them as holdings outside a basket. If not, "Hold as shares" can't be
+  the default for moving a basket until they do.
+- **The polling tiers** (5 minutes if viewed in a week, hourly otherwise) are a guess at the RPC
+  budget. Tune them from the jobs' telemetry once linking is live, or drop them once push updates
+  exist.
+- **Retention of unlinked history.** Kept indefinitely under plain Unlink, so linking again restores
+  it. Should it be deleted automatically after, say, a year?

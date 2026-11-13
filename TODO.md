@@ -104,6 +104,20 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 - [ ] Weekly check: SOL the relayer spent against the USDC it collected
 - [ ] Decide whether Send keeps absorbing its signature
 
+## Linked wallets: designed, in review
+
+[ADR 0019](docs/adr/0019-linked-wallets.md) (proposed),
+[spec](docs/superpowers/specs/2026-11-13-linked-wallets-design.md). Link up to 7 Solana wallets
+beside the Mercury wallet, see them on web and iOS, act for them on web, move funds and baskets
+into the Mercury wallet, and rebuild their past (cost, loan deposits, Earn interest) in a separate
+history worker.
+
+- [ ] Review the spec and accept or amend ADR 0019
+- [ ] Pick the historical price source (Yahoo client or Pyth) and raw RPC or a provider's history API
+- [ ] Check whether Ondo tokens (what baskets hold) count as positions outside a basket
+- [ ] Test on mainnet whether Phantom's scanner flags a multi-token move
+- [ ] Build steps 1–5 (link, track, read on web and iOS): the first release
+
 ## Trade router: designed, not to be built until the go-ahead
 
 [ADR 0018](docs/adr/0018-trade-router.md) (proposed),
