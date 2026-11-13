@@ -147,7 +147,47 @@ In Coolify, on a Dockerfile application:
 | Base Directory      | `/`                        |
 | Dockerfile Location | `/services/api/Dockerfile` |
 | Ports Exposes       | `8787`                     |
-| Health Check Path   | `/health`                  |
+| Health Check        | **leave disabled**         |
+
+**Leave Coolify's health check off**, which is the opposite of what it looks
+like it wants. The image declares its own `HEALTHCHECK` — Node's `fetch`
+against `/health`, because `node:24-slim` ships no curl — and Coolify reads the
+container's health state either way, so the resource reports `running:healthy`
+with Coolify's own check switched off. Turning it on supersedes the image's
+directive, and this image carries no HTTP client for a generated check to call,
+so the replacement has nothing to pass with. Coolify waits on health during a
+deploy, which makes that a failed deploy rather than a bad badge.
+
+That endpoint is deliberately outside `/v1`, which `requireAuth` covers in
+full: a health check holds no Privy token, so anything under `/v1` would answer
+401 and read as an outage. It is also why the path is not `/` — the server
+answers that with a 404.
+
+Give the container a memory limit and a CPU weight:
+
+| Setting             | Value  |                                                                                                                                                                              |
+| ------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Memory limit        | `2g`   | Several times what the process uses. A cap is there to contain a leak, not to size the service, and a cap near the working set turns a slow hour into an OOM kill.           |
+| Memory reservation  | `512m` | A soft floor the scheduler honours under pressure. Small on purpose: a reservation is a claim on the box, and claiming more than is needed starves whatever else runs on it. |
+| CPU weight (shares) | `2048` | Twice the default, so the API wins when it competes with the telemetry stack.                                                                                                |
+
+**A CPU weight rather than a CPU limit, and the difference matters.** A limit is
+a quota the kernel enforces whether or not anything else wants the CPU, so a
+hard cap would throttle the hourly snapshot on an idle box for no benefit.
+Shares only apply when two containers want the same core at the same time, which
+is the only case worth arbitrating. The telemetry stack is set to 512 against
+this 2048, so under contention the API gets four times the service.
+
+**Postgres is left uncapped, which is a decision rather than an omission.** A
+memory limit on a database is only meaningful alongside `shared_buffers` and
+`work_mem`, and set without them it converts one expensive query into a killed
+container — and this is the one container on the box whose death loses writes
+rather than graphs. It stays unbounded until there is a reason, measured on
+this box, to tune the three together. The limits above are what keep it from
+being crowded out: there is no third claimant for the memory they release.
+
+Changing any of these recreates the container, so they take effect on the next
+deploy and not when they are saved.
 
 Then set `DATABASE_URL`, `PRIVY_APP_ID` and `SOLANA_RPC_URL` as environment
 variables. The server refuses to start without all three. Do not mount a `.env`
