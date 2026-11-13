@@ -123,12 +123,26 @@ remember.
 
 On the **API** resource:
 
-| Variable                      | Required                 |                                                                                                                                                                 |
-| ----------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | **yes, to switch it on** | the address Coolify gives this resource on its internal network, port 4318. Unset means telemetry is off: the SDK never starts, and the API says which at boot. |
-| `GIT_SHA`                     | no, but do it            | becomes `service.version`. Without it every deploy reports the same version, so "did this start at the last deploy" has no answer.                              |
-| `LOG_LEVEL`                   | no                       | `info` by default. `debug` adds the decision inputs while reproducing somebody's problem.                                                                       |
-| `OTEL_SERVICE_NAME`           | no                       | `mercury-api` by default.                                                                                                                                       |
+| Variable                      | Required                 |                                                                                                                                    |
+| ----------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | **yes, to switch it on** | exactly `http://mercury-lgtm:4318`. Unset means telemetry is off: the SDK never starts, and the API says which at boot.            |
+| `GIT_SHA`                     | no, but do it            | becomes `service.version`. Without it every deploy reports the same version, so "did this start at the last deploy" has no answer. |
+| `LOG_LEVEL`                   | no                       | `info` by default. `debug` adds the decision inputs while reproducing somebody's problem.                                          |
+| `OTEL_SERVICE_NAME`           | no                       | `mercury-api` by default.                                                                                                          |
+
+**`mercury-lgtm` is a network alias, not a name Coolify derives**, which is why
+the value is written out above rather than described. This resource carries
+`--network-alias mercury-lgtm` in its Custom Docker Options; the name matches
+the `container_name` the compose file uses locally, so one endpoint works in
+both places. Nothing connects the two ends, so nothing catches a wrong one.
+
+And a wrong one costs a month before anyone notices, because every symptom
+points elsewhere. The SDK starts, the API logs `telemetry on` — all it knows is
+that a variable was set — the exporter drops what it cannot deliver without
+touching the request path, and the stack sits there healthy and empty. A
+misspelled hostname looks exactly like a product nobody used. Read the
+endpoint back after setting it, and check the verification steps below rather
+than the boot line.
 
 That is the whole of the API's side: no code change, no SDK to initialise in a
 handler, no sidecar. And it is reversible for the same reason — point that one
