@@ -316,9 +316,16 @@ history…" and the summary counts that wallet as "calculating".
 A separate process, `services/history`, next to the API. It shares Postgres and the workspace
 packages, and nothing else:
 
-- **Its own RPC key** (`HISTORY_RPC_URL`), on a plan with full history (an archive node). Reading
-  years of a wallet's past can never use up the allowance the app's own reads and trades need,
-  which is what took the API down on 23 October.
+- **The same paid RPC as the API** (`SOLANA_RPC_URL`). It must serve full history
+  (`getSignaturesForAddress` back to an account's creation); check the plan does before step 9.
+  Because the two processes share one allowance, the worker **stays out of the app's way**:
+  - a fixed budget of its own, `HISTORY_RPC_RPS` (default 2 requests a second), well under the
+    plan's limit
+  - on any 429 it stops for a minute, then resumes at half the rate, so the app's reads and
+    trades always win
+  - it reads nothing while the API's own jobs are being refused ("the node refused this pass"),
+    which it sees in the shared telemetry
+    This is what took the API down on 23 October, so the budget is a hard ceiling, not a target.
 - **Its own queue,** a `history_job` table: one row per wallet to read, with its status, cursor
   and attempts. Linking a wallet inserts one. The worker takes jobs with
   `for update skip locked`, so a second worker could share the queue later.
@@ -546,12 +553,26 @@ screen shows the current numbers and "Reading history…".
 
 ## Fees
 
-The same everywhere, from the same settings:
+A linked wallet pays exactly what the Mercury wallet pays for the same action. That is not a fee
+on every action, because Mercury doesn't charge one on every action today:
 
-- Trades: `TRADING_FEE_BPS`.
-- Deposits Relay swaps: `DEPOSIT_FEE_BPS`. Deposits always go to the Mercury wallet.
-- The network cost, charged in USDC as today.
-- Moves between a person's own wallets: network cost only.
+| Action                           | Mercury's fee today                                    | Planned (`TODO.md`, `docs/revenue-todo.md`)             |
+| -------------------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
+| Buy or sell a stock              | **Yes**, `TRADING_FEE_BPS` (0.5%)                      | Tiers by trade size                                     |
+| Add cash that Relay swaps        | **Yes**, `DEPOSIT_FEE_BPS` (0.3%). Mercury wallet only | —                                                       |
+| Invest in a basket, rebalance    | **No**. `feeBps: 0` (`baskets.ts`)                     | Glider `swapBps` to 50, once Glider confirms the payout |
+| Borrow on Kamino                 | **No**                                                 | 0.25% borrow fee, once counsel agrees                   |
+| Repay, pledge, withdraw          | No                                                     | —                                                       |
+| Deposit to or withdraw from Earn | **No**. Kamino's vault fees are the vault's own        | —                                                       |
+| Send                             | No                                                     | —                                                       |
+| Move between own wallets         | No                                                     | —                                                       |
+
+Every transaction Mercury builds also charges the **network cost** in USDC, as today, since the
+relayer pays the SOL.
+
+When a planned fee ships, it applies to linked wallets in the same release, because it lives in the
+transaction Mercury builds, not in the wallet that signs it. Nothing in this design needs changing
+for that.
 
 `order.mercury_fee_usd` records the fee per order as today, and with `wallet_id` on `order`,
 revenue can be split by wallet kind.
@@ -637,8 +658,8 @@ hourly snapshot. At the limit, 7 recently viewed wallets each, it is 3.5 times t
 updates (Helius webhooks on account changes), which `TODO.md` already lists and which would remove
 most of this.
 
-Reading history is the history worker's cost, on its own key, and it is mostly paid once per
-wallet. A typical linked wallet: ~10 token accounts × ~30 transactions, plus the loan account,
+Reading history shares the paid RPC with the API, inside the worker's own budget, and it is mostly
+paid once per wallet. A typical linked wallet: ~10 token accounts × ~30 transactions, plus the loan account,
 is a few hundred calls when linked and a handful per pass after that. The worker paces itself to
 what its plan allows, so a wallet with a long past takes longer rather than taking from anyone
 else.
@@ -661,7 +682,7 @@ else.
    recognised as moves.
 8. **Moving baskets.** `wallet_move`, the exit-wait-move steps, resuming, and "Keep it as a
    basket".
-9. **The history worker.** `services/history` with its Dockerfile and RPC key, the `history_job`,
+9. **The history worker.** `services/history` with its Dockerfile and its RPC budget, the `history_job`,
    `history_tx` and `history_event` tables, reading token accounts and the loan account.
 10. **Cost and P&L from history.** Classifying arrivals, historical prices, the average-cost
     replay, lots with `chain_exact` / `chain_estimated`, `~` on web and iOS, "Set cost".
