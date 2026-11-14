@@ -115,7 +115,10 @@ history reader inside the API.
 - [ ] Review the spec and accept or amend ADR 0017
 - [ ] Choose a sanctions provider, and settle with counsel what happens to a wallet flagged after
       it was linked (the spec proposes: refuse writes, keep reads)
-- [ ] Push updates (Helius webhooks): a prerequisite for opening linking, not a later option
+- [ ] Take load off paid RPC before linking opens — it is already at the free tier's ceiling at
+      18 wallets: watch token accounts with `accountSubscribe` on the public lane (measured
+      14 Nov: solanavibestation took 398 subscriptions on one connection; Alchemy does not
+      implement the method), and read loans from Kamino's API instead of the chain
 - [ ] Test on mainnet whether Phantom's scanner flags a multi-token move, and start domain
       verification with its security provider
 - [ ] Build steps 1–5 (link, track, read on web and iOS): the first release
