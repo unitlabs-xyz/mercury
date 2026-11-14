@@ -695,12 +695,35 @@ at 1,000 users with two recently viewed linked wallets each: ~400 extra balance 
 history walks per minute on the jobs' lane, plus one loan read per loan every 5 minutes and the
 hourly snapshot. At the limit, 7 recently viewed wallets each, it is 3.5 times that.
 
-**This load cannot go on the plan as it stands.** The allowance ran out again on 13 November and
-the user-facing reads — `/v1/money`, `/v1/portfolio`, `/v1/borrow` — answered 500 until it
-recovered. That was at today's traffic, with no linked wallets at all. So push updates (Helius
-webhooks on account changes), which `TODO.md` already lists and which would remove most of this
-polling, are a **prerequisite for opening linking to everyone**, not an alternative to weigh
-afterwards. Steps 1–5 can be built and tested against a handful of internal wallets meanwhile.
+**This load cannot go on the plan as it stands, and neither can today's.** The allowance ran out
+on 13 November and the user-facing reads — `/v1/money`, `/v1/portfolio`, `/v1/borrow` — answered
+500 until it recovered, at today's traffic with no linked wallets at all. The arithmetic says why.
+At the 18 wallets the jobs currently read, `position-sync` (every 10s when present, about a minute
+otherwise), `wallet-events` (30s), `loan-watch` (5m) and the hourly snapshot come to roughly **2.5
+million requests a month**. Alchemy's free tier is about 30M compute units a month, so anything
+above roughly 12 CU a request is already over it before a single wallet is linked.
+
+**The fix is not a bigger plan, and there is no budget for one.** Three things take load off
+paid RPC, all of them free and two of them measured on 14 November 2026:
+
+- **Subscribe instead of poll, on the lane that already exists.** `accountSubscribe` works on both
+  endpoints in `SOLANA_PUBLIC_RPC_URLS`: `public.rpc.solanavibestation.com` accepted **398 of 400
+  subscriptions on one connection**, and `api.mainnet-beta.solana.com` accepted 55 before closing
+  with 1013. The paid Alchemy endpoint is the one that **cannot** do this — it answers a socket
+  and then `Method 'accountSubscribe' not found`. So a wallet's token accounts are watched rather
+  than re-read, and a balance poll becomes a push. At 18 wallets of about 10 token accounts each
+  that is one connection; it is per-account, so it scales with accounts watched, not with users.
+- **Read loans from Kamino's API, not the chain.** `loan-watch` is the job that may never slow
+  down, and it is the one that need not touch RPC at all once the obligation routes above are used.
+- **Keep the paid allowance for the request path only** — the reads a person waits on and the
+  transactions they sign — which is what `deps.ts` already says it is for.
+
+Subscriptions are not free of care: a public endpoint has no SLA, a socket drops, and a
+subscription can go quiet without saying so. Each needs reconnect-and-resubscribe, and a slow
+reconciliation read per wallet stays as the safety net that catches whatever the stream missed.
+That periodic read is a fraction of polling every ten seconds.
+
+Steps 1–5 can be built and tested against a handful of internal wallets meanwhile.
 
 Reading history shares the paid RPC with the app, inside the reader's own budget, and it is mostly
 paid once per wallet. A typical linked wallet: ~10 token accounts × ~30 transactions, plus the loan account,
@@ -757,16 +780,16 @@ a decision or a test that cannot be made from the code.
   no issuer filter — "tokens we do not list are skipped", and every verified wrapper of both
   issuers is listed (`jupiter/registry.ts`, tags `xstocks` and `ondo`; `stocks/sync.ts:69` writes
   the issuer through). Nothing to build.
-- **Raw RPC or a provider's history API.** A provider's, and the same provider that solves the
-  polling: Helius. Its Parsed Events history is 10 credits a request and a Scan is 10 credits plus
-  one per page, at most 20 for a 10,000-transaction budget, against Helius's own figure of 350
-  credits for the equivalent raw walk. The paid Solana plan is the binding constraint on this
-  whole feature, so moving history off it matters more than avoiding a second vendor — and the
-  webhooks that replace the polling come from the same place. Raw RPC stays the fallback, since
-  the reader works against any archive node.
-- **The polling tiers.** They stop being a guess to tune, because push updates are now a
-  prerequisite for opening linking (see "RPC budget"). With webhooks the tiers mostly go; they
-  remain only as the floor for a wallet whose webhook has not fired.
+- **Raw RPC or a provider's history API.** Raw RPC, because there is no budget for a provider:
+  there are no Helius credits and the plan is Alchemy's free tier. A parsed-history API would cost
+  fewer calls per wallet, and is worth revisiting the day there is a budget, but it cannot be
+  designed in now. What makes raw RPC affordable here is that history is **paid once per wallet**
+  — a few hundred calls when it is linked, then a handful per pass — so it is the standing poll,
+  not the walk, that has to come down. See "RPC budget".
+- **The polling tiers.** Mostly moot, because polling is the thing being replaced: watched token
+  accounts push, so the tiers survive only as the reconciliation floor for a wallet whose
+  subscription dropped or went quiet. Tune that floor from telemetry, not these guesses. See
+  "RPC budget".
 - **Moving a loan.** Not an open question: it is out of this piece, and worth revisiting only
   after step 11, when a loan's history is already read.
 
