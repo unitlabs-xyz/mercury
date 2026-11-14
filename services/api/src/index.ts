@@ -31,6 +31,9 @@ import { telemetryEndpoint } from "./telemetry/otel.js";
 import { forwardConsoleToOtel } from "./telemetry/console-logs.js";
 import { every, type EveryDeps } from "./jobs/every.js";
 import { cadence, presence } from "./jobs/presence.js";
+import { pushed } from "./jobs/pushed.js";
+import { watchAddresses } from "./jobs/watch.js";
+import { streamAddresses } from "./wallet-events/streams.js";
 import { logger } from "./log/index.js";
 
 /*
@@ -390,28 +393,83 @@ if (fund !== undefined) {
 }
 
 /**
- * Thirty seconds, because this answers "what happened" and `position-sync`
- * already answers "what do I hold" every two. The balance a user checks is the
- * fresh one; only the row in the feed waits.
+ * How long a wallet may go unread while the node is pushing its news.
  *
- * Two streams per wallet — its own address for native SOL, its USDC account for
- * cash — so a quiet pass is four calls a minute per wallet and says nothing.
+ * The safety net under the subscriptions, and the whole of what the stream is
+ * trusted for. A notification dropped between the node and us leaves a feed
+ * behind by this much and no more; against the thirty-second pass it replaces,
+ * it is a twentieth of the reads.
+ */
+const EVENTS_SWEEP_MS = 10 * 60_000;
+
+/*
+ * Every address whose news somebody owns, watched rather than asked after.
+ *
+ * `logsSubscribe` with a `mentions` filter covers both kinds of stream a
+ * wallet has, which is why this watches the rows of `wallet_stream` and not
+ * only the wallet: an SPL transfer names the two token accounts and the
+ * sender, never the recipient, so watching owners alone would miss every
+ * deposit. Nothing is watched when the jobs are on the paid endpoint, which
+ * does not serve subscriptions at all — then `pushed` falls back to reading
+ * every wallet every pass, as it did before.
+ */
+const eventsLog = logger("wallet-events");
+const eventsPushed = pushed({
+  live: () => jobs.subscriptions?.live ?? false,
+  sweepMs: EVENTS_SWEEP_MS,
+});
+const eventStreams =
+  jobs.subscriptions === null
+    ? null
+    : watchAddresses({
+        addresses: () => streamAddresses(auth.db),
+        subscribe: (address, told) => jobs.subscriptions!.logsMentioning(address, told),
+        told: (wallet) => eventsPushed.changed(wallet),
+      });
+
+/**
+ * Thirty seconds, because this answers "what happened" and `position-sync`
+ * already answers "what do I hold". The balance a user checks is the fresh
+ * one; only the row in the feed waits.
+ *
+ * The pass itself is cheap now: it reads a wallet the node has mentioned, and
+ * otherwise one whose sweep is due. A wallet nothing happened to costs a row
+ * of SQL. The clock stays at thirty seconds because that is how soon news the
+ * socket brought is acted on.
  */
 every(
   "wallet-events",
   30_000,
   async () => {
-    const s = await syncAllWalletEvents(auth.db, {
-      history: jobs.deps.history,
-      lendingProgram: KAMINO_LENDING_PROGRAM,
-      ...(relay === undefined ? {} : { relayer: relay.signer.address }),
-      ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
-      ...(fund === undefined ? {} : { fundingDeposits: true }),
-    });
-    if (s.written === 0 && s.failed === 0) return null;
+    let watchNote = "";
+    if (eventStreams !== null) {
+      try {
+        const w = await eventStreams.refresh();
+        if (w.added > 0 || w.dropped > 0) {
+          watchNote = `; watching ${w.watching} addresses, ${w.added} new, ${w.dropped} let go`;
+        }
+      } catch (error) {
+        /* A pass that could not read its own wallets must still read the
+           chain: the addresses already watched are unaffected. */
+        eventsLog.error({ err: error }, "could not bring the watched addresses up to date");
+      }
+    }
+    const s = await syncAllWalletEvents(
+      auth.db,
+      {
+        history: jobs.deps.history,
+        lendingProgram: KAMINO_LENDING_PROGRAM,
+        ...(relay === undefined ? {} : { relayer: relay.signer.address }),
+        ...(deps.basketProvider ? { exitOperations: deps.basketProvider } : {}),
+        ...(fund === undefined ? {} : { fundingDeposits: true }),
+      },
+      eventsPushed,
+    );
+    if (s.written === 0 && s.failed === 0 && watchNote === "") return null;
     return (
       `${s.written} rows across ${s.checked}/${s.wallets} wallets` +
-      (s.failed > 0 ? `, ${s.failed} failed` : "")
+      (s.failed > 0 ? `, ${s.failed} failed` : "") +
+      watchNote
     );
   },
   jobClock(10_000),

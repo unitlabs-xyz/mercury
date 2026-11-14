@@ -7,6 +7,9 @@ import {
   SymmetryVenue,
   rotatingFetch,
   rotation,
+  solanaSubscriptions,
+  subscriptionEndpoints,
+  type ChainSubscriptions,
   type Rotation,
   USDC_MINT,
   type BasketVenue,
@@ -513,12 +516,22 @@ const earnOver = (config: Config, chain: ChainReader, api: KaminoApi, lane?: Rot
  * everything else shared. The jobs read every wallet on a clock; on the paid
  * plan, a deploy had them refused every call for its first minute. `lane` is
  * what a job backs off on; null when the jobs stay on the paid endpoint.
+ *
+ * `subscriptions` is the same lane's sockets, and it is what lets the
+ * per-wallet jobs stop polling. It can only be the public lane: the paid
+ * endpoint answers `accountSubscribe` with "Method not found" (14 November
+ * 2026). Null when the jobs are on the paid endpoint, and a job given no
+ * subscriptions polls exactly as it did before.
  */
 export function backgroundDeps(
   deps: Deps,
   config: Config,
-): { readonly deps: Deps; readonly lane: Rotation | null } {
-  if (config.solanaPublicRpcUrls.length === 0) return { deps, lane: null };
+): {
+  readonly deps: Deps;
+  readonly lane: Rotation | null;
+  readonly subscriptions: ChainSubscriptions | null;
+} {
+  if (config.solanaPublicRpcUrls.length === 0) return { deps, lane: null, subscriptions: null };
   // What every public endpoint refuses goes to the paid one, so the jobs do not fail it.
   const lane = rotation(config.solanaPublicRpcUrls, {
     skips: PUBLIC_RPC_SKIPS,
@@ -536,6 +549,7 @@ export function backgroundDeps(
   const chain = new SolanaRpc({ rpcUrl: lane.urls[0]!, fetch: rotatingFetch(lane), attempts: 2 });
   return {
     lane,
+    subscriptions: solanaSubscriptions({ endpoints: subscriptionEndpoints(config.solanaPublicRpcUrls) }),
     deps: {
       ...deps,
       chain,
