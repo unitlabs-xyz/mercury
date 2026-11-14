@@ -713,6 +713,9 @@ paid RPC, all of them free and two of them measured on 14 November 2026:
   and then `Method 'accountSubscribe' not found`. So a wallet's token accounts are watched rather
   than re-read, and a balance poll becomes a push. At 18 wallets of about 10 token accounts each
   that is one connection; it is per-account, so it scales with accounts watched, not with users.
+  `logsSubscribe` with a `mentions` filter answers on both endpoints too, which is what
+  `wallet-events` needs: that job alone is about 1.55M of the 2.5M requests a month, and it is a
+  notification, not a poll, by nature.
 - **Read loans from Kamino's API, not the chain.** `loan-watch` is the job that may never slow
   down, and it is the one that need not touch RPC at all once the obligation routes above are used.
 - **Keep the paid allowance for the request path only** — the reads a person waits on and the
