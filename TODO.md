@@ -35,7 +35,7 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 ## Local branches nobody has pushed
 
-- [ ] `feat/import-stocks`: one docs commit, Part B of importing stocks answered and Part C corrected.
+- [ ] `feat/import-stocks`: one docs commit, Part B of importing stocks answered and Part C corrected. Its spec is superseded by linked wallets; keep only what that branch adds to the transfer and basis rules.
       Push it or drop it
 - [ ] `feat/trade-router`: its docs are on `main` now. The branch can go once #97 merges
 - [ ] Prune the local branches whose pull requests have merged
@@ -106,13 +106,13 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 ## Linked wallets: designed, in review
 
-[ADR 0019](docs/adr/0019-linked-wallets.md) (proposed),
+[ADR 0017](docs/adr/0017-linked-wallets.md) (proposed),
 [spec](docs/superpowers/specs/2026-11-13-linked-wallets-design.md). Link up to 7 Solana wallets
 beside the Mercury wallet, see them on web and iOS, act for them on web, move funds and baskets
-into the Mercury wallet, and rebuild their past (cost, loan deposits, Earn interest) in a separate
-history worker.
+into the Mercury wallet, and rebuild their past (cost, loan deposits, Earn interest) with a
+history reader inside the API.
 
-- [ ] Review the spec and accept or amend ADR 0019
+- [ ] Review the spec and accept or amend ADR 0017
 - [ ] Pick the historical price source (Yahoo client or Pyth) and raw RPC or a provider's history API
 - [ ] Check whether Ondo tokens (what baskets hold) count as positions outside a basket
 - [ ] Test on mainnet whether Phantom's scanner flags a multi-token move

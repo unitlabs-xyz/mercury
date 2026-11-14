@@ -1,4 +1,4 @@
-# ADR 0019 · Linked wallets beside the Mercury wallet
+# ADR 0017 · Linked wallets beside the Mercury wallet
 
 **Status:** proposed · 13 November 2026 · amends [ADR 0003](0003-custody.md)
 
@@ -18,7 +18,8 @@ Since ADR 0003, two things have made a second wallet cheaper than it was:
   people already hold. It is kept apart from Privy's wallet list on purpose, and it already signs
   transactions Mercury builds.
 - Every background job and every chain read is keyed by a wallet address, not a user. The `wallet`
-  table already has `kind: "external"` and `is_primary`; nothing has used them yet.
+  table already has `is_primary`, written when an identity is created and read by four jobs,
+  and a `kind` column that allows `"external"`. That value is the part nothing has used yet.
 
 ## Decision
 
@@ -41,11 +42,15 @@ wallet's own signature on each action.**
 5. **The same fees apply** to anything Mercury builds, whichever wallet signs it. Today that is
    the trading fee on stock buys and sells; baskets, borrowing and Earn carry no Mercury fee yet
    for any wallet.
-6. **A linked wallet's past is read by a separate worker,** `services/history`, from the history
-   of its token accounts and its Kamino loan account. It gives purchase prices (exact from USDC
-   swaps, otherwise estimated from the market price at arrival and marked `~`), each loan deposit
-   with its date and price, and Earn interest. It runs in its own process and uses the API's paid
-   RPC under a strict budget of its own, backing off whenever the node pushes back.
+6. **A linked wallet's past is read by a history reader,** from the history of its token accounts
+   and its Kamino loan account. It gives purchase prices (exact from USDC swaps, otherwise
+   estimated from the market price at arrival and marked `~`), each loan deposit with its date and
+   price, and Earn interest. It runs inside the API beside the other jobs, on the same paid RPC,
+   under a strict budget of its own and backing off whenever the node pushes back. Its queue is a
+   table rather than memory, so it can be moved into a process of its own later; it does not start
+   as one, because `services/` holds only `api` and putting a second long-lived process back would
+   reverse what PR #24 did when it folded the jobs in. That reversal needs its own decision and
+   this one does not take it.
 7. **Only what Mercury already understands is tracked:** xStocks, USDC and SOL, loans in Kamino's
    xStocks market, Glider baskets and the Earn vault. AMM and LP positions, other lending markets
    and other protocols are out until each has its own adapter.
@@ -84,8 +89,10 @@ wallet's own signature on each action.**
 liquidation warnings for positions they already have.
 
 **Bad.** Wallets Mercury doesn't control come with obligations Mercury doesn't yet meet: sanctions
-screening at link time, and a country check that covers them. Both are pre-launch items already
-(`TODO.md`, "Before a public launch"), and this widens them.
+screening at link time, and a country check that covers them. The country check is already a
+pre-launch item (`TODO.md`, "Before a public launch") and this widens it. Sanctions screening is
+not on that list at all: it is new work this decision creates, and linking cannot open to the
+public without it.
 
 The design is in
 [2026-11-13 linked wallets](../superpowers/specs/2026-11-13-linked-wallets-design.md).
