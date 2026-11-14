@@ -303,8 +303,74 @@ export interface TransactionDetail {
 export interface ChainHistory {
   /** The owner's token accounts for one mint. Empty when they have none yet. */
   tokenAccountsFor(owner: string, mint: string): Promise<readonly string[]>;
+  /**
+   * Every token account the owner holds, under either token program.
+   *
+   * Addresses to watch, which is why an account holding nothing is kept where
+   * a balance read drops it: an empty account is exactly where the next
+   * transfer in lands, and a subscription opened after the money arrives is a
+   * subscription that missed it.
+   *
+   * Optional for the same reason as `mintConfigs`: it is a capability, not a
+   * contract. A reader that cannot do it leaves it out, and a caller that
+   * wanted to watch holdings reads them on a clock instead.
+   */
+  tokenAccounts?(owner: string): Promise<readonly string[]>;
   /** Newest first, as the node returns them. */
   signatures(address: string, page: SignaturePage): Promise<readonly SignatureRef[]>;
   /** Null when the node has no such transaction, or has pruned it. */
   transaction(signature: string): Promise<TransactionDetail | null>;
+}
+
+/**
+ * A live subscription. Closing it tells the node to stop sending and gives its
+ * place on the connection back, which is what keeps a wallet that was dropped
+ * from holding room a new one needs.
+ */
+export interface Subscription {
+  close(): void;
+}
+
+/** A transaction the node has confirmed that mentioned the address watched. */
+export interface LogNotice {
+  readonly signature: string;
+  /** True when it failed on chain, so it moved nothing. */
+  readonly failed: boolean;
+}
+
+/** An account the node says has changed. The data itself is not carried: a reader goes and looks. */
+export interface AccountNotice {
+  readonly account: string;
+  readonly slot: number;
+}
+
+/**
+ * What the chain tells us without being asked.
+ *
+ * The other half of `ChainReader` and `ChainHistory`, and the reason the jobs
+ * no longer have to poll: a wallet is read when something happened to it
+ * rather than every few seconds in case something did.
+ *
+ * It lives on the public lane and nowhere else. The paid endpoint does not
+ * implement `accountSubscribe` at all — the socket opens and then answers
+ * `Method 'accountSubscribe' not found` (measured 14 November 2026) — while
+ * both public endpoints serve it and `logsSubscribe`.
+ *
+ * Registering is not a promise, because a caller cannot usefully wait: a
+ * socket that is down is reopened and everything asked for is asked again, so
+ * a wait would be a wait for the network to come back. `live` is how a caller
+ * learns whether it may trust the stream, and a caller that cannot goes back
+ * to polling.
+ */
+export interface ChainSubscriptions {
+  /** Every transaction the node confirms that names `address` anywhere in it. */
+  logsMentioning(address: string, told: (notice: LogNotice) => void): Subscription;
+  accountChanges(account: string, told: (notice: AccountNotice) => void): Subscription;
+  /**
+   * Every address asked for is being watched on a socket the node is still
+   * answering. False means something may have been missed, so whatever
+   * depends on this has to read instead of wait.
+   */
+  readonly live: boolean;
+  close(): void;
 }
