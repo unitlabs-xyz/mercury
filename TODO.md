@@ -113,9 +113,11 @@ into the Mercury wallet, and rebuild their past (cost, loan deposits, Earn inter
 history reader inside the API.
 
 - [ ] Review the spec and accept or amend ADR 0017
-- [ ] Pick the historical price source (Yahoo client or Pyth) and raw RPC or a provider's history API
-- [ ] Check whether Ondo tokens (what baskets hold) count as positions outside a basket
-- [ ] Test on mainnet whether Phantom's scanner flags a multi-token move
+- [ ] Choose a sanctions provider, and settle with counsel what happens to a wallet flagged after
+      it was linked (the spec proposes: refuse writes, keep reads)
+- [ ] Push updates (Helius webhooks): a prerequisite for opening linking, not a later option
+- [ ] Test on mainnet whether Phantom's scanner flags a multi-token move, and start domain
+      verification with its security provider
 - [ ] Build steps 1–5 (link, track, read on web and iOS): the first release
 
 ## Trade router: designed, not to be built until the go-ahead

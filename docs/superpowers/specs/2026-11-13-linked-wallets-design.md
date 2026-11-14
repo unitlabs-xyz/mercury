@@ -406,14 +406,38 @@ estimate never replaces an exact figure. A purchase made in Mercury is always ex
 
 Mercury keeps minute bars for only 30 days (`price-bar-prune`). For anything older, the reader
 asks a historical source for the price at the arrival's time: **an hourly or daily price is enough
-for an estimate**, and the screen says it is one. The source is an open question (below). An
-arrival with no price found stays "Cost unknown".
+for an estimate**, and the screen says it is one. An arrival with no price found stays
+"Cost unknown".
+
+**The source is the Yahoo client Mercury already has** (`packages/market/src/yahoo.ts`), which
+reaches the same chart endpoint. It asks today by preset `range`, so reading one past moment adds
+`period1`/`period2` (epoch seconds) beside the presets; the response shape is unchanged, so this
+is a parameter, not an adapter. Measured 14 November 2026 against `AAPL`: an hourly series comes
+back for a window six months old (36 points over five days) and for one two years old, and at
+three years hourly is refused ("1h data not available") while daily still answers. So **hourly
+within about 730 days, daily beyond it** — within what an estimate needs, and xStocks are younger
+than that bound.
+
+Pyth is not the source, and this is already settled in the file that would have used it: Pyth
+Benchmarks "returns 403 for equity feeds on our entitlement and has no range endpoint at all,
+measured 28 September 2026". `PYTH_API_KEY` being a setting does not change that; it is the
+live reference feed, not a historical one.
 
 ### The loan, deposit by deposit
 
-From the loan account's history, each Kamino lending instruction (decoded with the klend SDK the
-API already uses) becomes a `loan_event` with `source: "chain"`, its time and its amounts from the
-balance changes:
+**Kamino's API serves this directly, so there is no decoding to do.** Verified live on
+14 November 2026, all answering 200 on `https://api.kamino.finance`:
+
+| Route                                                                 | Gives                              |
+| --------------------------------------------------------------------- | ---------------------------------- |
+| `/v2/kamino-market/{market}/obligations/{obligation}/transactions`    | every transaction against the loan |
+| `/v2/kamino-market/{market}/obligations/{obligation}/metrics/history` | its state over time                |
+| `/v2/kamino-market/{market}/users/{wallet}/transactions`              | the wallet's activity in a market  |
+
+`earn/kamino-api.ts` already calls this host, so this is a method on an existing client. Falling
+back to decoding each lending instruction with the klend SDK stays the second path, for a loan
+the API does not return. Either way each becomes a `loan_event` with `source: "chain"`, its time
+and its amounts:
 
 | Event                   | Shown                                                                        |
 | ----------------------- | ---------------------------------------------------------------------------- |
@@ -521,7 +545,8 @@ runs and the person only approves:
 
 The person chooses at the start:
 
-- **Hold as shares** (the default): exit in kind, move the shares. They arrive as ordinary stocks
+- **Hold as shares** (the default, and available: Ondo wrappers already count as holdings outside
+  a basket — see "Answered" below): exit in kind, move the shares. They arrive as ordinary stocks
   in the Mercury wallet. Nothing is sold.
 - **Keep it as a basket:** exit to USDC, move the USDC, enroll and fund the same strategy from the
   Mercury wallet. Glider only takes USDC to fund a basket, so this sells and buys again: spreads
@@ -706,7 +731,8 @@ else.
 10. **Cost and P&L from history.** Classifying arrivals, historical prices, the average-cost
     replay, lots with `source: "chain"` and `is_estimated` set from the evidence, `~` on web and
     iOS, "Set cost".
-11. **Loan and Earn history.** The Kamino decoder, `loan_event` and `earn_event` from history,
+11. **Loan and Earn history.** Kamino's API for the loan (the klend decoder only as a fallback),
+    `loan_event` and `earn_event` from history,
     deposit-by-deposit loan detail, interest paid and earned.
 
 Until 9–11 land, P&L, loan history and Earn interest for linked wallets say "calculating".
@@ -715,25 +741,55 @@ Steps 1–5 make a useful release on their own.
 
 ## Open questions
 
-- **Moving a loan.** Out of this piece. A later one could repay the linked wallet's loan and open
-  the same loan in the Mercury wallet in one flow.
-- **Phantom's scanner.** Test on mainnet whether a move of several tokens is flagged, and get the
-  domain verified with Phantom's security provider before launch.
-- **Sanctions provider** for link-time screening, and what happens to an already-linked wallet that
-  is later flagged.
-- **Historical prices.** For arrivals and loan deposits older than 30 days. Candidates:
-  `packages/market/src/yahoo.ts` (does it return past daily or hourly prices?) or Pyth's historical
-  prices (`PYTH_API_KEY` is already a setting). Hourly is enough.
-- **Raw RPC or a provider's history API.** Reading raw transactions works with any archive RPC. A
-  provider's parsed-history API (Helius's, for example) would save some decoding. Compare cost per
-  wallet before building step 9.
-- **Kamino's API.** Earn already calls Kamino's API (`earn/kamino-api.ts`). If it returns a loan
-  account's transaction history, it could replace the decoder in step 11. Check before building.
-- **Ondo tokens.** Baskets hold Ondo tokens (`NVDAon`), not xStocks. Check whether `position-sync`
-  and the stock pages count them as holdings outside a basket. If not, "Hold as shares" can't be
-  the default for moving a basket until they do.
-- **The polling tiers** (5 minutes if viewed in a week, hourly otherwise) are a guess at the RPC
-  budget. Tune them from the jobs' telemetry once linking is live, or drop them once push updates
-  exist.
-- **Retention of unlinked history.** Kept indefinitely under plain Unlink, so linking again restores
-  it. Should it be deleted automatically after, say, a year?
+Nine were open when this was written. Six are answered below, with what answered them. Three need
+a decision or a test that cannot be made from the code.
+
+### Answered
+
+- **Historical prices.** The Yahoo client Mercury already has, with `period1`/`period2` added:
+  hourly within about 730 days, daily beyond. Pyth was already ruled out in `yahoo.ts` — 403 for
+  equity feeds on this entitlement, and no range endpoint. See "Prices at a past moment".
+- **Kamino's API.** Yes. `/v2/kamino-market/{market}/obligations/{obligation}/transactions` and
+  `.../metrics/history` both answer, so step 11 reads the loan rather than decoding it. The klend
+  decoder stays as a fallback. See "The loan, deposit by deposit".
+- **Ondo tokens.** Yes, they already count as holdings outside a basket, so "Hold as shares" can
+  be the default. `loadHeldTokens` (`portfolio/apply.ts:49`) joins `tokens` to `instruments` with
+  no issuer filter — "tokens we do not list are skipped", and every verified wrapper of both
+  issuers is listed (`jupiter/registry.ts`, tags `xstocks` and `ondo`; `stocks/sync.ts:69` writes
+  the issuer through). Nothing to build.
+- **Raw RPC or a provider's history API.** A provider's, and the same provider that solves the
+  polling: Helius. Its Parsed Events history is 10 credits a request and a Scan is 10 credits plus
+  one per page, at most 20 for a 10,000-transaction budget, against Helius's own figure of 350
+  credits for the equivalent raw walk. The paid Solana plan is the binding constraint on this
+  whole feature, so moving history off it matters more than avoiding a second vendor — and the
+  webhooks that replace the polling come from the same place. Raw RPC stays the fallback, since
+  the reader works against any archive node.
+- **The polling tiers.** They stop being a guess to tune, because push updates are now a
+  prerequisite for opening linking (see "RPC budget"). With webhooks the tiers mostly go; they
+  remain only as the floor for a wallet whose webhook has not fired.
+- **Moving a loan.** Not an open question: it is out of this piece, and worth revisiting only
+  after step 11, when a loan's history is already read.
+
+### Still open
+
+- **Sanctions provider.** The port with its allow-all implementation means no route changes when
+  one is chosen, so this blocks launch rather than the build. What a provider needs here is Solana
+  address screening against OFAC and the EU, UK and UN lists; Range, Scorechain, TRM and Bitquery
+  all advertise it, and the choice is commercial rather than technical. **What to do about a
+  wallet flagged after it was linked is a design question and should be settled with counsel
+  before step 2 ships:** the proposal is to re-screen active links daily, and on a hit stop
+  acting for that wallet at once (every write route refuses) while leaving it readable, so the
+  person can still see and move their own money, with the event recorded for compliance. Freezing
+  reads as well would hide someone's holdings from them on an automated signal, which is worse
+  and harder to undo.
+- **Phantom's scanner.** Untestable from here: it needs a real multi-token move on mainnet. It is
+  a task inside step 7, not a question holding anything up — the design already mitigates it by
+  splitting a move into transactions of about four tokens through `signAllTransactions` rather
+  than one sweeping transaction. Domain verification with Phantom's security provider should be
+  started before launch, because it has a lead time nobody controls.
+- **Retention of unlinked history.** Proposed: keep it until the person deletes it or deletes
+  their account, with no automatic expiry. "Unlink and delete history" already gives them the
+  explicit choice. An automatic one-year delete would surprise exactly the person it claims to
+  serve — someone who re-links in month thirteen and finds their cost basis gone — and the data
+  is their own public chain history, not something Mercury collected about them. Worth confirming
+  against whatever retention line the privacy policy ends up taking.
