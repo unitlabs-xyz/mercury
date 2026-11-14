@@ -32,7 +32,8 @@ import { forwardConsoleToOtel } from "./telemetry/console-logs.js";
 import { every, type EveryDeps } from "./jobs/every.js";
 import { cadence, presence } from "./jobs/presence.js";
 import { pushed } from "./jobs/pushed.js";
-import { watchAddresses } from "./jobs/watch.js";
+import { watchAddresses, type Watch } from "./jobs/watch.js";
+import { tokenAccountAddresses } from "./portfolio/accounts.js";
 import { streamAddresses } from "./wallet-events/streams.js";
 import { logger } from "./log/index.js";
 
@@ -249,16 +250,18 @@ const jobClock = (startAfterMs: number): EveryDeps => ({ startAfterMs });
  * | `prices`             | 20s     | `price_bar`, and it fills the shared price board                              |
  * | `price-bar-prune`    | 6h      | deletes minute bars past thirty days                                          |
  * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`                                     |
- * | `position-sync`      | 2s/1m   | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
+ * | `position-sync`      | 10s     | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
  * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers                                        |
  * | `funding-poll`       | 60s     | `funding_intent`, Relay's verdict on a deposit; only when Relay is configured |
  * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                                          |
  * | `snapshot-retry`     | 5m      | `portfolio_snapshot`, for accounts the hour's pass missed, within that hour   |
  * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email                                        |
  *
- * `position-sync` reads a wallet every 2s while its owner is using the app,
- * and once a minute otherwise. The jobs that read the chain do it over public
- * endpoints in turn, and start at different offsets after boot (`jobClock`).
+ * The two per-wallet jobs tick at those intervals but read almost nothing on
+ * most of them: the chain tells them which wallets moved, and a wallet nobody
+ * has said anything about is read once a sweep. The jobs that read the chain
+ * do it over public endpoints in turn, and start at different offsets after
+ * boot (`jobClock`).
  *
  * One job the design called for is not here: a poller for Jupiter trigger
  * orders. Trigger orders are not built, and `gateExecution` turns the decision
@@ -344,22 +347,120 @@ every(
   jobClock(60_000),
 );
 
+/*
+ * What the chain tells the two per-wallet jobs, instead of their asking.
+ *
+ * Both jobs used to read every wallet on a timer in case something had
+ * happened, and almost nothing ever had. Two kinds of subscription cover
+ * between them everything either job used to poll for:
+ *
+ * - `logsSubscribe` on the rows of `wallet_stream` — a wallet's own address
+ *   and its USDC account — which is every transaction that names either.
+ * - `accountSubscribe` on the wallet's token accounts, which is the only way
+ *   to hear money arrive: a transfer names the two token accounts and the
+ *   sender's authority, never the recipient.
+ *
+ * Either notice marks the wallet for both jobs. A buy moves a token account
+ * and a deposit changes what the feed should say, and a job reading a wallet
+ * that turns out to have nothing new costs one pass of SQL.
+ *
+ * Nothing is watched when the jobs are on the paid endpoint, which does not
+ * serve subscriptions at all; then both jobs poll exactly as they did before.
+ */
+
 /**
- * Ten seconds for a wallet whose owner has the app open, and once a minute for
- * anyone else's (`cadence`). It was two seconds, but the app asks for money and
- * portfolio every thirty, and refreshes at once after its own transactions:
- * four reads in five were ones nobody saw, each two token-program calls and a
- * Kamino read on the background lane (23 October 2026).
+ * How long a wallet may go unread while the node is pushing its news.
+ *
+ * The safety net under the subscriptions, and the whole of what the stream is
+ * trusted for. A notification dropped between the node and us leaves that
+ * wallet behind by this much and no more.
+ */
+const EVENTS_SWEEP_MS = 10 * 60_000;
+const POSITIONS_SWEEP_MS = 15 * 60_000;
+
+/**
+ * How often a wallet is asked what token accounts it has.
+ *
+ * The one read left in `position-sync`'s steady state, so it is the one thing
+ * here with a cost: a call per wallet, once per this. An account that appears
+ * between two of these is not missed — opening one names its owner, so the
+ * wallet's own log subscription fires and the wallet is read anyway.
+ */
+const ACCOUNT_DISCOVERY_MS = 10 * 60_000;
+
+const eventsLog = logger("wallet-events");
+const positionsLog = logger("position-sync");
+
+/* Ten seconds for a wallet whose owner has the app open, and once a minute for
+   anyone else's: what decided a pass before anything was pushed, and what
+   decides one again whenever the stream cannot be trusted. */
+const syncCadence = cadence({ here });
+
+let heldAccounts: Watch | null = null;
+const eventsPushed = pushed({
+  live: () => jobs.subscriptions?.live ?? false,
+  sweepMs: EVENTS_SWEEP_MS,
+});
+const positionsPushed = pushed({
+  /* Live sockets are not enough: everything subscribed to can be healthy while
+     the list of what to subscribe to has gone stale, and a token account
+     nothing is watching is a deposit nobody hears about. */
+  live: () => (jobs.subscriptions?.live ?? false) && (heldAccounts?.current() ?? false),
+  blind: syncCadence,
+  sweepMs: POSITIONS_SWEEP_MS,
+});
+const walletChanged = (wallet: string) => {
+  eventsPushed.changed(wallet);
+  positionsPushed.changed(wallet);
+};
+
+const eventStreams =
+  jobs.subscriptions === null
+    ? null
+    : watchAddresses({
+        addresses: () => streamAddresses(auth.db),
+        subscribe: (address, told) => jobs.subscriptions!.logsMentioning(address, told),
+        told: walletChanged,
+      });
+
+const jobHistory = jobs.deps.history;
+heldAccounts =
+  jobs.subscriptions === null || jobHistory.tokenAccounts === undefined
+    ? null
+    : watchAddresses({
+        addresses: () =>
+          tokenAccountAddresses(auth.db, { tokenAccounts: (o) => jobHistory.tokenAccounts!(o) }),
+        subscribe: (address, told) => jobs.subscriptions!.accountChanges(address, told),
+        told: walletChanged,
+        everyMs: ACCOUNT_DISCOVERY_MS,
+      });
+
+/**
+ * Ten seconds, because that is how soon news the socket brought is acted on.
+ *
+ * A pass reads a wallet an account of theirs moved under, and otherwise one
+ * whose sweep is due. Before, it read every wallet whose owner had the app
+ * open every ten seconds and everyone else's every minute, and four reads in
+ * five were ones nobody saw — each two token-program calls and a Kamino read
+ * on the background lane (23 October 2026).
  *
  * A quiet pass is the common case, so only a pass that changed something or
  * failed says anything.
  */
-const syncCadence = cadence({ here });
 every(
   "position-sync",
   10_000,
   async () => {
-    const s = await syncAllPositions(auth.db, buildReconcileDeps(jobs.deps), syncCadence);
+    if (heldAccounts !== null) {
+      try {
+        await heldAccounts.refresh();
+      } catch (error) {
+        /* The pass still reads the chain: the accounts already watched are
+           unaffected, and `current` turns the stream off if this keeps up. */
+        positionsLog.error({ err: error }, "could not bring the watched token accounts up to date");
+      }
+    }
+    const s = await syncAllPositions(auth.db, buildReconcileDeps(jobs.deps), positionsPushed);
     if (s.written === 0 && s.failed === 0) return null;
     return (
       `${s.written} rows across ${s.reconciled}/${s.wallets} wallets` +
@@ -391,41 +492,6 @@ if (fund !== undefined) {
     jobClock(20_000),
   );
 }
-
-/**
- * How long a wallet may go unread while the node is pushing its news.
- *
- * The safety net under the subscriptions, and the whole of what the stream is
- * trusted for. A notification dropped between the node and us leaves a feed
- * behind by this much and no more; against the thirty-second pass it replaces,
- * it is a twentieth of the reads.
- */
-const EVENTS_SWEEP_MS = 10 * 60_000;
-
-/*
- * Every address whose news somebody owns, watched rather than asked after.
- *
- * `logsSubscribe` with a `mentions` filter covers both kinds of stream a
- * wallet has, which is why this watches the rows of `wallet_stream` and not
- * only the wallet: an SPL transfer names the two token accounts and the
- * sender, never the recipient, so watching owners alone would miss every
- * deposit. Nothing is watched when the jobs are on the paid endpoint, which
- * does not serve subscriptions at all — then `pushed` falls back to reading
- * every wallet every pass, as it did before.
- */
-const eventsLog = logger("wallet-events");
-const eventsPushed = pushed({
-  live: () => jobs.subscriptions?.live ?? false,
-  sweepMs: EVENTS_SWEEP_MS,
-});
-const eventStreams =
-  jobs.subscriptions === null
-    ? null
-    : watchAddresses({
-        addresses: () => streamAddresses(auth.db),
-        subscribe: (address, told) => jobs.subscriptions!.logsMentioning(address, told),
-        told: (wallet) => eventsPushed.changed(wallet),
-      });
 
 /**
  * Thirty seconds, because this answers "what happened" and `position-sync`

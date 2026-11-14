@@ -303,6 +303,19 @@ export interface TransactionDetail {
 export interface ChainHistory {
   /** The owner's token accounts for one mint. Empty when they have none yet. */
   tokenAccountsFor(owner: string, mint: string): Promise<readonly string[]>;
+  /**
+   * Every token account the owner holds, under either token program.
+   *
+   * Addresses to watch, which is why an account holding nothing is kept where
+   * a balance read drops it: an empty account is exactly where the next
+   * transfer in lands, and a subscription opened after the money arrives is a
+   * subscription that missed it.
+   *
+   * Optional for the same reason as `mintConfigs`: it is a capability, not a
+   * contract. A reader that cannot do it leaves it out, and a caller that
+   * wanted to watch holdings reads them on a clock instead.
+   */
+  tokenAccounts?(owner: string): Promise<readonly string[]>;
   /** Newest first, as the node returns them. */
   signatures(address: string, page: SignaturePage): Promise<readonly SignatureRef[]>;
   /** Null when the node has no such transaction, or has pruned it. */

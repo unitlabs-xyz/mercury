@@ -21,6 +21,19 @@ export interface Watch {
    * blip must not quietly stop the stream.
    */
   refresh(): Promise<WatchSummary>;
+  /**
+   * The subscriptions can be believed to cover what they should.
+   *
+   * Live sockets are not enough on their own. Everything already subscribed to
+   * can be perfectly healthy while the list of what to subscribe to has gone
+   * stale — a wallet opened since the last look, a token account nobody has
+   * found yet — and a caller that trusted the stream then would wait for news
+   * about an address nothing is watching.
+   *
+   * False before the first look, and after two intervals without one that
+   * worked: one missed look is a blip, two is a pattern.
+   */
+  current(): boolean;
   close(): void;
 }
 
@@ -29,6 +42,16 @@ export interface WatchOptions {
   readonly subscribe: (address: string, told: () => void) => Subscription;
   /** Told the wallet, never the address: an address in a log is a person's holdings in a log. */
   readonly told: (wallet: string) => void;
+  /**
+   * The least time between two looks at the addresses. Every call when left
+   * out, which suits a list that is one query of SQL.
+   *
+   * It is not when a list is cheap to read. Finding a wallet's token accounts
+   * costs an RPC call per wallet, and doing that on every pass of a job that
+   * runs every ten seconds would be the poll this replaces under another name.
+   */
+  readonly everyMs?: number;
+  readonly now?: () => number;
 }
 
 /**
@@ -47,10 +70,20 @@ export interface WatchOptions {
  */
 export const watchAddresses = (opts: WatchOptions): Watch => {
   const watching = new Map<string, Subscription>();
+  const now = opts.now ?? Date.now;
+  let lookedAt: number | null = null;
 
   return {
     async refresh() {
+      const at = now();
+      if (opts.everyMs !== undefined && lookedAt !== null && at - lookedAt < opts.everyMs) {
+        return { added: 0, dropped: 0, watching: watching.size };
+      }
       const wanted = await opts.addresses();
+      /* Marked after the read, not before it: a read that threw looked at
+         nothing, and holding off for the whole interval would leave a new
+         wallet unwatched over one database blip. */
+      lookedAt = at;
       let added = 0;
       for (const { wallet, address } of wanted) {
         if (watching.has(address)) continue;
@@ -73,9 +106,15 @@ export const watchAddresses = (opts: WatchOptions): Watch => {
       return { added, dropped, watching: watching.size };
     },
 
+    current() {
+      if (lookedAt === null) return false;
+      return now() - lookedAt < 2 * (opts.everyMs ?? Infinity);
+    },
+
     close() {
       for (const subscription of watching.values()) subscription.close();
       watching.clear();
+      lookedAt = null;
     },
   };
 };

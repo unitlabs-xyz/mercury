@@ -152,3 +152,168 @@ describe("watchAddresses", () => {
     expect(net.live()).toEqual([WALLET_A]);
   });
 });
+
+describe("watchAddresses on a clock of its own", () => {
+  /**
+   * Finding a wallet's token accounts costs an RPC call per wallet, so it
+   * cannot happen on every pass of a job that runs every ten seconds — that
+   * would be the poll this replaces, under another name.
+   */
+  it("reads the addresses again only once the interval has passed", async () => {
+    const net = node();
+    let now = 0;
+    let reads = 0;
+    const watch = watchAddresses({
+      addresses: async () => {
+        reads += 1;
+        return [{ wallet: WALLET_A, address: WALLET_A }];
+      },
+      subscribe: net.subscribe,
+      told: () => undefined,
+      everyMs: 10_000,
+      now: () => now,
+    });
+
+    await watch.refresh();
+    expect(reads).toBe(1);
+
+    now = 9_999;
+    await watch.refresh();
+    expect(reads).toBe(1);
+
+    now = 10_000;
+    await watch.refresh();
+    expect(reads).toBe(2);
+  });
+
+  it("reports what it is watching even on a pass it did not look", async () => {
+    const net = node();
+    const watch = watchAddresses({
+      addresses: async () => [
+        { wallet: WALLET_A, address: WALLET_A },
+        { wallet: WALLET_A, address: USDC_A },
+      ],
+      subscribe: net.subscribe,
+      told: () => undefined,
+      everyMs: 10_000,
+      now: () => 0,
+    });
+    await watch.refresh();
+
+    await expect(watch.refresh()).resolves.toEqual({ added: 0, dropped: 0, watching: 2 });
+  });
+
+  it("looks again straight away after a read that failed", async () => {
+    const net = node();
+    let fail = true;
+    let reads = 0;
+    const watch = watchAddresses({
+      addresses: async () => {
+        reads += 1;
+        if (fail) throw new Error("the database said no");
+        return [{ wallet: WALLET_A, address: WALLET_A }];
+      },
+      subscribe: net.subscribe,
+      told: () => undefined,
+      everyMs: 10_000,
+      now: () => 0,
+    });
+
+    await expect(watch.refresh()).rejects.toThrow("the database said no");
+    fail = false;
+
+    // Not held off for ten seconds by a pass that watched nothing.
+    await watch.refresh();
+    expect(reads).toBe(2);
+    expect(net.live()).toEqual([WALLET_A]);
+  });
+
+  it("looks every pass when no interval is given", async () => {
+    const net = node();
+    let reads = 0;
+    const watch = watchAddresses({
+      addresses: async () => {
+        reads += 1;
+        return [];
+      },
+      subscribe: net.subscribe,
+      told: () => undefined,
+      now: () => 0,
+    });
+
+    await watch.refresh();
+    await watch.refresh();
+
+    expect(reads).toBe(2);
+  });
+});
+
+describe("watchAddresses knowing whether to be believed", () => {
+  const watchOver = (opts: {
+    readonly addresses: () => Promise<readonly WatchedAddress[]>;
+    readonly now: () => number;
+    readonly everyMs?: number;
+  }) =>
+    watchAddresses({
+      addresses: opts.addresses,
+      subscribe: node().subscribe,
+      told: () => undefined,
+      now: opts.now,
+      ...(opts.everyMs === undefined ? {} : { everyMs: opts.everyMs }),
+    });
+
+  it("is not to be believed before it has ever looked", () => {
+    const watch = watchOver({ addresses: async () => [], now: () => 0 });
+
+    expect(watch.current()).toBe(false);
+  });
+
+  it("is to be believed once it has looked", async () => {
+    const watch = watchOver({ addresses: async () => [], now: () => 0 });
+    await watch.refresh();
+
+    expect(watch.current()).toBe(true);
+  });
+
+  it("is not to be believed after two intervals with no successful look", async () => {
+    let now = 0;
+    let fail = false;
+    const watch = watchOver({
+      addresses: async () => {
+        if (fail) throw new Error("the node said no");
+        return [];
+      },
+      now: () => now,
+      everyMs: 10_000,
+    });
+    await watch.refresh();
+    fail = true;
+
+    now = 19_999;
+    await expect(watch.refresh()).rejects.toThrow();
+    expect(watch.current()).toBe(true);
+
+    now = 20_000;
+    expect(watch.current()).toBe(false);
+  });
+
+  it("is to be believed again after a look that worked", async () => {
+    let now = 0;
+    const watch = watchOver({ addresses: async () => [], now: () => now, everyMs: 10_000 });
+    await watch.refresh();
+
+    now = 30_000;
+    expect(watch.current()).toBe(false);
+    await watch.refresh();
+    expect(watch.current()).toBe(true);
+  });
+
+  it("is not to be believed after being closed", async () => {
+    const watch = watchOver({ addresses: async () => [], now: () => 0 });
+    await watch.refresh();
+
+    watch.close();
+
+    expect(watch.current()).toBe(false);
+  });
+});

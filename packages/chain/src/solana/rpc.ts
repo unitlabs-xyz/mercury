@@ -380,6 +380,25 @@ export class SolanaRpc implements ChainReader, ChainHistory {
    * so this is one call. It also finds a non-associated account, which deriving
    * the associated address would miss.
    */
+  /**
+   * One call per token program, the two in parallel, and the addresses of
+   * everything they answer with. No filter and no balance test: this is the
+   * list of accounts to watch, not the list of holdings.
+   */
+  async tokenAccounts(owner: string): Promise<readonly string[]> {
+    const pages = await Promise.all(
+      [TOKEN_PROGRAM, TOKEN_2022_PROGRAM].map((programId) =>
+        this.call<{ value: readonly { pubkey: string }[] }>("getTokenAccountsByOwner", [
+          owner,
+          { programId },
+          { encoding: "jsonParsed" },
+        ]),
+      ),
+    );
+    // A set: the same account answered twice is one account to watch.
+    return [...new Set(pages.flatMap((page) => page.value.map((a) => a.pubkey)))];
+  }
+
   async tokenAccountsFor(owner: string, mint: string): Promise<readonly string[]> {
     const res = await this.call<{ value: readonly { pubkey: string }[] }>("getTokenAccountsByOwner", [
       owner,
