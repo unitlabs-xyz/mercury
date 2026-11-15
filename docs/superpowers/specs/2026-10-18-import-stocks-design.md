@@ -1,6 +1,9 @@
 # Import stocks · design
 
-**Status:** proposed · 18 October 2026
+**Status:** superseded · 18 October 2026 · by
+[2026-11-13 linked wallets](2026-11-13-linked-wallets-design.md) and
+[ADR 0017](../../adr/0017-linked-wallets.md). Its transfer and cost-basis rules are reused there;
+its parts that assume the wallet isn't known to Mercury no longer apply.
 
 ## What this is for
 
