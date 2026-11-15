@@ -201,3 +201,81 @@ describe("SolanaRpc.transaction", () => {
     expect(await rpc.transaction(SIG_A)).toBeNull();
   });
 });
+
+describe("SolanaRpc.tokenAccounts", () => {
+  /**
+   * Both token programs, because a wallet holds USDC under the original and
+   * xStocks under Token-2022, and the point of this is to watch all of them.
+   */
+  it("asks both token programs and returns every account's address", async () => {
+    let page = 0;
+    const pages = [
+      { context: { slot: 1 }, value: [{ pubkey: "AccountOne1111111111111111111111111111111" }] },
+      { context: { slot: 1 }, value: [{ pubkey: "AccountTwo2222222222222222222222222222222" }] },
+    ];
+    const n = node({ getTokenAccountsByOwner: {} });
+    const doFetch = ((_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      void n.calls.push(String(init?.body));
+      const result = pages[page++];
+      return Promise.resolve(
+        new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }), {
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    }) as typeof fetch;
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: doFetch });
+
+    const accounts = await rpc.tokenAccounts(FIXTURE_OWNER);
+
+    expect([...accounts].sort()).toEqual([
+      "AccountOne1111111111111111111111111111111",
+      "AccountTwo2222222222222222222222222222222",
+    ]);
+    expect(n.calls.join(" ")).toContain(TOKEN_PROGRAM);
+    expect(n.calls.join(" ")).toContain(TOKEN_2022_PROGRAM);
+  });
+
+  /* An account holding nothing is exactly where the next transfer in lands. */
+  it("keeps an account that is empty, which a balance read drops", async () => {
+    const n = node({
+      getTokenAccountsByOwner: {
+        context: { slot: 1 },
+        value: [
+          {
+            pubkey: "EmptyAccount111111111111111111111111111111",
+            account: {
+              data: {
+                parsed: {
+                  info: { mint: USDC_MINT, tokenAmount: { amount: "0", decimals: 6 } },
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: n.doFetch });
+
+    expect(await rpc.tokenBalances(FIXTURE_OWNER)).toEqual([]);
+    expect(await rpc.tokenAccounts(FIXTURE_OWNER)).toContain("EmptyAccount111111111111111111111111111111");
+  });
+
+  it("names an account once, however many programs answer with it", async () => {
+    const n = node({
+      getTokenAccountsByOwner: {
+        context: { slot: 1 },
+        value: [{ pubkey: "AccountOne1111111111111111111111111111111" }],
+      },
+    });
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: n.doFetch });
+
+    expect(await rpc.tokenAccounts(FIXTURE_OWNER)).toEqual(["AccountOne1111111111111111111111111111111"]);
+  });
+
+  it("returns nothing for a wallet that holds nothing yet", async () => {
+    const n = node({ getTokenAccountsByOwner: { context: { slot: 1 }, value: [] } });
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: n.doFetch });
+
+    expect(await rpc.tokenAccounts(FIXTURE_OWNER)).toEqual([]);
+  });
+});

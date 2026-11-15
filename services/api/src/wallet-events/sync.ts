@@ -261,25 +261,47 @@ async function syncWallet(
   });
 }
 
+export interface EventsOptions {
+  /** Whether a wallet is read this pass. All of them when left out. See `jobs/pushed.ts`. */
+  readonly due?: (address: string) => boolean;
+  /** Told each wallet read, whether or not it could be. */
+  readonly read?: (address: string) => void;
+}
+
 /**
  * Turn every account's recent history into activity rows.
  *
  * One wallet failing does not stop the rest, as `position-sync` already does.
  * A wallet we cannot read is a wallet whose feed stays where it was — behind
  * but right — which is the correct answer when an upstream is down.
+ *
+ * Which wallets a pass reads is the caller's to decide, as it is for
+ * `position-sync`: a wallet the node has said something about, and otherwise
+ * one the sweep is due. `wallets` in the summary counts the pass's own work,
+ * so a quiet pass reports the handful it looked at rather than everyone on the
+ * books.
  */
-export async function syncAllWalletEvents(db: Db, deps: WalletEventsDeps): Promise<EventsSummary> {
-  const rows = await db
+export async function syncAllWalletEvents(
+  db: Db,
+  deps: WalletEventsDeps,
+  opts: EventsOptions = {},
+): Promise<EventsSummary> {
+  const all = await db
     .select({ userId: users.id, walletId: wallets.id, address: wallets.address })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
     .where(eq(wallets.isPrimary, true));
+  const rows = opts.due === undefined ? all : all.filter((r) => opts.due!(r.address));
 
   let checked = 0;
   let failed = 0;
   let written = 0;
 
   for (const row of rows) {
+    /* Before the pass, not after it: a wallet whose read failed has still been
+       read, and marking it either way is what stops a wallet the node keeps
+       refusing from being retried every pass for ever. */
+    opts.read?.(row.address);
     try {
       written += await syncWallet(db, deps, row.userId, row.walletId, row.address);
       checked += 1;

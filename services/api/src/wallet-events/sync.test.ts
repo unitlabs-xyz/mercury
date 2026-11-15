@@ -345,6 +345,79 @@ describe("syncAllWalletEvents", () => {
     expect(ataAfterSecond[0]!.cursor).toBe(SIG_U);
   });
 
+  describe("which wallets a pass reads", () => {
+    const OTHER = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PQfuzkt";
+
+    /** Two primary wallets, neither with anything on chain. */
+    const two = async () => {
+      const db = await testDb();
+      for (const [i, address] of [WALLET, OTHER].entries()) {
+        const [user] = await db
+          .insert(users)
+          .values({ privyUserId: `did:privy:u${i}` })
+          .returning();
+        await db.insert(wallets).values({ userId: user!.id, address, kind: "privy_embedded" });
+      }
+      return db;
+    };
+
+    const quiet = (asked: string[]): ChainHistory => ({
+      tokenAccountsFor: () => Promise.resolve([]),
+      signatures: (address) => {
+        asked.push(address);
+        return Promise.resolve([]);
+      },
+      transaction: () => Promise.resolve(null),
+    });
+
+    it("reads only the wallets that are due, and says which it read", async () => {
+      const db = await two();
+      const asked: string[] = [];
+      const read: string[] = [];
+
+      const summary = await syncAllWalletEvents(
+        db,
+        { history: quiet(asked), lendingProgram: KAMINO },
+        { due: (address) => address === OTHER, read: (address) => void read.push(address) },
+      );
+
+      expect(asked).toEqual([OTHER]);
+      expect(read).toEqual([OTHER]);
+      // `wallets` counts the pass's work, not everyone on the books.
+      expect(summary.wallets).toBe(1);
+    });
+
+    it("says a wallet was read even when reading it failed, so it is tried again", async () => {
+      const db = await two();
+      const read: string[] = [];
+
+      const summary = await syncAllWalletEvents(
+        db,
+        {
+          history: {
+            tokenAccountsFor: () => Promise.resolve([]),
+            signatures: () => Promise.reject(new Error("the node said no")),
+            transaction: () => Promise.resolve(null),
+          },
+          lendingProgram: KAMINO,
+        },
+        { read: (address) => void read.push(address) },
+      );
+
+      expect(summary.failed).toBe(2);
+      expect(read.sort()).toEqual([OTHER, WALLET].sort());
+    });
+
+    it("reads every wallet when nothing says otherwise", async () => {
+      const db = await two();
+      const asked: string[] = [];
+
+      await syncAllWalletEvents(db, { history: quiet(asked), lendingProgram: KAMINO });
+
+      expect(asked.sort()).toEqual([OTHER, WALLET].sort());
+    });
+  });
+
   it("leaves the cursor alone when a transaction cannot be fetched, so nothing is stepped over", async () => {
     const { db } = await seed();
     const [wallet] = await db.select().from(wallets).where(eq(wallets.address, WALLET));

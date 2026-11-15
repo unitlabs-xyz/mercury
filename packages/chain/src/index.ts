@@ -7,4 +7,5 @@ export * from "./jupiter/keys.js";
 export * from "./jupiter/pace.js";
 export * from "./solana/rpc.js";
 export * from "./solana/rotation.js";
+export * from "./solana/subscriptions.js";
 export * from "./fetch.js";

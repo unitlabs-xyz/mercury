@@ -35,7 +35,7 @@ export const presence = (
 };
 
 /** A wallet's own spot in a window of `ms`: the same every time, spread across wallets. */
-const spot = (wallet: string, ms: number) => {
+export const spot = (wallet: string, ms: number) => {
   let h = 0;
   for (let i = 0; i < wallet.length; i++) h = (h * 31 + wallet.charCodeAt(i)) >>> 0;
   return h % ms;

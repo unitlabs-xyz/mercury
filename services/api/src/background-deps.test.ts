@@ -97,6 +97,23 @@ describe("backgroundDeps", () => {
   it("leaves the jobs on the paid endpoint when the list is set empty", () => {
     const config = readConfig({ ...base, SOLANA_PUBLIC_RPC_URLS: "" });
     const deps = buildDeps(config);
-    expect(backgroundDeps(deps, config)).toEqual({ deps, lane: null });
+    expect(backgroundDeps(deps, config)).toEqual({ deps, lane: null, subscriptions: null });
+  });
+
+  /* The paid endpoint answers accountSubscribe with "Method not found", so a
+     job on it has nothing to subscribe to and polls as it always did. */
+  it("gives the jobs sockets on the public lane and none on the paid one", () => {
+    const onPublic = readConfig({ ...base, SOLANA_PUBLIC_RPC_URLS: "https://a.example,https://b.example" });
+    expect(backgroundDeps(buildDeps(onPublic), onPublic).subscriptions).not.toBeNull();
+
+    const onPaid = readConfig({ ...base, SOLANA_PUBLIC_RPC_URLS: "" });
+    expect(backgroundDeps(buildDeps(onPaid), onPaid).subscriptions).toBeNull();
+  });
+
+  it("has subscribed to nothing until something asks to be told", () => {
+    const config = readConfig({ ...base, SOLANA_PUBLIC_RPC_URLS: "https://a.example" });
+    // Building the jobs' dependencies must not open a socket: the process
+    // starts and the first job's first pass is what asks for one.
+    expect(backgroundDeps(buildDeps(config), config).subscriptions!.live).toBe(false);
   });
 });
