@@ -1,7 +1,8 @@
 # Withdraw to any chain: design
 
 **Status:** draft for review, not built · 16 November 2026 · web first, iOS after ·
-amends [ADR 0014](../../adr/0014-relay-funding.md) for the outbound direction
+**EVM and Solana destinations only** · amends [ADR 0014](../../adr/0014-relay-funding.md) for the
+outbound direction
 
 Send moves USDC from the Mercury wallet to a Solana address, and nothing else. Someone who wants
 their money on Base, Ethereum or an exchange that only takes another chain has to send it to a
@@ -175,7 +176,14 @@ the same `verified === true` filter, which is what stops an impostor USDC being 
 | EVM    | 20-byte hex. Mixed case must pass its EIP-55 checksum; all one case is taken |
 | Solana | Base58 that decodes to 32 bytes, as `address()` does today                   |
 
-Bitcoin and other VMs are out of the first release; see "Still open".
+**EVM and Solana are the whole of it.** Bitcoin and other VMs are not a later release: they are
+out, and the poller this design reuses is the reason. `funding/poll.ts` waits 90 seconds before it
+treats an untouched row as stale, and says why in so many words — "a cross-chain fill takes about a
+second, and Bitcoin — the one case that takes an hour — is not offered". A destination that settles
+in an hour breaks that window, the minute the sheet promises, and the open lifetime of a
+`withdrawal` row. Offering it means a second settlement path with its own timings, alerts and copy,
+which is more than one destination is worth. If that trade is ever worth making it is its own
+piece, with its own decision.
 
 **Solana and USDC never goes through Relay.** Picking the default keeps today's direct transfer:
 cheaper (no bridge fee, no Mercury fee), and the one that already works.
@@ -231,7 +239,8 @@ already matches a deposit's signature to its intent, and does the same for a wit
 
 - **iOS.** `apps/mobile/app/send.tsx` gets the picker in a follow-up, against these endpoints.
 - **Sending stocks or other tokens across chains.** The source is the Mercury wallet's USDC.
-- **Bitcoin and non-EVM destinations** (below).
+- **Bitcoin and other non-EVM destinations.** Decided against rather than deferred, for the
+  settlement-window reason under "Where it can go".
 
 ## Build order
 
@@ -252,9 +261,6 @@ already matches a deposit's signature to its intent, and does the same for a wit
   spends about $0.001 of SOL per withdrawal that is not repaid, while 10 bps of $5 ($0.005) builds
   up in the Relay balance, so each withdrawal at the minimum still pays for itself, just not in
   the same account.
-- **Bitcoin as a destination.** Relay supports it and nothing has to sign on Bitcoin, because the
-  money leaves from Solana, so unlike deposits it is possible. It needs address checks for each
-  Bitcoin format and a look at Relay's minimum for BTC fills. Worth a second release.
 - **The app fee on a refund, and claiming.** Confirm with Relay that an app fee is not credited
   for a request that ends in `refund`, and how the balance is claimed when it builds up from Solana
   origins as well as EVM ones (the recipient is an EVM address today). Nothing in the build waits
