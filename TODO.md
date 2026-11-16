@@ -60,9 +60,12 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 **Earn**
 
-- [ ] One Cash balance earning a variable rate, chosen at sign-up and not pre-checked
+- [ ] One Cash balance earning a variable rate, chosen at sign-up and not pre-checked. Designed as
+      auto-earn: [spec](docs/superpowers/specs/2026-11-16-auto-earn-design.md), in review
 - [ ] Take what a buy needs out of Earn inside the buy's own transaction. Today the ticket points
-      the person to Earn instead
+      the person to Earn instead. Part of auto-earn, step 4
+- [ ] Earn moves repay their network cost in USDC, and withdrawals pay 0.75% of the interest
+      they carry, manual and automatic alike. Part of auto-earn, step 2
 - [ ] An Earn screen on mobile
 
 **Trading**
