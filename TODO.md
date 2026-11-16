@@ -104,6 +104,16 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 - [ ] Weekly check: SOL the relayer spent against the USDC it collected
 - [ ] Decide whether Send keeps absorbing its signature
 
+## Withdraw to any chain: designed, in review
+
+[Spec](docs/superpowers/specs/2026-11-16-withdraw-any-chain-design.md). Send gains a chain and
+token picker; anything but Solana USDC is a Relay withdrawal composed under our relayer, with
+Mercury's fee (`WITHDRAW_FEE_BPS`, default 10) held by Relay through `appFees` and claimed later.
+
+- [ ] Review the spec, and settle the minimum (proposed $5)
+- [ ] Check a Solana-origin quote through `/quote/v2` with the real `RELAY_API_KEY`
+- [ ] Build steps 1–6 on web; iOS after
+
 ## Trade router: designed, not to be built until the go-ahead
 
 [ADR 0018](docs/adr/0018-trade-router.md) (proposed),
