@@ -39,8 +39,8 @@ the protection it trades is the whole of what stood between a compromised page a
 
 ## Why that is acceptable now, and when it stops being
 
-Today this runs on a dev deployment, for accounts we control, holding test amounts. The risk is
-bounded by what is in those wallets.
+This runs in private beta: some real users, holding small balances. The risk is bounded by what is
+in those wallets, and it is no longer bounded to ours.
 
 It stops being acceptable the moment someone who is not us holds a balance here worth taking. The
 replacement is not the sheet coming back — it is delegated signing constrained by policy, which

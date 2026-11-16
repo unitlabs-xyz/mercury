@@ -4,7 +4,7 @@
 program ships.
 
 The design is in [the spec](../superpowers/specs/2026-10-21-trade-router-design.md), and the build
-in [the plan](../superpowers/plans/2026-10-21-trade-router.md). 0017 is held by the referral work.
+in [the plan](../superpowers/plans/2026-10-21-trade-router.md).
 
 ## Context
 

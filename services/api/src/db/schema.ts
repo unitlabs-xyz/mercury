@@ -794,11 +794,10 @@ export const fundingIntents = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     /**
-     * The id Relay gave the quote we minted.
+     * The id Relay gave the quote we minted, and the deposit's identity.
      *
-     * Not an identity. Relay regenerates the quote on over- or underpayment
-     * and the fill lands under a new id, so this is what we asked for and not
-     * necessarily what happened. `deposit_address` is the identity.
+     * One quote is one deposit, for the reason `funding_intent_request_idx`
+     * gives below.
      */
     relayRequestId: text("relay_request_id").notNull(),
     originChainId: integer("origin_chain_id").notNull(),
@@ -845,11 +844,7 @@ export const fundingIntents = pgTable(
      *
      * One quote is one deposit: the amount is fixed by a signature before
      * Relay ever sees it, so Relay has nothing to regenerate and the id it
-     * gave us stays the id the fill lands under. That was not true while
-     * deposit addresses existed — an open address is reusable, and Relay
-     * reissues a quote on over- or underpayment — which is why this index was
-     * briefly a partial one over a `deposit_address` column that no longer
-     * exists.
+     * gave us stays the id the fill lands under.
      */
     uniqueIndex("funding_intent_request_idx").on(t.relayRequestId),
   ],

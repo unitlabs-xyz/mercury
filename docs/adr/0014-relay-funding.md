@@ -223,3 +223,18 @@ transport and a webhook that was never enabled cannot leave a deposit reading
 Everything in the quote path is one shape for every chain: the server composes
 nothing, `execute()` runs whatever steps the quote holds, and
 `funding/compose.ts` is deleted.
+
+---
+
+## Amendment · 15 October 2026
+
+**`appFees` is not zero.** A deposit of anything but Circle's own USDC is charged
+0.3% (`DEPOSIT_FEE_BPS`), which Relay takes out of the deposit and holds as a
+USDC balance credited to `DEPOSIT_FEE_RECIPIENT` — an EVM address, including for
+deposits from Solana. Circle's own USDC is free on every chain Circle issues it,
+because Relay bridges it for nothing, so a fee there would be for our name on
+the deposit and not for any work. With no recipient set, nothing is charged.
+
+`services/api/src/funding/fees.ts` holds the rule and
+[revenue TODO §6](../revenue-todo.md#6--add-cash-fee-03-on-non-usdc-tokens) the
+rest of it, including that the balance is left at Relay with no payout built.
