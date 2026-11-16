@@ -98,11 +98,11 @@ mainnet's old rent rate.
 
 ## 3 · Referral tracking
 
-**Built in [PR #97](https://github.com/unitlabs-xyz/mercury/pull/97), in review, not merged.** The
-boxes below stay unchecked on `main` until it is. It conflicts with `main` today, and its migration has
-to be renumbered after `0028_earn_consent`. Until it merges, nothing reads `?ref=`, and the
-founding-card links (`/f/:slug`) 301 to `trymercury.xyz` and drop any query string
-(`services/api/src/app.ts`). The founding 500 are still in the `waitlist` table (`position <= 500`).
+**Not planned.** [PR #97](https://github.com/unitlabs-xyz/mercury/pull/97) was closed unmerged on
+13 November 2026: referral tracking will not go live, and its branch is kept so the work is
+recoverable. Nothing reads `?ref=`, and the founding-card links (`/f/:slug`) 301 to
+`trymercury.xyz` and drop any query string (`services/api/src/app.ts`). The founding 500 are in the
+`waitlist` table (`position <= 500`). The boxes below are the design, not work in hand.
 
 - [ ] Give every user a referral code and a share link
 - [ ] Read `?ref=` on landing and web, keep it through Privy sign-in, then attach it at first sign-in
@@ -114,7 +114,10 @@ founding-card links (`/f/:slug`) 301 to `trymercury.xyz` and drop any query stri
 - [ ] Keep `?ref=` when `/f/:slug` redirects
 - [ ] Invite screen: link, friends invited, friends funded, earned so far
 
-## 4 · Referral payouts (once counsel approves the flat reward)
+## 4 · Referral payouts (not planned)
+
+**Not planned**, with §3. The design below is kept because it is the answer if referrals ever come
+back, and because the research behind it applies to any reward Mercury pays a user.
 
 **Changed 21 October 2026.** A share of the friend's fees is the riskiest referral design in nearly
 every target market, because xStocks are securities ([research](research/2026-10-21-referral-fee-sharing.md)).
@@ -131,7 +134,6 @@ The design now, pending counsel:
 - [ ] Monthly, off-chain: the server publishes the month's total, the admin withdraws it to the
       treasury (the payout wallet), and a payout job pays each inviter and records a `referral_payout`
       ledger. See the router spec's "Referral payouts"
-- [ ] Rewrite #97's `docs/superpowers/plans/2026-10-17-referral-rewards.md`, which still assumes the fee share
 - [ ] Later, partners only: a revenue share for vetted, contracted partners where counsel clears it
 
 ## 5 · Glider basket fee (once Glider confirms the payout)

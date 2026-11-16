@@ -26,9 +26,6 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 ## Pull requests
 
-- [ ] [#97 Referral tracking](https://github.com/unitlabs-xyz/mercury/pull/97): conflicts with `main`.
-      Renumber its migration after `0028_earn_consent`, then review and merge. The trade router builds
-      on it
 - [ ] [#74 Custom baskets](https://github.com/unitlabs-xyz/mercury/pull/74): review
 - [ ] [#76 Copy pass](https://github.com/unitlabs-xyz/mercury/pull/76): conflicts with `main` since
       14 October. Rebase or close
@@ -37,7 +34,7 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 - [ ] `feat/import-stocks`: one docs commit, Part B of importing stocks answered and Part C corrected.
       Push it or drop it
-- [ ] `feat/trade-router`: its docs are on `main` now. The branch can go once #97 merges
+- [ ] `feat/trade-router`: its docs are on `main` now. The branch can go
 - [ ] Prune the local branches whose pull requests have merged
 
 ## Before a public launch
@@ -86,12 +83,11 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
       ticket
 - [ ] Charge the network cost on basket deposits
 
-**Referrals, after #97 merges**
+**Referrals**
 
-- [ ] The flat reward per qualified friend instead of a fee share, once counsel agrees
-      ([revenue TODO §4](docs/revenue-todo.md#4--referral-payouts-once-counsel-approves-the-flat-reward))
-- [ ] Rewrite the rewards plan, which still assumes the fee share
-- [ ] An Invite screen on mobile
+Not planned. Referral tracking was closed unmerged on 13 November 2026 and will not go live. The
+design is kept in [revenue TODO §3 and §4](docs/revenue-todo.md#3--referral-tracking), and its branch
+is kept so the work is recoverable.
 
 **Card and cash out**
 
@@ -108,10 +104,12 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 [ADR 0018](docs/adr/0018-trade-router.md) (proposed),
 [spec](docs/superpowers/specs/2026-10-21-trade-router-design.md),
-[plan](docs/superpowers/plans/2026-10-21-trade-router.md). It builds on #97.
+[plan](docs/superpowers/plans/2026-10-21-trade-router.md).
 
 - [ ] Pick the audit firm, and when
 - [ ] Counsel: does routing swaps for a fee make Mercury an order transmitter in the launch markets?
+- [ ] Take the referral payouts out of the spec, or say they are not planned: it still designs them
+      on referral tracking that will not ship
 
 ## RPC and infrastructure
 
