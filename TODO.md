@@ -65,6 +65,27 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
       the person to Earn instead
 - [ ] An Earn screen on mobile
 
+**Invest: every stock, not 21**
+([spec](docs/superpowers/specs/2026-11-17-invest-all-stocks-design.md))
+
+- [ ] API: `scope=all` ordered by deepest pool, with `total` in the response
+- [ ] API: a job that reads `tokens/v2/tag?query=verified` every 30 s and holds price, liquidity and
+      24h change for every stock in memory. /invest and the portfolio read from it
+- [ ] API: multipliers from `price/v3` hourly, spread across the hour. Share price = list price ÷
+      multiplier
+- [ ] API: stock pages keep `price/v3` through `CachedPriceBoard`, cached 7 s. Fill every call to 50
+      mints: the opened stock's first, then the most liquid mints whose price has expired
+- [ ] API: held mints leave `warmPrices` (the portfolio reads list prices)
+- [ ] Confirm the API host doesn't charge for inbound traffic (the list call downloads about 14 GB a
+      day; memory is replaced each pass, not accumulated)
+- [ ] Web: /invest lists `scope=all`, default sort liquidity descending, real count in the header
+- [ ] Web: "Liquid only" toggle beside the sector filter (featured rows only)
+- [ ] Web: sparkline history only for the visible page
+- [ ] Web: Movers, Most bought and Sectors use featured rows only
+- [ ] API: lower the accepted-impact ceiling (`ACCEPTED_IMPACT`) from 10% to 5%, and show a clear
+      refusal above it on the ticket
+- [ ] Mobile: same list and order on the Invest tab
+
 **Trading**
 
 - [ ] Fee tiers: 0.5% / 0.35% / 0.25% by trade size, tested at the $2k and $20k edges
