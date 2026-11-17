@@ -12,14 +12,14 @@ because a stock is thin.
 
 ## What happens today
 
-| Piece                                    | Behaviour                                                                                                                                   |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /v1/instruments` (no params)        | Only tickers whose deepest wrapper pool is at least `FEATURED_LIQUIDITY_USD` ($70k). 21 today (`services/api/src/routes/instruments.ts`)     |
-| `GET /v1/instruments?scope=all`          | Every tradable, priced ticker. Exists, unused by web                                                                                        |
-| `?q=`                                    | Searches all of them, 50 results at most                                                                                                    |
-| Screener (`apps/web/src/app/invest/Screener.tsx`) | Pages of 20, sorted by 24h volume by default. Thin rows carry an "Up to $X" chip from `maxOrderUsd`                               |
-| Price warming (`services/api/src/prices/warm.ts`) | Warms the featured set and held mints only. The other ~447 are priced when someone asks for them                                  |
-| Ticket (`apps/web/src/app/stock/Ticket.tsx`) | Under 1.5% impact: nothing shown. Over 1.5%: the quote is refused with `impact_too_high`, a warning names the cost in dollars, and one press accepts it. The re-quote then runs with a 10% ceiling (`ACCEPTED_IMPACT`, `services/api/src/pricing.ts`) |
+| Piece                                             | Behaviour                                                                                                                                                                                                                                             |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /v1/instruments` (no params)                 | Only tickers whose deepest wrapper pool is at least `FEATURED_LIQUIDITY_USD` ($70k). 21 today (`services/api/src/routes/instruments.ts`)                                                                                                              |
+| `GET /v1/instruments?scope=all`                   | Every tradable, priced ticker. Exists, unused by web                                                                                                                                                                                                  |
+| `?q=`                                             | Searches all of them, 50 results at most                                                                                                                                                                                                              |
+| Screener (`apps/web/src/app/invest/Screener.tsx`) | Pages of 20, sorted by 24h volume by default. Thin rows carry an "Up to $X" chip from `maxOrderUsd`                                                                                                                                                   |
+| Price warming (`services/api/src/prices/warm.ts`) | Warms the featured set and held mints only. The other ~447 are priced when someone asks for them                                                                                                                                                      |
+| Ticket (`apps/web/src/app/stock/Ticket.tsx`)      | Under 1.5% impact: nothing shown. Over 1.5%: the quote is refused with `impact_too_high`, a warning names the cost in dollars, and one press accepts it. The re-quote then runs with a 10% ceiling (`ACCEPTED_IMPACT`, `services/api/src/pricing.ts`) |
 
 The ticket already behaves as wanted. **Most of the work is the list.**
 
@@ -62,25 +62,25 @@ would starve trading.
 
 Measured 17 November 2026:
 
-|                                  | `tokens/v2/tag?query=verified`          | `price/v3?ids=…`                          |
-| -------------------------------- | --------------------------------------- | ----------------------------------------- |
-| Covers                           | Every verified token, 3,771, in one call | Up to 50 chosen mints                     |
-| Size                             | 4.9 MB                                  | Small                                     |
-| Jupiter's CDN cache              | 30 s (`max-age=30`)                     | 5 s (`max-age=5`)                         |
-| `usdPrice`                       | Yes, identical to `price/v3` (50 of 50 compared) | Yes                              |
-| Liquidity, holders, 24h stats    | Yes (`stats24h.priceChange` included)   | Liquidity only                            |
-| Multiplier (`scaledUiConfig`)    | No                                      | Yes. Mostly 1.000–1.007; one seen at 0.51 |
-| Issuer reference (`stockData`)   | No                                      | Yes                                       |
+|                                | `tokens/v2/tag?query=verified`                   | `price/v3?ids=…`                          |
+| ------------------------------ | ------------------------------------------------ | ----------------------------------------- |
+| Covers                         | Every verified token, 3,771, in one call         | Up to 50 chosen mints                     |
+| Size                           | 4.9 MB                                           | Small                                     |
+| Jupiter's CDN cache            | 30 s (`max-age=30`)                              | 5 s (`max-age=5`)                         |
+| `usdPrice`                     | Yes, identical to `price/v3` (50 of 50 compared) | Yes                                       |
+| Liquidity, holders, 24h stats  | Yes (`stats24h.priceChange` included)            | Liquidity only                            |
+| Multiplier (`scaledUiConfig`)  | No                                               | Yes. Mostly 1.000–1.007; one seen at 0.51 |
+| Issuer reference (`stockData`) | No                                               | Yes                                       |
 
 So each source does one job:
 
-| What                                   | Source                                         | Who calls it      | How often        |
-| -------------------------------------- | ---------------------------------------------- | ----------------- | ---------------- |
-| /invest list (all ~470 stocks)         | `tokens/v2/tag?query=verified`                 | Server job        | Every 30 s, 1 call |
-| Portfolio values and holdings          | The same list prices                           | Server job        | Every 30 s       |
-| Multipliers (token → share)            | `price/v3` for every listed mint, in batches spread across the hour | Server job | Hourly, about 19 calls |
-| A stock's own page                     | `price/v3` for that stock's mints, filled to 50 (below), through `CachedPriceBoard` | The server, when the page asks and the price has expired | Cached 7 s |
-| What an order fills at                 | Jupiter swap quote                             | The server, per order | Per quote, as today |
+| What                           | Source                                                                              | Who calls it                                             | How often              |
+| ------------------------------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------- | ---------------------- |
+| /invest list (all ~470 stocks) | `tokens/v2/tag?query=verified`                                                      | Server job                                               | Every 30 s, 1 call     |
+| Portfolio values and holdings  | The same list prices                                                                | Server job                                               | Every 30 s             |
+| Multipliers (token → share)    | `price/v3` for every listed mint, in batches spread across the hour                 | Server job                                               | Hourly, about 19 calls |
+| A stock's own page             | `price/v3` for that stock's mints, filled to 50 (below), through `CachedPriceBoard` | The server, when the page asks and the price has expired | Cached 7 s             |
+| What an order fills at         | Jupiter swap quote                                                                  | The server, per order                                    | Per quote, as today    |
 
 - **Share price** = list `usdPrice` ÷ the hourly multiplier, the same arithmetic `price/v3` prices go
   through today. A mint with no multiplier yet is not shown rather than shown at 1.
@@ -97,6 +97,7 @@ So each source does one job:
 
   The board is shared by every user, so with traffic the most liquid stocks stay fresh and most
   stock-page opens are answered from cache without a call.
+
 - **The cache is 7 s.** Jupiter caches `price/v3` for 5 s, so a shorter window wouldn't get fresher
   prices, only more calls.
 - **Held mints leave `warmPrices`.** The portfolio reads list prices, so warming held mints through
