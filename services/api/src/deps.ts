@@ -43,6 +43,7 @@ import { createPrivyVerifier } from "./auth/verifier.js";
 import { createDb, type Db } from "./db/client.js";
 import type { ActivityDeps } from "./routes/activity.js";
 import type { NotificationDeps } from "./routes/notifications.js";
+import type { WalletDeps } from "./routes/wallets.js";
 import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import { KaminoLending } from "./lending/kamino.js";
@@ -79,6 +80,7 @@ import {
 import { basketReturnsReader, basketValueReader } from "./portfolio/baskets.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import { countUnread, markAllRead, markRead, readInbox } from "./notify/inbox-queries.js";
+import { pgWalletDeps } from "./wallets/deps.js";
 import { readReceipt } from "./portfolio/receipt-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 import { BasketService } from "./baskets/core/service.js";
@@ -205,6 +207,17 @@ export interface Config {
    * rather than on dislocation.
    */
   readonly pythApiKey?: string;
+  /**
+   * Where the web app is served. A wallet being linked signs a message that
+   * names this domain, so a signature asked for on any other site is no use
+   * here. `APP_URL`, defaulting to the beta.
+   */
+  readonly appUrl: string;
+  /**
+   * How many wallets a person may have linked at once, beside their Mercury
+   * wallet. `LINKED_WALLET_LIMIT`, defaulting to 5.
+   */
+  readonly linkedWalletLimit: number;
 }
 
 /**
@@ -260,6 +273,46 @@ const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): num
     throw new Error(`${key} must be whole basis points from 0 to 9999, got "${raw}"`);
   }
   return bps;
+};
+
+/** The web app, where a wallet is linked. */
+const DEFAULT_APP_URL = "https://beta.trymercury.xyz";
+
+/** Five linked wallets beside the Mercury wallet, the number set on 21 November 2026. */
+const DEFAULT_LINKED_WALLET_LIMIT = 5;
+
+/*
+ * https, or http on this machine for a local web app. The domain is what a
+ * wallet shows the person when it asks them to sign, so it has to be real.
+ */
+const appUrl = (env: NodeJS.ProcessEnv): string => {
+  const raw = env["APP_URL"];
+  if (raw === undefined || raw.length === 0) return DEFAULT_APP_URL;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`APP_URL must be a URL, got "${raw}"`);
+  }
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
+    throw new Error(`APP_URL must be https (or http on localhost), got "${raw}"`);
+  }
+  return url.origin;
+};
+
+/*
+ * A whole number of at least one, or the server does not start. Zero would
+ * offer linking and refuse every link.
+ */
+const linkedWalletLimit = (env: NodeJS.ProcessEnv): number => {
+  const raw = env["LINKED_WALLET_LIMIT"];
+  if (raw === undefined || raw.length === 0) return DEFAULT_LINKED_WALLET_LIMIT;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error(`LINKED_WALLET_LIMIT must be a whole number of at least 1, got "${raw}"`);
+  }
+  return n;
 };
 
 /*
@@ -369,6 +422,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     depositFeeBps: basisPoints(env, "DEPOSIT_FEE_BPS", DEFAULT_DEPOSIT_FEE_BPS),
     ...(depositFeeRecipient === undefined ? {} : { depositFeeRecipient }),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
+    appUrl: appUrl(env),
+    linkedWalletLimit: linkedWalletLimit(env),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
   };
@@ -581,6 +636,8 @@ export interface ReadDeps {
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
   readonly notifications: NotificationDeps;
+  /** Linking, naming and unlinking the wallets beside the Mercury wallet. */
+  readonly wallets: WalletDeps;
   readonly orders: OrderStore;
   readonly fills: FillDeps;
   readonly borrow: BorrowDeps;
@@ -630,6 +687,8 @@ export function buildReadDeps(
     | "notifyFrom"
     | "feedbackTo"
     | "tradingFeeBps"
+    | "appUrl"
+    | "linkedWalletLimit"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
@@ -713,6 +772,7 @@ export function buildReadDeps(
       read: (userId, id) => markRead(db, userId, id, new Date()),
       readAll: (userId, upTo) => markAllRead(db, userId, upTo, new Date()),
     },
+    wallets: pgWalletDeps(db, { appUrl: config.appUrl, limit: config.linkedWalletLimit }),
     orders: pgOrderStore(db),
     tradingFeeBps: config.tradingFeeBps,
     feedback: {

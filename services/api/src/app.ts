@@ -21,6 +21,7 @@ import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { walletRoutes } from "./routes/wallets.js";
 import { borrowRoutes } from "./routes/borrow.js";
 import { earnRoutes } from "./routes/earn.js";
 import { sendRoutes } from "./routes/send.js";
@@ -207,6 +208,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", moneyRoutes(read.money));
   app.route("/", activityRoutes(read.activity));
   app.route("/", notificationRoutes(read.notifications));
+  app.route("/", walletRoutes(read.wallets));
   app.route("/", borrowRoutes(read.borrow));
   app.route("/", earnRoutes(read.earn));
   app.route("/", sendRoutes(read.send));

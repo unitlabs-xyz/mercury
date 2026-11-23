@@ -16,6 +16,7 @@ import { syncStocks } from "./stocks/sync.js";
 import { warmPrices } from "./prices/warm.js";
 import { RECORD_MAX_AGE_MS, prunePriceBars, recordPriceBars } from "./prices/record.js";
 import { pruneNotifications } from "./notify/inbox-queries.js";
+import { pruneLinkChallenges } from "./wallets/store.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
@@ -245,17 +246,18 @@ const jobClock = (startAfterMs: number): EveryDeps => ({ startAfterMs });
  * its job plan was deleted rather than left to describe a system that does not
  * exist — and no serverless cron, because this is not deployed as functions.
  *
- * | Job                  | Cadence | Writes                                                                        |
- * | -------------------- | ------- | ----------------------------------------------------------------------------- |
- * | `prices`             | 20s     | `price_bar`, and it fills the shared price board                              |
- * | `price-bar-prune`    | 6h      | deletes minute bars past thirty days                                          |
- * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`                                     |
- * | `position-sync`      | 10s     | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
- * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers                                        |
- * | `funding-poll`       | 60s     | `funding_intent`, Relay's verdict on a deposit; only when Relay is configured |
- * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                                          |
- * | `snapshot-retry`     | 5m      | `portfolio_snapshot`, for accounts the hour's pass missed, within that hour   |
- * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email                                        |
+ * | Job                    | Cadence | Writes                                                                        |
+ * | ---------------------- | ------- | ----------------------------------------------------------------------------- |
+ * | `prices`               | 20s     | `price_bar`, and it fills the shared price board                              |
+ * | `price-bar-prune`      | 6h      | deletes minute bars past thirty days                                          |
+ * | `stocks`               | 6h      | `instrument`, `token`, `multiplier_event`                                     |
+ * | `position-sync`        | 10s     | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
+ * | `wallet-events`        | 30s     | `activity`, for SOL and USDC transfers                                        |
+ * | `funding-poll`         | 60s     | `funding_intent`, Relay's verdict on a deposit; only when Relay is configured |
+ * | `portfolio-snapshot`   | 1h      | `portfolio_snapshot`                                                          |
+ * | `snapshot-retry`       | 5m      | `portfolio_snapshot`, for accounts the hour's pass missed, within that hour   |
+ * | `loan-watch`           | 5m      | `loan_alert`, `activity`, and an email                                        |
+ * | `link-challenge-prune` | 24h     | deletes wallet-link challenges past a day                                     |
  *
  * The two per-wallet jobs tick at those intervals but read almost nothing on
  * most of them: the chain tells them which wallets moved, and a wallet nobody
@@ -335,6 +337,21 @@ every(
     return dropped === 0 ? null : `${dropped} notifications past ninety days dropped`;
   },
   jobClock(150_000),
+);
+
+/**
+ * Once a day. A challenge to link a wallet is good for ten minutes and read by
+ * nothing once used; a day of them is plenty to look back on. Quiet when there
+ * was nothing to drop.
+ */
+every(
+  "link-challenge-prune",
+  24 * 60 * 60 * 1000,
+  async () => {
+    const dropped = await pruneLinkChallenges(auth.db, new Date());
+    return dropped === 0 ? null : `${dropped} wallet-link challenges past a day dropped`;
+  },
+  jobClock(210_000),
 );
 
 every(
