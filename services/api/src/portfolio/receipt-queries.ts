@@ -28,8 +28,8 @@ const LEG_ORDER: Record<LoanKind, number> = { pledge: 0, borrow: 1, repay: 2, un
 const num = (v: string | null) => (v === null ? null : D(v));
 
 /**
- * One feed row and the receipt behind it, or null when the row is not this
- * account's — or is not a row at all.
+ * One feed row and the receipt behind it, or null when the row is not in one
+ * of these wallets — someone else's, an unlinked wallet's, or not a row at all.
  *
  * Read from the table the row points at, when somebody opens it, rather than
  * written onto the row: the feed is read constantly and never joined, and
@@ -40,10 +40,11 @@ export async function readReceipt(
   db: Db,
   userId: string,
   id: string,
-  wallet: string | null,
+  /** The wallets the row may be in. Its own address is the one a transfer is read against. */
+  wallets: readonly { readonly id: string; readonly address: string }[],
   chain: ReceiptChain,
 ): Promise<{ readonly row: ActivityRow; readonly detail: ReceiptDetail | null } | null> {
-  if (!UUID.test(id)) return null;
+  if (!UUID.test(id) || wallets.length === 0) return null;
 
   const [found] = await db
     .select({
@@ -60,15 +61,26 @@ export async function readReceipt(
       refTable: activities.refTable,
       refId: activities.refId,
       basketPortfolioId: activities.basketPortfolioId,
+      walletId: activities.walletId,
     })
     .from(activities)
     .leftJoin(tokens, eq(tokens.mint, activities.mint))
     .leftJoin(instruments, eq(instruments.id, tokens.instrumentId))
-    .where(and(eq(activities.id, id), eq(activities.userId, userId)))
+    .where(
+      and(
+        eq(activities.id, id),
+        eq(activities.userId, userId),
+        inArray(
+          activities.walletId,
+          wallets.map((w) => w.id),
+        ),
+      ),
+    )
     .limit(1);
   if (found === undefined) return null;
 
-  const { refTable, refId, basketPortfolioId, ticker, ...row } = found;
+  const { refTable, refId, basketPortfolioId, ticker, walletId, ...row } = found;
+  const wallet = wallets.find((w) => w.id === walletId)?.address ?? null;
 
   const detail = await (async (): Promise<ReceiptDetail | null> => {
     if ((row.kind === "buy" || row.kind === "sell") && refTable === "order" && refId !== null) {

@@ -10,8 +10,9 @@ import type { EarnLedger } from "../earn/store.js";
 import { recordMove } from "../earn/record.js";
 import { EARN_RISK_VERSION } from "../earn/risk.js";
 import type { EarnSends } from "../earn/sends.js";
-// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
+import type { ActingWallet } from "../wallets/acting.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
 import { logger } from "../log/index.js";
 
@@ -142,24 +143,49 @@ export function earnRoutes(deps: EarnDeps): Hono {
     return (await deps.directory.list())[0]?.address ?? deps.directory.defaultVault;
   };
 
-  /** What this account has in Earn, vault by vault. */
-  app.get("/v1/earn", async (c) => {
-    const identity = c.get("identity");
-    const wallet = identity.walletAddress;
-    const [selected, settings, net, cash, holdings] = await Promise.all([
-      defaultFor(identity.userId),
-      deps.ledger.settings(identity.userId),
-      deps.ledger.netDeposited(identity.userId),
-      wallet === null ? ZERO : walletUsdc(wallet),
-      wallet === null ? [] : deps.directory.holdings(wallet),
+  /**
+   * One wallet's vaults, each with what it earned measured against that
+   * wallet's own deposits: the same vault in another wallet is a different
+   * balance with a different basis.
+   */
+  const walletEarn = async (userId: string, wallet: ActingWallet) => {
+    const [net, cash, holdings] = await Promise.all([
+      deps.ledger.netDeposited({ userId, walletId: wallet.id }),
+      walletUsdc(wallet.address),
+      deps.directory.holdings(wallet.address),
     ]);
+    return {
+      cash,
+      holdings: holdings.map((h) => ({ ...h, earned: earnedOn(h.usdc, net.get(h.listing.address)) })),
+    };
+  };
+
+  /** What the chosen wallet has in Earn, vault by vault; under `all`, every wallet's, a vault in two wallets as one row. */
+  app.get("/v1/earn", async (c) => {
+    const { userId } = c.get("identity");
+    const { wallets } = c.get("acting");
+    const [selected, settings, each] = await Promise.all([
+      defaultFor(userId),
+      deps.ledger.settings(userId),
+      Promise.all(wallets.map((w) => walletEarn(userId, w))),
+    ]);
+    const byVault = new Map<string, (typeof each)[number]["holdings"][number]>();
+    for (const h of each.flatMap((e) => e.holdings)) {
+      const seen = byVault.get(h.listing.address);
+      byVault.set(
+        h.listing.address,
+        seen === undefined ? h : { ...seen, usdc: seen.usdc.add(h.usdc), earned: seen.earned.add(h.earned) },
+      );
+    }
+    const holdings = [...byVault.values()];
+    const cash = each.reduce((s, e) => s.add(e.cash), ZERO);
     const rows = holdings.map((h) => ({
       ...vaultJson(h.listing),
       balanceUsd: usd(h.usdc),
-      earnedUsd: tiny(earnedOn(h.usdc, net.get(h.listing.address))),
+      earnedUsd: tiny(h.earned),
     }));
     const total = holdings.reduce((s, h) => s.add(h.usdc), ZERO);
-    const earned = holdings.reduce((s, h) => s.add(earnedOn(h.usdc, net.get(h.listing.address))), ZERO);
+    const earned = holdings.reduce((s, h) => s.add(h.earned), ZERO);
     return c.json({
       selected,
       holdings: rows,

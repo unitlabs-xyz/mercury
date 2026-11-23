@@ -17,3 +17,9 @@ export interface WalletOwner {
   readonly userId: string;
   readonly walletId: string;
 }
+
+/** Several of one person's wallets, read together: one for a wallet's own page, every followed one for "All wallets". */
+export interface WalletScope {
+  readonly userId: string;
+  readonly walletIds: readonly string[];
+}

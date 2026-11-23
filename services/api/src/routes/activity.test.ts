@@ -7,6 +7,8 @@ import {
   type ActivityDeps,
   type ActivityRow,
 } from "./activity.js";
+import type { Acting } from "../wallets/acting.js";
+import { actingAs, actingLinked } from "../wallets/testing.js";
 
 const at = (iso: string): Date => new Date(iso);
 
@@ -24,10 +26,12 @@ const row = (id: string, iso: string): ActivityRow => ({
   logoUrl: null,
 });
 
-const appWith = (d: ActivityDeps) => {
+/** As the auth and acting-wallet middleware leave a request: the Mercury wallet unless `acting` says otherwise. */
+const appWith = (d: ActivityDeps, acting: Acting = { all: false, wallets: [actingAs("WaLLeT")] }) => {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "WaLLeT" });
+    c.set("acting", acting);
     await next();
   });
   app.route("/", activityRoutes(d));
@@ -152,7 +156,7 @@ describe("GET /v1/activity/:id", () => {
     expect(body.item.occurredAt).toBe("2026-10-15T14:32:00.000Z");
     expect(body.detail.type).toBe("transfer");
     // The caller's own account and wallet, never anything the request names.
-    expect(asked).toEqual(["user-1", "WaLLeT", "abc"]);
+    expect(asked).toEqual(["user-1", [actingAs("WaLLeT")], "abc"]);
   });
 
   /* Another account's row and no row at all are the same answer, so an id says nothing about anyone. */
@@ -160,5 +164,40 @@ describe("GET /v1/activity/:id", () => {
     const res = await appWith({ read: async () => [], receipt: none }).request("/v1/activity/abc");
     expect(res.status).toBe(404);
     expect((await errorOf(res)).error.code).toBe("not_found");
+  });
+});
+
+describe("activity, across wallets", () => {
+  const MERCURY = actingAs("Mercury");
+  const PHANTOM = actingLinked("Phantom");
+
+  it("reads the chosen wallet's feed, or every chosen wallet's as one", async () => {
+    const scopes: unknown[] = [];
+    const d: ActivityDeps = {
+      receipt: none,
+      read: async (scope) => {
+        scopes.push(scope);
+        return [];
+      },
+    };
+    await appWith(d, { all: false, wallets: [PHANTOM] }).request("/v1/activity");
+    await appWith(d, { all: true, wallets: [MERCURY, PHANTOM] }).request("/v1/activity");
+    expect(scopes).toEqual([
+      { userId: "user-1", walletIds: [PHANTOM.id] },
+      { userId: "user-1", walletIds: [MERCURY.id, PHANTOM.id] },
+    ]);
+  });
+
+  it("opens a receipt from any of the chosen wallets", async () => {
+    let asked: unknown[] = [];
+    const d: ActivityDeps = {
+      read: async () => [],
+      receipt: async (...args) => {
+        asked = args;
+        return null;
+      },
+    };
+    await appWith(d, { all: true, wallets: [MERCURY, PHANTOM] }).request("/v1/activity/abc");
+    expect(asked).toEqual(["user-1", [MERCURY, PHANTOM], "abc"]);
   });
 });

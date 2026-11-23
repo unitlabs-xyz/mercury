@@ -17,6 +17,7 @@ import { warmPrices } from "./prices/warm.js";
 import { RECORD_MAX_AGE_MS, prunePriceBars, recordPriceBars } from "./prices/record.js";
 import { pruneNotifications } from "./notify/inbox-queries.js";
 import { pruneLinkChallenges } from "./wallets/store.js";
+import { viewedRecorder } from "./wallets/viewed.js";
 import { linkedViewings, viewedTiers } from "./jobs/tiers.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
@@ -105,7 +106,18 @@ await syncConfiguredCatalog(config);
 
 /* Who is using the app right now, so position-sync can be quick for them alone. */
 const here = presence();
-const auth = { ...buildAuthDeps(config), onSeen: here.seen };
+const authDeps = buildAuthDeps(config);
+/* When a linked wallet was last looked at, which sets how often the jobs read it. See `jobs/tiers.ts`. */
+const viewed = viewedRecorder(authDeps.db);
+const walletsLog = logger("wallets");
+const auth = {
+  ...authDeps,
+  onSeen: here.seen,
+  onViewed: (wallet: string) =>
+    void viewed(wallet).catch((err: unknown) =>
+      walletsLog.warn({ err }, "couldn't record a linked wallet as viewed"),
+    ),
+};
 const deps = buildDeps(config);
 /*
  * The relayer, if one is configured. Built here because loading a key is async.

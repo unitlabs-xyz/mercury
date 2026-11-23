@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, max, sum } from "drizzle-orm";
 import { D, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { activities, instruments, portfolioSnapshots, positions, tokens } from "../db/schema.js";
@@ -6,18 +6,14 @@ import { USDC_MINT } from "@mercury/chain";
 import type { HoldingRow } from "../routes/portfolio.js";
 import type { Flow, Reading } from "./history.js";
 import type { BasketMovement, InKindExit } from "./basket-basis.js";
+import type { WalletOwner } from "../wallets/active.js";
 
 /**
- * Every instrument the user has a position row for, with the wrappers that
+ * Every instrument one wallet has a position row for, with the wrappers that
  * belong to it. One query plus one, rather than a join that would repeat the
  * position across its wrappers and have to be folded back up.
  */
-export async function readHoldings(
-  db: Db,
-  userId: string,
-  /** One of the person's wallets. Every wallet they have when left out. */
-  walletId?: string,
-): Promise<readonly HoldingRow[]> {
+export async function readHoldings(db: Db, userId: string, walletId: string): Promise<readonly HoldingRow[]> {
   const rows = await db
     .select({
       instrumentId: positions.instrumentId,
@@ -32,11 +28,7 @@ export async function readHoldings(
     })
     .from(positions)
     .innerJoin(instruments, eq(instruments.id, positions.instrumentId))
-    .where(
-      walletId === undefined
-        ? eq(positions.userId, userId)
-        : and(eq(positions.userId, userId), eq(positions.walletId, walletId)),
-    );
+    .where(and(eq(positions.userId, userId), eq(positions.walletId, walletId)));
 
   if (rows.length === 0) return [];
 
@@ -80,41 +72,63 @@ export async function readHoldings(
  * watching a loan — so an hour-old figure is served in place of a zero that
  * would make a borrower look solvent.
  */
-export async function readLatestDebt(db: Db, userId: string): Promise<Decimal | null> {
+export async function readLatestDebt(db: Db, owner: WalletOwner): Promise<Decimal | null> {
   const [row] = await db
     .select({ debtUsd: portfolioSnapshots.debtUsd })
     .from(portfolioSnapshots)
-    .where(eq(portfolioSnapshots.userId, userId))
+    .where(and(eq(portfolioSnapshots.userId, owner.userId), eq(portfolioSnapshots.walletId, owner.walletId)))
     .orderBy(desc(portfolioSnapshots.capturedAt))
     .limit(1);
   return row === undefined ? null : D(row.debtUsd);
 }
 
 /** The Earn balance in the latest reading. Null with no reading, or one from before Earn. */
-export async function readLatestEarn(db: Db, userId: string): Promise<Decimal | null> {
+export async function readLatestEarn(db: Db, owner: WalletOwner): Promise<Decimal | null> {
   const [row] = await db
     .select({ earnUsd: portfolioSnapshots.earnUsd })
     .from(portfolioSnapshots)
-    .where(eq(portfolioSnapshots.userId, userId))
+    .where(and(eq(portfolioSnapshots.userId, owner.userId), eq(portfolioSnapshots.walletId, owner.walletId)))
     .orderBy(desc(portfolioSnapshots.capturedAt))
     .limit(1);
   return row?.earnUsd == null ? null : D(row.earnUsd);
 }
 
-export async function readSnapshots(db: Db, userId: string, from: Date): Promise<readonly Reading[]> {
+export async function readSnapshots(
+  db: Db,
+  userId: string,
+  /** The wallets to add up, hour by hour. One for a wallet's own chart. */
+  walletIds: readonly string[],
+  from: Date,
+): Promise<readonly Reading[]> {
+  if (walletIds.length === 0) return [];
+  /*
+   * Summed by the hour, and an hour is drawn only when every wallet has a
+   * reading for it. A wallet linked yesterday has none before yesterday, and
+   * one missed hour is a gap in one wallet's line; adding up whatever was
+   * there would draw either as money arriving or leaving, which it did not.
+   * One wallet is the same query, every hour having its one reading.
+   */
   const rows = await db
     .select({
       at: portfolioSnapshots.capturedAt,
-      readAt: portfolioSnapshots.readAt,
-      totalUsd: portfolioSnapshots.totalUsd,
+      readAt: max(portfolioSnapshots.readAt),
+      totalUsd: sum(portfolioSnapshots.totalUsd),
     })
     .from(portfolioSnapshots)
-    .where(and(eq(portfolioSnapshots.userId, userId), gte(portfolioSnapshots.capturedAt, from)))
+    .where(
+      and(
+        eq(portfolioSnapshots.userId, userId),
+        inArray(portfolioSnapshots.walletId, [...walletIds]),
+        gte(portfolioSnapshots.capturedAt, from),
+      ),
+    )
+    .groupBy(portfolioSnapshots.capturedAt)
+    .having(eq(count(), walletIds.length))
     .orderBy(asc(portfolioSnapshots.capturedAt));
   return rows.map((r) => ({
     at: r.at,
     readAt: r.readAt,
-    totalUsd: D(r.totalUsd),
+    totalUsd: D(r.totalUsd ?? "0"),
   }));
 }
 
@@ -139,13 +153,25 @@ const FLOW_SIGN: Record<string, 1 | -1> = {
   transfer_out: -1,
 };
 
-export async function readFlows(db: Db, userId: string, from: Date): Promise<readonly Flow[]> {
+export async function readFlows(
+  db: Db,
+  userId: string,
+  /**
+   * The wallets whose edge is measured. Across several, a move from one to
+   * another is a row out of one and a row into the other, which add to
+   * nothing, as a move inside the account should.
+   */
+  walletIds: readonly string[],
+  from: Date,
+): Promise<readonly Flow[]> {
+  if (walletIds.length === 0) return [];
   const rows = await db
     .select({ at: activities.occurredAt, kind: activities.kind, amountUsd: activities.amountUsd })
     .from(activities)
     .where(
       and(
         eq(activities.userId, userId),
+        inArray(activities.walletId, [...walletIds]),
         gte(activities.occurredAt, from),
         eq(activities.mint, USDC_MINT),
         inArray(activities.kind, Object.keys(FLOW_SIGN)),
@@ -181,7 +207,7 @@ const BASKET_INWARD: Record<string, boolean> = {
  */
 export async function readBasketMovements(
   db: Db,
-  userId: string,
+  owner: WalletOwner,
 ): Promise<{ movements: readonly BasketMovement[]; inKindExits: readonly InKindExit[] }> {
   const rows = await db
     .select({
@@ -190,7 +216,13 @@ export async function readBasketMovements(
       portfolioId: activities.basketPortfolioId,
     })
     .from(activities)
-    .where(and(eq(activities.userId, userId), isNotNull(activities.basketPortfolioId)));
+    .where(
+      and(
+        eq(activities.userId, owner.userId),
+        eq(activities.walletId, owner.walletId),
+        isNotNull(activities.basketPortfolioId),
+      ),
+    );
 
   const movements: BasketMovement[] = [];
   const inKindExits: InKindExit[] = [];

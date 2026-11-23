@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { every } from "hono/combine";
 import { httpInstrumentationMiddleware } from "@hono/otel";
 import { allocate, D, DEFAULT_POLICY, toWire } from "@mercury/core";
 import { ConfirmOrderRequest, CreateOrderRequest, InvestBasketRequest, type ErrorCode } from "@mercury/types";
@@ -16,6 +17,7 @@ import { createSolanaRpc } from "@solana/kit";
 import { USDC_MINT } from "@mercury/chain";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
+import { actingWallet, mercuryWalletOnly } from "./wallets/acting.js";
 import { requestId } from "./telemetry/request-id.js";
 import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
@@ -123,8 +125,36 @@ const orderLog = logger("orders");
  */
 const httpLog = logger("http");
 
+/**
+ * The routes that build, sign or record something for a wallet. Until linked
+ * wallets can act, each acts for the Mercury wallet alone, and refuses a
+ * request made while another wallet, or every wallet, is chosen; see
+ * `mercuryWalletOnly`. Reads under these paths pass.
+ *
+ * Not here, on purpose: adding money (it always lands in the Mercury wallet,
+ * whichever is chosen), Earn's account settings, the inbox and the wallets
+ * themselves, none of which act for a wallet.
+ */
+const WALLET_ACTIONS = [
+  "/v1/quote",
+  "/v1/orders",
+  "/v1/orders/*",
+  "/v1/baskets/*",
+  "/v1/borrow/*",
+  "/v1/earn/transactions",
+  "/v1/earn/confirm",
+  "/v1/money/send/*",
+  "/v1/transactions/send",
+] as const;
+
 export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
+  /* Which of the caller's wallets each request is for. Mounted after `requireAuth`, whose identity it reads. */
+  const acting = actingWallet({
+    db: auth.db,
+    ...(auth.onSeen === undefined ? {} : { onSeen: auth.onSeen }),
+    ...(auth.onViewed === undefined ? {} : { onViewed: auth.onViewed }),
+  });
   /* One client for the routes that talk to the chain directly. */
   const rpc = createSolanaRpc(read.send.rpcUrl);
   const lookupTables = cachedLookupTables(rpcLookupTables(rpc));
@@ -156,7 +186,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   // and a visitor browsing before signing in should see prices. Registered ahead
   // of the auth middleware, which only guards the routes after it.
   app.route("/", instrumentRoutes(read.instruments));
-  app.route("/", basketRoutes(read.basketTemplates, requireAuth(auth)));
+  app.route("/", basketRoutes(read.basketTemplates, every(requireAuth(auth), acting, mercuryWalletOnly())));
 
   /*
    * The waitlist's share links. The waitlist is gone, but people posted their
@@ -178,6 +208,8 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   }
 
   app.use("/v1/*", requireAuth(auth));
+  app.use("/v1/*", acting);
+  for (const path of WALLET_ACTIONS) app.use(path, mercuryWalletOnly());
 
   app.onError((err, c) => {
     if (err.message.startsWith("buildDeps:")) return c.json(NOT_READY, 503);

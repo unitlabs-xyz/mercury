@@ -1,11 +1,13 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { getBase64Encoder, getCompiledTransactionMessageDecoder, getTransactionDecoder } from "@solana/kit";
 import { D } from "@mercury/core";
 import { USDC_MINT, type TokenBalance } from "@mercury/chain";
 import { createApp } from "./app.js";
 import { testDb } from "./db/testing.js";
+import { users, wallets } from "./db/schema.js";
 import { memoryOrderStore } from "./orders/memory.js";
 import { inMemoryBuilds } from "./relay/builds.js";
 import type { AuthDeps } from "./auth/middleware.js";
@@ -190,8 +192,15 @@ const harness = async (
   const post = (path: string, body: unknown) =>
     app.request(path, { method: "POST", headers, body: JSON.stringify(body) });
   const get = (path: string) => app.request(path, { headers });
+  /* As `post`, with a wallet chosen the way the web chooses one. */
+  const postAs = (wallet: string, path: string, body: unknown) =>
+    app.request(path, {
+      method: "POST",
+      headers: { ...headers, "x-mercury-wallet": wallet },
+      body: JSON.stringify(body),
+    });
 
-  return { post, get, priced, amounts };
+  return { post, get, postAs, db, priced, amounts };
 };
 
 describe("POST /v1/quote, selling", () => {
@@ -411,5 +420,51 @@ describe("POST /v1/orders/:id/execute", () => {
     const res = await execute(h, { ticker: "NVDA", side: "sell", amount: "0.30" });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { error: { message: string } }).error.message).toContain("$0.33");
+  });
+});
+
+/*
+ * Until a linked wallet can act, every action acts for the Mercury wallet.
+ * The web sends the chosen wallet on every request, so an order placed while
+ * a linked wallet is chosen must be refused, not quietly placed for the
+ * Mercury wallet instead.
+ */
+describe("which wallet a write is for", () => {
+  const order = { ticker: "NVDA", side: "buy", amount: "50" };
+
+  const signedInWithLinked = async () => {
+    const h = await harness();
+    await h.get("/v1/me"); // the first request makes the person and their Mercury wallet
+    const [me] = await h.db.select().from(users);
+    const [linked] = await h.db
+      .insert(wallets)
+      .values({ userId: me!.id, address: "Linked", kind: "external", isPrimary: false, linkedAt: new Date() })
+      .returning();
+    const [mercury] = await h.db.select().from(wallets).where(eq(wallets.isPrimary, true));
+    return { ...h, linkedId: linked!.id, mercuryId: mercury!.id };
+  };
+
+  it("places an order for the Mercury wallet, chosen by name or not at all", async () => {
+    const h = await signedInWithLinked();
+    expect((await h.post("/v1/orders", order)).status).toBe(200);
+    expect((await h.postAs(h.mercuryId, "/v1/orders", order)).status).toBe(200);
+  });
+
+  it("refuses an order while a linked wallet is chosen", async () => {
+    const h = await signedInWithLinked();
+    const res = await h.postAs(h.linkedId, "/v1/orders", order);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "wallet_read_only" } });
+  });
+
+  it("refuses an order, and a quote, for every wallet at once", async () => {
+    const h = await signedInWithLinked();
+    expect((await h.postAs("all", "/v1/orders", order)).status).toBe(400);
+    expect((await h.postAs("all", "/v1/quote", order)).status).toBe(400);
+  });
+
+  it("refuses a wallet that isn't the caller's before anything else", async () => {
+    const h = await signedInWithLinked();
+    expect((await h.postAs("6f1c9b8e-0000-4000-8000-000000000000", "/v1/orders", order)).status).toBe(403);
   });
 });

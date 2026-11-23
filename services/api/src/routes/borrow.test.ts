@@ -12,6 +12,8 @@ import type { LedgerRow } from "../lending/interest.js";
 import type { PlannedLoanEvent } from "../lending/events.js";
 import type { PriceBoard, TokenPrice } from "@mercury/market";
 import { borrowRoutes, type BorrowDeps } from "./borrow.js";
+import type { Acting } from "../wallets/acting.js";
+import { actingAs, actingLinked } from "../wallets/testing.js";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SPYX = "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W";
@@ -130,10 +132,14 @@ const mints: string[] = [];
 /** What `record` was handed, per test. */
 const recorded: PlannedLoanEvent[] = [];
 
-const app = (d: BorrowDeps, walletAddress: string | null = "WaLLeT") => {
+const app = (d: BorrowDeps, walletAddress: string | null = "WaLLeT", acting?: Acting) => {
   const a = new Hono();
   a.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress });
+    c.set(
+      "acting",
+      acting ?? { all: false, wallets: walletAddress === null ? [] : [actingAs(walletAddress)] },
+    );
     await next();
   });
   a.route("/", borrowRoutes(d));
@@ -647,4 +653,41 @@ describe("POST /v1/borrow/transactions, when Kamino or the relayer refuses", () 
     expect(res.status).toBe(503);
     expect((await errorOf(res)).code).toBe("upstream_unavailable");
   });
+});
+
+describe("GET /v1/borrow, and linked wallets", () => {
+  it("reads the chosen linked wallet's own loan and ledger", async () => {
+    const read: string[] = [];
+    const owners: unknown[] = [];
+    const base = deps(lending(1_000));
+    const d: BorrowDeps = {
+      ...base,
+      chain: {
+        ...base.chain,
+        tokenBalances: async (wallet) => {
+          read.push(wallet);
+          return base.chain.tokenBalances(wallet);
+        },
+      },
+      ledger: async (owner) => {
+        owners.push(owner);
+        return [];
+      },
+    };
+    const phantom = actingLinked("Phantom");
+    const res = await app(d, "WaLLeT", { all: false, wallets: [phantom] }).request("/v1/borrow");
+    expect(res.status).toBe(200);
+    expect(new Set(read)).toEqual(new Set(["Phantom"]));
+    expect(owners).toEqual([{ userId: "user-1", walletId: phantom.id }]);
+  });
+
+  it.each(["/v1/borrow", "/v1/borrow/SPY"])(
+    "answers 400 to %s for every wallet at once: a loan's health is one wallet's",
+    async (path) => {
+      const acting: Acting = { all: true, wallets: [actingAs("WaLLeT"), actingLinked("Phantom")] };
+      const res = await app(deps(lending(1_000)), "WaLLeT", acting).request(path);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "wallet_all" } });
+    },
+  );
 });

@@ -22,8 +22,10 @@ import {
 } from "../lending/ports.js";
 import { landedAmounts, planLoanEvents, type PlannedLoanEvent } from "../lending/events.js";
 import type { RecordInput } from "../lending/record.js";
-// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
+import { actingOne, oneWalletOnly } from "../wallets/acting.js";
+import type { WalletOwner } from "../wallets/active.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
 import { logger } from "../log/index.js";
 
@@ -48,8 +50,8 @@ export interface BorrowDeps {
    * cover, and remembered so the send route will co-sign it.
    */
   readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
-  /** A borrower's loan events, oldest first: what tells the interest apart from what was lent. */
-  readonly ledger: (userId: string) => Promise<readonly LedgerRow[]>;
+  /** One wallet's loan events, oldest first: what tells the interest apart from what was lent. */
+  readonly ledger: (owner: WalletOwner) => Promise<readonly LedgerRow[]>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -200,13 +202,13 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
    * The split is null when the ledger cannot account for the debt, rather than
    * calling all of it interest.
    */
-  const loanJson = async (input: CapacityInput, userId: string) => {
+  const loanJson = async (input: CapacityInput, owner: WalletOwner) => {
     // Micro-USDC, the smallest amount there is; Kamino's figures run to forty digits.
     // What is owed rounds up, so a figure read off the wire is never short of it.
     const owed = (input.position?.owedUsdc ?? ZERO).toDecimalPlaces(6, Decimal.ROUND_UP);
     const parts = owed.lte(0)
       ? { principal: ZERO, interest: ZERO }
-      : loanParts(owed, outstandingPrincipal(await deps.ledger(userId)));
+      : loanParts(owed, outstandingPrincipal(await deps.ledger(owner)));
     return {
       owedUsdc: toWire(owed),
       principalUsdc: parts.principal === null ? null : toWire(parts.principal),
@@ -216,25 +218,34 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
     };
   };
 
-  const summaryFor = async (wallet: string, userId: string) => {
-    const input = await inputFor(wallet);
-    const [setup, loan] = await Promise.all([setupCostUsd(input), loanJson(input, userId)]);
+  const summaryFor = async (address: string, owner: WalletOwner) => {
+    const input = await inputFor(address);
+    const [setup, loan] = await Promise.all([setupCostUsd(input), loanJson(input, owner)]);
     return { ...summaryJson(input), setupCostUsd: setup, ...loan };
   };
 
-  /** The whole position: cash, what is pledged and owed, and what can be spent. */
-  app.get("/v1/borrow", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+  /*
+   * One wallet's loan, the chosen wallet's. A Kamino loan is one wallet's
+   * position, and its LTV and liquidation prices mean nothing added to
+   * another's, so `all` is a 400 here; the summary lists every loan's health.
+   */
+  app.get("/v1/borrow", oneWalletOnly(), async (c) => {
+    const wallet = actingOne(c);
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
-    return c.json(await summaryFor(wallet, c.get("identity").userId));
+    return c.json(
+      await summaryFor(wallet.address, { userId: c.get("identity").userId, walletId: wallet.id }),
+    );
   });
 
   /** One stock: whether Kamino accepts it, and what it can be borrowed against. */
-  app.get("/v1/borrow/:ticker", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+  app.get("/v1/borrow/:ticker", oneWalletOnly(), async (c) => {
+    const wallet = actingOne(c);
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const ticker = c.req.param("ticker").toUpperCase();
-    const summary = await summaryFor(wallet, c.get("identity").userId);
+    const summary = await summaryFor(wallet.address, {
+      userId: c.get("identity").userId,
+      walletId: wallet.id,
+    });
     // Only stocks are offered here; other collateral in the market still counts in `account`.
     const row = summary.collateral.find((r) => r.isStock && r.ticker === ticker) ?? null;
     return c.json({

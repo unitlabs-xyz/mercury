@@ -10,6 +10,7 @@ import { portfolioRoutes } from "../routes/portfolio.js";
 import { hourOf } from "./history.js";
 import { readSnapshots } from "./queries.js";
 import { snapshotAllPortfolios, type SnapshotDeps } from "./snapshot.js";
+import { actingAs } from "../wallets/testing.js";
 
 /**
  * The job writes and the route reads, over a real database.
@@ -48,9 +49,10 @@ describe("snapshot to chart, over a real database", () => {
   it("draws back the hours it recorded, in order and to the cent", async () => {
     const db = await testDb();
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:rt" }).returning();
-    await db
+    const [wallet] = await db
       .insert(wallets)
-      .values({ userId: user!.id, address: ADDRESS, kind: "privy_embedded", isPrimary: true });
+      .values({ userId: user!.id, address: ADDRESS, kind: "privy_embedded", isPrimary: true })
+      .returning();
 
     // Six hourly readings of one share, at a price that moves every hour.
     const prices = ["100.01", "101.02", "102.03", "103.04", "104.05", "105.06"];
@@ -74,12 +76,12 @@ describe("snapshot to chart, over a real database", () => {
     const app = new Hono();
     app.use("*", async (c, next) => {
       c.set("identity", { userId: user!.id, privyUserId: "did:privy:rt", walletAddress: ADDRESS });
+      c.set("acting", { all: false, wallets: [actingAs(ADDRESS, { id: wallet!.id })] });
       await next();
     });
     app.route(
       "/",
       portfolioRoutes({
-        holdings: async () => [],
         walletHoldings: async () => [],
         prices: { pricesFor: async () => new Map() } as unknown as PriceBoard,
         chain: { mintConfig: async () => null, tokenBalances: async () => [] } as ChainReader,
@@ -92,7 +94,7 @@ describe("snapshot to chart, over a real database", () => {
         pledged: async () => [],
         debt: async () => ZERO,
         lastKnownDebt: async () => null,
-        snapshots: (userId, from) => readSnapshots(db, userId, from),
+        snapshots: (userId, walletIds, from) => readSnapshots(db, userId, walletIds, from),
         baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
       }),
     );
@@ -125,9 +127,10 @@ describe("a loan, over a real database", () => {
   it("does not move the chart when the money borrowed is the money owed", async () => {
     const db = await testDb();
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:loan" }).returning();
-    await db
+    const [wallet] = await db
       .insert(wallets)
-      .values({ userId: user!.id, address: ADDRESS, kind: "privy_embedded", isPrimary: true });
+      .values({ userId: user!.id, address: ADDRESS, kind: "privy_embedded", isPrimary: true })
+      .returning();
 
     const now = topOfHour();
     // Four hours at a flat price. In the third the account borrows $500, which
@@ -156,12 +159,12 @@ describe("a loan, over a real database", () => {
     const app = new Hono();
     app.use("*", async (c, next) => {
       c.set("identity", { userId: user!.id, privyUserId: "did:privy:loan", walletAddress: ADDRESS });
+      c.set("acting", { all: false, wallets: [actingAs(ADDRESS, { id: wallet!.id })] });
       await next();
     });
     app.route(
       "/",
       portfolioRoutes({
-        holdings: async () => [],
         walletHoldings: async () => [],
         prices: { pricesFor: async () => new Map() } as unknown as PriceBoard,
         chain: { mintConfig: async () => null, tokenBalances: async () => [] } as ChainReader,
@@ -174,7 +177,7 @@ describe("a loan, over a real database", () => {
         pledged: async () => [],
         debt: async () => ZERO,
         lastKnownDebt: async () => null,
-        snapshots: (userId, from) => readSnapshots(db, userId, from),
+        snapshots: (userId, walletIds, from) => readSnapshots(db, userId, walletIds, from),
         baskets: async () => ({ totalUsd: ZERO, baskets: [], fetchedAt: null }),
       }),
     );

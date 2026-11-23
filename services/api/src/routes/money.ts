@@ -5,8 +5,9 @@ import { capacity } from "../lending/capacity.js";
 import { capacityInputFor } from "../lending/input.js";
 import type { LendingSource } from "../lending/ports.js";
 import type { CreditSource } from "@mercury/market";
-// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
+import type {} from "../wallets/acting.js";
 
 export interface MoneyDeps {
   readonly chain: ChainReader;
@@ -21,20 +22,8 @@ export interface MoneyDeps {
 export function moneyRoutes(deps: MoneyDeps): Hono {
   const app = new Hono();
 
-  app.get("/v1/money", async (c) => {
-    const identity = c.get("identity");
-    if (identity.walletAddress === null) {
-      return c.json({
-        balanceUsd: "0",
-        yieldApr: "0",
-        interestEarnedYtdUsd: "0",
-        earnUsd: "0",
-        depositAddress: null,
-        borrowingPower: { availableUsd: "0", enabled: false },
-      });
-    }
-
-    const wallet = identity.walletAddress;
+  /** One wallet's cash, Earn and borrowing power. Each part fails on its own, as the screen does. */
+  const walletMoney = async (wallet: string) => {
     const [balances, earn] = await Promise.all([
       deps.chain.tokenBalances(wallet),
       // A missing rate is a missing rate. The balance is the number that
@@ -51,6 +40,39 @@ export function moneyRoutes(deps: MoneyDeps): Hono {
     const power = await capacityInputFor(deps, wallet, balances)
       .then(capacity)
       .catch(() => null);
+    return { balanceUsd, earn, power };
+  };
+
+  /** The chosen wallet's money, or every wallet's added up under `all`. */
+  app.get("/v1/money", async (c) => {
+    const identity = c.get("identity");
+    const { wallets } = c.get("acting");
+    if (wallets.length === 0) {
+      return c.json({
+        balanceUsd: "0",
+        yieldApr: "0",
+        interestEarnedYtdUsd: "0",
+        earnUsd: "0",
+        depositAddress: null,
+        borrowingPower: { availableUsd: "0", enabled: false },
+      });
+    }
+
+    const each = await Promise.all(wallets.map((w) => walletMoney(w.address)));
+    const balanceUsd = each.reduce((s, m) => s.add(m.balanceUsd), ZERO);
+    const earnUsd = each.reduce((s, m) => s.add(m.earn?.balance ?? ZERO), ZERO);
+    // Several wallets earn each one's rate, weighted by what it has in Earn, as /v1/earn weights each vault's.
+    const earning = each.reduce((s, m) => s.add((m.earn?.apy ?? ZERO).mul(m.earn?.balance ?? ZERO)), ZERO);
+    const apy =
+      each.length === 1 ? (each[0]!.earn?.apy ?? null) : earnUsd.isZero() ? null : earning.div(earnUsd);
+    // Borrowable is only a figure when every wallet's could be priced: a sum
+    // with a wallet missing would be a confident number that is short.
+    const powers = each.map((m) => m.power);
+    const power = powers.every((p) => p !== null)
+      ? { borrowableNowUsd: powers.reduce((s, p) => s.add(p!.borrowableNowUsd), ZERO) }
+      : null;
+    // Deposits always land in the Mercury wallet, whichever wallet is chosen.
+    const wallet = identity.walletAddress;
 
     return c.json({
       balanceUsd: toWire(balanceUsd),
@@ -61,9 +83,9 @@ export function moneyRoutes(deps: MoneyDeps): Hono {
        * the balance was earning. Only money in Earn earns, and `/v1/earn` is
        * where what it earned is worked out.
        */
-      yieldApr: toWire(earn?.apy?.toDecimalPlaces(6) ?? ZERO),
+      yieldApr: toWire(apy?.toDecimalPlaces(6) ?? ZERO),
       interestEarnedYtdUsd: "0",
-      earnUsd: toWire((earn?.balance ?? ZERO).toDecimalPlaces(2)),
+      earnUsd: toWire(earnUsd.toDecimalPlaces(2)),
       depositAddress: wallet,
       /*
        * ADR 0009 puts borrowing against holdings firmly in scope — "not margin

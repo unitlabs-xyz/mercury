@@ -725,7 +725,6 @@ export function buildReadDeps(
       history: deps.priceHistory,
     },
     portfolio: {
-      holdings: (userId) => readHoldings(db, userId),
       walletHoldings: (userId, walletId) => readHoldings(db, userId, walletId),
       prices: deps.prices,
       chain: deps.chain,
@@ -733,13 +732,13 @@ export function buildReadDeps(
       usdcMint: USDC_MINT,
       pledged: (wallet) => pledgedByMint(deps.lending, wallet),
       debt: (wallet) => debtFrom(deps.lending, wallet),
-      lastKnownDebt: (userId) => readLatestDebt(db, userId),
-      lastKnownEarn: (userId) => readLatestEarn(db, userId),
-      snapshots: (userId, from) => readSnapshots(db, userId, from),
+      lastKnownDebt: (owner) => readLatestDebt(db, owner),
+      lastKnownEarn: (owner) => readLatestEarn(db, owner),
+      snapshots: (userId, walletIds, from) => readSnapshots(db, userId, walletIds, from),
       baskets,
       basketReturns: basketReturnsReader(deps.basketProvider),
-      flows: (userId, from) => readFlows(db, userId, from),
-      basketMovements: (userId) => readBasketMovements(db, userId),
+      flows: (userId, walletIds, from) => readFlows(db, userId, walletIds, from),
+      basketMovements: (owner) => readBasketMovements(db, owner),
       earn: onlyIfUsed(usedEarn, (wallet) => earnBalance(deps.earn, wallet), ZERO),
     },
     money: {
@@ -760,9 +759,9 @@ export function buildReadDeps(
       ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
     activity: {
-      read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor),
-      receipt: (userId, wallet, id) =>
-        readReceipt(db, userId, id, wallet, {
+      read: (scope, limit, cursor) => readActivity(db, scope, limit, cursor),
+      receipt: (userId, wallets, id) =>
+        readReceipt(db, userId, id, wallets, {
           history: deps.history,
           ...(relay === undefined ? {} : { relayer: relay.signer.address }),
         }),
@@ -795,7 +794,7 @@ export function buildReadDeps(
       usdcMint: USDC_MINT,
       history: deps.history,
       record: (planned, input) => recordLoanEvents(db, planned, input),
-      ledger: (userId) => loanLedger(db, userId),
+      ledger: (owner) => loanLedger(db, owner),
       ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
     send: {

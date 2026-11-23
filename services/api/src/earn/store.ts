@@ -1,9 +1,10 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { D, toWire, type Decimal } from "@mercury/core";
 import { USDC_MINT } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { activities, earnEvents, users, wallets } from "../db/schema.js";
 import { primaryWalletId } from "../wallets/primary.js";
+import type { WalletOwner } from "../wallets/active.js";
 
 export interface EarnRecord {
   readonly userId: string;
@@ -28,8 +29,8 @@ export interface EarnLedger {
   settings(userId: string): Promise<EarnSettings>;
   /** Only the fields given change. Accepting the risks records when, too. */
   save(userId: string, change: Partial<EarnSettings>): Promise<void>;
-  /** Deposits less withdrawals, in USDC, per vault. A vault with nothing recorded is absent. */
-  netDeposited(userId: string): Promise<ReadonlyMap<string, Decimal>>;
+  /** One wallet's deposits less withdrawals, in USDC, per vault. A vault with nothing recorded is absent. */
+  netDeposited(owner: WalletOwner): Promise<ReadonlyMap<string, Decimal>>;
   /** True when written; false when this signature was already recorded. */
   record(event: EarnRecord): Promise<boolean>;
 }
@@ -57,14 +58,14 @@ export const pgEarnLedger = (db: Db): EarnLedger => ({
     };
     if (Object.keys(set).length > 0) await db.update(users).set(set).where(eq(users.id, userId));
   },
-  async netDeposited(userId) {
+  async netDeposited(owner) {
     const rows = await db
       .select({
         vault: earnEvents.vault,
         net: sql<string>`sum(case when ${earnEvents.kind} = 'deposit' then ${earnEvents.usdcAmount} else -${earnEvents.usdcAmount} end)`,
       })
       .from(earnEvents)
-      .where(eq(earnEvents.userId, userId))
+      .where(and(eq(earnEvents.userId, owner.userId), eq(earnEvents.walletId, owner.walletId)))
       .groupBy(earnEvents.vault);
     return new Map(rows.map((r) => [r.vault, D(r.net)]));
   },

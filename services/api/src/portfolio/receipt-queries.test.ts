@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import { USDC_MINT, type TransactionDetail } from "@mercury/chain";
 import { mercuryWallet, testDb } from "../db/testing.js";
-import { activities, fundingIntents, instruments, orders, tokens, users } from "../db/schema.js";
+import { activities, fundingIntents, instruments, orders, tokens, users, wallets } from "../db/schema.js";
 import { settleOrder } from "../orders/settle.js";
 import { recordLoanEvents } from "../lending/record.js";
 import { planLoanEvents } from "../lending/events.js";
@@ -20,8 +20,8 @@ const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:receipt" }).returning();
   const [stranger] = await db.insert(users).values({ privyUserId: "did:privy:stranger" }).returning();
-  const walletId = await mercuryWallet(db, user!.id);
-  await mercuryWallet(db, stranger!.id);
+  const walletId = await mercuryWallet(db, user!.id, WALLET);
+  const strangerWalletId = await mercuryWallet(db, stranger!.id);
   const [instrument] = await db
     .insert(instruments)
     .values({ ticker: "NVDA", name: "Nvidia", logoUrl: "https://logo/nvda.png" })
@@ -35,12 +35,16 @@ const seed = async () => {
     userId: user!.id,
     walletId,
     strangerId: stranger!.id,
+    strangerWalletId,
     instrumentId: instrument!.id,
     tokenId: token!.id,
   };
 };
 
 type Seeded = Awaited<ReturnType<typeof seed>>;
+
+/** The person's Mercury wallet, as the acting-wallet middleware hands it to a receipt. */
+const mine = (s: Seeded) => [{ id: s.walletId, address: WALLET }];
 
 const rowFor = async (s: Seeded, signature: string, kind?: string) => {
   const rows = await s.db.select().from(activities).where(eq(activities.txSignature, signature));
@@ -112,7 +116,7 @@ describe("readReceipt", () => {
   it("reads a buy back from its order and the lot it wrote", async () => {
     const s = await seed();
     const row = await settledBuy(s);
-    const found = await readReceipt(s.db, s.userId, row.id, WALLET, noChain);
+    const found = await readReceipt(s.db, s.userId, row.id, mine(s), noChain);
     expect(found?.row.title).toBe("Bought NVDA");
     expect(found?.row.logoUrl).toBe("https://logo/nvda.png");
     expect(found?.detail).toMatchObject({
@@ -132,12 +136,14 @@ describe("readReceipt", () => {
   it("finds nothing for another account's row", async () => {
     const s = await seed();
     const row = await settledBuy(s);
-    expect(await readReceipt(s.db, s.strangerId, row.id, WALLET, noChain)).toBeNull();
+    expect(
+      await readReceipt(s.db, s.strangerId, row.id, [{ id: s.strangerWalletId, address: FRIEND }], noChain),
+    ).toBeNull();
   });
 
   it("finds nothing for an id that is not one", async () => {
     const s = await seed();
-    expect(await readReceipt(s.db, s.userId, "not-a-uuid", WALLET, noChain)).toBeNull();
+    expect(await readReceipt(s.db, s.userId, "not-a-uuid", mine(s), noChain)).toBeNull();
   });
 
   it("reads both halves of a pledge-and-borrow, from either row", async () => {
@@ -150,7 +156,7 @@ describe("readReceipt", () => {
       "2.11",
     );
     const borrow = await rowFor(s, "SigLoan", "borrow");
-    const found = await readReceipt(s.db, s.userId, borrow.id, WALLET, noChain);
+    const found = await readReceipt(s.db, s.userId, borrow.id, mine(s), noChain);
     expect(found?.detail).toMatchObject({
       type: "loan",
       legs: [
@@ -163,7 +169,7 @@ describe("readReceipt", () => {
       interestPaidUsd: null,
     });
     const pledge = await rowFor(s, "SigLoan", "pledge");
-    expect((await readReceipt(s.db, s.userId, pledge.id, WALLET, noChain))?.detail).toEqual(found?.detail);
+    expect((await readReceipt(s.db, s.userId, pledge.id, mine(s), noChain))?.detail).toEqual(found?.detail);
   });
 
   it("says how much of the repay that closed a loan was interest, and that it opened no account", async () => {
@@ -191,7 +197,7 @@ describe("readReceipt", () => {
         mintFor: () => USDC_MINT,
       },
     );
-    const found = await readReceipt(s.db, s.userId, (await rowFor(s, "SigClose")).id, WALLET, noChain);
+    const found = await readReceipt(s.db, s.userId, (await rowFor(s, "SigClose")).id, mine(s), noChain);
     expect(found?.detail).toMatchObject({ type: "loan", openedAccount: false, interestPaidUsd: "0.000015" });
   });
 
@@ -228,7 +234,7 @@ describe("readReceipt", () => {
         refId: intent!.id,
       })
       .returning();
-    const found = await readReceipt(s.db, s.userId, row!.id, WALLET, noChain);
+    const found = await readReceipt(s.db, s.userId, row!.id, mine(s), noChain);
     expect(found?.detail).toEqual({
       type: "deposit",
       fromChain: "Base",
@@ -268,7 +274,7 @@ describe("readReceipt", () => {
       history: { transaction: async (sig) => (sig === "SigSend" ? sent : null) },
       relayer: RELAYER,
     };
-    const found = await readReceipt(s.db, s.userId, row!.id, WALLET, chain);
+    const found = await readReceipt(s.db, s.userId, row!.id, mine(s), chain);
     expect(found?.detail).toEqual({ type: "transfer", counterparty: FRIEND, accountSetupUsd: "0.25" });
   });
 
@@ -294,7 +300,7 @@ describe("readReceipt", () => {
         },
       },
     };
-    const found = await readReceipt(s.db, s.userId, row!.id, WALLET, failing);
+    const found = await readReceipt(s.db, s.userId, row!.id, mine(s), failing);
     expect(found?.row.title).toBe("Sent cash");
     expect(found?.detail).toBeNull();
   });
@@ -311,8 +317,51 @@ describe("readReceipt", () => {
         subtitle: "Repay some.",
       })
       .returning();
-    const found = await readReceipt(s.db, s.userId, row!.id, WALLET, noChain);
+    const found = await readReceipt(s.db, s.userId, row!.id, mine(s), noChain);
     expect(found?.row.subtitle).toBe("Repay some.");
     expect(found?.detail).toBeNull();
+  });
+});
+
+describe("readReceipt, in a linked wallet", () => {
+  it("opens a linked wallet's row only when that wallet is one of those chosen, and reads it against that wallet", async () => {
+    const s = await seed();
+    const [linked] = await s.db
+      .insert(wallets)
+      .values({ userId: s.userId, address: FRIEND, kind: "external", isPrimary: false, linkedAt: new Date() })
+      .returning();
+    const [row] = await s.db
+      .insert(activities)
+      .values({
+        userId: s.userId,
+        walletId: linked!.id,
+        kind: "transfer_in",
+        occurredAt: new Date("2026-11-20T12:00:00.000Z"),
+        title: "Received USDC",
+        amountUsd: "20",
+        txSignature: "SigLinked",
+        mint: USDC_MINT,
+      })
+      .returning();
+    const read: string[] = [];
+    const chain: ReceiptChain = {
+      history: {
+        transaction: async (signature) => {
+          read.push(signature);
+          return null;
+        },
+      },
+    };
+
+    expect(await readReceipt(s.db, s.userId, row!.id, mine(s), chain)).toBeNull();
+    const both = [...mine(s), { id: linked!.id, address: FRIEND }];
+    expect((await readReceipt(s.db, s.userId, row!.id, both, chain))?.row.title).toBe("Received USDC");
+    expect(read).toEqual(["SigLinked"]);
+  });
+
+  it("finds nothing with no wallets chosen", async () => {
+    const s = await seed();
+    const row = await settledBuy(s);
+    expect(await readReceipt(s.db, s.userId, row.id, [], noChain)).toBeNull();
   });
 });

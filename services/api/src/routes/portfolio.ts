@@ -35,8 +35,10 @@ import {
   type Range,
   type Reading,
 } from "../portfolio/history.js";
-// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
+import type { ActingWallet } from "../wallets/acting.js";
+import type { WalletOwner } from "../wallets/active.js";
 
 export interface HoldingWrapper {
   readonly mint: string;
@@ -62,8 +64,7 @@ export interface HoldingRow {
 }
 
 export interface PortfolioDeps {
-  readonly holdings: (userId: string) => Promise<readonly HoldingRow[]>;
-  /** One wallet's holdings: what the hourly snapshot values, wallet by wallet. */
+  /** One wallet's holdings: what this page and the hourly snapshot both value, wallet by wallet. */
   readonly walletHoldings: (userId: string, walletId: string) => Promise<readonly HoldingRow[]>;
   readonly prices: PriceBoard;
   readonly chain: ChainReader;
@@ -73,10 +74,14 @@ export interface PortfolioDeps {
   readonly pledged: (walletAddress: string) => Promise<readonly TokenBalance[]>;
   /** Owed to Kamino now. Null when Kamino could not be read — never zero. */
   readonly debt: (walletAddress: string) => Promise<Decimal | null>;
-  /** The newest recorded debt for this account, for when `debt` answers null. */
-  readonly lastKnownDebt: (userId: string) => Promise<Decimal | null>;
-  /** Hourly readings of the account's value, no older than `from`. */
-  readonly snapshots: (userId: string, from: Date) => Promise<readonly Reading[]>;
+  /** The newest recorded debt for this wallet, for when `debt` answers null. */
+  readonly lastKnownDebt: (owner: WalletOwner) => Promise<Decimal | null>;
+  /** Hourly readings of these wallets' value added together, no older than `from`. */
+  readonly snapshots: (
+    userId: string,
+    walletIds: readonly string[],
+    from: Date,
+  ) => Promise<readonly Reading[]>;
   readonly baskets: BasketValueReader;
   /**
    * USDC this wallet holds in the Earn vault. Absent when Earn is not set up.
@@ -84,11 +89,11 @@ export interface PortfolioDeps {
    * the way pledged stock does; without it a deposit would chart as a loss.
    */
   readonly earn?: (walletAddress: string) => Promise<Decimal>;
-  /** The Earn balance in the latest hourly reading, for when it cannot be read now. */
-  readonly lastKnownEarn?: (userId: string) => Promise<Decimal | null>;
+  /** The Earn balance in this wallet's latest hourly reading, for when it cannot be read now. */
+  readonly lastKnownEarn?: (owner: WalletOwner) => Promise<Decimal | null>;
   readonly basketReturns?: BasketReturnsReader;
   /** Deposits and withdrawals since `from`, signed, so the chart can show performance without them. */
-  readonly flows?: (userId: string, from: Date) => Promise<readonly Flow[]>;
+  readonly flows?: (userId: string, walletIds: readonly string[], from: Date) => Promise<readonly Flow[]>;
   /**
    * Cash that crossed between the wallet and its own baskets, for a basket's
    * cost basis. Absent, a basket reports its value and no cost — which is
@@ -96,7 +101,7 @@ export interface PortfolioDeps {
    * return however much was in it.
    */
   readonly basketMovements?: (
-    userId: string,
+    owner: WalletOwner,
   ) => Promise<{ movements: readonly BasketMovement[]; inKindExits: readonly InKindExit[] }>;
 }
 
@@ -118,51 +123,131 @@ const EMPTY = {
 
 const log = logger("portfolio");
 
+/** One holding in one wallet, before it is added to the same stock in any other. */
+interface HoldingView {
+  readonly ticker: string;
+  readonly name: string;
+  readonly shares: Decimal;
+  readonly valueUsd: Decimal;
+  readonly costBasisUsd: Decimal;
+  readonly unrealisedPnlUsd: Decimal;
+  readonly marketPnlUsd: Decimal;
+  readonly tradingCostUsd: Decimal;
+  readonly sharesWithBasis: Decimal;
+  /** The stock's, not the wallet's: the same in every wallet that holds it. */
+  readonly changePct24h: Decimal;
+  readonly wrapperCount: number;
+  readonly pledgedShares: Decimal;
+}
+
+/** One wallet, valued: everything the page shows, as numbers, before any sum. */
+interface WalletView {
+  readonly totalUsd: Decimal;
+  readonly cashUsd: Decimal;
+  readonly earnUsd: Decimal;
+  readonly basketUsd: Decimal;
+  readonly debtUsd: Decimal;
+  readonly debtIsStale: boolean;
+  readonly earnIsStale: boolean;
+  readonly changeUsd: Decimal;
+  /** What the stocks behind `changeUsd` were worth a day ago, which the percentage is of. */
+  readonly yesterdayUsd: Decimal;
+  readonly holdings: readonly HoldingView[];
+  readonly baskets: readonly object[];
+}
+
+/**
+ * Several wallets as one. Every figure is a sum, a stock held in two wallets
+ * is one row, and the day's percentage is the summed change over the summed
+ * day-ago value, never an average of percentages. Each wallet was valued on
+ * its own first, so nothing here can mix one wallet's balances with
+ * another's debt.
+ */
+const sumViews = (views: readonly WalletView[]) => {
+  const add = (pick: (v: WalletView) => Decimal) => views.reduce((s, v) => s.add(pick(v)), ZERO);
+  const holdings = new Map<string, HoldingView>();
+  for (const h of views.flatMap((v) => v.holdings)) {
+    const seen = holdings.get(h.ticker);
+    holdings.set(
+      h.ticker,
+      seen === undefined
+        ? h
+        : {
+            ...seen,
+            shares: seen.shares.add(h.shares),
+            valueUsd: seen.valueUsd.add(h.valueUsd),
+            costBasisUsd: seen.costBasisUsd.add(h.costBasisUsd),
+            unrealisedPnlUsd: seen.unrealisedPnlUsd.add(h.unrealisedPnlUsd),
+            marketPnlUsd: seen.marketPnlUsd.add(h.marketPnlUsd),
+            tradingCostUsd: seen.tradingCostUsd.add(h.tradingCostUsd),
+            sharesWithBasis: seen.sharesWithBasis.add(h.sharesWithBasis),
+            wrapperCount: Math.max(seen.wrapperCount, h.wrapperCount),
+            pledgedShares: seen.pledgedShares.add(h.pledgedShares),
+          },
+    );
+  }
+  const changeUsd = add((v) => v.changeUsd);
+  const yesterday = add((v) => v.yesterdayUsd);
+  return {
+    totalValueUsd: toWire(add((v) => v.totalUsd)),
+    cashUsd: toWire(add((v) => v.cashUsd)),
+    earnUsd: toWire(add((v) => v.earnUsd)),
+    basketUsd: toWire(add((v) => v.basketUsd)),
+    debtUsd: toWire(add((v) => v.debtUsd)),
+    debtIsStale: views.some((v) => v.debtIsStale),
+    earnIsStale: views.some((v) => v.earnIsStale),
+    changeUsd: toWire(changeUsd),
+    changePct: toWire(yesterday.isZero() ? ZERO : changeUsd.div(yesterday).mul(100)),
+    holdings: [...holdings.values()].map((h) => ({
+      ticker: h.ticker,
+      name: h.name,
+      shares: toWire(h.shares),
+      valueUsd: toWire(h.valueUsd),
+      costBasisUsd: toWire(h.costBasisUsd),
+      // Measured over the shares a lot covers, not over the holding. Shares
+      // that arrived from outside have no cost we can prove, and pretending
+      // their basis is zero would report the whole of their value as profit.
+      //
+      // Three figures where there was one. The total is unchanged and still
+      // the dollars; the other two say how much of it the stock did and how
+      // much of it was the cost of getting in. See `stackedReturn`.
+      unrealisedPnlUsd: toWire(h.unrealisedPnlUsd),
+      marketPnlUsd: toWire(h.marketPnlUsd),
+      tradingCostUsd: toWire(h.tradingCostUsd),
+      sharesWithBasis: toWire(h.sharesWithBasis),
+      changePct24h: toWire(h.changePct24h),
+      wrapperCount: h.wrapperCount,
+      pledgedShares: toWire(h.pledgedShares),
+    })),
+    baskets: views.flatMap((v) => v.baskets),
+  };
+};
+
 export function portfolioRoutes(deps: PortfolioDeps): Hono {
   const app = new Hono();
 
-  // Performance is a separate read so a slow Glider curve cannot delay net worth.
-  app.get("/v1/portfolio/basket-returns", async (c) => {
-    const wallet = c.get("identity").walletAddress;
-    if (wallet === null || !deps.basketReturns) return c.json({ returns: [] });
-    try {
-      return c.json({ returns: await deps.basketReturns(wallet) });
-    } catch (error) {
-      log.error({ err: error }, "basket return read failed");
-      return c.json(fail("basket_returns_unavailable", "Basket returns are temporarily unavailable."), 503);
-    }
-  });
+  /**
+   * One wallet, valued. Throws `BasketValuationError` when its baskets cannot
+   * be read, which is a 503 for the whole page rather than a total that is
+   * quietly short.
+   */
+  const viewWallet = async (userId: string, wallet: ActingWallet): Promise<WalletView> => {
+    const owner = { userId, walletId: wallet.id };
+    const address = wallet.address;
 
-  app.get("/v1/portfolio", async (c) => {
-    const identity = c.get("identity");
-    // A session can be valid before Privy finishes provisioning the wallet.
-    // Nothing is owned yet, which is an empty portfolio and not an error.
-    if (identity.walletAddress === null) return c.json(EMPTY);
-
-    // Nothing is written here. A GET reports what is known; bringing the
-    // records in line with the chain is position-sync's job, on its own
-    // clock. See services/api/src/index.ts: position-sync.
-
-    let inputs;
-    try {
-      inputs = await Promise.all([
-        deps.baskets(identity.userId, identity.walletAddress).catch((error: unknown) => {
-          if (error instanceof BasketValuationError) throw error;
-          log.error({ err: error }, "basket valuation failed");
-          throw new BasketValuationError("Basket balances are temporarily unavailable.");
-        }),
-        deps.holdings(identity.userId),
-        deps.pledged(identity.walletAddress).catch(() => [] as readonly TokenBalance[]),
-        deps.debt(identity.walletAddress),
-        deps.basketMovements
-          ? deps.basketMovements(identity.userId)
-          : Promise.resolve({ movements: [], inKindExits: [] }),
-      ]);
-    } catch (error) {
-      if (error instanceof BasketValuationError) return c.json(fail(error.code, error.message), 503);
-      throw error;
-    }
-    const [basketValue, rows, pledged, liveDebt, basketFlows] = inputs;
+    const [basketValue, rows, pledged, liveDebt, basketFlows] = await Promise.all([
+      deps.baskets(userId, address).catch((error: unknown) => {
+        if (error instanceof BasketValuationError) throw error;
+        log.error({ err: error }, "basket valuation failed");
+        throw new BasketValuationError("Basket balances are temporarily unavailable.");
+      }),
+      deps.walletHoldings(userId, wallet.id),
+      deps.pledged(address).catch(() => [] as readonly TokenBalance[]),
+      deps.debt(address),
+      deps.basketMovements
+        ? deps.basketMovements(owner)
+        : Promise.resolve({ movements: [], inKindExits: [] }),
+    ]);
     const bases = basketBases(basketFlows.movements, basketFlows.inKindExits);
 
     /*
@@ -171,11 +256,10 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
      * Zero would be the easy answer and it is the wrong one: it would report a
      * borrower as owing nothing, which overstates their net worth and tells
      * them they have room they do not have. An hour-old figure is close, and a
-     * flag says it is old. An account that has never borrowed has zero in every
+     * flag says it is old. A wallet that has never borrowed has zero in every
      * reading, so an outage changes nothing for the people it should not.
      */
-    const debtUsd = liveDebt ?? (await deps.lastKnownDebt(identity.userId)) ?? ZERO;
-    const debtIsStale = liveDebt === null;
+    const debtUsd = liveDebt ?? (await deps.lastKnownDebt(owner)) ?? ZERO;
     const pledgedByMint = new Map(pledged.map((p) => [p.mint, p]));
 
     const mints = [
@@ -186,23 +270,28 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     ];
     const [board, balances, liveEarn] = await Promise.all([
       deps.prices.pricesFor(mints),
-      deps.chain.tokenBalances(identity.walletAddress),
-      deps.earn?.(identity.walletAddress).catch(() => null) ?? ZERO,
+      deps.chain.tokenBalances(address),
+      deps.earn?.(address).catch(() => null) ?? ZERO,
     ]);
     /*
      * As with debt: an unreadable Earn is the last hourly reading, flagged.
      * Zero would take the whole Earn balance off net worth and draw it on the
      * chart as a loss.
      */
-    const earnUsd = liveEarn ?? (await deps.lastKnownEarn?.(identity.userId)) ?? ZERO;
-    const earnIsStale = liveEarn === null;
+    const earnUsd = liveEarn ?? (await deps.lastKnownEarn?.(owner)) ?? ZERO;
 
     // The figures are `valuePortfolio`'s, so that the hourly snapshot behind the
     // chart and the number at the top of this page cannot drift apart. The loop
     // below is only about the per-holding rows.
-    const cashUsd = cashFrom(balances, deps.usdcMint);
-    const value = valuePortfolio(rows, board, cashUsd, debtUsd, basketValue.totalUsd, earnUsd);
-    const holdings = [];
+    const value = valuePortfolio(
+      rows,
+      board,
+      cashFrom(balances, deps.usdcMint),
+      debtUsd,
+      basketValue.totalUsd,
+      earnUsd,
+    );
+    const holdings: HoldingView[] = [];
 
     for (const row of rows) {
       if (row.shares.lte(ZERO)) continue; // a closed holding is not a row
@@ -210,7 +299,6 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       const priced = priceFor(row, board);
       // The pool values the holding; the quote measures what the stock did.
       const perShare = priced === undefined ? ZERO : marketPricePerShare(priced);
-      const changePct24h = priced?.changePct24h ?? ZERO;
       const stacked = stackedReturn(
         {
           sharesWithBasis: row.sharesWithBasis,
@@ -232,23 +320,16 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       holdings.push({
         ticker: row.ticker,
         name: row.name,
-        shares: toWire(row.shares),
-        valueUsd: toWire(row.shares.mul(perShare)),
-        costBasisUsd: toWire(row.costBasisUsd),
-        // Measured over the shares a lot covers, not over the holding. Shares
-        // that arrived from outside have no cost we can prove, and pretending
-        // their basis is zero would report the whole of their value as profit.
-        //
-        // Three figures where there was one. The total is unchanged and still
-        // the dollars; the other two say how much of it the stock did and how
-        // much of it was the cost of getting in. See `stackedReturn`.
-        unrealisedPnlUsd: toWire(stacked.totalPnlUsd),
-        marketPnlUsd: toWire(stacked.marketPnlUsd),
-        tradingCostUsd: toWire(stacked.tradingCostUsd),
-        sharesWithBasis: toWire(row.sharesWithBasis),
-        changePct24h: toWire(changePct24h),
+        shares: row.shares,
+        valueUsd: row.shares.mul(perShare),
+        costBasisUsd: row.costBasisUsd,
+        unrealisedPnlUsd: stacked.totalPnlUsd,
+        marketPnlUsd: stacked.marketPnlUsd,
+        tradingCostUsd: stacked.tradingCostUsd,
+        sharesWithBasis: row.sharesWithBasis,
+        changePct24h: priced?.changePct24h ?? ZERO,
         wrapperCount: row.wrappers.length,
-        pledgedShares: toWire(pledgedShares.gt(row.shares) ? row.shares : pledgedShares),
+        pledgedShares: pledgedShares.gt(row.shares) ? row.shares : pledgedShares,
       });
     }
 
@@ -256,19 +337,17 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // Missing quotes contribute no guessed move, as wallet holdings already do.
     const basketStocks = valueBasketStocks(basketValue.baskets, board);
     const changeUsd = value.changeUsd.add(basketStocks.changeUsd);
-    const yesterday = value.stocksUsd.add(basketStocks.stocksUsd).sub(changeUsd);
-    const changePct = yesterday.isZero() ? ZERO : changeUsd.div(yesterday).mul(100);
 
-    return c.json({
-      totalValueUsd: toWire(value.totalUsd),
-      cashUsd: toWire(value.cashUsd),
-      earnUsd: toWire(value.earnUsd),
-      basketUsd: toWire(value.basketUsd),
-      debtUsd: toWire(value.debtUsd),
-      debtIsStale,
-      earnIsStale,
-      changeUsd: toWire(changeUsd),
-      changePct: toWire(changePct),
+    return {
+      totalUsd: value.totalUsd,
+      cashUsd: value.cashUsd,
+      earnUsd: value.earnUsd,
+      basketUsd: value.basketUsd,
+      debtUsd: value.debtUsd,
+      debtIsStale: liveDebt === null,
+      earnIsStale: liveEarn === null,
+      changeUsd,
+      yesterdayUsd: value.stocksUsd.add(basketStocks.stocksUsd).sub(changeUsd),
       holdings,
       baskets: basketValue.baskets.map((basket) => {
         const basis = bases.get(basket.portfolioId);
@@ -292,7 +371,43 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
               }),
         };
       }),
-    });
+    };
+  };
+
+  // Performance is a separate read so a slow Glider curve cannot delay net worth.
+  app.get("/v1/portfolio/basket-returns", async (c) => {
+    const { wallets } = c.get("acting");
+    const read = deps.basketReturns;
+    if (wallets.length === 0 || read === undefined) return c.json({ returns: [] });
+    try {
+      const each = await Promise.all(wallets.map((w) => read(w.address)));
+      return c.json({ returns: each.flat() });
+    } catch (error) {
+      log.error({ err: error }, "basket return read failed");
+      return c.json(fail("basket_returns_unavailable", "Basket returns are temporarily unavailable."), 503);
+    }
+  });
+
+  /**
+   * The chosen wallet, or every wallet added together under `all`.
+   *
+   * Nothing is written here. A GET reports what is known; bringing the
+   * records in line with the chain is position-sync's job, on its own clock.
+   * See services/api/src/index.ts: position-sync.
+   */
+  app.get("/v1/portfolio", async (c) => {
+    const { userId } = c.get("identity");
+    const { wallets } = c.get("acting");
+    // A session can be valid before Privy finishes provisioning the wallet.
+    // Nothing is owned yet, which is an empty portfolio and not an error.
+    if (wallets.length === 0) return c.json(EMPTY);
+
+    try {
+      return c.json(sumViews(await Promise.all(wallets.map((w) => viewWallet(userId, w)))));
+    } catch (error) {
+      if (error instanceof BasketValuationError) return c.json(fail(error.code, error.message), 503);
+      throw error;
+    }
   });
 
   /**
@@ -308,16 +423,17 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     }
     const range = asked as Range;
 
-    const identity = c.get("identity");
+    const { userId } = c.get("identity");
+    const walletIds = c.get("acting").wallets.map((w) => w.id);
     // A session can be valid before Privy finishes provisioning the wallet.
     // Nothing has been recorded yet, which is an empty chart and not an error.
-    if (identity.walletAddress === null) return c.json({ range, points: [] });
+    if (walletIds.length === 0) return c.json({ range, points: [] });
 
     const now = new Date();
     const from = new Date(now.getTime() - RANGES[range].spanHours * 3_600_000);
     const [readings, flows] = await Promise.all([
-      deps.snapshots(identity.userId, from),
-      deps.flows ? deps.flows(identity.userId, from) : Promise.resolve([]),
+      deps.snapshots(userId, walletIds, from),
+      deps.flows ? deps.flows(userId, walletIds, from) : Promise.resolve([]),
     ]);
     const points = bucketSeries(readings, range, now, flows);
 
@@ -326,14 +442,18 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     return c.json({ range, points: points.length < MIN_POINTS ? [] : points });
   });
 
+  /** One stock across its wrappers, in the chosen wallet or in every wallet together. */
   app.get("/v1/portfolio/exposure/:ticker", async (c) => {
-    const identity = c.get("identity");
+    const { userId } = c.get("identity");
+    const { wallets } = c.get("acting");
     const ticker = c.req.param("ticker").toUpperCase();
-    if (identity.walletAddress === null) return c.json(fail("not_found", "Nothing held."), 404);
+    if (wallets.length === 0) return c.json(fail("not_found", "Nothing held."), 404);
 
-    const rows = await deps.holdings(identity.userId);
-    const row = rows.find((r) => r.ticker === ticker);
-    if (row === undefined || row.shares.lte(ZERO)) {
+    const rowsByWallet = await Promise.all(wallets.map((w) => deps.walletHoldings(userId, w.id)));
+    const rows = rowsByWallet.flat().filter((r) => r.ticker === ticker);
+    const held = rows.reduce((s, r) => s.add(r.shares), ZERO);
+    const row = rows[0];
+    if (row === undefined || held.lte(ZERO)) {
       return c.json(fail("not_found", `No position in ${ticker}.`), 404);
     }
 
@@ -341,19 +461,25 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // The multipliers are read here, not inside the loop below. Awaiting one
     // mint before asking about the next made this a round trip per wrapper,
     // and nothing underneath can batch calls a loop issues one at a time.
-    const [balances, board, multipliers] = await Promise.all([
-      deps.chain.tokenBalances(identity.walletAddress),
+    const [balancesByWallet, board, multipliers] = await Promise.all([
+      Promise.all(wallets.map((w) => deps.chain.tokenBalances(w.address))),
       deps.prices.pricesFor(mints),
       deps.multipliers.multipliersFor(mints),
     ]);
+    // Raw amounts of one mint add up across wallets; its decimals are the mint's own.
+    const balances = new Map<string, TokenBalance>();
+    for (const b of balancesByWallet.flat()) {
+      const seen = balances.get(b.mint);
+      balances.set(b.mint, seen === undefined ? b : { ...seen, rawAmount: seen.rawAmount + b.rawAmount });
+    }
 
-    const held: WrapperHolding[] = [];
+    const tokens: WrapperHolding[] = [];
     for (const wrapper of row.wrappers) {
-      const balance = balances.find((b) => b.mint === wrapper.mint);
+      const balance = balances.get(wrapper.mint);
       if (balance === undefined || balance.rawAmount === 0n) continue;
       const price = board.get(wrapper.mint);
       const multiplier = multipliers.get(wrapper.mint) ?? price?.multiplier ?? D(1);
-      held.push({
+      tokens.push({
         mint: wrapper.mint,
         symbol: wrapper.symbol,
         issuer: wrapper.issuer,
@@ -366,7 +492,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     // The arithmetic is `@mercury/core`'s. Shares are summed as tokenQty x
     // multiplier, never by adding token counts: two wrappers of one company are
     // different numbers of shares. See docs/02.
-    const result = exposure(ticker, held);
+    const result = exposure(ticker, tokens);
 
     return c.json({
       ticker: result.ticker,
