@@ -66,3 +66,25 @@ describe("apiFetch", () => {
     }
   });
 });
+
+describe("apiFetch, and the chosen wallet", () => {
+  it("sends the wallet chosen in the header, unless the caller names one, and nothing for the Mercury wallet", async () => {
+    const { setChosenWallet, WALLET_HEADER } = await import("./wallet-choice.js");
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response("{}", { status: 200 }));
+    const sent = () => new Headers(spy.mock.calls.at(-1)?.[1]?.headers).get(WALLET_HEADER);
+
+    setChosenWallet(null);
+    await apiFetch("/v1/portfolio");
+    expect(sent()).toBeNull();
+
+    setChosenWallet("phantom");
+    await apiFetch("/v1/portfolio");
+    expect(sent()).toBe("phantom");
+
+    await apiFetch("/v1/portfolio", { headers: { [WALLET_HEADER]: "all" } });
+    expect(sent()).toBe("all");
+    setChosenWallet(null);
+  });
+});

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { MercuryLogo } from "../ui/Logo";
 import { AccountMenu } from "./AccountMenu";
 import { HeaderChrome } from "./HeaderChrome";
+import { WalletSwitcher } from "./WalletSwitcher";
 
 export type NavKey = "portfolio" | "invest" | "baskets" | "earn" | "money" | "activity";
 
@@ -61,6 +62,7 @@ export const TopBar = ({ current }: { current: NavKey }) => (
         <Nav current={current} className="ml-12 hidden items-center gap-8 lg:flex" />
 
         <div className="ml-auto flex items-center gap-3">
+          <WalletSwitcher />
           <HeaderChrome />
           <Divider />
           <AccountMenu />

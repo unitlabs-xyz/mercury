@@ -11,6 +11,7 @@ import {
   walletName,
   type AccountWallet,
 } from "../../api/wallets";
+import { usePortfolioSummary } from "../../api/hooks";
 
 /*
  * Linking needs AppKit, which is half again on the first download. Loaded when
@@ -163,6 +164,10 @@ const ConfirmUnlink = ({
   onClose: () => void;
 }) => {
   const unlink = useUnlinkWallet();
+  // The summary knows each wallet's debt from its last reading; unknown reads as a loan, to warn rather than not.
+  const summary = usePortfolioSummary(true);
+  const debt = summary.data?.wallets.find((w) => w.id === wallet.id)?.debtUsd;
+  const hasLoan = debt === undefined || Number(debt) > 0;
   const go = (deleteHistory: boolean) =>
     unlink.mutate({ id: wallet.id, deleteHistory }, { onSuccess: onBack });
 
@@ -177,11 +182,15 @@ const ConfirmUnlink = ({
       />
       <div className="flex flex-col gap-5 px-6 pt-6 pb-8 text-[14px] leading-[1.45] text-ds-muted text-pretty">
         <p>
-          Mercury will stop tracking this wallet. Its holdings, activity and loans disappear from Mercury, and{" "}
-          <span className="text-ds-ink">
-            if it has a loan, Mercury won't warn you if it gets close to liquidation.
-          </span>
+          Mercury will stop tracking this wallet. Its holdings, activity and loans disappear from Mercury.
         </p>
+        {hasLoan && (
+          <p className="text-ds-ink">
+            {debt === undefined
+              ? "If it has a loan, Mercury won't warn you if it gets close to liquidation."
+              : "This wallet has a loan. After unlinking, Mercury won't warn you if it gets close to liquidation."}
+          </p>
+        )}
         <p>The wallet itself and everything in it stay exactly as they are.</p>
 
         <div className="flex flex-col gap-2">

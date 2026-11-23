@@ -1,4 +1,5 @@
-import type { Money, Portfolio } from "@mercury/types";
+import type { Money, Portfolio, PortfolioSummary } from "@mercury/types";
+import type { AccountWallets } from "../api/wallets";
 import type { Dashboard } from "../api/dashboard";
 import { toEvent, type ActivityReceipt, type Event } from "@mercury/view";
 
@@ -125,6 +126,187 @@ const portfolio: Portfolio = {
   changePct: "0.32",
   holdings,
   baskets: sampleBaskets,
+};
+
+/*
+ * Linked wallets: the Mercury wallet, a Phantom wallet with a loan, and one
+ * linked minutes ago whose past is still being read. Enough to show the
+ * switcher, Home's summary and each card's states.
+ */
+const NOW = Date.now();
+const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
+const SAMPLE_WALLETS: AccountWallets = {
+  limit: 5,
+  wallets: [
+    {
+      id: "w-mercury",
+      address: "Merc1111111111111111111111111111111111111111",
+      kind: "privy_embedded",
+      isPrimary: true,
+      label: null,
+      linkedAt: null,
+    },
+    {
+      id: "w-phantom",
+      address: "Phan7om22222222222222222222222222222222222Xy",
+      kind: "external",
+      isPrimary: false,
+      label: "Phantom",
+      linkedAt: ago(60 * 24 * 9),
+    },
+    {
+      id: "w-new",
+      address: "9xQe3333333333333333333333333333333333333Kp4",
+      kind: "external",
+      isPrimary: false,
+      label: null,
+      linkedAt: ago(4),
+    },
+  ],
+};
+
+const SAMPLE_SUMMARY: PortfolioSummary = {
+  wallets: [
+    {
+      id: "w-mercury",
+      address: SAMPLE_WALLETS.wallets[0]!.address,
+      isPrimary: true,
+      label: null,
+      valueUsd: "12380.12",
+      asOf: ago(38),
+      debtUsd: debt.toFixed(2),
+      loanHealth: debt > 0 ? "healthy" : null,
+      history: "ready",
+    },
+    {
+      id: "w-phantom",
+      address: SAMPLE_WALLETS.wallets[1]!.address,
+      isPrimary: false,
+      label: "Phantom",
+      valueUsd: "4210.55",
+      asOf: ago(38),
+      debtUsd: "1500.00",
+      loanHealth: "margin_call",
+      history: "ready",
+    },
+    {
+      id: "w-new",
+      address: SAMPLE_WALLETS.wallets[2]!.address,
+      isPrimary: false,
+      label: null,
+      valueUsd: null,
+      asOf: null,
+      debtUsd: "0",
+      loanHealth: null,
+      history: "calculating",
+    },
+  ],
+  netWorthUsd: "16590.67",
+  asOf: ago(38),
+  pnl: {
+    totalUsd: "1842.30",
+    unrealisedUsd: "1520.10",
+    realisedUsd: "322.20",
+    returnPct: "11.4",
+    estimatedCostUsd: "640.00",
+  },
+  income: { totalUsd: "96.42", earnUsd: "71.12", dividendsUsd: "25.30" },
+  loanInterestUsd: "18.77",
+  calculating: 1,
+};
+
+/*
+ * The Phantom wallet's own figures, so choosing it shows Phantom and not the
+ * Mercury wallet: Tesla and Nvidia (Tesla well under its cost), some cash,
+ * and a loan in a margin call. No baskets and no Earn: those are Mercury's.
+ */
+const phantomHoldings = [
+  { ...holding("TSLA", "Tesla", "8.400", 2950, 3200, "-2.41"), pledgedShares: "6" },
+  { ...holding("NVDA", "Nvidia", "10.200", 1885.1, 1500, "0.18"), pledgedShares: "0" },
+];
+const phantomCash = 900;
+const phantomDebt = 1500;
+const phantomPortfolio: Portfolio = {
+  totalValueUsd: (
+    phantomHoldings.reduce((sum, h) => sum + Number(h.valueUsd), 0) +
+    phantomCash -
+    phantomDebt
+  ).toFixed(2),
+  cashUsd: phantomCash.toFixed(2),
+  earnUsd: "0.00",
+  basketUsd: "0.00",
+  debtUsd: phantomDebt.toFixed(2),
+  debtIsStale: false,
+  changeUsd: "-61.40",
+  changePct: "-1.43",
+  holdings: phantomHoldings,
+  baskets: [],
+};
+
+/*
+ * Linked minutes ago. Its balance is read like any wallet's, so it counts in
+ * net worth and shows what it holds; what it paid is not known until its past
+ * is read, so its shares carry no cost yet and its P&L is "calculating".
+ */
+const freshHoldings = [
+  {
+    ...holding("AMZN", "Amazon", "1.400", 295.4, 0, "1.12"),
+    costBasisUsd: "0.00",
+    unrealisedPnlUsd: "0.00",
+    tradingCostUsd: "0.00",
+    marketPnlUsd: "0.00",
+  },
+];
+const freshCash = 345;
+const freshPortfolio: Portfolio = {
+  totalValueUsd: (295.4 + freshCash).toFixed(2),
+  cashUsd: freshCash.toFixed(2),
+  earnUsd: "0.00",
+  basketUsd: "0.00",
+  debtUsd: "0.00",
+  debtIsStale: false,
+  changeUsd: "3.27",
+  changePct: "0.51",
+  holdings: freshHoldings,
+  baskets: [],
+};
+
+/** Every wallet read at once: the two wallets added up, a stock in both one row, plus each wallet's own. */
+const allWallets: Portfolio = {
+  ...portfolio,
+  totalValueUsd: (
+    Number(portfolio.totalValueUsd) +
+    Number(phantomPortfolio.totalValueUsd) +
+    Number(freshPortfolio.totalValueUsd)
+  ).toFixed(2),
+  cashUsd: (cash + phantomCash + freshCash).toFixed(2),
+  debtUsd: (debt + phantomDebt).toFixed(2),
+  changeUsd: (39.32 - 61.4 + 3.27).toFixed(2),
+  changePct: "-0.13",
+  holdings: [...holdings, ...phantomHoldings, ...freshHoldings],
+  wallets: [
+    {
+      walletId: "w-mercury",
+      totalValueUsd: portfolio.totalValueUsd,
+      debtUsd: portfolio.debtUsd,
+      changeUsd: "39.32",
+      changePct: "0.32",
+    },
+    {
+      walletId: "w-phantom",
+      totalValueUsd: phantomPortfolio.totalValueUsd,
+      debtUsd: phantomPortfolio.debtUsd,
+      changeUsd: phantomPortfolio.changeUsd,
+      changePct: phantomPortfolio.changePct,
+    },
+    {
+      walletId: "w-new",
+      totalValueUsd: freshPortfolio.totalValueUsd,
+      debtUsd: "0.00",
+      changeUsd: freshPortfolio.changeUsd,
+      changePct: freshPortfolio.changePct,
+    },
+  ],
 };
 
 const money: Money = {
@@ -469,6 +651,47 @@ const borrow = {
     row("AAPL", 0.4, 0.5, 246.2, 0, 1.2),
     row("HOOD", 0.3, 0.4, 122.79, 0, 4.8),
   ],
+};
+
+/** Phantom's loan: $1,500 against pledged Tesla that has fallen, so a margin call. */
+const phantomBorrow = {
+  ...borrow,
+  cashUsd: phantomCash.toFixed(2),
+  collateralUsd: (6 * (2950 / 8.4)).toFixed(2),
+  debtUsd: phantomDebt.toFixed(2),
+  borrowableNowUsd: "0",
+  overTargetUsd: "210.00",
+  health: "margin_call",
+  usage: "0.86",
+  repayToClearMarginCallUsd: "210.00",
+  borrowableUsd: "0",
+  spendableUsd: phantomCash.toFixed(2),
+  ltv: "0.71",
+  safeUntilDrop: "0.09",
+  obligation: "SamplePhantomObligation111111111111111111",
+  owedUsdc: "1500.000000",
+  principalUsdc: "1482.5",
+  interestUsdc: "17.500000",
+  closeLoanUsdc: "1500.010000",
+};
+
+const emptyBorrow = {
+  ...borrow,
+  cashUsd: "0",
+  collateralUsd: "0",
+  debtUsd: "0",
+  borrowableNowUsd: "0",
+  health: "healthy",
+  usage: "0",
+  borrowableUsd: "0",
+  spendableUsd: "0",
+  ltv: "0",
+  obligation: null,
+  owedUsdc: "0",
+  principalUsdc: "0",
+  interestUsdc: "0",
+  closeLoanUsdc: "0",
+  collateral: [],
 };
 
 export const SAMPLE_DASHBOARD: Dashboard = {
@@ -1295,14 +1518,42 @@ const inboxResponse = (route: string, body?: string): unknown | undefined => {
   return undefined;
 };
 
-export const sampleResponse = (path: string, body?: string): unknown | undefined => {
+export const sampleResponse = (path: string, body?: string, wallet?: string): unknown | undefined => {
   const route = path.split("?")[0] ?? path;
   const inbox = inboxResponse(route, body);
   if (inbox !== undefined) return inbox;
-  if (route === "/v1/portfolio") return portfolio;
-  if (route === "/v1/money") return money;
-  if (route === "/v1/borrow") return borrow;
-  if (route === "/v1/earn") return earn;
+  if (route === "/v1/wallets") return SAMPLE_WALLETS;
+  if (route === "/v1/portfolio/summary") return SAMPLE_SUMMARY;
+  /*
+   * The chosen wallet's own figures. "all" is every wallet at once; the
+   * account-wide routes (the card, the inbox) answer the same for any choice,
+   * and so do routes nothing here distinguishes.
+   */
+  const phantom = wallet === "w-phantom";
+  const fresh = wallet === "w-new";
+  if (route === "/v1/portfolio")
+    return wallet === "all" ? allWallets : phantom ? phantomPortfolio : fresh ? freshPortfolio : portfolio;
+  if (route === "/v1/money")
+    return phantom || fresh
+      ? {
+          ...money,
+          balanceUsd: (phantom ? phantomCash : freshCash).toFixed(2),
+          earnUsd: "0.00",
+          borrowingPower: { availableUsd: "0", enabled: phantom },
+        }
+      : money;
+  if (route === "/v1/borrow") return phantom ? phantomBorrow : fresh ? emptyBorrow : borrow;
+  if (route === "/v1/earn")
+    return phantom || fresh
+      ? {
+          ...earn,
+          holdings: [],
+          balanceUsd: "0",
+          earnedUsd: "0",
+          apy: null,
+          walletUsd: (phantom ? phantomCash : freshCash).toFixed(2),
+        }
+      : earn;
   if (route === "/v1/earn/risk") return { accepted: "2026-10-22" };
   if (route === "/v1/earn/vaults") return { vaults: earnVaults };
   if (route.startsWith("/v1/earn/vaults/")) return earnHistory(path);
@@ -1320,7 +1571,14 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
   if (route === "/v1/money/fund/intents") return { intents: [] };
   if (route === "/v1/portfolio/history") {
     const range = new URLSearchParams(path.split("?")[1] ?? "").get("range") ?? "1D";
-    return { range, points: SAMPLE_HISTORY[range] ?? SAMPLE_HISTORY["1D"] };
+    const points = SAMPLE_HISTORY[range] ?? SAMPLE_HISTORY["1D"]!;
+    // The same shape per wallet, scaled to each one's size. The new wallet has no past read yet.
+    const scale = wallet === "all" ? 1.416 : wallet === "w-phantom" ? 0.416 : wallet === "w-new" ? 0 : 1;
+    return {
+      range,
+      points:
+        scale === 0 ? [] : points.map((p) => ({ ...p, valueUsd: (Number(p.valueUsd) * scale).toFixed(2) })),
+    };
   }
   return undefined;
 };

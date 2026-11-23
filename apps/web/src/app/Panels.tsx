@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { ActionGate } from "./ActionGate";
 import { ActivityReceipt } from "./ActivityReceipt";
 import { AddCash } from "./AddCash";
 import { BorrowSheet, type Tab } from "./borrow/BorrowSheet";
@@ -92,23 +93,32 @@ export const GlobalPanels = () => {
   return (
     <>
       {addSeen && <AddCash open={adding} onClose={close} />}
-      {sendSeen && <Send open={sending} onClose={close} />}
+      {/* Adding money is not gated: it lands in the Mercury wallet whichever wallet is shown. */}
+      {sendSeen && (
+        <ActionGate open={sending} onClose={close}>
+          <Send open={sending} onClose={close} />
+        </ActionGate>
+      )}
       {borrowSeen && (
-        <BorrowSheet
-          open={borrowing}
-          onClose={close}
-          initialTab={borrowing ? tab : lastTab}
-          ticker={params.get("ticker") ?? undefined}
-          only={params.get("only") === "1"}
-        />
+        <ActionGate open={borrowing} onClose={close}>
+          <BorrowSheet
+            open={borrowing}
+            onClose={close}
+            initialTab={borrowing ? tab : lastTab}
+            ticker={params.get("ticker") ?? undefined}
+            only={params.get("only") === "1"}
+          />
+        </ActionGate>
       )}
       {earnSeen && (
-        <EarnSheet
-          open={earning}
-          onClose={close}
-          tab={earning ? earnParam : lastEarn}
-          vault={params.get("vault") ?? undefined}
-        />
+        <ActionGate open={earning} onClose={close}>
+          <EarnSheet
+            open={earning}
+            onClose={close}
+            tab={earning ? earnParam : lastEarn}
+            vault={params.get("vault") ?? undefined}
+          />
+        </ActionGate>
       )}
       {walletsSeen && <LinkedWallets open={managingWallets} onClose={close} />}
       {receiptSeen && <ActivityReceipt id={event ?? lastEvent} open={event !== null} onClose={close} />}

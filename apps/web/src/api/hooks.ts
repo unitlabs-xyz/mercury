@@ -1,10 +1,18 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
-import type { HistoryRange, MarketStatus, Money, Portfolio, PortfolioHistory } from "@mercury/types";
+import type {
+  HistoryRange,
+  MarketStatus,
+  Money,
+  Portfolio,
+  PortfolioHistory,
+  PortfolioSummary,
+} from "@mercury/types";
 import type { ActivityReceipt } from "@mercury/view";
 import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { apiFetch } from "./client";
 import { LIVE } from "./live";
+import { ALL_WALLETS, WALLET_HEADER } from "./wallet-choice";
 
 /**
  * The app's reads from our own API.
@@ -48,11 +56,19 @@ export const usePortfolio = () => {
  * the live balance would be three hundred and sixty requests an hour for one
  * new point. A minute is still well inside the hour it is waiting for.
  */
-export const usePortfolioHistory = (range: HistoryRange) => {
+export const usePortfolioHistory = (range: HistoryRange, wallet?: typeof ALL_WALLETS) => {
   const signedIn = useSignedIn();
   return useQuery({
-    queryKey: ["api", "portfolio", "history", range],
-    queryFn: () => apiFetch<PortfolioHistory>(`/v1/portfolio/history?range=${range}`),
+    // Every wallet at once is its own query, the same whichever wallet is chosen.
+    queryKey:
+      wallet === undefined
+        ? ["api", "portfolio", "history", range]
+        : ["api", "portfolio", wallet, "history", range],
+    queryFn: () =>
+      apiFetch<PortfolioHistory>(
+        `/v1/portfolio/history?range=${range}`,
+        wallet === undefined ? {} : { headers: { [WALLET_HEADER]: wallet } },
+      ),
     enabled: signedIn,
     staleTime: 60_000,
     refetchInterval: 60_000,
@@ -118,5 +134,36 @@ export const useMarketStatus = () => {
     enabled: signedIn,
     staleTime: 60_000,
     refetchInterval: 60_000,
+  });
+};
+
+/**
+ * The summary at the top of Home, across every wallet. Read from the
+ * server's records alone, so a minute is plenty: it moves with the hourly
+ * readings and the history reader. Only asked for once something is linked.
+ */
+export const usePortfolioSummary = (enabled: boolean) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "summary"],
+    queryFn: () => apiFetch<PortfolioSummary>("/v1/portfolio/summary"),
+    enabled: signedIn && enabled,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+};
+
+/**
+ * Every wallet at once, live, whichever is chosen: what the wallet cards on
+ * Home show while it is open. The live read the summary falls back from.
+ */
+export const useAllWalletsPortfolio = (enabled: boolean) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "portfolio", "all"],
+    queryFn: () => apiFetch<Portfolio>("/v1/portfolio", { headers: { [WALLET_HEADER]: ALL_WALLETS } }),
+    enabled: signedIn && enabled,
+    ...LIVE,
+    retry: (attempt) => attempt < 1,
   });
 };

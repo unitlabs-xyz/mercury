@@ -1,8 +1,10 @@
 import { useSignTransaction } from "@privy-io/react-auth/solana";
 import { useEmbeddedWallet } from "../auth/embedded";
+import { useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
+import { ALL_WALLETS, chosenWallet, subscribeChoice } from "./wallet-choice";
 import { refreshAfterChain } from "./settle";
 import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 import { borrowFromWire, type BorrowIntent, type BorrowWire } from "@mercury/view";
@@ -20,10 +22,12 @@ const confirmSentLoan = (sent: SentLoan) =>
 /** The account's Kamino position and what it can spend: cash plus what it could borrow. */
 export const useBorrow = () => {
   const signedIn = useSignedIn();
+  // A loan is one wallet's: every wallet at once has no position to read, and the server says so with a 400.
+  const all = useSyncExternalStore(subscribeChoice, chosenWallet, chosenWallet) === ALL_WALLETS;
   return useQuery({
     queryKey: ["api", "borrow"],
     queryFn: async () => borrowFromWire(await apiFetch<BorrowWire>("/v1/borrow")),
-    enabled: signedIn,
+    enabled: signedIn && !all,
     staleTime: 20_000,
     refetchInterval: 60_000,
   });

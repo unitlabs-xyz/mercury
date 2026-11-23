@@ -1,6 +1,7 @@
 import { SAMPLE, sampleResponse } from "../dev/sample";
 import { getAccessToken } from "@privy-io/react-auth";
 import { identityToken } from "../auth/identity";
+import { chosenWallet, WALLET_HEADER } from "./wallet-choice";
 
 const BASE = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8787";
 
@@ -32,7 +33,11 @@ export class ApiError extends Error {
 export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
   // Sample data for design review (VITE_SAMPLE=1); off in a normal build.
   if (SAMPLE) {
-    const sample = sampleResponse(path, typeof init.body === "string" ? init.body : undefined);
+    const sample = sampleResponse(
+      path,
+      typeof init.body === "string" ? init.body : undefined,
+      new Headers(init.headers).get(WALLET_HEADER) ?? chosenWallet() ?? undefined,
+    );
     if (sample !== undefined) return sample as T;
   }
   // `getAccessToken` answers from memory and only goes to the network when the
@@ -46,6 +51,9 @@ export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise
   headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (identity) headers.set("X-Privy-Identity-Token", identity);
+  // The wallet chosen in the header, unless the caller named one: Home reads every wallet's cards whichever is chosen.
+  const wallet = chosenWallet();
+  if (wallet !== null && !headers.has(WALLET_HEADER)) headers.set(WALLET_HEADER, wallet);
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   const body: unknown = await res.json().catch(() => null);

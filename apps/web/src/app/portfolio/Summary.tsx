@@ -6,6 +6,7 @@ import { ArrowUp, Card, Plus } from "../../ui/icons";
 import { pct, usd, usdCompact, usdSigned } from "@mercury/view";
 import { ValueChart, useHistory, type Range } from "../ValueChart";
 import { usePortfolioHistory } from "../../api/hooks";
+import type { ALL_WALLETS } from "../../api/wallet-choice";
 import { HexAllocation, type Slice } from "./HexAllocation";
 import { RailHead, RangeSwitch } from "../../ui/ds";
 import type { Model } from "./model";
@@ -30,8 +31,14 @@ export const performancePercent = (change: number, openingValue: number): number
  * it is the number that shrinks every time a loan is used to buy more
  * collateral. The maths is the server's `safeUntilDrop`.
  */
-export const borrowedSub = (m: Model): string => {
+export const borrowedSub = (m: Model, together = false): string => {
   if (m.debtIsStale) return "As of an hour ago — we could not reach Kamino";
+  /*
+   * Every wallet at once has no one loan to describe: each has its own health
+   * and room, listed under Borrowing. Headroom or "safe unless" here would be
+   * one wallet's figure dressed up as all of them.
+   */
+  if (together) return m.borrowed > 0 ? "Across your wallets' loans" : "No wallet has a loan";
   if (m.borrowed <= 0) {
     return m.power > 0 ? `${usdCompact(m.available)} more available` : "Nothing to borrow against";
   }
@@ -83,8 +90,10 @@ export const basketPnlSub = (m: Model): string => {
 };
 
 /** Red once a fall has taken the loan somewhere the owner has to act on. */
-export const borrowedTone = (m: Model): "down" | undefined =>
-  m.health === "margin_call" || m.health === "liquidation" || m.health === "over_limit" ? "down" : undefined;
+export const borrowedTone = (m: Model, together = false): "down" | undefined =>
+  !together && (m.health === "margin_call" || m.health === "liquidation" || m.health === "over_limit")
+    ? "down"
+    : undefined;
 
 export const HeaderFigure = ({
   label,
@@ -200,9 +209,15 @@ export const AccountHeader = ({
   inEarn,
   earnIsStale = false,
   failed = false,
+  together = false,
+  calculating = false,
 }: {
   m: Model | undefined;
   dash: Dashboard | undefined;
+  /** Every wallet at once: the debt is several loans, each described under Borrowing. */
+  together?: boolean;
+  /** A linked wallet whose past is still being read: its stock P&L waits for it. */
+  calculating?: boolean;
   /** Cash in the Earn vault. Not in `m.cash`, which is what can be spent now. */
   inEarn: number;
   /** Kamino could not be read, so `inEarn` is the last hourly reading. */
@@ -259,14 +274,14 @@ export const AccountHeader = ({
           label="Holdings"
           loading={waiting}
           value={m ? usd(m.stocks) : "—"}
-          sub={m ? `${m.rows.length} positions` : undefined}
+          sub={m ? `${m.rows.length} position${m.rows.length === 1 ? "" : "s"}` : undefined}
         />
         <HeaderFigure
           label="Stock P&L"
           loading={waiting}
-          value={m ? usdSigned(m.costBasis > 0 ? m.marketReturnUsd : 0) : "—"}
-          sub={m ? stockPnlSub(m) : undefined}
-          tone={m && m.costBasis > 0 ? (m.marketReturnUsd < 0 ? "down" : "up") : undefined}
+          value={calculating ? "Calculating…" : m ? usdSigned(m.costBasis > 0 ? m.marketReturnUsd : 0) : "—"}
+          sub={calculating ? "Reading this wallet's past for what you paid" : m ? stockPnlSub(m) : undefined}
+          tone={!calculating && m && m.costBasis > 0 ? (m.marketReturnUsd < 0 ? "down" : "up") : undefined}
         />
         {/* Only for an account that holds one. A basket's return is a total
             and cannot join the stacked figure beside it, so it gets its own. */}
@@ -292,8 +307,8 @@ export const AccountHeader = ({
           label="Borrowed"
           loading={waiting}
           value={m ? usd(m.borrowed) : "—"}
-          sub={m ? borrowedSub(m) : undefined}
-          tone={m ? borrowedTone(m) : undefined}
+          sub={m ? borrowedSub(m, together) : undefined}
+          tone={m ? borrowedTone(m, together) : undefined}
         />
         <HeaderFigure
           label="Card due"
@@ -323,16 +338,25 @@ export const AccountHeader = ({
  * beside it, the range switch top right, and the dot chart under them.
  */
 export const Performance = ({
-  m,
+  total,
   range,
   setRange,
+  wallet,
+  title = "Account value",
+  framed = true,
 }: {
-  m: Model | undefined;
+  /** Net worth now, said instead of a change while there is no line; undefined while loading. */
+  total: number | undefined;
   range: Range;
   setRange: (r: Range) => void;
+  /** Every wallet at once whichever is chosen; left out, the chosen wallet. */
+  wallet?: typeof ALL_WALLETS;
+  title?: string;
+  /** Its own white card on Home; bare inside a panel that already is one. */
+  framed?: boolean;
 }) => {
-  const history = useHistory(range);
-  const recorded = usePortfolioHistory(range).data?.points;
+  const history = useHistory(range, wallet);
+  const recorded = usePortfolioHistory(range, wallet).data?.points;
   const first = history?.points[0]?.value;
   const last = history?.points[history.points.length - 1]?.value;
   const change = first !== undefined && last !== undefined ? last - first : null;
@@ -355,12 +379,12 @@ export const Performance = ({
   const down = change !== null && change < 0 && !flat;
   return (
     <section
-      aria-label="Account value history"
-      className="flex min-w-0 flex-col rounded-xl bg-white px-4 pt-5 pb-5 sm:px-6"
+      aria-label={`${title} history`}
+      className={`flex min-w-0 flex-col ${framed ? "rounded-xl bg-white px-4 pt-5 pb-5 sm:px-6" : ""}`}
     >
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-[14px] leading-none font-medium text-ds-ink">Account value</h2>
+          <h2 className="text-[14px] leading-none font-medium text-ds-ink">{title}</h2>
           {change !== null && first !== undefined ? (
             <p className="mt-[11px] flex flex-wrap items-center gap-x-2">
               <span
@@ -389,16 +413,18 @@ export const Performance = ({
             </p>
           ) : (
             <p className="mt-2 text-[14px] leading-none text-ds-muted">
-              {m ? `Net worth ${usd(m.total)}` : <Skeleton className="h-[14px] w-36" />}
+              {total !== undefined ? `Net worth ${usd(total)}` : <Skeleton className="h-[14px] w-36" />}
             </p>
           )}
         </div>
         <RangeSwitch options={RANGES} value={range} onChange={setRange} />
       </header>
       {/* The chart takes its full height only when there is a line to draw. */}
-      <div className={`mt-[14px] flex flex-1 ${history ? "min-h-[365px]" : ""}`}>
+      {/* Home's card stretches to its neighbour's height; inside another panel it takes only what the chart needs. */}
+      <div className={`mt-[14px] flex flex-1 ${history && framed ? "min-h-[365px]" : ""}`}>
         <ValueChart
           range={range}
+          {...(wallet === undefined ? {} : { wallet })}
           onZoom={(dir) =>
             setRange(RANGES[Math.min(RANGES.length - 1, Math.max(0, RANGES.indexOf(range) + dir))]!)
           }

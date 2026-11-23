@@ -52,6 +52,7 @@ import { USDC_MINT, UsdcMark } from "./activity-mark";
 import { Skeleton } from "./portfolio/ui";
 import { LIST_DOT } from "./invest/shared";
 import { Fact } from "./stock/Panels";
+import { ActionGate } from "./ActionGate";
 
 type Range = "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
 const WINDOWS = [
@@ -1457,78 +1458,84 @@ export const Basket = () => {
           </div>
         </aside>
       </div>
-      <InvestSheet
-        open={investOpen}
-        name={name}
-        assetCount={allocations.length}
-        mark={basketMark}
-        amount={fundingAmount}
-        cash={money.data ? Number(money.data.balanceUsd) : null}
-        portfolio={investPortfolio}
-        firstDeposit={firstDeposit}
-        receipt={fundingAction.data ?? null}
-        enroll={{
-          walletReady: enrollAction.walletReady,
-          busy: enrollmentBusy,
-          error: enrollAction.error?.message ?? enrollment.error?.message,
-          onConfirm: () => void confirmEnrollment(),
-        }}
-        fund={{
-          walletReady: fundingAction.walletReady,
-          busy: fundingAction.isPending,
-          error: fundingAction.error?.message,
-          onConfirm: () => void confirmFunding(),
-        }}
-        onClose={closeInvest}
-      />
-      <RebalanceSheet
-        open={rebalanceOpen}
-        name={name}
-        mark={basketMark}
-        assetCount={allocations.length}
-        busy={rebalanceAction.isPending}
-        error={rebalanceAction.error?.message}
-        onClose={() => {
-          if (!rebalanceAction.isPending) setRebalanceOpen(false);
-        }}
-        onConfirm={() => void confirmRebalance()}
-      />
-      {account && (
-        <ExitSheet
-          key={account.portfolioId}
-          open={exitOpen}
+      <ActionGate open={investOpen} onClose={closeInvest}>
+        <InvestSheet
+          open={investOpen}
+          name={name}
+          assetCount={allocations.length}
+          mark={basketMark}
+          amount={fundingAmount}
+          cash={money.data ? Number(money.data.balanceUsd) : null}
+          portfolio={investPortfolio}
+          firstDeposit={firstDeposit}
+          receipt={fundingAction.data ?? null}
+          enroll={{
+            walletReady: enrollAction.walletReady,
+            busy: enrollmentBusy,
+            error: enrollAction.error?.message ?? enrollment.error?.message,
+            onConfirm: () => void confirmEnrollment(),
+          }}
+          fund={{
+            walletReady: fundingAction.walletReady,
+            busy: fundingAction.isPending,
+            error: fundingAction.error?.message,
+            onConfirm: () => void confirmFunding(),
+          }}
+          onClose={closeInvest}
+        />
+      </ActionGate>
+      <ActionGate open={rebalanceOpen} onClose={() => setRebalanceOpen(false)}>
+        <RebalanceSheet
+          open={rebalanceOpen}
           name={name}
           mark={basketMark}
-          assetMarks={assetMarks}
-          mode={exitMode}
-          onMode={(mode) => {
-            setExitMode(mode);
-            exitAction.prepare.reset();
-            exitAction.submit.reset();
-          }}
-          account={account}
-          prepared={exitAction.prepare.data ?? null}
-          submitted={exitAction.submit.data ?? null}
-          busy={exitAction.prepare.isPending || exitAction.submit.isPending}
-          walletReady={exitAction.walletReady}
-          error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
-          onPrepare={(assets) =>
-            void exitAction.prepare
-              .mutateAsync({ mode: exitMode, ...(assets ? { assets } : {}) })
-              .catch(() => undefined)
-          }
-          onSubmit={() => void confirmExit()}
-          onBack={() => {
-            exitAction.prepare.reset();
-            exitAction.submit.reset();
-          }}
+          assetCount={allocations.length}
+          busy={rebalanceAction.isPending}
+          error={rebalanceAction.error?.message}
           onClose={() => {
-            if (exitAction.prepare.isPending || exitAction.submit.isPending) return;
-            setExitOpen(false);
-            exitAction.prepare.reset();
-            exitAction.submit.reset();
+            if (!rebalanceAction.isPending) setRebalanceOpen(false);
           }}
+          onConfirm={() => void confirmRebalance()}
         />
+      </ActionGate>
+      {account && (
+        <ActionGate open={exitOpen} onClose={() => setExitOpen(false)}>
+          <ExitSheet
+            key={account.portfolioId}
+            open={exitOpen}
+            name={name}
+            mark={basketMark}
+            assetMarks={assetMarks}
+            mode={exitMode}
+            onMode={(mode) => {
+              setExitMode(mode);
+              exitAction.prepare.reset();
+              exitAction.submit.reset();
+            }}
+            account={account}
+            prepared={exitAction.prepare.data ?? null}
+            submitted={exitAction.submit.data ?? null}
+            busy={exitAction.prepare.isPending || exitAction.submit.isPending}
+            walletReady={exitAction.walletReady}
+            error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
+            onPrepare={(assets) =>
+              void exitAction.prepare
+                .mutateAsync({ mode: exitMode, ...(assets ? { assets } : {}) })
+                .catch(() => undefined)
+            }
+            onSubmit={() => void confirmExit()}
+            onBack={() => {
+              exitAction.prepare.reset();
+              exitAction.submit.reset();
+            }}
+            onClose={() => {
+              if (exitAction.prepare.isPending || exitAction.submit.isPending) return;
+              setExitOpen(false);
+              exitAction.prepare.reset();
+              exitAction.submit.reset();
+            }}
+          />
+        </ActionGate>
       )}
     </AppShell>
   );

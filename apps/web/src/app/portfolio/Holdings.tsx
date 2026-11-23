@@ -21,6 +21,9 @@ import type { Issuer } from "@mercury/types";
  * stock page's borrow card asks and answers it in one place.
  */
 const COLS = "grid-cols-[minmax(0,1fr)_120px_100px_110px_150px]";
+/** A linked wallet whose past is still being read: what was paid is not known yet, so neither is the return. */
+const CALCULATING = <span className="text-[13px] text-ds-muted">Calculating…</span>;
+
 const ZERO_RETURN = (
   <>
     <span className="font-medium text-ds-up">{usdSigned(0)}</span>
@@ -52,7 +55,15 @@ const Logo = ({ row }: { row: Row }) =>
  * One holding, to holdings.svg: a 60px row, 4px in from the grey panel, that
  * turns white under the pointer. Numbers medium, labels regular, 14 over 12.
  */
-const Line = ({ r, providers }: { r: Row; providers: readonly Issuer[] | undefined }) => {
+const Line = ({
+  r,
+  providers,
+  calculating,
+}: {
+  r: Row;
+  providers: readonly Issuer[] | undefined;
+  calculating: boolean;
+}) => {
   const pledged = r.pledgedShares;
   const today = r.changePct24h;
   return (
@@ -109,7 +120,9 @@ const Line = ({ r, providers }: { r: Row; providers: readonly Issuer[] | undefin
         <MoveChip value={today} />
       </span>
 
-      {r.returnPct === null ? (
+      {calculating ? (
+        <span className="flex items-baseline justify-end whitespace-nowrap">{CALCULATING}</span>
+      ) : r.returnPct === null ? (
         <span
           className="flex items-baseline justify-end gap-[5px] whitespace-nowrap"
           title="Purchase cost was not recorded; zero is a display placeholder, not calculated profit"
@@ -248,11 +261,14 @@ export const Holdings = ({
   signedIn,
   failed,
   baskets = [],
+  calculating = false,
 }: {
   m: Model | undefined;
   signedIn: boolean;
   failed: boolean;
   baskets?: readonly BasketHolding[];
+  /** A linked wallet whose past is still being read: returns say so rather than $0. */
+  calculating?: boolean;
 }) => {
   const [showAll, setShowAll] = useState(false);
   const providers = useProviders(m?.rows ?? []);
@@ -315,7 +331,12 @@ export const Holdings = ({
                 </div>
                 <GlideRows>
                   {shown.map((r) => (
-                    <Line key={r.ticker} r={r} providers={providers.get(r.ticker)} />
+                    <Line
+                      key={r.ticker}
+                      r={r}
+                      providers={providers.get(r.ticker)}
+                      calculating={calculating}
+                    />
                   ))}
                 </GlideRows>
 
