@@ -399,8 +399,8 @@ Mercury wallet today, and it is what a linked wallet needs:
 - **On linking, every share is held at no known cost.** Value and the day's change show at once,
   from prices. P&L says "Calculating…" until the history reader has read the wallet.
 - **The history reader writes the cost.** It prices each arrival from the wallet's own history
-  and writes `chain` lots, exact or `~`, or leaves shares it found no price for as "cost
-  unknown". `shares_with_basis` rises to meet `shares`, and P&L appears.
+  and writes `chain` lots, exact or `~`; every share ends with a cost (see "Prices at a past
+  moment"). `shares_with_basis` rises to meet `shares`, and P&L appears.
 - **It keeps doing so after the first read.** Shares bought later, from Phantom through Jupiter
   say, arrive with no cost exactly as before linking, so the reader keeps reading a linked
   wallet's token accounts and prices each new arrival as it is found (see "After the first read").
@@ -465,10 +465,25 @@ reader reads:
    USDC, and the Earn vault's share token).
 2. **The wallet's Kamino loan account** in the xStocks market, which `kamino.ts` already finds by
    owner.
-3. For each, **`getSignaturesForAddress`** back to the account's creation, then **`getTransaction`**
-   for each signature. Each transaction gives its time (`blockTime`) and every account's token
-   balance before and after it, which is all the amounts the reader needs. It doesn't decode
-   swap routes.
+3. For each, **`getSignaturesForAddress`** (a thousand a call), then **`getTransaction`** for each
+   signature. Each transaction gives its time (`blockTime`) and every account's token balance
+   before and after it, which is all the amounts the reader needs. It doesn't decode swap routes.
+
+**It reads newest first, and stops at the last time the account was empty.** One call per
+transaction is the cost, so a trader's token account with thousands of them is the expensive case.
+But each transaction says the account's balance before it, and once the walk back reaches one whose
+balance before was zero, nothing older can change today's cost or unrealised P&L: everything bought
+before it had already left. So a position bought once and held is a few calls, and one emptied and
+refilled many times is only the stretch since it was last empty. The replay then runs forward from
+that point.
+
+What this gives up is realised P&L on positions closed before that point, outside Mercury and
+before linking. Realised P&L on anything sold through Mercury, or after linking, is kept.
+
+An account that never went to zero is read back at most 5,000 signatures. The shares it held at
+the oldest point reached are priced at the price then, marked `~`, and the replay goes forward
+from there. At the reader's two calls a second that is about forty minutes for the worst account,
+once, behind "Calculating…".
 
 What it reads is kept raw, so a better rule later can re-derive without reading the chain again:
 
@@ -514,8 +529,19 @@ estimate never replaces an exact figure. A purchase made in Mercury is always ex
 
 Mercury keeps minute bars for only 30 days (`price-bar-prune`). For anything older, the reader
 asks a historical source for the price at the arrival's time: **an hourly or daily price is enough
-for an estimate**, and the screen says it is one. An arrival with no price found stays
-"Cost unknown".
+for an estimate**, and the screen says it is one.
+
+Every share ends with a cost. In order, the first that answers:
+
+1. exact, from the swap (USDC or USDT left the wallet in the same transaction);
+2. the market price at the arrival's time, from the historical source below;
+3. the earliest price Mercury itself has for the stock (`price_bar`);
+4. the price on the day the wallet was linked.
+
+Everything after the first is marked `~`, with a line saying where the estimate came from ("from
+the price when you linked this wallet"), and every one of them offers "Set cost". A price source
+that fails is not a missing price: the reader backs off and tries again, and the wallet stays
+"Calculating…" until it answers, giving up to the next rule only after repeated failures.
 
 **The source is the Yahoo client Mercury already has** (`packages/market/src/yahoo.ts`), which
 reaches the same chart endpoint. It asks today by preset `range`, so reading one past moment adds
@@ -576,8 +602,9 @@ linking, and finds loan and Earn actions taken outside it. New token accounts (a
 elsewhere for the first time) are found on the next pass. The cursors are also what let a wallet
 linked again be read from where it stopped.
 
-A token account with more than 5,000 signatures is read back to that point and marked incomplete;
-its earlier shares are priced at the oldest point reached, marked `~`.
+After the first read nothing is replayed again: each account's cursor is the newest signature read,
+and a pass asks only for signatures newer than it, which is usually none. New arrivals are priced
+and added to the lots already written.
 
 ## P&L on a linked wallet
 
@@ -590,7 +617,8 @@ its earlier shares are priced at the oldest point reached, marked `~`.
        Exact for 5 · estimated for 10 from the price when they arrived
   ```
 
-  Shares with no cost at all (no price found) are left out and say so: "on 13 of 15 shares".
+  Every share has a cost, exact or estimated (see "Prices at a past moment"), so P&L always covers
+  the whole position; the line under it says how much of it is estimated.
 
 - **The position page** lists each arrival: date, shares, price, and whether it is exact,
   estimated or entered. Each has "Set cost".
@@ -625,7 +653,7 @@ its earlier shares are priced at the oldest point reached, marked `~`.
    scanners may flag it. Wallets without `signAllTransactions` fall back to one prompt per
    transaction.
 4. When they land, **the lots move with the shares**: between two wallets of the same user, the
-   Mercury wallet inherits whatever cost the linked wallet had (including "unknown"), by #99's rule.
+   Mercury wallet inherits whatever cost the linked wallet had, exact or estimated, by #99's rule.
 
 **A send made by hand counts too.** If the person copies their Mercury address from Money →
 Receive and sends from Phantom themselves, `wallet-events` sees one signature leave one of their
