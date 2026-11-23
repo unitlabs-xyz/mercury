@@ -18,12 +18,12 @@ Since ADR 0003, two things have made a second wallet cheaper than it was:
   people already hold. It is kept apart from Privy's wallet list on purpose, and it already signs
   transactions Mercury builds.
 - Every background job and every chain read is keyed by a wallet address, not a user. The `wallet`
-  table already has `is_primary`, written when an identity is created and read by four jobs,
-  and a `kind` column that allows `"external"`. That value is the part nothing has used yet.
+  table already has `is_primary`, written when an identity is created and read by four jobs
+  and the two subscription lists added in #112, and a `kind` column that allows `"external"`. That value is the part nothing has used yet.
 
 ## Decision
 
-**The Mercury wallet stays the account. Someone can link up to 7 existing Solana wallets to it at
+**The Mercury wallet stays the account. Someone can link up to 5 existing Solana wallets to it at
 a time. Mercury shows them on web and iOS, and on web acts for them as it does for its own, with the
 wallet's own signature on each action.**
 
@@ -77,9 +77,11 @@ wallet's own signature on each action.**
   (recurring buys through Privy delegated actions, once built) cannot run on a linked wallet.
   Glider's daily basket rebalancing still works, because the owner authorizes it once with a signed
   message and Glider runs it.
-- **RPC budget.** Each linked wallet is another address every job polls. Linking is capped at 7
-  active wallets per person, and linked wallets are polled by how recently they were viewed (hourly once nobody has
-  looked for a week), except their loans, which are always checked every 5 minutes.
+- **RPC budget.** Each linked wallet is about ten more token accounts to subscribe to, and one
+  more loan to check. Linking is capped at 5 active wallets per person. Since #112 the jobs are
+  told about changes and only sweep as a safety net; when the stream can't be trusted they fall
+  back to polling, and linked wallets are then polled by how recently they were viewed (hourly
+  once nobody has looked for a week). Loans are always checked every 5 minutes.
 - **Fee capture.** A linked wallet can trade the same tokens elsewhere at any time. Mercury only
   earns on what it builds.
 
@@ -91,8 +93,8 @@ liquidation warnings for positions they already have.
 **Bad.** Wallets Mercury doesn't control come with obligations Mercury doesn't yet meet: sanctions
 screening at link time, and a country check that covers them. The country check is already a
 pre-launch item (`TODO.md`, "Before a public launch") and this widens it. Sanctions screening is
-not on that list at all: it is new work this decision creates, and linking cannot open to the
-public without it.
+not on that list at all: it is new work this decision creates, designed apart from the linked
+wallets spec, and linking cannot open to the public without it.
 
 The design is in
 [2026-11-13 linked wallets](../superpowers/specs/2026-11-13-linked-wallets-design.md).
