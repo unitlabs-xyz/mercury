@@ -169,6 +169,7 @@ export async function loadHeldTokens(
       recordedCostUsd: held.costUsd,
       recordedReferenceUsd: held.referenceUsd,
       recordedFeeUsd: held.feeUsd,
+      recordedIsEstimated: held.isEstimated,
       settling: settling.has(token.instrumentId),
       provisional: provisional.get(token.tokenId) ?? [],
     } satisfies HeldToken;
@@ -266,6 +267,7 @@ export async function applyReconciliation(db: Db, owner: WalletOwner, plan: Reco
           referenceBasisUsd: fixed(p.referenceBasisUsd),
           feeUsd: fixed(p.feeUsd),
           avgUnitCostUsd: fixed(p.avgUnitCostUsd),
+          estimatedCostUsd: fixed(p.estimatedCostUsd),
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
@@ -277,6 +279,7 @@ export async function applyReconciliation(db: Db, owner: WalletOwner, plan: Reco
             referenceBasisUsd: fixed(p.referenceBasisUsd),
             feeUsd: fixed(p.feeUsd),
             avgUnitCostUsd: fixed(p.avgUnitCostUsd),
+            estimatedCostUsd: fixed(p.estimatedCostUsd),
             updatedAt: new Date(),
           },
         });

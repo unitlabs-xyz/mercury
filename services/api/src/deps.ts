@@ -82,6 +82,7 @@ import { readActivity } from "./portfolio/activity-queries.js";
 import { countUnread, markAllRead, markRead, readInbox } from "./notify/inbox-queries.js";
 import { pgWalletDeps } from "./wallets/deps.js";
 import { readReceipt } from "./portfolio/receipt-queries.js";
+import { readSummary } from "./portfolio/summary-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 import { BasketService } from "./baskets/core/service.js";
 import { GliderClient } from "./baskets/glider/client.js";
@@ -739,6 +740,7 @@ export function buildReadDeps(
       basketReturns: basketReturnsReader(deps.basketProvider),
       flows: (userId, walletIds, from) => readFlows(db, userId, walletIds, from),
       basketMovements: (owner) => readBasketMovements(db, owner),
+      summary: (userId) => readSummary(db, deps.prices, userId),
       earn: onlyIfUsed(usedEarn, (wallet) => earnBalance(deps.earn, wallet), ZERO),
     },
     money: {

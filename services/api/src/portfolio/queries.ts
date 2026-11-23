@@ -25,6 +25,7 @@ export async function readHoldings(db: Db, userId: string, walletId: string): Pr
       referenceBasisUsd: positions.referenceBasisUsd,
       feeUsd: positions.feeUsd,
       avgUnitCostUsd: positions.avgUnitCostUsd,
+      estimatedCostUsd: positions.estimatedCostUsd,
     })
     .from(positions)
     .innerJoin(instruments, eq(instruments.id, positions.instrumentId))
@@ -52,6 +53,7 @@ export async function readHoldings(db: Db, userId: string, walletId: string): Pr
     referenceBasisUsd: D(row.referenceBasisUsd),
     feeUsd: D(row.feeUsd),
     avgUnitCostUsd: D(row.avgUnitCostUsd),
+    estimatedCostUsd: D(row.estimatedCostUsd),
     wrappers: wrappers
       .filter((w) => w.instrumentId === row.instrumentId)
       .map((w) => ({ mint: w.mint, symbol: w.symbol, issuer: w.issuer, decimals: w.decimals })),

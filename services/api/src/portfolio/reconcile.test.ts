@@ -23,6 +23,7 @@ const held = (over: Partial<HeldToken> = {}): HeldToken => ({
   // is not what most of these tests are about.
   recordedReferenceUsd: over.recordedCostUsd ?? ZERO,
   recordedFeeUsd: ZERO,
+  recordedIsEstimated: false,
   settling: false,
   provisional: [],
   ...over,
@@ -52,6 +53,7 @@ describe("planReconciliation: tokens that arrived from outside", () => {
         referenceBasisUsd: ZERO,
         feeUsd: ZERO,
         avgUnitCostUsd: ZERO,
+        estimatedCostUsd: ZERO,
       },
     ]);
   });
@@ -227,6 +229,7 @@ describe("planReconciliation: tokens that left", () => {
       // Average cost does not move when a position shrinks. That is what
       // average-cost accounting means, and it is why the scaling is pro rata.
       avgUnitCostUsd: D(200),
+      estimatedCostUsd: ZERO,
     });
   });
 
@@ -276,6 +279,7 @@ describe("planReconciliation: tokens that left", () => {
       referenceBasisUsd: ZERO,
       feeUsd: ZERO,
       avgUnitCostUsd: ZERO,
+      estimatedCostUsd: ZERO,
     });
   });
 
@@ -424,6 +428,7 @@ describe("planReconciliation: a sell in flight", () => {
         referenceBasisUsd: D(200),
         feeUsd: ZERO,
         avgUnitCostUsd: D(200),
+        estimatedCostUsd: ZERO,
       },
     ]);
   });
@@ -583,6 +588,7 @@ describe("planReconciliation: open shares above the chain's", () => {
       referenceBasisUsd: D(200),
       feeUsd: D("0.46"),
       avgUnitCostUsd: D(200),
+      estimatedCostUsd: ZERO,
     });
   });
 });
@@ -646,7 +652,44 @@ describe("planReconciliation: rolling up", () => {
         referenceBasisUsd: ZERO,
         feeUsd: ZERO,
         avgUnitCostUsd: ZERO,
+        estimatedCostUsd: ZERO,
       },
     ]);
+  });
+});
+
+describe("planReconciliation: estimated cost", () => {
+  it("carries a token's estimated cost into its position, and none for a cost read off a trade", async () => {
+    const estimated = held({
+      chainRawAmount: 200_000_000n,
+      recordedRawAmount: 200_000_000n,
+      recordedShares: D(2),
+      recordedCostUsd: D(300),
+      recordedIsEstimated: true,
+    });
+    const traded = held({
+      tokenId: "token-nvdaon",
+      mint: "9Mjb",
+      symbol: "NVDAon",
+      chainRawAmount: 100_000_000n,
+      recordedRawAmount: 100_000_000n,
+      recordedShares: D(1),
+      recordedCostUsd: D(180),
+    });
+    const [position] = planReconciliation([estimated, traded], NOW).positions;
+    // One stock across both wrappers: $480 of cost, $300 of it estimated.
+    expect(position).toMatchObject({ costBasisUsd: D(480), estimatedCostUsd: D(300) });
+  });
+
+  it("takes the estimated cost down with the shares that leave", async () => {
+    const token = held({
+      chainRawAmount: 100_000_000n,
+      recordedRawAmount: 200_000_000n,
+      recordedShares: D(2),
+      recordedCostUsd: D(300),
+      recordedIsEstimated: true,
+    });
+    const [position] = planReconciliation([token], NOW).positions;
+    expect(position).toMatchObject({ costBasisUsd: D(150), estimatedCostUsd: D(150) });
   });
 });

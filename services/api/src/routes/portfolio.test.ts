@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { D, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard, TokenPrice } from "@mercury/market";
-import { Exposure, Portfolio, PortfolioHistory } from "@mercury/types";
+import { Exposure, Portfolio, PortfolioHistory, PortfolioSummary } from "@mercury/types";
 import { portfolioRoutes, type HoldingRow, type PortfolioDeps } from "./portfolio.js";
 import type { Acting } from "../wallets/acting.js";
 import { actingAs, actingLinked } from "../wallets/testing.js";
@@ -48,6 +48,7 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
   referenceBasisUsd: over.costBasisUsd ?? D(300),
   feeUsd: ZERO,
   avgUnitCostUsd: D(150),
+  estimatedCostUsd: ZERO,
   wrappers: [{ mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 }],
   ...over,
 });
@@ -935,5 +936,62 @@ describe("GET /v1/portfolio, across wallets", () => {
     };
     expect(asked).toEqual(["Mercury", "Phantom"]);
     expect(body.returns.map((r) => r.portfolioId)).toEqual(["portfolio-Mercury", "portfolio-Phantom"]);
+  });
+});
+
+describe("GET /v1/portfolio, each wallet's own figures", () => {
+  it("lists each wallet valued on its own, in the order they were added up", async () => {
+    const mercury = actingAs("Mercury");
+    const phantom = actingLinked("Phantom");
+    const d = deps({
+      walletHoldings: async (_userId, walletId) =>
+        walletId === mercury.id ? [holding()] : [holding({ shares: D(1), sharesWithBasis: D(1) })],
+      prices: {
+        pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m, { changePct24h: D(10) })])),
+      },
+      debt: async (address) => (address === "Phantom" ? D(50) : ZERO),
+    });
+    const body = await portfolioOf(
+      await appWith(d, "Mercury", { all: true, wallets: [mercury, phantom] }).request("/v1/portfolio"),
+    );
+    expect(body.wallets?.map((w) => [w.walletId, w.totalValueUsd, w.debtUsd])).toEqual([
+      [mercury.id, "400", "0"],
+      [phantom.id, "150", "50"],
+    ]);
+    // Each wallet's own move: its stock up 10% on the day.
+    for (const w of body.wallets ?? []) expect(Number(w.changePct)).toBeCloseTo(10, 6);
+    expect(Number(body.totalValueUsd)).toBe(550);
+  });
+});
+
+describe("GET /v1/portfolio/summary", () => {
+  const empty = {
+    wallets: [],
+    netWorthUsd: "0",
+    asOf: null,
+    pnl: { totalUsd: "0", unrealisedUsd: "0", realisedUsd: "0", returnPct: null, estimatedCostUsd: "0" },
+    income: { totalUsd: "0", earnUsd: "0", dividendsUsd: "0" },
+    loanInterestUsd: "0",
+    calculating: 0,
+  };
+
+  it("is the whole account's, whichever wallet is chosen", async () => {
+    const asked: string[] = [];
+    const d = deps({
+      summary: async (userId) => {
+        asked.push(userId);
+        return empty;
+      },
+    });
+    const res = await appWith(d, "Mercury", { all: false, wallets: [actingLinked("Phantom")] }).request(
+      "/v1/portfolio/summary",
+    );
+    expect(res.status).toBe(200);
+    expect(PortfolioSummary.parse(await res.json())).toEqual(empty);
+    expect(asked).toEqual(["user-1"]);
+  });
+
+  it("is not there when it is not wired", async () => {
+    expect((await appWith(deps()).request("/v1/portfolio/summary")).status).toBe(404);
   });
 });

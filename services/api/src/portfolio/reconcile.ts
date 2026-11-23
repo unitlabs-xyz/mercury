@@ -29,6 +29,12 @@ export interface HeldToken {
   /** Fees paid to acquire the open shares. */
   readonly recordedFeeUsd: Decimal;
   /**
+   * Whether any of that cost was estimated rather than read off a trade: a
+   * linked wallet's shares priced at a past moment, say. The replay pools a
+   * token's lots, so it is the token's cost that is marked, not a lot's.
+   */
+  readonly recordedIsEstimated: boolean;
+  /**
    * A sell of this stock is executing, created within the last ten minutes.
    *
    * The balance the pass reads can trail the transaction a sell is settled
@@ -95,6 +101,8 @@ export interface PositionWrite {
   /** Fees paid to acquire the shares still held. */
   readonly feeUsd: Decimal;
   readonly avgUnitCostUsd: Decimal;
+  /** Of `costBasisUsd`, how much was estimated: what the summary marks `~`. */
+  readonly estimatedCostUsd: Decimal;
 }
 
 export interface Reconciliation {
@@ -150,7 +158,14 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
   const disposals: DisposalWrite[] = [];
   const byInstrument = new Map<
     string,
-    { shares: Decimal; withBasis: Decimal; cost: Decimal; reference: Decimal; fee: Decimal }
+    {
+      shares: Decimal;
+      withBasis: Decimal;
+      cost: Decimal;
+      reference: Decimal;
+      fee: Decimal;
+      estimated: Decimal;
+    }
   >();
 
   // A stock with a sell in flight sits this pass out when any wrapper of it
@@ -317,11 +332,13 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
       cost: ZERO,
       reference: ZERO,
       fee: ZERO,
+      estimated: ZERO,
     };
     byInstrument.set(token.instrumentId, {
       shares: running.shares.add(chainShares),
       withBasis: running.withBasis.add(withBasis),
       cost: running.cost.add(cost.mul(ratio)),
+      estimated: running.estimated.add(token.recordedIsEstimated ? cost.mul(ratio) : ZERO),
       // Scaled by the same ratio as the cost, and they have to be: a capped
       // cost whose reference was not capped with it would report the tokens
       // that left as a market move, and the two lines would stop summing to
@@ -339,6 +356,7 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     referenceBasisUsd: r.reference,
     feeUsd: r.fee,
     avgUnitCostUsd: r.withBasis.isZero() ? ZERO : r.cost.div(r.withBasis),
+    estimatedCostUsd: r.estimated,
   }));
 
   return { lots, activity, disposals, retracted, positions };

@@ -21,6 +21,15 @@ export const Holding = z.object({
   pledgedShares: Usd.optional(),
 });
 
+/** One wallet's part of a portfolio read for several, live: what a wallet's card on Home shows. */
+export const WalletValue = z.object({
+  walletId: z.string(),
+  totalValueUsd: Usd,
+  debtUsd: Usd,
+  changeUsd: Usd,
+  changePct: Ratio,
+});
+
 export const Portfolio = z.object({
   /** Net worth: wallet and pledged stocks, wallet cash, and Glider baskets, less debt. */
   totalValueUsd: Usd,
@@ -38,6 +47,11 @@ export const Portfolio = z.object({
   changeUsd: Usd,
   changePct: Ratio,
   holdings: z.array(Holding),
+  /**
+   * Each wallet the read covered, valued on its own, in the order the
+   * figures above add them up. One entry for one wallet. Optional for older servers.
+   */
+  wallets: z.array(WalletValue).optional(),
   baskets: z.array(
     z.object({
       portfolioId: z.string(),
@@ -143,3 +157,52 @@ export type PortfolioHistory = z.infer<typeof PortfolioHistory>;
 export type HistoryRange = z.infer<typeof HistoryRange>;
 export type Exposure = z.infer<typeof Exposure>;
 export type Money = z.infer<typeof Money>;
+
+/**
+ * The summary at the top of Home: every followed wallet, from what the
+ * database already holds. No chain read, so it is cheap to poll; Home shows
+ * live figures beside it while it is open, from `Portfolio` read for every wallet.
+ */
+export const PortfolioSummary = z.object({
+  wallets: z.array(
+    z.object({
+      id: z.string(),
+      address: z.string(),
+      isPrimary: z.boolean(),
+      label: z.string().nullable(),
+      /** The latest hourly reading, net of debt. Null before the first one, minutes after linking. */
+      valueUsd: Usd.nullable(),
+      /** When that reading's balances were read. */
+      asOf: z.string().datetime().nullable(),
+      debtUsd: Usd,
+      /** The loan's health as last recorded by the loan watch; null with no loan. */
+      loanHealth: z.enum(["healthy", "over_limit", "margin_call", "liquidation"]).nullable(),
+      /** "calculating" until the wallet's past is read; its P&L, income and interest wait for it. */
+      history: z.enum(["ready", "calculating"]),
+    }),
+  ),
+  /** Every wallet's latest reading added up. Wallets with no reading yet are left out. */
+  netWorthUsd: Usd,
+  /** The oldest reading in `netWorthUsd`: how stale the figure can be. */
+  asOf: z.string().datetime().nullable(),
+  pnl: z.object({
+    /** Unrealised and realised, over the wallets that are ready. */
+    totalUsd: Usd,
+    unrealisedUsd: Usd,
+    realisedUsd: Usd,
+    /** Unrealised against the cost of the shares still held, as a percentage. Null with no cost. */
+    returnPct: Ratio.nullable(),
+    /** How much of that cost was estimated; the P&L starts with `~` when any was. */
+    estimatedCostUsd: Usd,
+  }),
+  income: z.object({
+    totalUsd: Usd,
+    earnUsd: Usd,
+    dividendsUsd: Usd,
+  }),
+  /** Interest owed on every ready wallet's loan: what is owed beyond what was borrowed. */
+  loanInterestUsd: Usd,
+  /** Wallets whose past is still being read, and so are not in P&L, income or interest. */
+  calculating: z.number().int().nonnegative(),
+});
+export type PortfolioSummary = z.infer<typeof PortfolioSummary>;

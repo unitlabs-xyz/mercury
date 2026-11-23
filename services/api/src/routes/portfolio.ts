@@ -11,6 +11,7 @@ import {
   type WrapperHolding,
 } from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
+import type { PortfolioSummary } from "@mercury/types";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import {
   basketStockMints,
@@ -60,6 +61,8 @@ export interface HoldingRow {
   /** Fees paid to acquire the shares still held. */
   readonly feeUsd: Decimal;
   readonly avgUnitCostUsd: Decimal;
+  /** Of `costBasisUsd`, how much was estimated rather than read off a trade. */
+  readonly estimatedCostUsd: Decimal;
   readonly wrappers: readonly HoldingWrapper[];
 }
 
@@ -103,6 +106,8 @@ export interface PortfolioDeps {
   readonly basketMovements?: (
     owner: WalletOwner,
   ) => Promise<{ movements: readonly BasketMovement[]; inKindExits: readonly InKindExit[] }>;
+  /** The summary at the top of Home, across every followed wallet. Absent, the route is not there. */
+  readonly summary?: (userId: string) => Promise<PortfolioSummary>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -142,6 +147,7 @@ interface HoldingView {
 
 /** One wallet, valued: everything the page shows, as numbers, before any sum. */
 interface WalletView {
+  readonly walletId: string;
   readonly totalUsd: Decimal;
   readonly cashUsd: Decimal;
   readonly earnUsd: Decimal;
@@ -218,6 +224,14 @@ const sumViews = (views: readonly WalletView[]) => {
       changePct24h: toWire(h.changePct24h),
       wrapperCount: h.wrapperCount,
       pledgedShares: toWire(h.pledgedShares),
+    })),
+    // Each wallet's own figures, for its card: live, where the summary's are hourly.
+    wallets: views.map((v) => ({
+      walletId: v.walletId,
+      totalValueUsd: toWire(v.totalUsd),
+      debtUsd: toWire(v.debtUsd),
+      changeUsd: toWire(v.changeUsd),
+      changePct: toWire(v.yesterdayUsd.isZero() ? ZERO : v.changeUsd.div(v.yesterdayUsd).mul(100)),
     })),
     baskets: views.flatMap((v) => v.baskets),
   };
@@ -339,6 +353,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     const changeUsd = value.changeUsd.add(basketStocks.changeUsd);
 
     return {
+      walletId: wallet.id,
       totalUsd: value.totalUsd,
       cashUsd: value.cashUsd,
       earnUsd: value.earnUsd,
@@ -373,6 +388,17 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
       }),
     };
   };
+
+  /**
+   * The summary at the top of Home: every followed wallet, whichever is
+   * chosen. From the database and the price board alone, so it is cheap to
+   * poll; while Home is open it shows the live figures from /v1/portfolio
+   * beside these, and these are what it falls back to.
+   */
+  app.get("/v1/portfolio/summary", async (c) => {
+    if (deps.summary === undefined) return c.json(fail("not_found", "No summary here."), 404);
+    return c.json(await deps.summary(c.get("identity").userId));
+  });
 
   // Performance is a separate read so a slow Glider curve cannot delay net worth.
   app.get("/v1/portfolio/basket-returns", async (c) => {

@@ -495,6 +495,12 @@ export const positions = pgTable(
     /** Trading charges paid to acquire the shares still held: network cost and Mercury's fee. */
     feeUsd: usd("fee_usd").notNull().default("0"),
     avgUnitCostUsd: usd("avg_unit_cost_usd").notNull(),
+    /**
+     * Of `cost_basis_usd`, how much was estimated rather than read off a trade.
+     * The summary's P&L starts with `~` when any is, and says how much.
+     * Rewritten by position-sync on every pass, like the rest of the row.
+     */
+    estimatedCostUsd: usd("estimated_cost_usd").notNull().default("0"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
