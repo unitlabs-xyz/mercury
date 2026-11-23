@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { wallets } from "../db/schema.js";
 import type { WatchedAddress } from "../jobs/watch.js";
+import { followed } from "../wallets/active.js";
 
 /** What this needs of a chain reader: the accounts, not what is in them. */
 export interface AccountSource {
@@ -29,7 +29,7 @@ export async function tokenAccountAddresses(
   db: Db,
   source: AccountSource,
 ): Promise<readonly WatchedAddress[]> {
-  const rows = await db.select({ address: wallets.address }).from(wallets).where(eq(wallets.isPrimary, true));
+  const rows = await db.select({ address: wallets.address }).from(wallets).where(followed);
 
   // A shared index rather than a chunked split, so a slow wallet holds up only
   // itself, as `syncAllPositions` does.

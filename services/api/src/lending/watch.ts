@@ -97,3 +97,39 @@ export const alertFor = (
  */
 export const markAfter = (told: Health | null, current: Health, delivered: boolean): Health | null =>
   current === "healthy" ? "healthy" : delivered ? current : told;
+
+/** The wallet a loan is in, as much as an alert needs to name it. */
+export interface LoanWallet {
+  readonly kind: "privy_embedded" | "external";
+  readonly label: string | null;
+  readonly address: string;
+}
+
+/** A linked wallet's name: what the person called it, or its first and last four characters. */
+export const loanWalletName = (wallet: Pick<LoanWallet, "label" | "address">): string =>
+  wallet.label ??
+  (wallet.address.length <= 10
+    ? wallet.address
+    : `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`);
+
+/**
+ * An alert about a loan in a linked wallet, said as one.
+ *
+ * Named, because the person may have a loan in more than one wallet and has to
+ * know which to repay. And told what only they can do: Mercury builds nothing
+ * for a linked wallet without its signature, so repaying or adding collateral
+ * has to come from that wallet. A loan in the Mercury wallet reads as it
+ * always has.
+ */
+export const forWallet = (alert: Alert, wallet: LoanWallet): Alert => {
+  if (wallet.kind !== "external") return alert;
+  const name = loanWalletName(wallet);
+  return {
+    ...alert,
+    title: `${alert.title} · ${name}`,
+    subject: `${alert.subject} (${name})`,
+    body:
+      `${alert.body} This loan is in your linked wallet ${name}. Mercury can't act for this wallet. ` +
+      `Repay or add collateral from it to avoid liquidation.`,
+  };
+};

@@ -438,3 +438,26 @@ describe("syncAllWalletEvents", () => {
     expect(streams[0]!.cursor).toBe("older");
   });
 });
+
+describe("syncAllWalletEvents, linked wallets", () => {
+  it("reads every followed wallet, a linked one included, and no unlinked one", async () => {
+    const { db, userId } = await seed();
+    await db.insert(wallets).values([
+      { userId, address: "Phantom1", kind: "external", isPrimary: false },
+      { userId, address: "Gone", kind: "external", isPrimary: false, unlinkedAt: new Date() },
+    ]);
+    const asked = new Set<string>();
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve([]),
+      signatures: (address) => (asked.add(address), Promise.resolve([])),
+      transaction: () => Promise.resolve(null),
+    };
+
+    const summary = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
+
+    expect(summary.wallets).toBe(2);
+    expect(asked.has(WALLET)).toBe(true);
+    expect(asked.has("Phantom1")).toBe(true);
+    expect(asked.has("Gone")).toBe(false);
+  });
+});

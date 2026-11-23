@@ -73,7 +73,7 @@ const fill = async (db: Db, userId: string, walletId: string, instrumentId: stri
     tokenQty: 100_000_000n,
     shares: "1",
     unitCostUsd: "100",
-    source: "link",
+    source: "chain",
     isEstimated: true,
   });
   await db.insert(disposals).values({
@@ -308,7 +308,7 @@ describe("rows keyed by wallet", () => {
 
   it("takes every new kind of lot source", async () => {
     const { db, userId, mercury, instrumentId, tokenId } = await world();
-    for (const source of ["link", "chain", "declared", "basket_exit"] as const) {
+    for (const source of ["chain", "declared", "basket_exit"] as const) {
       await db.insert(lots).values({
         userId,
         walletId: mercury,
@@ -321,7 +321,7 @@ describe("rows keyed by wallet", () => {
       });
     }
     const rows = await db.select({ source: lots.source }).from(lots);
-    expect(rows.map((r) => r.source).sort()).toEqual(["basket_exit", "chain", "declared", "link"]);
+    expect(rows.map((r) => r.source).sort()).toEqual(["basket_exit", "chain", "declared"]);
   });
 });
 

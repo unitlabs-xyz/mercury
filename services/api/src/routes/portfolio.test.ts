@@ -63,6 +63,7 @@ const basket = (valueUsd: string) => ({
 
 const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   holdings: async () => [holding()],
+  walletHoldings: async () => [holding()],
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) } satisfies PriceBoard,
   chain: {
     tokenBalances: async () => [{ mint: NVDAX, rawAmount: 200_000_000n, decimals: 8 }],

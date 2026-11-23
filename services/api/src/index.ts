@@ -17,6 +17,7 @@ import { warmPrices } from "./prices/warm.js";
 import { RECORD_MAX_AGE_MS, prunePriceBars, recordPriceBars } from "./prices/record.js";
 import { pruneNotifications } from "./notify/inbox-queries.js";
 import { pruneLinkChallenges } from "./wallets/store.js";
+import { linkedViewings, viewedTiers } from "./jobs/tiers.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
@@ -408,14 +409,34 @@ const ACCOUNT_DISCOVERY_MS = 10 * 60_000;
 const eventsLog = logger("wallet-events");
 const positionsLog = logger("position-sync");
 
+/*
+ * When the stream cannot be trusted, linked wallets are polled by how recently
+ * anyone looked at them: every five minutes if viewed this week, hourly if not.
+ * Loaded from the database at the start of each pass of either job.
+ */
+const tiers = viewedTiers();
+const loadTiers = async (log: ReturnType<typeof logger>) => {
+  try {
+    tiers.load(await linkedViewings(auth.db));
+  } catch (error) {
+    /* Without it a linked wallet falls back to its job's own cadence, which
+       reads it more often, not less: the cheaper mistake. */
+    log.error({ err: error }, "could not read when linked wallets were last viewed");
+  }
+};
+
 /* Ten seconds for a wallet whose owner has the app open, and once a minute for
    anyone else's: what decided a pass before anything was pushed, and what
-   decides one again whenever the stream cannot be trusted. */
-const syncCadence = cadence({ here });
+   decides one again whenever the stream cannot be trusted. Linked wallets by
+   their tier. */
+const syncCadence = cadence({ here, idleFor: tiers.idleFor });
+/* Every pass for the Mercury wallet, as before; linked wallets by their tier. */
+const eventsCadence = cadence({ here, idleMs: 30_000, idleFor: tiers.idleFor });
 
 let heldAccounts: Watch | null = null;
 const eventsPushed = pushed({
   live: () => jobs.subscriptions?.live ?? false,
+  blind: eventsCadence,
   sweepMs: EVENTS_SWEEP_MS,
 });
 const positionsPushed = pushed({
@@ -468,6 +489,7 @@ every(
   "position-sync",
   10_000,
   async () => {
+    await loadTiers(positionsLog);
     if (heldAccounts !== null) {
       try {
         await heldAccounts.refresh();
@@ -524,6 +546,7 @@ every(
   "wallet-events",
   30_000,
   async () => {
+    await loadTiers(eventsLog);
     let watchNote = "";
     if (eventStreams !== null) {
       try {

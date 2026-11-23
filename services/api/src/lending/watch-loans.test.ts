@@ -226,3 +226,75 @@ describe("watchAllLoans", () => {
     expect(sent).toHaveLength(2);
   });
 });
+
+describe("watchAllLoans, linked wallets", () => {
+  const PHANTOM = "7EYnhQoR9YM3N7UoaKRoA44Uy8JeaZV3qyouov87awMs";
+
+  /** Loans by wallet: `owed` maps an address to its debt, and anything absent owes nothing. */
+  const depsFor = (owed: Record<string, string>, notifier: Notifier): WatchDeps => ({
+    ...deps("none", notifier),
+    lending: {
+      terms: async () => terms(),
+      position: async (wallet: string) => (owed[wallet] === undefined ? null : position(owed[wallet]!)),
+      build: async () => ({ transactions: [], messages: [], firstTime: false, expiresAt: NOW }),
+    } satisfies LendingSource,
+  });
+
+  const withLinked = async (over: Partial<typeof wallets.$inferInsert> = {}) => {
+    const { db, userId } = await seed();
+    const [linked] = await db
+      .insert(wallets)
+      .values({ userId, address: PHANTOM, kind: "external", isPrimary: false, ...over })
+      .returning();
+    return { db, userId, linkedId: linked!.id };
+  };
+
+  it("checks a loan in a linked wallet as it checks the Mercury wallet's, and remembers it apart", async () => {
+    const { db, linkedId } = await withLinked();
+    const { sent, notifier } = collect();
+
+    const summary = await watchAllLoans(db, depsFor({ [PHANTOM]: "60" }, notifier), NOW);
+
+    expect(summary).toMatchObject({ loans: 1, alerted: 1, delivered: 1 });
+    expect(sent).toHaveLength(1);
+    const [remembered] = await db.select().from(loanAlerts);
+    expect(remembered).toMatchObject({ walletId: linkedId, health: "over_limit" });
+  });
+
+  it("names the linked wallet and says Mercury cannot act for it", async () => {
+    const { db } = await withLinked({ label: "Phantom main" });
+    const { sent, notifier } = collect();
+
+    await watchAllLoans(db, depsFor({ [PHANTOM]: "64" }, notifier), NOW);
+
+    expect(sent[0]!.subject).toBe("Repay now, or your shares will be sold (Phantom main)");
+    expect(sent[0]!.body).toContain("This loan is in your linked wallet Phantom main.");
+    expect(sent[0]!.body).toContain("Mercury can't act for this wallet. Repay or add collateral from it");
+    const [row] = await db.select().from(activities);
+    expect(row!.title).toBe("Liquidation risk · Phantom main");
+  });
+
+  it("warns about each wallet's loan on its own, so two loans are two warnings", async () => {
+    const { db } = await withLinked();
+    const { sent, notifier } = collect();
+
+    const summary = await watchAllLoans(db, depsFor({ [ADDRESS]: "60", [PHANTOM]: "60" }, notifier), NOW);
+
+    expect(summary).toMatchObject({ loans: 2, alerted: 2 });
+    expect(sent.map((n) => n.subject).sort()).toEqual([
+      "Your loan is past its safe limit",
+      "Your loan is past its safe limit (7EYn…awMs)",
+    ]);
+    expect(await db.select().from(loanAlerts)).toHaveLength(2);
+  });
+
+  it("leaves an unlinked wallet's loan alone, however close it gets", async () => {
+    const { db } = await withLinked({ unlinkedAt: NOW });
+    const { sent, notifier } = collect();
+
+    const summary = await watchAllLoans(db, depsFor({ [PHANTOM]: "74" }, notifier), NOW);
+
+    expect(summary).toMatchObject({ loans: 0, alerted: 0 });
+    expect(sent).toEqual([]);
+  });
+});

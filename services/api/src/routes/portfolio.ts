@@ -63,6 +63,8 @@ export interface HoldingRow {
 
 export interface PortfolioDeps {
   readonly holdings: (userId: string) => Promise<readonly HoldingRow[]>;
+  /** One wallet's holdings: what the hourly snapshot values, wallet by wallet. */
+  readonly walletHoldings: (userId: string, walletId: string) => Promise<readonly HoldingRow[]>;
   readonly prices: PriceBoard;
   readonly chain: ChainReader;
   readonly multipliers: MultiplierSource;

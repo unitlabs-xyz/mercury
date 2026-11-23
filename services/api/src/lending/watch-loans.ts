@@ -7,7 +7,8 @@ import { capacity } from "./capacity.js";
 import { capacityInputFor } from "./input.js";
 import type { LendingSource } from "./ports.js";
 import type { ChainReader } from "@mercury/chain";
-import { alertFor, markAfter } from "./watch.js";
+import { alertFor, forWallet, markAfter } from "./watch.js";
+import { followed } from "../wallets/active.js";
 import { notifyFor } from "../notify/inbox.js";
 import type { Health } from "./capacity.js";
 
@@ -48,10 +49,19 @@ const CONCURRENCY = 8;
  */
 export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise<WatchSummary> {
   const rows = await db
-    .select({ userId: users.id, walletId: wallets.id, email: users.email, address: wallets.address })
+    .select({
+      userId: users.id,
+      walletId: wallets.id,
+      email: users.email,
+      address: wallets.address,
+      kind: wallets.kind,
+      label: wallets.label,
+    })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
-    .where(eq(wallets.isPrimary, true));
+    // Every loan in every followed wallet, linked ones included, and at the same
+    // pace: a loan Mercury cannot act for gets no slower a check.
+    .where(followed);
 
   let loans = 0;
   let alerted = 0;
@@ -102,7 +112,8 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
           .where(eq(loanAlerts.walletId, row.walletId));
         const told = (existing?.health ?? null) as Health | null;
 
-        const alert = alertFor(told, summary);
+        const found = alertFor(told, summary);
+        const alert = found === null ? null : forWallet(found, row);
         if (alert === null) {
           // Still record a return to health, so a relapse is worth saying again.
           if (told !== null && summary.health === "healthy") {

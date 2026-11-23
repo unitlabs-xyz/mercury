@@ -69,3 +69,34 @@ describe("cadence, right after boot", () => {
     expect(c.spotOf("WaLLeT")).toBe(spots[2]);
   });
 });
+
+describe("cadence, with a wallet's own idle interval", () => {
+  it("reads a wallet with its own interval at that, and the rest at the job's", () => {
+    let now = 0;
+    const p = presence({ now: () => now });
+    const c = cadence({
+      here: p,
+      idleMs: 60_000,
+      now: () => now,
+      spread: () => 0,
+      idleFor: (wallet) => (wallet === "Linked" ? 60 * 60_000 : undefined),
+    });
+    c.read("Linked");
+    c.read("Mercury");
+    now = 60_000;
+    expect(c.due("Mercury")).toBe(true);
+    expect(c.due("Linked")).toBe(false);
+    now = 60 * 60_000;
+    expect(c.due("Linked")).toBe(true);
+  });
+
+  it("still reads a wallet someone is looking at on every pass", () => {
+    let now = 0;
+    const p = presence({ now: () => now });
+    const c = cadence({ here: p, now: () => now, spread: () => 0, idleFor: () => 60 * 60_000 });
+    c.read("Linked");
+    now = 10_000;
+    p.seen("Linked");
+    expect(c.due("Linked")).toBe(true);
+  });
+});

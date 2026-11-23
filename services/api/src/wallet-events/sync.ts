@@ -15,6 +15,7 @@ import { reconcileBasketExits } from "../baskets/glider/reconcile.js";
 import { reconcileFundingDeposits } from "../funding/enrich.js";
 import { notifyFor } from "../notify/inbox.js";
 import type { ManagedBasketOperation } from "@mercury/types";
+import { followed } from "../wallets/active.js";
 
 const log = logger("wallet-events");
 
@@ -291,7 +292,7 @@ export async function syncAllWalletEvents(
     .select({ userId: users.id, walletId: wallets.id, address: wallets.address })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
-    .where(eq(wallets.isPrimary, true));
+    .where(followed);
   const rows = opts.due === undefined ? all : all.filter((r) => opts.due!(r.address));
 
   let checked = 0;

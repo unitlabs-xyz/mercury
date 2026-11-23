@@ -12,7 +12,12 @@ import type { BasketMovement, InKindExit } from "./basket-basis.js";
  * belong to it. One query plus one, rather than a join that would repeat the
  * position across its wrappers and have to be folded back up.
  */
-export async function readHoldings(db: Db, userId: string): Promise<readonly HoldingRow[]> {
+export async function readHoldings(
+  db: Db,
+  userId: string,
+  /** One of the person's wallets. Every wallet they have when left out. */
+  walletId?: string,
+): Promise<readonly HoldingRow[]> {
   const rows = await db
     .select({
       instrumentId: positions.instrumentId,
@@ -27,7 +32,11 @@ export async function readHoldings(db: Db, userId: string): Promise<readonly Hol
     })
     .from(positions)
     .innerJoin(instruments, eq(instruments.id, positions.instrumentId))
-    .where(eq(positions.userId, userId));
+    .where(
+      walletId === undefined
+        ? eq(positions.userId, userId)
+        : and(eq(positions.userId, userId), eq(positions.walletId, walletId)),
+    );
 
   if (rows.length === 0) return [];
 

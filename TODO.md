@@ -116,9 +116,8 @@ history reader inside the API.
 - [ ] Sanctions screening for linked wallets: designed separately, not in this spec. Choose a
       provider and settle with counsel what happens to a wallet flagged after it was linked, before
       linking opens to the public
-- [ ] Before linking opens (build step 3): `loan-watch` reads loans from Kamino's API instead of the chain.
-      Token accounts and wallet streams already subscribe (#112); linking needs only
-      `portfolio/accounts.ts` and `wallet-events/streams.ts` to list active wallets
+- [x] Build step 3: every job follows linked wallets; `loan-watch` stays on the klend SDK, which
+      batches loans into one read per hundred wallets
 - [ ] Watch public-lane connection count as links grow: ~10 subscriptions per wallet, 398 per
       Solana Vibe Station connection, no SLA
 - [ ] Test on mainnet whether Phantom's scanner flags a multi-token move, and start domain

@@ -12,20 +12,23 @@ const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const MINT = "Xsc9NVDAx";
 const ADDRESS = (i: number) => `Wa11et${String(i).padStart(38, "0")}`;
 
-const seed = async (count: number): Promise<{ db: Db; ids: string[] }> => {
+const seed = async (count: number): Promise<{ db: Db; ids: string[]; walletIds: string[] }> => {
   const db = await testDb();
   const ids: string[] = [];
+  const walletIds: string[] = [];
   for (let i = 0; i < count; i++) {
     const [user] = await db
       .insert(users)
       .values({ privyUserId: `did:privy:u${i}` })
       .returning();
     ids.push(user!.id);
-    await db
+    const [wallet] = await db
       .insert(wallets)
-      .values({ userId: user!.id, address: ADDRESS(i), kind: "privy_embedded", isPrimary: true });
+      .values({ userId: user!.id, address: ADDRESS(i), kind: "privy_embedded", isPrimary: true })
+      .returning();
+    walletIds.push(wallet!.id);
   }
-  return { db, ids };
+  return { db, ids, walletIds };
 };
 
 const price: TokenPrice = {
@@ -40,7 +43,7 @@ const price: TokenPrice = {
 
 /** One share of a $100 stock and $14.25 of cash, for every wallet. */
 const deps = (over: Partial<SnapshotDeps> = {}): SnapshotDeps => ({
-  holdings: async () => [{ shares: D("1"), wrappers: [{ mint: MINT }] }],
+  walletHoldings: async () => [{ shares: D("1"), wrappers: [{ mint: MINT }] }],
   chain: {
     mintConfig: async () => null,
     tokenBalances: async (): Promise<TokenBalance[]> => [{ mint: USDC, rawAmount: 14_250_000n, decimals: 6 }],
@@ -114,7 +117,7 @@ describe("snapshotAllPortfolios", () => {
     await snapshotAllPortfolios(db, deps(), new Date("2026-09-30T12:05:00.000Z"));
     await snapshotAllPortfolios(
       db,
-      deps({ holdings: async () => [{ shares: D("3"), wrappers: [{ mint: MINT }] }] }),
+      deps({ walletHoldings: async () => [{ shares: D("3"), wrappers: [{ mint: MINT }] }] }),
       new Date("2026-09-30T12:55:00.000Z"),
     );
 
@@ -133,7 +136,7 @@ describe("snapshotAllPortfolios", () => {
   it("records an empty account as zero rather than skipping it, so its line starts at zero", async () => {
     const { db, ids } = await seed(1);
     const empty = deps({
-      holdings: async () => [],
+      walletHoldings: async () => [],
       chain: { mintConfig: async () => null, tokenBalances: async () => [] } as ChainReader,
     });
 
@@ -145,7 +148,7 @@ describe("snapshotAllPortfolios", () => {
   });
 
   it("lets one unreadable wallet fail without costing the others their reading", async () => {
-    const { db, ids } = await seed(3);
+    const { db, ids, walletIds } = await seed(3);
     const flaky = deps({
       chain: {
         mintConfig: async () => null,
@@ -158,7 +161,7 @@ describe("snapshotAllPortfolios", () => {
 
     const summary = await snapshotAllPortfolios(db, flaky, new Date("2026-09-30T12:00:00.000Z"));
 
-    expect(summary).toEqual({ wallets: 3, written: 2, failed: 1, missed: [ids[1]] });
+    expect(summary).toEqual({ wallets: 3, written: 2, failed: 1, missed: [walletIds[1]] });
     expect(await rowsFor(db, ids[0]!)).toHaveLength(1);
     expect(await rowsFor(db, ids[1]!)).toHaveLength(0);
     expect(await rowsFor(db, ids[2]!)).toHaveLength(1);
@@ -235,25 +238,59 @@ describe("snapshotAllPortfolios, for the accounts it missed", () => {
 
   /* A reading missed is a gap in the chart forever, so it is worth saying whose. */
   it("says which accounts it could not read", async () => {
-    const { db, ids } = await seed(3);
+    const { db, ids, walletIds } = await seed(3);
     const summary = await snapshotAllPortfolios(
       db,
       deps({
-        holdings: async (userId) => {
+        walletHoldings: async (userId) => {
           if (userId === ids[1]) throw new Error("solana getTokenAccountsByOwner returned 429");
           return [{ shares: D("1"), wrappers: [{ mint: MINT }] }];
         },
       }),
       at,
     );
-    expect(summary).toMatchObject({ written: 2, failed: 1, missed: [ids[1]] });
+    expect(summary).toMatchObject({ written: 2, failed: 1, missed: [walletIds[1]] });
   });
 
   it("reads only the accounts it is given", async () => {
-    const { db, ids } = await seed(3);
-    const summary = await snapshotAllPortfolios(db, deps(), at, { only: new Set([ids[2]!]) });
+    const { db, ids, walletIds } = await seed(3);
+    const summary = await snapshotAllPortfolios(db, deps(), at, { only: new Set([walletIds[2]!]) });
     expect(summary).toMatchObject({ wallets: 1, written: 1, missed: [] });
     expect(await rowsFor(db, ids[0]!)).toHaveLength(0);
     expect(await rowsFor(db, ids[2]!)).toHaveLength(1);
+  });
+});
+
+describe("snapshotAllPortfolios, linked wallets", () => {
+  const at = new Date("2026-11-21T10:20:00.000Z");
+
+  it("takes a reading of each followed wallet on its own, and none of an unlinked one", async () => {
+    const { db, ids, walletIds } = await seed(1);
+    const [linked] = await db
+      .insert(wallets)
+      .values({ userId: ids[0]!, address: "Phantom1", kind: "external", isPrimary: false })
+      .returning();
+    await db
+      .insert(wallets)
+      .values({ userId: ids[0]!, address: "Gone", kind: "external", isPrimary: false, unlinkedAt: at });
+    const asked: string[] = [];
+
+    const summary = await snapshotAllPortfolios(
+      db,
+      deps({
+        walletHoldings: async (_userId, walletId) => {
+          asked.push(walletId);
+          return [{ shares: D(walletId === linked!.id ? "3" : "1"), wrappers: [{ mint: MINT }] }];
+        },
+      }),
+      at,
+    );
+
+    expect(summary).toMatchObject({ wallets: 2, written: 2, failed: 0 });
+    expect([...asked].sort()).toEqual([walletIds[0]!, linked!.id].sort());
+    const rows = await db.select().from(portfolioSnapshots).where(eq(portfolioSnapshots.userId, ids[0]!));
+    const byWallet = new Map(rows.map((r) => [r.walletId, r.stocksUsd]));
+    expect(byWallet.get(walletIds[0]!)).toBe("100.000000000000000000");
+    expect(byWallet.get(linked!.id)).toBe("300.000000000000000000");
   });
 });

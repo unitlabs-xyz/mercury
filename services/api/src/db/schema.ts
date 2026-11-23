@@ -403,18 +403,16 @@ export const lots = pgTable(
     /**
      * How the shares were acquired, or for a linked wallet where the cost came from.
      *
-     * - `link`: written on a linked wallet's first pass at that day's price, so
-     *   the share counts are right from the start. A placeholder, never shown as
-     *   P&L, and replaced by `chain` lots once the history reader has read the
-     *   wallet. No `link` lot survives a finished read.
-     * - `chain`: priced from the wallet's own history by the history reader.
+     * - `chain`: priced from a linked wallet's own history by the history
+     *   reader. Shares that arrive where Mercury did not see them bought get no
+     *   lot from position-sync, so this is what gives a linked wallet a cost.
      * - `declared`: a cost the person entered. Always wins.
      * - `basket_exit`: shares that came out of a basket in kind.
      *
      * Plain text with no database check, so a new value needs no migration.
      */
     source: text("source", {
-      enum: ["buy", "transfer_in", "dividend", "basket", "link", "chain", "declared", "basket_exit"],
+      enum: ["buy", "transfer_in", "dividend", "basket", "chain", "declared", "basket_exit"],
     }).notNull(),
     /** True when we inferred the cost. The UI has to say so. */
     isEstimated: boolean("is_estimated").notNull().default(false),

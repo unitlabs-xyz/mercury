@@ -229,8 +229,8 @@ moment it was unlinked, so the gap must be filled before anything is shown as cu
   a first link.
 - **`wallet-events` does not baseline it** as it would a new address. The gap's transfers are
   recorded by the reader, marked as found in history, and never reach the inbox as news.
-- **`position-sync` runs as on any first pass:** balances come from the chain at once. Shares that
-  differ from the kept lots get `link` lots until the reader has priced the gap, as for a new link.
+- **`position-sync` runs as on any pass:** balances come from the chain at once. Shares that
+  arrived during the gap have no cost until the reader has priced them, as for a new link.
 - **`loan_alert` starts empty** (it was cleared at unlink), so a loan already in trouble is warned
   about on the first `loan-watch` pass.
 
@@ -269,17 +269,17 @@ Today these tables are keyed by user, because a user had one wallet. Each gains
 `wallet_id uuid not null references wallet(id)`, backfilled from the user's primary wallet in the
 same migration:
 
-| Table                | Key or index that changes                                                                                                                                                                                                                                                                                                                           |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `position`           | Primary key `(user_id, instrument_id)` → `(wallet_id, instrument_id)`                                                                                                                                                                                                                                                                               |
-| `lot`                | `lot_user_token_idx` → `(wallet_id, token_id)`. `source` gains `link`, `chain`, `declared` and `basket_exit` beside `buy`, `transfer_in`, `dividend`, `basket`. Whether a cost is exact or inferred stays in the `is_estimated` column that already exists ("True when we inferred the cost. The UI has to say so."), so the two can never disagree |
-| `disposal`           | Gains the column. Index alongside `lot`'s                                                                                                                                                                                                                                                                                                           |
-| `order`              | Gains the column, **nullable**, `on delete set null`, so fee records outlive a deleted wallet                                                                                                                                                                                                                                                       |
-| `activity`           | `activity_signature_mint_idx` `(user_id, tx_signature, mint)` → `(wallet_id, tx_signature, mint)`                                                                                                                                                                                                                                                   |
-| `portfolio_snapshot` | Its key gains `wallet_id`                                                                                                                                                                                                                                                                                                                           |
-| `loan_event`         | `loan_event_signature_kind_idx` → `(wallet_id, tx_signature, kind)`. Gains `origin_source` (`mercury` or `chain`) and `price_usd`, the collateral's share price at the time                                                                                                                                                                         |
-| `loan_alert`         | Primary key `user_id` → `wallet_id`: one remembered health per loan, not per person                                                                                                                                                                                                                                                                 |
-| `earn_event`         | Gains the column and `origin_source` (`mercury` or `chain`)                                                                                                                                                                                                                                                                                         |
+| Table                | Key or index that changes                                                                                                                                                                                                                                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `position`           | Primary key `(user_id, instrument_id)` → `(wallet_id, instrument_id)`                                                                                                                                                                                                                                                                       |
+| `lot`                | `lot_user_token_idx` → `(wallet_id, token_id)`. `source` gains `chain`, `declared` and `basket_exit` beside `buy`, `transfer_in`, `dividend`, `basket`. Whether a cost is exact or inferred stays in the `is_estimated` column that already exists ("True when we inferred the cost. The UI has to say so."), so the two can never disagree |
+| `disposal`           | Gains the column. Index alongside `lot`'s                                                                                                                                                                                                                                                                                                   |
+| `order`              | Gains the column, **nullable**, `on delete set null`, so fee records outlive a deleted wallet                                                                                                                                                                                                                                               |
+| `activity`           | `activity_signature_mint_idx` `(user_id, tx_signature, mint)` → `(wallet_id, tx_signature, mint)`                                                                                                                                                                                                                                           |
+| `portfolio_snapshot` | Its key gains `wallet_id`                                                                                                                                                                                                                                                                                                                   |
+| `loan_event`         | `loan_event_signature_kind_idx` → `(wallet_id, tx_signature, kind)`. Gains `origin_source` (`mercury` or `chain`) and `price_usd`, the collateral's share price at the time                                                                                                                                                                 |
+| `loan_alert`         | Primary key `user_id` → `wallet_id`: one remembered health per loan, not per person                                                                                                                                                                                                                                                         |
+| `earn_event`         | Gains the column and `origin_source` (`mercury` or `chain`)                                                                                                                                                                                                                                                                                 |
 
 `origin_source` says who wrote the row: `mercury` when Mercury recorded it at confirm time, `chain`
 when the history reader found it afterwards. It is not `lot.source`, which already exists and says
@@ -389,20 +389,24 @@ because a missed liquidation warning is the one failure the slower polling must 
 pass. Years of transfers would otherwise land in the activity feed and the inbox as if they were
 new.
 
-### A new wallet's first pass, and who owns its lots
+### Who costs a linked wallet's shares
 
-`position-sync` owns a linked wallet's lots, as it does the Mercury wallet's. On its first pass it
-finds shares no lot explains and writes lots for them at that day's price, as it already does for
-an unexplained arrival (`portfolio/apply.ts`), but with **`source: "link"`**. These lots keep the
-share counts and the books consistent from the first second. They are not a cost:
+`position-sync` writes no lot for shares that arrive where Mercury did not see them bought. It
+counts them in the holding (`position.shares`) and not in the shares it can prove a cost for
+(`shares_with_basis`), so profit is only ever measured against what was paid. That is true of the
+Mercury wallet today, and it is what a linked wallet needs:
 
-- **A `link` lot is never shown as P&L.** Every P&L read, the Home summary included, leaves out
-  shares whose lots are still `link` and says "Calculating…" for them.
-- **The history reader replaces them.** When it finishes a wallet it swaps every `link` lot for
-  `chain` lots, exact or `~`, in one transaction, or for a lot marked "cost unknown" where no price
-  was found. **No `link` lot survives a finished read**; that invariant is tested.
-- **After that, new arrivals are `position-sync`'s,** exactly as for the Mercury wallet. The reader
-  writes no more lots for the wallet unless it is linked again.
+- **On linking, every share is held at no known cost.** Value and the day's change show at once,
+  from prices. P&L says "Calculating…" until the history reader has read the wallet.
+- **The history reader writes the cost.** It prices each arrival from the wallet's own history
+  and writes `chain` lots, exact or `~`, or leaves shares it found no price for as "cost
+  unknown". `shares_with_basis` rises to meet `shares`, and P&L appears.
+- **It keeps doing so after the first read.** Shares bought later, from Phantom through Jupiter
+  say, arrive with no cost exactly as before linking, so the reader keeps reading a linked
+  wallet's token accounts and prices each new arrival as it is found (see "After the first read").
+- **`position-sync` still writes what it always has:** dividends from the multiplier, and the
+  shares that leave. Nothing else writes those, so the reader and `position-sync` never write the
+  same thing.
 
 ## What the person sees, and when
 
@@ -499,7 +503,7 @@ same answer the Mercury wallet's positions would.
 arrival is converted to shares with the multiplier in force at its time (`multiplier_event`), and
 each multiplier change after it is a dividend, at no cost, as `position-sync` already treats them.
 
-What's left after the replay replaces the wallet's `link` lots, in one transaction: `source: "chain"`, with
+What's left after the replay is written as lots for that wallet, in one transaction: `source: "chain"`, with
 `is_estimated` false where the wallet swapped USDC for the stock and true where the cost was
 inferred from the market price at arrival, and the time and price of each arrival.
 
@@ -566,11 +570,11 @@ shares' value now − net USDC put in.** Exact, written as `earn_event` rows wit
 
 ### After the first read
 
-Lots are `position-sync`'s from here on, so the reader no longer walks token accounts for cost.
-It keeps every account's cursor, which is what lets a wallet linked again be read from where it
-stopped. Its only standing passes are over the loan account and the Earn share token, for actions
-taken outside Mercury after linking, every 5 minutes for wallets viewed in the last week and hourly
-otherwise.
+The reader keeps each account's cursor and reads only newer signatures, every 5 minutes for wallets
+viewed in the last week and hourly otherwise. That prices shares bought outside Mercury after
+linking, and finds loan and Earn actions taken outside it. New token accounts (a stock bought
+elsewhere for the first time) are found on the next pass. The cursors are also what let a wallet
+linked again be read from where it stopped.
 
 A token account with more than 5,000 signatures is read back to that point and marked incomplete;
 its earlier shares are priced at the oldest point reached, marked `~`.
@@ -819,11 +823,12 @@ public endpoint with no SLA. Watch that before linking opens widely.
 
 **What is left:**
 
-- **Read loans from Kamino's API, not the chain.** `loan-watch` still reads each borrower from the
-  chain every 5 minutes (`index.ts`), and it is the job that may never slow down. Every linked
-  wallet with a loan adds one. The obligation routes in "The loan, deposit by deposit" make it
-  need no RPC at all. **This is part of step 3**, so it lands in the first release, before linking
-  opens to anyone outside the team.
+- **`loan-watch` stays on the klend SDK.** It reads every followed wallet's loan through
+  `@kamino-finance/klend-sdk` (`lending/kamino.ts`), which batches them into one
+  `getMultipleAccounts` per hundred wallets on the public lane, and then two balance reads for each
+  wallet that owes something. That cost grows with borrowers, not with wallets, and a linked
+  wallet with no loan adds nothing to it. Kamino's REST API stays the source for a loan's
+  _history_ (step 11), not its current health.
 - **Keep the paid allowance for the request path only**: the reads a person waits on and the
   transactions they sign, which is what `deps.ts` already says it is for.
 
@@ -845,18 +850,17 @@ else.
 2. **Linking.** The challenge, link, list, rename, unlink and delete routes; linking again
    reactivates the row; Settings on web.
 3. **Tracking.** The six `isPrimary` reads list active wallets and write `wallet_id`, including
-   the two subscription lists; `link` lots on a wallet's first pass; presence and
-   `last_viewed_at`; the fallback tiers. **`loan-watch` reads loans from Kamino's API instead of
-   the chain.**
+   the two subscription lists; per-wallet positions, snapshots and loan warnings (naming a linked
+   wallet); `last_viewed_at`; the fallback tiers. `loan-watch` stays on the klend SDK.
 4. **Reading on web.** The acting-wallet middleware, read routes per wallet and `X-Mercury-Wallet: all`, the
    summary route, Home with the summary and wallet cards, the switcher. P&L says "Calculating…".
 5. **Reading on iOS.** The summary, the Linked wallets section, read-only wallet pages, "Manage on
    web".
 6. **The history reader.** The reader inside the API with its own RPC budget, the `history_job`,
    `history_tx` and `history_event` tables, reading token accounts; a job on every link and every
-   link again.
+   link again, and passes after the first read for later arrivals.
 7. **Cost and P&L from history.** Classifying arrivals, historical prices, the average-cost
-   replay, `chain` lots replacing `link` lots, `~` on web and iOS, "Set cost". "Calculating…"
+   replay, `chain` lots for linked wallets, `~` on web and iOS, "Set cost". "Calculating…"
    gives way to real P&L.
 
 **After the first release:**

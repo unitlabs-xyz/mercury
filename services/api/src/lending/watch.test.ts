@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BorrowSummary, Health } from "./capacity.js";
-import { alertFor, markAfter } from "./watch.js";
+import { alertFor, forWallet, loanWalletName, markAfter } from "./watch.js";
 
 type Input = Parameters<typeof alertFor>[1];
 
@@ -99,5 +99,39 @@ describe("markAfter", () => {
 
   it("clears the mark once the loan is healthy, so a relapse speaks again", () => {
     expect(markAfter("liquidation", "healthy", false)).toBe("healthy");
+  });
+});
+
+describe("forWallet", () => {
+  const alert = {
+    health: "margin_call" as const,
+    title: "Liquidation risk",
+    subject: "Repay now, or your shares will be sold",
+    body: "Your stocks have fallen.",
+  };
+
+  it("leaves a loan in the Mercury wallet as it always read", () => {
+    expect(forWallet(alert, { kind: "privy_embedded", label: null, address: "Mercury111" })).toBe(alert);
+  });
+
+  it("names a linked wallet by what the person called it", () => {
+    const told = forWallet(alert, {
+      kind: "external",
+      label: "Phantom main",
+      address: "7EYnhQoR9YM3N7UoaKRoA44Uy8JeaZV3qyouov87awMs",
+    });
+    expect(told.title).toBe("Liquidation risk · Phantom main");
+    expect(told.subject).toBe("Repay now, or your shares will be sold (Phantom main)");
+    expect(told.body).toBe(
+      "Your stocks have fallen. This loan is in your linked wallet Phantom main. Mercury can't act for " +
+        "this wallet. Repay or add collateral from it to avoid liquidation.",
+    );
+    expect(told.health).toBe("margin_call");
+  });
+
+  it("names an unnamed linked wallet by its first and last four characters", () => {
+    expect(loanWalletName({ label: null, address: "7EYnhQoR9YM3N7UoaKRoA44Uy8JeaZV3qyouov87awMs" })).toBe(
+      "7EYn…awMs",
+    );
   });
 });

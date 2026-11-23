@@ -7,7 +7,7 @@ import { activities, disposals, instruments, lots, orders, positions, tokens } f
 import { notifyFor } from "../notify/inbox.js";
 import { movementsByToken } from "./open.js";
 import type { HeldToken, Reconciliation } from "./reconcile.js";
-import { primaryWalletId } from "../wallets/primary.js";
+import type { WalletOwner } from "../wallets/active.js";
 
 export interface ReconcileDeps {
   readonly chain: ChainReader;
@@ -50,7 +50,7 @@ const PROVISIONAL_MS = 2 * 60_000;
 export async function loadHeldTokens(
   db: Db,
   deps: ReconcileDeps,
-  userId: string,
+  owner: WalletOwner,
   walletAddress: string,
   now: Date = new Date(),
 ): Promise<readonly HeldToken[]> {
@@ -70,7 +70,8 @@ export async function loadHeldTokens(
       })
       .from(tokens)
       .innerJoin(instruments, eq(instruments.id, tokens.instrumentId)),
-    // Every lot and every disposal the user has, to be replayed. A token they
+    // Every lot and every disposal of this wallet, to be replayed. Per wallet,
+    // not per person: a person's other wallets hold their own positions. A token they
     // have emptied still needs a pass, or its position would stay stale at
     // what it used to be.
     db
@@ -89,7 +90,7 @@ export async function loadHeldTokens(
         isEstimated: lots.isEstimated,
       })
       .from(lots)
-      .where(eq(lots.userId, userId)),
+      .where(eq(lots.walletId, owner.walletId)),
     db
       .select({
         id: disposals.id,
@@ -101,7 +102,7 @@ export async function loadHeldTokens(
         ),
       })
       .from(disposals)
-      .where(eq(disposals.userId, userId)),
+      .where(eq(disposals.walletId, owner.walletId)),
     // Stocks with a sell executing. See `HeldToken.settling`. Whether one
     // holds its stock is for the plan to say, from what the chain reads.
     db
@@ -109,7 +110,7 @@ export async function loadHeldTokens(
       .from(orders)
       .where(
         and(
-          eq(orders.userId, userId),
+          eq(orders.walletId, owner.walletId),
           eq(orders.side, "sell"),
           eq(orders.status, "executing"),
           gt(orders.createdAt, new Date(now.getTime() - EXECUTING_WINDOW_MS)),
@@ -177,7 +178,8 @@ export async function loadHeldTokens(
 const fixed = (v: Decimal): string => v.toFixed(18);
 
 /** Writes what the plan decided. One transaction, so a half-written pass cannot exist. */
-export async function applyReconciliation(db: Db, userId: string, plan: Reconciliation): Promise<void> {
+export async function applyReconciliation(db: Db, owner: WalletOwner, plan: Reconciliation): Promise<void> {
+  const { userId, walletId } = owner;
   if (
     plan.lots.length === 0 &&
     plan.disposals.length === 0 &&
@@ -191,14 +193,14 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
     if (plan.retracted.length > 0) {
       await tx
         .delete(disposals)
-        .where(and(eq(disposals.userId, userId), inArray(disposals.id, [...plan.retracted])));
+        .where(and(eq(disposals.walletId, walletId), inArray(disposals.id, [...plan.retracted])));
     }
 
     if (plan.lots.length > 0) {
       await tx.insert(lots).values(
         plan.lots.map((l) => ({
           userId,
-          walletId: primaryWalletId(userId),
+          walletId,
           tokenId: l.tokenId,
           instrumentId: l.instrumentId,
           tokenQty: l.tokenQty,
@@ -215,7 +217,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
       await tx.insert(disposals).values(
         plan.disposals.map((d) => ({
           userId,
-          walletId: primaryWalletId(userId),
+          walletId,
           tokenId: d.tokenId,
           instrumentId: d.instrumentId,
           tokenQty: d.tokenQty,
@@ -232,7 +234,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
         .values(
           plan.activity.map((a) => ({
             userId,
-            walletId: primaryWalletId(userId),
+            walletId,
             kind: a.kind,
             occurredAt: a.occurredAt,
             title: a.title,
@@ -256,7 +258,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
         .insert(positions)
         .values({
           userId,
-          walletId: primaryWalletId(userId),
+          walletId,
           instrumentId: p.instrumentId,
           shares: fixed(p.shares),
           sharesWithBasis: fixed(p.sharesWithBasisUsd),

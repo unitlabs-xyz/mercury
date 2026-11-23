@@ -726,6 +726,7 @@ export function buildReadDeps(
     },
     portfolio: {
       holdings: (userId) => readHoldings(db, userId),
+      walletHoldings: (userId, walletId) => readHoldings(db, userId, walletId),
       prices: deps.prices,
       chain: deps.chain,
       multipliers: deps.multipliers,

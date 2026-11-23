@@ -57,7 +57,7 @@ describe("snapshot to chart, over a real database", () => {
     const now = topOfHour();
     for (const [i, perShare] of prices.entries()) {
       const deps: SnapshotDeps = {
-        holdings: async () => [{ shares: D("1"), wrappers: [{ mint: MINT }] }],
+        walletHoldings: async () => [{ shares: D("1"), wrappers: [{ mint: MINT }] }],
         chain: {
           mintConfig: async () => null,
           tokenBalances: async () => [{ mint: USDC, rawAmount: 14_250_000n, decimals: 6 }],
@@ -80,6 +80,7 @@ describe("snapshot to chart, over a real database", () => {
       "/",
       portfolioRoutes({
         holdings: async () => [],
+        walletHoldings: async () => [],
         prices: { pricesFor: async () => new Map() } as unknown as PriceBoard,
         chain: { mintConfig: async () => null, tokenBalances: async () => [] } as ChainReader,
         multipliers: {
@@ -139,7 +140,7 @@ describe("a loan, over a real database", () => {
     ];
     for (const [i, hour] of hours.entries()) {
       const deps: SnapshotDeps = {
-        holdings: async () => [{ shares: D("1"), wrappers: [{ mint: MINT }] }],
+        walletHoldings: async () => [{ shares: D("1"), wrappers: [{ mint: MINT }] }],
         chain: {
           mintConfig: async () => null,
           tokenBalances: async () => [{ mint: USDC, rawAmount: hour.cash, decimals: 6 }],
@@ -161,6 +162,7 @@ describe("a loan, over a real database", () => {
       "/",
       portfolioRoutes({
         holdings: async () => [],
+        walletHoldings: async () => [],
         prices: { pricesFor: async () => new Map() } as unknown as PriceBoard,
         chain: { mintConfig: async () => null, tokenBalances: async () => [] } as ChainReader,
         multipliers: {
