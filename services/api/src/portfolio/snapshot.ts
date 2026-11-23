@@ -53,7 +53,7 @@ export async function snapshotAllPortfolios(
   opts: { readonly only?: ReadonlySet<string> } = {},
 ): Promise<SnapshotSummary> {
   const all = await db
-    .select({ userId: users.id, address: wallets.address })
+    .select({ userId: users.id, walletId: wallets.id, address: wallets.address })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
     .where(eq(wallets.isPrimary, true));
@@ -107,6 +107,7 @@ export async function snapshotAllPortfolios(
           .insert(portfolioSnapshots)
           .values({
             userId: row.userId,
+            walletId: row.walletId,
             capturedAt,
             readAt: now,
             totalUsd: toWire(value.totalUsd),
@@ -119,7 +120,7 @@ export async function snapshotAllPortfolios(
           // A deploy mid-hour re-reads the same hour. The later reading is the
           // better one — it is closer to the top of the next hour — so it wins.
           .onConflictDoUpdate({
-            target: [portfolioSnapshots.userId, portfolioSnapshots.capturedAt],
+            target: [portfolioSnapshots.walletId, portfolioSnapshots.capturedAt],
             set: {
               readAt: now,
               totalUsd: toWire(value.totalUsd),

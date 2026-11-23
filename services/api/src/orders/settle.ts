@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { activities, disposals, instruments, lots, orders, positions, tokens } from "../db/schema.js";
 import type { Fill } from "./fill.js";
 import { logger } from "../log/index.js";
+import { primaryWalletId } from "../wallets/primary.js";
 
 const log = logger("orders");
 
@@ -134,6 +135,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
     if (input.side === "buy") {
       await tx.insert(lots).values({
         userId: input.userId,
+        walletId: primaryWalletId(input.userId),
         tokenId: input.tokenId,
         instrumentId: input.instrumentId,
         tokenQty: fill.tokensRaw,
@@ -185,6 +187,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         .insert(disposals)
         .values({
           userId: input.userId,
+          walletId: primaryWalletId(input.userId),
           tokenId: input.tokenId,
           instrumentId: input.instrumentId,
           tokenQty: fill.tokensRaw,
@@ -223,6 +226,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
       .insert(activities)
       .values({
         userId: input.userId,
+        walletId: primaryWalletId(input.userId),
         kind: input.side,
         occurredAt: fill.occurredAt,
         title: `${input.side === "buy" ? "Bought" : "Sold"} ${input.ticker}`,

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import { USDC_MINT, type TransactionDetail } from "@mercury/chain";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { activities, fundingIntents, instruments, orders, tokens, users } from "../db/schema.js";
 import { settleOrder } from "../orders/settle.js";
 import { recordLoanEvents } from "../lending/record.js";
@@ -20,6 +20,8 @@ const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:receipt" }).returning();
   const [stranger] = await db.insert(users).values({ privyUserId: "did:privy:stranger" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
+  await mercuryWallet(db, stranger!.id);
   const [instrument] = await db
     .insert(instruments)
     .values({ ticker: "NVDA", name: "Nvidia", logoUrl: "https://logo/nvda.png" })
@@ -28,7 +30,14 @@ const seed = async () => {
     .insert(tokens)
     .values({ instrumentId: instrument!.id, mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 })
     .returning();
-  return { db, userId: user!.id, strangerId: stranger!.id, instrumentId: instrument!.id, tokenId: token!.id };
+  return {
+    db,
+    userId: user!.id,
+    walletId,
+    strangerId: stranger!.id,
+    instrumentId: instrument!.id,
+    tokenId: token!.id,
+  };
 };
 
 type Seeded = Awaited<ReturnType<typeof seed>>;
@@ -208,6 +217,7 @@ describe("readReceipt", () => {
       .insert(activities)
       .values({
         userId: s.userId,
+        walletId: s.walletId,
         kind: "transfer_in",
         title: "Added cash",
         subtitle: "cbBTC from Base",
@@ -234,6 +244,7 @@ describe("readReceipt", () => {
       .insert(activities)
       .values({
         userId: s.userId,
+        walletId: s.walletId,
         kind: "transfer_out",
         title: "Sent cash",
         amountUsd: "20",
@@ -268,6 +279,7 @@ describe("readReceipt", () => {
       .insert(activities)
       .values({
         userId: s.userId,
+        walletId: s.walletId,
         kind: "transfer_out",
         title: "Sent cash",
         amountUsd: "20",
@@ -293,6 +305,7 @@ describe("readReceipt", () => {
       .insert(activities)
       .values({
         userId: s.userId,
+        walletId: s.walletId,
         kind: "loan_alert",
         title: "Your loan is close to its limit",
         subtitle: "Repay some.",

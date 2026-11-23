@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { users, portfolioSnapshots } from "../db/schema.js";
 import { readLatestDebt } from "./queries.js";
 
@@ -13,8 +13,10 @@ describe("debt on a snapshot", () => {
   it("round-trips through numeric(38,18) to the cent", async () => {
     const db = await testDb();
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:d1" }).returning();
+    const walletId = await mercuryWallet(db, user!.id);
     await db.insert(portfolioSnapshots).values({
       userId: user!.id,
+      walletId,
       capturedAt: new Date("2026-09-30T12:00:00.000Z"),
       totalUsd: "10000.005",
       stocksUsd: "15000.005",
@@ -28,8 +30,10 @@ describe("debt on a snapshot", () => {
   it("defaults to zero, so a row written before this column is not a loan", async () => {
     const db = await testDb();
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:d2" }).returning();
+    const walletId = await mercuryWallet(db, user!.id);
     await db.insert(portfolioSnapshots).values({
       userId: user!.id,
+      walletId,
       capturedAt: new Date("2026-09-30T12:00:00.000Z"),
       totalUsd: "100",
       stocksUsd: "100",
@@ -41,6 +45,7 @@ describe("debt on a snapshot", () => {
   it("reads the newest reading, not the first one it finds", async () => {
     const db = await testDb();
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:d3" }).returning();
+    const walletId = await mercuryWallet(db, user!.id);
     for (const [hour, debt] of [
       ["10:00", "100"],
       ["12:00", "300"],
@@ -48,6 +53,7 @@ describe("debt on a snapshot", () => {
     ] as const) {
       await db.insert(portfolioSnapshots).values({
         userId: user!.id,
+        walletId,
         capturedAt: new Date(`2026-09-30T${hour}:00.000Z`),
         totalUsd: "1000",
         stocksUsd: "1000",

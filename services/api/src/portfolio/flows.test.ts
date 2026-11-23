@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { USDC_MINT } from "@mercury/chain";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { activities, users } from "../db/schema.js";
+import { primaryWalletId } from "../wallets/primary.js";
 import { readFlows } from "./queries.js";
 
 /**
@@ -17,11 +18,13 @@ const FROM = new Date("2026-10-01T00:00:00.000Z");
 const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:flows" }).returning();
+  await mercuryWallet(db, user!.id);
   return { db, userId: user!.id };
 };
 
 const row = (userId: string, over: Partial<typeof activities.$inferInsert> = {}) => ({
   userId,
+  walletId: primaryWalletId(userId),
   kind: "transfer_out",
   occurredAt: AT,
   title: "Sent cash",

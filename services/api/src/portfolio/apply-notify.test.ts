@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { activities, instruments, notifications, tokens, users } from "../db/schema.js";
 import { applyReconciliation } from "./apply.js";
 import type { Reconciliation } from "./reconcile.js";
@@ -11,6 +11,7 @@ const NOW = new Date("2026-10-27T12:00:00.000Z");
 const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:div" }).returning();
+  await mercuryWallet(db, user!.id);
   const [instrument] = await db
     .insert(instruments)
     .values({ ticker: "NVDA", name: "Nvidia", sector: "Technology" })

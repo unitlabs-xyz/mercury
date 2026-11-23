@@ -218,6 +218,7 @@ async function syncWallet(
         .values(
           moved.map((m) => ({
             userId,
+            walletId,
             kind: m.kind,
             occurredAt: m.occurredAt,
             title: m.title,
@@ -229,7 +230,7 @@ async function syncWallet(
           })),
         )
         .onConflictDoNothing({
-          target: [activities.userId, activities.txSignature, activities.mint],
+          target: [activities.walletId, activities.txSignature, activities.mint],
         })
         .returning({ id: activities.id, kind: activities.kind, occurredAt: activities.occurredAt });
       written = inserted.length;

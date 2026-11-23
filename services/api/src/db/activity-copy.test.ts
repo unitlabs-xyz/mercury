@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { testDb } from "./testing.js";
+import { mercuryWallet, testDb } from "./testing.js";
 import { activities, users } from "./schema.js";
 
 /**
@@ -70,9 +70,11 @@ const NEW: readonly [title: string, subtitle: string | null][] = [
 const seeded = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:copy" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
   await db.insert(activities).values(
     OLD.map(([kind, title, subtitle, refTable], i) => ({
       userId: user!.id,
+      walletId,
       kind,
       title,
       subtitle,

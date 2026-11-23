@@ -3,6 +3,7 @@ import { D, toWire, type Decimal } from "@mercury/core";
 import { USDC_MINT } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { activities, earnEvents, users, wallets } from "../db/schema.js";
+import { primaryWalletId } from "../wallets/primary.js";
 
 export interface EarnRecord {
   readonly userId: string;
@@ -79,6 +80,7 @@ export const pgEarnLedger = (db: Db): EarnLedger => ({
         .insert(earnEvents)
         .values({
           userId: e.userId,
+          walletId: primaryWalletId(e.userId),
           kind: e.kind,
           usdcAmount: toWire(e.usdc),
           vault: e.vault,
@@ -92,6 +94,7 @@ export const pgEarnLedger = (db: Db): EarnLedger => ({
         .insert(activities)
         .values({
           userId: e.userId,
+          walletId: primaryWalletId(e.userId),
           kind: FEED[e.kind].kind,
           occurredAt: e.occurredAt,
           title: FEED[e.kind].title,

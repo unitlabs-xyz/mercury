@@ -14,6 +14,7 @@ import type {
 } from "../core/primitives.js";
 import type { Db } from "../../db/client.js";
 import { activities, basketAccounts, basketActions, wallets } from "../../db/schema.js";
+import { primaryWalletId } from "../../wallets/primary.js";
 
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const LOCK_KEY = 4_919_208;
@@ -257,6 +258,7 @@ export class JsonBasketStore implements BasketStore {
       .insert(activities)
       .values({
         userId: input.userId,
+        walletId: primaryWalletId(input.userId),
         kind: "basket_funding",
         occurredAt: input.occurredAt,
         title: input.title,
@@ -268,7 +270,7 @@ export class JsonBasketStore implements BasketStore {
         basketPortfolioId: input.portfolioId,
       })
       .onConflictDoUpdate({
-        target: [activities.userId, activities.txSignature, activities.mint],
+        target: [activities.walletId, activities.txSignature, activities.mint],
         set: {
           kind: "basket_funding",
           occurredAt: input.occurredAt,

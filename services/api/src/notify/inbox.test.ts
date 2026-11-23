@@ -1,15 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { activities, notifications, users } from "../db/schema.js";
 import { notifyFor } from "./inbox.js";
 
 const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:inbox" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
   const [row] = await db
     .insert(activities)
-    .values({ userId: user!.id, kind: "transfer_in", title: "Added cash", mint: null })
+    .values({ userId: user!.id, walletId, kind: "transfer_in", title: "Added cash", mint: null })
     .returning();
   return { db, userId: user!.id, activityId: row!.id };
 };

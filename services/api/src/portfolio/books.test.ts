@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { testDb } from "../db/testing.js";
+import { primaryWalletId } from "../wallets/primary.js";
 import {
   activities,
   disposals,
@@ -570,6 +571,7 @@ describe("the books, end to end", () => {
     await b.pass();
     await b.db.insert(lots).values({
       userId: b.userId,
+      walletId: primaryWalletId(b.userId),
       tokenId: b.tokenId,
       instrumentId: b.instrumentId,
       tokenQty: 0n,

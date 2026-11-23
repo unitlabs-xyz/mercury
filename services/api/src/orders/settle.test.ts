@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { activities, disposals, instruments, lots, orders, positions, tokens, users } from "../db/schema.js";
 import { settleOrder, tokenRefFor } from "./settle.js";
 import type { Fill } from "./fill.js";
@@ -13,6 +13,7 @@ const AT = new Date("2026-09-29T14:00:00.000Z");
 const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:test" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
   const [instrument] = await db
     .insert(instruments)
     .values({ ticker: "NVDA", name: "Nvidia", sector: "Technology" })
@@ -40,7 +41,14 @@ const seed = async () => {
     })
     .returning();
 
-  return { db, userId: user!.id, instrumentId: instrument!.id, tokenId: token!.id, orderId: order!.id };
+  return {
+    db,
+    userId: user!.id,
+    walletId,
+    instrumentId: instrument!.id,
+    tokenId: token!.id,
+    orderId: order!.id,
+  };
 };
 
 const aFill: Fill = {
@@ -134,6 +142,7 @@ describe("settleOrder", () => {
     const s = await seed();
     await s.db.insert(positions).values({
       userId: s.userId,
+      walletId: s.walletId,
       instrumentId: s.instrumentId,
       shares: "1",
       sharesWithBasis: "1",
@@ -158,6 +167,7 @@ describe("settleOrder", () => {
     const s = await seed();
     await s.db.insert(positions).values({
       userId: s.userId,
+      walletId: s.walletId,
       instrumentId: s.instrumentId,
       shares: "1",
       // Less basis than is being sold: the rest arrived by a path we never saw.
@@ -219,6 +229,7 @@ describe("settleOrder", () => {
     const s = await seed();
     await s.db.insert(positions).values({
       userId: s.userId,
+      walletId: s.walletId,
       instrumentId: s.instrumentId,
       shares: "1",
       sharesWithBasis: "1",
@@ -269,6 +280,7 @@ describe("settleOrder: the shares a sell removes", () => {
       .insert(orders)
       .values({
         userId: s.userId,
+        walletId: s.walletId,
         instrumentId: s.instrumentId,
         side: "sell",
         usdAmount: "110",
@@ -284,6 +296,7 @@ describe("settleOrder: the shares a sell removes", () => {
   const transferOut = (s: Awaited<ReturnType<typeof seed>>, recordedAt: Date) =>
     s.db.insert(disposals).values({
       userId: s.userId,
+      walletId: s.walletId,
       tokenId: s.tokenId,
       instrumentId: s.instrumentId,
       tokenQty: 44_901_800n,
@@ -372,6 +385,7 @@ describe("settleOrder: the shares a sell removes", () => {
     const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
     await s.db.insert(disposals).values({
       userId: s.userId,
+      walletId: s.walletId,
       tokenId: other!.id,
       instrumentId: s.instrumentId,
       tokenQty: 1_000_000n,
@@ -391,9 +405,11 @@ describe("settleOrder: the shares a sell removes", () => {
   it("leaves another user's transfer out alone", async () => {
     const s = await seed();
     const [stranger] = await s.db.insert(users).values({ privyUserId: "did:privy:stranger" }).returning();
+    const strangerWallet = await mercuryWallet(s.db, stranger!.id);
     const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
     await s.db.insert(disposals).values({
       userId: stranger!.id,
+      walletId: strangerWallet,
       tokenId: s.tokenId,
       instrumentId: s.instrumentId,
       tokenQty: 44_901_800n,

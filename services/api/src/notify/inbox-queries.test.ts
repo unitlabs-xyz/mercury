@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { activities, notifications, users } from "../db/schema.js";
+import { primaryWalletId } from "../wallets/primary.js";
 import { countUnread, markAllRead, markRead, pruneNotifications, readInbox } from "./inbox-queries.js";
 
 const NOW = new Date("2026-10-27T12:00:00.000Z");
@@ -12,12 +13,15 @@ const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:q" }).returning();
   const [other] = await db.insert(users).values({ privyUserId: "did:privy:other" }).returning();
+  await mercuryWallet(db, user!.id);
+  await mercuryWallet(db, other!.id);
   /** One activity row and its notification, created `age` ago. */
   const tell = async (userId: string, title: string, age: number) => {
     const [a] = await db
       .insert(activities)
       .values({
         userId,
+        walletId: primaryWalletId(userId),
         kind: "transfer_in",
         title,
         subtitle: "From Tron · USDT",

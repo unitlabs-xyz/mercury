@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import catalogJson from "../../../../catalog.json" with { type: "json" };
 import { JsonBasketStore } from "../store.js";
-import { testDb } from "../../../db/testing.js";
+import { mercuryWallet, testDb } from "../../../db/testing.js";
 import { activities, users } from "../../../db/schema.js";
 import { eq } from "drizzle-orm";
 import { USDC_MINT } from "@mercury/chain";
@@ -36,10 +36,12 @@ describe("JsonBasketStore", () => {
   it("enriches a wallet-watcher transfer once and keeps rebalance history", async () => {
     const db = await testDb();
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:activity" }).returning();
+    const walletId = await mercuryWallet(db, user!.id);
     const store = new JsonBasketStore("postgres://unused", catalogJson, db);
     const signature = "5".repeat(88);
     await db.insert(activities).values({
       userId: user!.id,
+      walletId,
       kind: "transfer_out",
       title: "Sent cash",
       amountUsd: "5",

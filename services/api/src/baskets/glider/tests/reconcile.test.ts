@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { USDC_MINT, type TransactionDetail } from "@mercury/chain";
-import { testDb } from "../../../db/testing.js";
+import { mercuryWallet, testDb } from "../../../db/testing.js";
 import { activities, basketActions, users } from "../../../db/schema.js";
 import { reconcileBasketExits, verifiedExitTransfers } from "../reconcile.js";
 
@@ -89,6 +89,7 @@ describe("verifiedExitTransfers", () => {
 it("enriches an existing Added cash row idempotently before scanning the smart account", async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:exit" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
   const [action] = await db
     .insert(basketActions)
     .values({
@@ -108,6 +109,7 @@ it("enriches an existing Added cash row idempotently before scanning the smart a
     .returning();
   await db.insert(activities).values({
     userId: user!.id,
+    walletId,
     kind: "transfer_in",
     occurredAt: new Date(TRANSFER_TIME * 1_000),
     title: "Added cash",

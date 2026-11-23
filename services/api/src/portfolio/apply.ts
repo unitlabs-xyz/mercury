@@ -7,6 +7,7 @@ import { activities, disposals, instruments, lots, orders, positions, tokens } f
 import { notifyFor } from "../notify/inbox.js";
 import { movementsByToken } from "./open.js";
 import type { HeldToken, Reconciliation } from "./reconcile.js";
+import { primaryWalletId } from "../wallets/primary.js";
 
 export interface ReconcileDeps {
   readonly chain: ChainReader;
@@ -197,6 +198,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
       await tx.insert(lots).values(
         plan.lots.map((l) => ({
           userId,
+          walletId: primaryWalletId(userId),
           tokenId: l.tokenId,
           instrumentId: l.instrumentId,
           tokenQty: l.tokenQty,
@@ -213,6 +215,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
       await tx.insert(disposals).values(
         plan.disposals.map((d) => ({
           userId,
+          walletId: primaryWalletId(userId),
           tokenId: d.tokenId,
           instrumentId: d.instrumentId,
           tokenQty: d.tokenQty,
@@ -229,6 +232,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
         .values(
           plan.activity.map((a) => ({
             userId,
+            walletId: primaryWalletId(userId),
             kind: a.kind,
             occurredAt: a.occurredAt,
             title: a.title,
@@ -252,6 +256,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
         .insert(positions)
         .values({
           userId,
+          walletId: primaryWalletId(userId),
           instrumentId: p.instrumentId,
           shares: fixed(p.shares),
           sharesWithBasis: fixed(p.sharesWithBasisUsd),
@@ -262,7 +267,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
-          target: [positions.userId, positions.instrumentId],
+          target: [positions.walletId, positions.instrumentId],
           set: {
             shares: fixed(p.shares),
             sharesWithBasis: fixed(p.sharesWithBasisUsd),

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
 import { USDC_MINT } from "@mercury/chain";
-import { testDb } from "../db/testing.js";
-import { activities, users, wallets } from "../db/schema.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
+import { activities, users } from "../db/schema.js";
 import { hasEarnHistory, pgEarnLedger, type EarnRecord } from "./store.js";
 
 const setup = async () => {
@@ -11,6 +11,7 @@ const setup = async () => {
     .insert(users)
     .values({ privyUserId: "did:privy:e", email: "e@example.com" })
     .returning();
+  await mercuryWallet(db, user!.id, "WaLLeT");
   return { db, ledger: pgEarnLedger(db), userId: user!.id };
 };
 
@@ -70,7 +71,6 @@ describe("pgEarnLedger settings", () => {
 describe("hasEarnHistory", () => {
   it("is true only for a wallet whose account has moved money through Earn", async () => {
     const { db, ledger, userId } = await setup();
-    await db.insert(wallets).values({ userId, address: "WaLLeT", kind: "privy_embedded", isPrimary: true });
     expect(await hasEarnHistory(db, "WaLLeT")).toBe(false);
     await ledger.record(move(userId));
     expect(await hasEarnHistory(db, "WaLLeT")).toBe(true);

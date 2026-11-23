@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { activities, loanEvents } from "../db/schema.js";
 import type { PlannedLoanEvent } from "./events.js";
 import type { LedgerRow } from "./interest.js";
+import { primaryWalletId } from "../wallets/primary.js";
 
 export interface RecordInput {
   readonly userId: string;
@@ -43,6 +44,7 @@ export async function recordLoanEvents(
       .insert(loanEvents)
       .values({
         userId: input.userId,
+        walletId: primaryWalletId(input.userId),
         kind: event.kind,
         usdAmount: event.usdAmount === null ? null : toWire(event.usdAmount),
         ticker: event.ticker,
@@ -64,6 +66,7 @@ export async function recordLoanEvents(
       .insert(activities)
       .values({
         userId: input.userId,
+        walletId: primaryWalletId(input.userId),
         kind: event.kind,
         occurredAt: input.occurredAt,
         title: event.title,

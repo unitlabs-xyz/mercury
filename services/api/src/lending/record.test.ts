@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { users } from "../db/schema.js";
 import type { PlannedLoanEvent } from "./events.js";
 import { loanLedger, recordLoanEvents } from "./record.js";
@@ -20,6 +20,7 @@ const setup = async () => {
     .insert(users)
     .values({ privyUserId: "did:privy:l", email: "l@example.com" })
     .returning();
+  await mercuryWallet(db, user!.id);
   const record = (planned: PlannedLoanEvent[], signature: string, at: string, debtAfter: string) =>
     recordLoanEvents(db, planned, {
       userId: user!.id,

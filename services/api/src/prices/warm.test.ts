@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { D, ZERO } from "@mercury/core";
 import type { PriceAsk, TokenPrice } from "@mercury/market";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { instruments, lots, tokens, users } from "../db/schema.js";
 import type { StockRow, StockWrapperRow } from "../routes/instruments.js";
 import { warmPrices } from "./warm.js";
@@ -70,6 +70,7 @@ const board = () => {
 const held = async (mint: string) => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:warm" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
   const [instrument] = await db.insert(instruments).values({ ticker: "HELD", name: "Held Inc" }).returning();
   const [token] = await db
     .insert(tokens)
@@ -77,6 +78,7 @@ const held = async (mint: string) => {
     .returning();
   await db.insert(lots).values({
     userId: user!.id,
+    walletId,
     tokenId: token!.id,
     instrumentId: instrument!.id,
     tokenQty: 100_000_000n,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { testDb } from "../db/testing.js";
-import { users } from "../db/schema.js";
+import { users, wallets } from "../db/schema.js";
 import { resolveIdentity, type UserDirectory } from "./identity.js";
 import type { VerifiedToken } from "./verifier.js";
 
@@ -30,5 +30,30 @@ describe("resolveIdentity, over a real database", () => {
     const rows = await db.select().from(users);
     expect(rows).toHaveLength(1);
     expect(new Set(identities.map((i) => i.userId))).toEqual(new Set([rows[0]!.id]));
+  });
+});
+
+describe("resolveIdentity, the Mercury wallet", () => {
+  const signedFor = (address: string): UserDirectory => ({
+    read: async () => ({ privyUserId: token.privyUserId, solanaAddress: address, email: null }),
+  });
+
+  it("makes the first wallet Privy names the person's Mercury wallet", async () => {
+    const db = await testDb();
+    await resolveIdentity(db, signedFor("FirstWallet"), token, "id_tok");
+
+    const rows = await db.select().from(wallets);
+    expect(rows.map((w) => [w.address, w.kind, w.isPrimary])).toEqual([
+      ["FirstWallet", "privy_embedded", true],
+    ]);
+  });
+
+  it("writes it once, however many requests of a first visit name it", async () => {
+    const db = await testDb();
+    await Promise.all(
+      Array.from({ length: 4 }, () => resolveIdentity(db, signedFor("FirstWallet"), token, "id_tok")),
+    );
+
+    expect(await db.select().from(wallets)).toHaveLength(1);
   });
 });

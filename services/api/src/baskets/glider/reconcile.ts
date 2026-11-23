@@ -11,6 +11,7 @@ import { z } from "zod";
 import type { Db } from "../../db/client.js";
 import { activities, basketActions } from "../../db/schema.js";
 import type { ExitIntentPayload } from "../core/primitives.js";
+import { primaryWalletId } from "../../wallets/primary.js";
 
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:";
 const PAGE = 100;
@@ -189,6 +190,7 @@ async function recordTransfer(
     .insert(activities)
     .values({
       userId: row.userId,
+      walletId: primaryWalletId(row.userId),
       kind: isUsdc ? "liquidate_to_usdc" : "withdraw_in_kind",
       occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1_000),
       title: isUsdc ? `Sold ${row.payload.templateName} to cash` : `Received ${expected.symbol}`,
@@ -203,7 +205,7 @@ async function recordTransfer(
       basketPortfolioId: row.portfolioId,
     })
     .onConflictDoUpdate({
-      target: [activities.userId, activities.txSignature, activities.mint],
+      target: [activities.walletId, activities.txSignature, activities.mint],
       set: {
         kind: isUsdc ? "liquidate_to_usdc" : "withdraw_in_kind",
         occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1_000),

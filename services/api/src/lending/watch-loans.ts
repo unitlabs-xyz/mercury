@@ -48,7 +48,7 @@ const CONCURRENCY = 8;
  */
 export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise<WatchSummary> {
   const rows = await db
-    .select({ userId: users.id, email: users.email, address: wallets.address })
+    .select({ userId: users.id, walletId: wallets.id, email: users.email, address: wallets.address })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
     .where(eq(wallets.isPrimary, true));
@@ -99,7 +99,7 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
         const [existing] = await db
           .select({ health: loanAlerts.health })
           .from(loanAlerts)
-          .where(eq(loanAlerts.userId, row.userId));
+          .where(eq(loanAlerts.walletId, row.walletId));
         const told = (existing?.health ?? null) as Health | null;
 
         const alert = alertFor(told, summary);
@@ -108,9 +108,9 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
           if (told !== null && summary.health === "healthy") {
             await db
               .insert(loanAlerts)
-              .values({ userId: row.userId, health: "healthy", notifiedAt: now })
+              .values({ walletId: row.walletId, userId: row.userId, health: "healthy", notifiedAt: now })
               .onConflictDoUpdate({
-                target: loanAlerts.userId,
+                target: loanAlerts.walletId,
                 set: { health: "healthy", notifiedAt: now },
               });
           }
@@ -132,6 +132,7 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
             .insert(activities)
             .values({
               userId: row.userId,
+              walletId: row.walletId,
               kind: "loan_alert",
               occurredAt: now,
               title: alert.title,
@@ -154,8 +155,8 @@ export async function watchAllLoans(db: Db, deps: WatchDeps, now: Date): Promise
         if (mark !== null) {
           await db
             .insert(loanAlerts)
-            .values({ userId: row.userId, health: mark, notifiedAt: now })
-            .onConflictDoUpdate({ target: loanAlerts.userId, set: { health: mark, notifiedAt: now } });
+            .values({ walletId: row.walletId, userId: row.userId, health: mark, notifiedAt: now })
+            .onConflictDoUpdate({ target: loanAlerts.walletId, set: { health: mark, notifiedAt: now } });
         }
       } catch (error: unknown) {
         failed += 1;

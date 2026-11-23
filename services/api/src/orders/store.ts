@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { instruments, orders, tokens } from "../db/schema.js";
 import { logger } from "../log/index.js";
+import { primaryWalletId } from "../wallets/primary.js";
 
 /*
  * `partially_filled` and `expired` were here with nothing able to write them.
@@ -106,6 +107,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
       .insert(orders)
       .values({
         userId: order.userId,
+        walletId: primaryWalletId(order.userId),
         instrumentId: instrument.id,
         side: order.side,
         usdAmount: order.usdAmount,
