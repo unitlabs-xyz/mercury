@@ -6,6 +6,7 @@ import { activities, fundingIntents, instruments, loanEvents, lots, orders, toke
 import type { ActivityRow } from "../routes/activity.js";
 import { transferParties } from "../wallet-events/movements.js";
 import { logger } from "../log/index.js";
+import type { WalletOwner } from "../wallets/active.js";
 import { loanReceipt, tradeReceipt, type ReceiptDetail } from "./receipt.js";
 
 const log = logger("activity");
@@ -87,7 +88,7 @@ export async function readReceipt(
       return trade(db, userId, row.kind, refId, row.mint, ticker, row.amountUsd);
     }
     if (isLoan(row.kind) && row.txSignature !== null) {
-      return loan(db, userId, row.txSignature);
+      return loan(db, { userId, walletId }, row.txSignature);
     }
     if (refTable === "funding_intent" && refId !== null) {
       return deposit(db, userId, refId);
@@ -157,12 +158,20 @@ async function trade(
   });
 }
 
-async function loan(db: Db, userId: string, signature: string): Promise<ReceiptDetail | null> {
+/**
+ * A loan transaction's receipt, read within the wallet whose loan it is. Each
+ * wallet has its own Kamino loan, so the account-opening transaction and
+ * everything before this one are that wallet's alone: another wallet's
+ * borrows are no part of this loan's interest, and its first borrow did not
+ * open this wallet's account.
+ */
+async function loan(db: Db, owner: WalletOwner, signature: string): Promise<ReceiptDetail | null> {
+  const ofThisLoan = and(eq(loanEvents.userId, owner.userId), eq(loanEvents.walletId, owner.walletId));
   const legs = (
     await db
       .select()
       .from(loanEvents)
-      .where(and(eq(loanEvents.userId, userId), eq(loanEvents.txSignature, signature)))
+      .where(and(ofThisLoan, eq(loanEvents.txSignature, signature)))
   )
     .filter((l): l is typeof l & { kind: LoanKind } => isLoan(l.kind))
     .sort((a, b) => LEG_ORDER[a.kind] - LEG_ORDER[b.kind]);
@@ -173,14 +182,14 @@ async function loan(db: Db, userId: string, signature: string): Promise<ReceiptD
   const [opening] = await db
     .select({ txSignature: loanEvents.txSignature })
     .from(loanEvents)
-    .where(eq(loanEvents.userId, userId))
+    .where(ofThisLoan)
     .orderBy(asc(loanEvents.occurredAt), asc(loanEvents.recordedAt))
     .limit(1);
 
   const earlier = await db
     .select({ kind: loanEvents.kind, usdAmount: loanEvents.usdAmount, debtAfterUsd: loanEvents.debtAfterUsd })
     .from(loanEvents)
-    .where(and(eq(loanEvents.userId, userId), lt(loanEvents.occurredAt, first.occurredAt)))
+    .where(and(ofThisLoan, lt(loanEvents.occurredAt, first.occurredAt)))
     .orderBy(asc(loanEvents.occurredAt), asc(loanEvents.recordedAt));
 
   // Kamino takes only xStocks, so a pledged ticker is the backed token's.

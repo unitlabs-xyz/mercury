@@ -3,7 +3,16 @@ import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import { USDC_MINT, type TransactionDetail } from "@mercury/chain";
 import { mercuryWallet, testDb } from "../db/testing.js";
-import { activities, fundingIntents, instruments, orders, tokens, users, wallets } from "../db/schema.js";
+import {
+  activities,
+  fundingIntents,
+  instruments,
+  loanEvents,
+  orders,
+  tokens,
+  users,
+  wallets,
+} from "../db/schema.js";
 import { settleOrder } from "../orders/settle.js";
 import { recordLoanEvents } from "../lending/record.js";
 import { planLoanEvents } from "../lending/events.js";
@@ -357,6 +366,65 @@ describe("readReceipt, in a linked wallet", () => {
     const both = [...mine(s), { id: linked!.id, address: FRIEND }];
     expect((await readReceipt(s.db, s.userId, row!.id, both, chain))?.row.title).toBe("Received USDC");
     expect(read).toEqual(["SigLinked"]);
+  });
+
+  it("reads a linked wallet's loan on its own: another wallet's borrows are not its history", async () => {
+    const s = await seed();
+    // The Mercury wallet borrowed first, and has a loan of its own.
+    await loan(s, { kind: "borrow", usd: D("50") }, "SigMercuryBorrow", "2026-10-01T09:00:00Z", "50");
+    const [linked] = await s.db
+      .insert(wallets)
+      .values({ userId: s.userId, address: FRIEND, kind: "external", isPrimary: false, linkedAt: new Date() })
+      .returning();
+    const linkedLoan = async (
+      kind: "borrow" | "repay",
+      usd: string,
+      signature: string,
+      at: string,
+      after: string,
+    ) => {
+      await s.db.insert(loanEvents).values({
+        userId: s.userId,
+        walletId: linked!.id,
+        kind,
+        usdAmount: usd,
+        borrowApy: "0.058",
+        debtAfterUsd: after,
+        collateralAfterUsd: "40",
+        txSignature: signature,
+        occurredAt: new Date(at),
+      });
+      const [row] = await s.db
+        .insert(activities)
+        .values({
+          userId: s.userId,
+          walletId: linked!.id,
+          kind,
+          occurredAt: new Date(at),
+          title: kind === "borrow" ? "Borrowed" : "Repaid your loan in full",
+          amountUsd: usd,
+          refTable: "loan_event",
+          txSignature: signature,
+          mint: USDC_MINT,
+        })
+        .returning();
+      return row!;
+    };
+    const opened = await linkedLoan("borrow", "10", "SigLinkedBorrow", "2026-10-10T09:00:00Z", "10");
+    const closed = await linkedLoan("repay", "10.02", "SigLinkedClose", "2026-10-20T09:00:00Z", "0");
+    const both = [...mine(s), { id: linked!.id, address: FRIEND }];
+
+    // Its first borrow opened its own Kamino account, though the Mercury wallet borrowed earlier.
+    expect((await readReceipt(s.db, s.userId, opened.id, both, noChain))?.detail).toMatchObject({
+      type: "loan",
+      openedAccount: true,
+    });
+    // Closing it paid its own interest: $10.02 against the $10 it borrowed, not the Mercury wallet's $50.
+    expect((await readReceipt(s.db, s.userId, closed.id, both, noChain))?.detail).toMatchObject({
+      type: "loan",
+      openedAccount: false,
+      interestPaidUsd: "0.02",
+    });
   });
 
   it("finds nothing with no wallets chosen", async () => {
