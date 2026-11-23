@@ -401,7 +401,17 @@ const Row = ({
       )}
     </span>
     <span className="flex items-center justify-end gap-2">
-      {slice.changePct !== null && <Delta value={slice.changePct} />}
+      {slice.changePct !== null && (
+        /*
+         * Today's price move of what the wallet holds now: known from its
+         * balance and two prices, so a wallet whose P&L is still calculating
+         * has one. Said as "today" so it is not read as that P&L.
+         */
+        <span className="flex items-center gap-1.5" title="Today's price move of what this wallet holds">
+          <Delta value={slice.changePct} />
+          <span className="text-[11px] text-ds-muted">today</span>
+        </span>
+      )}
       <span className="text-[14px] font-semibold">{slice.valueUsd === null ? "—" : usd(slice.valueUsd)}</span>
     </span>
     <span className="truncate pl-[18px] text-[11px] text-faint">{status(slice)}</span>

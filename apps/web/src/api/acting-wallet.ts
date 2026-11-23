@@ -51,13 +51,27 @@ export const actingLabel = (acting: Acting): string =>
 /** Whether the chosen wallet can act. Until linked wallets can, only the Mercury wallet does. */
 export const canAct = (acting: Acting): boolean => acting.kind === "mercury";
 
+/**
+ * What a blocked action is. Most can be done from the Mercury wallet instead,
+ * so switching to it is the way on. A loan cannot: it is one wallet's own
+ * position, and switching would show a different loan.
+ */
+export type BlockedAction = "action" | "loan";
+
 /** What to say where an action would be, when the chosen wallet cannot take it. */
-export const actionBlockedCopy = (acting: Acting): string | null =>
-  acting.kind === "all"
+export const actionBlockedCopy = (acting: Acting, what: BlockedAction = "action"): string | null => {
+  if (acting.kind === "mercury") return null;
+  if (what === "loan") {
+    return acting.kind === "all"
+      ? "A loan belongs to one wallet. Choose whose loan this is."
+      : `This is ${walletName(acting.wallet)}'s own loan. Repaying or borrowing from ${walletName(
+          acting.wallet,
+        )} in Mercury is coming soon. Until then, repay it or add collateral from ${walletName(acting.wallet)} itself.`;
+  }
+  return acting.kind === "all"
     ? "Choose a wallet to do this from. All wallets is for looking."
-    : acting.kind === "linked"
-      ? "For now this can only be done from your Mercury wallet. Switch to it to continue."
-      : null;
+    : "For now this can only be done from your Mercury wallet. Switch to it to continue.";
+};
 
 /**
  * Whether a query is a read for the chosen wallet, and so is dropped when

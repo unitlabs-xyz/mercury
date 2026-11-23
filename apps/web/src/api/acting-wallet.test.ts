@@ -73,6 +73,24 @@ describe("acting", () => {
     expect(actionBlockedCopy({ kind: "linked", wallet: PHANTOM })).toMatch(/Mercury wallet/);
   });
 
+  it("never sends a linked wallet's loan to the Mercury wallet, whose loan is a different one", () => {
+    const copy = actionBlockedCopy({ kind: "linked", wallet: PHANTOM }, "loan");
+    expect(copy).toBe(
+      "This is Phantom's own loan. Repaying or borrowing from Phantom in Mercury is coming soon. Until then, repay it or add collateral from Phantom itself.",
+    );
+    expect(copy).not.toMatch(/Switch to/);
+  });
+
+  it("asks whose loan when every wallet is shown", () => {
+    expect(actionBlockedCopy({ kind: "all" }, "loan")).toBe(
+      "A loan belongs to one wallet. Choose whose loan this is.",
+    );
+  });
+
+  it("lets the Mercury wallet manage its own loan", () => {
+    expect(actionBlockedCopy({ kind: "mercury", wallet: MERCURY }, "loan")).toBeNull();
+  });
+
   it("names what is shown", () => {
     expect(actingLabel({ kind: "mercury", wallet: MERCURY })).toBe("Mercury");
     expect(actingLabel({ kind: "linked", wallet: PHANTOM })).toBe("Phantom");

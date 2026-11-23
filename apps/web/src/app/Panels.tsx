@@ -100,7 +100,7 @@ export const GlobalPanels = () => {
         </ActionGate>
       )}
       {borrowSeen && (
-        <ActionGate open={borrowing} onClose={close}>
+        <ActionGate open={borrowing} onClose={close} what="loan">
           <BorrowSheet
             open={borrowing}
             onClose={close}
