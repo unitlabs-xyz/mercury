@@ -1,3 +1,5 @@
+import { kaminoLoans } from "./lending/kamino-loans.js";
+import { XSTOCKS_MARKET } from "./lending/kamino.js";
 import { serve } from "@hono/node-server";
 import {
   backgroundDeps,
@@ -709,6 +711,8 @@ every(
       }),
       laneBusy: () => laneRefusedWithin(60_000),
     },
+    // A linked wallet's loan, from Kamino's own record of it: when it opened, each pledge at its price then.
+    loan: { lending: deps.lending, loans: kaminoLoans(), market: XSTOCKS_MARKET, usdcMint: USDC_MINT },
     log: logger("history"),
   }),
   jobClock(5 * 60_000),

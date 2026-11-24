@@ -246,7 +246,8 @@ export const moveOnWebUrl = (base: string, walletId: string): string =>
   `${manageOnWebUrl(base, walletId)}&${MOVE_PARAM}=1`;
 
 /** Whether a link asks for the move to open, from a query string. */
-export const moveFromSearch = (search: string): boolean => new URLSearchParams(search).get(MOVE_PARAM) === "1";
+export const moveFromSearch = (search: string): boolean =>
+  new URLSearchParams(search).get(MOVE_PARAM) === "1";
 
 /** The wallet a link asks to open on, from a query string; null when it names none. */
 export const walletFromSearch = (search: string): string | null => {

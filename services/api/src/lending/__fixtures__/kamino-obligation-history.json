@@ -1,0 +1,2192 @@
+{
+  "obligation": "GGCN61XUn4MuFv7LqkHGjymENghMJf6vRYVK84sf7upR",
+  "history": [
+    {
+      "timestamp": "2026-03-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "91.597882593810951778",
+        "userTotalCollateralDeposit": "91.597882593810951778",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-03-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "134.59696465877865201",
+        "userTotalCollateralDeposit": "134.59696465877865201",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-03-25T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "148.67294092816854755",
+        "userTotalCollateralDeposit": "148.67294092816854755",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-03-26T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "145.21049200377805227",
+        "userTotalCollateralDeposit": "145.21049200377805227",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-03-27T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "145.21052946462914106",
+        "userTotalCollateralDeposit": "145.21052946462914106",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-03-28T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "349.94483773356168575",
+        "userTotalDeposit": "1363.7380393420610949",
+        "userTotalCollateralDeposit": "1363.7380393420610949",
+        "loanToValue": "0.25660708115349885508"
+      }
+    },
+    {
+      "timestamp": "2026-03-29T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.01278400991766347",
+        "userTotalDeposit": "1421.2294995352917134",
+        "userTotalCollateralDeposit": "1421.2294995352917134",
+        "loanToValue": "0.24627464046050516801"
+      }
+    },
+    {
+      "timestamp": "2026-03-30T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.01342537008326224",
+        "userTotalDeposit": "1410.8792324021083926",
+        "userTotalCollateralDeposit": "1410.8792324021083926",
+        "loanToValue": "0.24808177576911664269"
+      }
+    },
+    {
+      "timestamp": "2026-03-31T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.08473783656474473",
+        "userTotalDeposit": "1458.5091749770676587",
+        "userTotalCollateralDeposit": "1458.5091749770676587",
+        "loanToValue": "0.24002916391805980613"
+      }
+    },
+    {
+      "timestamp": "2026-04-01T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.22798236128757231",
+        "userTotalDeposit": "1475.8962211790751456",
+        "userTotalCollateralDeposit": "1475.8962211790751456",
+        "loanToValue": "0.23729851552942847876"
+      }
+    },
+    {
+      "timestamp": "2026-04-02T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.29846354152489608",
+        "userTotalDeposit": "1577.3237228828729992",
+        "userTotalCollateralDeposit": "1577.3237228828729992",
+        "loanToValue": "0.22208406458332138867"
+      }
+    },
+    {
+      "timestamp": "2026-04-03T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.36080226471790566",
+        "userTotalDeposit": "1577.3279335954437523",
+        "userTotalCollateralDeposit": "1577.3279335954437523",
+        "loanToValue": "0.22212299345139166883"
+      }
+    },
+    {
+      "timestamp": "2026-04-04T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.40549534915014864",
+        "userTotalDeposit": "1577.3322377573810505",
+        "userTotalCollateralDeposit": "1577.3322377573810505",
+        "loanToValue": "0.22215072193499929178"
+      }
+    },
+    {
+      "timestamp": "2026-04-05T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.4499139401132163",
+        "userTotalDeposit": "1577.3364344114858344",
+        "userTotalCollateralDeposit": "1577.3364344114858344",
+        "loanToValue": "0.22217829138706752061"
+      }
+    },
+    {
+      "timestamp": "2026-04-06T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.52561762664334209",
+        "userTotalDeposit": "1587.0095248520561348",
+        "userTotalCollateralDeposit": "1587.0095248520561348",
+        "loanToValue": "0.2208717793671212949"
+      }
+    },
+    {
+      "timestamp": "2026-04-07T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.5785949480274312",
+        "userTotalDeposit": "1587.7286919342628324",
+        "userTotalCollateralDeposit": "1587.7286919342628324",
+        "loanToValue": "0.22080510148174769721"
+      }
+    },
+    {
+      "timestamp": "2026-04-08T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.6306494371172817",
+        "userTotalDeposit": "1633.4208786044123885",
+        "userTotalCollateralDeposit": "1633.4208786044123885",
+        "loanToValue": "0.21466032057622195069"
+      }
+    },
+    {
+      "timestamp": "2026-04-09T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.69547509817547744",
+        "userTotalDeposit": "1645.4951850816263429",
+        "userTotalCollateralDeposit": "1645.4951850816263429",
+        "loanToValue": "0.21312458296909504305"
+      }
+    },
+    {
+      "timestamp": "2026-04-10T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.76052461067965889",
+        "userTotalDeposit": "1648.0489502348512026",
+        "userTotalCollateralDeposit": "1648.0489502348512026",
+        "loanToValue": "0.21283380239445884447"
+      }
+    },
+    {
+      "timestamp": "2026-04-11T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.80429673723062129",
+        "userTotalDeposit": "1648.0539456574668259",
+        "userTotalCollateralDeposit": "1648.0539456574668259",
+        "loanToValue": "0.2128597171600972192"
+      }
+    },
+    {
+      "timestamp": "2026-04-12T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.87465057495192479",
+        "userTotalDeposit": "1648.0587962235438648",
+        "userTotalCollateralDeposit": "1648.0587962235438648",
+        "loanToValue": "0.21290177958393605647"
+      }
+    },
+    {
+      "timestamp": "2026-04-13T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.92149570145814908",
+        "userTotalDeposit": "1665.2574763311912035",
+        "userTotalCollateralDeposit": "1665.2574763311912035",
+        "loanToValue": "0.21073107353620184031"
+      }
+    },
+    {
+      "timestamp": "2026-04-14T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "350.9633847399313112",
+        "userTotalDeposit": "1694.8900188572894398",
+        "userTotalCollateralDeposit": "1694.8900188572894398",
+        "loanToValue": "0.20707148005777630231"
+      }
+    },
+    {
+      "timestamp": "2026-04-15T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.05417362309302387",
+        "userTotalDeposit": "1719.1148037847962833",
+        "userTotalCollateralDeposit": "1719.1148037847962833",
+        "loanToValue": "0.2042063583247689787"
+      }
+    },
+    {
+      "timestamp": "2026-04-16T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.12119105387065508",
+        "userTotalDeposit": "1727.480779107257435",
+        "userTotalCollateralDeposit": "1727.480779107257435",
+        "loanToValue": "0.20325620713147738916"
+      }
+    },
+    {
+      "timestamp": "2026-04-17T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.14222903454156622",
+        "userTotalDeposit": "1860.6817481445029517",
+        "userTotalCollateralDeposit": "1860.6817481445029517",
+        "loanToValue": "0.18871697397188173334"
+      }
+    },
+    {
+      "timestamp": "2026-04-18T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.16840680867204703",
+        "userTotalDeposit": "1860.6874809297118103",
+        "userTotalCollateralDeposit": "1860.6874809297118103",
+        "loanToValue": "0.18873046140623631653"
+      }
+    },
+    {
+      "timestamp": "2026-04-19T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.2576515751462077",
+        "userTotalDeposit": "1860.6933992898633719",
+        "userTotalCollateralDeposit": "1860.6933992898633719",
+        "loanToValue": "0.1887778242827132376"
+      }
+    },
+    {
+      "timestamp": "2026-04-20T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.29229058762448952",
+        "userTotalDeposit": "1855.2359692082798817",
+        "userTotalCollateralDeposit": "1855.2359692082798817",
+        "loanToValue": "0.18935181099229017628"
+      }
+    },
+    {
+      "timestamp": "2026-04-21T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.34113978769369625",
+        "userTotalDeposit": "1847.3402061355604724",
+        "userTotalCollateralDeposit": "1847.3402061355604724",
+        "loanToValue": "0.19018756730394670996"
+      }
+    },
+    {
+      "timestamp": "2026-04-22T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.36367388263543016",
+        "userTotalDeposit": "1879.0361098821426559",
+        "userTotalCollateralDeposit": "1879.0361098821426559",
+        "loanToValue": "0.18699144313127316378"
+      }
+    },
+    {
+      "timestamp": "2026-04-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.44105056736486795",
+        "userTotalDeposit": "1868.8460150154580002",
+        "userTotalCollateralDeposit": "1868.8460150154580002",
+        "loanToValue": "0.18805243864056822965"
+      }
+    },
+    {
+      "timestamp": "2026-04-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.48285882528895034",
+        "userTotalDeposit": "1904.327874303326439",
+        "userTotalCollateralDeposit": "1904.327874303326439",
+        "loanToValue": "0.18457055823639318329"
+      }
+    },
+    {
+      "timestamp": "2026-04-25T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.5307776032061905",
+        "userTotalDeposit": "1904.3331982989862307",
+        "userTotalCollateralDeposit": "1904.3331982989862307",
+        "loanToValue": "0.18459520524937819515"
+      }
+    },
+    {
+      "timestamp": "2026-04-26T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.58370924397808339",
+        "userTotalDeposit": "1904.33692847683347",
+        "userTotalCollateralDeposit": "1904.33692847683347",
+        "loanToValue": "0.18462263898079690539"
+      }
+    },
+    {
+      "timestamp": "2026-04-27T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.62573074949523489",
+        "userTotalDeposit": "1904.9428450500019012",
+        "userTotalCollateralDeposit": "1904.9428450500019012",
+        "loanToValue": "0.18458597414783097351"
+      }
+    },
+    {
+      "timestamp": "2026-04-28T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.66499643156790723",
+        "userTotalDeposit": "1885.6880622534908038",
+        "userTotalCollateralDeposit": "1885.6880622534908038",
+        "loanToValue": "0.18649160668244926289"
+      }
+    },
+    {
+      "timestamp": "2026-04-29T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "351.70961790238630574",
+        "userTotalDeposit": "1896.7046566727707341",
+        "userTotalCollateralDeposit": "1896.7046566727707341",
+        "loanToValue": "0.18543193673566493609"
+      }
+    },
+    {
+      "timestamp": "2026-05-03T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "29.003414738899448546",
+        "userTotalCollateralDeposit": "29.003414738899448546",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-04T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "28.937872086763264727",
+        "userTotalCollateralDeposit": "28.937872086763264727",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-05T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "29.321881995464602269",
+        "userTotalCollateralDeposit": "29.321881995464602269",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-06T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "29.929810250555944076",
+        "userTotalCollateralDeposit": "29.929810250555944076",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-07T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "29.891151211090345629",
+        "userTotalCollateralDeposit": "29.891151211090345629",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-08T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.58340839755279419",
+        "userTotalCollateralDeposit": "30.58340839755279419",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-09T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.583474343731113065",
+        "userTotalCollateralDeposit": "30.583474343731113065",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-10T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.583539794665875264",
+        "userTotalCollateralDeposit": "30.583539794665875264",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-11T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.678249243622310977",
+        "userTotalCollateralDeposit": "30.678249243622310977",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-12T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.416751032737664953",
+        "userTotalCollateralDeposit": "30.416751032737664953",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-13T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.742051343585763319",
+        "userTotalCollateralDeposit": "30.742051343585763319",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-14T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.968835624359445866",
+        "userTotalCollateralDeposit": "30.968835624359445866",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-15T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.495670473521452992",
+        "userTotalCollateralDeposit": "30.495670473521452992",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-16T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.495730509597816631",
+        "userTotalCollateralDeposit": "30.495730509597816631",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-17T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.495793626686534968",
+        "userTotalCollateralDeposit": "30.495793626686534968",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-18T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.357328921751842316",
+        "userTotalCollateralDeposit": "30.357328921751842316",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-19T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.180999782663438383",
+        "userTotalCollateralDeposit": "30.180999782663438383",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-20T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.671066609986937137",
+        "userTotalCollateralDeposit": "30.671066609986937137",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-21T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.738664125991558451",
+        "userTotalCollateralDeposit": "30.738664125991558451",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-22T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.867131584098958969",
+        "userTotalCollateralDeposit": "30.867131584098958969",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.867172321626282165",
+        "userTotalCollateralDeposit": "30.867172321626282165",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.867206060497260304",
+        "userTotalCollateralDeposit": "30.867206060497260304",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-25T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "30.867240710027546337",
+        "userTotalCollateralDeposit": "30.867240710027546337",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-26T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "31.41214427470172893",
+        "userTotalCollateralDeposit": "31.41214427470172893",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-27T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "31.38378813193917494",
+        "userTotalCollateralDeposit": "31.38378813193917494",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-28T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "31.645396493587690788",
+        "userTotalCollateralDeposit": "31.645396493587690788",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-29T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "31.769763544304573019",
+        "userTotalCollateralDeposit": "31.769763544304573019",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-30T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "31.769797832145878417",
+        "userTotalCollateralDeposit": "31.769797832145878417",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-05-31T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "31.769831014210922631",
+        "userTotalCollateralDeposit": "31.769831014210922631",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-01T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "320.51984970902892716",
+        "userTotalCollateralDeposit": "320.51984970902892716",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-02T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "322.13446026336681013",
+        "userTotalCollateralDeposit": "322.13446026336681013",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-03T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "321.1637862953994346",
+        "userTotalCollateralDeposit": "321.1637862953994346",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-04T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "319.61483433647689963",
+        "userTotalCollateralDeposit": "319.61483433647689963",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-05T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "304.40293924894469583",
+        "userTotalCollateralDeposit": "304.40293924894469583",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-06T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "304.40334670702092715",
+        "userTotalCollateralDeposit": "304.40334670702092715",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-07T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "304.40376932517114067",
+        "userTotalCollateralDeposit": "304.40376932517114067",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-08T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "309.04844015333984334",
+        "userTotalCollateralDeposit": "309.04844015333984334",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-09T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "305.54844850213236655",
+        "userTotalCollateralDeposit": "305.54844850213236655",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-10T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "299.41556605106857619",
+        "userTotalCollateralDeposit": "299.41556605106857619",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-11T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "309.28507491422982215",
+        "userTotalCollateralDeposit": "309.28507491422982215",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-12T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "311.48896072002184091",
+        "userTotalCollateralDeposit": "311.48896072002184091",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-13T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "311.48948153992460273",
+        "userTotalCollateralDeposit": "311.48948153992460273",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-14T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "311.49000704075958695",
+        "userTotalCollateralDeposit": "311.49000704075958695",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-15T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "320.93885807130081071",
+        "userTotalCollateralDeposit": "320.93885807130081071",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-16T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "314.99172303178113606",
+        "userTotalCollateralDeposit": "314.99172303178113606",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-17T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "316.41221754406580151",
+        "userTotalCollateralDeposit": "316.41221754406580151",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-19T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2156.8695760480002686",
+        "userTotalCollateralDeposit": "2156.8695760480002686",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-20T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2156.8695760480002686",
+        "userTotalCollateralDeposit": "2156.8695760480002686",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-21T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2156.8695760480002686",
+        "userTotalCollateralDeposit": "2156.8695760480002686",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-22T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2144.3796090136002686",
+        "userTotalCollateralDeposit": "2144.3796090136002686",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2031.8356049832",
+        "userTotalCollateralDeposit": "2031.8356049832",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2183.01239890575",
+        "userTotalCollateralDeposit": "2183.01239890575",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-25T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2214.0150372812",
+        "userTotalCollateralDeposit": "2214.0150372812",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-26T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2368.0698314209",
+        "userTotalCollateralDeposit": "2368.0698314209",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-27T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2368.0698314209",
+        "userTotalCollateralDeposit": "2368.0698314209",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-28T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2368.0698314209",
+        "userTotalCollateralDeposit": "2368.0698314209",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-29T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2443.9715671557",
+        "userTotalCollateralDeposit": "2443.9715671557",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-06-30T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2015.09459850165",
+        "userTotalCollateralDeposit": "2015.09459850165",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-01T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "1996.2799733301",
+        "userTotalCollateralDeposit": "1996.2799733301",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-02T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2079.9005296481",
+        "userTotalCollateralDeposit": "2079.9005296481",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-03T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2079.9005296480996784",
+        "userTotalCollateralDeposit": "2079.9005296480996784",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-04T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2079.9005296481",
+        "userTotalCollateralDeposit": "2079.9005296481",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-05T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2079.9005296480996784",
+        "userTotalCollateralDeposit": "2079.9005296480996784",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-06T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2208.38673060595",
+        "userTotalCollateralDeposit": "2208.38673060595",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-07T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2095.0165532902",
+        "userTotalCollateralDeposit": "2095.0165532902",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-08T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2060.44266942795",
+        "userTotalCollateralDeposit": "2060.44266942795",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-09T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2026.19040309",
+        "userTotalCollateralDeposit": "2026.19040309",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-10T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2129.7512459146",
+        "userTotalCollateralDeposit": "2129.7512459146",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-11T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2129.7512459146",
+        "userTotalCollateralDeposit": "2129.7512459146",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-12T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2129.7512459146",
+        "userTotalCollateralDeposit": "2129.7512459146",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-13T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2025.8687855657",
+        "userTotalCollateralDeposit": "2025.8687855657",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-14T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2033.2659886246",
+        "userTotalCollateralDeposit": "2033.2659886246",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-15T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2112.0622820781",
+        "userTotalCollateralDeposit": "2112.0622820781",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-16T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "1947.87653592295",
+        "userTotalCollateralDeposit": "1947.87653592295",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-17T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "1947.3941096365",
+        "userTotalCollateralDeposit": "1947.3941096365",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-18T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2046.770290047",
+        "userTotalCollateralDeposit": "2046.770290047",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-19T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2046.770290047",
+        "userTotalCollateralDeposit": "2046.770290047",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-20T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2208.517537575900338",
+        "userTotalCollateralDeposit": "2208.517537575900338",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-21T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2401.8705691047",
+        "userTotalCollateralDeposit": "2401.8705691047",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-22T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2237.757113148",
+        "userTotalCollateralDeposit": "2237.757113148",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2171.4189209438",
+        "userTotalCollateralDeposit": "2171.4189209438",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2184.5461512413",
+        "userTotalCollateralDeposit": "2184.5461512413",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-25T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2184.5461512413",
+        "userTotalCollateralDeposit": "2184.5461512413",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-26T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2184.5461512413",
+        "userTotalCollateralDeposit": "2184.5461512413",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-27T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2375.87830809",
+        "userTotalCollateralDeposit": "2375.87830809",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-28T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2409.8937793017",
+        "userTotalCollateralDeposit": "2409.8937793017",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-29T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2293.16513488365",
+        "userTotalCollateralDeposit": "2293.16513488365",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-30T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2409.1443177003",
+        "userTotalCollateralDeposit": "2409.1443177003",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-07-31T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2340.75594657255",
+        "userTotalCollateralDeposit": "2340.75594657255",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-01T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2340.75594657255",
+        "userTotalCollateralDeposit": "2340.75594657255",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-02T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2340.75594657255",
+        "userTotalCollateralDeposit": "2340.75594657255",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-03T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2261.6877476248501499",
+        "userTotalCollateralDeposit": "2261.6877476248501499",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-04T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2372.7954300324",
+        "userTotalCollateralDeposit": "2372.7954300324",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-05T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2367.5491988226",
+        "userTotalCollateralDeposit": "2367.5491988226",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-06T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2419.2620493192",
+        "userTotalCollateralDeposit": "2419.2620493192",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-07T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2497.2060558648",
+        "userTotalCollateralDeposit": "2497.2060558648",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-08T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2497.2060558648",
+        "userTotalCollateralDeposit": "2497.2060558648",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-09T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2497.2060558648",
+        "userTotalCollateralDeposit": "2497.2060558648",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-10T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2512.5700186935",
+        "userTotalCollateralDeposit": "2512.5700186935",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-11T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2667.7085701833",
+        "userTotalCollateralDeposit": "2667.7085701833",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-12T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2671.830608991",
+        "userTotalCollateralDeposit": "2671.830608991",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-13T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2832.77748789165",
+        "userTotalCollateralDeposit": "2832.77748789165",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-14T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2681.9483406099",
+        "userTotalCollateralDeposit": "2681.9483406099",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-15T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2681.9483406099",
+        "userTotalCollateralDeposit": "2681.9483406099",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-16T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2681.9483406099",
+        "userTotalCollateralDeposit": "2681.9483406099",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-17T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2796.2412348234",
+        "userTotalCollateralDeposit": "2796.2412348234",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-18T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2684.75882161515",
+        "userTotalCollateralDeposit": "2684.75882161515",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-19T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2944.6346319006",
+        "userTotalCollateralDeposit": "2944.6346319006",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-20T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3134.06105165445",
+        "userTotalCollateralDeposit": "3134.06105165445",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-21T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3296.1321229572003747",
+        "userTotalCollateralDeposit": "3296.1321229572003747",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-22T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3296.1321229572003747",
+        "userTotalCollateralDeposit": "3296.1321229572003747",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3296.1321229572003747",
+        "userTotalCollateralDeposit": "3296.1321229572003747",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3282.641814132",
+        "userTotalCollateralDeposit": "3282.641814132",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-25T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3449.7717512442",
+        "userTotalCollateralDeposit": "3449.7717512442",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-26T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3365.8320518874",
+        "userTotalCollateralDeposit": "3365.8320518874",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-27T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3534.0861814017",
+        "userTotalCollateralDeposit": "3534.0861814017",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-28T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3264.6547356984",
+        "userTotalCollateralDeposit": "3264.6547356984",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-29T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3264.6547356984",
+        "userTotalCollateralDeposit": "3264.6547356984",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-30T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3264.6547356984",
+        "userTotalCollateralDeposit": "3264.6547356984",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-08-31T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3579.99070448745",
+        "userTotalCollateralDeposit": "3579.99070448745",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-01T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3352.7164738629",
+        "userTotalCollateralDeposit": "3352.7164738629",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-02T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3321.80118280515",
+        "userTotalCollateralDeposit": "3321.80118280515",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3867.40922862435",
+        "userTotalCollateralDeposit": "3867.40922862435",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-04T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3824.31518654385",
+        "userTotalCollateralDeposit": "3824.31518654385",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-05T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3824.31518654385",
+        "userTotalCollateralDeposit": "3824.31518654385",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-06T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3824.31518654385",
+        "userTotalCollateralDeposit": "3824.31518654385",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-07T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3824.31518654385",
+        "userTotalCollateralDeposit": "3824.31518654385",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-08T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3603.4113795312",
+        "userTotalCollateralDeposit": "3603.4113795312",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-09T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3483.1227925065",
+        "userTotalCollateralDeposit": "3483.1227925065",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-10T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3385.6927843245",
+        "userTotalCollateralDeposit": "3385.6927843245",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-11T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3396.9347083455",
+        "userTotalCollateralDeposit": "3396.9347083455",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-12T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3396.9347083455",
+        "userTotalCollateralDeposit": "3396.9347083455",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-13T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3396.9347083455",
+        "userTotalCollateralDeposit": "3396.9347083455",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-14T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3649.1285372166",
+        "userTotalCollateralDeposit": "3649.1285372166",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-15T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3235.0510024431",
+        "userTotalCollateralDeposit": "3235.0510024431",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-16T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3020.14288824165",
+        "userTotalCollateralDeposit": "3020.14288824165",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-17T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3188.02228695525",
+        "userTotalCollateralDeposit": "3188.02228695525",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-18T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3441.5276736288",
+        "userTotalCollateralDeposit": "3441.5276736288",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-19T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3441.5276736288",
+        "userTotalCollateralDeposit": "3441.5276736288",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-20T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3441.5276736288",
+        "userTotalCollateralDeposit": "3441.5276736288",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-21T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3540.0818742129",
+        "userTotalCollateralDeposit": "3540.0818742129",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-22T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3542.7049898178",
+        "userTotalCollateralDeposit": "3542.7049898178",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3433.6583268141",
+        "userTotalCollateralDeposit": "3433.6583268141",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3483.4975233072",
+        "userTotalCollateralDeposit": "3483.4975233072",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-25T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3332.1062798244",
+        "userTotalCollateralDeposit": "3332.1062798244",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-26T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3332.1062798244",
+        "userTotalCollateralDeposit": "3332.1062798244",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-27T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3332.1062798244",
+        "userTotalCollateralDeposit": "3332.1062798244",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-28T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3213.6913468032",
+        "userTotalCollateralDeposit": "3213.6913468032",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-29T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3137.9957250618",
+        "userTotalCollateralDeposit": "3137.9957250618",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-09-30T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3081.59873955645",
+        "userTotalCollateralDeposit": "3081.59873955645",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-01T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3108.7667226072",
+        "userTotalCollateralDeposit": "3108.7667226072",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-02T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3043.75092868575",
+        "userTotalCollateralDeposit": "3043.75092868575",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-03T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3043.75092868575",
+        "userTotalCollateralDeposit": "3043.75092868575",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-04T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3043.75092868575",
+        "userTotalCollateralDeposit": "3043.75092868575",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-05T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3127.1285318415",
+        "userTotalCollateralDeposit": "3127.1285318415",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-06T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3152.6102262891",
+        "userTotalCollateralDeposit": "3152.6102262891",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-07T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3028.9490620581",
+        "userTotalCollateralDeposit": "3028.9490620581",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-08T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3027.63750425565",
+        "userTotalCollateralDeposit": "3027.63750425565",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-09T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3166.8499967156996253",
+        "userTotalCollateralDeposit": "3166.8499967156996253",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-10T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3166.8499967156996253",
+        "userTotalCollateralDeposit": "3166.8499967156996253",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-11T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3166.8499967156996253",
+        "userTotalCollateralDeposit": "3166.8499967156996253",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-12T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3141.7430330688",
+        "userTotalCollateralDeposit": "3141.7430330688",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-13T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3161.2290347052",
+        "userTotalCollateralDeposit": "3161.2290347052",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-14T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "2983.41926977305",
+        "userTotalCollateralDeposit": "2983.41926977305",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-15T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3260.5326968907",
+        "userTotalCollateralDeposit": "3260.5326968907",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-16T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3080.6619125547",
+        "userTotalCollateralDeposit": "3080.6619125547",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-17T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3080.6619125547",
+        "userTotalCollateralDeposit": "3080.6619125547",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-18T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3080.6619125547",
+        "userTotalCollateralDeposit": "3080.6619125547",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-19T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3047.8729674934503747",
+        "userTotalCollateralDeposit": "3047.8729674934503747",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-20T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3219.3123088137",
+        "userTotalCollateralDeposit": "3219.3123088137",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-21T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3365.26995568635",
+        "userTotalCollateralDeposit": "3365.26995568635",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-22T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "0",
+        "userTotalDeposit": "3246.10556106375",
+        "userTotalCollateralDeposit": "3246.10556106375",
+        "loanToValue": "0"
+      }
+    },
+    {
+      "timestamp": "2026-10-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.03279105989211482",
+        "userTotalDeposit": "3218.937578013",
+        "userTotalCollateralDeposit": "3218.937578013",
+        "loanToValue": "0.18640709132057261119"
+      }
+    },
+    {
+      "timestamp": "2026-10-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.17020846019035901",
+        "userTotalDeposit": "3218.937578013",
+        "userTotalCollateralDeposit": "3218.937578013",
+        "loanToValue": "0.18644978161728320158"
+      }
+    },
+    {
+      "timestamp": "2026-10-25T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.24883023746577633",
+        "userTotalDeposit": "3218.937578013",
+        "userTotalCollateralDeposit": "3218.937578013",
+        "loanToValue": "0.18647420637712087117"
+      }
+    },
+    {
+      "timestamp": "2026-10-26T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.30299820867883972",
+        "userTotalDeposit": "2989.2275971839",
+        "userTotalCollateralDeposit": "2989.2275971839",
+        "loanToValue": "0.20082211162984511058"
+      }
+    },
+    {
+      "timestamp": "2026-10-27T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.42678843414756093",
+        "userTotalDeposit": "3058.1780645127",
+        "userTotalCollateralDeposit": "3058.1780645127",
+        "loanToValue": "0.19633480319590923183"
+      }
+    },
+    {
+      "timestamp": "2026-10-28T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.55655163797380565",
+        "userTotalDeposit": "3067.1716037295",
+        "userTotalCollateralDeposit": "3067.1716037295",
+        "loanToValue": "0.19580141877543871831"
+      }
+    },
+    {
+      "timestamp": "2026-10-29T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.55523076845764323",
+        "userTotalDeposit": "2996.7222131979",
+        "userTotalCollateralDeposit": "2996.7222131979",
+        "loanToValue": "0.20040403749254608812"
+      }
+    },
+    {
+      "timestamp": "2026-10-30T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.8778133050124326",
+        "userTotalDeposit": "2713.8004586694",
+        "userTotalCollateralDeposit": "2713.8004586694",
+        "loanToValue": "0.2214156208078865377"
+      }
+    },
+    {
+      "timestamp": "2026-10-31T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.94276733270913814",
+        "userTotalDeposit": "2713.8004586694",
+        "userTotalCollateralDeposit": "2713.8004586694",
+        "loanToValue": "0.2214395555181520644"
+      }
+    },
+    {
+      "timestamp": "2026-11-01T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.9319148415492925",
+        "userTotalDeposit": "2713.8004586694",
+        "userTotalCollateralDeposit": "2713.8004586694",
+        "loanToValue": "0.22143555651700031181"
+      }
+    },
+    {
+      "timestamp": "2026-11-02T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "600.98099983244634888",
+        "userTotalDeposit": "2701.4343422463",
+        "userTotalCollateralDeposit": "2701.4343422463",
+        "loanToValue": "0.22246737240066249038"
+      }
+    },
+    {
+      "timestamp": "2026-11-03T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "601.18562157917829971",
+        "userTotalDeposit": "2818.3503520647003747",
+        "userTotalCollateralDeposit": "2818.3503520647003747",
+        "loanToValue": "0.2133111737292542921"
+      }
+    },
+    {
+      "timestamp": "2026-11-04T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "601.31366494886271956",
+        "userTotalDeposit": "2855.0739705333",
+        "userTotalCollateralDeposit": "2855.0739705333",
+        "loanToValue": "0.21061228926287439961"
+      }
+    },
+    {
+      "timestamp": "2026-11-05T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "601.35840533666355078",
+        "userTotalDeposit": "2602.8801416622",
+        "userTotalCollateralDeposit": "2602.8801416622",
+        "loanToValue": "0.23103576523221538039"
+      }
+    },
+    {
+      "timestamp": "2026-11-06T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "601.47303859029312304",
+        "userTotalDeposit": "2540.86219414635",
+        "userTotalCollateralDeposit": "2540.86219414635",
+        "loanToValue": "0.23672005509624625592"
+      }
+    },
+    {
+      "timestamp": "2026-11-07T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "601.58420152316859402",
+        "userTotalDeposit": "2540.86219414635",
+        "userTotalCollateralDeposit": "2540.86219414635",
+        "loanToValue": "0.23676380517963588982"
+      }
+    },
+    {
+      "timestamp": "2026-11-08T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "601.67543227878107436",
+        "userTotalDeposit": "2540.86219414635",
+        "userTotalCollateralDeposit": "2540.86219414635",
+        "loanToValue": "0.23679971061198190928"
+      }
+    },
+    {
+      "timestamp": "2026-11-09T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "601.76139012703844604",
+        "userTotalDeposit": "2536.927520739",
+        "userTotalCollateralDeposit": "2536.927520739",
+        "loanToValue": "0.23720086017741137925"
+      }
+    },
+    {
+      "timestamp": "2026-11-10T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "601.94391960502822003",
+        "userTotalDeposit": "2435.56283914965",
+        "userTotalCollateralDeposit": "2435.56283914965",
+        "loanToValue": "0.24714776803508396629"
+      }
+    },
+    {
+      "timestamp": "2026-11-11T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "602.09505919138792836",
+        "userTotalDeposit": "2515.1931342984",
+        "userTotalCollateralDeposit": "2515.1931342984",
+        "loanToValue": "0.23938323104533251013"
+      }
+    },
+    {
+      "timestamp": "2026-11-12T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "602.23553068091561279",
+        "userTotalDeposit": "2390.0330468646",
+        "userTotalCollateralDeposit": "2390.0330468646",
+        "loanToValue": "0.25197790945651029809"
+      }
+    },
+    {
+      "timestamp": "2026-11-13T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "602.37236149185675905",
+        "userTotalDeposit": "2328.9519263505002248",
+        "userTotalCollateralDeposit": "2328.9519263505002248",
+        "loanToValue": "0.25864525354792640728"
+      }
+    },
+    {
+      "timestamp": "2026-11-14T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "602.53157551171901741",
+        "userTotalDeposit": "2328.9519263505002248",
+        "userTotalCollateralDeposit": "2328.9519263505002248",
+        "loanToValue": "0.25871361649610960526"
+      }
+    },
+    {
+      "timestamp": "2026-11-15T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "602.62819873524145431",
+        "userTotalDeposit": "2328.9519263505002248",
+        "userTotalCollateralDeposit": "2328.9519263505002248",
+        "loanToValue": "0.25875510435269831846"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "602.76912761639049959",
+        "userTotalDeposit": "2164.4451048432",
+        "userTotalCollateralDeposit": "2164.4451048432",
+        "loanToValue": "0.27848667830273164204"
+      }
+    },
+    {
+      "timestamp": "2026-11-17T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "602.88360004367822664",
+        "userTotalDeposit": "2046.4049026227",
+        "userTotalCollateralDeposit": "2046.4049026227",
+        "loanToValue": "0.29460621369261503918"
+      }
+    },
+    {
+      "timestamp": "2026-11-18T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "603.0196804426050028",
+        "userTotalDeposit": "1998.0646293324",
+        "userTotalCollateralDeposit": "1998.0646293324",
+        "loanToValue": "0.3018018894834687826"
+      }
+    },
+    {
+      "timestamp": "2026-11-19T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "603.17923707096317651",
+        "userTotalDeposit": "1944.66549023265",
+        "userTotalCollateralDeposit": "1944.66549023265",
+        "loanToValue": "0.31017120430249515346"
+      }
+    },
+    {
+      "timestamp": "2026-11-20T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "603.33072084955850911",
+        "userTotalDeposit": "1781.65759192815",
+        "userTotalCollateralDeposit": "1781.65759192815",
+        "loanToValue": "0.33863449609114869568"
+      }
+    },
+    {
+      "timestamp": "2026-11-21T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "603.40237549066909124",
+        "userTotalDeposit": "1781.65759192815",
+        "userTotalCollateralDeposit": "1781.65759192815",
+        "loanToValue": "0.33867471405527110365"
+      }
+    },
+    {
+      "timestamp": "2026-11-22T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "603.50291500855521208",
+        "userTotalDeposit": "1781.65759192815",
+        "userTotalCollateralDeposit": "1781.65759192815",
+        "loanToValue": "0.33873114438079583858"
+      }
+    },
+    {
+      "timestamp": "2026-11-23T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "603.65768183536634559",
+        "userTotalDeposit": "1923.4931999931",
+        "userTotalCollateralDeposit": "1923.4931999931",
+        "loanToValue": "0.31383406077938398774"
+      }
+    },
+    {
+      "timestamp": "2026-11-24T00:00:00.000Z",
+      "refreshedStats": {
+        "userTotalBorrow": "603.69225279755887807",
+        "userTotalDeposit": "1923.4931999931",
+        "userTotalCollateralDeposit": "1923.4931999931",
+        "loanToValue": "0.31385203378921456915"
+      }
+    }
+  ]
+}

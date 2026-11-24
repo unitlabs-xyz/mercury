@@ -38,7 +38,7 @@ export interface TradeReceipt {
 }
 
 export interface LoanLeg {
-  readonly kind: "borrow" | "repay" | "pledge" | "unpledge";
+  readonly kind: "borrow" | "repay" | "pledge" | "unpledge" | "liquidation";
   readonly usdAmount: string | null;
   readonly ticker: string | null;
   /** Collateral moved, as a person would write it: "0.02239976". */
@@ -53,8 +53,13 @@ export interface LoanReceipt {
   readonly borrowApy: string | null;
   readonly debtAfterUsd: string;
   readonly collateralAfterUsd: string;
-  /** The transaction opened the borrower's Kamino account, and Mercury paid its rent. */
+  /** The transaction opened the borrower's Kamino account: with Mercury paying its rent, unless `fromHistory`. */
   readonly openedAccount: boolean;
+  /**
+   * Read from the chain rather than recorded by Mercury: a linked wallet's
+   * loan, worked outside Mercury. Optional for the phone's older builds.
+   */
+  readonly fromHistory?: boolean;
   /** What closing the loan paid in interest. Null unless this closed it and the amount is known. */
   readonly interestPaidUsd: string | null;
 }
@@ -163,6 +168,8 @@ export interface LoanSource {
   readonly debtAfterUsd: Decimal;
   readonly collateralAfterUsd: Decimal;
   readonly openedAccount: boolean;
+  /** Every row of it was read from the chain, not recorded by Mercury. */
+  readonly fromHistory: boolean;
   /** The borrower's ledger before this transaction, oldest first. */
   readonly earlier: readonly LedgerRow[];
 }
@@ -197,6 +204,7 @@ export const loanReceipt = (s: LoanSource): LoanReceipt => {
     debtAfterUsd: micro(s.debtAfterUsd),
     collateralAfterUsd: micro(s.collateralAfterUsd),
     openedAccount: s.openedAccount,
+    fromHistory: s.fromHistory,
     interestPaidUsd: interest === null ? null : micro(interest),
   };
 };

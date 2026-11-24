@@ -44,6 +44,7 @@ const KIND: Record<string, EventKind> = {
   repay: "repay",
   pledge: "pledge",
   unpledge: "unpledge",
+  liquidation: "liquidation",
   loan_alert: "loan_alert",
   earn_deposit: "earn_deposit",
   earn_withdraw: "earn_withdraw",
@@ -73,6 +74,13 @@ const FLOW: Partial<Record<EventKind, "in" | "out">> = {
   repay: "out",
 };
 
+/**
+ * Rows with an amount but no direction: collateral Kamino sold to clear a debt.
+ * The shares left and the debt went down by what they fetched; no cash reached
+ * the holder or left them, so neither sign is true.
+ */
+const NO_DIRECTION = new Set(["liquidation"]);
+
 export const toEvent = (i: ActivityItem): Event => {
   const kind = KIND[i.kind] ?? "receive";
   return {
@@ -88,10 +96,15 @@ export const toEvent = (i: ActivityItem): Event => {
         ? null
         : Math.abs(Number(i.amountUsd)).toLocaleString("en-US", { style: "currency", currency: "USD" }),
     // Money moving within the account, to a basket or to Earn and back: no sign either way.
-    flow: INTERNAL.has(i.kind)
-      ? null
-      : (FLOW[kind] ??
-        (i.amountUsd === null || Number(i.amountUsd) === 0 ? null : Number(i.amountUsd) < 0 ? "out" : "in")),
+    flow:
+      INTERNAL.has(i.kind) || NO_DIRECTION.has(i.kind)
+        ? null
+        : (FLOW[kind] ??
+          (i.amountUsd === null || Number(i.amountUsd) === 0
+            ? null
+            : Number(i.amountUsd) < 0
+              ? "out"
+              : "in")),
     details: [],
     ...(i.txSignature ? { signature: i.txSignature } : {}),
     ...(i.mint ? { mint: i.mint } : {}),

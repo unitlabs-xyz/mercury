@@ -26,7 +26,7 @@ export type ReceiptDetail =
   | {
       readonly type: "loan";
       readonly legs: readonly {
-        readonly kind: "borrow" | "repay" | "pledge" | "unpledge";
+        readonly kind: "borrow" | "repay" | "pledge" | "unpledge" | "liquidation";
         readonly usdAmount: string | null;
         readonly ticker: string | null;
         readonly tokens: string | null;
@@ -35,6 +35,8 @@ export type ReceiptDetail =
       readonly debtAfterUsd: string;
       readonly collateralAfterUsd: string;
       readonly openedAccount: boolean;
+      /** Read from the chain: a loan worked outside Mercury. Absent from older servers. */
+      readonly fromHistory?: boolean;
       readonly interestPaidUsd: string | null;
     }
   | {
@@ -224,6 +226,7 @@ const loan = (d: Extract<ReceiptDetail, { type: "loan" }>): Body => {
   const borrow = leg("borrow");
   const repay = leg("repay");
   const unpledge = leg("unpledge");
+  const liquidation = leg("liquidation");
   const debt = n(d.debtAfterUsd) ?? 0;
   const collateral = n(d.collateralAfterUsd) ?? 0;
 
@@ -238,6 +241,13 @@ const loan = (d: Extract<ReceiptDetail, { type: "loan" }>): Body => {
           ? `All ${unpledge.ticker ?? "stock"}`
           : `${unpledge.tokens} ${unpledge.ticker ?? ""}`.trim(),
     });
+  if (liquidation)
+    facts.push({
+      label: "Sold by Kamino",
+      value: `${liquidation.tokens ?? "—"} ${liquidation.ticker ?? ""}`.trim(),
+      tone: "down",
+      tip: "Collateral Kamino sold to bring the loan back under its limit.",
+    });
   const apy = n(d.borrowApy);
   if (borrow && apy !== null)
     facts.push({
@@ -245,12 +255,19 @@ const loan = (d: Extract<ReceiptDetail, { type: "loan" }>): Body => {
       value: `${pct(apy * 100, 1)} a year`,
       tip: "Kamino's rate when this landed. It moves with demand, so today's can differ.",
     });
-  if (d.openedAccount)
+  if (d.openedAccount && d.fromHistory === true) facts.push({ label: "Loan", value: "Opened with this" });
+  else if (d.openedAccount)
     facts.push({
       label: "Account setup",
       value: "Covered by Mercury",
       tone: "up",
       tip: "Opening your borrowing account takes a one-time network deposit. Mercury paid it.",
+    });
+  if (d.fromHistory === true)
+    facts.push({
+      label: "Recorded",
+      value: "Found in history",
+      tip: "Done outside Mercury, and read from the chain when this wallet was linked.",
     });
 
   // Closing a loan is when its interest is paid, so that is where it is shown.

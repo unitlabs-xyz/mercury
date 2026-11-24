@@ -124,6 +124,13 @@ export const EVENT_ICON: Record<Event["kind"], ReactNode> = {
       <path d="M12 16.2V16.3" />
     </Glyph>
   ),
+  // Collateral Kamino sold to clear a debt: the alert's mark, in the falling red.
+  liquidation: (
+    <Glyph bg="var(--color-ds-down-chip)" ink="var(--color-ds-down)">
+      <path d="M12 7.5V13" />
+      <path d="M12 16.2V16.3" />
+    </Glyph>
+  ),
   // Earn's trend mark going in, as buying does; cash's arrow coming back, as receiving does.
   earn_deposit: (
     <Glyph bg="var(--color-ds-act-buy-bg)" ink="var(--color-ds-act-buy)">

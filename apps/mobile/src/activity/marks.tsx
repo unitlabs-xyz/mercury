@@ -15,6 +15,8 @@ const DIVIDEND = { bg: "#E4F3EC", ink: "#007242" };
 const BUY = { bg: "#E5F4F5", ink: "#007682" };
 const QUEUED = { bg: "#FDF3D9", ink: "#925A0A" };
 const INTEREST = { bg: "#E2F4E9", ink: "#007242" };
+/** The theme's `downTint` and `downDeep`: collateral Kamino sold. */
+const LIQUIDATED = { bg: "#FAEBE8", ink: "#B33D29" };
 
 const SEND_UP = (
   <>
@@ -55,6 +57,16 @@ const GLYPH: Record<EventKind, { tone: { bg: string; ink: string }; draw: ReactN
   repay: { tone: SEND, draw: SEND_UP },
   pledge: { tone: SEND, draw: BUY_TREND },
   unpledge: { tone: BUY, draw: BUY_TREND },
+  // Collateral taken to clear a debt: the alert's mark, in red.
+  liquidation: {
+    tone: LIQUIDATED,
+    draw: (
+      <>
+        <Path d="M12 7.5V13" />
+        <Path d="M12 16.2V16.3" />
+      </>
+    ),
+  },
   loan_alert: {
     tone: QUEUED,
     draw: (

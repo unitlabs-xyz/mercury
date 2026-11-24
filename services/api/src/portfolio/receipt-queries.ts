@@ -20,11 +20,11 @@ export interface ReceiptChain {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const LOAN_KINDS = ["borrow", "repay", "pledge", "unpledge"] as const;
+const LOAN_KINDS = ["borrow", "repay", "pledge", "unpledge", "liquidation"] as const;
 type LoanKind = (typeof LOAN_KINDS)[number];
 const isLoan = (kind: string): kind is LoanKind => (LOAN_KINDS as readonly string[]).includes(kind);
 /** A pledge-and-borrow pledges first; that is the order the transaction does them in. */
-const LEG_ORDER: Record<LoanKind, number> = { pledge: 0, borrow: 1, repay: 2, unpledge: 3 };
+const LEG_ORDER: Record<LoanKind, number> = { pledge: 0, borrow: 1, repay: 2, unpledge: 3, liquidation: 4 };
 
 const num = (v: string | null) => (v === null ? null : D(v));
 
@@ -218,6 +218,7 @@ async function loan(db: Db, owner: WalletOwner, signature: string): Promise<Rece
     debtAfterUsd: D(first.debtAfterUsd),
     collateralAfterUsd: D(first.collateralAfterUsd),
     openedAccount: opening?.txSignature === signature,
+    fromHistory: legs.every((l) => l.originSource === "chain"),
     earlier: earlier.map((r) => ({
       kind: r.kind,
       usdAmount: num(r.usdAmount),

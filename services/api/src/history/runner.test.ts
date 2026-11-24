@@ -7,6 +7,7 @@ import { mercuryWallet, testDb } from "../db/testing.js";
 import {
   historyEvents,
   historyJobs,
+  loanEvents,
   historyTxs,
   instruments,
   lots,
@@ -19,6 +20,8 @@ import type { Log } from "../log/index.js";
 import { RateLimited, REFUSAL_PAUSE_MS } from "./budget.js";
 import { queueHistory } from "./queue.js";
 import { PAST_GIVE_UP_AFTER, costPass, historyPass, listedMints, nextPassIn } from "./runner.js";
+import type { KaminoLoans } from "../lending/kamino-loans.js";
+import type { LendingPosition } from "../lending/ports.js";
 
 const ME = "Phantom1111111111111111111111111111111111111";
 const TSLAX = "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB";
@@ -147,6 +150,66 @@ describe("historyPass", () => {
     await expect(run(s.db, broken)()).rejects.toThrow("returned 500");
     expect(await s.job()).toMatchObject({ status: "queued", attempts: 1, runAfter: new Date(T0 + 60_000) });
     expect((await s.job()).lastError).toContain("returned 500");
+  });
+});
+
+describe("historyPass, with the wallet's loan", () => {
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const borrowed = {
+    signature: "L1",
+    at: new Date(T0 - 86_400_000),
+    action: "borrow" as const,
+    mint: USDC,
+    symbol: "USDC",
+    amount: D(200),
+    priceUsd: D(1),
+    valueUsd: D(200),
+    liquidation: false,
+  };
+  const loans = (txs: KaminoLoans["transactions"]): KaminoLoans => ({
+    transactions: txs,
+    days: async () => [],
+  });
+  const withLoan = (
+    db: Awaited<ReturnType<typeof seed>>["db"],
+    position: () => Promise<LendingPosition | null>,
+    kamino: KaminoLoans,
+  ) =>
+    historyPass({
+      db,
+      reader: { history: chain(), listedMints: async () => new Set([TSLAX]), laneBusy: () => false },
+      loan: { lending: { position }, loans: kamino, market: "Market", usdcMint: USDC },
+      now: () => T0,
+      log,
+    });
+
+  it("reads the loan's history after the tokens, and says how much it found", async () => {
+    const s = await seed();
+    await queueHistory(s.db, { walletId: s.walletId, userId: s.userId, now: new Date(T0) });
+    const pass = withLoan(
+      s.db,
+      async () => ({ obligation: "Obligation" }) as LendingPosition,
+      loans(async () => [borrowed]),
+    );
+    expect(await pass()).toBe("first read: 1 transactions, 1 events across 1 accounts, 1 loan events");
+    const [row] = await s.db.select().from(loanEvents).where(eq(loanEvents.walletId, s.walletId));
+    expect([row!.kind, row!.originSource]).toEqual(["borrow", "chain"]);
+  });
+
+  it("finishes the tokens' pass when the loan can't be read, and says why in the log", async () => {
+    const s = await seed();
+    await queueHistory(s.db, { walletId: s.walletId, userId: s.userId, now: new Date(T0) });
+    warned.length = 0;
+    const pass = withLoan(
+      s.db,
+      async () => {
+        throw new Error("rpc down");
+      },
+      loans(async () => [borrowed]),
+    );
+    expect(await pass()).toBe("first read: 1 transactions, 1 events across 1 accounts");
+    expect((await s.job()).status).toBe("read");
+    expect(warned).toHaveLength(1);
   });
 });
 

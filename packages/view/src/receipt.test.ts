@@ -115,6 +115,44 @@ const loanDetail = (over: Partial<Extract<ReceiptDetail, { type: "loan" }>> = {}
   ...over,
 });
 
+describe("receiptOf — a loan found in history", () => {
+  it("says the loan was opened with it, and found in history, never that Mercury paid for it", () => {
+    const r = receiptOf(
+      item({ kind: "pledge", title: "Added collateral", subtitle: "10 TSLA at $240.10", amountUsd: null }),
+      loanDetail({
+        legs: [{ kind: "pledge", usdAmount: null, ticker: "TSLA", tokens: "10" }],
+        borrowApy: null,
+        debtAfterUsd: "0",
+        collateralAfterUsd: "2401",
+        fromHistory: true,
+      }),
+    );
+    expect(r.facts.map((f) => [f.label, f.value])).toEqual([
+      ["Collateral added", "10 TSLA"],
+      ["Loan", "Opened with this"],
+      ["Recorded", "Found in history"],
+    ]);
+  });
+
+  it("says what Kamino sold to clear a debt, in red", () => {
+    const r = receiptOf(
+      item({
+        kind: "liquidation",
+        title: "Sold by Kamino",
+        subtitle: "1.5 TSLA at $200.00",
+        amountUsd: "300",
+      }),
+      loanDetail({
+        legs: [{ kind: "liquidation", usdAmount: "300", ticker: "TSLA", tokens: "1.5" }],
+        borrowApy: null,
+        openedAccount: false,
+        fromHistory: true,
+      }),
+    );
+    expect(r.facts[0]).toMatchObject({ label: "Sold by Kamino", value: "1.5 TSLA", tone: "down" });
+  });
+});
+
 describe("receiptOf — a loan", () => {
   it("shows a pledge-and-borrow as stock in and dollars out, from either of its rows", () => {
     const borrow = receiptOf(

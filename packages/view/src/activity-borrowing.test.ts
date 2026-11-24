@@ -43,9 +43,22 @@ describe("a loan in the feed", () => {
     expect(toEvent(row({ kind: "unpledge", title: "Withdrew 2.4 SPYx", amountUsd: null })).flow).toBeNull();
   });
 
-  it("files everything about the loan under one chip, warnings included", () => {
+  /* Collateral sold to clear a debt: shares left, no cash came back to the holder. */
+  it("shows what Kamino sold as its own kind, with no direction: the shares went to clear the debt", () => {
+    const e = toEvent(
+      row({
+        kind: "liquidation",
+        title: "Sold by Kamino",
+        subtitle: "1.5 TSLA at $200.00",
+        amountUsd: "300",
+      }),
+    );
+    expect([e.kind, e.flow, KIND_LABEL[e.kind]]).toEqual(["liquidation", null, "Sold by Kamino"]);
+  });
+
+  it("files everything about the loan under one chip, liquidations and warnings included", () => {
     const borrowing = GROUPS.find((g) => g.key === "borrowing");
-    expect(borrowing?.kinds).toEqual(["borrow", "repay", "pledge", "unpledge", "loan_alert"]);
+    expect(borrowing?.kinds).toEqual(["borrow", "repay", "pledge", "unpledge", "liquidation", "loan_alert"]);
   });
 
   it("keeps them out of Trades, which is about buying and selling", () => {

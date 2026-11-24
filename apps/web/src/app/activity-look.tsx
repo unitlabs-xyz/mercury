@@ -19,6 +19,8 @@ export const LOOK: Record<EventKind, { icon: ReactNode; tone: string }> = {
   // Collateral, not money: a lock going on and coming off.
   pledge: { icon: <Lock className="size-4" />, tone: "bg-chip text-ink-soft" },
   unpledge: { icon: <Lock className="size-4" />, tone: "bg-up-tint text-up-deep" },
+  // Collateral taken to clear a debt: the one loan row that is a loss, so the red tint and the alert mark.
+  liquidation: { icon: <Alert className="size-4" />, tone: "bg-down-tint text-down-deep" },
   // The only row in the feed that is asking for something to be done.
   loan_alert: { icon: <Alert className="size-4" />, tone: "bg-warn-tint text-warn" },
   // Earn's own mark going in, as on its button; cash's arrow coming back.

@@ -8,6 +8,7 @@ import { RateLimited, REFUSAL_PAUSE_MS } from "./budget.js";
 import { claimHistoryJob, deferHistoryPass, failHistoryPass, finishHistoryPass } from "./queue.js";
 import { GiveWay, readWallet, type ReaderDeps } from "./reader.js";
 import { costWallet, walletToCost, type CostDeps } from "./cost.js";
+import { readLoanHistory, type LoanHistoryDeps } from "./loan.js";
 
 /**
  * When a wallet's next later pass is due, by how recently anyone looked at
@@ -20,6 +21,8 @@ export const nextPassIn = (lastViewedAt: Date | null, now: number): number =>
 export interface HistoryRunDeps {
   readonly db: Db;
   readonly reader: Omit<ReaderDeps, "db">;
+  /** The wallet's Kamino loan, read with its tokens. Absent, a pass reads tokens only. */
+  readonly loan?: Omit<LoanHistoryDeps, "db">;
   readonly now?: () => number;
   readonly log: Log;
 }
@@ -66,9 +69,14 @@ export const historyPass = (deps: HistoryRunDeps) => async (): Promise<string | 
         "history read stopped at its cap on an account that never went to zero",
       );
     }
+    const loan = await loanPass(deps, {
+      userId: job.userId,
+      walletId: job.walletId,
+      address: wallet.address,
+    });
     const first = job.status === "running";
-    if (!first && r.transactions === 0) return null;
-    return `${first ? "first read" : "later pass"}: ${r.transactions} transactions, ${r.events} events across ${r.accounts} accounts`;
+    if (!first && r.transactions === 0 && loan === 0) return null;
+    return `${first ? "first read" : "later pass"}: ${r.transactions} transactions, ${r.events} events across ${r.accounts} accounts${loan > 0 ? `, ${loan} loan events` : ""}`;
   } catch (error: unknown) {
     if (error instanceof RateLimited || error instanceof GiveWay) {
       await deferHistoryPass(deps.db, {
@@ -81,6 +89,28 @@ export const historyPass = (deps: HistoryRunDeps) => async (): Promise<string | 
     }
     await failHistoryPass(deps.db, { walletId: job.walletId, error: errorLine(error), now: new Date(now()) });
     throw error;
+  }
+};
+
+/**
+ * The wallet's loan history, after its tokens. Best effort: a loan that cannot
+ * be read now is read on the next pass, and never holds up the wallet's P&L,
+ * which waits only for its tokens. Returns the rows written.
+ */
+const loanPass = async (
+  deps: HistoryRunDeps,
+  wallet: { readonly userId: string; readonly walletId: string; readonly address: string },
+): Promise<number> => {
+  if (deps.loan === undefined) return 0;
+  try {
+    const r = await readLoanHistory({ ...deps.loan, db: deps.db }, wallet);
+    return r.kind === "read" ? r.written : 0;
+  } catch (error: unknown) {
+    deps.log.warn(
+      { userId: wallet.userId, walletId: wallet.walletId, err: errorLine(error) },
+      "could not read the loan's history; trying again next pass",
+    );
+    return 0;
   }
 };
 
