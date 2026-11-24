@@ -284,3 +284,45 @@ describe("POST /v1/move/prepare", () => {
     expect([status, body.error.code]).toEqual([409, "wallet_pending"]);
   });
 });
+
+describe("GET /v1/move/outside-baskets", () => {
+  it("lists the linked wallet's baskets made outside Mercury, with what each holds", async () => {
+    const w = await world();
+    let askedFor: unknown;
+    const app = appWith(w, {
+      ...w.deps,
+      outside: async (wallet) => {
+        askedFor = wallet;
+        return [
+          {
+            address: "Basket1",
+            valueUsd: D("470.004"),
+            holdings: [
+              { mint: NVDAX, symbol: "NVDAx", ticker: "NVDA", amount: D("1.5"), valueUsd: D("450") },
+            ],
+          },
+        ];
+      },
+    });
+    const res = await app.request("/v1/move/outside-baskets");
+    expect(await res.json()).toEqual({
+      baskets: [
+        {
+          address: "Basket1",
+          valueUsd: "470",
+          holdings: [{ mint: NVDAX, symbol: "NVDAx", ticker: "NVDA", amount: "1.5", valueUsd: "450" }],
+        },
+      ],
+    });
+    expect(askedFor).toEqual({ userId: "user-1", walletId: "w-phantom", address: w.phantom.address });
+  });
+
+  it("is only for a linked wallet, and lists nothing where nothing looks", async () => {
+    const w = await world();
+    const mercury = await appWith(w, w.deps, { all: false, wallets: [w.MERCURY] }).request(
+      "/v1/move/outside-baskets",
+    );
+    expect(mercury.status).toBe(400);
+    expect(await (await appWith(w).request("/v1/move/outside-baskets")).json()).toEqual({ baskets: [] });
+  });
+});

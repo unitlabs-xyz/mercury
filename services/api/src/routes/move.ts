@@ -13,6 +13,7 @@ import { buildMove } from "../moves/build.js";
 import { planMove } from "../moves/plan.js";
 import type { MoveSends } from "../moves/sends.js";
 import type { Movable } from "../moves/queries.js";
+import type { OutsideBasket } from "../baskets/outside.js";
 
 /** Native SOL is priced under the wrapped-SOL mint. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -30,6 +31,15 @@ export interface MoveDeps {
   /** Absent, there is no relayer to pay for a move, and none is offered. */
   readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
   readonly sends: Pick<MoveSends, "remember">;
+  /**
+   * A linked wallet's baskets made outside Mercury, found on the chain.
+   * Absent, none are looked for.
+   */
+  readonly outside?: (wallet: {
+    readonly userId: string;
+    readonly walletId: string;
+    readonly address: string;
+  }) => Promise<readonly OutsideBasket[]>;
   readonly now?: () => Date;
 }
 
@@ -96,6 +106,37 @@ export function moveRoutes(deps: MoveDeps): Hono {
           amount: toWire(D(t.amountRaw.toString()).div(D(10).pow(t.decimals))),
         };
       }),
+    });
+  });
+
+  /**
+   * The linked wallet's baskets made outside Mercury: their value and what
+   * they hold, so the page can show them and walk the person through
+   * bringing them in. Read only: Mercury can't move them itself.
+   */
+  app.get("/v1/move/outside-baskets", async (c) => {
+    const writer = writerOf(c);
+    if (writer === null || writer.isPrimary) {
+      return c.json(fail("wallet_mercury", "Choose a linked wallet to look for its baskets."), 400);
+    }
+    if (deps.outside === undefined) return c.json({ baskets: [] });
+    const baskets = await deps.outside({
+      userId: c.get("identity").userId,
+      walletId: writer.id,
+      address: writer.address,
+    });
+    return c.json({
+      baskets: baskets.map((b) => ({
+        address: b.address,
+        valueUsd: toWire(b.valueUsd.toDecimalPlaces(2)),
+        holdings: b.holdings.map((h) => ({
+          mint: h.mint,
+          symbol: h.symbol,
+          ticker: h.ticker,
+          amount: toWire(h.amount),
+          valueUsd: toWire(h.valueUsd.toDecimalPlaces(2)),
+        })),
+      })),
     });
   });
 

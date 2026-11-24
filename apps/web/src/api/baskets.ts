@@ -258,14 +258,33 @@ export const useBasketRebalanceAction = (slug: string) => {
 };
 
 /** Prepare first so the review sheet shows the exact assets and recipient before signing. */
-export const useBasketExitAction = (slug: string) => {
+/**
+ * Whether what the wallet is about to sign pays out to `address` and nowhere
+ * else: the review shown, the message signed and the portfolio all agree.
+ * Checked before every exit signature, so a wallet never signs a payout to an
+ * address nobody chose.
+ */
+export const paysOutTo = (
+  prepared: Pick<PreparedBasketExit, "recipientAccountId" | "portfolioId" | "message">,
+  address: string,
+): boolean =>
+  prepared.recipientAccountId === `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${address}` &&
+  prepared.message.recipientAccountId === prepared.recipientAccountId &&
+  prepared.message.portfolioId === prepared.portfolioId;
+
+export const useBasketExitAction = (
+  slug: string,
+  /** A move: pay out in kind to the person's Mercury wallet, at this address, instead of to the owner. */
+  toMercury?: string,
+) => {
   const qc = useQueryClient();
   // The basket's owner approves: the Mercury wallet in Mercury, a linked wallet in its own pop-up.
   const signer = useTransactionSigner();
   const path = `/v1/basket-templates/${encodeURIComponent(slug)}/exit`;
+  const query = toMercury === undefined ? "" : "?to=mercury";
   const prepare = useMutation({
     mutationFn: ({ mode, assets }: { mode: BasketExitMode; assets?: BasketExitAsset[] }) =>
-      apiFetch<PreparedBasketExit>(`${path}/${mode}/prepare`, {
+      apiFetch<PreparedBasketExit>(`${path}/${mode}/prepare${query}`, {
         method: "POST",
         ...(assets ? { body: JSON.stringify({ assets }) } : {}),
       }),
@@ -273,11 +292,8 @@ export const useBasketExitAction = (slug: string) => {
   const submit = useMutation({
     mutationFn: async (prepared: PreparedBasketExit) => {
       if (signer.address === null) throw new Error("Your Solana wallet is unavailable.");
-      if (
-        prepared.recipientAccountId !== `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${signer.address}` ||
-        prepared.message.recipientAccountId !== prepared.recipientAccountId ||
-        prepared.message.portfolioId !== prepared.portfolioId
-      )
+      // Paid out where it was asked to go, and nowhere else: the owner, or the Mercury wallet for a move.
+      if (!paysOutTo(prepared, toMercury ?? signer.address))
         throw new Error("Withdrawal destination changed. Review the exit again.");
       if (Date.parse(prepared.expiresAt) <= Date.now() + 5_000)
         throw new Error("Withdrawal review expired. Prepare it again.");

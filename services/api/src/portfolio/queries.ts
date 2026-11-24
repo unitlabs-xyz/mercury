@@ -1,12 +1,20 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, max, sql, sum } from "drizzle-orm";
 import { D, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
-import { activities, instruments, lots, portfolioSnapshots, positions, tokens } from "../db/schema.js";
+import {
+  activities,
+  instruments,
+  lots,
+  portfolioSnapshots,
+  positions,
+  tokens,
+  wallets,
+} from "../db/schema.js";
 import type { EstimateSource } from "@mercury/types";
 import { USDC_MINT } from "@mercury/chain";
 import type { HoldingRow } from "../routes/portfolio.js";
 import type { Flow, Reading } from "./history.js";
-import type { BasketMovement, InKindExit } from "./basket-basis.js";
+import { basketBases, type BasketMovement, type InKindExit } from "./basket-basis.js";
 import type { WalletOwner } from "../wallets/active.js";
 
 /**
@@ -250,17 +258,57 @@ export async function readBasketMovements(
       ),
     );
 
+  /*
+   * In-kind exits by basket, wherever the shares landed: a linked wallet's
+   * basket moved into the Mercury wallet is written in the Mercury wallet's
+   * feed, and the basket it left must still know something left in kind.
+   */
+  const ownBaskets = [...new Set(rows.map((r) => r.portfolioId!))];
+  const exitedInKind =
+    ownBaskets.length === 0
+      ? []
+      : await db
+          .selectDistinct({ portfolioId: activities.basketPortfolioId })
+          .from(activities)
+          .where(
+            and(
+              eq(activities.userId, owner.userId),
+              eq(activities.kind, "withdraw_in_kind"),
+              inArray(activities.basketPortfolioId, ownBaskets),
+            ),
+          );
+
   const movements: BasketMovement[] = [];
-  const inKindExits: InKindExit[] = [];
+  const inKindExits: InKindExit[] = exitedInKind.map((r) => ({ portfolioId: r.portfolioId! }));
   for (const row of rows) {
     const portfolioId = row.portfolioId!;
-    if (row.kind === "withdraw_in_kind") {
-      inKindExits.push({ portfolioId });
-      continue;
-    }
+    if (row.kind === "withdraw_in_kind") continue;
     const inward = BASKET_INWARD[row.kind];
     if (inward === undefined || row.amountUsd === null) continue;
     movements.push({ portfolioId, amountUsd: D(row.amountUsd), inward });
   }
   return { movements, inKindExits };
+}
+
+/**
+ * What went into one basket and came back out, in dollars, for the wallet
+ * that owns it: its net funding, which exited shares carry a split of. Null
+ * when something already left it in kind, which no dollar figure records, or
+ * when the owner is not one of this person's wallets.
+ */
+export async function basketNetFunding(
+  db: Db,
+  userId: string,
+  ownerAddress: string,
+  portfolioId: string,
+): Promise<Decimal | null> {
+  const [wallet] = await db
+    .select({ id: wallets.id })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.address, ownerAddress)))
+    .limit(1);
+  if (wallet === undefined) return null;
+  const { movements, inKindExits } = await readBasketMovements(db, { userId, walletId: wallet.id });
+  const basis = basketBases(movements, inKindExits).get(portfolioId);
+  return basis === undefined || !basis.isComplete ? null : basis.investedUsd;
 }

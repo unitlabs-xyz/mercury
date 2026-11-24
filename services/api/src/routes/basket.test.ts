@@ -144,6 +144,8 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
     owner,
     "in_kind",
     [{ assetId: "solana:asset", amountRaw: "1" }],
+    // Paid out to the owner itself.
+    owner,
   ]);
 });
 
@@ -216,5 +218,74 @@ describe("baskets for the wallet chosen", () => {
     );
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "wallet_all" } });
+  });
+});
+
+describe("moving a linked wallet's basket into the Mercury wallet", () => {
+  const SOL = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+  const PHANTOM = actingLinked("PhantomWallet", { id: "w-phantom" });
+  const MERCURY = actingAs("MercuryWallet", { id: "w-mercury" });
+  const appFor = (service: BasketService, chosen = PHANTOM) =>
+    basketRoutes(service, async (c, next) => {
+      c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "MercuryWallet" });
+      c.set("acting", { all: false, wallets: [chosen] });
+      await next();
+    });
+  const message = (recipientAccountId: string) => ({
+    portfolioId: "p-1",
+    recipientAccountId,
+    assets: [{ assetId: "solana:asset", amountRaw: "1" }],
+    nonce: `0x${"a".repeat(64)}`,
+    expiresAt: 4_000_000_000,
+  });
+
+  it("prepares the exit paid out to the person's Mercury wallet, the linked wallet still the owner", async () => {
+    let args: unknown[] = [];
+    const service = {
+      prepareExit: async (...a: unknown[]) => {
+        args = a;
+        throw new Error("stop");
+      },
+    } as unknown as BasketService;
+    await appFor(service).request("/v1/basket-templates/mag7/exit/in_kind/prepare?to=mercury", {
+      method: "POST",
+    });
+    expect([args[1], args[4]]).toEqual([`${SOL}:PhantomWallet`, `${SOL}:MercuryWallet`]);
+  });
+
+  it("refuses a move from the Mercury wallet into itself, and anywhere but the Mercury wallet", async () => {
+    const service = { prepareExit: async () => ({}) } as unknown as BasketService;
+    const self = await appFor(service, MERCURY).request(
+      "/v1/basket-templates/mag7/exit/in_kind/prepare?to=mercury",
+      {
+        method: "POST",
+      },
+    );
+    expect(self.status).toBe(400);
+    const elsewhere = await appFor(service).request(
+      "/v1/basket-templates/mag7/exit/in_kind/prepare?to=Attacker",
+      {
+        method: "POST",
+      },
+    );
+    expect(elsewhere.status).toBe(400);
+  });
+
+  it("submits a signed move to the Mercury wallet, and treats any other recipient as the owner, which then fails the terms", async () => {
+    const recipients: unknown[] = [];
+    const service = {
+      submitExit: async (...a: unknown[]) => {
+        recipients.push(a[7]);
+        throw new Error("stop");
+      },
+    } as unknown as BasketService;
+    const app = appFor(service);
+    for (const to of [`${SOL}:MercuryWallet`, `${SOL}:AttackerWallet`]) {
+      await app.request("/v1/basket-templates/mag7/exit/in_kind", {
+        method: "POST",
+        body: JSON.stringify({ message: message(to), signature: "sig" }),
+      });
+    }
+    expect(recipients).toEqual([`${SOL}:MercuryWallet`, `${SOL}:PhantomWallet`]);
   });
 });

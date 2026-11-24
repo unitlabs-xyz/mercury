@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { D, type Decimal } from "@mercury/core";
 import { BasketService } from "../service.js";
 import { BasketFundingPreflightError, type BasketProvider, type BasketStore } from "../deps.js";
 import type { BasketTemplate } from "../primitives.js";
@@ -739,4 +740,145 @@ it("does not submit a withdrawal when its durable intent cannot be saved", async
     "db unavailable",
   );
   expect(submitted).toBe(0);
+});
+
+describe("moving a linked wallet's basket into the Mercury wallet", () => {
+  const SOL = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+  const owner = `${SOL}:PhantomWa11et1111111111111111111111111111111`;
+  const mercury = `${SOL}:MercuryWa11et111111111111111111111111111111`;
+  const asset = (mint: string) => `${SOL}/spl:${mint}`;
+  const [TSLAX, NVDAX] = ["TSLAxMint", "NVDAxMint"];
+  const message = (recipientAccountId: string, assets = [{ assetId: asset(TSLAX), amountRaw: "100" }]) => ({
+    portfolioId: "p-1",
+    recipientAccountId,
+    assets,
+    nonce: `0x${"b".repeat(64)}`,
+    expiresAt: Math.floor(Date.now() / 1000) + 600,
+    liquidate: false,
+  });
+
+  /** A basket holding $300 of TSLAx (100 raw) and $900 of NVDAx (300 raw): $1,200, into which $600 went. */
+  const moving = (netFunding?: () => Promise<Decimal | null>) => {
+    let saved: Parameters<BasketStore["saveExitIntent"]>[0] | undefined;
+    let preparedFor = "";
+    const signed = message(mercury);
+    const service = new BasketService({
+      store: {
+        ...store(basket),
+        saveExitIntent: async (action) => {
+          saved = action;
+          return { id: "intent-1", ...action, operationId: null, submittedAt: null, createdAt: new Date() };
+        },
+        attachExitOperation: async () => undefined,
+      },
+      provider: provider({
+        portfolios: async () => [
+          {
+            portfolioId: "p-1",
+            ownerAccountId: owner,
+            strategyId: "remote-1",
+            smartAccounts: [{ accountId: `${SOL}:Vau1tAccount1111111111111111111111111111` }],
+          },
+        ],
+        portfolio: async () => ({
+          portfolioId: "p-1",
+          ownerAccountId: owner,
+          strategyId: "remote-1",
+          smartAccounts: [{ accountId: `${SOL}:Vau1tAccount1111111111111111111111111111` }],
+          schedule: null,
+        }),
+        positions: async () => ({
+          portfolioId: "p-1",
+          totalValueUsd: "1200",
+          inTransitUsd: "0",
+          fetchedAt: new Date().toISOString(),
+          warnings: [],
+          assets: [
+            {
+              assetId: asset(TSLAX),
+              smartAccountId: `${SOL}:Vau1tAccount1111111111111111111111111111`,
+              symbol: "TSLAx",
+              decimals: 8,
+              balance: "1",
+              balanceRaw: "100",
+              priceUsd: "3",
+              valueUsd: "300",
+            },
+            {
+              assetId: asset(NVDAX),
+              smartAccountId: `${SOL}:Vau1tAccount1111111111111111111111111111`,
+              symbol: "NVDAx",
+              decimals: 8,
+              balance: "3",
+              balanceRaw: "300",
+              priceUsd: "3",
+              valueUsd: "900",
+            },
+          ],
+        }),
+        prepareExit: async (_id, _mode, recipient) => {
+          preparedFor = recipient;
+          return {
+            expiresAt: new Date(signed.expiresAt * 1000).toISOString(),
+            authorization: { kind: "solana-message", text: "Withdraw to your Mercury wallet" },
+            message: signed,
+          };
+        },
+        submitExit: async () => ({ operationId: "op-move", submittedAt: new Date().toISOString() }),
+      }),
+      history: {
+        tokenAccountsFor: async () => [],
+        signatures: async () => [],
+        transaction: async () => null,
+      },
+      ...(netFunding === undefined ? {} : { netFunding }),
+    });
+    return { service, signed, saved: () => saved, preparedFor: () => preparedFor };
+  };
+
+  it("asks Glider for an exit paid out to the Mercury wallet, and checks that is what came back", async () => {
+    const m = moving();
+    await expect(
+      m.service.prepareExit(
+        "nvidia",
+        owner,
+        "in_kind",
+        [{ assetId: asset(TSLAX), amountRaw: "100" }],
+        mercury,
+      ),
+    ).resolves.toMatchObject({ recipientAccountId: mercury });
+    expect(m.preparedFor()).toBe(mercury);
+  });
+
+  it("refuses a signed move whose recipient is not the one it was submitted for", async () => {
+    const m = moving();
+    await expect(
+      m.service.submitExit("nvidia", "user-1", owner, "in_kind", m.signed, "sig", "withdraw", owner),
+    ).rejects.toMatchObject({ code: "invalid_exit" });
+  });
+
+  it("records each exited asset's share of what the basket cost: net funding split by value at exit", async () => {
+    // Half the NVDAx ($450) and all the TSLAx ($300): $750 of $1,200 leaves, carrying $375 of the $600 put in.
+    const m = moving(async () => D(600));
+    const both = message(mercury, [
+      { assetId: asset(TSLAX), amountRaw: "100" },
+      { assetId: asset(NVDAX), amountRaw: "150" },
+    ]);
+    await m.service.submitExit("nvidia", "user-1", owner, "in_kind", both, "sig", "withdraw", mercury);
+    expect(m.saved()?.payload).toMatchObject({
+      recipientAccountId: mercury,
+      exitCosts: [
+        { mint: TSLAX, costUsd: "150" },
+        { mint: NVDAX, costUsd: "225" },
+      ],
+    });
+  });
+
+  it("carries no cost when what went into the basket is not fully known, or nothing was put in", async () => {
+    for (const funding of [async () => null, async () => D(0)]) {
+      const m = moving(funding);
+      await m.service.submitExit("nvidia", "user-1", owner, "in_kind", m.signed, "sig", "withdraw", mercury);
+      expect(m.saved()?.payload.exitCosts).toBeUndefined();
+    }
+  });
 });

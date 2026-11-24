@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { USDC_MINT, type TransactionDetail } from "@mercury/chain";
 import { mercuryWallet, testDb } from "../../../db/testing.js";
-import { activities, basketActions, users } from "../../../db/schema.js";
+import { activities, basketActions, instruments, lots, tokens, users, wallets } from "../../../db/schema.js";
+import { D } from "@mercury/core";
 import { reconcileBasketExits, verifiedExitTransfers } from "../reconcile.js";
 
 const SMART = "7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk";
@@ -173,4 +174,161 @@ it("enriches an existing Added cash row idempotently before scanning the smart a
     ),
   ).toEqual({ checked: 0, recorded: 0, settled: 0, stopped: 0, failed: 0 });
   expect(await db.select().from(activities).where(eq(activities.userId, user!.id))).toHaveLength(1);
+});
+
+describe("an in-kind exit, recorded where it landed with its cost", () => {
+  const SOL = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+  const MERCURY = "MercuryWa11et111111111111111111111111111111";
+  const TSLAX = "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB";
+
+  /** A linked wallet (OWNER) whose basket paid 1 TSLAx out to `recipient`, $300 of the basket's cost going with it. */
+  const seed = async (recipient: string) => {
+    const db = await testDb();
+    const [user] = await db.insert(users).values({ privyUserId: "did:privy:basket-move" }).returning();
+    const mercuryId = await mercuryWallet(db, user!.id, MERCURY);
+    const [linked] = await db
+      .insert(wallets)
+      .values({ userId: user!.id, address: OWNER, kind: "external", isPrimary: false })
+      .returning();
+    const [tsla] = await db.insert(instruments).values({ ticker: "TSLA", name: "Tesla" }).returning();
+    await db
+      .insert(tokens)
+      .values({ instrumentId: tsla!.id, mint: TSLAX, symbol: "TSLAx", issuer: "backed", decimals: 8 });
+    const exit = {
+      ...payload,
+      mode: "in_kind" as const,
+      recipientAccountId: `${SOL}:${recipient}`,
+      authorization: {
+        ...payload.authorization,
+        message: {
+          ...payload.authorization.message,
+          recipientAccountId: `${SOL}:${recipient}`,
+          liquidate: false,
+        },
+      },
+      expectedTransfers: [{ mint: TSLAX, symbol: "TSLAx", amountRaw: "100000000" }],
+      exitCosts: [{ mint: TSLAX, costUsd: "300" }],
+    };
+    const [action] = await db
+      .insert(basketActions)
+      .values({
+        userId: user!.id,
+        slug: "nvda-tsla-50-50",
+        kind: "withdraw_in_kind",
+        ownerAccountId: `${SOL}:${OWNER}`,
+        strategyId: "strategy-1",
+        portfolioId: "portfolio-1",
+        operationId: "operation-1",
+        nonce: exit.authorization.message.nonce,
+        payload: exit,
+        reconciliationState: "pending",
+        reconcileAfter: new Date("2026-10-07T00:04:00Z"),
+        createdAt: new Date("2026-10-07T00:00:00Z"),
+      })
+      .returning();
+    const landedIn = recipient === MERCURY ? mercuryId : linked!.id;
+    // What wallet-events wrote first, seeing tokens arrive.
+    await db.insert(activities).values({
+      userId: user!.id,
+      walletId: landedIn,
+      kind: "transfer_in",
+      occurredAt: new Date(TRANSFER_TIME * 1_000),
+      title: "Received TSLAx",
+      txSignature: SIGNATURE,
+      mint: TSLAX,
+    });
+    const moved: TransactionDetail = {
+      ...transaction(),
+      preTokens: [
+        { owner: SMART, mint: TSLAX, rawAmount: 100_000_000n, decimals: 8 },
+        { owner: recipient, mint: TSLAX, rawAmount: 0n, decimals: 8 },
+      ],
+      postTokens: [
+        { owner: SMART, mint: TSLAX, rawAmount: 0n, decimals: 8 },
+        { owner: recipient, mint: TSLAX, rawAmount: 100_000_000n, decimals: 8 },
+      ],
+      tokenTransfersIn: [
+        {
+          programId: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+          source: SOURCE_ACCOUNT,
+          destination: DESTINATION_ACCOUNT,
+          authority: SMART,
+          sourceOwner: SMART,
+          destinationOwner: recipient,
+          mint: TSLAX,
+          rawAmount: 100_000_000n,
+          decimals: 8,
+        },
+      ],
+    };
+    const reconcile = () =>
+      reconcileBasketExits(
+        db,
+        {
+          operation: async () => ({
+            operationId: "operation-1",
+            portfolioId: "portfolio-1",
+            kind: "withdraw",
+            state: "completed",
+            createdAt: "2026-10-07T00:01:00Z",
+            updatedAt: "2026-10-07T00:04:00Z",
+            finishedAt: "2026-10-07T00:04:00Z",
+            error: null,
+          }),
+          history: {
+            tokenAccountsFor: async () => [],
+            // The basket account's payout, found scanning it since the exit was signed.
+            signatures: async () => [
+              { signature: SIGNATURE, slot: 1, blockTime: TRANSFER_TIME, failed: false },
+            ],
+            transaction: async () => moved,
+          },
+        },
+        NOW,
+      );
+    return { db, userId: user!.id, mercuryId, linkedId: linked!.id, action: action!, reconcile };
+  };
+
+  it("files a move into the Mercury wallet's feed, and gives the shares their share of what the basket cost", async () => {
+    const s = await seed(MERCURY);
+    expect(await s.reconcile()).toMatchObject({ recorded: 1, settled: 1 });
+
+    const [row] = await s.db.select().from(activities).where(eq(activities.txSignature, SIGNATURE));
+    expect([row!.walletId, row!.kind, row!.refId]).toEqual([s.mercuryId, "withdraw_in_kind", s.action.id]);
+    const [lot] = await s.db.select().from(lots).where(eq(lots.walletId, s.mercuryId));
+    expect([
+      lot!.source,
+      lot!.tokenQty,
+      D(lot!.shares).toString(),
+      D(lot!.unitCostUsd).toString(),
+      lot!.isEstimated,
+    ]).toEqual(["basket_exit", 100_000_000n, "1", "300", false]);
+  });
+
+  it("files a linked wallet's exit to itself in its own feed, not the Mercury wallet's", async () => {
+    const s = await seed(OWNER);
+    await s.reconcile();
+    const [row] = await s.db.select().from(activities).where(eq(activities.txSignature, SIGNATURE));
+    expect(row!.walletId).toBe(s.linkedId);
+    expect((await s.db.select().from(lots).where(eq(lots.walletId, s.linkedId))).length).toBe(1);
+  });
+
+  it("carries the cost once, however many times the exit is looked at again", async () => {
+    const s = await seed(MERCURY);
+    await s.reconcile();
+    await s.db
+      .update(basketActions)
+      .set({ reconciliationState: "pending", reconcileAfter: new Date("2026-10-07T00:04:00Z") })
+      .where(eq(basketActions.id, s.action.id));
+    await s.reconcile();
+    expect(await s.db.select().from(lots).where(eq(lots.walletId, s.mercuryId))).toHaveLength(1);
+  });
+
+  it("writes no lot when no cost share was known when the exit was signed", async () => {
+    const s = await seed(MERCURY);
+    const { exitCosts: _none, ...withoutCost } = s.action.payload as { exitCosts?: unknown };
+    await s.db.update(basketActions).set({ payload: withoutCost }).where(eq(basketActions.id, s.action.id));
+    await s.reconcile();
+    expect(await s.db.select().from(lots).where(eq(lots.walletId, s.mercuryId))).toEqual([]);
+  });
 });

@@ -18,6 +18,7 @@ import { AllWalletLoans, WalletsOverview } from "./portfolio/Wallets";
 import { useActingWallet } from "../api/acting-wallet";
 import { walletName } from "../api/wallets";
 import { MoveBanner } from "./move/MoveBanner";
+import { OutsideBaskets } from "./move/OutsideBaskets";
 import { AccountHeader, Allocation, Performance } from "./portfolio/Summary";
 import { useEvents } from "./useEvents";
 import type { Range } from "./ValueChart";
@@ -143,6 +144,9 @@ export const Portfolio = () => {
         {acting.kind === "linked" && (
           <MoveBanner walletId={acting.wallet.id} name={walletName(acting.wallet)} />
         )}
+
+        {/* A linked wallet's baskets made outside Mercury, and the way to bring them in. */}
+        {acting.kind === "linked" && <OutsideBaskets name={walletName(acting.wallet)} />}
 
         {/* 2 — the account, and what you can do with it. */}
         <AccountHeader

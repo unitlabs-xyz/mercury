@@ -21,6 +21,34 @@ export const useMovableTokens = (enabled: boolean) => {
   });
 };
 
+/** A basket the linked wallet runs outside Mercury, as `GET /v1/move/outside-baskets` lists it. */
+export interface OutsideBasket {
+  readonly address: string;
+  readonly valueUsd: string;
+  readonly holdings: readonly {
+    readonly mint: string;
+    readonly symbol: string;
+    readonly ticker: string | null;
+    readonly amount: string;
+    readonly valueUsd: string;
+  }[];
+}
+
+/**
+ * The chosen linked wallet's baskets made outside Mercury: shown so they are
+ * not missing from the picture, with the way to bring them in. Slow to change,
+ * and the server keeps the answer for ten minutes.
+ */
+export const useOutsideBaskets = () => {
+  const { acting } = useActingWallet();
+  return useQuery({
+    queryKey: ["api", "move", "outside-baskets"],
+    queryFn: async () => (await apiFetch<{ baskets: OutsideBasket[] }>("/v1/move/outside-baskets")).baskets,
+    enabled: acting.kind === "linked",
+    staleTime: 5 * 60_000,
+  });
+};
+
 /** How much of each token to move, in its smallest unit. */
 export type MoveAsk = readonly { readonly mint: string; readonly amountRaw: string }[];
 

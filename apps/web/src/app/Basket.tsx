@@ -1,3 +1,4 @@
+import { useActingWallet } from "../api/acting-wallet";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
@@ -388,6 +389,8 @@ export const Basket = () => {
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
   const [exitMode, setExitMode] = useState<BasketExitMode>("in_kind");
+  /** Where an exit goes: to the owner (a withdrawal), or into the Mercury wallet (a linked wallet's move). */
+  const [exitTo, setExitTo] = useState<"owner" | "mercury">("owner");
   const [exitOperation, setExitOperation] = useState<{
     portfolioId: string;
     operationId: string;
@@ -415,7 +418,12 @@ export const Basket = () => {
   const enrollAction = useBasketEnrollmentAction(slug);
   const fundingAction = useBasketFundingAction(slug);
   const rebalanceAction = useBasketRebalanceAction(slug);
-  const exitAction = useBasketExitAction(slug);
+  // A linked wallet's basket can move straight into the person's Mercury wallet, in one approval.
+  const { acting, wallets } = useActingWallet();
+  const mercuryAddress = wallets.find((w) => w.isPrimary)?.address;
+  const canMove = acting.kind === "linked" && mercuryAddress !== undefined;
+  const toMercury = canMove && exitTo === "mercury" ? mercuryAddress : undefined;
+  const exitAction = useBasketExitAction(slug, toMercury);
   const activity = useBasketActivity(slug, enrolled);
   const queryClient = useQueryClient();
   const ownerContext = `${slug}:${user?.id ?? ""}:${address ?? ""}`;
@@ -1123,13 +1131,31 @@ export const Basket = () => {
                         Check withdrawal status again
                       </button>
                     )}
-                    {heldAssets.length > 0 && (
+                    {heldAssets.length > 0 && canMove && (
                       <Button
+                        variant="primary"
                         size="lg"
                         className="mt-5 w-full"
                         disabled={portfolio.isError || exitActive || operationActive}
                         onClick={() => {
                           setExitMode("in_kind");
+                          setExitTo("mercury");
+                          exitAction.prepare.reset();
+                          exitAction.submit.reset();
+                          setExitOpen(true);
+                        }}
+                      >
+                        Move to Mercury wallet
+                      </Button>
+                    )}
+                    {heldAssets.length > 0 && (
+                      <Button
+                        size="lg"
+                        className={canMove ? "mt-2 w-full" : "mt-5 w-full"}
+                        disabled={portfolio.isError || exitActive || operationActive}
+                        onClick={() => {
+                          setExitMode("in_kind");
+                          setExitTo("owner");
                           exitAction.prepare.reset();
                           exitAction.submit.reset();
                           setExitOpen(true);
@@ -1520,6 +1546,7 @@ export const Basket = () => {
             busy={exitAction.prepare.isPending || exitAction.submit.isPending}
             walletReady={exitAction.walletReady}
             approver={exitAction.approver}
+            toMercury={toMercury}
             error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
             onPrepare={(assets) =>
               void exitAction.prepare

@@ -19,3 +19,11 @@ import { sql, type SQL } from "drizzle-orm";
  */
 export const primaryWalletId = (userId: string): SQL<string> =>
   sql<string>`(select "id" from "wallet" where "user_id" = ${userId} and "is_primary")`;
+
+/**
+ * The wallet of this person's that has this address, as a subquery: where a
+ * payout landed. The Mercury wallet when the address is none of theirs, which
+ * keeps a row from being dropped for want of a wallet.
+ */
+export const walletIdAt = (userId: string, address: string): SQL<string> =>
+  sql<string>`coalesce((select "id" from "wallet" where "user_id" = ${userId} and "address" = ${address}), (select "id" from "wallet" where "user_id" = ${userId} and "is_primary"))`;

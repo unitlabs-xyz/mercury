@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { logger } from "../../log/index.js";
+import { D, type Decimal } from "@mercury/core";
 import type {
   BasketExitAsset,
   BasketExitMessage,
@@ -96,6 +97,12 @@ export class BasketService {
       store: BasketStore;
       funding?: BasketFunding;
       history?: ChainHistory;
+      /**
+       * What went into a basket and came back out, in dollars: its net
+       * funding, for splitting across shares exited in kind. Null where that
+       * is not fully known (something already left it in kind).
+       */
+      netFunding?: (userId: string, ownerAccountId: string, portfolioId: string) => Promise<Decimal | null>;
     },
   ) {}
 
@@ -346,8 +353,10 @@ export class BasketService {
     ownerAccountId: string,
     mode: BasketExitMode,
     requestedAssets?: readonly BasketExitAsset[],
+    /** Where the exit pays out: the owner, or the person's Mercury wallet for a move. */
+    recipientAccountId: string = ownerAccountId,
   ) {
-    if (!SOLANA_ACCOUNT.test(ownerAccountId))
+    if (!SOLANA_ACCOUNT.test(ownerAccountId) || !SOLANA_ACCOUNT.test(recipientAccountId))
       throw new BasketEnrollmentError("wallet_required", 400, "A Solana wallet is required to exit.");
     const { provider, portfolio } = await this.exitPortfolio(slug, ownerAccountId);
     const positions = await provider.positions(portfolio.portfolioId);
@@ -396,14 +405,14 @@ export class BasketService {
       const prepared = await provider.prepareExit(
         portfolio.portfolioId,
         mode,
-        ownerAccountId,
+        recipientAccountId,
         assets,
         submission,
       );
       const { message } = prepared;
       if (
         message.portfolioId !== portfolio.portfolioId ||
-        message.recipientAccountId !== ownerAccountId ||
+        message.recipientAccountId !== recipientAccountId ||
         Boolean(message.liquidate) !== (mode === "liquidate_usdc") ||
         (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC)
       )
@@ -428,7 +437,7 @@ export class BasketService {
         mode,
         submission,
         portfolioId: portfolio.portfolioId,
-        recipientAccountId: ownerAccountId,
+        recipientAccountId,
       };
     } catch (error) {
       if (error instanceof BasketExitUnsupportedError)
@@ -445,11 +454,13 @@ export class BasketService {
     message: BasketExitMessage,
     signature: string,
     submission: BasketExitSubmission = mode === "in_kind" ? "withdraw" : "liquidate_all",
+    /** Where it pays out: the owner, or the person's Mercury wallet for a move. */
+    recipientAccountId: string = ownerAccountId,
   ) {
     const { template, provider, portfolio, smartAccount } = await this.exitPortfolio(slug, ownerAccountId);
     if (
       message.portfolioId !== portfolio.portfolioId ||
-      message.recipientAccountId !== ownerAccountId ||
+      message.recipientAccountId !== recipientAccountId ||
       Boolean(message.liquidate) !== (mode === "liquidate_usdc") ||
       (mode === "in_kind" && submission !== "withdraw") ||
       (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC) ||
@@ -492,11 +503,16 @@ export class BasketService {
         address: addressOf(smartAccount.accountId),
       });
       const latest = await this.deps.history.signatures(addressOf(smartAccount.accountId), { limit: 1 });
+      const exitCosts =
+        mode === "in_kind"
+          ? await this.exitCosts(userId, ownerAccountId, portfolio.portfolioId, authorizedAssets)
+          : undefined;
       const payload: ExitIntentPayload = {
         mode,
         submission,
         smartAccountId: smartAccount.accountId,
-        recipientAccountId: ownerAccountId,
+        recipientAccountId,
+        ...(exitCosts === undefined ? {} : { exitCosts }),
         baselineSignature: latest[0]?.signature ?? null,
         authorization: { message, signature },
         authorizedAssets,
@@ -518,7 +534,7 @@ export class BasketService {
       mode,
       submission,
       smartAccountId: smartAccount.accountId,
-      recipientAccountId: ownerAccountId,
+      recipientAccountId,
       authorization: { message, signature },
       authorizedAssets,
       expectedTransfers,
@@ -565,6 +581,37 @@ export class BasketService {
       new Date(submitted.submittedAt),
     );
     return { ...submitted, mode };
+  }
+
+  /**
+   * What each exited asset's share of the basket cost: the basket's net
+   * funding, split across what it holds by value now, at Glider's own prices.
+   * The shares carry that into the wallet they land in, so leaving a basket
+   * in kind is not leaving its cost behind. Undefined when the funding is not
+   * fully known or nothing was put in: no cost is better than an invented one.
+   */
+  private async exitCosts(
+    userId: string,
+    ownerAccountId: string,
+    portfolioId: string,
+    assets: readonly { mint: string; amountRaw: string }[],
+  ): Promise<ExitIntentPayload["exitCosts"]> {
+    const provider = this.deps.provider;
+    if (!this.deps.netFunding || !provider) return undefined;
+    const [invested, positions] = await Promise.all([
+      this.deps.netFunding(userId, ownerAccountId, portfolioId),
+      provider.positions(portfolioId),
+    ]);
+    const total = D(positions.totalValueUsd);
+    if (invested === null || !invested.gt(0) || !total.gt(0)) return undefined;
+    const costs: { mint: string; costUsd: string }[] = [];
+    for (const asset of assets) {
+      const held = positions.assets.find((a) => a.assetId === `${SOLANA_ASSET}${asset.mint}`);
+      if (!held || !/^[1-9]\d*$/.test(held.balanceRaw)) continue;
+      const exited = D(held.valueUsd).mul(D(asset.amountRaw)).div(D(held.balanceRaw));
+      costs.push({ mint: asset.mint, costUsd: invested.mul(exited).div(total).toFixed() });
+    }
+    return costs.length === 0 ? undefined : costs;
   }
 
   async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string) {

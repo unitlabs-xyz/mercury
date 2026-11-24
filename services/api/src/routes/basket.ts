@@ -160,10 +160,23 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
     const selection = request === null ? null : PrepareBasketExit.safeParse(request);
     if (selection && !selection.success)
       return c.json(fail("validation_failed", "Choose at least one valid asset amount."), 400);
+    // `?to=mercury`: a linked wallet's basket paid out straight into the person's Mercury wallet.
+    const to = c.req.query("to");
+    if (to !== undefined && to !== "mercury")
+      return c.json(fail("validation_failed", "A basket can only be moved to your Mercury wallet."), 400);
+    const mercury = ownerFor(c.get("identity").walletAddress);
+    if (to === "mercury" && (mercury === null || mercury === owner))
+      return c.json(fail("validation_failed", "Choose a linked wallet's basket to move it here."), 400);
     try {
       return c.json(
         PreparedBasketExit.parse(
-          await service.prepareExit(c.req.param("slug"), owner, mode.data, selection?.data.assets),
+          await service.prepareExit(
+            c.req.param("slug"),
+            owner,
+            mode.data,
+            selection?.data.assets,
+            to === "mercury" ? mercury! : owner,
+          ),
         ),
       );
     } catch (error) {
@@ -191,6 +204,10 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
             body.data.message,
             body.data.signature,
             body.data.submission,
+            // Paid out to the owner, or moved to the person's own Mercury wallet: never anywhere else.
+            body.data.message.recipientAccountId === ownerFor(identity.walletAddress)
+              ? body.data.message.recipientAccountId
+              : owner,
           ),
         ),
         202,

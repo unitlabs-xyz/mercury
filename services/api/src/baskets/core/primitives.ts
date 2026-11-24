@@ -80,6 +80,12 @@ export interface ExitIntentPayload {
     amountRaw: string | null;
   }[];
   templateName: string;
+  /**
+   * For an in-kind exit: what each asset's share of the basket cost, from the
+   * basket's net funding split by value at exit. Written as the shares' lots
+   * where they land. Absent where the basket's funding is not fully known.
+   */
+  exitCosts?: readonly { mint: string; costUsd: string }[] | undefined;
 }
 
 export interface ExitIntent {

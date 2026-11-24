@@ -665,6 +665,12 @@ interface ExitSheetProps {
   error?: string | undefined;
   /** The linked wallet that approves the withdrawal; null for the Mercury wallet. */
   approver?: string | null;
+  /**
+   * A move rather than a withdrawal: a linked wallet's basket paid out in kind
+   * straight into the person's Mercury wallet, at this address. Undefined for
+   * a withdrawal to the owner.
+   */
+  toMercury?: string | undefined;
   onPrepare: (assets?: BasketExitAsset[]) => void;
   onSubmit: () => void;
   onBack: () => void;
@@ -707,6 +713,7 @@ export const ExitSheet = ({
   walletReady,
   error,
   approver = null,
+  toMercury,
   onPrepare,
   onSubmit,
   onBack,
@@ -725,7 +732,8 @@ export const ExitSheet = ({
   const available = exitAssets(account);
   const byAsset = new Map(account.assets.map((asset) => [asset.assetId, asset]));
   const count = available.length;
-  const destination = account.ownerAccountId.split(":").at(-1) ?? "Unavailable";
+  const destination = toMercury ?? account.ownerAccountId.split(":").at(-1) ?? "Unavailable";
+  const moving = toMercury !== undefined;
   const selectedAssets: BasketExitAsset[] = [];
   let selectionError: string | null = null;
   if (manual && !prepared) {
@@ -793,7 +801,7 @@ export const ExitSheet = ({
             <Check className="size-5" />
           </span>
           <h2 id="basket-exit-title" className="mt-4 text-[20px] font-medium text-ds-ink">
-            Withdrawal submitted
+            {moving ? "Move submitted" : "Withdrawal submitted"}
           </h2>
           <p className="mx-auto mt-3 max-w-[40ch] text-[14px] leading-[1.45] text-ds-muted">
             This is not settled yet. Track the operation under Your position; your wallet and basket balances
@@ -809,14 +817,23 @@ export const ExitSheet = ({
             <SheetHead
               id="basket-exit-title"
               mark={mark}
-              title={prepared ? "Review withdrawal" : `Withdraw ${name}`}
+              title={
+                prepared
+                  ? moving
+                    ? "Review move"
+                    : "Review withdrawal"
+                  : moving
+                    ? `Move ${name} to your Mercury wallet`
+                    : `Withdraw ${name}`
+              }
               sub={
                 prepared
                   ? "Check this before your wallet signs it"
                   : `${count} ${count === 1 ? "asset" : "assets"} · ${usd(account.totalValueUsd)}`
               }
             />
-            {!prepared && (
+            {/* A move hands over the shares themselves: there is nothing to convert. */}
+            {!prepared && !moving && (
               <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-ds-panel p-1 text-[13px]">
                 {(["in_kind", "liquidate_usdc"] as const).map((choice) => (
                   <button
@@ -999,16 +1016,23 @@ export const ExitSheet = ({
                   >
                     {count}
                   </TipLine>
-                  <TipLine k="Destination" tip={`Your Solana wallet · ${destination}`}>
-                    Wallet · {short(destination)}
+                  <TipLine
+                    k="Destination"
+                    tip={
+                      moving ? `Your Mercury wallet · ${destination}` : `Your Solana wallet · ${destination}`
+                    }
+                  >
+                    {moving ? "Mercury wallet" : "Wallet"} · {short(destination)}
                   </TipLine>
                 </dl>
               </SwapPanel>
             </div>
             <SheetNote>
-              {mode === "in_kind"
-                ? "These tokens move to your wallet without being sold. Anything left behind may rebalance on the next scheduled run, and values can shift while it settles."
-                : "Glider sells the listed assets for USDC and sends the proceeds to your wallet. Small or illiquid balances may stay behind and rebalance later."}
+              {moving
+                ? "These shares move into your Mercury wallet without being sold, with their share of what the basket cost, so you can trade them in one tap. Anything you leave behind stays in this basket."
+                : mode === "in_kind"
+                  ? "These tokens move to your wallet without being sold. Anything left behind may rebalance on the next scheduled run, and values can shift while it settles."
+                  : "Glider sells the listed assets for USDC and sends the proceeds to your wallet. Small or illiquid balances may stay behind and rebalance later."}
             </SheetNote>
             {!walletReady && (
               <p className="mx-5 mt-3 text-[12px] text-ds-muted">Waiting for your Solana wallet…</p>

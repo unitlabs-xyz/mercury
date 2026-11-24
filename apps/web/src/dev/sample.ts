@@ -1587,6 +1587,41 @@ export const sampleResponse = (path: string, body?: string, wallet?: string): un
           ]
         : [],
     };
+  // A basket Phantom runs in Glider's own app: Mercury sees it, and shows the way to bring it in.
+  if (route === "/v1/move/outside-baskets")
+    return {
+      baskets: phantom
+        ? [
+            {
+              address: "8kSn2Z2nUzR1x5kqG3cZB1ozSUhLkV3m1gD9Zw3xGl1d",
+              valueUsd: "1186.40",
+              holdings: [
+                {
+                  mint: "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+                  symbol: "AAPLx",
+                  ticker: "AAPL",
+                  amount: "2.1",
+                  valueUsd: "486.15",
+                },
+                {
+                  mint: "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+                  symbol: "QQQx",
+                  ticker: "QQQ",
+                  amount: "1.05",
+                  valueUsd: "650.25",
+                },
+                {
+                  mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                  symbol: "USDC",
+                  ticker: null,
+                  amount: "50",
+                  valueUsd: "50",
+                },
+              ],
+            },
+          ]
+        : [],
+    };
   // Built, as the server would: one transaction, the rent for two new accounts taken from the USDC.
   if (route === "/v1/move/prepare")
     return {

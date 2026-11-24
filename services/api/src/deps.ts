@@ -50,6 +50,8 @@ import type { MoveDeps } from "./routes/move.js";
 import { recordMove as recordWalletMove } from "./moves/record.js";
 import { moveSends } from "./moves/sends.js";
 import { mercuryWalletIdOf, movableMints } from "./moves/queries.js";
+import { findOutsideBaskets } from "./baskets/outside.js";
+import { remembered } from "./moves/remembered.js";
 import { createSolanaRpc } from "@solana/kit";
 import { KaminoLending } from "./lending/kamino.js";
 import { KaminoEarn } from "./earn/kamino-vault.js";
@@ -76,6 +78,7 @@ import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import {
   readBasketMovements,
+  basketNetFunding,
   readFlows,
   readHoldings,
   readLatestDebt,
@@ -753,6 +756,9 @@ export function buildReadDeps(
         relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
       ),
       history: deps.history,
+      // What went into a basket, so shares that leave it in kind carry their share of that cost.
+      netFunding: (userId, owner, portfolioId) =>
+        basketNetFunding(db, userId, owner.slice(owner.lastIndexOf(":") + 1), portfolioId),
       ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
     }),
     instruments: {
@@ -858,6 +864,19 @@ export function buildReadDeps(
       mercuryWalletId: (userId) => mercuryWalletIdOf(db, userId),
       latestBlockhash: async () => (await rpc.getLatestBlockhash().send()).value,
       sends: walletMoves,
+      // Baskets made outside Mercury, found on the chain; looked for at most every ten minutes a wallet.
+      outside: remembered(10 * 60_000, (wallet) =>
+        findOutsideBaskets(
+          {
+            db,
+            history: deps.history,
+            chain: deps.chain,
+            prices: deps.prices,
+            listed: () => movableMints(db, USDC_MINT),
+          },
+          wallet,
+        ),
+      ),
       ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
   };
