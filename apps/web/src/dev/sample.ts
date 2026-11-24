@@ -1551,6 +1551,50 @@ export const sampleResponse = (path: string, body?: string, wallet?: string): un
         }
       : money;
   if (route === "/v1/borrow") return phantom ? phantomBorrow : fresh ? emptyBorrow : borrow;
+  // The move into the Mercury wallet: Phantom's unpledged shares and its cash. The 6 Tesla in the loan stay.
+  if (route === "/v1/move/tokens")
+    return {
+      available: true,
+      tokens: phantom
+        ? [
+            {
+              mint: "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              symbol: "TSLAx",
+              ticker: "TSLA",
+              name: "Tesla",
+              decimals: 8,
+              amountRaw: "240000000",
+              amount: "2.4",
+            },
+            {
+              mint: "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+              symbol: "NVDAx",
+              ticker: "NVDA",
+              name: "Nvidia",
+              decimals: 8,
+              amountRaw: "1020000000",
+              amount: "10.2",
+            },
+            {
+              mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              symbol: "USDC",
+              ticker: null,
+              name: "US dollars",
+              decimals: 6,
+              amountRaw: "900000000",
+              amount: "900",
+            },
+          ]
+        : [],
+    };
+  // Built, as the server would: one transaction, the rent for two new accounts taken from the USDC.
+  if (route === "/v1/move/prepare")
+    return {
+      transactions: [{ transaction: "AA==", moved: [] }],
+      feeUsd: "0.84",
+      rentUsd: "0.84",
+      coveredByMercury: false,
+    };
   if (route === "/v1/earn")
     return phantom || fresh
       ? {

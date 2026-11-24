@@ -12,6 +12,7 @@ import { writerOf } from "../wallets/acting.js";
 import { buildMove } from "../moves/build.js";
 import { planMove } from "../moves/plan.js";
 import type { MoveSends } from "../moves/sends.js";
+import type { Movable } from "../moves/queries.js";
 
 /** Native SOL is priced under the wrapped-SOL mint. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -21,8 +22,8 @@ export interface MoveDeps {
   readonly history: Pick<ChainHistory, "ownedTokenAccounts">;
   readonly prices: PriceBoard;
   readonly usdcMint: string;
-  /** The mints Mercury lists, stocks and USDC: what can be moved. */
-  readonly listed: () => Promise<ReadonlySet<string>>;
+  /** The tokens Mercury lists, stocks and USDC, by mint: what can be moved. */
+  readonly listed: () => Promise<ReadonlyMap<string, Movable>>;
   /** The person's Mercury wallet's id, which the moved shares are recorded into. */
   readonly mercuryWalletId: (userId: string) => Promise<string | null>;
   readonly latestBlockhash: () => Promise<{ blockhash: Blockhash; lastValidBlockHeight: bigint }>;
@@ -62,6 +63,42 @@ export function moveRoutes(deps: MoveDeps): Hono {
   const app = new Hono();
   const now = deps.now ?? (() => new Date());
 
+  /** What the linked wallet holds that can be moved, a line each, largest account first within a token. */
+  app.get("/v1/move/tokens", async (c) => {
+    const writer = writerOf(c);
+    if (writer === null || writer.isPrimary) {
+      return c.json(fail("wallet_mercury", "Choose a linked wallet to move from."), 400);
+    }
+    if (deps.relay === undefined || deps.history.ownedTokenAccounts === undefined) {
+      return c.json({ available: false, tokens: [] });
+    }
+    const [owned, listed] = await Promise.all([
+      deps.history.ownedTokenAccounts(writer.address),
+      deps.listed(),
+    ]);
+    const byMint = new Map<string, { decimals: number; amountRaw: bigint }>();
+    for (const a of owned) {
+      if (a.rawAmount <= 0n || !listed.has(a.mint)) continue;
+      const seen = byMint.get(a.mint);
+      byMint.set(a.mint, { decimals: a.decimals, amountRaw: (seen?.amountRaw ?? 0n) + a.rawAmount });
+    }
+    return c.json({
+      available: true,
+      tokens: [...byMint].map(([mint, t]) => {
+        const about = listed.get(mint)!;
+        return {
+          mint,
+          symbol: about.symbol,
+          ticker: about.ticker,
+          name: about.name,
+          decimals: t.decimals,
+          amountRaw: t.amountRaw.toString(),
+          amount: toWire(D(t.amountRaw.toString()).div(D(10).pow(t.decimals))),
+        };
+      }),
+    });
+  });
+
   app.post("/v1/move/prepare", async (c) => {
     const writer = writerOf(c);
     if (writer === null) return c.json(fail("wallet_pending", "Your wallet is still being set up."), 409);
@@ -96,7 +133,7 @@ export function moveRoutes(deps: MoveDeps): Hono {
     ]);
     const plan = planMove({
       owned,
-      listed,
+      listed: new Set(listed.keys()),
       asked,
       mercuryHolds: new Set(mercury.map((b) => b.mint)),
       rent: { classic, token2022 },

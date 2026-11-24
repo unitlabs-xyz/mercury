@@ -16,6 +16,8 @@ import { displayBasketName } from "./baskets/catalog";
 import { useModel } from "./portfolio/model";
 import { AllWalletLoans, WalletsOverview } from "./portfolio/Wallets";
 import { useActingWallet } from "../api/acting-wallet";
+import { walletName } from "../api/wallets";
+import { MoveBanner } from "./move/MoveBanner";
 import { AccountHeader, Allocation, Performance } from "./portfolio/Summary";
 import { useEvents } from "./useEvents";
 import type { Range } from "./ValueChart";
@@ -137,6 +139,11 @@ export const Portfolio = () => {
         {/* 1 — every wallet together, once anything is linked. */}
         <WalletsOverview />
 
+        {/* A linked wallet: the light reminder that the Mercury wallet is one tap. */}
+        {acting.kind === "linked" && (
+          <MoveBanner walletId={acting.wallet.id} name={walletName(acting.wallet)} />
+        )}
+
         {/* 2 — the account, and what you can do with it. */}
         <AccountHeader
           m={m}
@@ -146,6 +153,7 @@ export const Portfolio = () => {
           failed={failed}
           together={acting.kind === "all"}
           calculating={calculating}
+          movable={acting.kind === "linked"}
         />
 
         <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">

@@ -50,6 +50,11 @@ vi.mock("../wallet/appkit", () => ({
         state.phantomAsked += 1;
         return state.signWith!(tx);
       },
+      // One pop-up for a batch.
+      signAllTransactions: async (txs: unknown[]) => {
+        state.phantomAsked += 1;
+        return txs.map((tx) => state.signWith!(tx));
+      },
     }),
     subscribeAccount: (cb: () => void) => {
       state.accountListeners.push(cb);
@@ -157,5 +162,24 @@ describe("useTransactionSigner: which pop-up appears", () => {
     await signing;
     expect(state.phantomAsked).toBe(1);
     expect(state.privyAsked).toBe(0);
+  });
+});
+
+describe("useTransactionSigner: several transactions, as a move signs them", () => {
+  it("asks Phantom once for all of them when Phantom is the wallet chosen", async () => {
+    state.acting = { kind: "linked", wallet: PHANTOM };
+    state.connected = PHANTOM.address;
+    const signed = await signer().signAll([built(), built(), built()]);
+    expect(signed).toHaveLength(3);
+    expect(state.phantomAsked).toBe(1);
+    expect(state.privyAsked).toBe(0);
+  });
+
+  it("has Privy sign each for the Mercury wallet, inside Mercury, and never opens Phantom", async () => {
+    const signed = await signer().signAll([built(), built()]);
+    expect(signed).toHaveLength(2);
+    expect(state.privyAsked).toBe(2);
+    expect(state.phantomAsked).toBe(0);
+    expect(state.dialogOpened).toBe(0);
   });
 });

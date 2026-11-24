@@ -68,7 +68,11 @@ const world = async (
     history: { ownedTokenAccounts: async () => owned },
     prices,
     usdcMint: USDC,
-    listed: async () => new Set([USDC, NVDAX]),
+    listed: async () =>
+      new Map([
+        [USDC, { symbol: "USDC", ticker: null, name: "US dollars" }],
+        [NVDAX, { symbol: "NVDAx", ticker: "NVDA", name: "Nvidia" }],
+      ]),
     mercuryWalletId: async () => "w-mercury",
     latestBlockhash: async () => ({
       blockhash: "EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k" as Blockhash,
@@ -117,6 +121,63 @@ const prepare = async (app: Hono, body: unknown = {}) => {
   });
   return { status: res.status, body: (await res.json()) as Body };
 };
+
+describe("GET /v1/move/tokens", () => {
+  const list = async (app: Hono) => {
+    const res = await app.request("/v1/move/tokens");
+    return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+  };
+
+  it("lists what the linked wallet can move, named, with a token in two accounts added up", async () => {
+    const w = await world({
+      owned: [
+        { address: "a1", mint: NVDAX, programId: TOKEN_2022, rawAmount: 100_000_000n, decimals: 8 },
+        { address: "a2", mint: NVDAX, programId: TOKEN_2022, rawAmount: 50_000_000n, decimals: 8 },
+        { address: "a3", mint: USDC, programId: TOKEN, rawAmount: 20_000_000n, decimals: 6 },
+        { address: "a4", mint: "Bonk", programId: TOKEN, rawAmount: 9n, decimals: 5 },
+        { address: "a5", mint: USDC, programId: TOKEN, rawAmount: 0n, decimals: 6 },
+      ],
+    });
+    expect(await list(appWith(w))).toEqual({
+      status: 200,
+      body: {
+        available: true,
+        tokens: [
+          {
+            mint: NVDAX,
+            symbol: "NVDAx",
+            ticker: "NVDA",
+            name: "Nvidia",
+            decimals: 8,
+            amountRaw: "150000000",
+            amount: "1.5",
+          },
+          {
+            mint: USDC,
+            symbol: "USDC",
+            ticker: null,
+            name: "US dollars",
+            decimals: 6,
+            amountRaw: "20000000",
+            amount: "20",
+          },
+        ],
+      },
+    });
+  });
+
+  it("says moving isn't available without a relayer, rather than offering it", async () => {
+    const w = await world();
+    const { relay: _relay, ...unsponsored } = w.deps;
+    expect((await list(appWith(w, unsponsored))).body).toEqual({ available: false, tokens: [] });
+  });
+
+  it("is only for a linked wallet", async () => {
+    const w = await world();
+    const { status } = await list(appWith(w, w.deps, { all: false, wallets: [w.MERCURY] }));
+    expect(status).toBe(400);
+  });
+});
 
 describe("POST /v1/move/prepare", () => {
   it("builds the move for the linked wallet to sign, which the relayer will then co-sign", async () => {

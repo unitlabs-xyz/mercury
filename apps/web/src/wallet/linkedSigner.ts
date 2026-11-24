@@ -8,9 +8,11 @@ import { LinkedSignError, unchangedMessage, wrongWalletCopy } from "../api/signe
  * the eager bundle may import AppKit. See `app/money/FundFromChainWithWallet.tsx`.
  */
 
-/** What AppKit's Solana provider is asked for here: one transaction signed, never sent. */
+/** What AppKit's Solana provider is asked for here: transactions signed, never sent. */
 interface SolanaSigner {
   signTransaction<T extends VersionedTransaction>(transaction: T): Promise<T>;
+  /** Several at once, approved once. Not every wallet has it. */
+  signAllTransactions?<T extends VersionedTransaction>(transactions: T[]): Promise<T[]>;
 }
 
 /** How long the connect dialog may stay open before the action gives up. */
@@ -93,10 +95,47 @@ export const signWithLinked = async (
   const transaction = VersionedTransaction.deserialize(bytes);
   const before = transaction.message.serialize();
   const signed = await provider.signTransaction(transaction);
+  return unchangedOrRefused(name, before, signed);
+};
+
+/** The signed transaction's bytes, or a plain refusal if the wallet rewrote it, which the relayer would refuse. */
+const unchangedOrRefused = (name: string, before: Uint8Array, signed: VersionedTransaction): Uint8Array => {
   if (!unchangedMessage(before, signed.message.serialize())) {
     throw new LinkedSignError(
       `${name} changed the transaction while signing, so Mercury can't send it. If it has a setting that adds protections to transactions, turn it off for this one and try again.`,
     );
   }
   return signed.serialize();
+};
+
+/**
+ * Several transactions signed by a linked wallet, approved once where the
+ * wallet can: a move split into small transactions still asks only once.
+ * A wallet without `signAllTransactions` is asked for each in turn.
+ *
+ * Every one is checked as a single one is, and if the wallet rewrote any,
+ * none is returned: half a move sent is worse than none.
+ */
+export const signAllWithLinked = async (
+  address: string,
+  name: string,
+  all: readonly Uint8Array[],
+): Promise<Uint8Array[]> => {
+  await ensureConnected(address, name);
+  const provider = appKit?.getProvider<SolanaSigner>("solana");
+  if (provider === undefined) throw new LinkedSignError(`${name} isn't ready to sign. Try again.`);
+
+  const transactions = all.map((b) => VersionedTransaction.deserialize(b));
+  const before = transactions.map((t) => t.message.serialize());
+  const signed =
+    provider.signAllTransactions === undefined
+      ? await transactions.reduce<Promise<VersionedTransaction[]>>(
+          async (done, t) => [...(await done), await provider.signTransaction(t)],
+          Promise.resolve([]),
+        )
+      : await provider.signAllTransactions(transactions);
+  if (signed.length !== transactions.length) {
+    throw new LinkedSignError(`${name} didn't sign every step, so nothing was sent.`);
+  }
+  return signed.map((t, i) => unchangedOrRefused(name, before[i]!, t));
 };

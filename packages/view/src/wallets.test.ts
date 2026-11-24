@@ -13,6 +13,8 @@ import {
   walletStatus,
   liquidationLine,
   manageOnWebUrl,
+  moveFromSearch,
+  moveOnWebUrl,
   pledgedStocks,
   walletFromSearch,
   alsoHoldLine,
@@ -354,6 +356,21 @@ describe("walletStatus", () => {
       "Updated 38m ago",
     );
     expect(walletStatus(card({ isLive: false, asOf: null }), now)).toBe("");
+  });
+});
+
+describe("moveOnWebUrl and moveFromSearch", () => {
+  it("opens the web app on the wallet with the move open", () => {
+    expect(moveOnWebUrl("https://beta.trymercury.xyz/", "w-1")).toBe(
+      "https://beta.trymercury.xyz/?wallet=w-1&move=1",
+    );
+    expect(walletFromSearch("?wallet=w-1&move=1")).toBe("w-1");
+  });
+
+  it("asks for the move only when the link says so", () => {
+    expect(moveFromSearch("?wallet=w-1&move=1")).toBe(true);
+    expect(moveFromSearch("?wallet=w-1")).toBe(false);
+    expect(moveFromSearch("?move=yes")).toBe(false);
   });
 });
 

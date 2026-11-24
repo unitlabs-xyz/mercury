@@ -29,3 +29,6 @@ export const continueIn = (name: string): string => `Continue in ${name}`;
 
 /** The line above it: where the person will approve. */
 export const approveIn = (name: string): string => `You'll approve this in ${name}.`;
+
+/** The quiet line on a linked wallet's confirm screen. */
+export const MERCURY_TIP = "Tip: this would be one tap from your Mercury wallet.";

@@ -8,6 +8,7 @@ import {
   estimateMark,
   liquidationLine,
   manageOnWebUrl,
+  moveOnWebUrl,
   pct,
   pledgedStocks,
   shortAddress,
@@ -61,7 +62,8 @@ const HEALTH: Record<Borrow["health"], { tone: "up" | "warn" | "down"; label: st
  * Every wallet is shown on the phone; only the Mercury wallet is acted on,
  * because the phone cannot get a linked wallet's signature. So there are no
  * buy, sell, borrow, repay or send buttons here. In their place, one row:
- * "Manage on web", which opens the web app on this wallet.
+ * "Manage on web", which opens the web app on this wallet, and "Move to
+ * Mercury wallet to trade here", which opens it with the move ready.
  */
 export default function LinkedWallet() {
   const router = useRouter();
@@ -162,12 +164,25 @@ export default function LinkedWallet() {
           <Text variant="small" tone="muted">
             {`Trading, borrowing and sending from ${name} happen on web, where ${name} approves each step. Here it is shown, not acted on.`}
           </Text>
-          <Button
-            label="Manage on web"
-            variant="secondary"
-            size="md"
-            onPress={() => void Linking.openURL(manageOnWebUrl(WEB_URL, id))}
-          />
+          <View style={s.manageRow}>
+            <View style={s.manageButton}>
+              <Button
+                label="Manage on web"
+                variant="secondary"
+                size="md"
+                onPress={() => void Linking.openURL(manageOnWebUrl(WEB_URL, id))}
+              />
+            </View>
+            {/* On web too: the move is signed by the linked wallet, which only its browser can ask. */}
+            <View style={s.manageButton}>
+              <Button
+                label="Move to Mercury wallet to trade here"
+                variant="primary"
+                size="md"
+                onPress={() => void Linking.openURL(moveOnWebUrl(WEB_URL, id))}
+              />
+            </View>
+          </View>
         </View>
       </View>
 
@@ -418,6 +433,8 @@ const s = StyleSheet.create({
   label: { fontFamily: font.medium, fontSize: 14, color: color.ink },
   worth: { fontFamily: font.medium, fontSize: 36, letterSpacing: -1.2, lineHeight: 42, color: color.ink },
   manage: { paddingHorizontal: 16, paddingVertical: 14, gap: space.md },
+  manageRow: { gap: space.sm },
+  manageButton: { alignSelf: "stretch" },
 
   head: {
     flexDirection: "row",

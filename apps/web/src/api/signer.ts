@@ -10,6 +10,8 @@ export interface TransactionSigner {
   readonly approver: string | null;
   /** One transaction, signed by the wallet chosen. Signed only: the server co-signs and sends it. */
   sign(transaction: Uint8Array): Promise<Uint8Array>;
+  /** Several transactions, approved once where the wallet can: a linked wallet asks for all of them together. */
+  signAll(transactions: readonly Uint8Array[]): Promise<Uint8Array[]>;
 }
 
 /**
@@ -35,14 +37,25 @@ export const useTransactionSigner = (): TransactionSigner => {
         const { signWithLinked } = await import("../wallet/linkedSigner");
         return signWithLinked(linked.address, name, transaction);
       },
+      signAll: async (transactions) => {
+        const { signAllWithLinked } = await import("../wallet/linkedSigner");
+        return signAllWithLinked(linked.address, name, transactions);
+      },
     };
   }
+  const sign = async (transaction: Uint8Array) => {
+    if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
+    return (await signTransaction({ transaction, wallet })).signedTransaction;
+  };
   return {
     walletReady: wallet !== undefined,
     approver: null,
-    sign: async (transaction) => {
-      if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
-      return (await signTransaction({ transaction, wallet })).signedTransaction;
+    sign,
+    // Privy signs inside Mercury, without a pop-up to repeat: one after another.
+    signAll: async (transactions) => {
+      const signed: Uint8Array[] = [];
+      for (const t of transactions) signed.push(await sign(t));
+      return signed;
     },
   };
 };

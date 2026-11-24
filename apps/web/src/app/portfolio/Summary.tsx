@@ -211,6 +211,7 @@ export const AccountHeader = ({
   failed = false,
   together = false,
   calculating = false,
+  movable = false,
 }: {
   m: Model | undefined;
   dash: Dashboard | undefined;
@@ -218,6 +219,8 @@ export const AccountHeader = ({
   together?: boolean;
   /** A linked wallet whose past is still being read: its stock P&L waits for it. */
   calculating?: boolean;
+  /** A linked wallet: what it holds can be moved into the Mercury wallet. */
+  movable?: boolean;
   /** Cash in the Earn vault. Not in `m.cash`, which is what can be spent now. */
   inEarn: number;
   /** Kamino could not be read, so `inEarn` is the last hourly reading. */
@@ -252,6 +255,7 @@ export const AccountHeader = ({
           <ButtonLink to="?send=usdc" icon={<ArrowUp className="rotate-45" />}>
             Send
           </ButtonLink>
+          {movable && <ButtonLink to="?move=1">Move to Mercury</ButtonLink>}
           {/* A shortcut only while the bill is close; otherwise the card panel owns it. */}
           {owes && Date.parse(card.statementDue) - Date.now() < 7 * 86_400_000 && (
             <Button icon={<Card />}>Pay card {usdCompact(card.statementBalanceUsd)}</Button>

@@ -39,7 +39,7 @@ vi.mock("./appkit", () => ({
   },
 }));
 
-const { signWithLinked } = await import("./linkedSigner");
+const { signAllWithLinked, signWithLinked } = await import("./linkedSigner");
 
 const MEMO = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 const relayer = Keypair.generate();
@@ -168,5 +168,123 @@ describe("signWithLinked, with a real key in place of Phantom", () => {
     kit.connected = Keypair.generate().publicKey.toBase58();
     for (const l of kit.accountListeners) l();
     await expect(signing).rejects.toThrow(/not Phantom/);
+  });
+});
+
+describe("signAllWithLinked: a move's small transactions, approved once", () => {
+  /** A wallet that signs a batch with one approval, counting the approvals. */
+  const batching = (key: Keypair) => {
+    const asked = { all: 0, one: 0 };
+    return {
+      asked,
+      provider: {
+        signTransaction: async (tx: VersionedTransaction) => {
+          asked.one += 1;
+          tx.sign([key]);
+          return tx;
+        },
+        signAllTransactions: async (txs: VersionedTransaction[]) => {
+          asked.all += 1;
+          for (const tx of txs) tx.sign([key]);
+          return txs;
+        },
+      },
+    };
+  };
+
+  it("asks the wallet once for all of them, and every one comes back validly signed by it", async () => {
+    kit.connected = phantom.publicKey.toBase58();
+    const w = batching(phantom);
+    kit.provider = w.provider;
+    const signed = await signAllWithLinked(phantom.publicKey.toBase58(), "Phantom", [
+      built(),
+      built(),
+      built(),
+    ]);
+
+    expect(w.asked).toEqual({ all: 1, one: 0 });
+    expect(signed).toHaveLength(3);
+    for (const bytes of signed) {
+      const { tx, signature } = signatureOf(bytes, phantom);
+      const valid = await verifySignature(
+        await getPublicKeyFromAddress(phantom.publicKey.toBase58() as Address),
+        signature as never,
+        tx.message.serialize(),
+      );
+      expect(valid).toBe(true);
+    }
+  });
+
+  it("asks for each in turn when the wallet can't sign several at once", async () => {
+    kit.connected = phantom.publicKey.toBase58();
+    let one = 0;
+    kit.provider = {
+      signTransaction: async (tx: VersionedTransaction) => {
+        one += 1;
+        tx.sign([phantom]);
+        return tx;
+      },
+    };
+    const signed = await signAllWithLinked(phantom.publicKey.toBase58(), "Phantom", [built(), built()]);
+    expect(one).toBe(2);
+    expect(signed.every((b) => signatureOf(b, phantom).signature.some((x) => x !== 0))).toBe(true);
+  });
+
+  it("returns none of them if the wallet rewrote any, so half a move is never sent", async () => {
+    kit.connected = phantom.publicKey.toBase58();
+    kit.provider = {
+      signTransaction: async () => {
+        throw new Error("not asked");
+      },
+      signAllTransactions: async (txs: VersionedTransaction[]) => {
+        const [first, second] = txs;
+        first!.sign([phantom]);
+        const changed = new VersionedTransaction(
+          new TransactionMessage({
+            payerKey: relayer.publicKey,
+            recentBlockhash: "EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k",
+            instructions: [
+              new TransactionInstruction({
+                programId: MEMO,
+                keys: [{ pubkey: phantom.publicKey, isSigner: true, isWritable: false }],
+                data: Buffer.from([9]),
+              }),
+            ],
+          }).compileToV0Message(),
+        );
+        changed.sign([phantom]);
+        void second;
+        return [first!, changed];
+      },
+    };
+    await expect(
+      signAllWithLinked(phantom.publicKey.toBase58(), "Phantom", [built(), built()]),
+    ).rejects.toThrow("Phantom changed the transaction while signing");
+  });
+
+  it("refuses a batch the wallet signed only part of", async () => {
+    kit.connected = phantom.publicKey.toBase58();
+    kit.provider = {
+      signTransaction: async () => {
+        throw new Error("not asked");
+      },
+      signAllTransactions: async (txs: VersionedTransaction[]) => {
+        txs[0]!.sign([phantom]);
+        return [txs[0]!];
+      },
+    };
+    await expect(
+      signAllWithLinked(phantom.publicKey.toBase58(), "Phantom", [built(), built()]),
+    ).rejects.toThrow("Phantom didn't sign every step, so nothing was sent.");
+  });
+
+  it("refuses, having asked nothing, when another wallet is connected", async () => {
+    kit.connected = Keypair.generate().publicKey.toBase58();
+    const w = batching(phantom);
+    kit.provider = w.provider;
+    await expect(signAllWithLinked(phantom.publicKey.toBase58(), "Phantom", [built()])).rejects.toThrow(
+      /not Phantom/,
+    );
+    expect(w.asked).toEqual({ all: 0, one: 0 });
   });
 });

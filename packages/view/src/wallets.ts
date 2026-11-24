@@ -234,6 +234,20 @@ export const WALLET_PARAM = "wallet";
 export const manageOnWebUrl = (base: string, walletId: string): string =>
   `${base.replace(/\/+$/, "")}/?${WALLET_PARAM}=${encodeURIComponent(walletId)}`;
 
+/** The parameter that opens the move into the Mercury wallet as the page loads. */
+export const MOVE_PARAM = "move";
+
+/**
+ * Where "Move to Mercury wallet to trade here" goes: the web app on that
+ * wallet, with the move open. The move is signed by the linked wallet, which
+ * only the browser it is connected in can ask.
+ */
+export const moveOnWebUrl = (base: string, walletId: string): string =>
+  `${manageOnWebUrl(base, walletId)}&${MOVE_PARAM}=1`;
+
+/** Whether a link asks for the move to open, from a query string. */
+export const moveFromSearch = (search: string): boolean => new URLSearchParams(search).get(MOVE_PARAM) === "1";
+
 /** The wallet a link asks to open on, from a query string; null when it names none. */
 export const walletFromSearch = (search: string): string | null => {
   const id = new URLSearchParams(search).get(WALLET_PARAM)?.trim() ?? "";

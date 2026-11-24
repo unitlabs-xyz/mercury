@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { opensPanel } from "./Panels";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { Plus } from "../ui/icons";
@@ -27,8 +28,11 @@ export const Welcome = () => {
   const navigate = useNavigate();
 
   // First arrival only. Storage can throw in a private window, so never let it
-  // decide whether the app renders.
+  // decide whether the app renders. Not over a page opened to do something (a
+  // link from the phone opening the move, say): it waits, unseen, for a visit
+  // that is only a visit.
   useEffect(() => {
+    if (opensPanel(window.location.search)) return;
     try {
       if (!localStorage.getItem(SEEN)) setOpen(true);
     } catch {
