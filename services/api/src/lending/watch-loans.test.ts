@@ -269,7 +269,9 @@ describe("watchAllLoans, linked wallets", () => {
 
     expect(sent[0]!.subject).toBe("Repay now, or your shares will be sold (Phantom main)");
     expect(sent[0]!.body).toContain("This loan is in your linked wallet Phantom main.");
-    expect(sent[0]!.body).toContain("Mercury can't act for this wallet. Repay or add collateral from it");
+    expect(sent[0]!.body).toContain(
+      "Repay or add collateral from Mercury on the web, where Phantom main approves it",
+    );
     const [row] = await db.select().from(activities);
     expect(row!.title).toBe("Liquidation risk · Phantom main");
   });

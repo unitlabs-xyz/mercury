@@ -123,8 +123,8 @@ describe("forWallet", () => {
     expect(told.title).toBe("Liquidation risk · Phantom main");
     expect(told.subject).toBe("Repay now, or your shares will be sold (Phantom main)");
     expect(told.body).toBe(
-      "Your stocks have fallen. This loan is in your linked wallet Phantom main. Mercury can't act for " +
-        "this wallet. Repay or add collateral from it to avoid liquidation.",
+      "Your stocks have fallen. This loan is in your linked wallet Phantom main. Repay or add collateral " +
+        "from Mercury on the web, where Phantom main approves it, to avoid liquidation.",
     );
     expect(told.health).toBe("margin_call");
   });

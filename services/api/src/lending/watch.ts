@@ -116,10 +116,10 @@ export const loanWalletName = (wallet: Pick<LoanWallet, "label" | "address">): s
  * An alert about a loan in a linked wallet, said as one.
  *
  * Named, because the person may have a loan in more than one wallet and has to
- * know which to repay. And told what only they can do: Mercury builds nothing
- * for a linked wallet without its signature, so repaying or adding collateral
- * has to come from that wallet. A loan in the Mercury wallet reads as it
- * always has.
+ * know which to repay. And told where it can be done: Mercury builds the repay
+ * or the collateral on the web, and the linked wallet approves it in its own
+ * pop-up, which the phone cannot ask for. A loan in the Mercury wallet reads
+ * as it always has.
  */
 export const forWallet = (alert: Alert, wallet: LoanWallet): Alert => {
   if (wallet.kind !== "external") return alert;
@@ -129,7 +129,7 @@ export const forWallet = (alert: Alert, wallet: LoanWallet): Alert => {
     title: `${alert.title} · ${name}`,
     subject: `${alert.subject} (${name})`,
     body:
-      `${alert.body} This loan is in your linked wallet ${name}. Mercury can't act for this wallet. ` +
-      `Repay or add collateral from it to avoid liquidation.`,
+      `${alert.body} This loan is in your linked wallet ${name}. ` +
+      `Repay or add collateral from Mercury on the web, where ${name} approves it, to avoid liquidation.`,
   };
 };
