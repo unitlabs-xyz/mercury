@@ -164,3 +164,46 @@ export const mercuryWalletOnly = (): MiddlewareHandler => async (c, next) => {
   await next();
   return undefined;
 };
+
+/**
+ * For a route that acts, once linked wallets can: it acts for the one wallet
+ * chosen, the Mercury wallet or a linked one. `all` is a 400, as the spec has
+ * it for every write: a trade for every wallet at once would not say whose.
+ * Reads pass, so it can be mounted on a whole path, as `mercuryWalletOnly` is.
+ */
+export const oneWalletToAct = (): MiddlewareHandler => async (c, next) => {
+  if (c.req.method !== "GET" && c.req.method !== "HEAD" && c.get("acting").all) {
+    return c.json(fail("wallet_all", "Choose a wallet to do this from."), 400);
+  }
+  await next();
+  return undefined;
+};
+
+/** The wallet a write acts for, and its address as the write should use it. */
+export interface Writer {
+  readonly id: string;
+  readonly address: string;
+  readonly isPrimary: boolean;
+  /** What to call it where the person approves: "Mercury", its label, or its short address. */
+  readonly label: string | null;
+}
+
+/**
+ * The wallet a write acts for: the one chosen, never a wallet the caller only
+ * names. The acting middleware has already checked the choice against the
+ * caller's own followed wallets in the database, and a linked wallet was
+ * proven theirs by its signature when it was linked. The Mercury wallet's
+ * address is the one Privy signed into the session, as every write used
+ * before; a linked wallet's is its row's. Null when there is no wallet to act
+ * for: a session whose Mercury wallet is still being made, or every wallet at
+ * once (which `oneWalletToAct` turns away first).
+ */
+export const writerOf = (c: Context): Writer | null => {
+  const one = actingOne(c);
+  if (one === null) return null;
+  if (one.isPrimary) {
+    const signed = c.get("identity").walletAddress;
+    return signed === null ? null : { id: one.id, address: signed, isPrimary: true, label: one.label };
+  }
+  return { id: one.id, address: one.address, isPrimary: false, label: one.label };
+};

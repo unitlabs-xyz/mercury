@@ -17,6 +17,7 @@ export const memoryOrderStore = (): OrderStore => {
         max: order.max ?? false,
         mercuryFeeUsd: null,
         createdAt: new Date().toISOString(),
+        walletId: order.walletId ?? null,
       };
       rows.set(stored.id, { order, stored });
       return stored;

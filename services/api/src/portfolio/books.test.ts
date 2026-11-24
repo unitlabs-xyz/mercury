@@ -153,6 +153,7 @@ const books = async () => {
       settle: () =>
         settleOrder(db, {
           userId,
+          walletId: owner.walletId,
           orderId: row!.id,
           signature: `sig-${row!.id}`,
           side,

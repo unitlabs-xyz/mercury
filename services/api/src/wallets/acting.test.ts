@@ -11,6 +11,8 @@ import {
   followedWallets,
   mercuryWalletOnly,
   oneWalletOnly,
+  oneWalletToAct,
+  writerOf,
   type Acting,
 } from "./acting.js";
 
@@ -249,5 +251,72 @@ describe("mercuryWalletOnly", () => {
     const res = await appFor(db, user!.id).request("/act", { method: "POST" });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ acted: null });
+  });
+});
+
+describe("oneWalletToAct and writerOf", () => {
+  let db: Db;
+  let userId: string;
+  let linkedId: string;
+
+  /** The session's own address is what Privy signed; the Mercury wallet's row says something else, to tell them apart. */
+  const appOf = (signed: string | null) => {
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("identity", { userId, privyUserId: "did:privy:x", walletAddress: signed });
+      await next();
+    });
+    app.use("*", actingWallet({ db }));
+    app.use("/act", oneWalletToAct());
+    app.get("/act", (c) => c.json({ read: true }));
+    app.post("/act", (c) => c.json({ writer: writerOf(c) }));
+    return app;
+  };
+  const act = (app: Hono, header?: string) =>
+    app.request("/act", {
+      method: "POST",
+      ...(header === undefined ? {} : { headers: { [WALLET_HEADER]: header } }),
+    });
+
+  beforeEach(async () => {
+    db = await testDb();
+    ({ userId } = await person(db, "did:privy:a"));
+    linkedId = await linkedWallet(db, userId, "Linked", { linkedAt: new Date("2026-11-10T00:00:00Z") });
+  });
+
+  it("acts for the Mercury wallet at the address Privy signed into the session, never its row's", async () => {
+    const res = await act(appOf("SignedBySession"));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { writer: { address: string; isPrimary: boolean } }).writer).toMatchObject({
+      address: "SignedBySession",
+      isPrimary: true,
+    });
+  });
+
+  it("acts for a linked wallet at its own address, once the middleware found it is the caller's", async () => {
+    const res = await act(appOf("SignedBySession"), linkedId);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { writer: unknown }).writer).toEqual({
+      id: linkedId,
+      address: "Linked",
+      isPrimary: false,
+      label: null,
+    });
+  });
+
+  it("refuses every wallet at once with a 400, and lets a read through", async () => {
+    const app = appOf("SignedBySession");
+    const res = await act(app, ALL_WALLETS);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "wallet_all" } });
+    expect((await app.request("/act", { headers: { [WALLET_HEADER]: ALL_WALLETS } })).status).toBe(200);
+  });
+
+  it("has no writer for a session whose Mercury wallet is still being made", async () => {
+    expect(((await (await act(appOf(null))).json()) as { writer: unknown }).writer).toBeNull();
+  });
+
+  it("refuses a wallet that is not the caller's before it reaches a write", async () => {
+    expect((await act(appOf("SignedBySession"), "6f1c9b8e-0000-4000-8000-000000000000")).status).toBe(403);
   });
 });

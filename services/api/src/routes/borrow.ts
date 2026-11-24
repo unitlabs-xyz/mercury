@@ -24,7 +24,7 @@ import { landedAmounts, planLoanEvents, type PlannedLoanEvent } from "../lending
 import type { RecordInput } from "../lending/record.js";
 // Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
-import { actingOne, oneWalletOnly } from "../wallets/acting.js";
+import { actingOne, oneWalletOnly, writerOf } from "../wallets/acting.js";
 import type { WalletOwner } from "../wallets/active.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
 import { logger } from "../log/index.js";
@@ -263,7 +263,8 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
    * reason, before anything is built.
    */
   app.post("/v1/borrow/transactions", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+    // The wallet chosen, whose own loan this acts on. See `writerOf`.
+    const wallet = writerOf(c)?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = Request.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
@@ -474,8 +475,9 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
    * `debt_after_usd` is Kamino's number and it is the one the books use.
    */
   app.post("/v1/borrow/confirm", async (c) => {
-    const wallet = c.get("identity").walletAddress;
-    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const writer = writerOf(c);
+    if (writer === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const wallet = writer.address;
 
     const parsed = ConfirmRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
@@ -514,6 +516,7 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
     const usdc = deps.usdcMint;
     const written = await deps.record(planned, {
       userId: c.get("identity").userId,
+      walletId: writer.id,
       signature,
       occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
       borrowApy: terms?.pool.borrowApy ?? null,

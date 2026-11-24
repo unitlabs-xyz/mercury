@@ -25,6 +25,7 @@ import type {} from "../auth/middleware.js";
 import { decodeSponsored } from "../relay/decode.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
 import type { RelaySigner } from "../relay/signer.js";
+import { writerOf } from "../wallets/acting.js";
 import { validateSponsored } from "../relay/validate.js";
 
 export interface SendDeps {
@@ -256,7 +257,8 @@ export function sendRoutes(deps: SendDeps): Hono {
    * enough for a field to ask on every address it accepts.
    */
   app.post("/v1/money/send/quote", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+    // The wallet chosen, which the money leaves. See `writerOf`.
+    const wallet = writerOf(c)?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = QuoteBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", "Enter a recipient address."), 400);
@@ -283,7 +285,8 @@ export function sendRoutes(deps: SendDeps): Hono {
   });
 
   app.post("/v1/money/send/prepare", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+    // The wallet chosen, which the money leaves. See `writerOf`.
+    const wallet = writerOf(c)?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = PrepareBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
@@ -365,7 +368,12 @@ export function sendRoutes(deps: SendDeps): Hono {
   });
 
   app.post("/v1/transactions/send", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+    /*
+     * The wallet chosen: the Mercury wallet at the address Privy signed into
+     * the session, or a linked wallet the caller proved theirs when it was
+     * linked. See `writerOf`.
+     */
+    const wallet = writerOf(c)?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = Body.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
@@ -385,7 +393,8 @@ export function sendRoutes(deps: SendDeps): Hono {
       /*
        * We are being asked to pay. The session proves who is calling; it does
        * not prove the transaction is theirs, so everything about the message
-       * is checked against the wallet Privy signed for before the key is used.
+       * is checked against the wallet chosen (the one it must be signed by)
+       * before the key is used.
        */
       const verdict = validateSponsored(decoded.tx, wallet, {
         relayer: deps.relay.signer.address,

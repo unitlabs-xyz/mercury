@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { every } from "hono/combine";
 import { httpInstrumentationMiddleware } from "@hono/otel";
@@ -17,7 +17,7 @@ import { createSolanaRpc } from "@solana/kit";
 import { USDC_MINT } from "@mercury/chain";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
-import { actingWallet, mercuryWalletOnly } from "./wallets/acting.js";
+import { actingWallet, mercuryWalletOnly, oneWalletToAct, writerOf } from "./wallets/acting.js";
 import { requestId } from "./telemetry/request-id.js";
 import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
@@ -126,26 +126,62 @@ const orderLog = logger("orders");
 const httpLog = logger("http");
 
 /**
- * The routes that build, sign or record something for a wallet. Until linked
- * wallets can act, each acts for the Mercury wallet alone, and refuses a
- * request made while another wallet, or every wallet, is chosen; see
- * `mercuryWalletOnly`. Reads under these paths pass.
+ * The routes that build, sign or record something for a wallet and that act
+ * for the wallet chosen, linked ones included: every wallet at once is a 400
+ * (`oneWalletToAct`). The rest of `WALLET_ACTIONS` follows as each flow learns
+ * to act for a linked wallet. Reads under these paths pass.
+ */
+const ACTING_ACTIONS = [
+  "/v1/quote",
+  "/v1/orders",
+  "/v1/orders/*",
+  "/v1/transactions/send",
+  "/v1/borrow/*",
+  "/v1/earn/transactions",
+  "/v1/earn/confirm",
+  "/v1/money/send/*",
+] as const;
+
+/**
+ * The routes that build, sign or record something for a wallet and still act
+ * for the Mercury wallet alone, refusing a request made while another wallet,
+ * or every wallet, is chosen; see `mercuryWalletOnly`. Reads under these
+ * paths pass.
  *
  * Not here, on purpose: adding money (it always lands in the Mercury wallet,
  * whichever is chosen), Earn's account settings, the inbox and the wallets
  * themselves, none of which act for a wallet.
  */
-const WALLET_ACTIONS = [
-  "/v1/quote",
-  "/v1/orders",
-  "/v1/orders/*",
-  "/v1/baskets/*",
-  "/v1/borrow/*",
-  "/v1/earn/transactions",
-  "/v1/earn/confirm",
-  "/v1/money/send/*",
-  "/v1/transactions/send",
-] as const;
+const WALLET_ACTIONS = ["/v1/baskets/*"] as const;
+
+/**
+ * The wallet an order is executed and confirmed for: the one it was placed
+ * for, which must still be the one chosen. The wallet is never taken from a
+ * header alone (see `writerOf`), and an order is never built or settled for a
+ * wallet other than its own: switching wallets between placing an order and
+ * approving it is a 409, not a trade for the wallet switched to.
+ */
+const orderWallet = (
+  c: Context,
+  order: { readonly walletId: string | null },
+):
+  | { readonly kind: "ok"; readonly address: string; readonly walletId: string }
+  | { readonly kind: "refused"; readonly response: Response } => {
+  const writer = writerOf(c);
+  if (writer === null) {
+    return { kind: "refused", response: c.json(fail("unauthorized", "No wallet on this session."), 401) };
+  }
+  if (order.walletId !== null && order.walletId !== writer.id) {
+    return {
+      kind: "refused",
+      response: c.json(
+        fail("wallet_changed", "This order was placed from another wallet. Switch back to it to finish."),
+        409,
+      ),
+    };
+  }
+  return { kind: "ok", address: writer.address, walletId: writer.id };
+};
 
 export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
@@ -209,6 +245,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
 
   app.use("/v1/*", requireAuth(auth));
   app.use("/v1/*", acting);
+  for (const path of ACTING_ACTIONS) app.use(path, oneWalletToAct());
   for (const path of WALLET_ACTIONS) app.use(path, mercuryWalletOnly());
 
   app.onError((err, c) => {
@@ -280,7 +317,8 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
-    const wallet = c.get("identity").walletAddress;
+    // The wallet chosen: a sell is priced against what that wallet holds.
+    const wallet = writerOf(c)?.address ?? null;
     const sponsored = read.send.relay !== undefined && wallet !== null;
     const req = toPriceRequest(parsed.data, wallet);
 
@@ -372,12 +410,15 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
     const identity = c.get("identity");
-    const decision = await priceOrder(market(), toPriceRequest(parsed.data, identity.walletAddress, true));
+    // Placed for the wallet chosen now, and kept on the order: executing and confirming act for it.
+    const writer = writerOf(c);
+    const decision = await priceOrder(market(), toPriceRequest(parsed.data, writer?.address ?? null, true));
     if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
     const wire = decisionToWire(decision);
     const saved = await read.orders.create({
       userId: identity.userId,
+      ...(writer === null ? {} : { walletId: writer.id }),
       ticker: parsed.data.ticker,
       side: parsed.data.side,
       usdAmount: parsed.data.amount,
@@ -419,10 +460,10 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const shown = order.decision as ReturnType<typeof decisionToWire>;
     if (shown.kind === "refuse") return c.json(fail("instrument_not_tradable", shown.detail), 409);
 
-    // The wallet comes from the identity token Privy signed, never from a
-    // header the caller controls. See services/api/src/auth/identity.ts.
-    const owner = identity.walletAddress;
-    if (owner === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    // The wallet the order was placed for. See `orderWallet`.
+    const acting = orderWallet(c, order);
+    if (acting.kind !== "ok") return acting.response;
+    const owner = acting.address;
 
     /*
      * Settled orders cannot be built again; unsettled ones can.
@@ -717,8 +758,9 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const decision = order.decision as ReturnType<typeof decisionToWire>;
     if (decision.kind === "refuse") return c.json(fail("instrument_not_tradable", decision.detail), 409);
 
-    const owner = identity.walletAddress;
-    if (owner === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const acting = orderWallet(c, order);
+    if (acting.kind !== "ok") return acting.response;
+    const owner = acting.address;
 
     const mint = decision.best.mint;
     const [ref, token, multiplier, board] = await Promise.all([
@@ -761,6 +803,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
 
     const settled = await read.fills.settle({
       userId: identity.userId,
+      walletId: acting.walletId,
       orderId: order.id,
       signature: parsed.data.signature,
       side: decision.side,

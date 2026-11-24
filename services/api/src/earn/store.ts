@@ -3,11 +3,12 @@ import { D, toWire, type Decimal } from "@mercury/core";
 import { USDC_MINT } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { activities, earnEvents, users, wallets } from "../db/schema.js";
-import { primaryWalletId } from "../wallets/primary.js";
 import type { WalletOwner } from "../wallets/active.js";
 
 export interface EarnRecord {
   readonly userId: string;
+  /** The wallet whose Earn position moved. */
+  readonly walletId: string;
   readonly kind: "deposit" | "withdraw";
   readonly usdc: Decimal;
   readonly vault: string;
@@ -81,7 +82,7 @@ export const pgEarnLedger = (db: Db): EarnLedger => ({
         .insert(earnEvents)
         .values({
           userId: e.userId,
-          walletId: primaryWalletId(e.userId),
+          walletId: e.walletId,
           kind: e.kind,
           usdcAmount: toWire(e.usdc),
           vault: e.vault,
@@ -95,7 +96,7 @@ export const pgEarnLedger = (db: Db): EarnLedger => ({
         .insert(activities)
         .values({
           userId: e.userId,
-          walletId: primaryWalletId(e.userId),
+          walletId: e.walletId,
           kind: FEED[e.kind].kind,
           occurredAt: e.occurredAt,
           title: FEED[e.kind].title,

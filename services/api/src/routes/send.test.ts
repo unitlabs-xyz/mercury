@@ -21,6 +21,7 @@ import type { SendDeps } from "./send.js";
 import { inMemoryBuilds } from "../relay/builds.js";
 import { getBase64Encoder, getTransactionDecoder } from "@solana/kit";
 import { D } from "@mercury/core";
+import { actingAs } from "../wallets/testing.js";
 import { USDC_MINT } from "@mercury/chain";
 
 const lifetime = { blockhash: "11111111111111111111111111111111" as Blockhash, lastValidBlockHeight: 1n };
@@ -43,6 +44,11 @@ const app = (walletAddress: string | null, relay?: SendDeps["relay"]) => {
   const a = new Hono();
   a.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress });
+    // The Mercury wallet chosen, as the acting middleware leaves it for a session with one.
+    {
+      const signed = c.get("identity").walletAddress;
+      c.set("acting", { all: false, wallets: signed === null ? [] : [actingAs(signed)] });
+    }
     await next();
   });
   a.route("/", sendRoutes({ rpcUrl: "http://127.0.0.1:1", ...(relay ? { relay } : {}) }));
@@ -282,6 +288,11 @@ const quote = (opts: {
       privyUserId: "did:privy:1",
       walletAddress: opts.wallet === undefined ? "8fLSHcVtPjDMytCpaK7AJjvU2tzpoGQudR5fFffmGdX6" : opts.wallet,
     });
+    // The Mercury wallet chosen, as the acting middleware leaves it for a session with one.
+    {
+      const signed = c.get("identity").walletAddress;
+      c.set("acting", { all: false, wallets: signed === null ? [] : [actingAs(signed)] });
+    }
     await next();
   });
   a.route(
@@ -371,6 +382,11 @@ describe("POST /v1/transactions/send, once the node takes it", () => {
       const a = new Hono();
       a.use("*", async (c, next) => {
         c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: wallet });
+        // The Mercury wallet chosen, as the acting middleware leaves it for a session with one.
+        {
+          const signed = c.get("identity").walletAddress;
+          c.set("acting", { all: false, wallets: signed === null ? [] : [actingAs(signed)] });
+        }
         await next();
       });
       a.route(
@@ -404,6 +420,11 @@ describe("POST /v1/transactions/send, once the node takes it", () => {
       const a = new Hono();
       a.use("*", async (c, next) => {
         c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: wallet });
+        // The Mercury wallet chosen, as the acting middleware leaves it for a session with one.
+        {
+          const signed = c.get("identity").walletAddress;
+          c.set("acting", { all: false, wallets: signed === null ? [] : [actingAs(signed)] });
+        }
         await next();
       });
       a.route("/", sendRoutes({ rpcUrl: node.url, sent: (w) => void sent.push(w) }));

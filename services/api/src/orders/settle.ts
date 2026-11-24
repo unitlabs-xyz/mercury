@@ -4,12 +4,18 @@ import type { Db } from "../db/client.js";
 import { activities, disposals, instruments, lots, orders, positions, tokens } from "../db/schema.js";
 import type { Fill } from "./fill.js";
 import { logger } from "../log/index.js";
-import { primaryWalletId } from "../wallets/primary.js";
 
 const log = logger("orders");
 
 export interface SettleInput {
   readonly userId: string;
+  /**
+   * The wallet the order was placed for, from the order row. Every row the
+   * fill writes is that wallet's, and a sell only ever takes back, and
+   * prices against, that wallet's records: another wallet's transfer out or
+   * cost is no part of it.
+   */
+  readonly walletId: string;
   readonly orderId: string;
   readonly signature: string;
   readonly side: "buy" | "sell";
@@ -135,7 +141,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
     if (input.side === "buy") {
       await tx.insert(lots).values({
         userId: input.userId,
-        walletId: primaryWalletId(input.userId),
+        walletId: input.walletId,
         tokenId: input.tokenId,
         instrumentId: input.instrumentId,
         tokenQty: fill.tokensRaw,
@@ -173,6 +179,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         .where(
           and(
             eq(disposals.userId, input.userId),
+            eq(disposals.walletId, input.walletId),
             eq(disposals.tokenId, input.tokenId),
             eq(disposals.kind, "transfer_out"),
             gte(disposals.recordedAt, claimed[0]!.createdAt),
@@ -187,7 +194,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         .insert(disposals)
         .values({
           userId: input.userId,
-          walletId: primaryWalletId(input.userId),
+          walletId: input.walletId,
           tokenId: input.tokenId,
           instrumentId: input.instrumentId,
           tokenQty: fill.tokensRaw,
@@ -207,7 +214,13 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
         ? await tx
             .select({ sharesWithBasis: positions.sharesWithBasis, costBasisUsd: positions.costBasisUsd })
             .from(positions)
-            .where(and(eq(positions.userId, input.userId), eq(positions.instrumentId, input.instrumentId)))
+            .where(
+              and(
+                eq(positions.userId, input.userId),
+                eq(positions.walletId, input.walletId),
+                eq(positions.instrumentId, input.instrumentId),
+              ),
+            )
             .limit(1)
         : [];
 
@@ -226,7 +239,7 @@ export async function settleOrder(db: Db, input: SettleInput): Promise<SettleRes
       .insert(activities)
       .values({
         userId: input.userId,
-        walletId: primaryWalletId(input.userId),
+        walletId: input.walletId,
         kind: input.side,
         occurredAt: fill.occurredAt,
         title: `${input.side === "buy" ? "Bought" : "Sold"} ${input.ticker}`,

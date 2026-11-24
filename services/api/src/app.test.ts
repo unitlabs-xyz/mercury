@@ -451,9 +451,50 @@ describe("which wallet a write is for", () => {
     expect((await h.postAs(h.mercuryId, "/v1/orders", order)).status).toBe(200);
   });
 
-  it("refuses an order while a linked wallet is chosen", async () => {
+  it("places an order for a linked wallet when it is chosen, and keeps the wallet on the order", async () => {
     const h = await signedInWithLinked();
     const res = await h.postAs(h.linkedId, "/v1/orders", order);
+    expect(res.status).toBe(200);
+    const { orderId } = (await res.json()) as { orderId: string };
+    expect(await (await h.get(`/v1/orders/${orderId}`)).json()).toMatchObject({ walletId: h.linkedId });
+  });
+
+  it("finishes an order only for the wallet it was placed for, never the one switched to", async () => {
+    const h = await signedInWithLinked();
+    const { orderId } = (await (await h.postAs(h.linkedId, "/v1/orders", order)).json()) as {
+      orderId: string;
+    };
+    for (const path of [`/v1/orders/${orderId}/execute`, `/v1/orders/${orderId}/confirm`]) {
+      // A signature of the right shape, so the wallet check is what answers.
+      const res = await h.postAs(h.mercuryId, path, { signature: "5".repeat(88) });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "wallet_changed" } });
+    }
+  });
+
+  it("lets a linked wallet through to a loan, Earn and a send, which now act for it", async () => {
+    const h = await signedInWithLinked();
+    for (const path of ["/v1/borrow/transactions", "/v1/earn/transactions", "/v1/money/send/quote"]) {
+      const res = await h.postAs(h.linkedId, path, {});
+      const body = (await res
+        .clone()
+        .json()
+        .catch(() => ({}))) as { error?: { code: string } };
+      expect(body.error?.code, path).not.toBe("wallet_read_only");
+      expect(body.error?.code, path).not.toBe("wallet_all");
+    }
+  });
+
+  it("refuses a loan, Earn and a send for every wallet at once", async () => {
+    const h = await signedInWithLinked();
+    for (const path of ["/v1/borrow/transactions", "/v1/earn/transactions", "/v1/money/send/quote"]) {
+      expect((await h.postAs("all", path, {})).status, path).toBe(400);
+    }
+  });
+
+  it("still refuses what a linked wallet cannot do yet: a basket", async () => {
+    const h = await signedInWithLinked();
+    const res = await h.postAs(h.linkedId, "/v1/basket-templates/mag7/rebalance", {});
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "wallet_read_only" } });
   });

@@ -78,6 +78,7 @@ const settledBuy = async (s: Seeded) => {
     .returning();
   await settleOrder(s.db, {
     userId: s.userId,
+    walletId: s.walletId,
     orderId: order!.id,
     signature: "SigBuy",
     side: "buy",
@@ -112,6 +113,7 @@ const loan = (
     planLoanEvents(intent, () => 8),
     {
       userId: s.userId,
+      walletId: s.walletId,
       signature,
       occurredAt: new Date(at),
       borrowApy: D("0.058"),
@@ -198,6 +200,7 @@ describe("readReceipt", () => {
       ],
       {
         userId: s.userId,
+        walletId: s.walletId,
         signature: "SigClose",
         occurredAt: new Date("2026-10-17T09:05:00Z"),
         borrowApy: D("0.058"),

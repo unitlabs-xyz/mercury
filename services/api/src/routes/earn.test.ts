@@ -307,7 +307,12 @@ describe("POST /v1/earn/transactions", () => {
     const remembered: unknown[] = [];
     const d = deps({ sends: { remember: (bytes, move) => remembered.push([[...bytes], move]) } });
     await send(appWith(d), "POST", "/v1/earn/transactions", { kind: "deposit", usd: "20" });
-    expect(remembered).toEqual([[[1], { userId: "user-1", wallet: WALLET, kind: "deposit", vault: STEADY }]]);
+    expect(remembered).toEqual([
+      [
+        [1],
+        { userId: "user-1", wallet: WALLET, walletId: "wallet-id-WaLLeT", kind: "deposit", vault: STEADY },
+      ],
+    ]);
   });
 
   it("moves all the wallet's cash when asked for all", async () => {

@@ -412,6 +412,48 @@ describe("POST /v1/borrow/confirm", () => {
     expect(res.status).toBe(422);
   });
 
+  it("records a linked wallet's repay under that wallet, read from its own transaction", async () => {
+    const owners: { walletId: string }[] = [];
+    const linked = actingLinked("Phantom", { id: "wallet-phantom" });
+    const d = {
+      ...deps(lending()),
+      history: {
+        transaction: async (signature: string) => ({
+          signature,
+          accountKeys: ["Phantom"],
+          blockTime: 1_790_000_000,
+          preTokens: [],
+          postTokens: [],
+        }),
+      } as unknown as BorrowDeps["history"],
+      record: async (planned: readonly PlannedLoanEvent[], input: { walletId: string }) => {
+        owners.push({ walletId: input.walletId });
+        return { written: planned.length };
+      },
+    } as BorrowDeps;
+    const res = await app(d, "WaLLeT", { all: false, wallets: [linked] }).request("/v1/borrow/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signature: "SIG", action: { kind: "repay", usd: "100" } }),
+    });
+    expect(res.status).toBe(200);
+    expect(owners).toEqual([{ walletId: "wallet-phantom" }]);
+  });
+
+  it("refuses the Mercury wallet's transaction filed while a linked wallet is chosen", async () => {
+    const linked = actingLinked("Phantom", { id: "wallet-phantom" });
+    // The transaction names only the Mercury wallet: it is not the chosen wallet's loan.
+    const res = await app(deps(lending()), "WaLLeT", { all: false, wallets: [linked] }).request(
+      "/v1/borrow/confirm",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ signature: "SIG", action: { kind: "repay", usd: "100" } }),
+      },
+    );
+    expect(res.status).toBe(422);
+  });
+
   it("records a repay of everything without inventing the figure", async () => {
     recorded.length = 0;
     await confirm(deps(lending()), { signature: "SIG2", action: { kind: "repay", usd: "all" } });

@@ -24,6 +24,7 @@ const setup = async () => {
   const record = (planned: PlannedLoanEvent[], signature: string, at: string, debtAfter: string) =>
     recordLoanEvents(db, planned, {
       userId: user!.id,
+      walletId,
       signature,
       occurredAt: new Date(at),
       borrowApy: D("0.077"),

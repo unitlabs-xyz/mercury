@@ -4,11 +4,12 @@ import type { Db } from "../db/client.js";
 import { activities, loanEvents } from "../db/schema.js";
 import type { PlannedLoanEvent } from "./events.js";
 import type { LedgerRow } from "./interest.js";
-import { primaryWalletId } from "../wallets/primary.js";
 import type { WalletOwner } from "../wallets/active.js";
 
 export interface RecordInput {
   readonly userId: string;
+  /** The wallet whose loan this is: the one that signed. Each wallet has its own Kamino loan. */
+  readonly walletId: string;
   readonly signature: string;
   readonly occurredAt: Date;
   /** Kamino's borrow APY when this landed. Null if the terms could not be read. */
@@ -45,7 +46,7 @@ export async function recordLoanEvents(
       .insert(loanEvents)
       .values({
         userId: input.userId,
-        walletId: primaryWalletId(input.userId),
+        walletId: input.walletId,
         kind: event.kind,
         usdAmount: event.usdAmount === null ? null : toWire(event.usdAmount),
         ticker: event.ticker,
@@ -67,7 +68,7 @@ export async function recordLoanEvents(
       .insert(activities)
       .values({
         userId: input.userId,
-        walletId: primaryWalletId(input.userId),
+        walletId: input.walletId,
         kind: event.kind,
         occurredAt: input.occurredAt,
         title: event.title,

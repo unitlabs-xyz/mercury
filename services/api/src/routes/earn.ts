@@ -12,8 +12,8 @@ import { EARN_RISK_VERSION } from "../earn/risk.js";
 import type { EarnSends } from "../earn/sends.js";
 // Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
-import type { ActingWallet } from "../wallets/acting.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
+import { writerOf, type ActingWallet } from "../wallets/acting.js";
 import { logger } from "../log/index.js";
 
 const log = logger("earn");
@@ -271,8 +271,10 @@ export function earnRoutes(deps: EarnDeps): Hono {
 
   app.post("/v1/earn/transactions", async (c) => {
     const identity = c.get("identity");
-    const wallet = identity.walletAddress;
-    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    // The wallet chosen, whose own Earn position this moves. See `writerOf`.
+    const writer = writerOf(c);
+    if (writer === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const wallet = writer.address;
     const parsed = Request.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
     const body = parsed.data;
@@ -350,7 +352,13 @@ export function earnRoutes(deps: EarnDeps): Hono {
     }
     for (const m of built.messages) {
       deps.relay?.builds.remember(m);
-      deps.sends?.remember(m, { userId: identity.userId, wallet, kind: body.kind, vault });
+      deps.sends?.remember(m, {
+        userId: identity.userId,
+        wallet,
+        walletId: writer.id,
+        kind: body.kind,
+        vault,
+      });
     }
     return c.json({ transactions: built.transactions, vault, expiresAt: built.expiresAt.toISOString() });
   });
@@ -361,8 +369,9 @@ export function earnRoutes(deps: EarnDeps): Hono {
    */
   app.post("/v1/earn/confirm", async (c) => {
     const identity = c.get("identity");
-    const wallet = identity.walletAddress;
-    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const writer = writerOf(c);
+    if (writer === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const wallet = writer.address;
     const parsed = ConfirmRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
     const { signature, action } = parsed.data;
@@ -370,6 +379,7 @@ export function earnRoutes(deps: EarnDeps): Hono {
     const result = await recordMove(deps, {
       userId: identity.userId,
       wallet,
+      walletId: writer.id,
       kind: action.kind,
       vault: action.vault ?? (await defaultFor(identity.userId)),
       signature,
