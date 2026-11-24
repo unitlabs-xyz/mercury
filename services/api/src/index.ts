@@ -730,7 +730,15 @@ every(
 every(
   "history-cost",
   30_000,
-  costPass({ db: auth.db, past: new YahooHistory(), board: deps.prices, log: logger("history-cost") }),
+  costPass({
+    db: auth.db,
+    past: new YahooHistory(),
+    board: deps.prices,
+    // Earn's vaults by share token, so a linked wallet's Earn moves are read into the ledger.
+    earnVaults: async () =>
+      new Map((await deps.earn.list()).map((v) => [v.sharesMint, { address: v.address, name: v.name }])),
+    log: logger("history-cost"),
+  }),
   jobClock(6 * 60_000),
 );
 

@@ -16,6 +16,8 @@ export interface EarnRecord {
   readonly vaultName: string;
   readonly signature: string;
   readonly occurredAt: Date;
+  /** Who wrote it: Mercury at confirm time, or the history reader afterwards. Mercury unless said. */
+  readonly origin?: "mercury" | "chain";
 }
 
 export interface EarnSettings {
@@ -77,41 +79,52 @@ export const pgEarnLedger = (db: Db): EarnLedger => ({
    * nothing.
    */
   async record(e) {
-    return db.transaction(async (tx) => {
-      const [row] = await tx
-        .insert(earnEvents)
-        .values({
-          userId: e.userId,
-          walletId: e.walletId,
-          kind: e.kind,
-          usdcAmount: toWire(e.usdc),
-          vault: e.vault,
-          txSignature: e.signature,
-          occurredAt: e.occurredAt,
-        })
-        .onConflictDoNothing()
-        .returning({ id: earnEvents.id });
-      if (row === undefined) return false;
-      await tx
-        .insert(activities)
-        .values({
-          userId: e.userId,
-          walletId: e.walletId,
-          kind: FEED[e.kind].kind,
-          occurredAt: e.occurredAt,
-          title: FEED[e.kind].title,
-          subtitle: e.vaultName,
-          amountUsd: toWire(e.usdc),
-          refTable: "earn_event",
-          refId: row.id,
-          txSignature: e.signature,
-          mint: USDC_MINT,
-        })
-        .onConflictDoNothing();
-      return true;
-    });
+    return db.transaction((tx) => writeEarnRecord(tx, e));
   },
 });
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/**
+ * One Earn move into the ledger and the feed, inside a transaction the caller
+ * holds: the confirm route's, or the cost pass's when it reads a linked
+ * wallet's past. False when this signature was already recorded, which keeps
+ * a move Mercury recorded as Mercury recorded it.
+ */
+export async function writeEarnRecord(tx: Tx, e: EarnRecord): Promise<boolean> {
+  const [row] = await tx
+    .insert(earnEvents)
+    .values({
+      userId: e.userId,
+      walletId: e.walletId,
+      kind: e.kind,
+      usdcAmount: toWire(e.usdc),
+      vault: e.vault,
+      ...(e.origin === undefined ? {} : { originSource: e.origin }),
+      txSignature: e.signature,
+      occurredAt: e.occurredAt,
+    })
+    .onConflictDoNothing()
+    .returning({ id: earnEvents.id });
+  if (row === undefined) return false;
+  await tx
+    .insert(activities)
+    .values({
+      userId: e.userId,
+      walletId: e.walletId,
+      kind: FEED[e.kind].kind,
+      occurredAt: e.occurredAt,
+      title: FEED[e.kind].title,
+      subtitle: e.origin === "chain" ? `${e.vaultName} · found in history` : e.vaultName,
+      amountUsd: toWire(e.usdc),
+      refTable: "earn_event",
+      refId: row.id,
+      txSignature: e.signature,
+      mint: USDC_MINT,
+    })
+    .onConflictDoNothing();
+  return true;
+}
 
 /** Whether this wallet's account has ever moved money into or out of Earn. One indexed lookup. */
 export const hasEarnHistory = async (db: Db, wallet: string): Promise<boolean> => {

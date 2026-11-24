@@ -30,6 +30,9 @@ import {
   type PlannedLot,
 } from "./cost-plan.js";
 import { SOL_MINT } from "./events.js";
+import { planChainEarn, type EarnVault } from "./earn.js";
+import { writeEarnRecord } from "../earn/store.js";
+import { USDC_MINT } from "@mercury/chain";
 import { recordMoveIn } from "../moves/record.js";
 import { moveTitles } from "../moves/names.js";
 
@@ -49,6 +52,13 @@ export interface CostDeps {
    * first, and gives up to Mercury's own prices only after repeated failures.
    */
   readonly skipPast?: boolean;
+  /**
+   * Earn's vaults, by their share token's mint. With them, a linked wallet's
+   * moves into and out of Earn are read from its share tokens into the Earn
+   * ledger, so "earned so far" covers the time before linking. Absent, those
+   * movements are marked costed and nothing more.
+   */
+  readonly earnVaults?: () => Promise<ReadonlyMap<string, EarnVault>>;
 }
 
 export interface CostResult {
@@ -232,7 +242,37 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     dividendRows.push({ ...d, amountUsd: price === null ? null : d.shares.mul(price.price) });
   }
 
+  // Moves into and out of Earn, from the vault share tokens' history.
+  const vaults = deps.earnVaults === undefined ? new Map<string, EarnVault>() : await deps.earnVaults();
+  const earnPending = pending.filter((e) => e.mint !== null && vaults.has(e.mint));
+  const earnRaw =
+    earnPending.length === 0
+      ? new Map<string, unknown>()
+      : new Map(
+          (
+            await db
+              .select({ signature: historyTxs.signature, raw: historyTxs.raw })
+              .from(historyTxs)
+              .where(
+                inArray(
+                  historyTxs.signature,
+                  earnPending.map((e) => e.signature),
+                ),
+              )
+          ).map((r) => [r.signature, r.raw]),
+        );
+  const earnMoves = planChainEarn(
+    earnPending.map((e) => ({ ...e, raw: earnRaw.get(e.signature) ?? null })),
+    vaults,
+    wallet.address,
+    USDC_MINT,
+    linkedAt,
+  );
+
   await db.transaction(async (tx) => {
+    for (const move of earnMoves) {
+      await writeEarnRecord(tx, { ...move, userId: wallet.userId, walletId, origin: "chain" });
+    }
     if (written.length > 0) {
       await tx.insert(lots).values(
         written.map(({ lot, stock }) => ({

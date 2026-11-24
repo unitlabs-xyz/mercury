@@ -5,6 +5,7 @@ import type { PastPriceSource, PriceBoard } from "@mercury/market";
 import { mercuryWallet, testDb } from "../db/testing.js";
 import {
   activities,
+  earnEvents,
   historyEvents,
   historyJobs,
   historyTxs,
@@ -19,6 +20,8 @@ import {
   wallets,
 } from "../db/schema.js";
 import { costWallet, walletToCost } from "./cost.js";
+import { rawJson } from "./events.js";
+import { pgEarnLedger } from "../earn/store.js";
 import { SOL_MINT } from "./events.js";
 
 const ME = "Phantom1111111111111111111111111111111111111";
@@ -564,5 +567,94 @@ describe("walletToCost", () => {
     await s.db.update(historyJobs).set({ status: "read" }).where(eq(historyJobs.walletId, s.walletId));
     await s.db.update(wallets).set({ unlinkedAt: NOW }).where(eq(wallets.id, s.walletId));
     expect(await walletToCost(s.db)).toBeNull();
+  });
+});
+
+describe("costWallet, a linked wallet's Earn", () => {
+  const SHARES = "SteakShares1111111111111111111111111111111";
+  const earnVaults = async () => new Map([[SHARES, { address: "SteakVault", name: "Steakhouse USDC" }]]);
+
+  /** Shares of the vault, in or out, and the transaction kept for it. */
+  const shareMove = async (
+    s: Awaited<ReturnType<typeof seed>>,
+    sig: string,
+    kind: "in" | "out",
+    usdc: bigint,
+    at: Date,
+  ) => {
+    const raw =
+      kind === "out"
+        ? rawJson({
+            signature: sig,
+            blockTime: 1,
+            succeeded: true,
+            accountKeys: [ME],
+            feeLamports: 0n,
+            preLamports: [],
+            postLamports: [],
+            preTokens: [{ owner: ME, mint: USDC, rawAmount: 0n, decimals: 6 }],
+            postTokens: [{ owner: ME, mint: USDC, rawAmount: usdc, decimals: 6 }],
+          })
+        : {};
+    await s.db.insert(historyTxs).values({ signature: sig, slot: 1n, blockTime: at, raw });
+    await s.db.insert(historyEvents).values({
+      walletId: s.walletId,
+      account: "shares-acct",
+      signature: sig,
+      blockTime: at,
+      kind,
+      mint: SHARES,
+      amountRaw: 1_000_000n,
+      counterMint: kind === "in" ? USDC : null,
+      counterAmountRaw: kind === "in" ? usdc : null,
+    });
+  };
+
+  it("writes the Earn moves found in history to the Earn ledger, so earned so far is measured from them", async () => {
+    const s = await seed();
+    await shareMove(s, "E1", "in", 500_000_000n, day(2));
+    await shareMove(s, "E2", "out", 120_000_000n, day(9));
+
+    await costWallet({ ...deps(s.db, pastOf({}).past), earnVaults }, s.walletId, NOW);
+
+    const rows = await s.db.select().from(earnEvents).where(eq(earnEvents.walletId, s.walletId));
+    expect(rows.map((r) => [r.kind, D(r.usdcAmount).toString(), r.vault, r.originSource]).sort()).toEqual(
+      [
+        ["deposit", "500", "SteakVault", "chain"],
+        ["withdraw", "120", "SteakVault", "chain"],
+      ].sort(),
+    );
+    const net = await pgEarnLedger(s.db).netDeposited({ userId: s.userId, walletId: s.walletId });
+    expect(net.get("SteakVault")?.toString()).toBe("380");
+    const feed = await s.db.select().from(activities).where(eq(activities.txSignature, "E1"));
+    expect([feed[0]!.kind, feed[0]!.subtitle]).toEqual([
+      "earn_deposit",
+      "Steakhouse USDC · found in history",
+    ]);
+  });
+
+  it("keeps an Earn move Mercury recorded as it was, and writes the rest once", async () => {
+    const s = await seed();
+    await shareMove(s, "E1", "in", 500_000_000n, day(2));
+    await s.db.insert(earnEvents).values({
+      userId: s.userId,
+      walletId: s.walletId,
+      kind: "deposit",
+      usdcAmount: "500",
+      vault: "SteakVault",
+      txSignature: "E1",
+      occurredAt: day(2),
+    });
+    await costWallet({ ...deps(s.db, pastOf({}).past), earnVaults }, s.walletId, NOW);
+    await costWallet({ ...deps(s.db, pastOf({}).past), earnVaults }, s.walletId, NOW);
+    const rows = await s.db.select().from(earnEvents).where(eq(earnEvents.walletId, s.walletId));
+    expect(rows.map((r) => r.originSource)).toEqual(["mercury"]);
+  });
+
+  it("marks the share movements costed without Earn when Earn's vaults are not given, as before", async () => {
+    const s = await seed();
+    await shareMove(s, "E1", "in", 500_000_000n, day(2));
+    expect(await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW)).toMatchObject({ costed: 1 });
+    expect(await s.db.select().from(earnEvents)).toEqual([]);
   });
 });

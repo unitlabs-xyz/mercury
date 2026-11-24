@@ -166,3 +166,43 @@ export const emptyBefore = (tx: TransactionDetail, owner: string, mint: string):
 /** The transaction as JSON, kept raw for a better rule later: bigints become strings. */
 export const rawJson = (tx: TransactionDetail): unknown =>
   JSON.parse(JSON.stringify(tx, (_k, v: unknown) => (typeof v === "bigint" ? v.toString() : v)));
+
+/** A transaction as `rawJson` kept it, read back: its big numbers were kept as strings. */
+export const transactionFromRaw = (raw: unknown): TransactionDetail | null => {
+  if (raw === null || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const entries = (v: unknown): TokenBalanceEntry[] =>
+    Array.isArray(v)
+      ? v.map((e: Record<string, unknown>) => ({
+          mint: String(e["mint"]),
+          owner: e["owner"] === null || e["owner"] === undefined ? null : String(e["owner"]),
+          rawAmount: BigInt(String(e["rawAmount"] ?? "0")),
+          decimals: Number(e["decimals"] ?? 0),
+        }))
+      : [];
+  const transfers = Array.isArray(r["tokenTransfersIn"])
+    ? (r["tokenTransfersIn"] as Record<string, unknown>[]).map((t) => ({
+        programId: String(t["programId"] ?? ""),
+        source: String(t["source"] ?? ""),
+        destination: String(t["destination"] ?? ""),
+        authority: t["authority"] === null ? null : String(t["authority"] ?? ""),
+        sourceOwner: t["sourceOwner"] === null ? null : String(t["sourceOwner"] ?? ""),
+        destinationOwner: t["destinationOwner"] === null ? null : String(t["destinationOwner"] ?? ""),
+        mint: String(t["mint"] ?? ""),
+        rawAmount: BigInt(String(t["rawAmount"] ?? "0")),
+        decimals: Number(t["decimals"] ?? 0),
+      }))
+    : [];
+  return {
+    signature: String(r["signature"] ?? ""),
+    blockTime: typeof r["blockTime"] === "number" ? r["blockTime"] : null,
+    succeeded: r["succeeded"] === true,
+    accountKeys: Array.isArray(r["accountKeys"]) ? r["accountKeys"].map(String) : [],
+    feeLamports: 0n,
+    preLamports: [],
+    postLamports: [],
+    preTokens: entries(r["preTokens"]),
+    postTokens: entries(r["postTokens"]),
+    tokenTransfersIn: transfers,
+  };
+};

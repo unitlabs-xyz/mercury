@@ -1,11 +1,11 @@
 import { and, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { address as toAddress, isOffCurveAddress } from "@solana/kit";
 import { D, Decimal, ZERO } from "@mercury/core";
-import type { ChainHistory, ChainReader, TokenBalanceEntry, TransactionDetail } from "@mercury/chain";
+import type { ChainHistory, ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
 import { basketAccounts, historyEvents, historyTxs, wallets } from "../db/schema.js";
-import { movementOf } from "../history/events.js";
+import { movementOf, transactionFromRaw } from "../history/events.js";
 
 /**
  * The Swig smart-wallet program Glider runs every basket account on: a
@@ -109,46 +109,6 @@ export const closestBasket = (
   return best;
 };
 
-/** A transaction as the history reader kept it: its big numbers as strings. */
-const fromRaw = (raw: unknown): TransactionDetail | null => {
-  if (raw === null || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const entries = (v: unknown): TokenBalanceEntry[] =>
-    Array.isArray(v)
-      ? v.map((e: Record<string, unknown>) => ({
-          mint: String(e["mint"]),
-          owner: e["owner"] === null || e["owner"] === undefined ? null : String(e["owner"]),
-          rawAmount: BigInt(String(e["rawAmount"] ?? "0")),
-          decimals: Number(e["decimals"] ?? 0),
-        }))
-      : [];
-  const transfers = Array.isArray(r["tokenTransfersIn"])
-    ? (r["tokenTransfersIn"] as Record<string, unknown>[]).map((t) => ({
-        programId: String(t["programId"] ?? ""),
-        source: String(t["source"] ?? ""),
-        destination: String(t["destination"] ?? ""),
-        authority: t["authority"] === null ? null : String(t["authority"] ?? ""),
-        sourceOwner: t["sourceOwner"] === null ? null : String(t["sourceOwner"] ?? ""),
-        destinationOwner: t["destinationOwner"] === null ? null : String(t["destinationOwner"] ?? ""),
-        mint: String(t["mint"] ?? ""),
-        rawAmount: BigInt(String(t["rawAmount"] ?? "0")),
-        decimals: Number(t["decimals"] ?? 0),
-      }))
-    : [];
-  return {
-    signature: String(r["signature"] ?? ""),
-    blockTime: typeof r["blockTime"] === "number" ? r["blockTime"] : null,
-    succeeded: r["succeeded"] === true,
-    accountKeys: Array.isArray(r["accountKeys"]) ? r["accountKeys"].map(String) : [],
-    feeLamports: 0n,
-    preLamports: [],
-    postLamports: [],
-    preTokens: entries(r["preTokens"]),
-    postTokens: entries(r["postTokens"]),
-    tokenTransfersIn: transfers,
-  };
-};
-
 /**
  * Where a linked wallet has sent tokens: the accounts that could be a basket
  * it funded outside Mercury. Read from the history reader's departures, which
@@ -183,7 +143,7 @@ export async function outsideCandidates(
     );
   const found = new Set(named.flatMap((r) => (r.to === null ? [] : [r.to])));
   for (const r of unnamed) {
-    const tx = fromRaw(r.raw);
+    const tx = transactionFromRaw(r.raw);
     const to =
       tx === null || r.mint === null ? null : movementOf(tx, wallet.address, r.mint)?.destinationOwner;
     if (to) found.add(to);
