@@ -316,10 +316,18 @@ describe("SolanaRpc.ownedTokenAccounts", () => {
       {
         address: "StockAccount111111111111111111111111111111",
         mint: NVDAX_MINT,
+        // Read from the Token-2022 page: xStocks are Token-2022, and a transfer has to name it.
+        programId: TOKEN_2022_PROGRAM,
         rawAmount: 250000000n,
         decimals: 8,
       },
-      { address: "UsdcAccount1111111111111111111111111111111", mint: USDC_MINT, rawAmount: 0n, decimals: 6 },
+      {
+        address: "UsdcAccount1111111111111111111111111111111",
+        mint: USDC_MINT,
+        programId: TOKEN_PROGRAM,
+        rawAmount: 0n,
+        decimals: 6,
+      },
     ]);
     expect(bodies.join(" ")).toContain(TOKEN_PROGRAM);
     expect(bodies.join(" ")).toContain(TOKEN_2022_PROGRAM);

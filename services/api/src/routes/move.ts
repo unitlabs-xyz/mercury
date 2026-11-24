@@ -1,0 +1,145 @@
+import { Hono } from "hono";
+import { z } from "zod";
+import { D, Decimal, toWire } from "@mercury/core";
+import type { ChainHistory, ChainReader } from "@mercury/chain";
+import type { PriceBoard } from "@mercury/market";
+import type { Blockhash } from "@solana/kit";
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
+import type {} from "../auth/middleware.js";
+import type { SponsoredBuilds } from "../relay/builds.js";
+import { STOCK_ACCOUNT_BYTES, TOKEN_ACCOUNT_BYTES, rentFor } from "../rent.js";
+import { writerOf } from "../wallets/acting.js";
+import { buildMove } from "../moves/build.js";
+import { planMove } from "../moves/plan.js";
+import type { MoveSends } from "../moves/sends.js";
+
+/** Native SOL is priced under the wrapped-SOL mint. */
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+
+export interface MoveDeps {
+  readonly chain: Pick<ChainReader, "tokenBalances" | "rentExemption">;
+  readonly history: Pick<ChainHistory, "ownedTokenAccounts">;
+  readonly prices: PriceBoard;
+  readonly usdcMint: string;
+  /** The mints Mercury lists, stocks and USDC: what can be moved. */
+  readonly listed: () => Promise<ReadonlySet<string>>;
+  /** The person's Mercury wallet's id, which the moved shares are recorded into. */
+  readonly mercuryWalletId: (userId: string) => Promise<string | null>;
+  readonly latestBlockhash: () => Promise<{ blockhash: Blockhash; lastValidBlockHeight: bigint }>;
+  /** Absent, there is no relayer to pay for a move, and none is offered. */
+  readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
+  readonly sends: Pick<MoveSends, "remember">;
+  readonly now?: () => Date;
+}
+
+const fail = (code: string, message: string) => ({ error: { code, message } });
+
+const Request = z.object({
+  /** How much of each to move, in the smallest unit. Absent, everything Mercury lists that the wallet holds. */
+  tokens: z
+    .array(z.object({ mint: z.string().min(1), amountRaw: z.string().regex(/^\d+$/, "expected an integer") }))
+    .optional(),
+});
+
+const REFUSED: Record<string, string> = {
+  nothing_to_move: "This wallet holds nothing Mercury lists.",
+  not_held: "This wallet doesn't hold that token.",
+  too_much: "That's more than this wallet holds.",
+};
+
+/**
+ * Moving a linked wallet's tokens into the person's Mercury wallet, where
+ * everything can be done from the phone too.
+ *
+ * Prepare returns the transactions for the linked wallet to sign, a few tokens
+ * each, and what the move costs: the rent of the accounts the Mercury wallet
+ * lacks, taken from the USDC moving or covered by Mercury. They go out through
+ * `/v1/transactions/send` like any other, where the relayer co-signs them, and
+ * the moved shares are recorded into the Mercury wallet with their cost once
+ * they land.
+ */
+export function moveRoutes(deps: MoveDeps): Hono {
+  const app = new Hono();
+  const now = deps.now ?? (() => new Date());
+
+  app.post("/v1/move/prepare", async (c) => {
+    const writer = writerOf(c);
+    if (writer === null) return c.json(fail("wallet_pending", "Your wallet is still being set up."), 409);
+    if (writer.isPrimary) {
+      return c.json(fail("wallet_mercury", "Choose a linked wallet to move from."), 400);
+    }
+    if (deps.relay === undefined || deps.history.ownedTokenAccounts === undefined) {
+      return c.json(fail("move_unavailable", "Moving isn't available right now."), 503);
+    }
+    const mercuryAddress = c.get("identity").walletAddress;
+    const { userId } = c.get("identity");
+    const mercuryId = await deps.mercuryWalletId(userId);
+    if (mercuryAddress === null || mercuryId === null) {
+      return c.json(fail("wallet_pending", "Your Mercury wallet is still being set up."), 409);
+    }
+
+    const parsed = Request.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json(fail("bad_request", "That move couldn't be read."), 400);
+    const asked =
+      parsed.data.tokens === undefined
+        ? undefined
+        : new Map(parsed.data.tokens.map((t) => [t.mint, BigInt(t.amountRaw)] as const));
+
+    const [owned, listed, mercury, prices, classic, token2022, block] = await Promise.all([
+      deps.history.ownedTokenAccounts(writer.address),
+      deps.listed(),
+      deps.chain.tokenBalances(mercuryAddress),
+      deps.prices.pricesFor([SOL_MINT]),
+      rentFor(deps.chain, TOKEN_ACCOUNT_BYTES),
+      rentFor(deps.chain, STOCK_ACCOUNT_BYTES),
+      deps.latestBlockhash(),
+    ]);
+    const plan = planMove({
+      owned,
+      listed,
+      asked,
+      mercuryHolds: new Set(mercury.map((b) => b.mint)),
+      rent: { classic, token2022 },
+      solPriceUsd: prices.get(SOL_MINT)?.usdPricePerToken,
+      usdcMint: deps.usdcMint,
+    });
+    if (!plan.ok) {
+      return c.json(
+        { ...fail(plan.code, REFUSED[plan.code]!), ...(plan.mint ? { mint: plan.mint } : {}) },
+        400,
+      );
+    }
+
+    const batches = await buildMove({
+      owner: writer.address,
+      destination: mercuryAddress,
+      relayer: deps.relay.relayer,
+      tokens: plan.tokens,
+      feeUsdcRaw: plan.feeUsdcRaw,
+      usdcMint: deps.usdcMint,
+      ...block,
+    });
+    const startedAt = now();
+    for (const b of batches) {
+      deps.relay.builds.remember(b.messageBytes);
+      deps.sends.remember(b.messageBytes, {
+        userId,
+        fromWalletId: writer.id,
+        toWalletId: mercuryId,
+        startedAt,
+        moved: b.moved,
+      });
+    }
+    return c.json({
+      transactions: batches.map((b) => ({
+        transaction: b.wire,
+        moved: b.moved.map((m) => ({ mint: m.mint, amountRaw: m.amountRaw.toString() })),
+      })),
+      feeUsd: toWire(D(plan.feeUsdcRaw.toString()).div(1e6).toDecimalPlaces(2, Decimal.ROUND_UP)),
+      rentUsd: toWire(plan.rentUsd),
+      coveredByMercury: plan.coveredByMercury,
+    });
+  });
+
+  return app;
+}

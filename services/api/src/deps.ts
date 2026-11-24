@@ -46,6 +46,11 @@ import type { NotificationDeps } from "./routes/notifications.js";
 import type { WalletDeps } from "./routes/wallets.js";
 import type { BorrowDeps } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
+import type { MoveDeps } from "./routes/move.js";
+import { recordMove as recordWalletMove } from "./moves/record.js";
+import { moveSends } from "./moves/sends.js";
+import { mercuryWalletIdOf, movableMints } from "./moves/queries.js";
+import { createSolanaRpc } from "@solana/kit";
 import { KaminoLending } from "./lending/kamino.js";
 import { KaminoEarn } from "./earn/kamino-vault.js";
 import { D, ZERO } from "@mercury/core";
@@ -665,6 +670,11 @@ export interface ReadDeps {
   readonly borrow: BorrowDeps;
   readonly earn: EarnDeps;
   readonly send: SendDeps;
+  /**
+   * Moving a linked wallet's tokens into the Mercury wallet. Optional so a test
+   * app can leave it out; built whenever there is a relayer to pay for it.
+   */
+  readonly move?: MoveDeps;
   /** Mercury's fee on every stock trade, in basis points. See `Config.tradingFeeBps`. */
   readonly tradingFeeBps: number;
   /** The in-app feedback button. Optional so a test app can leave it out. */
@@ -729,6 +739,12 @@ export function buildReadDeps(
     ),
   );
   const baskets = basketValueReader(deps.basketProvider, basketStore);
+  // Each move between a person's own wallets is recorded when the relayer sends it, with its cost carried over.
+  const walletMoves = moveSends({
+    history: deps.history,
+    record: (move) => recordWalletMove(db, move),
+  });
+  const rpc = createSolanaRpc(config.solanaRpcUrl);
   return {
     basketTemplates: new BasketService({
       store: basketStore,
@@ -824,9 +840,25 @@ export function buildReadDeps(
     send: {
       rpcUrl: config.solanaRpcUrl,
       fees: { chain: deps.chain, prices: deps.prices },
-      accepted: earnMoves.accepted,
+      accepted: async (messageBytes, signature) => {
+        await Promise.all([
+          earnMoves.accepted(messageBytes, signature),
+          walletMoves.accepted(messageBytes, signature),
+        ]);
+      },
       sent: (wallet) => deps.chain.forgetBalances?.(wallet),
       ...(relay === undefined ? {} : { relay }),
+    },
+    move: {
+      chain: deps.chain,
+      history: deps.history,
+      prices: deps.prices,
+      usdcMint: USDC_MINT,
+      listed: () => movableMints(db, USDC_MINT),
+      mercuryWalletId: (userId) => mercuryWalletIdOf(db, userId),
+      latestBlockhash: async () => (await rpc.getLatestBlockhash().send()).value,
+      sends: walletMoves,
+      ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
   };
 }

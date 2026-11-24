@@ -39,7 +39,15 @@ const bought: TransactionDetail = {
 
 const chain = (over: Partial<ChainHistory> = {}): ChainHistory => ({
   tokenAccountsFor: async () => [],
-  ownedTokenAccounts: async () => [{ address: ACCT, mint: TSLAX, rawAmount: 10n, decimals: 8 }],
+  ownedTokenAccounts: async () => [
+    {
+      address: ACCT,
+      mint: TSLAX,
+      programId: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      rawAmount: 10n,
+      decimals: 8,
+    },
+  ],
   signatures: async (_a, page) =>
     page.until === "S1" ? [] : [{ signature: "S1", slot: 1, blockTime: bought.blockTime, failed: false }],
   transaction: async () => bought,

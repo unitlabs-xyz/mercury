@@ -27,6 +27,7 @@ import { walletRoutes } from "./routes/wallets.js";
 import { borrowRoutes } from "./routes/borrow.js";
 import { earnRoutes } from "./routes/earn.js";
 import { sendRoutes } from "./routes/send.js";
+import { moveRoutes } from "./routes/move.js";
 import { instrumentRoutes } from "./routes/instruments.js";
 import { moneyRoutes } from "./routes/money.js";
 import { portfolioRoutes } from "./routes/portfolio.js";
@@ -140,6 +141,7 @@ const ACTING_ACTIONS = [
   "/v1/earn/transactions",
   "/v1/earn/confirm",
   "/v1/money/send/*",
+  "/v1/move/*",
 ] as const;
 
 /**
@@ -281,6 +283,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", borrowRoutes(read.borrow));
   app.route("/", earnRoutes(read.earn));
   app.route("/", sendRoutes(read.send));
+  if (read.move) app.route("/", moveRoutes(read.move));
   /* Absent when Relay or the treasury is not configured, so the routes 404 and
      the interface hides the method rather than offering one that cannot work. */
   if (read.fund) app.route("/", fundRoutes(read.fund));

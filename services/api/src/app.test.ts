@@ -168,6 +168,21 @@ const harness = async (
             },
           }),
     },
+    // A move from a wallet holding nothing: enough to show who may ask for one.
+    move: {
+      chain: { tokenBalances: async () => [] },
+      history: { ownedTokenAccounts: async () => [] },
+      prices: { pricesFor: async () => new Map() },
+      usdcMint: USDC_MINT,
+      listed: async () => new Set([USDC_MINT]),
+      mercuryWalletId: async () => "w-mercury",
+      latestBlockhash: async () => ({
+        blockhash: "EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k",
+        lastValidBlockHeight: 1n,
+      }),
+      relay: { relayer: "AkZjMBy3SAfbend3qq22aMh9nsAehS7a8HXk15VxGJmJ", builds: inMemoryBuilds() },
+      sends: { remember: () => undefined },
+    },
     instruments: {},
     // Only "Set cost" is read through this harness: no estimate to replace, as on a new account.
     portfolio: { declareCost: async () => ({ kind: "nothing_estimated" }) },
@@ -490,6 +505,17 @@ describe("which wallet a write is for", () => {
     for (const path of ["/v1/borrow/transactions", "/v1/earn/transactions", "/v1/money/send/quote"]) {
       expect((await h.postAs("all", path, {})).status, path).toBe(400);
     }
+  });
+
+  it("lets a linked wallet ask to move into the Mercury wallet, and refuses it for every wallet at once", async () => {
+    const h = await signedInWithLinked();
+    const linked = await h.postAs(h.linkedId, "/v1/move/prepare", {});
+    // Through every gate to the move itself, which finds nothing to move in this harness.
+    expect(linked.status).toBe(400);
+    expect(await linked.json()).toMatchObject({ error: { code: "nothing_to_move" } });
+    expect((await h.postAs("all", "/v1/move/prepare", {})).status).toBe(400);
+    const mercury = await h.postAs(h.mercuryId, "/v1/move/prepare", {});
+    expect(await mercury.json()).toMatchObject({ error: { code: "wallet_mercury" } });
   });
 
   it("still refuses what a linked wallet cannot do yet: a basket", async () => {

@@ -94,6 +94,7 @@ const quiet = () => false;
 const owned = (address: string, mint: string, rawAmount: bigint): OwnedTokenAccount => ({
   address,
   mint,
+  programId: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
   rawAmount,
   decimals: 8,
 });

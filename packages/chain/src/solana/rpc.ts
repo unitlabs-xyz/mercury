@@ -415,12 +415,14 @@ export class SolanaRpc implements ChainReader, ChainHistory {
       ),
     );
     const byAddress = new Map<string, OwnedTokenAccount>();
-    for (const page of pages) {
+    const programs = [TOKEN_PROGRAM, TOKEN_2022_PROGRAM];
+    for (const [i, page] of pages.entries()) {
       for (const entry of page.value) {
         const info = entry.account.data.parsed.info;
         byAddress.set(entry.pubkey, {
           address: entry.pubkey,
           mint: info.mint,
+          programId: programs[i]!,
           rawAmount: BigInt(info.tokenAmount.amount),
           decimals: info.tokenAmount.decimals,
         });

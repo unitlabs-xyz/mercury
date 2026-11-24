@@ -235,6 +235,8 @@ export interface ChainReader {
 export interface OwnedTokenAccount {
   readonly address: string;
   readonly mint: string;
+  /** The token program that owns it: the classic one, or Token-2022 (xStocks). A transfer names it. */
+  readonly programId: string;
   readonly rawAmount: bigint;
   readonly decimals: number;
 }
