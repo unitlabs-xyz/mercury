@@ -5,7 +5,8 @@ import Constants from "expo-constants";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { usePrivy } from "@privy-io/expo";
-import { useMoney } from "../src/api";
+import { linkOnWebUrl, linkedLine, shortAddress, walletName } from "@mercury/view";
+import { WEB_URL, useAccountWallets, useMoney } from "../src/api";
 import { Haptics } from "../src/haptics";
 import { setPref, usePrefs } from "../src/prefs";
 import { Button, Icon, IconButton, PressableScale, Text, type IconName } from "../src/ui";
@@ -28,6 +29,8 @@ export default function Settings() {
   const { user, logout } = usePrivy();
   const prefs = usePrefs();
   const address = useMoney().data?.depositAddress ?? null;
+  const account = useAccountWallets().data;
+  const linked = (account?.wallets ?? []).filter((w) => !w.isPrimary);
   const [copied, setCopied] = useState(false);
 
   const email =
@@ -95,6 +98,30 @@ export default function Settings() {
                   ? undefined
                   : () => void Linking.openURL(`https://solscan.io/account/${address}`)
               }
+            />
+          </Group>
+
+          {/*
+            Linked wallets are shown on the phone and managed on web: linking
+            and unlinking ask a wallet to sign, which the phone cannot do.
+          */}
+          <Group title={account === undefined ? "Linked wallets" : `Linked wallets · ${linkedLine(account)}`}>
+            {linked.map((w) => (
+              <Row
+                key={w.id}
+                icon="wallet"
+                title={walletName(w)}
+                detail={shortAddress(w.address)}
+                chevron
+                onPress={() => router.push({ pathname: "/wallet/[id]", params: { id: w.id } })}
+              />
+            ))}
+            <Row
+              icon="globe"
+              title={linked.length === 0 ? "Link a wallet you already hold" : "Link or unlink a wallet"}
+              detail="On web"
+              chevron
+              onPress={() => void Linking.openURL(linkOnWebUrl(WEB_URL))}
             />
           </Group>
 

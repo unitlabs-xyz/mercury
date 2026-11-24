@@ -11,6 +11,13 @@ import {
   walletCards,
   walletSeries,
   walletStatus,
+  liquidationLine,
+  manageOnWebUrl,
+  pledgedStocks,
+  walletFromSearch,
+  alsoHoldLine,
+  heldElsewhere,
+  linkOnWebUrl,
   updatedAgo,
   walletLoans,
   walletSlices,
@@ -18,6 +25,7 @@ import {
   type WalletCard,
 } from "./wallets.js";
 import { shortAddress } from "./receipt.js";
+import type { Borrow, BorrowRow } from "./borrow.js";
 
 const PHANTOM = "7EYnhQoR9YM3N7UoaKRoA44Uy8JeaZV3qyouov87awMs";
 
@@ -344,5 +352,115 @@ describe("walletStatus", () => {
       "Updated 38m ago",
     );
     expect(walletStatus(card({ isLive: false, asOf: null }), now)).toBe("");
+  });
+});
+
+describe("manageOnWebUrl and walletFromSearch", () => {
+  it("opens the web app on the wallet, whatever the base ends with", () => {
+    expect(manageOnWebUrl("https://beta.trymercury.xyz", "w-1")).toBe(
+      "https://beta.trymercury.xyz/?wallet=w-1",
+    );
+    expect(manageOnWebUrl("https://beta.trymercury.xyz/", "w-1")).toBe(
+      "https://beta.trymercury.xyz/?wallet=w-1",
+    );
+  });
+
+  it("encodes the id, so a link cannot carry anything else", () => {
+    expect(manageOnWebUrl("https://x.test", "a&b=c")).toBe("https://x.test/?wallet=a%26b%3Dc");
+  });
+
+  it("reads the wallet back from the address, and nothing when it names none", () => {
+    expect(walletFromSearch("?wallet=w-1")).toBe("w-1");
+    expect(walletFromSearch("?other=1&wallet=a%26b%3Dc")).toBe("a&b=c");
+    expect(walletFromSearch("?wallet=")).toBeNull();
+    expect(walletFromSearch("?wallet=%20%20")).toBeNull();
+    expect(walletFromSearch("")).toBeNull();
+  });
+});
+
+describe("pledgedStocks and liquidationLine", () => {
+  const row = (over: Partial<BorrowRow>): BorrowRow =>
+    ({
+      ticker: "TSLA",
+      isStock: true,
+      depositedUsd: 0,
+      liquidationPrice: null,
+      liquidationDistance: null,
+      ...over,
+    }) as BorrowRow;
+
+  it("lists the pledged stocks, largest first, and leaves out cash and what is not pledged", () => {
+    const b = {
+      collateral: [
+        row({ ticker: "NVDA", depositedUsd: 400 }),
+        row({ ticker: "TSLA", depositedUsd: 2100 }),
+        row({ ticker: "USDC", isStock: false, depositedUsd: 900 }),
+        row({ ticker: "AAPL", depositedUsd: 0 }),
+      ],
+    } as unknown as Borrow;
+    expect(pledgedStocks(b).map((r) => r.ticker)).toEqual(["TSLA", "NVDA"]);
+  });
+
+  it("says where Kamino starts selling and how far off it is", () => {
+    expect(liquidationLine(row({ liquidationPrice: 319.4, liquidationDistance: 0.094 }))).toBe(
+      "Kamino sells below $319.40 · 9% away",
+    );
+  });
+
+  it("never says a negative distance once the price is through it", () => {
+    expect(liquidationLine(row({ liquidationPrice: 300, liquidationDistance: -0.02 }))).toBe(
+      "Kamino sells below $300.00 · 0% away",
+    );
+  });
+
+  it("leaves the distance off when it is not known, and says why there is no price", () => {
+    expect(liquidationLine(row({ liquidationPrice: 300 }))).toBe("Kamino sells below $300.00");
+    expect(liquidationLine(row({}))).toBe("No liquidation price while nothing is owed");
+  });
+});
+
+describe("linkOnWebUrl", () => {
+  it("opens web's linked wallets panel", () => {
+    expect(linkOnWebUrl("https://beta.trymercury.xyz/")).toBe(
+      "https://beta.trymercury.xyz/?settings=wallets",
+    );
+  });
+});
+
+describe("heldElsewhere and alsoHoldLine", () => {
+  const holding = (ticker: string, shares: string, valueUsd = "100") => ({ ticker, shares, valueUsd });
+  const wallets = [
+    { id: "p", name: "Phantom main", holdings: [holding("TSLA", "2.1", "740.25"), holding("NVDA", "1")] },
+    { id: "n", name: "9xQe…3Kp4", holdings: [holding("TSLA", "0.5")] },
+    { id: "z", name: "Zero", holdings: [holding("TSLA", "0")] },
+    { id: "u", name: "Unread", holdings: undefined },
+  ];
+
+  it("finds each linked wallet's shares of the stock, in wallet order, leaving out none and unread", () => {
+    expect(heldElsewhere("TSLA", wallets)).toEqual([
+      { walletId: "p", name: "Phantom main", shares: 2.1, valueUsd: 740.25 },
+      { walletId: "n", name: "9xQe…3Kp4", shares: 0.5, valueUsd: 100 },
+    ]);
+    expect(heldElsewhere("AAPL", wallets)).toEqual([]);
+  });
+
+  it("says it as the spec does, under the Mercury wallet's position", () => {
+    expect(alsoHoldLine(heldElsewhere("NVDA", wallets), true)).toBe("You also hold 1 in Phantom main");
+    expect(alsoHoldLine(heldElsewhere("TSLA", wallets), true)).toBe(
+      "You also hold 2.1 in Phantom main and 0.5 in 9xQe…3Kp4",
+    );
+  });
+
+  it("drops 'also' when the Mercury wallet holds none, and lists three with commas", () => {
+    const three = [
+      { walletId: "a", name: "A", shares: 1.23456, valueUsd: 1 },
+      { walletId: "b", name: "B", shares: 2, valueUsd: 1 },
+      { walletId: "c", name: "C", shares: 0.0004, valueUsd: 1 },
+    ];
+    expect(alsoHoldLine(three, false)).toBe("You hold 1.235 in A, 2 in B and <0.001 in C");
+  });
+
+  it("says nothing when no linked wallet holds it", () => {
+    expect(alsoHoldLine([], true)).toBeNull();
   });
 });

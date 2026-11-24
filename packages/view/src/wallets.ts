@@ -1,4 +1,5 @@
 import type { Portfolio, PortfolioSummary } from "@mercury/types";
+import type { Borrow, BorrowRow } from "./borrow.js";
 import { usd, usdSigned } from "./format.js";
 import { shortAddress } from "./receipt.js";
 
@@ -222,3 +223,84 @@ export const walletStatus = (card: WalletCard, now: number = Date.now()): string
         : card.asOf === null
           ? ""
           : `Updated ${updatedAgo(card.asOf, now)}`;
+
+/** The query parameter that opens the web app on one wallet: `?wallet=<id>`. */
+export const WALLET_PARAM = "wallet";
+
+/**
+ * Where "Manage on web" goes for a wallet: the web app, opened on it. The web
+ * reads the parameter once, chooses that wallet, and drops it from the address.
+ */
+export const manageOnWebUrl = (base: string, walletId: string): string =>
+  `${base.replace(/\/+$/, "")}/?${WALLET_PARAM}=${encodeURIComponent(walletId)}`;
+
+/** The wallet a link asks to open on, from a query string; null when it names none. */
+export const walletFromSearch = (search: string): string | null => {
+  const id = new URLSearchParams(search).get(WALLET_PARAM)?.trim() ?? "";
+  return id.length === 0 ? null : id;
+};
+
+/**
+ * The stocks a loan is held against, the largest first: each with what is
+ * pledged and the price at which Kamino would start selling it. Cash-like
+ * collateral has no liquidation price of its own and is left out.
+ */
+export const pledgedStocks = (b: Borrow): readonly BorrowRow[] =>
+  b.collateral.filter((c) => c.isStock && c.depositedUsd > 0).sort((x, y) => y.depositedUsd - x.depositedUsd);
+
+/** "Kamino sells below $319.40 · 9% away", or what is known when the price is not. */
+export const liquidationLine = (row: BorrowRow): string => {
+  if (row.liquidationPrice === null) return "No liquidation price while nothing is owed";
+  const away =
+    row.liquidationDistance === null
+      ? ""
+      : ` · ${Math.max(0, Math.round(row.liquidationDistance * 100))}% away`;
+  return `Kamino sells below ${usd(row.liquidationPrice)}${away}`;
+};
+
+/** Where linking and unlinking happen: web's Linked wallets panel. The phone cannot ask a wallet to sign. */
+export const linkOnWebUrl = (base: string): string => `${base.replace(/\/+$/, "")}/?settings=wallets`;
+
+/** One linked wallet's share of a stock, for "You also hold…". */
+export interface HeldElsewhere {
+  readonly walletId: string;
+  readonly name: string;
+  readonly shares: number;
+  readonly valueUsd: number;
+}
+
+/**
+ * How much of one stock each linked wallet holds, from each wallet's own
+ * portfolio, in the order the wallets are given. Wallets holding none, or not
+ * read yet, are left out.
+ */
+export const heldElsewhere = (
+  ticker: string,
+  wallets: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly holdings:
+      readonly { readonly ticker: string; readonly shares: string; readonly valueUsd: string }[] | undefined;
+  }[],
+): readonly HeldElsewhere[] =>
+  wallets.flatMap((w) => {
+    const h = w.holdings?.find((x) => x.ticker === ticker);
+    const n = h === undefined ? 0 : Number(h.shares);
+    return n > 0 ? [{ walletId: w.id, name: w.name, shares: n, valueUsd: Number(h!.valueUsd) }] : [];
+  });
+
+/** A share count as a sentence says it: up to three places, no trailing zeros, and never a held sliver as 0. */
+const sharesSaid = (n: number): string => (n > 0 && n < 0.0005 ? "<0.001" : String(Number(n.toFixed(3))));
+
+/**
+ * "You also hold 2.1 in Phantom main", under the Mercury wallet's position,
+ * or "You hold 2.1 in Phantom main" when the Mercury wallet holds none. Two
+ * wallets join with "and"; more with commas. Null when no linked wallet does.
+ */
+export const alsoHoldLine = (held: readonly HeldElsewhere[], mercuryHolds: boolean): string | null => {
+  if (held.length === 0) return null;
+  const parts = held.map((h) => `${sharesSaid(h.shares)} in ${h.name}`);
+  const list =
+    parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]!}`;
+  return `${mercuryHolds ? "You also hold" : "You hold"} ${list}`;
+};

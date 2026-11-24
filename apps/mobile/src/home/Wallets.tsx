@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { StyleSheet, Text as RNText, View } from "react-native";
+import { useRouter } from "expo-router";
 import Svg, { Circle, Path } from "react-native-svg";
 import type { PortfolioSummary } from "@mercury/types";
 import {
@@ -16,7 +17,7 @@ import {
   type WalletSlice,
 } from "@mercury/view";
 import { useAccountWallets, useAllWalletsPortfolio, usePortfolioSummary } from "../api";
-import { MoveChip, Skeleton } from "../ui";
+import { Icon, MoveChip, PressableScale, Skeleton } from "../ui";
 import { color, font, radius, space } from "../theme";
 
 const MASK = "••••";
@@ -149,27 +150,40 @@ export const LinkedWalletsCard = ({ overview, hidden }: { overview: Overview; hi
   );
 };
 
-const WalletRow = ({ wallet, hidden }: { wallet: WalletSlice; hidden: boolean }) => (
-  <View style={s.row} accessible accessibilityLabel={rowLabel(wallet, hidden)}>
-    <View style={[s.dot, { backgroundColor: seriesColor(wallet.series) }]} />
-    <View style={s.mid}>
-      <View style={s.nameLine}>
-        <RNText style={s.name} numberOfLines={1}>
-          {wallet.name}
+/** One linked wallet; tapping it opens its page, which shows it without acting for it. */
+const WalletRow = ({ wallet, hidden }: { wallet: WalletSlice; hidden: boolean }) => {
+  const router = useRouter();
+  return (
+    <PressableScale
+      style={s.row}
+      activeScale={0.985}
+      onPress={() => router.push({ pathname: "/wallet/[id]", params: { id: wallet.id } })}
+      accessibilityRole="button"
+      accessibilityLabel={rowLabel(wallet, hidden)}
+    >
+      <View style={[s.dot, { backgroundColor: seriesColor(wallet.series) }]} />
+      <View style={s.mid}>
+        <View style={s.nameLine}>
+          <RNText style={s.name} numberOfLines={1}>
+            {wallet.name}
+          </RNText>
+          {wallet.loan !== null && <Badge tone={wallet.loan.tone} label={wallet.loan.label} />}
+        </View>
+        <RNText style={s.sub} numberOfLines={1}>
+          {walletStatus(wallet)}
         </RNText>
-        {wallet.loan !== null && <Badge tone={wallet.loan.tone} label={wallet.loan.label} />}
       </View>
-      <RNText style={s.sub} numberOfLines={1}>
-        {walletStatus(wallet)}
-      </RNText>
-    </View>
-    <View style={s.end}>
-      <RNText style={s.value}>{hidden ? MASK : wallet.valueUsd === null ? "—" : usd(wallet.valueUsd)}</RNText>
-      {/* Today's price move of what it holds: known from its balance, so a wallet still calculating has one. */}
-      {!hidden && wallet.changePct !== null && <MoveChip value={Number(wallet.changePct)} soft />}
-    </View>
-  </View>
-);
+      <View style={s.end}>
+        <RNText style={s.value}>
+          {hidden ? MASK : wallet.valueUsd === null ? "—" : usd(wallet.valueUsd)}
+        </RNText>
+        {/* Today's price move of what it holds: known from its balance, so a wallet still calculating has one. */}
+        {!hidden && wallet.changePct !== null && <MoveChip value={Number(wallet.changePct)} soft />}
+      </View>
+      <Icon name="chevronRight" size={12} color={color.chevron} />
+    </PressableScale>
+  );
+};
 
 const rowLabel = (w: WalletSlice, hidden: boolean) =>
   [

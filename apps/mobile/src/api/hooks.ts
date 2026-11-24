@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/expo";
 import type { Money, Portfolio, PortfolioSummary } from "@mercury/types";
 import { ALL_WALLETS, WALLET_HEADER, type AccountWallets, type ActivityItem } from "@mercury/view";
@@ -325,3 +325,49 @@ export const useExposure = (ticker: string, held: boolean) =>
     enabled: held && ticker.length > 0,
     staleTime: 30_000,
   });
+
+/** The header that makes a read one linked wallet's. Every action leaves it off. */
+const forWallet = (walletId: string): RequestInit => ({ headers: { [WALLET_HEADER]: walletId } });
+
+/** One linked wallet's holdings, cash, baskets and Earn, read live as the Mercury wallet's are. */
+export const useWalletPortfolio = (walletId: string) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "wallet", walletId, "portfolio"],
+    queryFn: () => apiFetch<Portfolio>("/v1/portfolio", forWallet(walletId)),
+    enabled: signedIn && walletId.length > 0,
+    ...LIVE,
+  });
+};
+
+/** One linked wallet's feed: its trades, transfers and loan events. */
+export const useWalletActivity = (walletId: string, limit = 25) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "wallet", walletId, "activity", limit],
+    queryFn: () =>
+      apiFetch<{ items: ActivityItem[]; nextCursor: string | null }>(
+        `/v1/activity?limit=${limit}`,
+        forWallet(walletId),
+      ),
+    enabled: signedIn && walletId.length > 0,
+    ...LIVE,
+  });
+};
+
+/**
+ * Every linked wallet's portfolio, for "You also hold…" on a stock page. The
+ * same queries as each wallet's page, so a wallet already opened costs
+ * nothing; a minute between reads, since a footnote need not be live.
+ */
+export const useLinkedPortfolios = (walletIds: readonly string[]) => {
+  const signedIn = useSignedIn();
+  return useQueries({
+    queries: walletIds.map((id) => ({
+      queryKey: ["api", "wallet", id, "portfolio"],
+      queryFn: () => apiFetch<Portfolio>("/v1/portfolio", forWallet(id)),
+      enabled: signedIn,
+      staleTime: 60_000,
+    })),
+  });
+};

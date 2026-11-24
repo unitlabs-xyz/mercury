@@ -151,6 +151,41 @@ describe("the remembered choice", () => {
     choice.setChosenWallet("phantom");
     expect(choice.chosenWallet()).toBe("phantom");
   });
+
+  it("chooses the wallet a phone's link names, then takes it out of the address", async () => {
+    const store = storage();
+    vi.stubGlobal("localStorage", store);
+    vi.resetModules();
+    const choice = await import("./wallet-choice");
+    const replaced: string[] = [];
+    const history = {
+      state: { from: "router" },
+      replaceState: (_s: unknown, _t: string, url?: string | URL | null) => void replaced.push(String(url)),
+    };
+
+    choice.adoptWalletFromUrl(
+      { search: "?tab=loans&wallet=phantom", pathname: "/money", hash: "#borrow" },
+      history,
+    );
+    expect(choice.chosenWallet()).toBe("phantom");
+    expect(store.items.get("mercury.wallet")).toBe("phantom");
+    expect(replaced).toEqual(["/money?tab=loans#borrow"]);
+
+    choice.adoptWalletFromUrl({ search: "?wallet=all", pathname: "/", hash: "" }, history);
+    expect(replaced.at(-1)).toBe("/");
+  });
+
+  it("leaves the choice and the address alone when the link names no wallet", async () => {
+    vi.stubGlobal("localStorage", storage({ "mercury.wallet": "phantom" }));
+    vi.resetModules();
+    const choice = await import("./wallet-choice");
+    const replaced: string[] = [];
+    const history = { state: null, replaceState: () => void replaced.push("touched") };
+    choice.adoptWalletFromUrl({ search: "?wallet=", pathname: "/", hash: "" }, history);
+    choice.adoptWalletFromUrl({ search: "", pathname: "/", hash: "" }, history);
+    expect(choice.chosenWallet()).toBe("phantom");
+    expect(replaced).toEqual([]);
+  });
 });
 
 describe("readsForChoice", () => {
