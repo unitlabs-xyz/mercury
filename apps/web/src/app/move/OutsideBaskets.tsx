@@ -1,19 +1,10 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usd } from "@mercury/view";
 import { useActingWallet } from "../../api/acting-wallet";
 import { useOutsideBaskets, type OutsideBasket } from "../../api/move";
 import { Button } from "../../ui/Button";
 import { usePanels } from "../Panels";
-import {
-  chosenHandoff,
-  handoffSteps,
-  nextStep,
-  rememberHandoff,
-  SHARES_INSTEAD_NOTE,
-  USDC_COST_NOTE,
-  type HandoffChoice,
-} from "./handoff";
+import { handoffSteps, nextStep } from "./handoff";
 
 /** Glider's own app, where a basket made there is withdrawn. */
 export const GLIDER_APP_URL = "https://glider.fi";
@@ -27,17 +18,9 @@ export const holdingsLine = (b: Pick<OutsideBasket, "holdings">): string => {
   return more > 0 ? `${shown.join(" · ")} · ${more} more` : shown.join(" · ");
 };
 
-const storage = (): Storage | null => {
-  try {
-    return localStorage;
-  } catch {
-    return null;
-  }
-};
-
 /**
- * One basket made outside Mercury: what it holds, a choice of how to bring it
- * in, and the step that comes next. Mercury can't withdraw it (only the app
+ * One basket made outside Mercury: what it holds, and the step that comes
+ * next. Mercury can't withdraw it (only the app
  * that made it can ask Glider to), so the first step happens on Glider; what
  * lands in the wallet then is Mercury's to move, and, as USDC, to reinvest in
  * a Mercury basket that rebalances itself.
@@ -46,12 +29,7 @@ const Basket = ({ basket, wallet }: { basket: OutsideBasket; wallet: string }) =
   const panels = usePanels();
   const navigate = useNavigate();
   const { choose, wallets } = useActingWallet();
-  const [choice, setChoice] = useState<HandoffChoice>(() => chosenHandoff(basket.address, storage()));
   const next = nextStep(basket);
-  const pick = (c: HandoffChoice) => {
-    setChoice(c);
-    rememberHandoff(basket.address, c, storage());
-  };
   // Invested from the Mercury wallet, where the money was moved: chosen first, then the basket opened.
   const investHere = (slug: string | null) => {
     const mercury = wallets.find((w) => w.isPrimary);
@@ -99,41 +77,13 @@ const Basket = ({ basket, wallet }: { basket: OutsideBasket; wallet: string }) =
         <span className="min-w-0 truncate text-ds-muted">{holdingsLine(basket)}</span>
         <span className="shrink-0 font-medium text-ds-ink">{usd(Number(basket.valueUsd))}</span>
       </div>
-      <div
-        role="radiogroup"
-        aria-label="How to bring it in"
-        className="grid grid-cols-2 gap-1 rounded-lg bg-white p-1 text-[13px]"
-      >
-        {(
-          [
-            ["shares", "Keep the shares"],
-            ["usdc", "Sell, reinvest here"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={choice === value}
-            onClick={() => pick(value)}
-            className={`rounded-md px-2 py-2 font-medium ${choice === value ? "bg-ds-panel text-ds-ink" : "text-ds-muted hover:text-ds-ink"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
       <ol className="flex flex-col gap-1.5 text-[13px] leading-[1.45] text-ds-ink">
-        {handoffSteps(choice, wallet, basket.similar).map((step, i) => (
+        {handoffSteps(wallet).map((step, n) => (
           <li key={step}>
-            <span className="font-medium">{i + 1}.</span> {step}
+            <span className="font-medium">{n + 1}.</span> {step}
           </li>
         ))}
       </ol>
-      {choice === "usdc" && (
-        <p className="text-[12px] leading-[1.45] text-ds-muted">
-          {USDC_COST_NOTE} {SHARES_INSTEAD_NOTE}
-        </p>
-      )}
       <div className="flex flex-wrap gap-2">
         <a
           href={GLIDER_APP_URL}
@@ -152,11 +102,10 @@ const Basket = ({ basket, wallet }: { basket: OutsideBasket; wallet: string }) =
  * Baskets a linked wallet runs on Glider outside Mercury. Mercury can see
  * them on the chain but can't withdraw them: a basket belongs to the app that
  * made it, and only that app's Glider account can ask for a withdrawal. So the
- * card says what they hold and guides the person, the way they choose: keep
- * the shares and move them here, or sell to USDC and reinvest in a Mercury
- * basket. It follows along: once the withdrawal lands, it asks for the next
- * step. Shares moved here are costed at the price when they arrived, since
- * Mercury never saw what the basket cost.
+ * card says what they hold, asks for the withdrawal to the wallet, and follows
+ * along: once it lands, shares are moved here, and USDC is moved and invested
+ * in the closest Mercury basket. Shares moved here are costed at the price
+ * when they arrived, since Mercury never saw what the basket cost.
  */
 export const OutsideBaskets = ({ name }: { name: string }) => {
   const baskets = useOutsideBaskets();
@@ -179,7 +128,7 @@ export const OutsideBaskets = ({ name }: { name: string }) => {
       {waiting > 0 && (
         <p className="text-[13px] leading-[1.45] text-ds-muted">
           Made in Glider's own app, so Mercury can see {waiting === 1 ? "it" : "them"} but can't withdraw{" "}
-          {waiting === 1 ? "it" : "them"} for you. Choose how to bring {waiting === 1 ? "it" : "them"} here:
+          {waiting === 1 ? "it" : "them"} for you. Two steps bring {waiting === 1 ? "it" : "them"} here:
         </p>
       )}
       <ul className="flex flex-col gap-2">

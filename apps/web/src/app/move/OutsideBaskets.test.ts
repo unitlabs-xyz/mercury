@@ -3,17 +3,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OutsideBasket } from "../../api/move";
 
-const state = vi.hoisted(() => ({ baskets: [] as unknown[], kept: new Map<string, string>() }));
+const state = vi.hoisted(() => ({ baskets: [] as unknown[] }));
 vi.mock("../../api/move", () => ({ useOutsideBaskets: () => ({ data: state.baskets }) }));
 vi.mock("../Panels", () => ({ usePanels: () => ({ move: () => undefined }) }));
 vi.mock("../../api/acting-wallet", () => ({
   useActingWallet: () => ({ choose: () => undefined, wallets: [] }),
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => () => undefined }));
-vi.stubGlobal("localStorage", {
-  getItem: (k: string) => state.kept.get(k) ?? null,
-  setItem: (k: string, v: string) => void state.kept.set(k, v),
-});
 const { GLIDER_APP_URL, OutsideBaskets, holdingsLine } = await import("./OutsideBaskets");
 
 const basket = (over: Partial<OutsideBasket> = {}): OutsideBasket => ({
@@ -31,7 +27,6 @@ const render = () => renderToStaticMarkup(createElement(OutsideBaskets, { name: 
 
 beforeEach(() => {
   state.baskets = [];
-  state.kept.clear();
 });
 
 describe("OutsideBaskets", () => {
@@ -39,28 +34,19 @@ describe("OutsideBaskets", () => {
     expect(render()).toBe("");
   });
 
-  it("shows what the basket holds and the choice, starting on keeping the shares", () => {
+  it("shows what the basket holds, and asks only for the withdrawal to the wallet", () => {
     state.baskets = [basket()];
     const html = render();
     expect(html).toContain("A basket on Glider");
     expect(html).toContain("$470.00");
     expect(html).toContain("1.5 TSLAx · 20 USDC");
     expect(html).toContain("Mercury can see it but can&#x27;t withdraw it for you");
-    expect(html).toMatch(/aria-checked="true"[^>]*>Keep the shares/);
-    expect(html).toContain("If it asks how, choose to receive the shares themselves. Nothing is sold.");
+    expect(html).toContain("Open Glider and withdraw the basket to Phantom.");
+    expect(html).toContain("When it lands in Phantom, this card offers the next step");
     expect(html).toContain(`href="${GLIDER_APP_URL}"`);
-    expect(html).not.toContain("spreads twice");
-  });
-
-  it("guides selling to USDC and reinvesting in the closest Mercury basket, with what it costs, when chosen", () => {
-    state.baskets = [basket()];
-    state.kept.set("mercury.handoff.Basket1", "usdc");
-    const html = render();
-    expect(html).toMatch(/aria-checked="true"[^>]*>Sell, reinvest here/);
-    expect(html).toContain("withdraw the basket to Phantom, as USDC if it offers that");
-    expect(html).toContain("If Glider hands back the shares instead");
-    expect(html).toContain("Invest it in Tech Leaders, which holds the most of the same");
-    expect(html).toContain("spreads twice");
+    // No option it can't vouch for.
+    expect(html).not.toContain("radiogroup");
+    expect(html).not.toContain("Sell, reinvest here");
   });
 
   it("moves on by itself once shares arrive in the wallet: move them here", () => {
