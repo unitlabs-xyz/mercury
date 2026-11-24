@@ -174,7 +174,8 @@ const harness = async (
       history: { ownedTokenAccounts: async () => [] },
       prices: { pricesFor: async () => new Map() },
       usdcMint: USDC_MINT,
-      listed: async () => new Map([[USDC_MINT, { symbol: "USDC", ticker: null, name: "US dollars" }]]),
+      listed: async () =>
+        new Map([[USDC_MINT, { symbol: "USDC", ticker: null, name: "US dollars", decimals: 6 }]]),
       mercuryWalletId: async () => "w-mercury",
       latestBlockhash: async () => ({
         blockhash: "EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k",

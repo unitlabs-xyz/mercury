@@ -1618,6 +1618,27 @@ export const sampleResponse = (path: string, body?: string, wallet?: string): un
                   valueUsd: "50",
                 },
               ],
+              arrived: null,
+              similar: { slug: "mag7", name: "Magnificent Seven", overlap: "0.41" },
+            },
+            // A second one, withdrawn as USDC this morning: the card asks for the next step.
+            {
+              address: "3QvJmXc7nB6T1tK8YdKp2fJ9tA4wLrS5hQ1eG8mN2xZa",
+              valueUsd: "0",
+              holdings: [],
+              arrived: {
+                at: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
+                holdings: [
+                  {
+                    mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                    symbol: "USDC",
+                    ticker: null,
+                    amount: "640",
+                    valueUsd: "640",
+                  },
+                ],
+              },
+              similar: { slug: "mag7", name: "Magnificent Seven", overlap: "0.62" },
             },
           ]
         : [],

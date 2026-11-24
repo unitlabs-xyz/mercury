@@ -125,17 +125,30 @@ export function moveRoutes(deps: MoveDeps): Hono {
       walletId: writer.id,
       address: writer.address,
     });
+    const holdingJson = (h: OutsideBasket["holdings"][number]) => ({
+      mint: h.mint,
+      symbol: h.symbol,
+      ticker: h.ticker,
+      amount: toWire(h.amount),
+      valueUsd: toWire(h.valueUsd.toDecimalPlaces(2)),
+    });
     return c.json({
       baskets: baskets.map((b) => ({
         address: b.address,
         valueUsd: toWire(b.valueUsd.toDecimalPlaces(2)),
-        holdings: b.holdings.map((h) => ({
-          mint: h.mint,
-          symbol: h.symbol,
-          ticker: h.ticker,
-          amount: toWire(h.amount),
-          valueUsd: toWire(h.valueUsd.toDecimalPlaces(2)),
-        })),
+        holdings: b.holdings.map(holdingJson),
+        arrived:
+          b.arrived === null
+            ? null
+            : { at: b.arrived.at.toISOString(), holdings: b.arrived.holdings.map(holdingJson) },
+        similar:
+          b.similar === null
+            ? null
+            : {
+                slug: b.similar.slug,
+                name: b.similar.name,
+                overlap: toWire(b.similar.overlap.toDecimalPlaces(2)),
+              },
       })),
     });
   });

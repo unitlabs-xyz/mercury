@@ -1,18 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { address, generateKeyPairSigner, getProgramDerivedAddress } from "@solana/kit";
+import { address, generateKeyPairSigner, getProgramDerivedAddress, isOffCurveAddress } from "@solana/kit";
 import { D } from "@mercury/core";
 import type { ChainHistory, SignatureRef, TokenBalance, TransactionDetail } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import { mercuryWallet, testDb } from "../db/testing.js";
 import { basketAccounts, historyEvents, historyTxs, users, wallets } from "../db/schema.js";
-import { findOutsideBaskets, outsideCandidates, SWIG_PROGRAMS, type Listed } from "./outside.js";
+import {
+  ARRIVED_WITHIN_MS,
+  closestBasket,
+  findOutsideBaskets,
+  outsideCandidates,
+  SWIG_PROGRAMS,
+  type Holding,
+  type Listed,
+  type Template,
+} from "./outside.js";
 
 const SWIG = [...SWIG_PROGRAMS][0]!;
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const TSLAX = "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB";
 const LISTED = new Map<string, Listed>([
-  [USDC, { symbol: "USDC", ticker: null }],
-  [TSLAX, { symbol: "TSLAx", ticker: "TSLA" }],
+  [USDC, { symbol: "USDC", ticker: null, decimals: 6 }],
+  [TSLAX, { symbol: "TSLAx", ticker: "TSLA", decimals: 8 }],
 ]);
 
 /** A program-derived address, off the curve, as a Swig sub-account is. */
@@ -179,5 +188,158 @@ describe("findOutsideBaskets", () => {
         s.wallet,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("findOutsideBaskets, once the person has withdrawn", () => {
+  const NOW = new Date("2026-11-24T12:00:00.000Z");
+  const prices = {
+    pricesFor: async (mints: readonly string[]) =>
+      new Map(mints.map((m) => [m, { usdPricePerToken: D(m === TSLAX ? 300 : 1) }])),
+  } as unknown as PriceBoard;
+  const swigRun = (owner: string): Pick<ChainHistory, "signatures" | "transaction"> => ({
+    signatures: async (a) => [{ signature: `tx-${a}`, slot: 1, blockTime: 1, failed: false }],
+    transaction: async (sig) => ({
+      signature: sig,
+      blockTime: 1,
+      succeeded: true,
+      accountKeys: sig === `tx-${owner}` ? [owner, SWIG] : [owner],
+      feeLamports: 0n,
+      preLamports: [],
+      postLamports: [],
+      preTokens: [],
+      postTokens: [],
+    }),
+  });
+  const withdrawal = async (s: Awaited<ReturnType<typeof seed>>, from: string, at: Date, sig: string) => {
+    await s.db.insert(historyTxs).values({ signature: sig, slot: 9n, blockTime: at, raw: {} });
+    await s.db.insert(historyEvents).values({
+      walletId: s.wallet.walletId,
+      account: "usdc-account",
+      signature: sig,
+      blockTime: at,
+      kind: "in",
+      mint: USDC,
+      amountRaw: 1_186_400_000n,
+      sourceOwner: from,
+    });
+  };
+
+  it("keeps a basket emptied into the wallet on the page, saying what arrived from it and when", async () => {
+    const s = await seed();
+    const basket = await pda("withdrawn");
+    await s.sent(basket);
+    const landed = new Date(NOW.getTime() - 60_000);
+    await withdrawal(s, basket, landed, "w-1");
+    const found = await findOutsideBaskets(
+      {
+        db: s.db,
+        history: swigRun(basket),
+        chain: { tokenBalances: async () => [] },
+        prices,
+        listed: async () => LISTED,
+        now: () => NOW,
+      },
+      s.wallet,
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]!.holdings).toEqual([]);
+    expect(found[0]!.arrived?.holdings.map((h) => [h.symbol, h.amount.toString()])).toEqual([
+      ["USDC", "1186.4"],
+    ]);
+    expect(found[0]!.arrived?.at).toEqual(landed);
+  });
+
+  it("forgets a withdrawal that landed more than two weeks ago, and an emptied basket with it", async () => {
+    const s = await seed();
+    const basket = await pda("long-ago");
+    await s.sent(basket);
+    await withdrawal(s, basket, new Date(NOW.getTime() - ARRIVED_WITHIN_MS - 1), "w-old");
+    expect(
+      await findOutsideBaskets(
+        {
+          db: s.db,
+          history: swigRun(basket),
+          chain: { tokenBalances: async () => [] },
+          prices,
+          listed: async () => LISTED,
+          now: () => NOW,
+        },
+        s.wallet,
+      ),
+    ).toEqual([]);
+  });
+
+  it("suggests the Mercury basket that holds most of the same", async () => {
+    const s = await seed();
+    const basket = await pda("tech");
+    await s.sent(basket);
+    const found = await findOutsideBaskets(
+      {
+        db: s.db,
+        history: swigRun(basket),
+        chain: { tokenBalances: async () => [{ mint: TSLAX, rawAmount: 100_000_000n, decimals: 8 }] },
+        prices,
+        listed: async () => LISTED,
+        templates: async () => [
+          {
+            slug: "tesla-only",
+            name: "Tesla",
+            allocations: [{ ticker: "TSLA", assetId: `x:${TSLAX}`, weightBps: 10_000 }],
+          },
+        ],
+        now: () => NOW,
+      },
+      s.wallet,
+    );
+    expect(found[0]!.similar).toMatchObject({ slug: "tesla-only", name: "Tesla" });
+    expect(found[0]!.arrived).toBeNull();
+  });
+});
+
+describe("closestBasket", () => {
+  const h = (ticker: string | null, mint: string, value: number): Holding => ({
+    mint,
+    symbol: ticker ?? "USDC",
+    ticker,
+    amount: D(1),
+    valueUsd: D(value),
+  });
+  const t = (slug: string, weights: Record<string, number>): Template => ({
+    slug,
+    name: slug,
+    allocations: Object.entries(weights).map(([ticker, bps]) => ({
+      ticker,
+      assetId: `x:${ticker}-mint`,
+      weightBps: bps,
+    })),
+  });
+
+  it("picks the basket whose weights cover most of the holdings' value, each up to its own weight", () => {
+    // 75% AAPL, 25% QQQ. Tech (AAPL 50%, QQQ 50%) covers 50% + 25% = 75%; the mix covers only 20%.
+    const holdings = [h("AAPL", "AAPL-mint", 750), h("QQQ", "QQQ-mint", 250)];
+    const best = closestBasket(holdings, [
+      t("mixed", { AAPL: 2_000, MSFT: 8_000 }),
+      t("tech", { AAPL: 5_000, QQQ: 5_000 }),
+    ]);
+    expect([best?.slug, best?.overlap.toString()]).toEqual(["tech", "0.75"]);
+  });
+
+  it("matches by mint or by ticker, and leaves cash out of it", () => {
+    const holdings = [h("AAPL", "AAPL-mint", 100), h(null, "usdc", 900)];
+    expect(closestBasket(holdings, [t("a", { AAPL: 10_000 })])?.overlap.toString()).toBe("1");
+  });
+
+  it("is null when no Mercury basket holds any of it, or only cash came out", () => {
+    expect(closestBasket([h("GME", "GME-mint", 10)], [t("a", { AAPL: 10_000 })])).toBeNull();
+    expect(closestBasket([h(null, "usdc", 500)], [t("a", { AAPL: 10_000 })])).toBeNull();
+  });
+});
+
+describe("a real Glider basket account", () => {
+  it("is a program address, not a person's wallet, so the finder would look at it", () => {
+    // A Mercury enrolment on mainnet; its transactions run through SWIG_PROGRAMS (checked 24 November 2026).
+    expect(isOffCurveAddress(address("7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk"))).toBe(true);
+    expect(SWIG_PROGRAMS.has("swigypWHEksbC64pWKwah1WTeh9JXwx8H1rJHLdbQMB")).toBe(true);
   });
 });

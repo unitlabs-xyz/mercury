@@ -70,8 +70,8 @@ const world = async (
     usdcMint: USDC,
     listed: async () =>
       new Map([
-        [USDC, { symbol: "USDC", ticker: null, name: "US dollars" }],
-        [NVDAX, { symbol: "NVDAx", ticker: "NVDA", name: "Nvidia" }],
+        [USDC, { symbol: "USDC", ticker: null, name: "US dollars", decimals: 6 }],
+        [NVDAX, { symbol: "NVDAx", ticker: "NVDA", name: "Nvidia", decimals: 8 }],
       ]),
     mercuryWalletId: async () => "w-mercury",
     latestBlockhash: async () => ({
@@ -300,6 +300,11 @@ describe("GET /v1/move/outside-baskets", () => {
             holdings: [
               { mint: NVDAX, symbol: "NVDAx", ticker: "NVDA", amount: D("1.5"), valueUsd: D("450") },
             ],
+            arrived: {
+              at: new Date("2026-11-23T10:00:00.000Z"),
+              holdings: [{ mint: USDC, symbol: "USDC", ticker: null, amount: D(20), valueUsd: D(20) }],
+            },
+            similar: { slug: "tech-leaders", name: "Tech Leaders", overlap: D("0.6667") },
           },
         ];
       },
@@ -311,6 +316,11 @@ describe("GET /v1/move/outside-baskets", () => {
           address: "Basket1",
           valueUsd: "470",
           holdings: [{ mint: NVDAX, symbol: "NVDAx", ticker: "NVDA", amount: "1.5", valueUsd: "450" }],
+          arrived: {
+            at: "2026-11-23T10:00:00.000Z",
+            holdings: [{ mint: USDC, symbol: "USDC", ticker: null, amount: "20", valueUsd: "20" }],
+          },
+          similar: { slug: "tech-leaders", name: "Tech Leaders", overlap: "0.67" },
         },
       ],
     });

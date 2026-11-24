@@ -22,16 +22,23 @@ export const useMovableTokens = (enabled: boolean) => {
 };
 
 /** A basket the linked wallet runs outside Mercury, as `GET /v1/move/outside-baskets` lists it. */
+export interface OutsideHolding {
+  readonly mint: string;
+  readonly symbol: string;
+  readonly ticker: string | null;
+  readonly amount: string;
+  readonly valueUsd: string;
+}
+
 export interface OutsideBasket {
   readonly address: string;
   readonly valueUsd: string;
-  readonly holdings: readonly {
-    readonly mint: string;
-    readonly symbol: string;
-    readonly ticker: string | null;
-    readonly amount: string;
-    readonly valueUsd: string;
-  }[];
+  /** What it holds now; empty once withdrawn. */
+  readonly holdings: readonly OutsideHolding[];
+  /** What came from it into the linked wallet in the last two weeks: the withdrawal, landed. */
+  readonly arrived: { readonly at: string; readonly holdings: readonly OutsideHolding[] } | null;
+  /** The Mercury basket holding most of the same. */
+  readonly similar: { readonly slug: string; readonly name: string; readonly overlap: string } | null;
 }
 
 /**

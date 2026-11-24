@@ -748,19 +748,20 @@ export function buildReadDeps(
     record: (move) => recordWalletMove(db, { ...move, usdcMint: USDC_MINT }),
   });
   const rpc = createSolanaRpc(config.solanaRpcUrl);
+  const basketTemplates = new BasketService({
+    store: basketStore,
+    funding: new SolanaBasketFunding(
+      config.solanaRpcUrl,
+      relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
+    ),
+    history: deps.history,
+    // What went into a basket, so shares that leave it in kind carry their share of that cost.
+    netFunding: (userId, owner, portfolioId) =>
+      basketNetFunding(db, userId, owner.slice(owner.lastIndexOf(":") + 1), portfolioId),
+    ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
+  });
   return {
-    basketTemplates: new BasketService({
-      store: basketStore,
-      funding: new SolanaBasketFunding(
-        config.solanaRpcUrl,
-        relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
-      ),
-      history: deps.history,
-      // What went into a basket, so shares that leave it in kind carry their share of that cost.
-      netFunding: (userId, owner, portfolioId) =>
-        basketNetFunding(db, userId, owner.slice(owner.lastIndexOf(":") + 1), portfolioId),
-      ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
-    }),
+    basketTemplates,
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),
@@ -873,6 +874,8 @@ export function buildReadDeps(
             chain: deps.chain,
             prices: deps.prices,
             listed: () => movableMints(db, USDC_MINT),
+            // Mercury's baskets, to suggest the closest when the person reinvests here.
+            templates: () => basketTemplates.listTemplates(),
           },
           wallet,
         ),

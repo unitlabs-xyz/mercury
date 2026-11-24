@@ -1,6 +1,6 @@
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
 import { address as toAddress, isOffCurveAddress } from "@solana/kit";
-import { D, type Decimal, ZERO } from "@mercury/core";
+import { D, Decimal, ZERO } from "@mercury/core";
 import type { ChainHistory, ChainReader, TokenBalanceEntry, TransactionDetail } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
@@ -11,6 +11,11 @@ import { movementOf } from "../history/events.js";
  * The Swig smart-wallet program Glider runs every basket account on: a
  * basket's assets sit in a Swig sub-account, a program-derived address. One
  * list, so a second deployment is one line.
+ *
+ * Checked on mainnet 24 November 2026 against a real Glider basket account
+ * (`7H3xg82jB7ctTqcN88TUxFBhVTSjPkALiqFe9FiXfWCk`, a Mercury enrolment): off
+ * the curve, and every transaction past its funding goes through this
+ * program, including Jupiter swaps of TSLAx and NVDAx in its rebalance.
  */
 export const SWIG_PROGRAMS: ReadonlySet<string> = new Set(["swigypWHEksbC64pWKwah1WTeh9JXwx8H1rJHLdbQMB"]);
 
@@ -18,25 +23,52 @@ export const SWIG_PROGRAMS: ReadonlySet<string> = new Set(["swigypWHEksbC64pWKwa
 const MAX_CANDIDATES = 12;
 const SIGNATURES_PER_CANDIDATE = 5;
 
+/** An amount of one token Mercury lists, named and valued. */
+export interface Holding {
+  readonly mint: string;
+  readonly symbol: string;
+  readonly ticker: string | null;
+  readonly amount: Decimal;
+  readonly valueUsd: Decimal;
+}
+
+/** A Mercury basket, as far as finding the closest one to another basket goes. */
+export interface Template {
+  readonly slug: string;
+  readonly name: string;
+  readonly allocations: readonly {
+    readonly ticker: string;
+    readonly assetId: string;
+    readonly weightBps: number;
+  }[];
+}
+
 /** A basket made outside Mercury, as far as the chain shows it: where it is, and what it holds. */
 export interface OutsideBasket {
   /** The basket account: the Swig sub-account the person funded. */
   readonly address: string;
   readonly valueUsd: Decimal;
-  readonly holdings: readonly {
-    readonly mint: string;
-    readonly symbol: string;
-    readonly ticker: string | null;
-    readonly amount: Decimal;
-    readonly valueUsd: Decimal;
-  }[];
+  /** What it holds now. Empty once it has been withdrawn. */
+  readonly holdings: readonly Holding[];
+  /**
+   * What came from it into the linked wallet in the last two weeks: the
+   * withdrawal, landed. Shares or USDC, so the page can say what to do next.
+   * Null when nothing has.
+   */
+  readonly arrived: { readonly at: Date; readonly holdings: readonly Holding[] } | null;
+  /** The Mercury basket that holds most of the same, to invest in here instead. Null when none overlaps. */
+  readonly similar: { readonly slug: string; readonly name: string; readonly overlap: Decimal } | null;
 }
 
 /** A token Mercury lists, by mint: what a basket's holding is called. */
 export interface Listed {
   readonly symbol: string;
   readonly ticker: string | null;
+  readonly decimals: number;
 }
+
+/** How far back a withdrawal from the basket still counts as having just landed. */
+export const ARRIVED_WITHIN_MS = 14 * 24 * 60 * 60_000;
 
 export interface OutsideDeps {
   readonly db: Db;
@@ -44,7 +76,38 @@ export interface OutsideDeps {
   readonly chain: Pick<ChainReader, "tokenBalances">;
   readonly prices: PriceBoard;
   readonly listed: () => Promise<ReadonlyMap<string, Listed>>;
+  /** Mercury's baskets, to suggest the closest. Absent, none is suggested. */
+  readonly templates?: () => Promise<readonly Template[]>;
+  readonly now?: () => Date;
 }
+
+/**
+ * The Mercury basket closest to what a basket holds: the share of its value
+ * in assets a Mercury basket also holds, each counted up to that basket's own
+ * weight in it. Cash is left out of both sides: it says nothing about the
+ * strategy. Null when no Mercury basket holds any of it.
+ */
+export const closestBasket = (
+  holdings: readonly Holding[],
+  templates: readonly Template[],
+): OutsideBasket["similar"] => {
+  const stocks = holdings.filter((h) => h.ticker !== null && h.valueUsd.gt(0));
+  const total = stocks.reduce((s, h) => s.add(h.valueUsd), ZERO);
+  if (!total.gt(0)) return null;
+  let best: OutsideBasket["similar"] = null;
+  for (const t of templates) {
+    let overlap = ZERO;
+    for (const h of stocks) {
+      const a = t.allocations.find((x) => x.assetId.endsWith(`:${h.mint}`) || x.ticker === h.ticker);
+      if (a === undefined) continue;
+      overlap = overlap.add(Decimal.min(h.valueUsd.div(total), D(a.weightBps).div(10_000)));
+    }
+    if (overlap.gt(0) && (best === null || overlap.gt(best.overlap))) {
+      best = { slug: t.slug, name: t.name, overlap };
+    }
+  }
+  return best;
+};
 
 /** A transaction as the history reader kept it: its big numbers as strings. */
 const fromRaw = (raw: unknown): TransactionDetail | null => {
@@ -170,8 +233,9 @@ async function isSwigAccount(history: OutsideDeps["history"], candidate: string)
  * key alone can't take a sub-account's funds), so this is what lets the page
  * show them and walk the person through bringing them in.
  *
- * Only accounts holding something Mercury lists are returned: an emptied one
- * has nothing to bring in.
+ * A basket that holds nothing Mercury lists is left out, unless it was just
+ * withdrawn into the wallet: that is the moment the page says what to do with
+ * what arrived.
  */
 export async function findOutsideBaskets(
   deps: OutsideDeps,
@@ -179,31 +243,52 @@ export async function findOutsideBaskets(
 ): Promise<readonly OutsideBasket[]> {
   const candidates = (await outsideCandidates(deps.db, wallet)).slice(0, MAX_CANDIDATES);
   if (candidates.length === 0) return [];
-  const listed = await deps.listed();
+  const [listed, templates] = await Promise.all([deps.listed(), deps.templates?.() ?? Promise.resolve([])]);
+  const now = deps.now?.() ?? new Date();
   const baskets: OutsideBasket[] = [];
   for (const candidate of candidates) {
     if (!(await isSwigAccount(deps.history, candidate))) continue;
-    const balances = (await deps.chain.tokenBalances(candidate)).filter(
-      (b) => b.rawAmount > 0n && listed.has(b.mint),
-    );
-    if (balances.length === 0) continue;
-    const prices = await deps.prices.pricesFor(balances.map((b) => b.mint));
-    const holdings = balances.map((b) => {
-      const about = listed.get(b.mint)!;
-      const amount = D(b.rawAmount.toString()).div(D(10).pow(b.decimals));
-      const price = prices.get(b.mint)?.usdPricePerToken ?? ZERO;
-      return {
-        mint: b.mint,
-        symbol: about.symbol,
-        ticker: about.ticker,
-        amount,
-        valueUsd: amount.mul(price),
-      };
-    });
+    const balances = (await deps.chain.tokenBalances(candidate))
+      .filter((b) => b.rawAmount > 0n && listed.has(b.mint))
+      .map((b) => ({ mint: b.mint, raw: b.rawAmount }));
+    const arrivals = await deps.db
+      .select({ mint: historyEvents.mint, amountRaw: historyEvents.amountRaw, at: historyEvents.blockTime })
+      .from(historyEvents)
+      .where(
+        and(
+          eq(historyEvents.walletId, wallet.walletId),
+          eq(historyEvents.kind, "in"),
+          eq(historyEvents.sourceOwner, candidate),
+          gte(historyEvents.blockTime, new Date(now.getTime() - ARRIVED_WITHIN_MS)),
+        ),
+      );
+    const landed = new Map<string, bigint>();
+    let latest: Date | null = null;
+    for (const a of arrivals) {
+      if (a.mint === null || a.amountRaw === null || !listed.has(a.mint)) continue;
+      landed.set(a.mint, (landed.get(a.mint) ?? 0n) + a.amountRaw);
+      if (a.at !== null && (latest === null || a.at > latest)) latest = a.at;
+    }
+    if (balances.length === 0 && landed.size === 0) continue;
+
+    const mints = [...new Set([...balances.map((b) => b.mint), ...landed.keys()])];
+    const prices = await deps.prices.pricesFor(mints);
+    const holding = (mint: string, raw: bigint): Holding => {
+      const about = listed.get(mint)!;
+      const amount = D(raw.toString()).div(D(10).pow(about.decimals));
+      const price = prices.get(mint)?.usdPricePerToken ?? ZERO;
+      return { mint, symbol: about.symbol, ticker: about.ticker, amount, valueUsd: amount.mul(price) };
+    };
+    const largestFirst = (a: Holding, b: Holding) => b.valueUsd.comparedTo(a.valueUsd);
+    const holdings = balances.map((b) => holding(b.mint, b.raw)).sort(largestFirst);
+    const arrived = [...landed].map(([mint, raw]) => holding(mint, raw)).sort(largestFirst);
     baskets.push({
       address: candidate,
       valueUsd: holdings.reduce((s, h) => s.add(h.valueUsd), ZERO),
-      holdings: holdings.sort((a, b) => b.valueUsd.comparedTo(a.valueUsd)),
+      holdings,
+      arrived: arrived.length === 0 ? null : { at: latest ?? now, holdings: arrived },
+      // What it held, or what came out of it: either says what the person was invested in.
+      similar: closestBasket(holdings.length > 0 ? holdings : arrived, templates),
     });
   }
   return baskets;

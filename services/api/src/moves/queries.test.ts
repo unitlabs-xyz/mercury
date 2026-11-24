@@ -17,9 +17,9 @@ describe("movableMints", () => {
       { instrumentId: nvda!.id, mint: "NVDAon-mint", symbol: "NVDAon", issuer: "ondo", decimals: 9 },
     ]);
     expect(Object.fromEntries(await movableMints(db, USDC))).toEqual({
-      [USDC]: { symbol: "USDC", ticker: null, name: "US dollars" },
-      "NVDAx-mint": { symbol: "NVDAx", ticker: "NVDA", name: "Nvidia" },
-      "NVDAon-mint": { symbol: "NVDAon", ticker: "NVDA", name: "Nvidia" },
+      [USDC]: { symbol: "USDC", ticker: null, name: "US dollars", decimals: 6 },
+      "NVDAx-mint": { symbol: "NVDAx", ticker: "NVDA", name: "Nvidia", decimals: 8 },
+      "NVDAon-mint": { symbol: "NVDAon", ticker: "NVDA", name: "Nvidia", decimals: 9 },
     });
   });
 });

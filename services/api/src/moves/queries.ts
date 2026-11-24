@@ -8,17 +8,26 @@ export interface Movable {
   /** The stock it is a share of; null for USDC. */
   readonly ticker: string | null;
   readonly name: string;
+  readonly decimals: number;
 }
 
 /** What can be moved into the Mercury wallet: every stock Mercury lists, and USDC. */
 export const movableMints = async (db: Db, usdcMint: string): Promise<ReadonlyMap<string, Movable>> => {
   const rows = await db
-    .select({ mint: tokens.mint, symbol: tokens.symbol, ticker: instruments.ticker, name: instruments.name })
+    .select({
+      mint: tokens.mint,
+      symbol: tokens.symbol,
+      ticker: instruments.ticker,
+      name: instruments.name,
+      decimals: tokens.decimals,
+    })
     .from(tokens)
     .innerJoin(instruments, eq(instruments.id, tokens.instrumentId));
   return new Map<string, Movable>([
-    [usdcMint, { symbol: "USDC", ticker: null, name: "US dollars" }],
-    ...rows.map((r) => [r.mint, { symbol: r.symbol, ticker: r.ticker, name: r.name }] as const),
+    [usdcMint, { symbol: "USDC", ticker: null, name: "US dollars", decimals: 6 }],
+    ...rows.map(
+      (r) => [r.mint, { symbol: r.symbol, ticker: r.ticker, name: r.name, decimals: r.decimals }] as const,
+    ),
   ]);
 };
 
