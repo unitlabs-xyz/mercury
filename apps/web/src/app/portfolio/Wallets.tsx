@@ -1,22 +1,32 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { usd } from "@mercury/view";
+import {
+  arcs,
+  ringPath,
+  sharePct,
+  summaryLines,
+  usd,
+  walletCards,
+  walletLoans,
+  walletSlices,
+  type Series,
+  type WalletCard,
+  type WalletSlice,
+} from "@mercury/view";
 import { ALL_WALLETS, useActingWallet, type Acting } from "../../api/acting-wallet";
 import { useAllWalletsPortfolio, usePortfolioSummary } from "../../api/hooks";
 import type { Range } from "../ValueChart";
-import { arcs, ringPath } from "./donut";
 import { Performance } from "./Summary";
 import { RailCard, RailHead, StatusChip } from "../../ui/ds";
 import { ChevronRight } from "../../ui/icons";
 import { Delta, Figure, Panel, Skeleton, relTime } from "./ui";
-import {
-  sharePct,
-  summaryLines,
-  walletCards,
-  walletLoans,
-  walletSlices,
-  type WalletCard,
-  type WalletSlice,
-} from "./wallets-model";
+
+/**
+ * A wallet's colour on web: its chart series from tokens.css, validated as a
+ * set, or grey past the fifth. The phone keeps its own palette for the same
+ * series numbers.
+ */
+export const seriesColor = (series: Series | null): string =>
+  series === null ? "var(--color-ds-muted)" : `var(--color-series-${series})`;
 
 const chosenId = (acting: Acting, mercuryId: string | undefined) =>
   acting.kind === "all" ? ALL_WALLETS : acting.kind === "linked" ? acting.wallet.id : mercuryId;
@@ -280,7 +290,7 @@ const Ring = ({
             <path
               key={s.id}
               d={d}
-              fill={s.color}
+              fill={seriesColor(s.series)}
               fillRule="evenodd"
               stroke="white"
               strokeWidth={several ? 2 : 0}
@@ -390,7 +400,11 @@ const Row = ({
     style={{ opacity: dim ? 0.45 : 1 }}
   >
     <span className="flex min-w-0 items-center gap-2">
-      <span className="size-2.5 shrink-0 rounded-full" style={{ background: slice.color }} aria-hidden />
+      <span
+        className="size-2.5 shrink-0 rounded-full"
+        style={{ background: seriesColor(slice.series) }}
+        aria-hidden
+      />
       <span className="truncate text-[14px] font-medium">{slice.name}</span>
       {slice.loan && (
         <span

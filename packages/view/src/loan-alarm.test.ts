@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PortfolioSummary } from "@mercury/types";
-import type { Borrow } from "../api/borrow";
-import { STAGES, alarmFor, fallUntil, otherAlarmLine, otherAlarms, pctOf } from "./loan-alarm";
+import type { Borrow } from "./borrow.js";
+import { STAGES, alarmFor, fallUntil, otherAlarmLine, otherAlarms, pctOf } from "./loan-alarm.js";
 
 const borrow = (over: Partial<Borrow>): Borrow =>
   ({

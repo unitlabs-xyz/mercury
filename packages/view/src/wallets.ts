@@ -1,6 +1,38 @@
 import type { Portfolio, PortfolioSummary } from "@mercury/types";
-import { usd, usdSigned } from "@mercury/view";
-import { walletName } from "../../api/wallets";
+import { usd, usdSigned } from "./format.js";
+import { shortAddress } from "./receipt.js";
+
+/**
+ * The wallets on someone's account: the Mercury wallet, and the Solana wallets
+ * they already hold and have linked beside it. The wire shape of
+ * `GET /v1/wallets`, read the same by web and the phone.
+ */
+export interface AccountWallet {
+  readonly id: string;
+  readonly address: string;
+  readonly kind: "privy_embedded" | "external";
+  readonly isPrimary: boolean;
+  readonly label: string | null;
+  readonly linkedAt: string | null;
+}
+
+export interface AccountWallets {
+  readonly wallets: readonly AccountWallet[];
+  /** How many may be linked at once, beside the Mercury wallet. */
+  readonly limit: number;
+}
+
+/** What a wallet is called on screen: "Mercury", its label, or its short address. */
+export const walletName = (w: Pick<AccountWallet, "isPrimary" | "label" | "address">): string =>
+  w.isPrimary ? "Mercury" : (w.label ?? shortAddress(w.address));
+
+/** Linked wallets being followed. The Mercury wallet is not one. */
+export const linkedCount = (wallets: readonly AccountWallet[]): number =>
+  wallets.filter((w) => !w.isPrimary).length;
+
+/** "3 of 5 linked". */
+export const linkedLine = (account: AccountWallets): string =>
+  `${linkedCount(account.wallets)} of ${account.limit} linked`;
 
 type SummaryWallet = PortfolioSummary["wallets"][number];
 type Health = NonNullable<SummaryWallet["loanHealth"]>;
@@ -91,22 +123,23 @@ export const walletCards = (
   });
 };
 
+/** The five chart series each client draws in, validated as a set. */
+export type Series = 1 | 2 | 3 | 4 | 5;
+
 /**
- * Each wallet's colour, following the wallet and never its size: the Mercury
- * wallet wears the first chart series, and linked wallets the next ones in
- * the order they were linked. There are five validated series (tokens.css),
- * so a fifth linked wallet and beyond wear grey rather than a made-up hue;
- * their names in the legend still tell them apart.
+ * Each wallet's chart series, following the wallet and never its size: the
+ * Mercury wallet wears the first, and linked wallets the next ones in the
+ * order they were linked. There are five validated series, so a fifth linked
+ * wallet and beyond get none and each client draws them grey rather than in a
+ * made-up hue; their names in the legend still tell them apart. A series, not
+ * a colour, because each client keeps its own palette.
  */
-export const walletColor = (card: Pick<WalletCard, "isPrimary">, linkedIndex: number): string =>
-  card.isPrimary
-    ? "var(--color-series-1)"
-    : linkedIndex < 4
-      ? `var(--color-series-${linkedIndex + 2})`
-      : "var(--color-ds-muted)";
+export const walletSeries = (card: Pick<WalletCard, "isPrimary">, linkedIndex: number): Series | null =>
+  card.isPrimary ? 1 : linkedIndex < 4 ? ((linkedIndex + 2) as Series) : null;
 
 export interface WalletSlice extends WalletCard {
-  readonly color: string;
+  /** Its chart series; null past the fifth, drawn grey. */
+  readonly series: Series | null;
   /** The wallet's value as a number; 0 before its first reading. */
   readonly value: number;
   /**
@@ -117,16 +150,16 @@ export interface WalletSlice extends WalletCard {
   readonly share: number | null;
 }
 
-/** The cards as pieces of the ring: each wallet's colour and share of the whole. */
+/** The cards as pieces of the ring: each wallet's series and share of the whole. */
 export const walletSlices = (cards: readonly WalletCard[]): readonly WalletSlice[] => {
   const values = cards.map((c) => (c.valueUsd === null ? 0 : Number(c.valueUsd)));
   const held = values.reduce((sum, v) => sum + (Number.isFinite(v) && v > 0 ? v : 0), 0);
   let linked = 0;
   return cards.map((card, i) => {
     const value = values[i] ?? 0;
-    const color = walletColor(card, card.isPrimary ? 0 : linked++);
+    const series = walletSeries(card, card.isPrimary ? 0 : linked++);
     const share = card.valueUsd === null ? null : held === 0 || !(value > 0) ? 0 : value / held;
-    return { ...card, color, value, share };
+    return { ...card, series, value, share };
   });
 };
 

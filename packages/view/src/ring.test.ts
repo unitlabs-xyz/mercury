@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arcs, ringPath } from "./donut";
+import { arcs, ringPath } from "./ring.js";
 
 const RING = { cx: 50, cy: 50, inner: 30, outer: 40 };
 

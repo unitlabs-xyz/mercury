@@ -2,15 +2,60 @@ import { describe, expect, it } from "vitest";
 import type { Portfolio, PortfolioSummary } from "@mercury/types";
 import {
   calculatingNote,
+  linkedCount,
+  linkedLine,
+  walletName,
+  type AccountWallet,
   sharePct,
   summaryLines,
   walletCards,
-  walletColor,
+  walletSeries,
   walletLoans,
   walletSlices,
   HEALTH,
   type WalletCard,
-} from "./wallets-model";
+} from "./wallets.js";
+import { shortAddress } from "./receipt.js";
+
+const PHANTOM = "7EYnhQoR9YM3N7UoaKRoA44Uy8JeaZV3qyouov87awMs";
+
+const wallet = (over: Partial<AccountWallet> = {}): AccountWallet => ({
+  id: "w1",
+  address: PHANTOM,
+  kind: "external",
+  isPrimary: false,
+  label: null,
+  linkedAt: "2026-11-21T10:00:00.000Z",
+  ...over,
+});
+
+describe("shortAddress", () => {
+  it("keeps the first and last four, as a wallet shows it", () => {
+    expect(shortAddress(PHANTOM)).toBe("7EYn…awMs");
+  });
+  it("leaves a short string whole", () => expect(shortAddress("abc")).toBe("abc"));
+});
+
+describe("walletName", () => {
+  it("calls the Mercury wallet Mercury, whatever else it holds", () => {
+    expect(walletName(wallet({ isPrimary: true, label: "ignored" }))).toBe("Mercury");
+  });
+  it("uses a linked wallet's name, or its short address without one", () => {
+    expect(walletName(wallet({ label: "Phantom main" }))).toBe("Phantom main");
+    expect(walletName(wallet())).toBe("7EYn…awMs");
+  });
+});
+
+describe("linkedCount and linkedLine", () => {
+  const account = {
+    wallets: [wallet({ isPrimary: true, kind: "privy_embedded" }), wallet(), wallet()],
+    limit: 5,
+  };
+  it("counts linked wallets, not the Mercury wallet", () => expect(linkedCount(account.wallets)).toBe(2));
+  it("says how many of how many", () => expect(linkedLine(account)).toBe("2 of 5 linked"));
+  it("reads zero with only the Mercury wallet", () =>
+    expect(linkedLine({ wallets: [wallet({ isPrimary: true })], limit: 5 })).toBe("0 of 5 linked"));
+});
 
 const summary = (over: Partial<PortfolioSummary> = {}): PortfolioSummary => ({
   wallets: [
@@ -121,16 +166,16 @@ describe("walletCards", () => {
   });
 });
 
-describe("walletColor", () => {
+describe("walletSeries", () => {
   it("gives the Mercury wallet the first series and linked wallets the next, in linked order", () => {
-    expect(walletColor({ isPrimary: true }, 0)).toBe("var(--color-series-1)");
-    expect(walletColor({ isPrimary: false }, 0)).toBe("var(--color-series-2)");
-    expect(walletColor({ isPrimary: false }, 3)).toBe("var(--color-series-5)");
+    expect(walletSeries({ isPrimary: true }, 0)).toBe(1);
+    expect(walletSeries({ isPrimary: false }, 0)).toBe(2);
+    expect(walletSeries({ isPrimary: false }, 3)).toBe(5);
   });
 
-  it("falls back to grey past the five validated series, never a made-up hue", () => {
-    expect(walletColor({ isPrimary: false }, 4)).toBe("var(--color-ds-muted)");
-    expect(walletColor({ isPrimary: false }, 9)).toBe("var(--color-ds-muted)");
+  it("gives no series past the fifth, drawn grey, never a made-up hue", () => {
+    expect(walletSeries({ isPrimary: false }, 4)).toBe(null);
+    expect(walletSeries({ isPrimary: false }, 9)).toBe(null);
   });
 });
 
@@ -154,19 +199,15 @@ describe("walletSlices", () => {
       card({ id: "m", isPrimary: true, valueUsd: "750" }),
       card({ id: "a", valueUsd: "250" }),
     ]);
-    expect(out.map((s) => [s.id, s.share, s.value, s.color])).toEqual([
-      ["m", 0.75, 750, "var(--color-series-1)"],
-      ["a", 0.25, 250, "var(--color-series-2)"],
+    expect(out.map((s) => [s.id, s.share, s.value, s.series])).toEqual([
+      ["m", 0.75, 750, 1],
+      ["a", 0.25, 250, 2],
     ]);
   });
 
   it("colours linked wallets by their own order, whatever the Mercury wallet's place", () => {
     const out = walletSlices([card({ id: "a" }), card({ id: "m", isPrimary: true }), card({ id: "b" })]);
-    expect(out.map((s) => s.color)).toEqual([
-      "var(--color-series-2)",
-      "var(--color-series-1)",
-      "var(--color-series-3)",
-    ]);
+    expect(out.map((s) => s.series)).toEqual([2, 1, 3]);
   });
 
   it("has no share for a wallet not read yet, and leaves it out of the whole", () => {

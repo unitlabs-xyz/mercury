@@ -23,3 +23,6 @@ export * from "./borrow.js";
 export * from "./baskets.js";
 export * from "./send.js";
 export * from "./receipt.js";
+export * from "./wallets.js";
+export * from "./ring.js";
+export * from "./loan-alarm.js";

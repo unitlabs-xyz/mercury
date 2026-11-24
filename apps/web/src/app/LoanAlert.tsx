@@ -1,10 +1,4 @@
 import { Link } from "react-router-dom";
-import { usd } from "@mercury/view";
-import { useActingWallet } from "../api/acting-wallet";
-import { useBorrow, type Health } from "../api/borrow";
-import { usePortfolioSummary } from "../api/hooks";
-import { walletName } from "../api/wallets";
-import { Alert, ChevronRight } from "../ui/icons";
 import {
   STAGES,
   STAGE_LABEL,
@@ -12,9 +6,15 @@ import {
   fallUntil,
   otherAlarmLine,
   otherAlarms,
+  usd,
   type Alarm,
   type OtherAlarm,
-} from "./loan-alarm";
+} from "@mercury/view";
+import { useActingWallet } from "../api/acting-wallet";
+import { useBorrow, type Health } from "../api/borrow";
+import { usePortfolioSummary } from "../api/hooks";
+import { walletName } from "../api/wallets";
+import { Alert, ChevronRight } from "../ui/icons";
 
 /**
  * The loan's alarm, on every screen while it matters. A margin call should not

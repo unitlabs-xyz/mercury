@@ -1,6 +1,6 @@
 import type { PortfolioSummary } from "@mercury/types";
-import { usd } from "@mercury/view";
-import type { Borrow, Health } from "../api/borrow";
+import type { Borrow, Health } from "./borrow.js";
+import { usd } from "./format.js";
 
 /** A fall this small to a margin call is worth saying before it happens. */
 export const EARLY_WARNING = 0.1;

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getBase58Decoder } from "@solana/kit";
 import { ApiError, apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
+import type { AccountWallets } from "@mercury/view";
 
 /**
  * The wallets on someone's account: the Mercury wallet, and the Solana wallets
@@ -11,40 +12,19 @@ import { useSignedIn } from "./hooks";
  * Privy, and nothing here can move a linked wallet's funds: every action from
  * one is signed in its own pop-up.
  */
-export interface AccountWallet {
-  readonly id: string;
-  readonly address: string;
-  readonly kind: "privy_embedded" | "external";
-  readonly isPrimary: boolean;
-  readonly label: string | null;
-  readonly linkedAt: string | null;
-}
-
-export interface AccountWallets {
-  readonly wallets: readonly AccountWallet[];
-  /** How many may be linked at once, beside the Mercury wallet. */
-  readonly limit: number;
-}
+/* The wire shape and how a wallet is named are shared with the phone. */
+export {
+  linkedCount,
+  linkedLine,
+  shortAddress,
+  walletName,
+  type AccountWallet,
+  type AccountWallets,
+} from "@mercury/view";
 
 /** The query every wallet read and write shares. */
 export const WALLETS_KEY = ["api", "wallets"] as const;
 const KEY = WALLETS_KEY;
-
-/** The first and last four characters, which is how a wallet shows an address. */
-export const shortAddress = (address: string): string =>
-  address.length <= 10 ? address : `${address.slice(0, 4)}…${address.slice(-4)}`;
-
-/** What a wallet is called on screen: "Mercury", its label, or its short address. */
-export const walletName = (w: Pick<AccountWallet, "isPrimary" | "label" | "address">): string =>
-  w.isPrimary ? "Mercury" : (w.label ?? shortAddress(w.address));
-
-/** Linked wallets being followed. The Mercury wallet is not one. */
-export const linkedCount = (wallets: readonly AccountWallet[]): number =>
-  wallets.filter((w) => !w.isPrimary).length;
-
-/** "3 of 5 linked". */
-export const linkedLine = (account: AccountWallets): string =>
-  `${linkedCount(account.wallets)} of ${account.limit} linked`;
 
 /**
  * A wallet's signature as the server takes it: base58.
