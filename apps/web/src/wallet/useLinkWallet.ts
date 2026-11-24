@@ -27,6 +27,10 @@ export const useLinkWallet = () => {
   return useMutation({
     mutationFn: async (address: string) => {
       if (walletProvider === undefined) throw new Error("Connect the wallet first.");
+      // Asked before the server is: a wallet that can only sign transactions can't prove it is yours.
+      if (typeof walletProvider.signMessage !== "function") {
+        throw new Error("This wallet can't sign a message, so it can't be linked. Try another wallet.");
+      }
       const { challengeId, message } = await apiFetch<{ challengeId: string; message: string }>(
         "/v1/wallets/link/challenge",
         { method: "POST", body: JSON.stringify({ address }) },

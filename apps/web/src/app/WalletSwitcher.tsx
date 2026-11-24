@@ -40,14 +40,14 @@ export const WalletSwitcher = () => {
   ];
 
   return (
-    <div ref={box} className="relative">
+    <div ref={box} className="relative min-w-0">
       <button
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Showing ${actingLabel(acting)}. Choose a wallet`}
         onClick={() => setOpen(!open)}
-        className="flex h-9 max-w-[180px] items-center gap-1.5 rounded-lg bg-white px-3 text-[13px] font-medium text-ds-ink max-sm:h-10"
+        className="flex h-9 max-w-[180px] min-w-0 items-center gap-1.5 rounded-lg bg-white px-3 text-[13px] font-medium text-ds-ink max-sm:h-10 max-sm:max-w-full max-sm:px-2.5"
       >
         <span className="truncate">{actingLabel(acting)}</span>
         <ChevronDown className="size-3.5 shrink-0 text-ds-muted" />

@@ -151,9 +151,25 @@ const harness = async (
     },
   } as unknown as Deps;
 
+  /*
+   * Orders in memory, with the one thing Postgres would do to them here:
+   * `order.wallet_id` is `on delete set null`, so an order whose wallet was
+   * deleted reads back with no wallet.
+   */
+  const memoryOrders = memoryOrderStore();
+  const orders: typeof memoryOrders = {
+    ...memoryOrders,
+    async byId(userId, id) {
+      const order = await memoryOrders.byId(userId, id);
+      if (order?.walletId == null) return order;
+      const [kept] = await db.select({ id: wallets.id }).from(wallets).where(eq(wallets.id, order.walletId));
+      return kept === undefined ? { ...order, walletId: null } : order;
+    },
+  };
+
   const read = {
     tradingFeeBps: over.tradingFeeBps ?? 50,
-    orders: memoryOrderStore(),
+    orders,
     send: {
       rpcUrl,
       ...(over.sponsored === false
@@ -485,6 +501,24 @@ describe("which wallet a write is for", () => {
       const res = await h.postAs(h.mercuryId, path, { signature: "5".repeat(88) });
       expect(res.status).toBe(409);
       expect(await res.json()).toMatchObject({ error: { code: "wallet_changed" } });
+    }
+  });
+
+  it("finishes no order whose wallet was deleted, for whichever wallet is chosen now", async () => {
+    // "Unlink and delete history" keeps the order for its fee and sets its wallet to null.
+    const h = await signedInWithLinked();
+    const { orderId } = (await (await h.postAs(h.linkedId, "/v1/orders", order)).json()) as {
+      orderId: string;
+    };
+    await h.db.delete(wallets).where(eq(wallets.id, h.linkedId));
+    for (const path of [`/v1/orders/${orderId}/execute`, `/v1/orders/${orderId}/confirm`]) {
+      for (const res of [
+        await h.postAs(h.mercuryId, path, { signature: "5".repeat(88) }),
+        await h.post(path, { signature: "5".repeat(88) }),
+      ]) {
+        expect(res.status, path).toBe(409);
+        expect(await res.json()).toMatchObject({ error: { code: "wallet_gone" } });
+      }
     }
   });
 

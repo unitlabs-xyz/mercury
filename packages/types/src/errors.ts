@@ -23,6 +23,11 @@ export const ErrorCode = z.enum([
    * settled for the other one: switch back to finish it.
    */
   "wallet_changed",
+  /**
+   * The order's wallet was deleted with "Unlink and delete history", so it is
+   * not finished at all: never for whichever wallet is chosen now.
+   */
+  "wallet_gone",
 ]);
 
 export const ApiError = z.object({

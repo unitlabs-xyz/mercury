@@ -16,9 +16,6 @@ const LinkSection = ({ wallets, limit }: { wallets: readonly AccountWallet[]; li
   const disconnect = useDisconnectFunder();
   const link = useLinkWallet();
 
-  if (!walletConnectConfigured) {
-    return <p className="text-[14px] text-ds-muted">Linking a wallet isn't available here yet.</p>;
-  }
   if (linkedCount(wallets) >= limit) {
     return <p className="text-[14px] text-ds-muted">Unlink a wallet to link another.</p>;
   }
@@ -74,10 +71,18 @@ const LinkSection = ({ wallets, limit }: { wallets: readonly AccountWallet[]; li
  * dynamically imported and nothing else, so AppKit loads with this and not
  * before.
  */
-const LinkWalletSection = (props: { wallets: readonly AccountWallet[]; limit: number }) => (
-  <WalletBoundary>
-    <LinkSection {...props} />
-  </WalletBoundary>
-);
+const LinkWalletSection = (props: { wallets: readonly AccountWallet[]; limit: number }) =>
+  /*
+   * Checked before anything touches AppKit: its hooks throw when it was never
+   * created, which with no project ID took the whole page down rather than
+   * saying linking isn't available.
+   */
+  !walletConnectConfigured ? (
+    <p className="text-[14px] text-ds-muted">Linking a wallet isn't available here yet.</p>
+  ) : (
+    <WalletBoundary>
+      <LinkSection {...props} />
+    </WalletBoundary>
+  );
 
 export default LinkWalletSection;

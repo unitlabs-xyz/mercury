@@ -173,7 +173,23 @@ const orderWallet = (
   if (writer === null) {
     return { kind: "refused", response: c.json(fail("unauthorized", "No wallet on this session."), 401) };
   }
-  if (order.walletId !== null && order.walletId !== writer.id) {
+  /*
+   * No wallet on an order means its wallet was deleted with "Unlink and
+   * delete history" (`order.wallet_id` is `on delete set null`, kept for the
+   * fee records). Every order is placed with a wallet, so this is never one
+   * to finish for whichever wallet is chosen now: a sell-max re-priced for the
+   * Mercury wallet would sell the Mercury wallet's whole position.
+   */
+  if (order.walletId === null) {
+    return {
+      kind: "refused",
+      response: c.json(
+        fail("wallet_gone", "The wallet this order was placed from isn't on your account any more."),
+        409,
+      ),
+    };
+  }
+  if (order.walletId !== writer.id) {
     return {
       kind: "refused",
       response: c.json(

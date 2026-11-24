@@ -1,7 +1,7 @@
 import { SAMPLE, sampleResponse } from "../dev/sample";
 import { getAccessToken } from "@privy-io/react-auth";
 import { identityToken } from "../auth/identity";
-import { chosenWallet, WALLET_HEADER } from "./wallet-choice";
+import { chosenWallet, setChosenWallet, WALLET_HEADER } from "./wallet-choice";
 
 const BASE = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:8787";
 
@@ -53,7 +53,8 @@ export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise
   if (identity) headers.set("X-Privy-Identity-Token", identity);
   // The wallet chosen in the header, unless the caller named one: Home reads every wallet's cards whichever is chosen.
   const wallet = chosenWallet();
-  if (wallet !== null && !headers.has(WALLET_HEADER)) headers.set(WALLET_HEADER, wallet);
+  const fromChoice = wallet !== null && !headers.has(WALLET_HEADER);
+  if (fromChoice) headers.set(WALLET_HEADER, wallet);
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   const body: unknown = await res.json().catch(() => null);
@@ -63,6 +64,20 @@ export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise
       body && typeof body === "object" && "error" in body
         ? (body.error as { code?: string; message?: string; details?: unknown })
         : {};
+    /*
+     * The chosen wallet is no longer on the account: unlinked here, on
+     * another device, or named by an old "Manage on web" link. The server
+     * refuses every read for it, the wallet list included, so waiting for the
+     * list to say it is gone would wait for ever. Back to the Mercury wallet,
+     * and this request asked again for it. Only a read, and only when the
+     * header came from the choice: a write is never retried for a wallet the
+     * person did not pick, and a caller that named a wallet gets its answer.
+     */
+    if (res.status === 403 && err.code === "wallet_forbidden" && fromChoice && chosenWallet() === wallet) {
+      setChosenWallet(null);
+      const method = (init.method ?? "GET").toUpperCase();
+      if (method === "GET" || method === "HEAD") return apiFetch<T>(path, init);
+    }
     throw new ApiError(res.status, err.code ?? "unknown", err.message ?? res.statusText, err.details);
   }
   return body as T;

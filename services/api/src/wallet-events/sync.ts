@@ -91,6 +91,7 @@ async function syncWallet(
   userId: string,
   walletId: string,
   address: string,
+  kind: "privy_embedded" | "external" = "privy_embedded",
 ): Promise<number> {
   const existing = await db.select().from(walletStreams).where(eq(walletStreams.walletId, walletId));
   const byAddress = new Map(existing.map((s) => [s.address, s]));
@@ -115,7 +116,16 @@ async function syncWallet(
   // the ATA on exactly the pass that needs it backfilled. Whether the row
   // already existed does not have that problem: it is fixed before either
   // stream is walked.
-  const walletKnownBefore = existing.some((r) => r.address === address);
+  //
+  // A linked wallet is different: it arrives with years of history, all of it
+  // from before Mercury followed it, and none of it is to be backfilled. The
+  // own row above is written outside this pass's transaction, so a first pass
+  // that failed partway would leave it behind, and the next pass would take
+  // the wallet as known and backfill its USDC account from the start. So a
+  // linked wallet is known only once a pass over it has committed, which is
+  // when its own stream gets `checkedAt`.
+  const ownBefore = existing.find((r) => r.address === address);
+  const walletKnownBefore = kind === "external" ? ownBefore?.checkedAt != null : ownBefore !== undefined;
 
   // A token stream with no cursor, on a wallet that already existed before
   // this pass, can only be a stream discovered after the wallet became known:
@@ -311,7 +321,7 @@ export async function syncAllWalletEvents(
   opts: EventsOptions = {},
 ): Promise<EventsSummary> {
   const all = await db
-    .select({ userId: users.id, walletId: wallets.id, address: wallets.address })
+    .select({ userId: users.id, walletId: wallets.id, address: wallets.address, kind: wallets.kind })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
     .where(followed);
@@ -327,7 +337,7 @@ export async function syncAllWalletEvents(
        refusing from being retried every pass for ever. */
     opts.read?.(row.address);
     try {
-      written += await syncWallet(db, deps, row.userId, row.walletId, row.address);
+      written += await syncWallet(db, deps, row.userId, row.walletId, row.address, row.kind);
       checked += 1;
     } catch (error: unknown) {
       failed += 1;

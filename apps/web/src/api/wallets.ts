@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getBase58Decoder } from "@solana/kit";
 import { ApiError, apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
+import { readsForChoice } from "./acting-wallet";
+import { chosenWallet, setChosenWallet } from "./wallet-choice";
 import type { AccountWallets } from "@mercury/view";
 
 /**
@@ -85,6 +87,16 @@ export const useUnlinkWallet = () => {
       apiFetch(`/v1/wallets/${encodeURIComponent(id)}${deleteHistory ? "?history=delete" : ""}`, {
         method: "DELETE",
       }),
+    /*
+     * The wallet being shown was the one unlinked: back to the Mercury wallet
+     * before anything is read again, since the server refuses every read for
+     * a wallet that is not followed. Its figures go with it.
+     */
+    onSuccess: (_, { id }) => {
+      if (chosenWallet() !== id) return;
+      setChosenWallet(null);
+      void qc.resetQueries({ predicate: (q) => readsForChoice(q.queryKey) });
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: ["api"] }),
   });
 };

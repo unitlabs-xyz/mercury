@@ -262,6 +262,32 @@ describe("recordMove", () => {
     );
   });
 
+  it("carries every share of a token held in two accounts and moved from both in one transaction", async () => {
+    // `planMove` takes a mint from each account the wallet holds it in: one signature, the mint twice.
+    const s = await seed([{ tokenQty: 300_000_000n, shares: "3", unitCostUsd: "150" }]);
+    await recordMove(
+      s.db,
+      s.input({
+        moved: [
+          { mint: NVDAX, amountRaw: 200_000_000n },
+          { mint: NVDAX, amountRaw: 100_000_000n },
+          { mint: USDC, amountRaw: 5_000_000n },
+          { mint: USDC, amountRaw: 2_500_000n },
+        ],
+      }),
+    );
+
+    const lots = await lotsIn(s, s.mercury);
+    expect(lots).toHaveLength(1);
+    expect(lots[0]).toMatchObject({ tokenQty: 300_000_000n, shares: "3", unitCostUsd: "150" });
+    const outs = await outsOf(s);
+    expect(outs).toHaveLength(1);
+    expect(outs[0]).toMatchObject({ kind: "transfer_out", tokenQty: 300_000_000n, shares: "3" });
+    // The dollars of both USDC accounts, on both sides.
+    const usdc = (await feedOf(s, s.mercury)).filter((a) => a.mint === USDC);
+    expect(usdc.map((a) => a.amountUsd)).toEqual(["7.5"]);
+  });
+
   it("leaves a move from a wallet whose past is still being read to the cost pass, which carries it with its cost", async () => {
     for (const status of ["queued", "running", "read"] as const) {
       const s = await seed();

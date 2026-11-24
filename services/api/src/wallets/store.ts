@@ -176,6 +176,8 @@ export async function completeLink(
         .set({ unlinkedAt: null, linkedAt: input.now })
         .where(eq(wallets.id, check.existing.id))
         .returning();
+      // Deleted since the check, which the shared lock rules out; refused rather than half-linked if it ever is.
+      if (wallet === undefined) return { kind: "refused", reason: "challenge_invalid" } as const;
     } else {
       // Another account can take the address between the check and here; the
       // unique index decides, and this one gets nothing back.
@@ -269,6 +271,14 @@ export async function unlinkWallet(
   },
 ): Promise<{ kind: "unlinked" } | { kind: "not_found" } | { kind: "primary" }> {
   return db.transaction(async (tx) => {
+    /*
+     * The lock linking holds. Without it, "unlink and delete history" could
+     * delete the row between a relink's check and its update, and the relink
+     * would go on to queue history for a wallet that is gone.
+     */
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`wallet-link:${input.userId}`}, 0))`,
+    );
     const [target] = await tx
       .select()
       .from(wallets)

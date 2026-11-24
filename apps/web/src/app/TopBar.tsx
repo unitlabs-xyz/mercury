@@ -56,12 +56,13 @@ export const TopBar = ({ current }: { current: NavKey }) => (
           className="flex shrink-0 items-center text-ds-ink"
           aria-label="Mercury, portfolio"
         >
-          <MercuryLogo className="h-7 w-auto" />
+          <MercuryLogo className="h-6 w-auto sm:h-7" />
         </Link>
 
         <Nav current={current} className="ml-12 hidden items-center gap-8 lg:flex" />
 
-        <div className="ml-auto flex items-center gap-3">
+        {/* min-w-0 so the wallet's name is what gives way on a phone, never the page width. */}
+        <div className="ml-auto flex min-w-0 items-center gap-2 pl-3 sm:gap-3">
           <WalletSwitcher />
           <HeaderChrome />
           <Divider />

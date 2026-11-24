@@ -71,9 +71,20 @@ export async function recordMoveIn(tx: Tx, input: MoveRecord): Promise<{ written
           .from(tokens)
           .where(inArray(tokens.mint, mints));
 
-  let written = false;
+  /*
+   * One row per mint. A move takes a token from each account the wallet holds
+   * it in (`planMove`), so one transaction can carry the same mint twice; the
+   * feed row is unique per wallet, signature and mint, and a second entry
+   * would find it written and carry nothing.
+   */
+  const byMint = new Map<string, bigint>();
   for (const m of input.moved) {
-    if (m.amountRaw <= 0n) continue;
+    if (m.amountRaw > 0n) byMint.set(m.mint, (byMint.get(m.mint) ?? 0n) + m.amountRaw);
+  }
+
+  let written = false;
+  for (const [mint, amountRaw] of byMint) {
+    const m = { mint, amountRaw };
     const dollars = m.mint === input.usdcMint ? fixed(scaled(m.amountRaw, USDC_DECIMALS)) : null;
     const [first] = await tx
       .insert(activities)

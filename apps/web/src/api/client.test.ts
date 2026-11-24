@@ -87,4 +87,67 @@ describe("apiFetch, and the chosen wallet", () => {
     expect(sent()).toBe("all");
     setChosenWallet(null);
   });
+
+  const forbidden = () =>
+    new Response(
+      JSON.stringify({ error: { code: "wallet_forbidden", message: "That wallet isn't on your account." } }),
+      { status: 403 },
+    );
+
+  it("goes back to the Mercury wallet when the chosen one is no longer on the account, and reads again", async () => {
+    // Unlinked here or elsewhere: the server refuses every read for it, the wallet list included.
+    const { chosenWallet, setChosenWallet, WALLET_HEADER } = await import("./wallet-choice.js");
+    setChosenWallet("unlinked-id");
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_url, init) =>
+        new Headers(init?.headers).has(WALLET_HEADER)
+          ? forbidden()
+          : new Response(JSON.stringify({ wallets: [] }), { status: 200 }),
+      );
+
+    await expect(apiFetch("/v1/wallets")).resolves.toEqual({ wallets: [] });
+    expect(chosenWallet()).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(new Headers(spy.mock.calls[1]?.[1]?.headers).has(WALLET_HEADER)).toBe(false);
+  });
+
+  it("forgets a stale choice on a write too, but never sends the write again for another wallet", async () => {
+    const { chosenWallet, setChosenWallet } = await import("./wallet-choice.js");
+    setChosenWallet("unlinked-id");
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => forbidden());
+
+    await expect(apiFetch("/v1/orders", { method: "POST", body: "{}" })).rejects.toMatchObject({
+      status: 403,
+      code: "wallet_forbidden",
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(chosenWallet()).toBeNull();
+  });
+
+  it("leaves the choice alone when the caller named the wallet itself", async () => {
+    const { chosenWallet, setChosenWallet, WALLET_HEADER } = await import("./wallet-choice.js");
+    setChosenWallet("phantom");
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => forbidden());
+
+    await expect(apiFetch("/v1/portfolio", { headers: { [WALLET_HEADER]: "other" } })).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(chosenWallet()).toBe("phantom");
+    setChosenWallet(null);
+  });
+
+  it("keeps a choice made while the refused request was in flight", async () => {
+    const { chosenWallet, setChosenWallet } = await import("./wallet-choice.js");
+    setChosenWallet("unlinked-id");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      setChosenWallet("phantom");
+      return forbidden();
+    });
+
+    await expect(apiFetch("/v1/portfolio")).rejects.toMatchObject({ status: 403 });
+    expect(chosenWallet()).toBe("phantom");
+    setChosenWallet(null);
+  });
 });
