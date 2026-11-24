@@ -345,3 +345,24 @@ export const estimateLine = (h: {
 /** `~` before a figure measured against a cost that is partly estimated, and nothing before an exact one. */
 export const estimateMark = (h: { readonly estimatedCostUsd?: string | undefined }): "~" | "" =>
   Number(h.estimatedCostUsd ?? 0) > 0 ? "~" : "";
+
+/** Said where a figure waits for a linked wallet's past: its loan's interest, what it earned in Earn. */
+export const READING_HISTORY = "Reading history…";
+
+/**
+ * Whether a figure that comes from history is still waiting for it, for the
+ * wallet shown: a linked wallet whose past is being read, or, for every wallet
+ * at once, any of them. The Mercury wallet's history is Mercury's own and is
+ * never read. Without the summary yet, nothing is said to be waiting.
+ */
+export const historyReading = (
+  wallets: readonly { readonly id: string; readonly history: "ready" | "calculating" }[] | undefined,
+  shown:
+    | { readonly kind: "mercury" }
+    | { readonly kind: "linked"; readonly walletId: string }
+    | { readonly kind: "all" },
+): boolean => {
+  if (wallets === undefined || shown.kind === "mercury") return false;
+  if (shown.kind === "all") return wallets.some((w) => w.history === "calculating");
+  return wallets.some((w) => w.id === shown.walletId && w.history === "calculating");
+};

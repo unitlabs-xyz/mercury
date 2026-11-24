@@ -1,3 +1,4 @@
+import { useHistoryReading } from "../../api/history-reading";
 import { useBorrow, type BorrowRow } from "../../api/borrow";
 import { useSignedIn } from "../../api/hooks";
 import { useInstruments } from "../../market/hooks";
@@ -5,7 +6,7 @@ import type { Tab } from "../borrow/BorrowSheet";
 import { usePanels } from "../Panels";
 import { Button } from "../../ui/Button";
 import { GlideRows, InfoTip, MoveChip, StatusChip, type Tone } from "../../ui/ds";
-import { ceilCents, interestText, monthlyInterestText, pct, usd } from "@mercury/view";
+import { ceilCents, interestText, monthlyInterestText, pct, usd, READING_HISTORY } from "@mercury/view";
 import { Mark } from "../invest/shared";
 import { HeaderFigure } from "../portfolio/Summary";
 import { Skeleton } from "../portfolio/ui";
@@ -38,6 +39,8 @@ type Borrow = NonNullable<ReturnType<typeof useBorrow>["data"]>;
  * when a borrow needs them, and only as many as it needs.
  */
 export const BorrowSection = () => {
+  // A linked wallet whose past is still being read: its interest and earnings wait for it.
+  const reading = useHistoryReading();
   const signedIn = useSignedIn();
   const borrow = useBorrow();
   const b = borrow.data;
@@ -131,7 +134,7 @@ export const BorrowSection = () => {
               <HeaderFigure
                 size="md"
                 label="Interest so far"
-                value={b.owedUsdc > 0 ? interestText(b.interestUsdc) : "—"}
+                value={b.owedUsdc > 0 ? (reading ? READING_HISTORY : interestText(b.interestUsdc)) : "—"}
                 // One line in a quarter of the card: with a loan, the month's estimate takes the room "variable" had.
                 sub={
                   b.owedUsdc > 0

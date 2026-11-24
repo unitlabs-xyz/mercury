@@ -13,6 +13,8 @@ import {
   walletStatus,
   liquidationLine,
   manageOnWebUrl,
+  historyReading,
+  READING_HISTORY,
   moveFromSearch,
   moveOnWebUrl,
   pledgedStocks,
@@ -508,5 +510,37 @@ describe("estimateLine and estimateMark", () => {
     expect(estimateLine({})).toBeNull();
     expect(estimateMark({ estimatedCostUsd: "0" })).toBe("");
     expect(estimateMark({})).toBe("");
+  });
+});
+
+describe("historyReading", () => {
+  const wallets = [
+    { id: "w-mercury", history: "ready" as const },
+    { id: "w-phantom", history: "calculating" as const },
+    { id: "w-solflare", history: "ready" as const },
+  ];
+
+  it("is true for a linked wallet whose past is still being read, and only that one", () => {
+    expect(historyReading(wallets, { kind: "linked", walletId: "w-phantom" })).toBe(true);
+    expect(historyReading(wallets, { kind: "linked", walletId: "w-solflare" })).toBe(false);
+  });
+
+  it("is true for every wallet at once while any of them is being read", () => {
+    expect(historyReading(wallets, { kind: "all" })).toBe(true);
+    expect(
+      historyReading(
+        wallets.filter((w) => w.id !== "w-phantom"),
+        { kind: "all" },
+      ),
+    ).toBe(false);
+  });
+
+  it("is never true for the Mercury wallet, or before the summary has answered", () => {
+    expect(historyReading(wallets, { kind: "mercury" })).toBe(false);
+    expect(historyReading(undefined, { kind: "linked", walletId: "w-phantom" })).toBe(false);
+  });
+
+  it("says so in words", () => {
+    expect(READING_HISTORY).toBe("Reading history…");
   });
 });

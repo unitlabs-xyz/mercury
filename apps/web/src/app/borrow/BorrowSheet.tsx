@@ -1,3 +1,4 @@
+import { useHistoryReading } from "../../api/history-reading";
 import { useEffect, useMemo, useState } from "react";
 import { useBorrow, useBorrowAction } from "../../api/borrow";
 import { useInstrument, useInstruments } from "../../market/hooks";
@@ -15,6 +16,7 @@ import {
   usd,
   type BorrowRow,
   type BorrowTab,
+  READING_HISTORY,
 } from "@mercury/view";
 import { Mark } from "../invest/shared";
 import { TipLine } from "../review";
@@ -49,6 +51,8 @@ export const BorrowSheet = ({
   /** Opened from that stock's own page: show just it, not the list to choose from. */
   only?: boolean;
 }) => {
+  // A linked wallet whose past is still being read: its interest and earnings wait for it.
+  const reading = useHistoryReading();
   const borrow = useBorrow();
   const action = useBorrowAction();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -363,7 +367,16 @@ export const BorrowSheet = ({
                    */}
                   {tab === "repay" && b.owedUsdc > 0 && (
                     <dl className="mt-3 flex flex-col gap-3 border-t border-ds-divider px-1 pt-3">
-                      {b.principalUsdc !== null && b.interestUsdc !== null && (
+                      {/* A linked wallet's loan before its past is read: no split to show yet, and it says why. */}
+                      {reading && (
+                        <TipLine
+                          k="Interest so far"
+                          tip="Read from this wallet's past, which is being read now."
+                        >
+                          {READING_HISTORY}
+                        </TipLine>
+                      )}
+                      {!reading && b.principalUsdc !== null && b.interestUsdc !== null && (
                         <>
                           <TipLine k="Borrowed" tip="What you borrowed and have not repaid yet.">
                             {usd(b.principalUsdc)}

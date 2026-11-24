@@ -1,3 +1,4 @@
+import { useHistoryReading } from "../api/history-reading";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -15,7 +16,7 @@ import { Button } from "../ui/Button";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { InfoTip, RangeSwitch, StatusChip } from "../ui/ds";
 import { Alert, ChevronDown, Plus, Search } from "../ui/icons";
-import { interestText, pct, usd, usdCompact } from "@mercury/view";
+import { interestText, pct, usd, usdCompact, READING_HISTORY } from "@mercury/view";
 import { AppShell } from "./AppShell";
 import { DotChart } from "./DotChart";
 import { KIND_LABEL, VaultMark, rate } from "./earn/VaultMark";
@@ -67,6 +68,8 @@ const STEPS = [
  * through. A vault opens in full in a side panel.
  */
 export const Earn = () => {
+  // A linked wallet whose past is still being read: its interest and earnings wait for it.
+  const reading = useHistoryReading();
   const earn = useEarn();
   const vaults = useEarnVaults();
   const action = useEarnAction();
@@ -159,11 +162,17 @@ export const Earn = () => {
                 <p className="mt-3 flex h-5 items-center gap-1.5 text-[12px] leading-none">
                   <span className="inline-flex h-5 items-center rounded-md bg-ds-up-chip px-2 text-ds-up">
                     <span className="opacity-80">
-                      {e.earnedUsd > 0 ? `+ ${interestText(e.earnedUsd)}` : "Earning"}
+                      {reading
+                        ? READING_HISTORY
+                        : e.earnedUsd > 0
+                          ? `+ ${interestText(e.earnedUsd)}`
+                          : "Earning"}
                     </span>
                   </span>
                   <span className="text-ds-ink/80">
-                    {e.earnedUsd > 0 ? "earned so far" : `${e.apy !== null ? pct(e.apy * 100) : "—"} a year`}
+                    {!reading && e.earnedUsd > 0
+                      ? "earned so far"
+                      : `${e.apy !== null ? pct(e.apy * 100) : "—"} a year`}
                   </span>
                 </p>
               </>
@@ -227,9 +236,13 @@ export const Earn = () => {
                         {usd(h.balanceUsd)}
                       </span>
                       <span
-                        className={`mt-0.5 block text-[12px] leading-4 ${h.earnedUsd > 0 ? "text-ds-up" : "text-ds-muted"}`}
+                        className={`mt-0.5 block text-[12px] leading-4 ${!reading && h.earnedUsd > 0 ? "text-ds-up" : "text-ds-muted"}`}
                       >
-                        {h.earnedUsd > 0 ? `+ ${interestText(h.earnedUsd)}` : "Just started"}
+                        {reading
+                          ? READING_HISTORY
+                          : h.earnedUsd > 0
+                            ? `+ ${interestText(h.earnedUsd)}`
+                            : "Just started"}
                       </span>
                     </span>
                   </button>
@@ -461,6 +474,8 @@ const VaultPanel = ({
   onWithdraw: () => void;
   onMoveAll: () => void;
 }) => {
+  // A linked wallet whose past is still being read: its interest and earnings wait for it.
+  const reading = useHistoryReading();
   const [range, setRange] = useState<VaultRange>("1M");
   const [agreed, setAgreed] = useState(false);
   const history = useEarnVault(open ? vault.address : null, range);
@@ -570,7 +585,11 @@ const VaultPanel = ({
           {held && (
             <p className="flex items-center justify-between rounded-lg bg-ds-up-chip px-5 py-3.5 text-[14px] text-ds-up">
               <span>You have {usd(held.balanceUsd)} here</span>
-              {held.earnedUsd > 0 && <span>+ {interestText(held.earnedUsd)}</span>}
+              {reading ? (
+                <span>{READING_HISTORY}</span>
+              ) : (
+                held.earnedUsd > 0 && <span>+ {interestText(held.earnedUsd)}</span>
+              )}
             </p>
           )}
         </div>
