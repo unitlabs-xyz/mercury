@@ -7,9 +7,8 @@ import { ChevronRight } from "../ui/icons";
 
 /**
  * Stands in for an action's sheet while the chosen wallet cannot take it:
- * every wallet at once is for looking, and a linked wallet cannot run a
- * basket yet (its Glider account is the Mercury wallet's). Everything else a
- * linked wallet does itself, approving each step in its own pop-up.
+ * every wallet at once is for looking. A linked wallet does everything
+ * itself, baskets included, approving each step in its own pop-up.
  *
  * Opened and closed exactly as the sheet would be, so every place that opens
  * one opens this instead without knowing. Switching to the Mercury wallet

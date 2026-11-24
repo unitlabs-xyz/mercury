@@ -53,24 +53,18 @@ export const canAct = (acting: Acting): boolean => acting.kind !== "all";
 
 /**
  * What an action is, for whether the chosen wallet can take it. A linked
- * wallet trades, borrows, repays, uses Earn and sends, approving each in its
- * own pop-up. A basket it cannot run yet: its Glider account is the Mercury
- * wallet's. A loan is one wallet's own position, so every wallet at once asks
- * whose loan is meant rather than offering a switch.
+ * wallet trades, borrows, repays, runs baskets, uses Earn and sends,
+ * approving each in its own pop-up. A loan is one wallet's own position, so
+ * every wallet at once asks whose loan is meant rather than offering a switch.
  */
-export type BlockedAction = "action" | "loan" | "basket";
+export type BlockedAction = "action" | "loan";
 
 /** What to say where an action would be, when the chosen wallet cannot take it; null when it can. */
 export const actionBlockedCopy = (acting: Acting, what: BlockedAction = "action"): string | null => {
-  if (acting.kind === "mercury") return null;
-  if (acting.kind === "all") {
-    return what === "loan"
-      ? "A loan belongs to one wallet. Choose whose loan this is."
-      : "Choose a wallet to do this from. All wallets is for looking.";
-  }
-  return what === "basket"
-    ? "Baskets can only be run from your Mercury wallet for now. Switch to it to continue."
-    : null;
+  if (acting.kind !== "all") return null;
+  return what === "loan"
+    ? "A loan belongs to one wallet. Choose whose loan this is."
+    : "Choose a wallet to do this from. All wallets is for looking.";
 };
 
 /**

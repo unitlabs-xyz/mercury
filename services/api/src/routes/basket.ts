@@ -1,4 +1,4 @@
-import { Hono, type MiddlewareHandler } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { logger } from "../log/index.js";
 import {
   ManagedBasketInsights,
@@ -22,11 +22,29 @@ import {
   SubmittedBasketExit,
 } from "@mercury/types";
 import { BasketEnrollmentError, type BasketService } from "../baskets/core/service.js";
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
+import type {} from "../auth/middleware.js";
+import { writerOf } from "../wallets/acting.js";
 
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
 const ownerFor = (address: string | null) => (address ? `${SOLANA}:${address}` : null);
+
+/**
+ * The basket owner a request is for: the wallet chosen, the Mercury wallet or
+ * a linked one. A linked wallet owns its own baskets under Mercury's Glider
+ * account, approving each step in its own app, as Glider's Solana-rooted
+ * owners do. Null for every wallet at once, and while the Mercury wallet is
+ * still being made.
+ */
+const ownerOf = (c: Context) => ownerFor(writerOf(c)?.address ?? null);
+
+/** Why there is no owner: every wallet at once is a choice to make; no wallet at all is a sign-in. */
+const noOwner = (c: Context, signIn: string) =>
+  c.get("acting").all
+    ? c.json(fail("wallet_all", "Choose a wallet to see or run a basket."), 400)
+    : c.json(fail("wallet_required", signIn), 401);
 
 const log = logger("baskets");
 
@@ -49,11 +67,20 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
 
   app.get("/v1/basket-portfolios", requireBasketAuth, async (c) => {
     const identity = c.get("identity");
-    const owner = ownerFor(identity.walletAddress);
-    if (!owner)
+    const acting = c.get("acting");
+    // Every wallet at once: each one's baskets, the Mercury wallet's first.
+    const owners = acting.all
+      ? acting.wallets.flatMap((w) => {
+          const o = ownerFor(w.isPrimary ? identity.walletAddress : w.address);
+          return o === null ? [] : [o];
+        })
+      : [ownerOf(c)].filter((o): o is string => o !== null);
+    if (owners.length === 0)
       return c.json(fail("wallet_required", "Sign in with a Solana wallet to view your baskets."), 401);
     try {
-      const portfolios = await service.ownedPortfolios(identity.userId, owner);
+      const portfolios = (
+        await Promise.all(owners.map((owner) => service.ownedPortfolios(identity.userId, owner)))
+      ).flat();
       return c.json({ portfolios: ManagedBasketPortfolioSummary.array().parse(portfolios) });
     } catch (error) {
       const result = handle(error, "portfolio list");
@@ -76,8 +103,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
   });
 
   app.get("/v1/basket-templates/:slug/enrollment", requireBasketAuth, async (c) => {
-    const owner = ownerFor(c.get("identity").walletAddress);
-    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to enroll."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to enroll.");
     try {
       const portfolio = await service.enrollment(c.req.param("slug"), owner);
       return c.json({ portfolio: portfolio ? ManagedBasketPortfolio.parse(portfolio) : null });
@@ -88,9 +115,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
   });
 
   app.get("/v1/basket-templates/:slug/portfolio", requireBasketAuth, async (c) => {
-    const owner = ownerFor(c.get("identity").walletAddress);
-    if (!owner)
-      return c.json(fail("wallet_required", "Sign in with a Solana wallet to view a portfolio."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to view a portfolio.");
     try {
       const snapshot = await service.portfolioSnapshot(c.req.param("slug"), owner);
       return c.json({ portfolio: snapshot ? ManagedBasketPortfolioSnapshot.parse(snapshot) : null });
@@ -101,9 +127,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
   });
 
   app.get("/v1/basket-templates/:slug/operations/:operationId", requireBasketAuth, async (c) => {
-    const owner = ownerFor(c.get("identity").walletAddress);
-    if (!owner)
-      return c.json(fail("wallet_required", "Sign in with a Solana wallet to view an operation."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to view an operation.");
     try {
       const operation = await service.operation(c.req.param("slug"), owner, c.req.param("operationId"));
       return c.json({ operation: ManagedBasketOperation.parse(operation) });
@@ -115,8 +140,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
 
   app.post("/v1/basket-templates/:slug/rebalance", requireBasketAuth, async (c) => {
     const identity = c.get("identity");
-    const owner = ownerFor(identity.walletAddress);
-    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to rebalance."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to rebalance.");
     try {
       const triggered = await service.rebalance(c.req.param("slug"), owner, identity.userId);
       return c.json(TriggeredBasketRebalance.parse(triggered), 202);
@@ -127,8 +152,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
   });
 
   app.post("/v1/basket-templates/:slug/exit/:mode/prepare", requireBasketAuth, async (c) => {
-    const owner = ownerFor(c.get("identity").walletAddress);
-    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to exit a basket."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to exit a basket.");
     const mode = BasketExitMode.safeParse(c.req.param("mode"));
     if (!mode.success) return c.json(fail("validation_failed", "Choose an in-kind or USDC exit."), 400);
     const request = await c.req.json().catch(() => null);
@@ -149,8 +174,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
 
   app.post("/v1/basket-templates/:slug/exit/:mode", requireBasketAuth, async (c) => {
     const identity = c.get("identity");
-    const owner = ownerFor(identity.walletAddress);
-    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to exit a basket."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to exit a basket.");
     const mode = BasketExitMode.safeParse(c.req.param("mode"));
     const body = SubmitBasketExit.safeParse(await c.req.json().catch(() => null));
     if (!mode.success || !body.success)
@@ -178,8 +203,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
 
   app.post("/v1/basket-templates/:slug/enrollment/prepare", requireBasketAuth, async (c) => {
     const identity = c.get("identity");
-    const owner = ownerFor(identity.walletAddress);
-    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to enroll."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to enroll.");
     try {
       const prepared = await service.prepareEnrollment(c.req.param("slug"), identity.userId, owner);
       return c.json(PreparedBasketEnrollment.parse(prepared));
@@ -191,8 +216,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
 
   app.post("/v1/basket-templates/:slug/enrollment", requireBasketAuth, async (c) => {
     const identity = c.get("identity");
-    const owner = ownerFor(identity.walletAddress);
-    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to enroll."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to enroll.");
     const parsed = SubmitBasketEnrollment.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
       return c.json(fail("validation_failed", "A valid enrollment signature is required."), 400);
@@ -212,8 +237,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
   });
 
   app.post("/v1/basket-templates/:slug/funding/prepare", requireBasketAuth, async (c) => {
-    const owner = ownerFor(c.get("identity").walletAddress);
-    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to fund a basket."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to fund a basket.");
     const parsed = PrepareBasketFunding.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", "Enter a valid USDC amount."), 400);
     try {
@@ -227,9 +252,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
 
   app.post("/v1/basket-templates/:slug/funding/confirm", requireBasketAuth, async (c) => {
     const identity = c.get("identity");
-    const owner = ownerFor(identity.walletAddress);
-    if (!owner)
-      return c.json(fail("wallet_required", "Sign in with a Solana wallet to confirm funding."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to confirm funding.");
     const parsed = ConfirmBasketFunding.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", "A Solana signature is required."), 400);
     try {
@@ -246,8 +270,8 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
 
   app.get("/v1/basket-templates/:slug/activity", requireBasketAuth, async (c) => {
     const identity = c.get("identity");
-    const owner = ownerFor(identity.walletAddress);
-    if (!owner) return c.json(fail("wallet_required", "Sign in with a Solana wallet to view activity."), 401);
+    const owner = ownerOf(c);
+    if (!owner) return noOwner(c, "Sign in with a Solana wallet to view activity.");
     try {
       return c.json({
         activity: ManagedBasketActivity.array().parse(

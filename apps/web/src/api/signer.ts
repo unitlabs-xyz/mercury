@@ -1,4 +1,4 @@
-import { useSignTransaction } from "@privy-io/react-auth/solana";
+import { useSignMessage, useSignTransaction } from "@privy-io/react-auth/solana";
 import { useEmbeddedWallet } from "../auth/embedded";
 import { useActingWallet } from "./acting-wallet";
 import { walletName } from "./wallets";
@@ -12,6 +12,10 @@ export interface TransactionSigner {
   sign(transaction: Uint8Array): Promise<Uint8Array>;
   /** Several transactions, approved once where the wallet can: a linked wallet asks for all of them together. */
   signAll(transactions: readonly Uint8Array[]): Promise<Uint8Array[]>;
+  /** A message, signed: a basket owner's approval. The 64-byte ed25519 signature. */
+  signMessage(message: Uint8Array): Promise<Uint8Array>;
+  /** The address that signs: the Mercury wallet's or the linked wallet's. Null until known. */
+  readonly address: string | null;
 }
 
 /**
@@ -26,6 +30,7 @@ export const useTransactionSigner = (): TransactionSigner => {
   const { acting } = useActingWallet();
   const { wallet } = useEmbeddedWallet();
   const { signTransaction } = useSignTransaction();
+  const { signMessage } = useSignMessage();
 
   if (acting.kind === "linked") {
     const linked = acting.wallet;
@@ -41,6 +46,11 @@ export const useTransactionSigner = (): TransactionSigner => {
         const { signAllWithLinked } = await import("../wallet/linkedSigner");
         return signAllWithLinked(linked.address, name, transactions);
       },
+      signMessage: async (message) => {
+        const { signMessageWithLinked } = await import("../wallet/linkedSigner");
+        return signMessageWithLinked(linked.address, name, message);
+      },
+      address: linked.address,
     };
   }
   const sign = async (transaction: Uint8Array) => {
@@ -57,5 +67,10 @@ export const useTransactionSigner = (): TransactionSigner => {
       for (const t of transactions) signed.push(await sign(t));
       return signed;
     },
+    signMessage: async (message) => {
+      if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
+      return (await signMessage({ message, wallet })).signature;
+    },
+    address: wallet?.address ?? null,
   };
 };

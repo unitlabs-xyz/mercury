@@ -224,7 +224,8 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   // and a visitor browsing before signing in should see prices. Registered ahead
   // of the auth middleware, which only guards the routes after it.
   app.route("/", instrumentRoutes(read.instruments));
-  app.route("/", basketRoutes(read.basketTemplates, every(requireAuth(auth), acting, mercuryWalletOnly())));
+  // Baskets act for the wallet chosen, a linked one included: it owns its own under Mercury's Glider account.
+  app.route("/", basketRoutes(read.basketTemplates, every(requireAuth(auth), acting, oneWalletToAct())));
 
   /*
    * The waitlist's share links. The waitlist is gone, but people posted their

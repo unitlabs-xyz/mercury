@@ -1458,7 +1458,7 @@ export const Basket = () => {
           </div>
         </aside>
       </div>
-      <ActionGate open={investOpen} onClose={closeInvest} what="basket">
+      <ActionGate open={investOpen} onClose={closeInvest}>
         <InvestSheet
           open={investOpen}
           name={name}
@@ -1471,12 +1471,14 @@ export const Basket = () => {
           receipt={fundingAction.data ?? null}
           enroll={{
             walletReady: enrollAction.walletReady,
+            approver: enrollAction.approver,
             busy: enrollmentBusy,
             error: enrollAction.error?.message ?? enrollment.error?.message,
             onConfirm: () => void confirmEnrollment(),
           }}
           fund={{
             walletReady: fundingAction.walletReady,
+            approver: fundingAction.approver,
             busy: fundingAction.isPending,
             error: fundingAction.error?.message,
             onConfirm: () => void confirmFunding(),
@@ -1484,7 +1486,7 @@ export const Basket = () => {
           onClose={closeInvest}
         />
       </ActionGate>
-      <ActionGate open={rebalanceOpen} onClose={() => setRebalanceOpen(false)} what="basket">
+      <ActionGate open={rebalanceOpen} onClose={() => setRebalanceOpen(false)}>
         <RebalanceSheet
           open={rebalanceOpen}
           name={name}
@@ -1499,7 +1501,7 @@ export const Basket = () => {
         />
       </ActionGate>
       {account && (
-        <ActionGate open={exitOpen} onClose={() => setExitOpen(false)} what="basket">
+        <ActionGate open={exitOpen} onClose={() => setExitOpen(false)}>
           <ExitSheet
             key={account.portfolioId}
             open={exitOpen}
@@ -1517,6 +1519,7 @@ export const Basket = () => {
             submitted={exitAction.submit.data ?? null}
             busy={exitAction.prepare.isPending || exitAction.submit.isPending}
             walletReady={exitAction.walletReady}
+            approver={exitAction.approver}
             error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
             onPrepare={(assets) =>
               void exitAction.prepare

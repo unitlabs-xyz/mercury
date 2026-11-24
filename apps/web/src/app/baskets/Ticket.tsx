@@ -1,3 +1,5 @@
+import { ApproveIn } from "../ApproveIn";
+import { continueIn } from "../../api/signer-rules";
 import { useEarn } from "../../api/earn";
 import { earnCovers } from "../earn/moves";
 import { exitAssets, fullSelection, rawTokenAmount, tokenAmount } from "@mercury/view";
@@ -301,6 +303,14 @@ const SheetFoot = ({ children }: { children: ReactNode }) => (
   <div className="mt-5 flex gap-2.5 px-5 pb-4">{children}</div>
 );
 
+/** "You'll approve this in Phantom", under the buttons, when a linked wallet takes the step. */
+const Approval = ({ approver }: { approver: string | null }) =>
+  approver === null ? null : (
+    <div className="px-5 pb-4">
+      <ApproveIn approver={approver} />
+    </div>
+  );
+
 const sendLabel = (amount: string) => (validUsdc(amount) ? `Send ${usd(Number(amount))}` : "Send USDC");
 
 interface EnrollmentStepProps {
@@ -312,6 +322,8 @@ interface EnrollmentStepProps {
   walletReady: boolean;
   busy: boolean;
   error?: string | undefined;
+  /** The linked wallet that approves, for "Continue in Phantom"; null for the Mercury wallet. */
+  approver?: string | null;
   onClose: () => void;
   onConfirm: () => void;
 }
@@ -326,6 +338,7 @@ const EnrollmentStep = ({
   walletReady,
   busy,
   error,
+  approver = null,
   onClose,
   onConfirm,
 }: EnrollmentStepProps) => (
@@ -363,9 +376,10 @@ const EnrollmentStep = ({
         onClick={onConfirm}
         className="flex-[1.6]"
       >
-        Set up portfolio
+        {approver === null ? "Set up portfolio" : continueIn(approver)}
       </Button>
     </SheetFoot>
+    <Approval approver={approver} />
   </>
 );
 
@@ -451,6 +465,8 @@ interface FundingStepProps {
   walletReady: boolean;
   receipt: { signature: string; status: "confirmed" | "pending" } | null;
   error?: string | undefined;
+  /** The linked wallet that approves, for "Continue in Phantom"; null for the Mercury wallet. */
+  approver?: string | null;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -472,6 +488,7 @@ const FundingStep = ({
   walletReady,
   receipt,
   error,
+  approver = null,
   onConfirm,
   onClose,
 }: FundingStepProps) => {
@@ -541,9 +558,10 @@ const FundingStep = ({
           onClick={onConfirm}
           className="flex-[1.6]"
         >
-          {sendLabel(amount)}
+          {approver === null ? sendLabel(amount) : continueIn(approver)}
         </Button>
       </SheetFoot>
+      <Approval approver={approver} />
     </>
   );
 };
@@ -561,8 +579,20 @@ interface InvestSheetProps {
   /** Opened before set-up: the transfer is step 2 of 2. */
   firstDeposit: boolean;
   receipt: FundingStepProps["receipt"];
-  enroll: { walletReady: boolean; busy: boolean; error?: string | undefined; onConfirm: () => void };
-  fund: { walletReady: boolean; busy: boolean; error?: string | undefined; onConfirm: () => void };
+  enroll: {
+    walletReady: boolean;
+    busy: boolean;
+    error?: string | undefined;
+    approver?: string | null;
+    onConfirm: () => void;
+  };
+  fund: {
+    walletReady: boolean;
+    busy: boolean;
+    error?: string | undefined;
+    approver?: string | null;
+    onConfirm: () => void;
+  };
   onClose: () => void;
 }
 
@@ -633,6 +663,8 @@ interface ExitSheetProps {
   busy: boolean;
   walletReady: boolean;
   error?: string | undefined;
+  /** The linked wallet that approves the withdrawal; null for the Mercury wallet. */
+  approver?: string | null;
   onPrepare: (assets?: BasketExitAsset[]) => void;
   onSubmit: () => void;
   onBack: () => void;
@@ -674,6 +706,7 @@ export const ExitSheet = ({
   busy,
   walletReady,
   error,
+  approver = null,
   onPrepare,
   onSubmit,
   onBack,
@@ -1004,9 +1037,14 @@ export const ExitSheet = ({
               onClick={prepared ? onSubmit : () => onPrepare(manual ? selectedAssets : undefined)}
               className="flex-[1.6]"
             >
-              {prepared ? "Sign and submit withdrawal" : "Review withdrawal"}
+              {prepared
+                ? approver === null
+                  ? "Sign and submit withdrawal"
+                  : continueIn(approver)
+                : "Review withdrawal"}
             </Button>
           </SheetFoot>
+          {prepared && <Approval approver={approver} />}
         </>
       )}
     </Dialog>

@@ -85,12 +85,10 @@ describe("acting", () => {
     expect(actionBlockedCopy({ kind: "linked", wallet: PHANTOM }, "loan")).toBeNull();
   });
 
-  it("keeps baskets to the Mercury wallet for now, and says how to get there", () => {
-    expect(actionBlockedCopy({ kind: "linked", wallet: PHANTOM }, "basket")).toBe(
-      "Baskets can only be run from your Mercury wallet for now. Switch to it to continue.",
-    );
-    expect(actionBlockedCopy({ kind: "mercury", wallet: MERCURY }, "basket")).toBeNull();
-    expect(actionBlockedCopy({ kind: "all" }, "basket")).toMatch(/Choose a wallet/);
+  it("lets a linked wallet run a basket, approving in its own pop-up, and asks for a wallet under all", () => {
+    expect(actionBlockedCopy({ kind: "linked", wallet: PHANTOM })).toBeNull();
+    expect(actionBlockedCopy({ kind: "mercury", wallet: MERCURY })).toBeNull();
+    expect(actionBlockedCopy({ kind: "all" })).toMatch(/Choose a wallet/);
   });
 
   it("asks whose loan when every wallet is shown", () => {

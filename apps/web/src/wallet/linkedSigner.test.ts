@@ -6,7 +6,13 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { getPublicKeyFromAddress, verifySignature, type Address } from "@solana/kit";
+import {
+  createKeyPairFromBytes,
+  getPublicKeyFromAddress,
+  signBytes,
+  verifySignature,
+  type Address,
+} from "@solana/kit";
 
 /*
  * The linked wallet signer, run for real with only the wallet app stood in:
@@ -39,7 +45,7 @@ vi.mock("./appkit", () => ({
   },
 }));
 
-const { signAllWithLinked, signWithLinked } = await import("./linkedSigner");
+const { signAllWithLinked, signMessageWithLinked, signWithLinked } = await import("./linkedSigner");
 
 const MEMO = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
 const relayer = Keypair.generate();
@@ -286,5 +292,60 @@ describe("signAllWithLinked: a move's small transactions, approved once", () => 
       /not Phantom/,
     );
     expect(w.asked).toEqual({ all: 0, one: 0 });
+  });
+});
+
+describe("signMessageWithLinked: a basket owner's approval", () => {
+  const MESSAGE = new TextEncoder().encode("Withdraw 2 TSLAx to your Mercury wallet");
+  const signing = (shape: "bytes" | "object") => ({
+    signTransaction: async () => {
+      throw new Error("not asked");
+    },
+    signMessage: async (message: Uint8Array) => {
+      const keys = await createKeyPairFromBytes(phantom.secretKey);
+      const signature = new Uint8Array(await signBytes(keys.privateKey, message));
+      return shape === "bytes" ? signature : { signature };
+    },
+  });
+
+  it("returns Phantom's own signature over the message, whichever shape the wallet answers in", async () => {
+    kit.connected = phantom.publicKey.toBase58();
+    for (const shape of ["bytes", "object"] as const) {
+      kit.provider = signing(shape);
+      const signature = await signMessageWithLinked(phantom.publicKey.toBase58(), "Phantom", MESSAGE);
+      expect(
+        await verifySignature(
+          await getPublicKeyFromAddress(phantom.publicKey.toBase58() as Address),
+          signature as never,
+          MESSAGE,
+        ),
+        shape,
+      ).toBe(true);
+    }
+  });
+
+  it("says plainly when the wallet can't sign messages, or answers with something that isn't a signature", async () => {
+    kit.connected = phantom.publicKey.toBase58();
+    kit.provider = { signTransaction: async () => undefined };
+    await expect(signMessageWithLinked(phantom.publicKey.toBase58(), "Phantom", MESSAGE)).rejects.toThrow(
+      "Phantom can't sign messages here",
+    );
+    kit.provider = { signTransaction: async () => undefined, signMessage: async () => new Uint8Array(12) };
+    await expect(signMessageWithLinked(phantom.publicKey.toBase58(), "Phantom", MESSAGE)).rejects.toThrow(
+      "Phantom didn't return a signature",
+    );
+  });
+
+  it("refuses, having asked nothing, when another wallet is connected", async () => {
+    kit.connected = Keypair.generate().publicKey.toBase58();
+    let asked = false;
+    kit.provider = {
+      signTransaction: async () => undefined,
+      signMessage: async () => ((asked = true), new Uint8Array(64)),
+    };
+    await expect(signMessageWithLinked(phantom.publicKey.toBase58(), "Phantom", MESSAGE)).rejects.toThrow(
+      /not Phantom/,
+    );
+    expect(asked).toBe(false);
   });
 });

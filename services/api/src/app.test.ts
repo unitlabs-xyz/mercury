@@ -518,11 +518,16 @@ describe("which wallet a write is for", () => {
     expect(await mercury.json()).toMatchObject({ error: { code: "wallet_mercury" } });
   });
 
-  it("still refuses what a linked wallet cannot do yet: a basket", async () => {
+  it("lets a linked wallet run a basket, and refuses one for every wallet at once", async () => {
     const h = await signedInWithLinked();
-    const res = await h.postAs(h.linkedId, "/v1/basket-templates/mag7/rebalance", {});
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "wallet_read_only" } });
+    const linked = await h.postAs(h.linkedId, "/v1/basket-templates/mag7/rebalance", {});
+    const body = (await linked.json()) as { error?: { code: string } };
+    // Through the wallet gate to the basket itself, which has no Glider behind it in this harness.
+    expect(body.error?.code).not.toBe("wallet_read_only");
+    expect(body.error?.code).not.toBe("wallet_all");
+    const all = await h.postAs("all", "/v1/basket-templates/mag7/rebalance", {});
+    expect(all.status).toBe(400);
+    expect(await all.json()).toMatchObject({ error: { code: "wallet_all" } });
   });
 
   it("refuses an order, and a quote, for every wallet at once", async () => {

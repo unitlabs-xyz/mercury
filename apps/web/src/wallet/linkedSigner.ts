@@ -13,6 +13,8 @@ interface SolanaSigner {
   signTransaction<T extends VersionedTransaction>(transaction: T): Promise<T>;
   /** Several at once, approved once. Not every wallet has it. */
   signAllTransactions?<T extends VersionedTransaction>(transactions: T[]): Promise<T[]>;
+  /** Raw bytes signed with the wallet's key: what Glider takes as a basket owner's approval. */
+  signMessage?(message: Uint8Array): Promise<Uint8Array | { signature: Uint8Array }>;
 }
 
 /** How long the connect dialog may stay open before the action gives up. */
@@ -138,4 +140,25 @@ export const signAllWithLinked = async (
     throw new LinkedSignError(`${name} didn't sign every step, so nothing was sent.`);
   }
   return signed.map((t, i) => unchangedOrRefused(name, before[i]!, t));
+};
+
+/**
+ * A message signed by a linked wallet, in its own pop-up: a basket owner's
+ * approval, which Glider checks against the wallet's key. The signature only,
+ * 64 bytes: some wallets answer with the bytes, some with `{ signature }`.
+ */
+export const signMessageWithLinked = async (
+  address: string,
+  name: string,
+  message: Uint8Array,
+): Promise<Uint8Array> => {
+  await ensureConnected(address, name);
+  const provider = appKit?.getProvider<SolanaSigner>("solana");
+  if (provider?.signMessage === undefined) {
+    throw new LinkedSignError(`${name} can't sign messages here. Try again, or reconnect it.`);
+  }
+  const answer = await provider.signMessage(message);
+  const signature = answer instanceof Uint8Array ? answer : answer.signature;
+  if (signature.length !== 64) throw new LinkedSignError(`${name} didn't return a signature. Try again.`);
+  return signature;
 };

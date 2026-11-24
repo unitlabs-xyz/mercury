@@ -1,3 +1,5 @@
+import { actingAs, actingLinked } from "../wallets/testing.js";
+import type { Acting } from "../wallets/acting.js";
 import { describe, expect, it } from "vitest";
 import { BasketService } from "../baskets/core/service.js";
 import { basketRoutes } from "./basket.js";
@@ -13,6 +15,7 @@ describe("authenticated basket enrollment", () => {
     } as unknown as BasketService;
     const app = basketRoutes(service, async (c, next) => {
       c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+      c.set("acting", { all: false, wallets: [actingAs("VerifiedWallet")] });
       await next();
     });
     const response = await app.request("/v1/basket-portfolios?ownerAccountId=AttackerWallet");
@@ -31,6 +34,7 @@ describe("authenticated basket enrollment", () => {
     } as BasketService;
     const app = basketRoutes(service, async (c, next) => {
       c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+      c.set("acting", { all: false, wallets: [actingAs("VerifiedWallet")] });
       await next();
     });
     const response = await app.request(
@@ -57,6 +61,7 @@ it("prepares funding for the verified wallet and ignores a client-supplied desti
   } as BasketService;
   const app = basketRoutes(service, async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+    c.set("acting", { all: false, wallets: [actingAs("VerifiedWallet")] });
     await next();
   });
   const response = await app.request("/v1/basket-templates/magnificent-seven/funding/prepare", {
@@ -82,6 +87,7 @@ it("submits rebalance for the verified wallet without accepting a client portfol
   } as BasketService;
   const app = basketRoutes(service, async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+    c.set("acting", { all: false, wallets: [actingAs("VerifiedWallet")] });
     await next();
   });
   const response = await app.request("/v1/basket-templates/magnificent-seven/rebalance", {
@@ -122,6 +128,7 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
   } as BasketService;
   const app = basketRoutes(service, async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+    c.set("acting", { all: false, wallets: [actingAs("VerifiedWallet")] });
     await next();
   });
   const response = await app.request(
@@ -138,4 +145,76 @@ it("prepares withdrawal for the session wallet, never a client-supplied recipien
     "in_kind",
     [{ assetId: "solana:asset", amountRaw: "1" }],
   ]);
+});
+
+describe("baskets for the wallet chosen", () => {
+  const SOL = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+  const MERCURY = actingAs("MercuryWallet", { id: "w-mercury" });
+  const PHANTOM = actingLinked("PhantomWallet", { id: "w-phantom", label: "Phantom" });
+  const appFor = (service: BasketService, acting: Acting) =>
+    basketRoutes(service, async (c, next) => {
+      c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "MercuryWallet" });
+      c.set("acting", acting);
+      await next();
+    });
+
+  it("enrolls a linked wallet as its own basket's owner, never the signed-in Mercury wallet", async () => {
+    let owner = "";
+    const service = {
+      prepareEnrollment: async (_slug: string, _user: string, o: string) => {
+        owner = o;
+        return { intentId: "i-1", challenge: { kind: "message", message: "sign" } };
+      },
+    } as unknown as BasketService;
+    await appFor(service, { all: false, wallets: [PHANTOM] }).request(
+      "/v1/basket-templates/mag7/enrollment/prepare",
+      { method: "POST" },
+    );
+    expect(owner).toBe(`${SOL}:PhantomWallet`);
+  });
+
+  it("funds, rebalances and exits as the linked wallet chosen", async () => {
+    const owners: string[] = [];
+    const record = (o: string) => {
+      owners.push(o);
+      throw new Error("stop here");
+    };
+    const service = {
+      prepareFunding: async (_s: string, o: string) => record(o),
+      rebalance: async (_s: string, o: string) => record(o),
+      prepareExit: async (_s: string, o: string) => record(o),
+    } as unknown as BasketService;
+    const app = appFor(service, { all: false, wallets: [PHANTOM] });
+    await app.request("/v1/basket-templates/mag7/funding/prepare", {
+      method: "POST",
+      body: JSON.stringify({ amountUsd: "20" }),
+    });
+    await app.request("/v1/basket-templates/mag7/rebalance", { method: "POST" });
+    await app.request("/v1/basket-templates/mag7/exit/in_kind/prepare", { method: "POST" });
+    expect(owners).toEqual([`${SOL}:PhantomWallet`, `${SOL}:PhantomWallet`, `${SOL}:PhantomWallet`]);
+  });
+
+  it("lists every wallet's baskets under every wallet at once, the Mercury wallet's first", async () => {
+    const asked: string[] = [];
+    const service = {
+      ownedPortfolios: async (_u: string, o: string) => {
+        asked.push(o);
+        return [];
+      },
+    } as unknown as BasketService;
+    const res = await appFor(service, { all: true, wallets: [MERCURY, PHANTOM] }).request(
+      "/v1/basket-portfolios",
+    );
+    expect(res.status).toBe(200);
+    expect(asked).toEqual([`${SOL}:MercuryWallet`, `${SOL}:PhantomWallet`]);
+  });
+
+  it("asks for one wallet to see or run a single basket under every wallet at once", async () => {
+    const service = { portfolioSnapshot: async () => null } as unknown as BasketService;
+    const res = await appFor(service, { all: true, wallets: [MERCURY, PHANTOM] }).request(
+      "/v1/basket-templates/mag7/portfolio",
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "wallet_all" } });
+  });
 });

@@ -8,7 +8,13 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
-import { getPublicKeyFromAddress, verifySignature, type Address } from "@solana/kit";
+import {
+  createKeyPairFromBytes,
+  getPublicKeyFromAddress,
+  signBytes,
+  verifySignature,
+  type Address,
+} from "@solana/kit";
 
 /*
  * Who signs, end to end in the browser code: `useTransactionSigner` as every
@@ -34,6 +40,13 @@ const state = vi.hoisted(() => ({
 vi.mock("./acting-wallet", () => ({ useActingWallet: () => ({ acting: state.acting }) }));
 vi.mock("../auth/embedded", () => ({ useEmbeddedWallet: () => ({ wallet: { address: "MercuryWallet" } }) }));
 vi.mock("@privy-io/react-auth/solana", () => ({
+  // Privy signing a message inside Mercury: counted, and a stand-in signature.
+  useSignMessage: () => ({
+    signMessage: async () => {
+      state.privyAsked += 1;
+      return { signature: new Uint8Array(64).fill(7) };
+    },
+  }),
   useSignTransaction: () => ({
     signTransaction: async ({ transaction }: { transaction: Uint8Array }) => {
       state.privyAsked += 1;
@@ -49,6 +62,12 @@ vi.mock("../wallet/appkit", () => ({
       signTransaction: async (tx: unknown) => {
         state.phantomAsked += 1;
         return state.signWith!(tx);
+      },
+      // A basket owner's approval: Phantom's key over the message bytes.
+      signMessage: async (message: Uint8Array) => {
+        state.phantomAsked += 1;
+        const keys = await createKeyPairFromBytes(phantom.secretKey);
+        return { signature: new Uint8Array(await signBytes(keys.privateKey, message)) };
       },
       // One pop-up for a batch.
       signAllTransactions: async (txs: unknown[]) => {
@@ -181,5 +200,32 @@ describe("useTransactionSigner: several transactions, as a move signs them", () 
     expect(state.privyAsked).toBe(2);
     expect(state.phantomAsked).toBe(0);
     expect(state.dialogOpened).toBe(0);
+  });
+});
+
+describe("useTransactionSigner: a message, as a basket owner approves", () => {
+  const MESSAGE = new TextEncoder().encode("Authorize Glider to manage portfolio p-1");
+
+  it("has Phantom sign it with its own key when Phantom is chosen, and says whose address signs", async () => {
+    state.acting = { kind: "linked", wallet: PHANTOM };
+    state.connected = PHANTOM.address;
+    const s = signer();
+    expect(s.address).toBe(PHANTOM.address);
+    const signature = await s.signMessage(MESSAGE);
+    expect(
+      await verifySignature(
+        await getPublicKeyFromAddress(PHANTOM.address as Address),
+        signature as never,
+        MESSAGE,
+      ),
+    ).toBe(true);
+    expect([state.phantomAsked, state.privyAsked]).toEqual([1, 0]);
+  });
+
+  it("has Privy sign it for the Mercury wallet, and never opens Phantom", async () => {
+    const s = signer();
+    expect(s.address).toBe("MercuryWallet");
+    expect(await s.signMessage(MESSAGE)).toHaveLength(64);
+    expect([state.privyAsked, state.phantomAsked, state.dialogOpened]).toEqual([1, 0, 0]);
   });
 });
