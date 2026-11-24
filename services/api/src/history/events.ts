@@ -3,6 +3,24 @@ import type { TokenBalanceEntry, TransactionDetail } from "@mercury/chain";
 /** Wrapped SOL's mint: what the reader writes when SOL left the wallet in a swap. */
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
 
+/** Kamino's lending program: a token it moves in or out of the wallet is collateral, not a trade. */
+export const KAMINO_LENDING_PROGRAM = "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD";
+/** Kamino's vaults (Earn). A vault calls the lending program too, so its share tokens are told apart by this. */
+export const KAMINO_VAULT_PROGRAM = "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd";
+
+/**
+ * Whether this transaction pledged or withdrew collateral at Kamino: the
+ * lending program took part, and no Earn vault did. Pledged shares are still
+ * the person's, so the cost pass keeps them, at their cost, and a withdrawal
+ * brings back what was already held rather than a new arrival.
+ *
+ * Read from the transaction itself rather than from Kamino's own list of the
+ * loan's history, so the reader can tell as it walks back, and a loan worked
+ * in another app is read the same way as one worked in Mercury.
+ */
+export const isCollateralMove = (tx: TransactionDetail): boolean =>
+  tx.accountKeys.includes(KAMINO_LENDING_PROGRAM) && !tx.accountKeys.includes(KAMINO_VAULT_PROGRAM);
+
 /**
  * What one transaction did to one of a wallet's tokens: the amounts only.
  *
@@ -13,7 +31,13 @@ export const SOL_MINT = "So11111111111111111111111111111111111111112";
  * transfer in, who sent it.
  */
 export interface Movement {
-  readonly kind: "in" | "out";
+  /**
+   * "in" and "out" are arrivals and departures. "loan_deposit" and
+   * "loan_withdraw" are collateral pledged to Kamino and taken back: the
+   * shares left the wallet's account but not the person, so they are held
+   * all along, at the cost they had.
+   */
+  readonly kind: "in" | "out" | "loan_deposit" | "loan_withdraw";
   /** Of this token, always positive. */
   readonly amountRaw: bigint;
   /** For an arrival: the token that left the wallet most in the same transaction, if any did. */
@@ -113,6 +137,16 @@ export const movementOf = (tx: TransactionDetail, owner: string, mint: string): 
   const all = deltas(tx, owner);
   const d = all.get(mint) ?? 0n;
   if (d === 0n) return null;
+  if (isCollateralMove(tx)) {
+    return {
+      kind: d < 0n ? "loan_deposit" : "loan_withdraw",
+      amountRaw: d < 0n ? -d : d,
+      counterMint: null,
+      counterAmountRaw: null,
+      sourceOwner: null,
+      destinationOwner: null,
+    };
+  }
   if (d < 0n) {
     // A plain transfer only: something arriving in the same transaction makes it a swap.
     const swapped = [...all].some(([m, delta]) => m !== mint && delta > 0n);

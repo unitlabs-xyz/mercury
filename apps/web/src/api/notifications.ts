@@ -29,9 +29,15 @@ const UNREAD_KEY = [...KEY, "unread"] as const;
 export const badgeText = (unread: number): string | null =>
   unread <= 0 ? null : unread > 9 ? "9+" : String(unread);
 
-/** Where clicking an item goes: its receipt, or the page the loan lives on. */
+/**
+ * Where clicking an item goes: its receipt, or the page the loan lives on. A
+ * liquidation is told as a loan alert, and is a sale with a receipt: what was
+ * sold, at what price, and what it repaid.
+ */
 export const destinationOf = (n: Notification): { readonly receipt: string } | { readonly path: string } =>
-  n.kind === "loan_alert" ? { path: "/portfolio" } : { receipt: n.activity.id };
+  n.kind === "loan_alert" && n.activity.kind !== "liquidation"
+    ? { path: "/portfolio" }
+    : { receipt: n.activity.id };
 
 export const useUnreadCount = () => {
   const signedIn = useSignedIn();

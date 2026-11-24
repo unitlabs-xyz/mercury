@@ -27,6 +27,7 @@ import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
 import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
 import { missedSnapshots } from "./portfolio/snapshot-retry.js";
 import { watchAllLoans } from "./lending/watch-loans.js";
+import { pledgedByMint } from "./lending/pledged.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
@@ -669,10 +670,20 @@ every(
   "loan-watch",
   5 * 60 * 1000,
   async () => {
-    const s = await watchAllLoans(auth.db, { ...jobRead.borrow, notifier }, new Date());
-    if (s.alerted === 0 && s.failed === 0) return null;
+    const s = await watchAllLoans(
+      auth.db,
+      {
+        ...jobRead.borrow,
+        notifier,
+        // Kamino's record of each loan: a liquidation is sent by a bot, so only this sees it.
+        loanHistory: { loans: kaminoLoans(), market: XSTOCKS_MARKET },
+      },
+      new Date(),
+    );
+    if (s.alerted === 0 && s.failed === 0 && s.liquidations === 0) return null;
     return (
       `${s.alerted} alerts across ${s.loans} loans, ${s.delivered} delivered` +
+      (s.liquidations > 0 ? `, ${s.liquidations} liquidations told` : "") +
       (s.failed > 0 ? `, ${s.failed} failed` : "")
     );
   },
@@ -710,9 +721,17 @@ every(
         earnShareMints: async () => (await deps.earn.list()).map((v) => v.sharesMint),
       }),
       laneBusy: () => laneRefusedWithin(60_000),
+      // Pledged shares are still held: an account emptied by pledging is read, not skipped.
+      pledged: (owner) => pledgedByMint(deps.lending, owner),
     },
     // A linked wallet's loan, from Kamino's own record of it: when it opened, each pledge at its price then.
-    loan: { lending: deps.lending, loans: kaminoLoans(), market: XSTOCKS_MARKET, usdcMint: USDC_MINT },
+    loan: {
+      lending: deps.lending,
+      loans: kaminoLoans(),
+      market: XSTOCKS_MARKET,
+      usdcMint: USDC_MINT,
+      notifier,
+    },
     log: logger("history"),
   }),
   jobClock(5 * 60_000),

@@ -181,6 +181,39 @@ describe("readSummary", () => {
     expect(summary.calculating).toBe(1);
   });
 
+  it("counts what a liquidation realised with the sells', once its shares' cost is known", async () => {
+    const s = await seed();
+    // Kamino sold some of the read wallet's shares for $40 less than they had cost.
+    await s.db.insert(loanEvents).values({
+      userId: s.userId,
+      walletId: s.read,
+      kind: "liquidation",
+      usdAmount: "300",
+      tokensRaw: "200000000",
+      debtAfterUsd: "100",
+      collateralAfterUsd: "100",
+      realisedPnlUsd: "-40",
+      originSource: "chain",
+      txSignature: "liq-1",
+      occurredAt: hour(6),
+    });
+    // One whose cost is not known yet counts nothing.
+    await s.db.insert(loanEvents).values({
+      userId: s.userId,
+      walletId: s.read,
+      kind: "liquidation",
+      usdAmount: "300",
+      tokensRaw: "200000000",
+      debtAfterUsd: "100",
+      collateralAfterUsd: "100",
+      originSource: "chain",
+      txSignature: "liq-2",
+      occurredAt: hour(7),
+    });
+    const summary = PortfolioSummary.parse(await readSummary(s.db, board, s.userId));
+    expect(summary.pnl).toMatchObject({ realisedUsd: "-28", totalUsd: "172" });
+  });
+
   it("keeps a wallet whose past is read but not yet costed calculating, never a $0 P&L", async () => {
     const s = await seed();
     await s.db.update(historyJobs).set({ status: "read" }).where(eq(historyJobs.walletId, s.read));

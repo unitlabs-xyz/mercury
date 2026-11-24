@@ -477,11 +477,18 @@ before it had already left. So a position bought once and held is a few calls, a
 refilled many times is only the stretch since it was last empty. The replay then runs forward from
 that point.
 
+**Shares pledged to Kamino are still held.** Pledging moves them out of the wallet's token account
+into Kamino's reserve, so the account alone reads as empty when they are all pledged. The reader
+asks Kamino what is pledged today, reads an account that is empty only because of a pledge, and
+works the pledged amount back through each pledge and withdrawal it passes: it stops only where
+the wallet held none in its account **and** none in the loan. If Kamino can't be read, the pass
+waits a minute, uncounted, rather than read a pledged holding as sold.
+
 What this gives up is realised P&L on positions closed before that point, outside Mercury and
 before linking. Realised P&L on anything sold through Mercury, or after linking, is kept.
 
 An account that never went to zero is read back at most 5,000 signatures. The shares it held at
-the oldest point reached are priced at the price then, marked `~`, and the replay goes forward
+the oldest point reached, in the wallet and in the loan, are priced at the price then, marked `~`, and the replay goes forward
 from there. At the reader's two calls a second that is about forty minutes for the worst account,
 once, behind "Calculating…".
 
@@ -513,6 +520,14 @@ For each token account, the reader walks its events oldest first.
 (`packages/core/src/portfolio/cost-basis.ts`): the average cost per share of what remains doesn't
 change. Replaying a token account's whole history is cheap because it is short, and it gives the
 same answer the Mercury wallet's positions would.
+
+**Collateral is neither.** A transaction Kamino's lending program made (and no Earn vault) that
+moved the stock is a pledge (`loan_deposit`) or a withdrawal (`loan_withdraw`), not a departure or an
+arrival: the shares keep the lots and the cost they had, as position-sync keeps them
+(`withPledged`). Only a liquidation sells them. It doesn't touch the wallet's account, so it is read
+from the loan's history, and is booked as a sale: Kamino's price for the shares, less their
+average cost just before, is realised P&L (`loan_event.realised_pnl_usd`), counted with the sells'.
+Until a linked wallet's past is costed, it waits rather than count the whole sale as profit.
 
 **Dividends:** xStocks pay by raising a multiplier, so one token later stands for more stock. Each
 arrival is converted to shares with the multiplier in force at its time (`multiplier_event`), and
@@ -726,6 +741,22 @@ to avoid liquidation."
 
 Read by the history reader: see "The loan, deposit by deposit" above. Until it finishes, the loan
 screen shows the current numbers and "Reading history…".
+
+### Liquidations, in any wallet
+
+A liquidation is sent by a bot, not built by Mercury, so nothing Mercury records sees it, in the
+Mercury wallet or a linked one. The live loan does. `loan-watch` reads Kamino's record of a loan
+when its collateral or debt fell since the last pass, when it was last warned it was close to
+liquidation (a bot can sell between two passes and leave it healthy by the next), and at least
+hourly. A liquidation found there is:
+
+- **A sale.** Its debt leg and collateral leg are one row, "Sold by Kamino · 4 TSLAx at $150.00 ·
+  repaid $570.00 of the loan". What it repaid, less the shares' average cost just before, is
+  realised P&L (see "What each stock cost").
+- **A repayment.** What it repaid comes off what was borrowed, so the interest stays the interest.
+- **News**, when it happened in the last day and since Mercury followed the wallet: an inbox entry
+  (opening its receipt) and an email, "Kamino sold collateral to repay your loan", naming a linked
+  wallet. Older ones, from a wallet's past, are in the feed and stay quiet.
 
 ## Fees
 

@@ -20,8 +20,12 @@ import { summarise, type WalletRecords } from "./summary.js";
 /** The summary's records for each wallet, by id, less the holdings, which `readHoldings` reads. */
 export type SummaryRecords = Omit<WalletRecords, "holdings">;
 
-const sums = (rows: readonly { walletId: string; total: string | null }[]) =>
-  new Map(rows.map((r) => [r.walletId, D(r.total ?? "0")]));
+/** Each wallet's total, adding up every row given for it. */
+const sums = (rows: readonly { walletId: string; total: string | null }[]) => {
+  const out = new Map<string, Decimal>();
+  for (const r of rows) out.set(r.walletId, (out.get(r.walletId) ?? D(0)).add(D(r.total ?? "0")));
+  return out;
+};
 
 /**
  * One query per ledger, each across every wallet at once, so the summary costs
@@ -35,7 +39,7 @@ export async function readSummaryRecords(
   if (walletIds.length === 0) return new Map();
   const ids = [...walletIds];
 
-  const [latest, realised, dividends, earnNet, ledger, alerts, read] = await Promise.all([
+  const [latest, realised, liquidated, dividends, earnNet, ledger, alerts, read] = await Promise.all([
     // Each wallet's newest reading: one row per wallet, newest first within it.
     db
       .selectDistinctOn([portfolioSnapshots.walletId], {
@@ -57,6 +61,21 @@ export async function readSummaryRecords(
       .from(orders)
       .where(and(eq(orders.userId, userId), inArray(orders.walletId, ids), isNotNull(orders.realisedPnlUsd)))
       .groupBy(orders.walletId),
+    // A liquidation is a sale too: Kamino sold the shares, and the money cleared the debt.
+    db
+      .select({
+        walletId: loanEvents.walletId,
+        total: sql<string | null>`sum(${loanEvents.realisedPnlUsd})`,
+      })
+      .from(loanEvents)
+      .where(
+        and(
+          eq(loanEvents.userId, userId),
+          inArray(loanEvents.walletId, ids),
+          isNotNull(loanEvents.realisedPnlUsd),
+        ),
+      )
+      .groupBy(loanEvents.walletId),
     db
       .select({ walletId: activities.walletId, total: sql<string | null>`sum(${activities.amountUsd})` })
       .from(activities)
@@ -100,7 +119,7 @@ export async function readSummaryRecords(
   ]);
 
   const latestBy = new Map(latest.map((r) => [r.walletId, r]));
-  const realisedBy = sums(realised);
+  const realisedBy = sums([...realised, ...liquidated]);
   const dividendsBy = sums(dividends);
   const earnBy = sums(earnNet);
   const healthBy = new Map(alerts.map((a) => [a.walletId, a.health]));

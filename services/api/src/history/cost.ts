@@ -115,6 +115,11 @@ export async function walletToCost(db: Db, resting: readonly string[] = []): Pro
  * nothing here: position-sync already takes shares that leave out of the
  * records, at average cost.
  *
+ * **Collateral** pledged to Kamino and taken back moves nothing: the shares
+ * left the wallet's account but not the person, and keep the lots and the
+ * cost they had. Only a liquidation sells them, and that is the loan
+ * history's to record (`settleLiquidations`).
+ *
  * All of it in one transaction, with every movement it took marked costed, so
  * a pass that fails writes nothing and the next one starts clean.
  */
@@ -144,6 +149,15 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     .where(and(eq(historyEvents.walletId, walletId), isNotNull(historyEvents.costedAt)))
     .limit(1);
   const first = costedBefore === undefined;
+  // Shares pledged before the oldest transaction read, where a walk back stopped at its cap: held then too.
+  const [job] = first
+    ? await db
+        .select({ openingPledged: historyJobs.openingPledged })
+        .from(historyJobs)
+        .where(eq(historyJobs.walletId, walletId))
+        .limit(1)
+    : [];
+  const openingPledged = job?.openingPledged ?? {};
 
   // The stocks among what moved: USDC and Earn shares are not lots.
   const mints = [...new Set(pending.map((e) => e.mint).filter((m): m is string => m !== null))];
@@ -200,6 +214,7 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
         if (toMercury(e)) later.push({ event: e, stock });
         continue;
       }
+      // A pledge to Kamino or a withdrawal from it: the shares stayed the person's, at their cost.
       if (e.kind !== "in" && e.kind !== "out") continue;
       const multiplier = multiplierAt(at(e), tokenSteps, current);
       if (e.kind === "out") {
@@ -219,7 +234,16 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
 
     // What was held before the oldest movement read, where the walk back stopped at its cap.
     const opening = first
-      ? await openingBalance(db, wallet.address, stock, events[0], tokenSteps, prices, linkedAt)
+      ? await openingBalance(
+          db,
+          wallet.address,
+          stock,
+          events[0],
+          openingPledged,
+          tokenSteps,
+          prices,
+          linkedAt,
+        )
       : undefined;
     const { lots: planned, departures } = replayWithDepartures(movements, stock.decimals, opening);
     for (const lot of planned) written.push({ lot, stock });
@@ -529,13 +553,15 @@ async function barClose(
 /**
  * Tokens held before the oldest movement read, where the walk back stopped
  * at its cap rather than at an empty balance: the balance just before that
- * movement, from the transaction kept raw, priced at the share's price then.
+ * movement, from the transaction kept raw, and what was pledged to Kamino
+ * then, as the reader worked it back, priced at the share's price then.
  */
 async function openingBalance(
   db: Db,
   owner: string,
   stock: Stock,
   oldest: HistoryEvent | undefined,
+  pledgedBefore: Readonly<Record<string, string>>,
   steps: readonly MultiplierStep[],
   prices: ReturnType<typeof pricer>,
   linkedAt: Date,
@@ -545,12 +571,13 @@ async function openingBalance(
     .select({ raw: historyTxs.raw })
     .from(historyTxs)
     .where(eq(historyTxs.signature, oldest.signature));
-  const pre = (
-    (tx?.raw as { preTokens?: { owner: string | null; mint: string; rawAmount: string }[] } | undefined)
-      ?.preTokens ?? []
-  )
-    .filter((t) => t.owner === owner && t.mint === stock.mint)
-    .reduce((sum, t) => sum + BigInt(t.rawAmount), 0n);
+  const pre =
+    (
+      (tx?.raw as { preTokens?: { owner: string | null; mint: string; rawAmount: string }[] } | undefined)
+        ?.preTokens ?? []
+    )
+      .filter((t) => t.owner === owner && t.mint === stock.mint)
+      .reduce((sum, t) => sum + BigInt(t.rawAmount), 0n) + BigInt(pledgedBefore[oldest.account] ?? "0");
   if (pre <= 0n) return undefined;
   const at = oldest.blockTime ?? linkedAt;
   const price = await prices.share(stock, at);

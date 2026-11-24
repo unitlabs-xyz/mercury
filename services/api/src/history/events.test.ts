@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { TokenBalanceEntry, TransactionDetail } from "@mercury/chain";
-import { SOL_MINT, balanceOf, emptyBefore, movementOf, rawJson } from "./events.js";
+import {
+  KAMINO_LENDING_PROGRAM,
+  KAMINO_VAULT_PROGRAM,
+  SOL_MINT,
+  balanceOf,
+  emptyBefore,
+  movementOf,
+  rawJson,
+} from "./events.js";
 
 const ME = "Phantom1111111111111111111111111111111111111";
 const FRIEND = "Friend11111111111111111111111111111111111111";
@@ -38,6 +46,70 @@ describe("balanceOf", () => {
     ];
     expect(balanceOf(entries, ME, TSLAX)).toBe(5n);
     expect(balanceOf(entries, ME, "Other")).toBe(0n);
+  });
+});
+
+describe("movementOf, at Kamino", () => {
+  const RESERVE = "Reserve11111111111111111111111111111111111";
+
+  it("reads stock pledged as collateral as a pledge, not a departure", () => {
+    const m = movementOf(
+      tx({
+        accountKeys: [ME, KAMINO_LENDING_PROGRAM],
+        preTokens: [entry(ME, TSLAX, 1_000_000_000n), entry(RESERVE, TSLAX, 0n)],
+        postTokens: [entry(ME, TSLAX, 200_000_000n), entry(RESERVE, TSLAX, 800_000_000n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m).toEqual({
+      kind: "loan_deposit",
+      amountRaw: 800_000_000n,
+      counterMint: null,
+      counterAmountRaw: null,
+      sourceOwner: null,
+      destinationOwner: null,
+    });
+  });
+
+  it("reads a pledge and a borrow in one transaction as a pledge, though USDC arrived", () => {
+    const m = movementOf(
+      tx({
+        accountKeys: [ME, KAMINO_LENDING_PROGRAM],
+        preTokens: [entry(ME, TSLAX, 1_000_000_000n), entry(ME, USDC, 0n)],
+        postTokens: [entry(ME, TSLAX, 0n), entry(ME, USDC, 500_000_000n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m?.kind).toBe("loan_deposit");
+  });
+
+  it("reads collateral taken back as a withdrawal, not an arrival with no cost", () => {
+    const m = movementOf(
+      tx({
+        accountKeys: [ME, KAMINO_LENDING_PROGRAM],
+        preTokens: [entry(ME, TSLAX, 0n)],
+        postTokens: [entry(ME, TSLAX, 800_000_000n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m).toMatchObject({ kind: "loan_withdraw", amountRaw: 800_000_000n, sourceOwner: null });
+  });
+
+  it("reads an Earn deposit as the trade it is: a vault calls the lending program too", () => {
+    const SHARES = "EarnShares111111111111111111111111111111111";
+    const m = movementOf(
+      tx({
+        accountKeys: [ME, KAMINO_VAULT_PROGRAM, KAMINO_LENDING_PROGRAM],
+        preTokens: [entry(ME, USDC, 500_000_000n)],
+        postTokens: [entry(ME, USDC, 0n), entry(ME, SHARES, 480_000_000n)],
+      }),
+      ME,
+      SHARES,
+    );
+    expect(m).toMatchObject({ kind: "in", counterMint: USDC, counterAmountRaw: 500_000_000n });
   });
 });
 

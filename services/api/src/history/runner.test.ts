@@ -5,6 +5,7 @@ import { D } from "@mercury/core";
 import type { PastPriceSource, PriceBoard } from "@mercury/market";
 import { mercuryWallet, testDb } from "../db/testing.js";
 import {
+  activities,
   historyEvents,
   historyJobs,
   loanEvents,
@@ -139,6 +140,30 @@ describe("historyPass", () => {
     });
   });
 
+  it("puts the job back for a minute when Kamino can't say what is pledged, with no mark against the wallet", async () => {
+    const s = await seed();
+    await queueHistory(s.db, { walletId: s.walletId, userId: s.userId, now: new Date(T0) });
+    const pass = historyPass({
+      db: s.db,
+      reader: {
+        history: chain(),
+        listedMints: async () => new Set([TSLAX]),
+        laneBusy: () => false,
+        pledged: async () => {
+          throw new Error("kamino 503");
+        },
+      },
+      now: () => T0,
+      log,
+    });
+    expect(await pass()).toBe("paused: Kamino could not be read");
+    expect(await s.job()).toMatchObject({
+      status: "queued",
+      attempts: 0,
+      runAfter: new Date(T0 + REFUSAL_PAUSE_MS),
+    });
+  });
+
   it("counts any other failure against the job, tries later, and still reports it", async () => {
     const s = await seed();
     await queueHistory(s.db, { walletId: s.walletId, userId: s.userId, now: new Date(T0) });
@@ -194,6 +219,52 @@ describe("historyPass, with the wallet's loan", () => {
     expect(await pass()).toBe("first read: 1 transactions, 1 events across 1 accounts, 1 loan events");
     const [row] = await s.db.select().from(loanEvents).where(eq(loanEvents.walletId, s.walletId));
     expect([row!.kind, row!.originSource]).toEqual(["borrow", "chain"]);
+  });
+
+  it("books a liquidation it finds as a sale, against what the shares had cost", async () => {
+    const s = await seed();
+    await queueHistory(s.db, { walletId: s.walletId, userId: s.userId, now: new Date(T0) });
+    await s.db.update(historyJobs).set({ status: "done" }).where(eq(historyJobs.walletId, s.walletId));
+    const [i] = await s.db.insert(instruments).values({ ticker: "TSLA", name: "Tesla" }).returning();
+    const [t] = await s.db
+      .insert(tokens)
+      .values({ instrumentId: i!.id, mint: TSLAX, symbol: "TSLAx", issuer: "backed", decimals: 8 })
+      .returning();
+    // 2 TSLAx at $200, from the wallet's costed past.
+    await s.db.insert(lots).values({
+      userId: s.userId,
+      walletId: s.walletId,
+      tokenId: t!.id,
+      instrumentId: i!.id,
+      tokenQty: 200_000_000n,
+      shares: "2",
+      unitCostUsd: "200",
+      feeUsd: "0",
+      acquiredAt: new Date(T0 - 10 * 86_400_000),
+      source: "chain",
+    });
+    const pass = withLoan(
+      s.db,
+      async () => ({ obligation: "Obligation" }) as LendingPosition,
+      loans(async () => [
+        borrowed,
+        {
+          signature: "Liq",
+          at: new Date(T0 - 3_600_000),
+          action: "liquidate" as const,
+          mint: TSLAX,
+          symbol: "TSLAx",
+          amount: D(1),
+          priceUsd: D(150),
+          valueUsd: D(150),
+          liquidation: true,
+        },
+      ]),
+    );
+    await pass();
+    const [row] = await s.db.select().from(loanEvents).where(eq(loanEvents.txSignature, "Liq"));
+    // Sold 1 for $150 that had cost $200.
+    expect([row!.kind, D(row!.realisedPnlUsd!).toString()]).toEqual(["liquidation", "-50"]);
   });
 
   it("finishes the tokens' pass when the loan can't be read, and says why in the log", async () => {
@@ -294,6 +365,42 @@ describe("costPass", () => {
     expect((await s.job()).status).toBe("done");
     clock += 1_000;
     expect(await pass()).toBeNull();
+  });
+
+  it("books a liquidation read before the wallet's costs once they are known", async () => {
+    const s = await seedRead();
+    // Kamino sold half a share for $100, an hour after the transfer in priced at $250.
+    const [liq] = await s.db
+      .insert(loanEvents)
+      .values({
+        userId: s.userId,
+        walletId: s.walletId,
+        kind: "liquidation",
+        usdAmount: "100",
+        ticker: "TSLA",
+        tokensRaw: "50000000",
+        debtAfterUsd: "0",
+        collateralAfterUsd: "0",
+        originSource: "chain",
+        txSignature: "Liq",
+        occurredAt: new Date(T0 + 3_600_000),
+      })
+      .returning();
+    await s.db.insert(activities).values({
+      userId: s.userId,
+      walletId: s.walletId,
+      kind: "liquidation",
+      title: "Sold by Kamino",
+      amountUsd: "100",
+      refTable: "loan_event",
+      refId: liq!.id,
+      txSignature: "Liq",
+      mint: TSLAX,
+    });
+    const pass = costPass({ db: s.db, past: { priceAt: async () => D(250) }, board, now: () => T0, log });
+    await pass();
+    const [row] = await s.db.select().from(loanEvents).where(eq(loanEvents.id, liq!.id));
+    expect(D(row!.realisedPnlUsd!).toString()).toBe("-25");
   });
 
   it("rests a failing wallet, and after repeated failures costs it from Mercury's own prices", async () => {

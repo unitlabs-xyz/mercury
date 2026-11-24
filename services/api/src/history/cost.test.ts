@@ -86,7 +86,7 @@ const seed = async (status: "read" | "done" = "read") => {
   let n = 0;
   /** One movement found in history, with the transaction it came from kept raw. */
   const found = async (e: {
-    kind: "in" | "out";
+    kind: "in" | "out" | "loan_deposit" | "loan_withdraw";
     amount: bigint;
     at: Date;
     mint?: string;
@@ -355,6 +355,59 @@ describe("costWallet, a first costing", () => {
     expect(held.map((l) => [l.tokenQty, l.estimateSource])).toEqual([[tokensOf(2), "market_price"]]);
   });
 
+  it("prices what was pledged to Kamino before the oldest movement read, with the wallet's own", async () => {
+    const s = await seed();
+    await s.db
+      .update(historyJobs)
+      .set({ openingPledged: { [`${TSLAX}-acct`]: tokensOf(2).toString() } })
+      .where(eq(historyJobs.walletId, s.walletId));
+    await s.found({ kind: "out", amount: tokensOf(1), at: day(6), preRaw: tokensOf(3) });
+    await costWallet(deps(s.db, pastOf({ TSLA: 50 }).past), s.walletId, NOW);
+    const held = await s.chainLots();
+    // 3 in the wallet and 2 in the loan before it; 1 left.
+    expect(held.map((l) => [l.tokenQty, l.estimateSource])).toEqual([[tokensOf(4), "market_price"]]);
+  });
+
+  it("keeps shares pledged to Kamino at the cost they were bought at: a pledge sells nothing", async () => {
+    const s = await seed();
+    // Bought 10 at $200, pledged 8, took 8 back.
+    await s.found({
+      kind: "in",
+      amount: tokensOf(10),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 2_000_000_000n,
+    });
+    await s.found({ kind: "loan_deposit", amount: tokensOf(8), at: day(2) });
+    await s.found({ kind: "loan_withdraw", amount: tokensOf(8), at: day(3) });
+    const { past, asked } = pastOf({ TSLA: 250 });
+
+    const r = await costWallet(deps(s.db, past), s.walletId, NOW);
+
+    expect(r).toMatchObject({ lots: 1, costed: 3, ready: true });
+    const held = await s.chainLots();
+    expect(held.map((l) => [l.tokenQty, D(l.unitCostUsd).toString(), l.isEstimated])).toEqual([
+      [tokensOf(10), "200", false],
+    ]);
+    // Nothing came back as a new arrival to be priced.
+    expect(asked).toEqual([]);
+  });
+
+  it("keeps a holding pledged in full at its cost", async () => {
+    const s = await seed();
+    await s.found({
+      kind: "in",
+      amount: tokensOf(10),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 2_000_000_000n,
+    });
+    await s.found({ kind: "loan_deposit", amount: tokensOf(10), at: day(2) });
+    await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+    const held = await s.chainLots();
+    expect(held.map((l) => [l.tokenQty, D(l.unitCostUsd).toString()])).toEqual([[tokensOf(10), "200"]]);
+  });
+
   it("marks USDC and other movements costed without writing lots for them", async () => {
     const s = await seed();
     await s.found({ kind: "in", amount: 5_000_000n, at: day(1), mint: USDC });
@@ -530,6 +583,25 @@ describe("costWallet, a later costing", () => {
       expect(await mercurySide(s), String(later)).toEqual([]);
       expect(await feedFor(s, sig)).toEqual([["linked", "transfer_out", "Moved to your Mercury wallet"]]);
     }
+  });
+
+  it("writes no lot for collateral taken back since: it never left the records", async () => {
+    const s = await seed("done");
+    await s.found({
+      kind: "in",
+      amount: tokensOf(10),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 2_000_000_000n,
+      costed: true,
+    });
+    await s.found({ kind: "loan_deposit", amount: tokensOf(8), at: day(2), costed: true });
+    await s.found({ kind: "loan_withdraw", amount: tokensOf(8), at: day(3) });
+    const { past, asked } = pastOf({ TSLA: 250 });
+    const r = await costWallet(deps(s.db, past), s.walletId, NOW);
+    expect(r).toMatchObject({ lots: 0, costed: 1, ready: false });
+    expect(await s.chainLots()).toEqual([]);
+    expect(asked).toEqual([]);
   });
 
   it("writes nothing twice when run again", async () => {

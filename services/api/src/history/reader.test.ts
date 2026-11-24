@@ -2,8 +2,18 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { ChainHistory, OwnedTokenAccount, SignatureRef, TransactionDetail } from "@mercury/chain";
 import { mercuryWallet, testDb } from "../db/testing.js";
-import { historyEvents, historyTxs, loanEvents, users, wallets } from "../db/schema.js";
-import { GiveWay, readWallet } from "./reader.js";
+import {
+  earnEvents,
+  historyEvents,
+  historyJobs,
+  historyTxs,
+  loanEvents,
+  users,
+  wallets,
+} from "../db/schema.js";
+import { KAMINO_LENDING_PROGRAM } from "./events.js";
+import { finishHistoryPass } from "./queue.js";
+import { GiveWay, PledgeUnknown, readWallet } from "./reader.js";
 
 const ME = "Phantom1111111111111111111111111111111111111";
 const TSLAX = "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB";
@@ -33,6 +43,17 @@ const move = (signature: string, slot: number, before: bigint, after: bigint): T
     ],
   };
 };
+
+/** `move`, made by Kamino's lending program: a pledge when the wallet's TSLAx falls, a withdrawal when it rises. */
+const atKamino = (signature: string, slot: number, before: bigint, after: bigint): TransactionDetail => ({
+  ...move(signature, slot, before, after),
+  accountKeys: [ME, KAMINO_LENDING_PROGRAM],
+  // Nothing is paid for collateral coming back.
+  postTokens: [
+    { owner: ME, mint: TSLAX, rawAmount: after, decimals: 8 },
+    { owner: ME, mint: USDC, rawAmount: 1_000_000n, decimals: 6 },
+  ],
+});
 
 /**
  * A chain with each account's transactions, oldest first as written; it
@@ -90,6 +111,8 @@ const seed = async () => {
 };
 
 const LISTED = async () => new Set([TSLAX, USDC]);
+/** Kamino's answer: this many TSLAx pledged today. */
+const pledgedOf = (raw: bigint) => async () => [{ mint: TSLAX, rawAmount: raw }];
 const quiet = () => false;
 const owned = (address: string, mint: string, rawAmount: bigint): OwnedTokenAccount => ({
   address,
@@ -202,14 +225,13 @@ describe("readWallet, a first read", () => {
 
   it("skips what Mercury itself recorded for the wallet, which its books already have exactly", async () => {
     const s = await seed();
-    // A borrow Mercury built and recorded at confirm time, in the same transaction.
-    await s.db.insert(loanEvents).values({
+    // An Earn move Mercury built and recorded at confirm time, in the same transaction.
+    await s.db.insert(earnEvents).values({
       userId: s.userId,
       walletId: s.walletId,
-      kind: "borrow",
-      usdAmount: "60",
-      debtAfterUsd: "60",
-      collateralAfterUsd: "100",
+      kind: "deposit",
+      usdcAmount: "60",
+      vault: "Vault1111",
       txSignature: "S2",
       occurredAt: new Date(),
     });
@@ -221,6 +243,151 @@ describe("readWallet, a first read", () => {
       { walletId: s.walletId, address: ME, cursors: {} },
     );
     expect(c.asked).toEqual(["S1"]);
+  });
+
+  it("reads a pledge Mercury recorded all the same: it moves no cost, and the walk back needs it", async () => {
+    const s = await seed();
+    await s.db.insert(loanEvents).values({
+      userId: s.userId,
+      walletId: s.walletId,
+      kind: "pledge",
+      debtAfterUsd: "0",
+      collateralAfterUsd: "100",
+      txSignature: "S2",
+      occurredAt: new Date(),
+    });
+    // Bought 10, pledged all 10 through Mercury, bought 5 more.
+    const c = chain([owned(TSLA_ACCT, TSLAX, 5n)], {
+      [TSLA_ACCT]: [
+        { tx: move("S1", 1, 0n, 10n) },
+        { tx: atKamino("S2", 2, 10n, 0n) },
+        { tx: move("S3", 3, 0n, 5n) },
+      ],
+    });
+    await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet, pledged: pledgedOf(10n) },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(c.asked).toEqual(["S3", "S2", "S1"]);
+  });
+});
+
+describe("readWallet, shares pledged to Kamino", () => {
+  it("reads an account emptied by pledging, back to where its shares were bought", async () => {
+    const s = await seed();
+    const c = chain([owned(TSLA_ACCT, TSLAX, 0n)], {
+      [TSLA_ACCT]: [
+        { tx: move("Old1", 1, 0n, 7n) },
+        { tx: move("Old2", 2, 7n, 0n) },
+        { tx: move("S1", 3, 0n, 10n) },
+        { tx: atKamino("S2", 4, 10n, 0n) },
+      ],
+    });
+    const r = await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet, pledged: pledgedOf(10n) },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(c.asked).toEqual(["S2", "S1"]);
+    expect(r).toMatchObject({ cursors: { [TSLA_ACCT]: "S2" }, capped: 0 });
+    const events = await s.db.select().from(historyEvents).where(eq(historyEvents.walletId, s.walletId));
+    expect(events.map((e) => [e.signature, e.kind, e.amountRaw]).sort()).toEqual([
+      ["S1", "in", 10n],
+      ["S2", "loan_deposit", 10n],
+    ]);
+  });
+
+  it("walks past a moment the wallet held none because the rest was pledged", async () => {
+    const s = await seed();
+    // Bought 10, pledged them all, bought 5: before the 5, the wallet's account was empty but 10 were held.
+    const c = chain([owned(TSLA_ACCT, TSLAX, 5n)], {
+      [TSLA_ACCT]: [
+        { tx: move("Old1", 1, 0n, 7n) },
+        { tx: move("Old2", 2, 7n, 0n) },
+        { tx: move("S1", 3, 0n, 10n) },
+        { tx: atKamino("S2", 4, 10n, 0n) },
+        { tx: move("S3", 5, 0n, 5n) },
+      ],
+    });
+    await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet, pledged: pledgedOf(10n) },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(c.asked).toEqual(["S3", "S2", "S1"]);
+  });
+
+  it("counts a withdrawal back as held before it, in the loan", async () => {
+    const s = await seed();
+    // Bought 10, pledged 10, took 4 back: 6 still pledged, 4 in the wallet.
+    const c = chain([owned(TSLA_ACCT, TSLAX, 4n)], {
+      [TSLA_ACCT]: [
+        { tx: move("Old1", 1, 0n, 7n) },
+        { tx: move("Old2", 2, 7n, 0n) },
+        { tx: move("S1", 3, 0n, 10n) },
+        { tx: atKamino("S2", 4, 10n, 0n) },
+        { tx: atKamino("S3", 5, 0n, 4n) },
+      ],
+    });
+    await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet, pledged: pledgedOf(6n) },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(c.asked).toEqual(["S3", "S2", "S1"]);
+    const events = await s.db.select().from(historyEvents).where(eq(historyEvents.walletId, s.walletId));
+    expect(events.map((e) => [e.signature, e.kind]).sort()).toEqual([
+      ["S1", "in"],
+      ["S2", "loan_deposit"],
+      ["S3", "loan_withdraw"],
+    ]);
+  });
+
+  it("keeps what was still pledged where the walk stopped at its cap, for the opening balance", async () => {
+    const s = await seed();
+    await s.db.insert(historyJobs).values({ walletId: s.walletId, userId: s.userId, status: "running" });
+    // 10 pledged long ago; 6 bought and pledged since. The cap stops the walk with 10 still in the loan.
+    const c = chain([owned(TSLA_ACCT, TSLAX, 0n)], {
+      [TSLA_ACCT]: [
+        { tx: move("S0", 1, 0n, 10n) },
+        { tx: atKamino("S1", 2, 10n, 0n) },
+        { tx: move("S2", 3, 0n, 6n) },
+        { tx: atKamino("S3", 4, 6n, 0n) },
+      ],
+    });
+    const r = await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet, pledged: pledgedOf(16n), cap: 2 },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(c.asked).toEqual(["S3", "S2"]);
+    expect(r).toMatchObject({ capped: 1, openingPledged: { [TSLA_ACCT]: "10" } });
+
+    await finishHistoryPass(s.db, {
+      walletId: s.walletId,
+      cursors: r.cursors,
+      openingPledged: r.openingPledged,
+      now: new Date(),
+      nextRunAfter: new Date(),
+    });
+    const [job] = await s.db.select().from(historyJobs).where(eq(historyJobs.walletId, s.walletId));
+    expect(job!.openingPledged).toEqual({ [TSLA_ACCT]: "10" });
+  });
+
+  it("waits, uncounted, when Kamino cannot be read, rather than read a pledged holding as sold", async () => {
+    const s = await seed();
+    const c = chain([owned(TSLA_ACCT, TSLAX, 0n)], { [TSLA_ACCT]: [{ tx: move("S1", 1, 0n, 10n) }] });
+    await expect(
+      readWallet(
+        {
+          db: s.db,
+          history: c.history,
+          listedMints: LISTED,
+          laneBusy: quiet,
+          pledged: async () => {
+            throw new Error("kamino 503");
+          },
+        },
+        { walletId: s.walletId, address: ME, cursors: {} },
+      ),
+    ).rejects.toBeInstanceOf(PledgeUnknown);
+    expect(c.asked).toEqual([]);
   });
 });
 

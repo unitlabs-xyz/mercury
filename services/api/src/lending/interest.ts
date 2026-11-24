@@ -23,11 +23,12 @@ export interface LedgerRow {
 /**
  * What was borrowed and not yet repaid, from the ledger, oldest row first.
  *
- * A repay comes off the principal rather than the interest. That keeps the
- * interest on screen until the loan is closed, which is when it is actually
- * paid: Kamino settles no interest on its own, it only grows the debt. A repay
- * of everything, or any row after which Kamino said nothing was owed, closes
- * the loan, and a later borrow starts a new one.
+ * A repay comes off the principal rather than the interest, and so does the
+ * debt a liquidation repaid. That keeps the interest on screen until the loan
+ * is closed, which is when it is actually paid: Kamino settles no interest on
+ * its own, it only grows the debt. A repay of everything, or any row after
+ * which Kamino said nothing was owed, closes the loan, and a later borrow
+ * starts a new one.
  *
  * Null when the ledger records no borrow at all. A debt it cannot account for
  * — a loan taken outside Mercury, or a confirm that never arrived — has no
@@ -42,6 +43,9 @@ export const outstandingPrincipal = (rows: readonly LedgerRow[]): Decimal | null
       borrowed = true;
     } else if (r.kind === "repay") {
       principal = r.usdAmount === null ? ZERO : Decimal.max(ZERO, principal.sub(r.usdAmount));
+    } else if (r.kind === "liquidation" && r.usdAmount !== null) {
+      // Kamino sold collateral and repaid the debt with it: a repayment the borrower didn't make.
+      principal = Decimal.max(ZERO, principal.sub(r.usdAmount));
     }
     if (r.debtAfterUsd.lte(0)) principal = ZERO;
   }

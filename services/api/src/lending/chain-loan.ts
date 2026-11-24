@@ -1,6 +1,7 @@
 import { D, toWire, type Decimal, ZERO } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { activities, loanEvents } from "../db/schema.js";
+import { notifyFor } from "../notify/inbox.js";
 import type { KaminoLoanDay, KaminoLoanTx } from "./kamino-loans.js";
 import { tokenText } from "./events.js";
 
@@ -15,7 +16,11 @@ export interface ChainLoanEvent {
   readonly kind: "pledge" | "unpledge" | "borrow" | "repay" | "liquidation";
   readonly signature: string;
   readonly occurredAt: Date;
-  /** Dollars borrowed or repaid, or what a liquidation took. Null on a pledge or withdrawal. */
+  /**
+   * Dollars borrowed or repaid. On a liquidation, the debt it cleared where
+   * Kamino says, else what the shares taken were worth. Null on a pledge or
+   * withdrawal.
+   */
   readonly usdAmount: Decimal | null;
   readonly ticker: string | null;
   readonly tokensRaw: string | null;
@@ -39,8 +44,17 @@ const KIND = {
 
 const money = (d: Decimal) => `$${d.toDecimalPlaces(2).toFixed(2)}`;
 
-/** How a row changes what is owed and what is pledged, in dollars at the time. */
-const delta = (t: KaminoLoanTx): { readonly debt: Decimal; readonly collateral: Decimal } => {
+/**
+ * How a row changes what is owed and what is pledged, in dollars at the time.
+ *
+ * A liquidation comes as two legs of one transaction: the debt it repaid, in
+ * the money lent, and the collateral it took. Each counts on its own side.
+ */
+const delta = (
+  t: KaminoLoanTx,
+  usdcMint: string,
+): { readonly debt: Decimal; readonly collateral: Decimal } => {
+  if (t.action === "liquidate" && t.mint === usdcMint) return { debt: t.valueUsd.neg(), collateral: ZERO };
   switch (t.action) {
     case "borrow":
       return { debt: t.valueUsd, collateral: ZERO };
@@ -70,6 +84,7 @@ const atLeastZero = (d: Decimal) => (d.lt(0) ? ZERO : d);
 export const positionsAfter = (
   txs: readonly KaminoLoanTx[],
   days: readonly KaminoLoanDay[],
+  usdcMint = "",
 ): readonly { readonly debt: Decimal; readonly collateral: Decimal }[] =>
   txs.map((t, i) => {
     const close = days.find((d) => d.at.getTime() >= t.at.getTime());
@@ -78,7 +93,7 @@ export const positionsAfter = (
       let collateral = close.collateralUsd;
       for (const later of txs.slice(i + 1)) {
         if (later.at.getTime() > close.at.getTime()) break;
-        const d = delta(later);
+        const d = delta(later, usdcMint);
         debt = debt.sub(d.debt);
         collateral = collateral.sub(d.collateral);
       }
@@ -89,7 +104,7 @@ export const positionsAfter = (
     let collateral = last?.collateralUsd ?? ZERO;
     for (const earlier of txs.slice(0, i + 1)) {
       if (last !== undefined && earlier.at.getTime() <= last.at.getTime()) continue;
-      const d = delta(earlier);
+      const d = delta(earlier, usdcMint);
       debt = debt.add(d.debt);
       collateral = collateral.add(d.collateral);
     }
@@ -112,11 +127,45 @@ export const planChainLoan = (
   stocks: ReadonlyMap<string, ListedStock>,
   usdcMint: string,
 ): readonly ChainLoanEvent[] => {
-  const after = positionsAfter(txs, days);
+  const after = positionsAfter(txs, days, usdcMint);
   const out: ChainLoanEvent[] = [];
   const seen = new Set<string>();
+  // A liquidation's debt leg, by transaction: what it repaid is what the shares were sold for.
+  const repaidBy = new Map<string, Decimal>();
+  for (const t of txs) {
+    if (t.action === "liquidate" && t.mint === usdcMint) {
+      repaidBy.set(t.signature, (repaidBy.get(t.signature) ?? ZERO).add(t.amount));
+    }
+  }
+  // A transaction whose collateral leg names a stock: its debt leg is told on that row.
+  const told = new Set(
+    txs
+      .filter((t) => t.action === "liquidate" && t.mint !== null && t.mint !== usdcMint)
+      .map((t) => t.signature),
+  );
   txs.forEach((t, i) => {
     if (t.action === "create" || t.mint === null) return;
+    if (t.action === "liquidate" && t.mint === usdcMint) {
+      if (told.has(t.signature) || seen.has(`${t.signature}:liquidation`)) return;
+      // Kamino named only the debt it repaid: still a liquidation, and still off the debt.
+      seen.add(`${t.signature}:liquidation`);
+      const repaid = repaidBy.get(t.signature)!;
+      out.push({
+        kind: "liquidation",
+        signature: t.signature,
+        occurredAt: t.at,
+        debtAfterUsd: after[i]!.debt,
+        collateralAfterUsd: after[i]!.collateral,
+        mint: t.mint,
+        usdAmount: repaid,
+        ticker: null,
+        tokensRaw: null,
+        priceUsd: null,
+        title: "Sold by Kamino",
+        subtitle: `Collateral sold to repay ${money(repaid)} of the loan`,
+      });
+      return;
+    }
     const kind = KIND[t.action];
     const key = `${t.signature}:${kind}`;
     if (seen.has(key)) return;
@@ -149,9 +198,10 @@ export const planChainLoan = (
     const tokensRaw = stock === undefined ? null : t.amount.mul(D(10).pow(stock.decimals)).floor().toFixed();
     const shares = tokensRaw === null ? t.amount.toString() : tokenText(tokensRaw, stock!.decimals);
     const at = t.priceUsd.gt(0) ? ` at ${money(t.priceUsd)}` : "";
+    const repaid = kind === "liquidation" ? (repaidBy.get(t.signature) ?? null) : null;
     out.push({
       ...base,
-      usdAmount: kind === "liquidation" ? t.valueUsd : null,
+      usdAmount: kind === "liquidation" ? (repaid ?? t.valueUsd) : null,
       ticker,
       tokensRaw,
       priceUsd: t.priceUsd.gt(0) ? t.priceUsd : null,
@@ -161,26 +211,44 @@ export const planChainLoan = (
           : kind === "unpledge"
             ? "Withdrew collateral"
             : "Sold by Kamino",
-      subtitle: `${shares} ${ticker}${at}`,
+      subtitle:
+        repaid === null
+          ? `${shares} ${ticker}${at}`
+          : `${shares} ${ticker}${at} · repaid ${money(repaid)} of the loan`,
     });
   });
   return out;
 };
 
+/** A liquidation just written that is news: the person is told, in the inbox here and by mail by the caller. */
+export interface NewLiquidation {
+  readonly event: ChainLoanEvent;
+  readonly activityId: string;
+}
+
 /**
  * Writes a loan's history to the ledger and the feed, marked as read from the
  * chain. Idempotent on the ledger's own key, so a row Mercury already recorded
  * (the wallet borrowed through Mercury) is kept as it was, and reading the
- * history again writes nothing. None of it is news: it already happened.
+ * history again writes nothing.
+ *
+ * Little of it is news: it already happened, mostly by the person's own hand.
+ * A liquidation is the exception. A bot sends it, so nothing in Mercury saw it
+ * coming in, and it is the one event in a loan that costs the person money
+ * without their doing anything. One at or after `newsSince` goes to the inbox,
+ * in the same transaction as its feed row, and is returned for the caller to
+ * mail. Older ones (a wallet's past, read when it was linked) stay quiet.
  */
 export async function recordChainLoan(
   db: Db,
   owner: { readonly userId: string; readonly walletId: string },
   events: readonly ChainLoanEvent[],
-): Promise<{ written: number }> {
-  if (events.length === 0) return { written: 0 };
+  newsSince: Date | null = null,
+): Promise<{ written: number; liquidations: readonly NewLiquidation[] }> {
+  if (events.length === 0) return { written: 0, liquidations: [] };
   return db.transaction(async (tx) => {
     let written = 0;
+    const liquidations: NewLiquidation[] = [];
     for (const e of events) {
       const [row] = await tx
         .insert(loanEvents)
@@ -203,7 +271,7 @@ export async function recordChainLoan(
         .returning({ id: loanEvents.id });
       if (row === undefined) continue;
       written += 1;
-      await tx
+      const [feed] = await tx
         .insert(activities)
         .values({
           userId: owner.userId,
@@ -218,8 +286,18 @@ export async function recordChainLoan(
           txSignature: e.signature,
           mint: e.mint,
         })
-        .onConflictDoNothing();
+        .onConflictDoNothing()
+        .returning({ id: activities.id });
+      if (
+        e.kind === "liquidation" &&
+        feed !== undefined &&
+        newsSince !== null &&
+        e.occurredAt.getTime() >= newsSince.getTime()
+      ) {
+        await notifyFor(tx, owner.userId, [{ activityId: feed.id, kind: "loan_alert" }]);
+        liquidations.push({ event: e, activityId: feed.id });
+      }
     }
-    return { written };
+    return { written, liquidations };
   });
 }

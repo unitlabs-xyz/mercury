@@ -4,6 +4,9 @@ import { instruments, tokens } from "../db/schema.js";
 import type { LendingSource } from "../lending/ports.js";
 import type { KaminoLoans } from "../lending/kamino-loans.js";
 import { planChainLoan, recordChainLoan, type ListedStock } from "../lending/chain-loan.js";
+import { settleLiquidations } from "../lending/liquidation-pnl.js";
+import { liquidationNewsSince, mailLiquidations } from "../lending/liquidation-news.js";
+import type { Notifier } from "../notify/ports.js";
 
 export interface LoanHistoryDeps {
   readonly db: Db;
@@ -13,15 +16,18 @@ export interface LoanHistoryDeps {
   /** The xStocks lending market the loan is in. */
   readonly market: string;
   readonly usdcMint: string;
+  /** Mails a liquidation that is news. Absent, it is still in the feed and the inbox. */
+  readonly notifier?: Notifier;
+  readonly now?: () => Date;
 }
 
 export type LoanHistoryResult =
   | { readonly kind: "none" }
   | { readonly kind: "unavailable" }
-  | { readonly kind: "read"; readonly written: number };
+  | { readonly kind: "read"; readonly written: number; readonly liquidations: number };
 
 /**
- * A linked wallet's loan, read into the ledger from Kamino: when it was
+ * A wallet's loan, read into the ledger from Kamino: when it was
  * opened, each pledge at its price then, each withdrawal, borrow and repay,
  * and anything Kamino sold. With every borrow and repay in the ledger, the
  * loan screen splits the debt into what was borrowed and the interest, as it
@@ -54,6 +60,15 @@ export async function readLoanHistory(
   );
   // Without the daily closes, each row's position is worked forward from nothing, which is still right in total.
   const events = planChainLoan(txs, days ?? [], stocks, deps.usdcMint);
-  const { written } = await recordChainLoan(deps.db, wallet, events);
-  return { kind: "read", written };
+  const now = deps.now?.() ?? new Date();
+  const { written, liquidations } = await recordChainLoan(
+    deps.db,
+    wallet,
+    events,
+    await liquidationNewsSince(deps.db, wallet.walletId, now),
+  );
+  // A liquidation is a sale: what it realised, once the shares' cost is known.
+  await settleLiquidations(deps.db, wallet.walletId);
+  await mailLiquidations(deps.db, deps.notifier, wallet.userId, wallet.walletId, liquidations);
+  return { kind: "read", written, liquidations: liquidations.length };
 }

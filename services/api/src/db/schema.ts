@@ -834,6 +834,12 @@ export const loanEvents = pgTable(
      * "Pledged 10 TSLAx at $240.10". Null where nobody recorded it.
      */
     priceUsd: usd("price_usd"),
+    /**
+     * On a liquidation: what Kamino sold the shares for, less what they had
+     * cost. A liquidation is a sale, so this is realised P&L, counted with the
+     * sells'. Null until the shares' cost is known, and on every other kind.
+     */
+    realisedPnlUsd: usd("realised_pnl_usd"),
     originSource: originSource(),
     txSignature: text("tx_signature").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
@@ -1064,6 +1070,13 @@ export const historyJobs = pgTable(
      * account and the loan account). An account with no entry has not been read.
      */
     cursors: jsonb("cursors").$type<Record<string, string>>().notNull().default({}),
+    /**
+     * Per token account whose first read stopped at its cap while shares were
+     * pledged to Kamino: how many were pledged just before the oldest
+     * transaction read, in raw units. Held then, so the cost pass prices them
+     * into the opening balance with the wallet's own.
+     */
+    openingPledged: jsonb("opening_pledged").$type<Record<string, string>>().notNull().default({}),
     attempts: integer("attempts").notNull().default(0),
     /** Not before this. Set further out after a failure, so a broken wallet does not spin. */
     runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),

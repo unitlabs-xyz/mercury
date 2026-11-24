@@ -60,7 +60,7 @@ describe("readLoanHistory", () => {
       },
       s.wallet,
     );
-    expect(r).toEqual({ kind: "read", written: 1 });
+    expect(r).toEqual({ kind: "read", written: 1, liquidations: 0 });
     expect(asked).toEqual(["Market/Obligation1"]);
     const [feed] = await s.db.select().from(activities).where(eq(activities.walletId, s.wallet.walletId));
     expect([feed!.title, feed!.subtitle]).toEqual(["Added collateral", "10 TSLA at $240.10"]);
@@ -103,7 +103,7 @@ describe("readLoanHistory", () => {
       },
       s.wallet,
     );
-    expect(r).toEqual({ kind: "read", written: 1 });
+    expect(r).toEqual({ kind: "read", written: 1, liquidations: 0 });
     const [row] = await s.db.select().from(loanEvents);
     expect(D(row!.collateralAfterUsd).toString()).toBe("2401");
   });

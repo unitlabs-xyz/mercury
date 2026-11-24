@@ -147,6 +147,61 @@ describe("planChainLoan", () => {
     ]);
   });
 
+  it("tells a liquidation's two legs as one sale: the shares taken, and the debt they repaid", () => {
+    const repaid = tx("liquidate", "2026-05-01T00:00:00Z", {
+      mint: USDC,
+      symbol: "USDC",
+      amount: "570",
+      price: "1",
+      value: "570",
+    });
+    const taken = {
+      ...tx("liquidate", "2026-05-01T00:00:00Z", { amount: "4", price: "150", value: "600" }),
+      signature: repaid.signature,
+    };
+    const rows = planChainLoan([repaid, taken], [], STOCKS, USDC);
+    expect(
+      rows.map((r) => [r.kind, r.ticker, r.tokensRaw, r.usdAmount?.toString(), r.mint, r.subtitle]),
+    ).toEqual([
+      ["liquidation", "TSLA", "400000000", "570", TSLAX, "4 TSLA at $150.00 · repaid $570.00 of the loan"],
+    ]);
+  });
+
+  it("takes what a liquidation repaid off the debt, and what it took off the collateral", () => {
+    const borrow = tx("borrow", "2026-04-01T00:00:00Z", { amount: "570", value: "570" });
+    const pledge = tx("deposit", "2026-04-01T00:00:00Z", { amount: "10", value: "2000" });
+    const repaid = tx("liquidate", "2026-05-01T00:00:00Z", {
+      mint: USDC,
+      symbol: "USDC",
+      amount: "570",
+      value: "570",
+    });
+    const taken = {
+      ...tx("liquidate", "2026-05-01T00:00:00Z", { amount: "4", value: "600" }),
+      signature: repaid.signature,
+    };
+    expect(fixed(positionsAfter([pledge, borrow, repaid, taken], [], USDC)).at(-1)).toEqual([
+      "0.00",
+      "1400.00",
+    ]);
+  });
+
+  it("still records a liquidation Kamino names only by the debt it repaid", () => {
+    const repaid = tx("liquidate", "2026-05-01T00:00:00Z", {
+      mint: USDC,
+      symbol: "USDC",
+      amount: "570",
+      value: "570",
+    });
+    const [row] = planChainLoan([repaid], [], STOCKS, USDC);
+    expect([row!.kind, row!.ticker, row!.usdAmount?.toString(), row!.subtitle]).toEqual([
+      "liquidation",
+      null,
+      "570",
+      "Collateral sold to repay $570.00 of the loan",
+    ]);
+  });
+
   it("names collateral Mercury doesn't list by Kamino's symbol, with no token count it can't scale", () => {
     const [row] = planChainLoan(
       [
@@ -217,7 +272,7 @@ describe("recordChainLoan", () => {
   it("writes the ledger and the feed, marked as read from the chain, and tells nobody", async () => {
     const { db, owner } = await seed();
     const rows = loan();
-    expect(await recordChainLoan(db, owner, rows)).toEqual({ written: 3 });
+    expect(await recordChainLoan(db, owner, rows)).toEqual({ written: 3, liquidations: [] });
 
     const ledger = await db.select().from(loanEvents).where(eq(loanEvents.walletId, owner.walletId));
     expect(ledger.map((r) => [r.kind, r.originSource])).toEqual([
@@ -255,8 +310,8 @@ describe("recordChainLoan", () => {
       txSignature: rows[1]!.signature,
       occurredAt: rows[1]!.occurredAt,
     });
-    expect(await recordChainLoan(db, owner, rows)).toEqual({ written: 2 });
-    expect(await recordChainLoan(db, owner, rows)).toEqual({ written: 0 });
+    expect(await recordChainLoan(db, owner, rows)).toEqual({ written: 2, liquidations: [] });
+    expect(await recordChainLoan(db, owner, rows)).toEqual({ written: 0, liquidations: [] });
     const [borrow] = await db
       .select()
       .from(loanEvents)
@@ -264,8 +319,62 @@ describe("recordChainLoan", () => {
     expect([borrow!.originSource, D(borrow!.borrowApy!).toString()]).toEqual(["mercury", "0.058"]);
   });
 
+  const liquidated = () => {
+    const repaid = tx("liquidate", "2026-05-01T00:00:00Z", {
+      mint: USDC,
+      symbol: "USDC",
+      amount: "300",
+      value: "300",
+    });
+    const taken = {
+      ...tx("liquidate", "2026-05-01T00:00:00Z", { amount: "2", price: "160", value: "320" }),
+      signature: repaid.signature,
+    };
+    return planChainLoan(
+      [
+        tx("deposit", "2026-03-01T10:00:00Z", { amount: "10", price: "240.1", value: "2401" }),
+        tx("borrow", "2026-03-01T11:00:00Z", { amount: "350", value: "349.95" }),
+        repaid,
+        taken,
+      ],
+      [],
+      STOCKS,
+      USDC,
+    );
+  };
+
+  it("puts a liquidation that is news in the inbox, with its feed row, and returns it to be mailed", async () => {
+    const { db, owner } = await seed();
+    const rows = liquidated();
+    const r = await recordChainLoan(db, owner, rows, at("2026-04-30T00:00:00Z"));
+    expect(r.liquidations.map((l) => [l.event.kind, l.event.subtitle])).toEqual([
+      ["liquidation", "2 TSLA at $160.00 · repaid $300.00 of the loan"],
+    ]);
+    const told = await db.select().from(notifications);
+    expect(told.map((n) => [n.kind, n.activityId])).toEqual([["loan_alert", r.liquidations[0]!.activityId]]);
+    // Read again, it is told no second time.
+    expect((await recordChainLoan(db, owner, rows, at("2026-04-30T00:00:00Z"))).liquidations).toEqual([]);
+    expect(await db.select().from(notifications)).toHaveLength(1);
+  });
+
+  it("keeps a liquidation from the wallet's past quiet: in the feed, not the inbox", async () => {
+    const { db, owner } = await seed();
+    const r = await recordChainLoan(db, owner, liquidated(), at("2026-05-02T00:00:00Z"));
+    expect(r.liquidations).toEqual([]);
+    expect(await db.select().from(notifications)).toEqual([]);
+    const feed = await db.select().from(activities).where(eq(activities.kind, "liquidation"));
+    expect(feed.map((a) => a.title)).toEqual(["Sold by Kamino"]);
+  });
+
+  it("takes the debt a liquidation repaid off what was borrowed, so the interest is still the interest", async () => {
+    const { db, owner } = await seed();
+    await recordChainLoan(db, owner, liquidated());
+    // $350 borrowed, $300 of it repaid by Kamino's sale.
+    expect(outstandingPrincipal(await loanLedger(db, owner))?.toString()).toBe("50");
+  });
+
   it("writes nothing for a loan with no rows", async () => {
     const { db, owner } = await seed();
-    expect(await recordChainLoan(db, owner, [])).toEqual({ written: 0 });
+    expect(await recordChainLoan(db, owner, [])).toEqual({ written: 0, liquidations: [] });
   });
 });

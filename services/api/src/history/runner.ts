@@ -6,9 +6,10 @@ import type { Log } from "../log/index.js";
 import { errorLine } from "../log.js";
 import { RateLimited, REFUSAL_PAUSE_MS } from "./budget.js";
 import { claimHistoryJob, deferHistoryPass, failHistoryPass, finishHistoryPass } from "./queue.js";
-import { GiveWay, readWallet, type ReaderDeps } from "./reader.js";
+import { GiveWay, PledgeUnknown, readWallet, type ReaderDeps } from "./reader.js";
 import { costWallet, walletToCost, type CostDeps } from "./cost.js";
 import { readLoanHistory, type LoanHistoryDeps } from "./loan.js";
+import { settleLiquidations } from "../lending/liquidation-pnl.js";
 
 /**
  * When a wallet's next later pass is due, by how recently anyone looked at
@@ -59,6 +60,7 @@ export const historyPass = (deps: HistoryRunDeps) => async (): Promise<string | 
     await finishHistoryPass(deps.db, {
       walletId: job.walletId,
       cursors: r.cursors,
+      openingPledged: r.openingPledged,
       now: done,
       nextRunAfter: new Date(done.getTime() + nextPassIn(wallet.lastViewedAt, done.getTime())),
     });
@@ -78,14 +80,17 @@ export const historyPass = (deps: HistoryRunDeps) => async (): Promise<string | 
     if (!first && r.transactions === 0 && loan === 0) return null;
     return `${first ? "first read" : "later pass"}: ${r.transactions} transactions, ${r.events} events across ${r.accounts} accounts${loan > 0 ? `, ${loan} loan events` : ""}`;
   } catch (error: unknown) {
-    if (error instanceof RateLimited || error instanceof GiveWay) {
+    // Kamino unreadable is a wait too: without the pledge, a pledged holding would be read as sold.
+    if (error instanceof RateLimited || error instanceof GiveWay || error instanceof PledgeUnknown) {
       await deferHistoryPass(deps.db, {
         walletId: job.walletId,
         until: new Date(now() + REFUSAL_PAUSE_MS),
       });
       return error instanceof RateLimited
         ? "paused: the node refused the reader"
-        : "gave way to the jobs' lane";
+        : error instanceof GiveWay
+          ? "gave way to the jobs' lane"
+          : "paused: Kamino could not be read";
     }
     await failHistoryPass(deps.db, { walletId: job.walletId, error: errorLine(error), now: new Date(now()) });
     throw error;
@@ -167,6 +172,8 @@ export const costPass = (
         new Date(t),
       );
       failing.delete(walletId);
+      // With the wallet's lots in place, a liquidation read before them can say what it realised.
+      if (r.ready) await settleLiquidations(deps.db, walletId);
       if (r.lots === 0 && r.dividends === 0 && !r.ready) return null;
       return `${r.ready ? "first costing" : "later costing"}: ${r.lots} lots, ${r.dividends} dividends from ${r.costed} movements`;
     } catch (error: unknown) {
