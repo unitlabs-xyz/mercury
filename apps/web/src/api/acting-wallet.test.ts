@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { actingLabel, actionBlockedCopy, canAct, readsForChoice, resolveChoice } from "./acting-wallet";
+import {
+  ALL_WALLETS,
+  actingLabel,
+  actionBlockedCopy,
+  canAct,
+  connectWhenChosen,
+  readsForChoice,
+  resolveChoice,
+} from "./acting-wallet";
 import type { AccountWallet } from "./wallets";
 
 const wallet = (over: Partial<AccountWallet>): AccountWallet => ({
@@ -119,9 +127,32 @@ describe("the remembered choice", () => {
     };
   };
 
+  it("starts a new visit on the Mercury wallet, whatever an older build kept for the browser", async () => {
+    // What earlier builds kept across visits; this one keeps the choice for the session alone.
+    vi.stubGlobal("localStorage", storage({ "mercury.wallet": "phantom" }));
+    vi.stubGlobal("sessionStorage", storage());
+    vi.resetModules();
+    const choice = await import("./wallet-choice");
+    expect(choice.chosenWallet()).toBeNull();
+  });
+
+  it("forgets the choice on sign-out, here and wherever an older build kept it", async () => {
+    const session = storage({ "mercury.wallet": "phantom" });
+    const local = storage({ "mercury.wallet": "phantom" });
+    vi.stubGlobal("sessionStorage", session);
+    vi.stubGlobal("localStorage", local);
+    vi.resetModules();
+    const choice = await import("./wallet-choice");
+    expect(choice.chosenWallet()).toBe("phantom");
+    choice.forgetChosenWallet();
+    expect(choice.chosenWallet()).toBeNull();
+    expect(session.items.has("mercury.wallet")).toBe(false);
+    expect(local.items.has("mercury.wallet")).toBe(false);
+  });
+
   it("comes back from the browser, and is kept and forgotten there", async () => {
     const store = storage({ "mercury.wallet": "phantom" });
-    vi.stubGlobal("localStorage", store);
+    vi.stubGlobal("sessionStorage", store);
     vi.resetModules();
     const choice = await import("./wallet-choice");
     expect(choice.chosenWallet()).toBe("phantom");
@@ -138,7 +169,7 @@ describe("the remembered choice", () => {
   });
 
   it("is the Mercury wallet, and still works for the tab, when the browser keeps nothing", async () => {
-    vi.stubGlobal("localStorage", {
+    vi.stubGlobal("sessionStorage", {
       getItem: () => {
         throw new Error("blocked");
       },
@@ -158,7 +189,7 @@ describe("the remembered choice", () => {
 
   it("chooses the wallet a phone's link names, then takes it out of the address", async () => {
     const store = storage();
-    vi.stubGlobal("localStorage", store);
+    vi.stubGlobal("sessionStorage", store);
     vi.resetModules();
     const choice = await import("./wallet-choice");
     const replaced: string[] = [];
@@ -180,7 +211,7 @@ describe("the remembered choice", () => {
   });
 
   it("leaves the choice and the address alone when the link names no wallet", async () => {
-    vi.stubGlobal("localStorage", storage({ "mercury.wallet": "phantom" }));
+    vi.stubGlobal("sessionStorage", storage({ "mercury.wallet": "phantom" }));
     vi.resetModules();
     const choice = await import("./wallet-choice");
     const replaced: string[] = [];
@@ -212,5 +243,48 @@ describe("readsForChoice", () => {
 
   it("leaves anything that is not an API read alone", () => {
     expect(readsForChoice(["prices", "AAPL"])).toBe(false);
+  });
+});
+
+describe("connectWhenChosen", () => {
+  const loader = (fail = false) => {
+    const asked: [string, string][] = [];
+    return {
+      asked,
+      load: async () => ({
+        connectLinked: async (address: string, name: string) => {
+          asked.push([address, name]);
+          if (fail) throw new Error("declined");
+        },
+      }),
+    };
+  };
+
+  it("asks a linked wallet to connect when it is chosen, by its own address and name", async () => {
+    const l = loader();
+    await connectWhenChosen(PHANTOM.id, WALLETS, l.load);
+    expect(l.asked).toEqual([[PHANTOM.address, "Phantom"]]);
+  });
+
+  it("connects nothing for the Mercury wallet, every wallet at once, or a wallet not on the account", async () => {
+    const l = loader();
+    await connectWhenChosen(null, WALLETS, l.load);
+    await connectWhenChosen(ALL_WALLETS, WALLETS, l.load);
+    await connectWhenChosen(MERCURY.id, WALLETS, l.load);
+    await connectWhenChosen("someone-elses", WALLETS, l.load);
+    expect(l.asked).toEqual([]);
+  });
+
+  it("loads nothing at all unless a linked wallet is chosen", async () => {
+    let loaded = 0;
+    await connectWhenChosen(null, WALLETS, async () => {
+      loaded += 1;
+      return { connectLinked: async () => undefined };
+    });
+    expect(loaded).toBe(0);
+  });
+
+  it("lets a declined connection pass: the wallet is still shown, and signing asks again", async () => {
+    await expect(connectWhenChosen(PHANTOM.id, WALLETS, loader(true).load)).resolves.toBeUndefined();
   });
 });

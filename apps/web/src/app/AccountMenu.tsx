@@ -8,6 +8,7 @@ import { Button } from "../ui/Button";
 import { useUsdcAck } from "./usdcAck";
 import { openFeedback } from "./Feedback";
 import { usd } from "@mercury/view";
+import { forgetChosenWallet } from "../api/wallet-choice";
 import { Skeleton } from "./portfolio/ui";
 
 const short = (a: string) => (a.length > 10 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a);
@@ -209,6 +210,8 @@ export const AccountMenu = () => {
                 type="button"
                 onClick={() => {
                   setOpen(false);
+                  // The next sign-in starts on the Mercury wallet, whatever was chosen in this one.
+                  forgetChosenWallet();
                   void logout();
                 }}
                 className={`${row} text-ds-muted hover:text-ds-ink`}

@@ -67,6 +67,13 @@ const ensureConnected = async (address: string, name: string): Promise<void> => 
 };
 
 /**
+ * Connect the linked wallet now, as somebody chooses it: the wallet's own
+ * dialog, once, and AppKit keeps the connection for later. Choosing is what
+ * asks; nothing connects a linked wallet before somebody picks it.
+ */
+export const connectLinked = (address: string, name: string): Promise<void> => ensureConnected(address, name);
+
+/**
  * One transaction signed by a linked wallet, in its own pop-up.
  *
  * Signed only, never sent: Mercury's relayer pays the network fee, co-signs

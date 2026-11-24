@@ -82,6 +82,35 @@ export const actionBlockedCopy = (acting: Acting, what: BlockedAction = "action"
 export const readsForChoice = (key: readonly unknown[]): boolean =>
   key[0] === "api" && key[1] !== WALLETS_KEY[1] && key[1] !== "summary" && key[2] !== ALL_WALLETS;
 
+/** What connecting a linked wallet needs, loaded only when one is chosen. */
+type Connector = { connectLinked(address: string, name: string): Promise<void> };
+
+/**
+ * When somebody explicitly chooses a linked wallet, ask it to connect then:
+ * its own dialog opens now rather than in the middle of their first trade,
+ * and the connection is kept after. The Mercury wallet and every wallet at
+ * once connect nothing, so a linked wallet's dialog is only ever seen by
+ * someone who chose that wallet.
+ *
+ * Nothing waits on it and nothing fails with it: closing the dialog still
+ * shows the wallet, which needs no connection to be looked at, and signing
+ * asks again. AppKit is loaded only here, as the bundle rule requires.
+ */
+export const connectWhenChosen = async (
+  next: WalletChoice,
+  wallets: readonly AccountWallet[],
+  load: () => Promise<Connector> = () => import("../wallet/linkedSigner"),
+): Promise<void> => {
+  if (next === null || next === ALL_WALLETS) return;
+  const wallet = wallets.find((w) => w.id === next && !w.isPrimary);
+  if (wallet === undefined) return;
+  try {
+    await (await load()).connectLinked(wallet.address, walletName(wallet));
+  } catch {
+    // Declined, or another wallet connected: said when it is asked to sign.
+  }
+};
+
 /** The chosen wallet, resolved, and a way to choose another. */
 export const useActingWallet = () => {
   const chosen = useSyncExternalStore(subscribeChoice, chosenWallet, chosenWallet);
@@ -105,6 +134,8 @@ export const useActingWallet = () => {
      */
     const forChoice = { predicate: (q: { queryKey: readonly unknown[] }) => readsForChoice(q.queryKey) };
     void qc.cancelQueries(forChoice).then(() => qc.resetQueries(forChoice));
+    // Chosen on purpose: a linked wallet asks to connect now, once.
+    void connectWhenChosen(next, account.data?.wallets ?? []);
   };
 
   const wallets = account.data?.wallets ?? [];

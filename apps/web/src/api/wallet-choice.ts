@@ -4,8 +4,12 @@
  *
  * Sent to the server on every request as `X-Mercury-Wallet`, so one choice
  * picks the wallet for every read: there is no query parameter to keep in step
- * with it. Remembered per browser, because it is how somebody left the app
- * rather than anything about their account.
+ * with it.
+ *
+ * Kept for the browser session only, and cleared on sign-out: a reload keeps
+ * the wallet chosen, and a new visit starts on the Mercury wallet, whatever
+ * was chosen last time. A linked wallet is shown, and asked to sign, only
+ * when somebody chooses it, never because they left it chosen days ago.
  */
 import { WALLET_PARAM, walletFromSearch } from "@mercury/view";
 
@@ -23,7 +27,7 @@ const KEY = "mercury.wallet";
  */
 const load = (): WalletChoice => {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = sessionStorage.getItem(KEY);
     return raw === null || raw.length === 0 ? null : raw;
   } catch {
     return null;
@@ -40,8 +44,8 @@ export const setChosenWallet = (next: WalletChoice) => {
   if (next === choice) return;
   choice = next;
   try {
-    if (next === null) localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, next);
+    if (next === null) sessionStorage.removeItem(KEY);
+    else sessionStorage.setItem(KEY, next);
   } catch {
     // Kept for this tab only.
   }
@@ -77,4 +81,18 @@ export const adoptWalletFromUrl = (
     "",
     `${location.pathname}${query === "" ? "" : `?${query}`}${location.hash}`,
   );
+};
+
+/**
+ * Back to the Mercury wallet, and the choice forgotten: on sign-out, so the
+ * next person, or the next visit, starts where everyone does. Clears what an
+ * older build kept for the browser too, which would otherwise outlive this.
+ */
+export const forgetChosenWallet = () => {
+  setChosenWallet(null);
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // Nothing kept there to forget.
+  }
 };
