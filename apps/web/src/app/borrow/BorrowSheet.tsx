@@ -21,6 +21,8 @@ import { TipLine } from "../review";
 import { LoanMeter, loanNow, loanShape } from "../money/LoanMeter";
 import { Skeleton, SkeletonRows } from "../portfolio/ui";
 import { Fact, RailLine } from "../stock/Panels";
+import { continueIn } from "../../api/signer-rules";
+import { ApproveIn } from "../ApproveIn";
 import { chip } from "../stock/Ticket";
 
 export type Tab = BorrowTab;
@@ -399,14 +401,17 @@ export const BorrowSheet = ({
               onClick={() => intent && action.mutate(intent)}
               className="mt-6 w-full"
             >
-              {tab === "borrow"
-                ? `Borrow ${value > 0 ? usd(value) : ""}`.trim()
-                : tab === "repay"
-                  ? `Repay ${value > 0 ? usd(value) : ""}`.trim()
-                  : tab === "pledge"
-                    ? "Add collateral"
-                    : "Withdraw"}
+              {action.approver !== null
+                ? continueIn(action.approver)
+                : tab === "borrow"
+                  ? `Borrow ${value > 0 ? usd(value) : ""}`.trim()
+                  : tab === "repay"
+                    ? `Repay ${value > 0 ? usd(value) : ""}`.trim()
+                    : tab === "pledge"
+                      ? "Add collateral"
+                      : "Withdraw"}
             </Button>
+            <ApproveIn approver={action.approver} />
             {/* Opening the Kamino account is Mercury's to pay. The relayer covers its
                 rent inside this same transaction, so it is paid only if this lands. */}
             {b.obligation === null && (tab === "borrow" || tab === "pledge") && (

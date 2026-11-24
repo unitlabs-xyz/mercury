@@ -1,10 +1,9 @@
-import { useSignTransaction } from "@privy-io/react-auth/solana";
-import { useEmbeddedWallet } from "../auth/embedded";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
 import { refreshAfterChain } from "./settle";
 import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { useTransactionSigner } from "./signer";
 import { reasonOf, runSteps } from "../app/earn/moves";
 
 const KIND = "earn";
@@ -233,8 +232,8 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
  */
 export const useEarnAction = () => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signTransaction } = useSignTransaction();
+  // The wallet chosen signs: the Mercury wallet through Privy, a linked one in its own pop-up.
+  const signer = useTransactionSigner();
 
   const mutation = useMutation({
     mutationFn: async ({ intents }: { intents: EarnStep[] }) => ({
@@ -245,8 +244,7 @@ export const useEarnAction = () => {
             body: JSON.stringify(intent),
           }),
         signAndSend: async (tx) => {
-          if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
-          const { signedTransaction } = await signTransaction({ transaction: toBytes(tx), wallet });
+          const signedTransaction = await signer.sign(toBytes(tx));
           const sent = await apiFetch<{ signature: string; status: string; error?: string | null }>(
             "/v1/transactions/send",
             { method: "POST", body: JSON.stringify({ transaction: toBase64(signedTransaction) }) },
@@ -271,7 +269,7 @@ export const useEarnAction = () => {
     onSettled: () => refreshAfterChain(qc),
   });
 
-  return { ...mutation, walletReady: wallet !== undefined };
+  return { ...mutation, walletReady: signer.walletReady, approver: signer.approver };
 };
 
 /**

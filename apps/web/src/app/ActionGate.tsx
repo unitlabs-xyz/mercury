@@ -7,7 +7,9 @@ import { ChevronRight } from "../ui/icons";
 
 /**
  * Stands in for an action's sheet while the chosen wallet cannot take it:
- * every wallet at once is for looking, and a linked wallet cannot act yet.
+ * every wallet at once is for looking, and a linked wallet cannot run a
+ * basket yet (its Glider account is the Mercury wallet's). Everything else a
+ * linked wallet does itself, approving each step in its own pop-up.
  *
  * Opened and closed exactly as the sheet would be, so every place that opens
  * one opens this instead without knowing. Switching to the Mercury wallet
@@ -15,10 +17,8 @@ import { ChevronRight } from "../ui/icons";
  * along. The server refuses the same requests; this is so nobody fills in a
  * form only to be told no at the end.
  *
- * A loan is the exception to switching: it is one wallet's own position, so
- * the Mercury wallet would show a different loan. A linked wallet's loan says
- * repaying it here is coming (step 8 builds the transaction for that wallet
- * to sign); every wallet at once asks whose loan is meant.
+ * A loan is the exception to switching to the Mercury wallet: it is one
+ * wallet's own position, so every wallet at once asks whose loan is meant.
  */
 export const ActionGate = ({
   open,
@@ -39,22 +39,14 @@ export const ActionGate = ({
     <SidePanel open={open} onClose={onClose} labelledBy="action-gate-title">
       <PanelHeader
         id="action-gate-title"
-        title={
-          what === "loan" && acting.kind === "linked"
-            ? `Repaying from ${walletName(acting.wallet)} is coming soon`
-            : "Switch wallets to continue"
-        }
+        title="Switch wallets to continue"
         sub={`Showing ${actingLabel(acting)}`}
         onClose={onClose}
       />
       <div className="flex flex-col gap-5 px-6 pt-6 pb-8">
         <p className="text-[14px] leading-[1.45] text-ds-muted text-pretty">{blocked}</p>
 
-        {what === "loan" && acting.kind === "linked" ? (
-          <Button variant="secondary" size="lg" onClick={() => choose(null)}>
-            Show your Mercury wallet's loan instead
-          </Button>
-        ) : what === "loan" && acting.kind === "all" ? (
+        {what === "loan" && acting.kind === "all" ? (
           <ul className="flex flex-col gap-1.5">
             {wallets.map((w) => (
               <li key={w.id}>

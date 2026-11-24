@@ -108,9 +108,16 @@ const built = walletConnectConfigured
           onramp: false,
         },
       };
-      createAppKit(options as unknown as Parameters<typeof createAppKit>[0]);
-      return { wagmiConfig: wagmi.wagmiConfig };
+      const kit = createAppKit(options as unknown as Parameters<typeof createAppKit>[0]);
+      return { wagmiConfig: wagmi.wagmiConfig, kit };
     })()
   : null;
 
 export const wagmiConfig = built?.wagmiConfig ?? null;
+
+/**
+ * The AppKit instance, for code that is not a component: the linked wallet
+ * signer asks it which Solana wallet is connected, opens it to connect one,
+ * and asks that wallet to sign. Null when no project ID is configured.
+ */
+export const appKit = built?.kit ?? null;

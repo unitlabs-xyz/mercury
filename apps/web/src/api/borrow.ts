@@ -1,5 +1,3 @@
-import { useSignTransaction } from "@privy-io/react-auth/solana";
-import { useEmbeddedWallet } from "../auth/embedded";
 import { useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
@@ -7,6 +5,7 @@ import { useSignedIn } from "./hooks";
 import { ALL_WALLETS, chosenWallet, subscribeChoice } from "./wallet-choice";
 import { refreshAfterChain } from "./settle";
 import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { useTransactionSigner } from "./signer";
 import { borrowFromWire, type BorrowIntent, type BorrowWire } from "@mercury/view";
 
 /* The position's shape and its reading off the wire are shared with the phone. */
@@ -45,12 +44,11 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
  */
 export const useBorrowAction = () => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signTransaction } = useSignTransaction();
+  // The wallet chosen signs: the Mercury wallet through Privy, a linked one in its own pop-up.
+  const signer = useTransactionSigner();
 
   const mutation = useMutation({
     mutationFn: async (intent: BorrowIntent) => {
-      if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
       const built = await apiFetch<{ transactions: string[]; firstTime: boolean }>(
         "/v1/borrow/transactions",
         {
@@ -60,7 +58,7 @@ export const useBorrowAction = () => {
       );
       const signatures: string[] = [];
       for (const tx of built.transactions) {
-        const { signedTransaction } = await signTransaction({ transaction: toBytes(tx), wallet });
+        const signedTransaction = await signer.sign(toBytes(tx));
         const sent = await apiFetch<{
           signature: string;
           status: string;
@@ -115,7 +113,7 @@ export const useBorrowAction = () => {
 
   /* Same race the buy sheet waits out: Privy fills the wallet list a beat
      after load, and an empty list there is not a missing wallet. */
-  const walletReady = wallet !== undefined;
+  const walletReady = signer.walletReady;
 
   /* Loans whose confirm the node was too slow to answer. Nothing else records one. */
   usePendingConfirms<SentLoan>(KIND, confirmSentLoan, {
@@ -123,5 +121,5 @@ export const useBorrowAction = () => {
     onSettled: () => refreshAfterChain(qc),
   });
 
-  return { ...mutation, walletReady };
+  return { ...mutation, walletReady, approver: signer.approver };
 };

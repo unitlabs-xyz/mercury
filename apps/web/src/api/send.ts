@@ -1,8 +1,7 @@
-import { useSignTransaction } from "@privy-io/react-auth/solana";
-import { useEmbeddedWallet } from "../auth/embedded";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { sendUsdc, type SendIntent, type SendQuote, type SendReceipt } from "@mercury/view";
+import { useTransactionSigner } from "./signer";
 import { refreshAfterChain } from "./settle";
 
 /* The sequence and its uncertainty rule are shared with the phone: @mercury/view's send.ts. */
@@ -43,12 +42,12 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
 export const useSendAction = () => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signTransaction } = useSignTransaction();
+  // The wallet chosen signs: the Mercury wallet through Privy, a linked one in its own pop-up.
+  const signer = useTransactionSigner();
 
   const action = useMutation<SendReceipt, Error, SendIntent>({
     mutationFn: async (intent) => {
-      if (wallet === undefined) throw new Error("Your wallet is not ready to sign yet.");
+      if (!signer.walletReady) throw new Error("Your wallet is not ready to sign yet.");
       return sendUsdc(
         {
           prepare: async (request) => {
@@ -59,8 +58,7 @@ export const useSendAction = () => {
             return built.transaction;
           },
           sign: async (transaction) => {
-            const signed = await signTransaction({ transaction: toBytes(transaction), wallet });
-            return toBase64(signed.signedTransaction);
+            return toBase64(await signer.sign(toBytes(transaction)));
           },
           submit: (transaction) =>
             apiFetch<SendReceipt>("/v1/transactions/send", {
@@ -76,5 +74,5 @@ export const useSendAction = () => {
     onSettled: () => refreshAfterChain(qc),
   });
 
-  return { ...action, walletReady: wallet !== undefined };
+  return { ...action, walletReady: signer.walletReady, approver: signer.approver };
 };

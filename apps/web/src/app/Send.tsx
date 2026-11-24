@@ -12,6 +12,8 @@ import { Skeleton } from "./portfolio/ui";
 import { Button } from "../ui/Button";
 import { PanelHeader, SidePanel } from "../ui/Dialog";
 import { Alert, Check } from "../ui/icons";
+import { continueIn } from "../api/signer-rules";
+import { ApproveIn } from "./ApproveIn";
 import { usd } from "@mercury/view";
 
 /** A soft note under a field: amber for a caution, red for something to fix. */
@@ -207,9 +209,14 @@ export const Send = ({ open, onClose }: { open: boolean; onClose: () => void }) 
               onClick={confirm}
               className="min-w-0 flex-1"
             >
-              {action.walletReady ? "Sign and send" : "Waiting for wallet…"}
+              {!action.walletReady
+                ? "Waiting for wallet…"
+                : action.approver !== null
+                  ? continueIn(action.approver)
+                  : "Sign and send"}
             </Button>
           </div>
+          <ApproveIn approver={action.approver} />
         </div>
       ) : (
         <form onSubmit={submit} className="flex flex-col px-6 pt-5 pb-6">

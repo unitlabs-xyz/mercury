@@ -1,9 +1,8 @@
-import { useSignTransaction } from "@privy-io/react-auth/solana";
-import { useEmbeddedWallet } from "../auth/embedded";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { placeOrder, type OrderIntent, type OrderResult } from "@mercury/view";
 import { apiFetch } from "./client";
 import { refreshAfterChain } from "./settle";
+import { useTransactionSigner } from "./signer";
 import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 
 /**
@@ -37,22 +36,16 @@ const confirmSent = (sent: SentOrder) =>
 /** `placeOrder` with this app's plumbing behind it, and a step to render. */
 export const useOrderAction = () => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signTransaction } = useSignTransaction();
+  // The wallet chosen signs: the Mercury wallet through Privy, a linked one in its own pop-up.
+  const signer = useTransactionSigner();
 
   const mutation = useMutation<OrderResult, Error, OrderIntent>({
     mutationFn: async (intent) => {
-      if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
+      if (!signer.walletReady) throw new Error("No wallet is connected to sign with.");
       return await placeOrder(
         {
           post: (path, body) => apiFetch(path, { method: "POST", body: JSON.stringify(body) }),
-          sign: async (unsigned) => {
-            const { signedTransaction } = await signTransaction({
-              transaction: toBytes(unsigned),
-              wallet,
-            });
-            return toBase64(signedTransaction);
-          },
+          sign: async (unsigned) => toBase64(await signer.sign(toBytes(unsigned))),
           /*
            * Nowhere to put it. The button shows one spinner for the whole
            * order, so holding each step in React state only re-rendered this
@@ -76,7 +69,7 @@ export const useOrderAction = () => {
    * "connect a wallet", when the wallet is ours and is simply not ready yet.
    * The sheet waits for this instead.
    */
-  const walletReady = wallet !== undefined;
+  const walletReady = signer.walletReady;
 
   /* Orders whose confirm ran out of attempts, or whose tab reloaded mid-confirm. */
   usePendingConfirms<SentOrder>(KIND, confirmSent, {
@@ -84,5 +77,5 @@ export const useOrderAction = () => {
     onSettled: () => refreshAfterChain(qc),
   });
 
-  return { ...mutation, walletReady, reset: () => mutation.reset() };
+  return { ...mutation, walletReady, approver: signer.approver, reset: () => mutation.reset() };
 };

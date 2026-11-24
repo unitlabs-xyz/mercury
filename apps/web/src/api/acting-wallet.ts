@@ -48,29 +48,29 @@ export const resolveChoice = (
 export const actingLabel = (acting: Acting): string =>
   acting.kind === "all" ? "All wallets" : acting.kind === "linked" ? walletName(acting.wallet) : "Mercury";
 
-/** Whether the chosen wallet can act. Until linked wallets can, only the Mercury wallet does. */
-export const canAct = (acting: Acting): boolean => acting.kind === "mercury";
+/** Whether the chosen wallet can act: the Mercury wallet or a linked one, never every wallet at once. */
+export const canAct = (acting: Acting): boolean => acting.kind !== "all";
 
 /**
- * What a blocked action is. Most can be done from the Mercury wallet instead,
- * so switching to it is the way on. A loan cannot: it is one wallet's own
- * position, and switching would show a different loan.
+ * What an action is, for whether the chosen wallet can take it. A linked
+ * wallet trades, borrows, repays, uses Earn and sends, approving each in its
+ * own pop-up. A basket it cannot run yet: its Glider account is the Mercury
+ * wallet's. A loan is one wallet's own position, so every wallet at once asks
+ * whose loan is meant rather than offering a switch.
  */
-export type BlockedAction = "action" | "loan";
+export type BlockedAction = "action" | "loan" | "basket";
 
-/** What to say where an action would be, when the chosen wallet cannot take it. */
+/** What to say where an action would be, when the chosen wallet cannot take it; null when it can. */
 export const actionBlockedCopy = (acting: Acting, what: BlockedAction = "action"): string | null => {
   if (acting.kind === "mercury") return null;
-  if (what === "loan") {
-    return acting.kind === "all"
+  if (acting.kind === "all") {
+    return what === "loan"
       ? "A loan belongs to one wallet. Choose whose loan this is."
-      : `This is ${walletName(acting.wallet)}'s own loan. Repaying or borrowing from ${walletName(
-          acting.wallet,
-        )} in Mercury is coming soon. Until then, repay it or add collateral from ${walletName(acting.wallet)} itself.`;
+      : "Choose a wallet to do this from. All wallets is for looking.";
   }
-  return acting.kind === "all"
-    ? "Choose a wallet to do this from. All wallets is for looking."
-    : "For now this can only be done from your Mercury wallet. Switch to it to continue.";
+  return what === "basket"
+    ? "Baskets can only be run from your Mercury wallet for now. Switch to it to continue."
+    : null;
 };
 
 /**

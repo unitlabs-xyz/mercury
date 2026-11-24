@@ -41,7 +41,7 @@ export const LoanAlert = () => {
 
   return (
     <div className="mb-4 flex flex-col gap-2">
-      {alarm && <ChosenAlarm alarm={alarm} canRepay={owner === null} owner={owner} />}
+      {alarm && <ChosenAlarm alarm={alarm} />}
       {others.map((o) => (
         <OtherLine key={o.id} alarm={o} onGo={() => choose(o.isPrimary ? null : o.id)} />
       ))}
@@ -72,15 +72,11 @@ const TONE = {
   },
 } as const;
 
-const ChosenAlarm = ({
-  alarm,
-  canRepay,
-  owner,
-}: {
-  alarm: Alarm;
-  canRepay: boolean;
-  owner: string | null;
-}) => {
+/**
+ * The chosen wallet's alarm. Its Repay button repays from that wallet, the
+ * Mercury wallet or a linked one, which approves in its own pop-up.
+ */
+const ChosenAlarm = ({ alarm }: { alarm: Alarm }) => {
   const tone = TONE[alarm.tone];
   /*
    * Three columns: the icon, everything said about the loan, and what to do
@@ -98,12 +94,6 @@ const ChosenAlarm = ({
         <p className={`text-[14px] font-semibold ${tone.ink}`}>{alarm.title}</p>
         <p className="mt-1 max-w-[70ch] text-[12px] leading-[1.5] text-ds-ink/80">{alarm.body}</p>
         <Road alarm={alarm} />
-        {!canRepay && owner !== null && (
-          <p className="mt-3 text-[11px] text-ds-muted">
-            Repaying {owner}'s loan from Mercury is coming soon. Until then, repay it or add collateral from{" "}
-            {owner} itself.
-          </p>
-        )}
       </div>
       <div className="col-start-2 mt-4 flex items-start gap-2 sm:col-start-3 sm:mt-0">
         <Link
@@ -112,14 +102,12 @@ const ChosenAlarm = ({
         >
           View loan
         </Link>
-        {canRepay && (
-          <Link
-            to="?borrow=repay"
-            className={`rounded-lg px-3.5 py-2 text-[12px] font-semibold whitespace-nowrap text-white transition-colors ${tone.button}`}
-          >
-            {alarm.repayUsd === null ? "Repay" : `Repay ${usd(alarm.repayUsd)}`}
-          </Link>
-        )}
+        <Link
+          to="?borrow=repay"
+          className={`rounded-lg px-3.5 py-2 text-[12px] font-semibold whitespace-nowrap text-white transition-colors ${tone.button}`}
+        >
+          {alarm.repayUsd === null ? "Repay" : `Repay ${usd(alarm.repayUsd)}`}
+        </Link>
       </div>
     </section>
   );

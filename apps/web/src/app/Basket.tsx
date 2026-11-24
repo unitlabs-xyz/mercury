@@ -1458,7 +1458,7 @@ export const Basket = () => {
           </div>
         </aside>
       </div>
-      <ActionGate open={investOpen} onClose={closeInvest}>
+      <ActionGate open={investOpen} onClose={closeInvest} what="basket">
         <InvestSheet
           open={investOpen}
           name={name}
@@ -1484,7 +1484,7 @@ export const Basket = () => {
           onClose={closeInvest}
         />
       </ActionGate>
-      <ActionGate open={rebalanceOpen} onClose={() => setRebalanceOpen(false)}>
+      <ActionGate open={rebalanceOpen} onClose={() => setRebalanceOpen(false)} what="basket">
         <RebalanceSheet
           open={rebalanceOpen}
           name={name}
@@ -1499,7 +1499,7 @@ export const Basket = () => {
         />
       </ActionGate>
       {account && (
-        <ActionGate open={exitOpen} onClose={() => setExitOpen(false)}>
+        <ActionGate open={exitOpen} onClose={() => setExitOpen(false)} what="basket">
           <ExitSheet
             key={account.portfolioId}
             open={exitOpen}

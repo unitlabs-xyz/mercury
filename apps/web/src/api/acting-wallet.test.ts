@@ -61,24 +61,28 @@ describe("resolveChoice", () => {
 });
 
 describe("acting", () => {
-  it("acts only from the Mercury wallet, for now", () => {
+  it("acts from the Mercury wallet or a linked one, never from every wallet at once", () => {
     expect(canAct({ kind: "mercury", wallet: MERCURY })).toBe(true);
-    expect(canAct({ kind: "linked", wallet: PHANTOM })).toBe(false);
+    expect(canAct({ kind: "linked", wallet: PHANTOM })).toBe(true);
     expect(canAct({ kind: "all" })).toBe(false);
   });
 
   it("says why an action is not there, and nothing when it is", () => {
     expect(actionBlockedCopy({ kind: "mercury", wallet: MERCURY })).toBeNull();
     expect(actionBlockedCopy({ kind: "all" })).toMatch(/Choose a wallet/);
-    expect(actionBlockedCopy({ kind: "linked", wallet: PHANTOM })).toMatch(/Mercury wallet/);
+    expect(actionBlockedCopy({ kind: "linked", wallet: PHANTOM })).toBeNull();
   });
 
-  it("never sends a linked wallet's loan to the Mercury wallet, whose loan is a different one", () => {
-    const copy = actionBlockedCopy({ kind: "linked", wallet: PHANTOM }, "loan");
-    expect(copy).toBe(
-      "This is Phantom's own loan. Repaying or borrowing from Phantom in Mercury is coming soon. Until then, repay it or add collateral from Phantom itself.",
+  it("lets a linked wallet repay and borrow on its own loan, approving in its own pop-up", () => {
+    expect(actionBlockedCopy({ kind: "linked", wallet: PHANTOM }, "loan")).toBeNull();
+  });
+
+  it("keeps baskets to the Mercury wallet for now, and says how to get there", () => {
+    expect(actionBlockedCopy({ kind: "linked", wallet: PHANTOM }, "basket")).toBe(
+      "Baskets can only be run from your Mercury wallet for now. Switch to it to continue.",
     );
-    expect(copy).not.toMatch(/Switch to/);
+    expect(actionBlockedCopy({ kind: "mercury", wallet: MERCURY }, "basket")).toBeNull();
+    expect(actionBlockedCopy({ kind: "all" }, "basket")).toMatch(/Choose a wallet/);
   });
 
   it("asks whose loan when every wallet is shown", () => {

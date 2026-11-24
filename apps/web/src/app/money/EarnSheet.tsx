@@ -19,6 +19,8 @@ import { Alert, Check } from "../../ui/icons";
 import { pct, usd } from "@mercury/view";
 import { Skeleton } from "../portfolio/ui";
 import { RailLine } from "../stock/Panels";
+import { continueIn } from "../../api/signer-rules";
+import { ApproveIn } from "../ApproveIn";
 import { chip } from "../stock/Ticket";
 
 export type EarnTab = "add" | "withdraw";
@@ -276,8 +278,9 @@ export const EarnSheet = ({
               onClick={() => void submit()}
               className="mt-6 w-full"
             >
-              {label}
+              {action.approver !== null ? continueIn(action.approver) : label}
             </Button>
+            <ApproveIn approver={action.approver} />
           </>
         )}
       </div>
