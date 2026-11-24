@@ -41,7 +41,8 @@ import { streamAddresses } from "./wallet-events/streams.js";
 import { logger } from "./log/index.js";
 import { SolanaRpc, USDC_MINT } from "@mercury/chain";
 import { budget, budgeted } from "./history/budget.js";
-import { historyPass, listedMints } from "./history/runner.js";
+import { costPass, historyPass, listedMints } from "./history/runner.js";
+import { YahooHistory } from "@mercury/market";
 import { laneRefusedWithin } from "./jobs/strain.js";
 
 /*
@@ -711,6 +712,22 @@ every(
     log: logger("history"),
   }),
   jobClock(5 * 60_000),
+);
+
+/**
+ * The cost pass: what the history reader found, turned into lots, so a linked
+ * wallet's shares have a cost and its P&L stops saying "Calculating…".
+ *
+ * Its own job rather than the reader's last step, so a price source that is
+ * down holds up costing and never reading. Thirty seconds between passes, one
+ * wallet each; past prices from Yahoo through its own client, whose answers
+ * are kept, since a past close does not change.
+ */
+every(
+  "history-cost",
+  30_000,
+  costPass({ db: auth.db, past: new YahooHistory(), board: deps.prices, log: logger("history-cost") }),
+  jobClock(6 * 60_000),
 );
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {

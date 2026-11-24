@@ -232,6 +232,13 @@
       "when": 1795504374572,
       "tag": "0032_history_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795505505187,
+      "tag": "0033_chain_costs",
+      "breakpoints": true
     }
   ]
 }

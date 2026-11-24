@@ -7,6 +7,7 @@ import { errorLine } from "../log.js";
 import { RateLimited, REFUSAL_PAUSE_MS } from "./budget.js";
 import { claimHistoryJob, deferHistoryPass, failHistoryPass, finishHistoryPass } from "./queue.js";
 import { GiveWay, readWallet, type ReaderDeps } from "./reader.js";
+import { costWallet, walletToCost, type CostDeps } from "./cost.js";
 
 /**
  * When a wallet's next later pass is due, by how recently anyone looked at
@@ -99,3 +100,48 @@ export const listedMints =
     const shares = await opts.earnShareMints().catch(() => [] as readonly string[]);
     return new Set([opts.usdcMint, ...stocks.map((t) => t.mint), ...shares]);
   };
+
+/** Failures of the historical source in a row before a wallet is costed from Mercury's own prices instead. */
+export const PAST_GIVE_UP_AFTER = 3;
+/** The longest a wallet whose costing keeps failing rests before it is tried again. */
+const COST_REST_CAP_MS = 60 * 60_000;
+
+/**
+ * One pass of the cost pass: the next wallet with movements to cost, costed.
+ *
+ * A wallet whose costing fails rests, a minute and doubling up to an hour,
+ * so it never holds up the others. A wallet waits for the historical price
+ * source first, and after `PAST_GIVE_UP_AFTER` failures in a row is costed
+ * from Mercury's own prices instead: every share ends with a cost. Failures
+ * are counted in memory, one process, like the reader's lane signal; a
+ * restart starts the count again, which only means waiting a little longer.
+ */
+export const costPass = (
+  deps: Omit<CostDeps, "skipPast"> & { readonly now?: () => number; readonly log: Log },
+) => {
+  const failing = new Map<string, { count: number; at: number }>();
+  return async (): Promise<string | null> => {
+    const now = deps.now ?? Date.now;
+    const t = now();
+    const resting = [...failing.entries()]
+      .filter(([, f]) => t - f.at < Math.min(60_000 * 2 ** (f.count - 1), COST_REST_CAP_MS))
+      .map(([id]) => id);
+    const walletId = await walletToCost(deps.db, resting);
+    if (walletId === null) return null;
+
+    const failures = failing.get(walletId)?.count ?? 0;
+    try {
+      const r = await costWallet(
+        { ...deps, skipPast: failures >= PAST_GIVE_UP_AFTER },
+        walletId,
+        new Date(t),
+      );
+      failing.delete(walletId);
+      if (r.lots === 0 && r.dividends === 0 && !r.ready) return null;
+      return `${r.ready ? "first costing" : "later costing"}: ${r.lots} lots, ${r.dividends} dividends from ${r.costed} movements`;
+    } catch (error: unknown) {
+      failing.set(walletId, { count: failures + 1, at: t });
+      throw error;
+    }
+  };
+};

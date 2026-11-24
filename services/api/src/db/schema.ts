@@ -416,6 +416,16 @@ export const lots = pgTable(
     }).notNull(),
     /** True when we inferred the cost. The UI has to say so. */
     isEstimated: boolean("is_estimated").notNull().default(false),
+    /**
+     * Where an estimated cost came from, so the screen can say: the price of
+     * SOL paid in a swap, the share's market price when it arrived, the
+     * earliest price Mercury has, the price when the wallet was linked, or the
+     * cost it had in another of the person's wallets. Null when exact.
+     * Plain text, so a new value needs no migration.
+     */
+    estimateSource: text("estimate_source", {
+      enum: ["sol_price", "market_price", "earliest_price", "link_day_price", "own_wallet"],
+    }),
     orderId: uuid("order_id"),
   },
   (t) => [
@@ -1123,6 +1133,12 @@ export const historyEvents = pgTable(
     counterAmountRaw: bigint("counter_amount_raw", { mode: "bigint" }),
     /** For a transfer in, who sent it. Tells a move between a person's own wallets apart. */
     sourceOwner: text("source_owner"),
+    /**
+     * When the cost pass took this into the wallet's lots. Null until then, so
+     * a pass picks up exactly what it has not costed, and costing twice writes
+     * nothing twice.
+     */
+    costedAt: timestamp("costed_at", { withTimezone: true }),
   },
   (t) => [
     index("history_event_wallet_account_time_idx").on(t.walletId, t.account, t.blockTime),

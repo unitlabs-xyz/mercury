@@ -128,7 +128,7 @@ export interface Reconciliation {
  * A billionth of a share is far below any dividend a holder could receive and
  * far above what that rounding can produce, so it separates the two cleanly.
  */
-const DIVIDEND_FLOOR = D("0.000000001");
+export const DIVIDEND_FLOOR = D("0.000000001");
 
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
 

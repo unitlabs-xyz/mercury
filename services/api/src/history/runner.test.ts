@@ -1,13 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { ChainHistory, TransactionDetail } from "@mercury/chain";
+import { D } from "@mercury/core";
+import type { PastPriceSource, PriceBoard } from "@mercury/market";
 import { mercuryWallet, testDb } from "../db/testing.js";
-import { historyJobs, instruments, tokens, users, wallets } from "../db/schema.js";
+import {
+  historyEvents,
+  historyJobs,
+  historyTxs,
+  instruments,
+  lots,
+  tokens,
+  users,
+  wallets,
+} from "../db/schema.js";
 import { DORMANT_IDLE_MS, RECENT_IDLE_MS } from "../jobs/tiers.js";
 import type { Log } from "../log/index.js";
 import { RateLimited, REFUSAL_PAUSE_MS } from "./budget.js";
 import { queueHistory } from "./queue.js";
-import { historyPass, listedMints, nextPassIn } from "./runner.js";
+import { PAST_GIVE_UP_AFTER, costPass, historyPass, listedMints, nextPassIn } from "./runner.js";
 
 const ME = "Phantom1111111111111111111111111111111111111";
 const TSLAX = "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB";
@@ -160,5 +171,84 @@ describe("listedMints", () => {
       },
     })();
     expect([...mints]).toEqual(["USDC"]);
+  });
+});
+
+describe("costPass", () => {
+  const seedRead = async () => {
+    const s = await seed();
+    await queueHistory(s.db, { walletId: s.walletId, userId: s.userId, now: new Date(T0) });
+    await s.db.update(historyJobs).set({ status: "read" }).where(eq(historyJobs.walletId, s.walletId));
+    // One transfer in, priced from the past: nothing exact to fall back on.
+    await s.db.insert(historyTxs).values({ signature: "S1", slot: 1n, blockTime: new Date(T0), raw: {} });
+    await s.db.insert(historyEvents).values({
+      walletId: s.walletId,
+      account: ACCT,
+      signature: "S1",
+      blockTime: new Date(T0),
+      kind: "in",
+      mint: TSLAX,
+      amountRaw: 100_000_000n,
+      sourceOwner: "Exchange111",
+    });
+    const [i] = await s.db.insert(instruments).values({ ticker: "TSLA", name: "Tesla" }).returning();
+    await s.db
+      .insert(tokens)
+      .values({ instrumentId: i!.id, mint: TSLAX, symbol: "TSLAx", issuer: "backed", decimals: 8 });
+    return s;
+  };
+  const board: PriceBoard = {
+    pricesFor: async (mints) =>
+      new Map(
+        mints.map((mint) => [
+          mint,
+          {
+            mint,
+            usdPricePerToken: D(77),
+            pricePerShare: D(77),
+            changePct24h: null,
+            liquidityUsd: D(0),
+            multiplier: D(1),
+            observedAt: null,
+          },
+        ]),
+      ),
+  };
+
+  it("costs a read wallet and says so, then is quiet", async () => {
+    const s = await seedRead();
+    let clock = T0;
+    const pass = costPass({ db: s.db, past: { priceAt: async () => D(250) }, board, now: () => clock, log });
+    expect(await pass()).toBe("first costing: 1 lots, 0 dividends from 1 movements");
+    expect((await s.job()).status).toBe("done");
+    clock += 1_000;
+    expect(await pass()).toBeNull();
+  });
+
+  it("rests a failing wallet, and after repeated failures costs it from Mercury's own prices", async () => {
+    const s = await seedRead();
+    let clock = T0;
+    let asked = 0;
+    const past: PastPriceSource = {
+      priceAt: async () => {
+        asked += 1;
+        throw new Error("yahoo chart returned 503");
+      },
+    };
+    const pass = costPass({ db: s.db, past, board, now: () => clock, log });
+
+    for (let i = 0; i < PAST_GIVE_UP_AFTER; i++) {
+      await expect(pass()).rejects.toThrow("503");
+      // Resting: the next pass passes it by until its rest is over.
+      expect(await pass()).toBeNull();
+      clock += 60 * 60_000;
+    }
+    expect((await s.job()).status).toBe("read");
+
+    expect(await pass()).toBe("first costing: 1 lots, 0 dividends from 1 movements");
+    expect(asked).toBe(PAST_GIVE_UP_AFTER);
+    const [lot] = await s.db.select().from(lots).where(eq(lots.walletId, s.walletId));
+    expect(lot).toMatchObject({ estimateSource: "link_day_price" });
+    expect(D(lot!.unitCostUsd).toString()).toBe("77");
   });
 });

@@ -145,3 +145,11 @@ export interface Series {
 export interface HistorySource {
   seriesFor(ticker: string, span: Span): Promise<Series | null>;
 }
+
+/**
+ * What a symbol traded at at a past moment: a share's ticker, or `SOL-USD`.
+ * Null when the source has no price for it then; a failing source throws.
+ */
+export interface PastPriceSource {
+  priceAt(symbol: string, at: Date): Promise<Decimal | null>;
+}
