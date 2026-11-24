@@ -22,12 +22,16 @@ import {
   dollarCost,
   multiplierAt,
   replayAccount,
+  replayWithDepartures,
   type ArrivalCost,
   type CostMovement,
+  type Departure,
   type MultiplierStep,
   type PlannedLot,
 } from "./cost-plan.js";
 import { SOL_MINT } from "./events.js";
+import { recordMoveIn } from "../moves/record.js";
+import { moveTitles } from "../moves/names.js";
 
 /** SOL's symbol at the historical source, for a swap paid in SOL. */
 const SOL_SYMBOL = "SOL-USD";
@@ -107,7 +111,12 @@ export async function walletToCost(db: Db, resting: readonly string[] = []): Pro
 export async function costWallet(deps: CostDeps, walletId: string, now: Date): Promise<CostResult> {
   const { db } = deps;
   const [wallet] = await db
-    .select({ userId: wallets.userId, address: wallets.address, linkedAt: wallets.linkedAt })
+    .select({
+      userId: wallets.userId,
+      address: wallets.address,
+      linkedAt: wallets.linkedAt,
+      label: wallets.label,
+    })
     .from(wallets)
     .where(eq(wallets.id, walletId))
     .limit(1);
@@ -148,9 +157,22 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     stocks.map((s) => s.tokenId),
   );
   const own = await ownWallets(db, wallet.userId, walletId);
+  const mercury = await mercuryWalletOf(db, wallet.userId, walletId);
+  // A send by hand to the person's Mercury wallet: a move, whose cost goes with it.
+  const toMercury = (e: HistoryEvent) =>
+    mercury !== null && e.kind === "out" && e.destinationOwner === mercury.address;
 
   const prices = pricer(deps, linkedAt);
   const written: { lot: PlannedLot; stock: (typeof stocks)[number] }[] = [];
+  /** Moves to the Mercury wallet found on the first costing, with what the shares that left had cost. */
+  const carried: {
+    event: HistoryEvent;
+    stock: (typeof stocks)[number];
+    taken: Departure;
+    multiplier: Decimal;
+  }[] = [];
+  /** Moves to the Mercury wallet found since: recorded from the wallet's lots, as the relayer's moves are. */
+  const later: { event: HistoryEvent; stock: (typeof stocks)[number] }[] = [];
   const dividends: { shares: Decimal; at: Date; stock: (typeof stocks)[number] }[] = [];
 
   for (const stock of stocks) {
@@ -162,12 +184,22 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     const movements: CostMovement[] = [];
     for (const e of events) {
       if (e.amountRaw === null || e.amountRaw <= 0n) continue;
-      // After the first costing, departures are position-sync's; only arrivals are priced here.
-      if (!first && e.kind !== "in") continue;
+      // After the first costing, departures are position-sync's; only arrivals are priced here,
+      // and a move to the Mercury wallet is carried there.
+      if (!first && e.kind !== "in") {
+        if (toMercury(e)) later.push({ event: e, stock });
+        continue;
+      }
       if (e.kind !== "in" && e.kind !== "out") continue;
       const multiplier = multiplierAt(at(e), tokenSteps, current);
       if (e.kind === "out") {
-        movements.push({ kind: "out", amountRaw: e.amountRaw, at: at(e), multiplier });
+        movements.push({
+          kind: "out",
+          amountRaw: e.amountRaw,
+          at: at(e),
+          multiplier,
+          ...(toMercury(e) ? { ref: e.id } : {}),
+        });
         continue;
       }
       const shares = scaled(e.amountRaw, stock.decimals).mul(multiplier);
@@ -179,8 +211,12 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     const opening = first
       ? await openingBalance(db, wallet.address, stock, events[0], tokenSteps, prices, linkedAt)
       : undefined;
-    const planned = replayAccount(movements, stock.decimals, opening);
+    const { lots: planned, departures } = replayWithDepartures(movements, stock.decimals, opening);
     for (const lot of planned) written.push({ lot, stock });
+    for (const taken of departures) {
+      const event = events.find((e) => e.id === taken.ref)!;
+      carried.push({ event, stock, taken, multiplier: multiplierAt(at(event), tokenSteps, current) });
+    }
     for (const d of dividendsSince(planned, tokenSteps, stock.decimals)) dividends.push({ ...d, stock });
   }
 
@@ -247,6 +283,77 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
           refId: d.stock.tokenId,
         })),
       );
+    }
+    // Moves to the Mercury wallet: the shares arrive there with what they cost here.
+    if (mercury !== null) {
+      const titles = moveTitles(
+        { label: wallet.label, address: wallet.address, isPrimary: false },
+        { label: null, address: mercury.address, isPrimary: true },
+      );
+      for (const c of carried) {
+        const at = c.event.blockTime ?? linkedAt;
+        // The feed row here is the record that it was carried, as for a move the relayer sent.
+        const [row] = await tx
+          .insert(activities)
+          .values({
+            userId: wallet.userId,
+            walletId,
+            kind: "transfer_out",
+            occurredAt: at,
+            title: titles.out,
+            subtitle: null,
+            amountUsd: null,
+            txSignature: c.event.signature,
+            mint: c.stock.mint,
+          })
+          .onConflictDoNothing()
+          .returning({ id: activities.id });
+        if (row === undefined) continue;
+        await tx
+          .insert(activities)
+          .values({
+            userId: wallet.userId,
+            walletId: mercury.id,
+            kind: "transfer_in",
+            occurredAt: at,
+            title: titles.in,
+            subtitle: null,
+            amountUsd: null,
+            txSignature: c.event.signature,
+            mint: c.stock.mint,
+          })
+          .onConflictDoNothing();
+        if (c.taken.tokenQty <= 0n || !c.taken.shares.gt(ZERO)) continue;
+        await tx.insert(lots).values({
+          userId: wallet.userId,
+          walletId: mercury.id,
+          tokenId: c.stock.tokenId,
+          instrumentId: c.stock.instrumentId,
+          tokenQty: c.taken.tokenQty,
+          shares: fixed(scaled(c.taken.tokenQty, c.stock.decimals).mul(c.multiplier)),
+          unitCostUsd: fixed(c.taken.costUsd.div(c.taken.shares)),
+          feeUsd: "0",
+          referencePriceUsd: fixed(c.taken.referenceUsd.div(c.taken.shares)),
+          acquiredAt: at,
+          recordedAt: now,
+          source: "transfer_in" as const,
+          isEstimated: c.taken.estimated,
+          estimateSource: c.taken.estimated ? ("own_wallet" as const) : null,
+        });
+      }
+      for (const l of later) {
+        const at = l.event.blockTime ?? now;
+        await recordMoveIn(tx, {
+          userId: wallet.userId,
+          fromWalletId: walletId,
+          toWalletId: mercury.id,
+          signature: l.event.signature,
+          occurredAt: at,
+          // Position-sync saw the shares leave after they did: its departure for them is this move.
+          startedAt: new Date(at.getTime() - SEEN_EARLY_MS),
+          moved: [{ mint: l.stock.mint, amountRaw: l.event.amountRaw! }],
+        });
+      }
     }
     if (pending.length > 0) {
       await tx
@@ -438,6 +545,23 @@ async function multiplierSteps(
 }
 
 /** The person's other wallets, by address: a transfer from one is a move, and keeps the cost it had. */
+/** How long before a move landed position-sync may have written its departure: clocks are not exact. */
+const SEEN_EARLY_MS = 2 * 60_000;
+
+/** The person's Mercury wallet, unless it is the one being costed. */
+async function mercuryWalletOf(
+  db: Db,
+  userId: string,
+  walletId: string,
+): Promise<{ readonly id: string; readonly address: string } | null> {
+  const [row] = await db
+    .select({ id: wallets.id, address: wallets.address })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.isPrimary, true), ne(wallets.id, walletId)))
+    .limit(1);
+  return row ?? null;
+}
+
 async function ownWallets(db: Db, userId: string, walletId: string): Promise<ReadonlyMap<string, string>> {
   const rows = await db
     .select({ id: wallets.id, address: wallets.address })

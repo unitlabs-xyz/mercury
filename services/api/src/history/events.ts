@@ -21,6 +21,11 @@ export interface Movement {
   readonly counterAmountRaw: bigint | null;
   /** For an arrival: the wallet that sent it, where the transaction says. */
   readonly sourceOwner: string | null;
+  /**
+   * For a departure: the wallet that received it, where the transaction says
+   * and it was a plain transfer. A swap's tokens go to a pool, not a person.
+   */
+  readonly destinationOwner: string | null;
 }
 
 /**
@@ -79,6 +84,26 @@ const senderOf = (tx: TransactionDetail, owner: string, mint: string): string | 
   return fell?.owner ?? null;
 };
 
+/** Who received `mint` from `owner`, from the parsed transfers, else from whose balance of it rose. */
+const receiverOf = (tx: TransactionDetail, owner: string, mint: string): string | null => {
+  const transfer = (tx.tokenTransfersIn ?? []).find(
+    (t) =>
+      t.mint === mint &&
+      t.sourceOwner === owner &&
+      t.destinationOwner !== null &&
+      t.destinationOwner !== owner,
+  );
+  if (transfer?.destinationOwner) return transfer.destinationOwner;
+  const rose = tx.postTokens.find(
+    (e) =>
+      e.mint === mint &&
+      e.owner !== null &&
+      e.owner !== owner &&
+      balanceOf(tx.postTokens, e.owner, mint) > balanceOf(tx.preTokens, e.owner, mint),
+  );
+  return rose?.owner ?? null;
+};
+
 /**
  * What a transaction did to `owner`'s `mint`, or null when it did nothing to
  * it (or failed, and so moved nothing).
@@ -88,8 +113,18 @@ export const movementOf = (tx: TransactionDetail, owner: string, mint: string): 
   const all = deltas(tx, owner);
   const d = all.get(mint) ?? 0n;
   if (d === 0n) return null;
-  if (d < 0n)
-    return { kind: "out", amountRaw: -d, counterMint: null, counterAmountRaw: null, sourceOwner: null };
+  if (d < 0n) {
+    // A plain transfer only: something arriving in the same transaction makes it a swap.
+    const swapped = [...all].some(([m, delta]) => m !== mint && delta > 0n);
+    return {
+      kind: "out",
+      amountRaw: -d,
+      counterMint: null,
+      counterAmountRaw: null,
+      sourceOwner: null,
+      destinationOwner: swapped ? null : receiverOf(tx, owner, mint),
+    };
+  }
 
   // What left the wallet in the same transaction: the largest other token out, else SOL beyond the fee.
   let counterMint: string | null = null;
@@ -115,6 +150,7 @@ export const movementOf = (tx: TransactionDetail, owner: string, mint: string): 
     counterAmountRaw,
     // A swap's tokens come from a pool, not a person: only a plain transfer names its sender.
     sourceOwner: counterMint === null ? senderOf(tx, owner, mint) : null,
+    destinationOwner: null,
   };
 };
 

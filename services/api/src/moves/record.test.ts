@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { D } from "@mercury/core";
 import { mercuryWallet, testDb } from "../db/testing.js";
-import { activities, disposals, instruments, lots, positions, tokens, users, wallets } from "../db/schema.js";
+import {
+  activities,
+  disposals,
+  historyJobs,
+  instruments,
+  lots,
+  positions,
+  tokens,
+  users,
+  wallets,
+} from "../db/schema.js";
 import { recordMove, type MoveRecord } from "./record.js";
 
 const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
@@ -10,9 +20,21 @@ const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SIG = "5f121XsT7YRkYk5SoDMSMAtCmKKwm58NhWumjUNCtR4o6qPBgwCT2upBB3uUizLsykU51RSvLt1Z8Cwt5RXFcbAW";
 const STARTED = new Date("2026-11-20T10:00:00.000Z");
 const LANDED = new Date("2026-11-20T10:00:30.000Z");
+const LONG_AGO = new Date("2026-09-01T00:00:00.000Z");
 
-/** A person with a Mercury wallet and a linked Phantom holding 2 NVDAx, as position-sync last wrote it. */
-const seed = async (position?: Partial<typeof positions.$inferInsert> | null) => {
+type LotSeed = {
+  tokenQty: bigint;
+  shares: string;
+  unitCostUsd: string;
+  referencePriceUsd?: string;
+  isEstimated?: boolean;
+};
+const TWO_AT_150: readonly LotSeed[] = [
+  { tokenQty: 200_000_000n, shares: "2", unitCostUsd: "150", referencePriceUsd: "148" },
+];
+
+/** A person with a Mercury wallet and a linked Phantom, whose lots say what it paid for its NVDAx. */
+const seed = async (held: readonly LotSeed[] = TWO_AT_150) => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:move" }).returning();
   const userId = user!.id;
@@ -36,17 +58,20 @@ const seed = async (position?: Partial<typeof positions.$inferInsert> | null) =>
     .insert(tokens)
     .values({ instrumentId: instrument!.id, mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 })
     .returning();
-  if (position !== null)
-    await db.insert(positions).values({
+  for (const l of held)
+    await db.insert(lots).values({
       userId,
       walletId: linked!.id,
+      tokenId: token!.id,
       instrumentId: instrument!.id,
-      shares: "2",
-      sharesWithBasis: "2",
-      costBasisUsd: "300",
-      referenceBasisUsd: "296",
-      avgUnitCostUsd: "150",
-      ...position,
+      tokenQty: l.tokenQty,
+      shares: l.shares,
+      unitCostUsd: l.unitCostUsd,
+      referencePriceUsd: l.referencePriceUsd ?? null,
+      acquiredAt: LONG_AGO,
+      recordedAt: LONG_AGO,
+      source: "chain",
+      isEstimated: l.isEstimated ?? false,
     });
   const input = (over: Partial<MoveRecord> = {}): MoveRecord => ({
     userId,
@@ -56,6 +81,7 @@ const seed = async (position?: Partial<typeof positions.$inferInsert> | null) =>
     occurredAt: LANDED,
     startedAt: STARTED,
     moved: [{ mint: NVDAX, amountRaw: 100_000_000n }],
+    usdcMint: USDC,
     ...over,
   });
   return { db, userId, mercury, linked: linked!.id, instrumentId: instrument!.id, tokenId: token!.id, input };
@@ -74,11 +100,23 @@ const lotsIn = async (s: Seeded, walletId: string) =>
   (await s.db.select().from(lots).where(eq(lots.walletId, walletId))).map(plain);
 const outsOf = async (s: Seeded) =>
   (await s.db.select().from(disposals).where(eq(disposals.walletId, s.linked))).map(plain);
-const feedOf = (s: Seeded, walletId: string) =>
-  s.db.select().from(activities).where(eq(activities.walletId, walletId));
+const feedOf = async (s: Seeded, walletId: string) =>
+  (await s.db.select().from(activities).where(eq(activities.walletId, walletId))).map(plain);
+const departure = (s: Seeded, tokenQty: bigint, over: Partial<typeof disposals.$inferInsert> = {}) =>
+  s.db.insert(disposals).values({
+    userId: s.userId,
+    walletId: s.linked,
+    tokenId: s.tokenId,
+    instrumentId: s.instrumentId,
+    tokenQty,
+    shares: D(tokenQty.toString()).div(1e8).toFixed(),
+    kind: "transfer_out",
+    occurredAt: LANDED,
+    ...over,
+  });
 
 describe("recordMove", () => {
-  it("carries the moved shares into the Mercury wallet at the cost they had in the linked one", async () => {
+  it("carries the moved shares into the Mercury wallet at the cost the linked wallet's lots say", async () => {
     const s = await seed();
     expect(await recordMove(s.db, s.input())).toEqual({ written: true });
 
@@ -101,11 +139,80 @@ describe("recordMove", () => {
     expect(outs[0]).toMatchObject({ kind: "transfer_out", tokenQty: 100_000_000n, shares: "1" });
   });
 
+  it("averages the cost over every open lot, as the linked wallet's own figures do", async () => {
+    const s = await seed([
+      { tokenQty: 100_000_000n, shares: "1", unitCostUsd: "100" },
+      { tokenQty: 100_000_000n, shares: "1", unitCostUsd: "200" },
+    ]);
+    await recordMove(s.db, s.input());
+    expect((await lotsIn(s, s.mercury))[0]).toMatchObject({ unitCostUsd: "150", referencePriceUsd: "150" });
+  });
+
+  it("still carries the cost when position-sync has already seen everything leave and emptied the position", async () => {
+    // The sheet moves everything by default. Position-sync got there first: a young transfer out, an empty position.
+    const s = await seed();
+    await departure(s, 200_000_000n);
+    await s.db.insert(positions).values({
+      userId: s.userId,
+      walletId: s.linked,
+      instrumentId: s.instrumentId,
+      shares: "0",
+      costBasisUsd: "0",
+      avgUnitCostUsd: "0",
+    });
+    await recordMove(s.db, s.input({ moved: [{ mint: NVDAX, amountRaw: 200_000_000n }] }));
+
+    expect((await lotsIn(s, s.mercury))[0]).toMatchObject({ tokenQty: 200_000_000n, unitCostUsd: "150" });
+    // Position-sync's departure was this move, early: taken back, so the shares leave once.
+    expect((await outsOf(s)).map((d) => d.tokenQty)).toEqual([200_000_000n]);
+  });
+
+  it("keeps a departure from before the move, which was something else, and reads the cost after it", async () => {
+    const s = await seed();
+    await departure(s, 50_000_000n, {
+      occurredAt: LONG_AGO,
+      recordedAt: new Date("2026-11-01T00:00:00.000Z"),
+    });
+    await recordMove(s.db, s.input());
+    expect((await outsOf(s)).map((d) => d.tokenQty).sort()).toEqual([100_000_000n, 50_000_000n].sort());
+    expect((await lotsIn(s, s.mercury))[0]).toMatchObject({ tokenQty: 100_000_000n, unitCostUsd: "150" });
+  });
+
+  it("keeps an estimated cost estimated, saying it came from the person's own wallet", async () => {
+    const s = await seed([{ tokenQty: 200_000_000n, shares: "2", unitCostUsd: "150", isEstimated: true }]);
+    await recordMove(s.db, s.input());
+    expect((await lotsIn(s, s.mercury))[0]).toMatchObject({
+      isEstimated: true,
+      estimateSource: "own_wallet",
+      unitCostUsd: "150",
+    });
+  });
+
+  it("carries a cost only for the shares that had one: those leave first, the rest arrive with none", async () => {
+    // 0.5 shares have a cost on record; more were held. A move of 1 carries the cost of 0.5.
+    const s = await seed([{ tokenQty: 50_000_000n, shares: "0.5", unitCostUsd: "140" }]);
+    await recordMove(s.db, s.input());
+    expect((await lotsIn(s, s.mercury))[0]).toMatchObject({
+      tokenQty: 50_000_000n,
+      shares: "0.5",
+      unitCostUsd: "140",
+    });
+    // The whole amount still leaves the linked wallet.
+    expect((await outsOf(s))[0]!.tokenQty).toBe(100_000_000n);
+  });
+
+  it("writes no lot when the linked wallet has no cost on record, so none is invented", async () => {
+    const s = await seed([]);
+    await recordMove(s.db, s.input());
+    expect(await lotsIn(s, s.mercury)).toEqual([]);
+    expect(await outsOf(s)).toHaveLength(1);
+  });
+
   it("says where it went and where it came from, in each wallet's feed", async () => {
     const s = await seed();
     await recordMove(s.db, s.input());
-    expect((await feedOf(s, s.linked)).map((a) => [a.kind, a.title])).toEqual([
-      ["transfer_out", "Moved to your Mercury wallet"],
+    expect((await feedOf(s, s.linked)).map((a) => [a.kind, a.title, a.amountUsd])).toEqual([
+      ["transfer_out", "Moved to your Mercury wallet", null],
     ]);
     expect((await feedOf(s, s.mercury)).map((a) => [a.kind, a.title])).toEqual([
       ["transfer_in", "Moved from Phantom main"],
@@ -119,68 +226,6 @@ describe("recordMove", () => {
     expect((await feedOf(s, s.mercury))[0]!.title).toBe("Moved from PhAn…xxxx");
   });
 
-  it("keeps an estimated cost estimated, saying it came from the person's own wallet", async () => {
-    const s = await seed({ estimatedCostUsd: "300" });
-    await recordMove(s.db, s.input());
-    const [lot] = await lotsIn(s, s.mercury);
-    expect(lot).toMatchObject({ isEstimated: true, estimateSource: "own_wallet", unitCostUsd: "150" });
-  });
-
-  it("carries a cost only for the share of the move the linked wallet had one for", async () => {
-    // 2 held, 1 with a cost: half of what moves arrives with that cost, the rest with none.
-    const s = await seed({ sharesWithBasis: "1", costBasisUsd: "150", referenceBasisUsd: "140" });
-    await recordMove(s.db, s.input());
-    const [lot] = await lotsIn(s, s.mercury);
-    expect(lot).toMatchObject({
-      tokenQty: 50_000_000n,
-      shares: "0.5",
-      unitCostUsd: "150",
-      referencePriceUsd: "140",
-    });
-    // The whole amount still leaves the linked wallet.
-    expect((await outsOf(s))[0]!.tokenQty).toBe(100_000_000n);
-  });
-
-  it("writes no lot when the linked wallet had no cost for them, so none is invented", async () => {
-    const s = await seed({
-      sharesWithBasis: "0",
-      costBasisUsd: "0",
-      referenceBasisUsd: "0",
-      avgUnitCostUsd: "0",
-    });
-    await recordMove(s.db, s.input());
-    expect(await lotsIn(s, s.mercury)).toEqual([]);
-    expect(await outsOf(s)).toHaveLength(1);
-  });
-
-  it("writes no lot when the linked wallet has no position read for the stock yet", async () => {
-    const s = await seed(null);
-    await recordMove(s.db, s.input());
-    expect(await lotsIn(s, s.mercury)).toEqual([]);
-    expect(await outsOf(s)).toHaveLength(1);
-  });
-
-  it("takes back the departure position-sync wrote for this move, so the shares leave once", async () => {
-    const s = await seed();
-    const early = { userId: s.userId, walletId: s.linked, tokenId: s.tokenId, instrumentId: s.instrumentId };
-    await s.db.insert(disposals).values([
-      // Seen by position-sync after the move was built: this move, early.
-      { ...early, tokenQty: 100_000_000n, shares: "1", kind: "transfer_out", occurredAt: LANDED },
-      // From before: a different departure, kept.
-      {
-        ...early,
-        tokenQty: 7n,
-        shares: "0.00000007",
-        kind: "transfer_out",
-        occurredAt: new Date("2026-11-01T00:00:00.000Z"),
-        recordedAt: new Date("2026-11-01T00:00:00.000Z"),
-      },
-    ]);
-    await recordMove(s.db, s.input());
-    const outs = await outsOf(s);
-    expect(outs.map((d) => d.tokenQty).sort()).toEqual([100_000_000n, 7n].sort());
-  });
-
   it("writes nothing the second time for the same signature", async () => {
     const s = await seed();
     await recordMove(s.db, s.input());
@@ -190,7 +235,7 @@ describe("recordMove", () => {
     expect(await feedOf(s, s.mercury)).toHaveLength(1);
   });
 
-  it("gives USDC its feed rows and no lot, and skips a zero amount", async () => {
+  it("gives USDC its dollars on both sides, so a move cancels out across every wallet, and no lot", async () => {
     const s = await seed();
     await recordMove(
       s.db,
@@ -203,16 +248,35 @@ describe("recordMove", () => {
     );
     expect(await lotsIn(s, s.mercury)).toEqual([]);
     expect(await outsOf(s)).toEqual([]);
-    const feed = await s.db
-      .select()
-      .from(activities)
-      .where(and(eq(activities.userId, s.userId), eq(activities.txSignature, SIG)));
-    expect(feed.map((a) => [a.kind, a.mint]).sort()).toEqual(
+    const feed = (
+      await s.db
+        .select()
+        .from(activities)
+        .where(and(eq(activities.userId, s.userId), eq(activities.txSignature, SIG)))
+    ).map(plain);
+    expect(feed.map((a) => [a.kind, a.mint, a.amountUsd]).sort()).toEqual(
       [
-        ["transfer_in", USDC],
-        ["transfer_out", USDC],
+        ["transfer_in", USDC, "19.55"],
+        ["transfer_out", USDC, "19.55"],
       ].sort(),
     );
+  });
+
+  it("leaves a move from a wallet whose past is still being read to the cost pass, which carries it with its cost", async () => {
+    for (const status of ["queued", "running", "read"] as const) {
+      const s = await seed();
+      await s.db.insert(historyJobs).values({ walletId: s.linked, userId: s.userId, status });
+      expect(await recordMove(s.db, s.input()), status).toEqual({ written: false, deferred: true });
+      expect(await feedOf(s, s.linked)).toEqual([]);
+    }
+  });
+
+  it("records now once the past is read, or when reading it failed for good", async () => {
+    for (const status of ["done", "failed"] as const) {
+      const s = await seed();
+      await s.db.insert(historyJobs).values({ walletId: s.linked, userId: s.userId, status });
+      expect(await recordMove(s.db, s.input()), status).toEqual({ written: true });
+    }
   });
 
   it("does nothing for an empty move", async () => {

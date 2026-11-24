@@ -90,6 +90,7 @@ const seed = async (status: "read" | "done" = "read") => {
     counterMint?: string;
     counterAmount?: bigint;
     sourceOwner?: string;
+    destinationOwner?: string;
     preRaw?: bigint;
     costed?: boolean;
   }) => {
@@ -112,6 +113,7 @@ const seed = async (status: "read" | "done" = "read") => {
       counterMint: e.counterMint ?? null,
       counterAmountRaw: e.counterAmount ?? null,
       sourceOwner: e.sourceOwner ?? null,
+      destinationOwner: e.destinationOwner ?? null,
       costedAt: e.costed === true ? NOW : null,
     });
   };
@@ -133,6 +135,14 @@ const seed = async (status: "read" | "done" = "read") => {
     job,
   };
 };
+
+/** The Mercury wallet's lots, and both wallets' feed rows for a signature. */
+const mercurySide = async (s: Awaited<ReturnType<typeof seed>>) =>
+  s.db.select().from(lots).where(eq(lots.walletId, s.mainId));
+const feedFor = async (s: Awaited<ReturnType<typeof seed>>, signature: string) =>
+  (await s.db.select().from(activities).where(eq(activities.txSignature, signature)))
+    .map((a) => [a.walletId === s.mainId ? "mercury" : "linked", a.kind, a.title])
+    .sort();
 
 const deps = (db: Awaited<ReturnType<typeof seed>>["db"], past: PastPriceSource, extra = {}) => ({
   db,
@@ -378,6 +388,145 @@ describe("costWallet, a later costing", () => {
     expect(D(lot!.unitCostUsd).toString()).toBe("300");
     expect(lot!.tokenQty).toBe(tokensOf(1));
     expect((await s.job()).status).toBe("done");
+  });
+
+  it("carries a send by hand to the Mercury wallet there, at what the shares cost in this wallet", async () => {
+    const s = await seed();
+    await s.found({
+      kind: "in",
+      amount: tokensOf(2),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 200_000_000n,
+    });
+    await s.found({
+      kind: "in",
+      amount: tokensOf(2),
+      at: day(2),
+      counterMint: USDC,
+      counterAmount: 600_000_000n,
+    });
+    await s.found({ kind: "out", amount: tokensOf(1), at: day(3), destinationOwner: MAIN });
+
+    await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+
+    // Average cost $200: one share arrives in the Mercury wallet at that, exact.
+    const [lot] = await mercurySide(s);
+    expect([
+      lot!.tokenQty,
+      D(lot!.unitCostUsd).toString(),
+      lot!.source,
+      lot!.isEstimated,
+      lot!.acquiredAt,
+    ]).toEqual([tokensOf(1), "200", "transfer_in", false, day(3)]);
+    // What stayed here keeps its own cost.
+    const kept = await s.chainLots();
+    expect(kept.reduce((n, l) => n + l.tokenQty, 0n)).toBe(tokensOf(3));
+    expect(await feedFor(s, "Sig3")).toEqual(
+      [
+        ["linked", "transfer_out", "Moved to your Mercury wallet"],
+        ["mercury", "transfer_in", "Moved from Phan…1111"],
+      ].sort(),
+    );
+  });
+
+  it("carries nothing for a send to somebody else: that is position-sync's departure, as before", async () => {
+    const s = await seed();
+    await s.found({
+      kind: "in",
+      amount: tokensOf(2),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 200_000_000n,
+    });
+    await s.found({ kind: "out", amount: tokensOf(1), at: day(3), destinationOwner: "Friend1111" });
+    await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+    expect(await mercurySide(s)).toEqual([]);
+    expect(await feedFor(s, "Sig2")).toEqual([]);
+  });
+
+  it("carries an estimated cost as estimated, from the person's own wallet", async () => {
+    const s = await seed();
+    await s.found({ kind: "in", amount: tokensOf(1), at: day(5), sourceOwner: "Exchange111" });
+    await s.found({ kind: "out", amount: tokensOf(1), at: day(6), destinationOwner: MAIN });
+    await costWallet(deps(s.db, pastOf({ TSLA: 250 }).past), s.walletId, NOW);
+    const [lot] = await mercurySide(s);
+    expect([D(lot!.unitCostUsd).toString(), lot!.isEstimated, lot!.estimateSource]).toEqual([
+      "250",
+      true,
+      "own_wallet",
+    ]);
+    // Everything left: nothing is held here now.
+    expect(await s.chainLots()).toEqual([]);
+  });
+
+  it("after the first costing, records a move found since from this wallet's lots, as the relayer's moves are", async () => {
+    const s = await seed("done");
+    await s.db.insert(lots).values({
+      userId: s.userId,
+      walletId: s.walletId,
+      tokenId: s.tokenId,
+      instrumentId: s.instrumentId,
+      tokenQty: tokensOf(2),
+      shares: "2",
+      unitCostUsd: "180",
+      acquiredAt: day(1),
+      recordedAt: day(1),
+      source: "chain",
+    });
+    // How those lots came: costed on the first pass.
+    await s.found({
+      kind: "in",
+      amount: tokensOf(2),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 360_000_000n,
+      costed: true,
+    });
+    await s.found({ kind: "out", amount: tokensOf(2), at: NOW, destinationOwner: MAIN });
+
+    const r = await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+
+    expect(r).toMatchObject({ costed: 1, ready: false });
+    const [lot] = await mercurySide(s);
+    expect([lot!.tokenQty, D(lot!.unitCostUsd).toString()]).toEqual([tokensOf(2), "180"]);
+    expect(await feedFor(s, "Sig2")).toEqual(
+      [
+        ["linked", "transfer_out", "Moved to your Mercury wallet"],
+        ["mercury", "transfer_in", "Moved from Phan…1111"],
+      ].sort(),
+    );
+  });
+
+  it("carries a move the relayer already recorded only once, on the first costing or a later one", async () => {
+    for (const later of [false, true]) {
+      const s = await seed(later ? "done" : "read");
+      // A later costing is one with something costed before it.
+      if (later)
+        await s.found({
+          kind: "in",
+          amount: tokensOf(1),
+          at: day(1),
+          counterMint: USDC,
+          counterAmount: 100_000_000n,
+          costed: true,
+        });
+      await s.found({ kind: "out", amount: tokensOf(1), at: NOW, destinationOwner: MAIN });
+      const sig = later ? "Sig2" : "Sig1";
+      // Recorded when the relayer sent it: the linked side's feed row is there.
+      await s.db.insert(activities).values({
+        userId: s.userId,
+        walletId: s.walletId,
+        kind: "transfer_out",
+        occurredAt: NOW,
+        title: "Moved to your Mercury wallet",
+        txSignature: sig,
+        mint: TSLAX,
+      });
+      await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+      expect(await mercurySide(s), String(later)).toEqual([]);
+      expect(await feedFor(s, sig)).toEqual([["linked", "transfer_out", "Moved to your Mercury wallet"]]);
+    }
   });
 
   it("writes nothing twice when run again", async () => {

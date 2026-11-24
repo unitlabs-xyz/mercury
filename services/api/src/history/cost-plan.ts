@@ -31,6 +31,20 @@ export interface CostMovement {
   readonly multiplier: Decimal;
   /** For an arrival, its cost. */
   readonly cost?: ArrivalCost;
+  /** For a departure: what to call it in `departures`, to learn what the shares that left had cost. */
+  readonly ref?: string;
+}
+
+/** What a tagged departure took with it, at average cost: the cost it carries to where it went. */
+export interface Departure {
+  readonly ref: string;
+  /** Of the tokens that left, those that had a cost: any beyond what was read in had none. */
+  readonly tokenQty: bigint;
+  readonly shares: Decimal;
+  readonly costUsd: Decimal;
+  readonly referenceUsd: Decimal;
+  /** Whether any of that cost was an estimate. */
+  readonly estimated: boolean;
 }
 
 /** A lot left after the replay: what is still held, and what it cost. */
@@ -80,13 +94,27 @@ export const dollarCost = (
 export const replayAccount = (
   movements: readonly CostMovement[],
   decimals: number,
-  opening?: {
-    readonly amountRaw: bigint;
-    readonly at: Date;
-    readonly multiplier: Decimal;
-    readonly cost: ArrivalCost;
-  },
-): readonly PlannedLot[] => {
+  opening?: Opening,
+): readonly PlannedLot[] => replayWithDepartures(movements, decimals, opening).lots;
+
+type Opening = {
+  readonly amountRaw: bigint;
+  readonly at: Date;
+  readonly multiplier: Decimal;
+  readonly cost: ArrivalCost;
+};
+
+/**
+ * `replayAccount`, and what each tagged departure took with it: the share of
+ * every open lot that left, at that lot's cost. A send to the person's own
+ * Mercury wallet carries exactly this there.
+ */
+export const replayWithDepartures = (
+  movements: readonly CostMovement[],
+  decimals: number,
+  opening?: Opening,
+): { readonly lots: readonly PlannedLot[]; readonly departures: readonly Departure[] } => {
+  const departures: Departure[] = [];
   const open: { tokenQty: bigint; lot: Omit<PlannedLot, "tokenQty" | "shares"> }[] = [];
   const arrive = (raw: bigint, at: Date, multiplier: Decimal, cost: ArrivalCost) => {
     if (raw <= 0n) return;
@@ -111,8 +139,13 @@ export const replayAccount = (
       continue;
     }
     const held = open.reduce((sum, l) => sum + l.tokenQty, 0n);
-    if (held === 0n) continue; // tokens that were never read in; nothing of ours to take
+    if (held === 0n) {
+      // Tokens that were never read in; nothing of ours to take, and no cost to carry.
+      if (m.ref !== undefined) departures.push(nothingTaken(m.ref));
+      continue;
+    }
     const left = held > m.amountRaw ? held - m.amountRaw : 0n;
+    const before = open.map((l) => l.tokenQty);
     // Each lot keeps the same share of itself; the rounding goes to the newest, so the total is exact.
     let kept = 0n;
     for (const l of open) {
@@ -121,16 +154,43 @@ export const replayAccount = (
     }
     const last = open.findLast((l) => l.tokenQty > 0n) ?? open[open.length - 1];
     if (last !== undefined) last.tokenQty += left - kept;
+    if (m.ref !== undefined) {
+      let taken: Departure = nothingTaken(m.ref);
+      open.forEach((l, i) => {
+        const raw = before[i]! - l.tokenQty;
+        if (raw <= 0n) return;
+        const shares = scaled(raw, decimals).mul(l.lot.multiplier);
+        taken = {
+          ...taken,
+          tokenQty: taken.tokenQty + raw,
+          shares: taken.shares.add(shares),
+          costUsd: taken.costUsd.add(shares.mul(l.lot.unitCostUsd)),
+          referenceUsd: taken.referenceUsd.add(shares.mul(l.lot.referencePriceUsd ?? l.lot.unitCostUsd)),
+          estimated: taken.estimated || l.lot.estimateSource !== null,
+        };
+      });
+      departures.push(taken);
+    }
   }
 
-  return open
+  const lots = open
     .filter((l) => l.tokenQty > 0n)
     .map((l) => ({
       ...l.lot,
       tokenQty: l.tokenQty,
       shares: scaled(l.tokenQty, decimals).mul(l.lot.multiplier),
     }));
+  return { lots, departures };
 };
+
+const nothingTaken = (ref: string): Departure => ({
+  ref,
+  tokenQty: 0n,
+  shares: ZERO,
+  costUsd: ZERO,
+  referenceUsd: ZERO,
+  estimated: false,
+});
 
 /** A rise in a token's multiplier: a dividend paid as more stock per token. */
 export interface MultiplierStep {

@@ -193,6 +193,14 @@ async function syncWallet(
     ).map((row) => [row.address, row.portfolioId]),
   );
 
+  // The person's wallets, by address: dollars between two of them are a move, not money in or out.
+  const mine = await db
+    .select({ address: wallets.address, label: wallets.label, isPrimary: wallets.isPrimary })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), followed));
+  const self = mine.find((w) => w.address === address);
+  const ownWallets = new Map(mine.filter((w) => w.address !== address).map((w) => [w.address, w]));
+
   const moved: Movement[] = [];
   const now = deps.now?.() ?? new Date();
   for (const sig of ordered) {
@@ -206,6 +214,8 @@ async function syncWallet(
         now,
         lendingProgram: deps.lendingProgram,
         basketAccounts,
+        ownWallets,
+        ...(self === undefined ? {} : { self }),
         ...(deps.relayer === undefined ? {} : { relayer: deps.relayer }),
       }),
     );
@@ -233,14 +243,26 @@ async function syncWallet(
         .onConflictDoNothing({
           target: [activities.walletId, activities.txSignature, activities.mint],
         })
-        .returning({ id: activities.id, kind: activities.kind, occurredAt: activities.occurredAt });
+        .returning({
+          id: activities.id,
+          kind: activities.kind,
+          occurredAt: activities.occurredAt,
+          txSignature: activities.txSignature,
+        });
       written = inserted.length;
 
+      // A move between the person's own wallets is never news: they made it.
+      const moves = new Set(moved.filter((m) => m.ownMove === true).map((m) => m.signature));
       await notifyFor(
         tx,
         userId,
         inserted
-          .filter((r) => r.kind === "transfer_in" && now.getTime() - r.occurredAt.getTime() < NEWS_WITHIN_MS)
+          .filter(
+            (r) =>
+              r.kind === "transfer_in" &&
+              !moves.has(r.txSignature ?? "") &&
+              now.getTime() - r.occurredAt.getTime() < NEWS_WITHIN_MS,
+          )
           .map((r) => ({ activityId: r.id, kind: "money_in" as const })),
       );
     }

@@ -461,3 +461,50 @@ describe("syncAllWalletEvents, linked wallets", () => {
     expect(asked.has("Gone")).toBe(false);
   });
 });
+
+describe("syncAllWalletEvents, a move between the person's own wallets", () => {
+  it("writes a move into the Mercury wallet from a linked one, and tells nobody: they made it", async () => {
+    const { db, userId } = await seed();
+    const PHANTOM = "FMVHP1xw6ZHB9zLGyrJeeAvEzCBgouH8bPzdkYqq2C5W";
+    await db
+      .insert(wallets)
+      .values({ userId, address: PHANTOM, kind: "external", isPrimary: false, label: "Phantom" });
+    const [mercury] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
+    await db.insert(walletStreams).values([
+      { walletId: mercury!.id, address: WALLET, cursor: "older" },
+      { walletId: mercury!.id, address: USDC_ACCOUNT, cursor: "older" },
+    ]);
+    const moved: TransactionDetail = {
+      ...deposit,
+      preTokens: [{ mint: USDC_MINT, owner: PHANTOM, rawAmount: 500_000_000n, decimals: 6 }],
+      postTokens: [
+        { mint: USDC_MINT, owner: PHANTOM, rawAmount: 0n, decimals: 6 },
+        { mint: USDC_MINT, owner: WALLET, rawAmount: 500_000_000n, decimals: 6 },
+      ],
+    };
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve([USDC_ACCOUNT]),
+      signatures: (address) => Promise.resolve(address === USDC_ACCOUNT ? [ref] : []),
+      transaction: () => Promise.resolve(moved),
+    };
+
+    await syncAllWalletEvents(
+      db,
+      {
+        history,
+        lendingProgram: KAMINO,
+        now: () => new Date(1_790_573_221 * 1000 + 60_000),
+      },
+      // The Mercury wallet's pass: where "money in" would have been told.
+      { due: (a) => a === WALLET },
+    );
+
+    const [row] = await db.select().from(activities).where(eq(activities.walletId, mercury!.id));
+    expect([row!.kind, row!.title, row!.amountUsd]).toEqual([
+      "transfer_in",
+      "Moved from Phantom",
+      "500.000000000000000000",
+    ]);
+    expect(await db.select().from(notifications)).toHaveLength(0);
+  });
+});

@@ -742,7 +742,7 @@ export function buildReadDeps(
   // Each move between a person's own wallets is recorded when the relayer sends it, with its cost carried over.
   const walletMoves = moveSends({
     history: deps.history,
-    record: (move) => recordWalletMove(db, move),
+    record: (move) => recordWalletMove(db, { ...move, usdcMint: USDC_MINT }),
   });
   const rpc = createSolanaRpc(config.solanaRpcUrl);
   return {

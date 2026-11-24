@@ -61,6 +61,7 @@ describe("movementOf", () => {
       counterMint: USDC,
       counterAmountRaw: 400_000_000n,
       sourceOwner: null,
+      destinationOwner: null,
     });
   });
 
@@ -118,6 +119,7 @@ describe("movementOf", () => {
       counterMint: null,
       counterAmountRaw: null,
       sourceOwner: FRIEND,
+      destinationOwner: null,
     });
   });
 
@@ -157,7 +159,62 @@ describe("movementOf", () => {
       counterMint: null,
       counterAmountRaw: null,
       sourceOwner: null,
+      // Dollars came back for it: a sale to a pool, not a send to anyone.
+      destinationOwner: null,
     });
+  });
+
+  it("names who received a plain transfer out, from the parsed transfer", () => {
+    const m = movementOf(
+      tx({
+        preTokens: [entry(ME, TSLAX, 10n)],
+        postTokens: [entry(ME, TSLAX, 4n), entry(FRIEND, TSLAX, 6n)],
+        tokenTransfersIn: [
+          {
+            programId: "Tokenz",
+            source: "a",
+            destination: "b",
+            authority: ME,
+            sourceOwner: ME,
+            destinationOwner: FRIEND,
+            mint: TSLAX,
+            rawAmount: 6n,
+            decimals: 8,
+          },
+        ],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m).toEqual({
+      kind: "out",
+      amountRaw: 6n,
+      counterMint: null,
+      counterAmountRaw: null,
+      sourceOwner: null,
+      destinationOwner: FRIEND,
+    });
+  });
+
+  it("falls back to whose balance rose when the transfers were not parsed", () => {
+    const m = movementOf(
+      tx({
+        preTokens: [entry(ME, TSLAX, 10n)],
+        postTokens: [entry(ME, TSLAX, 4n), entry(FRIEND, TSLAX, 6n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m?.destinationOwner).toBe(FRIEND);
+  });
+
+  it("names nobody when nobody's balance rose: tokens burned, or sent somewhere the node didn't say", () => {
+    const m = movementOf(
+      tx({ preTokens: [entry(ME, TSLAX, 10n)], postTokens: [entry(ME, TSLAX, 4n)] }),
+      ME,
+      TSLAX,
+    );
+    expect(m?.destinationOwner).toBeNull();
   });
 
   it("is nothing for a transaction that did not touch the token, or failed", () => {

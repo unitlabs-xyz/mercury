@@ -148,6 +148,7 @@ export async function readWallet(
               counterMint: m.counterMint,
               counterAmountRaw: m.counterAmountRaw,
               sourceOwner: m.sourceOwner,
+              destinationOwner: m.destinationOwner,
             },
           ];
     });

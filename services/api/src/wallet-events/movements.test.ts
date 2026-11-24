@@ -462,3 +462,76 @@ describe("transferParties", () => {
     expect(parties.accountSetupUsd).toBeNull();
   });
 });
+
+describe("movementsIn — a move between the person's own wallets", () => {
+  const MERCURY = { label: null, address: WALLET, isPrimary: true };
+  const PHANTOM = { label: "Phantom main", address: OTHER, isPrimary: false };
+  const RELAYER = "Re1ayer1111111111111111111111111111111111111";
+
+  it("calls dollars from another of the person's wallets a move into this one, and marks it", () => {
+    const [m] = movementsIn(
+      tx({
+        preTokens: [usdc(OTHER, 100_000_000n)],
+        postTokens: [usdc(OTHER, 40_000_000n), usdc(WALLET, 60_000_000n)],
+      }),
+      { ...ctx, self: MERCURY, ownWallets: new Map([[OTHER, PHANTOM]]) },
+    );
+    expect([m!.kind, m!.title, m!.ownMove, m!.amountUsd!.toFixed()]).toEqual([
+      "transfer_in",
+      "Moved from Phantom main",
+      true,
+      "60",
+    ]);
+  });
+
+  it("calls dollars to another of the person's wallets a move out of this one", () => {
+    const [m] = movementsIn(
+      tx({
+        preTokens: [usdc(WALLET, 100_000_000n)],
+        postTokens: [usdc(WALLET, 40_000_000n), usdc(OTHER, 60_000_000n)],
+      }),
+      { ...ctx, wallet: WALLET, self: PHANTOM, ownWallets: new Map([[OTHER, MERCURY]]) },
+    );
+    expect([m!.kind, m!.title, m!.ownMove]).toEqual(["transfer_out", "Moved to your Mercury wallet", true]);
+  });
+
+  it("is money added, as before, when it came from somebody else", () => {
+    const [m] = movementsIn(
+      tx({
+        preTokens: [usdc("Friend11111", 100_000_000n)],
+        postTokens: [usdc("Friend11111", 40_000_000n), usdc(WALLET, 60_000_000n)],
+      }),
+      { ...ctx, self: MERCURY, ownWallets: new Map([[OTHER, PHANTOM]]) },
+    );
+    expect([m!.title, m!.ownMove]).toEqual(["Added cash", undefined]);
+  });
+
+  it("is not fooled by the relayer's rent: the person's own wallet is still who it went to", () => {
+    const [m] = movementsIn(
+      tx({
+        accountKeys: [RELAYER, WALLET, OTHER],
+        preLamports: [1_000_000_000n, 0n, 0n],
+        postLamports: [999_995_000n, 0n, 0n],
+        preTokens: [usdc(WALLET, 100_000_000n), usdc(RELAYER, 0n)],
+        postTokens: [usdc(WALLET, 39_550_000n), usdc(OTHER, 60_000_000n), usdc(RELAYER, 450_000n)],
+      }),
+      { ...ctx, relayer: RELAYER, self: PHANTOM, ownWallets: new Map([[OTHER, MERCURY]]) },
+    );
+    expect([m!.title, m!.amountUsd!.toFixed(), m!.ownMove]).toEqual([
+      "Moved to your Mercury wallet",
+      "60",
+      true,
+    ]);
+  });
+
+  it("names a linked wallet with no label by its short address", () => {
+    const [m] = movementsIn(
+      tx({
+        preTokens: [usdc(OTHER, 100_000_000n)],
+        postTokens: [usdc(OTHER, 0n), usdc(WALLET, 100_000_000n)],
+      }),
+      { ...ctx, self: MERCURY, ownWallets: new Map([[OTHER, { ...PHANTOM, label: null }]]) },
+    );
+    expect(m!.title).toBe("Moved from FMVH…2C5W");
+  });
+});

@@ -1134,6 +1134,11 @@ export const historyEvents = pgTable(
     /** For a transfer in, who sent it. Tells a move between a person's own wallets apart. */
     sourceOwner: text("source_owner"),
     /**
+     * For a transfer out, who received it. A send by hand from a linked wallet
+     * to the person's Mercury wallet is a move, and carries its cost there.
+     */
+    destinationOwner: text("destination_owner"),
+    /**
      * When the cost pass took this into the wallet's lots. Null until then, so
      * a pass picks up exactly what it has not costed, and costing twice writes
      * nothing twice.

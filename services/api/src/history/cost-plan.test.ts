@@ -5,6 +5,7 @@ import {
   dollarCost,
   multiplierAt,
   replayAccount,
+  replayWithDepartures,
   type ArrivalCost,
   type CostMovement,
   type MultiplierStep,
@@ -165,5 +166,63 @@ describe("dividendsSince", () => {
         8,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("replayWithDepartures", () => {
+  const tagged = (n: number, at: Date, ref: string): CostMovement => ({ ...out(n, at), ref });
+  const estimated = (unit: string): ArrivalCost => ({
+    unitCostUsd: D(unit),
+    referencePriceUsd: D(unit),
+    estimateSource: "market_price",
+  });
+
+  it("says what a tagged departure took: its share of every open lot, at average cost", () => {
+    const { lots, departures } = replayWithDepartures(
+      [inn(2, day(1), exact("100")), inn(2, day(2), exact("300")), tagged(2, day(3), "move")],
+      8,
+    );
+    expect(departures).toHaveLength(1);
+    const [d] = departures;
+    expect([d!.ref, d!.tokenQty, d!.shares.toString(), d!.costUsd.toString(), d!.estimated]).toEqual([
+      "move",
+      tokens(2),
+      "2",
+      "400",
+      false,
+    ]);
+    // What stays keeps its own cost: the same as replayAccount.
+    expect(lots).toEqual(
+      replayAccount([inn(2, day(1), exact("100")), inn(2, day(2), exact("300")), out(2, day(3))], 8),
+    );
+  });
+
+  it("takes only what was read in: tokens beyond it left with no cost to carry", () => {
+    const { departures } = replayWithDepartures([inn(1, day(1), exact("100")), tagged(3, day(2), "move")], 8);
+    expect([departures[0]!.tokenQty, departures[0]!.costUsd.toString()]).toEqual([tokens(1), "100"]);
+  });
+
+  it("says a departure from nothing read took nothing", () => {
+    const { departures } = replayWithDepartures([tagged(1, day(1), "move")], 8);
+    expect([departures[0]!.tokenQty, departures[0]!.shares.toString()]).toEqual([0n, "0"]);
+  });
+
+  it("marks what it took estimated when any lot it took from was", () => {
+    const { departures } = replayWithDepartures(
+      [inn(1, day(1), exact("100")), inn(1, day(2), estimated("200")), tagged(1, day(3), "move")],
+      8,
+    );
+    expect(departures[0]!.estimated).toBe(true);
+    expect(departures[0]!.costUsd.toString()).toBe("150");
+  });
+
+  it("reports only tagged departures, and counts shares at each lot's own multiplier", () => {
+    const { departures } = replayWithDepartures(
+      [inn(1, day(1), exact("100"), D("1.1")), out(0.5, day(2)), tagged(0.5, day(3), "move")],
+      8,
+    );
+    expect(departures.map((d) => [d.ref, d.tokenQty, d.shares.toString()])).toEqual([
+      ["move", tokens(0.5), "0.55"],
+    ]);
   });
 });
