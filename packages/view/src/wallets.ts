@@ -3,6 +3,14 @@ import { usd, usdSigned } from "./format.js";
 import { shortAddress } from "./receipt.js";
 
 /**
+ * The header that picks which wallet a read is for: a wallet id, or `all` for
+ * every followed wallet at once. Absent, the Mercury wallet. Both clients send
+ * the same, so the server has one rule.
+ */
+export const WALLET_HEADER = "X-Mercury-Wallet";
+export const ALL_WALLETS = "all";
+
+/**
  * The wallets on someone's account: the Mercury wallet, and the Solana wallets
  * they already hold and have linked beside it. The wire shape of
  * `GET /v1/wallets`, read the same by web and the phone.
@@ -180,3 +188,37 @@ export const walletLoans = (cards: readonly WalletCard[]): readonly WalletCard[]
     .sort((a, b) => rank(b.c) - rank(a.c) || Number(b.c.debtUsd) - Number(a.c.debtUsd) || a.i - b.i)
     .map(({ c }) => c);
 };
+
+/**
+ * How long ago a reading was taken, for "Updated 38m ago": minutes within the
+ * hour, hours within the day, then the date. `now` is a parameter so the
+ * wording can be checked without a clock.
+ */
+export const updatedAgo = (iso: string, now: number = Date.now()): string => {
+  const seconds = Math.round((now - Date.parse(iso)) / 1000);
+  if (!Number.isFinite(seconds)) return "";
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `on ${new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}`;
+};
+
+/**
+ * The line under a wallet's name: still being read, P&L still calculating,
+ * which wallet it is when its figures are live, or when its last hourly
+ * reading was taken when they are not.
+ */
+export const walletStatus = (card: WalletCard, now: number = Date.now()): string =>
+  card.valueUsd === null
+    ? "Reading this wallet…"
+    : card.calculating
+      ? "P&L calculating…"
+      : card.isLive
+        ? card.isPrimary
+          ? "Your Mercury wallet"
+          : "Linked wallet"
+        : card.asOf === null
+          ? ""
+          : `Updated ${updatedAgo(card.asOf, now)}`;

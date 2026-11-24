@@ -33,6 +33,11 @@ export const color = {
   chevron: "#5C5C5C",
   link: "#007681",
 
+  /* The chart series, in fixed order: the web's `--color-series-1..5`, validated
+     there as a set. A wallet keeps its series whatever its size; past the
+     fifth it is drawn in `muted`. */
+  series: ["#00879F", "#C4812F", "#7163E0", "#CF5A86", "#3C63C4"] as const,
+
   /* movement */
   up: "#1D7D1F",
   down: "#C0442F",

@@ -10,6 +10,8 @@ import {
   summaryLines,
   walletCards,
   walletSeries,
+  walletStatus,
+  updatedAgo,
   walletLoans,
   walletSlices,
   HEALTH,
@@ -291,5 +293,56 @@ describe("walletLoans", () => {
 
   it("has none when no wallet owes anything", () => {
     expect(walletLoans([card({}), card({ id: "y" })])).toEqual([]);
+  });
+});
+
+describe("updatedAgo", () => {
+  const now = Date.parse("2026-11-24T12:00:00.000Z");
+  it("says just now under a minute", () => {
+    expect(updatedAgo("2026-11-24T11:59:30.000Z", now)).toBe("just now");
+  });
+  it("counts minutes within the hour, then hours within the day", () => {
+    expect(updatedAgo("2026-11-24T11:22:00.000Z", now)).toBe("38m ago");
+    expect(updatedAgo("2026-11-24T09:00:00.000Z", now)).toBe("3h ago");
+  });
+  it("gives the date after a day", () => {
+    expect(updatedAgo("2026-11-20T09:00:00.000Z", now)).toBe("on 20 Nov");
+  });
+  it("says nothing for a time it cannot read", () => {
+    expect(updatedAgo("not a time", now)).toBe("");
+  });
+});
+
+describe("walletStatus", () => {
+  const now = Date.parse("2026-11-24T12:00:00.000Z");
+  const card = (over: Partial<WalletCard>): WalletCard => ({
+    id: "x",
+    name: "x",
+    isPrimary: false,
+    valueUsd: "100",
+    changePct: null,
+    isLive: true,
+    asOf: null,
+    loan: null,
+    debtUsd: "0",
+    calculating: false,
+    ...over,
+  });
+
+  it("says a wallet with no reading yet is being read, whatever else", () => {
+    expect(walletStatus(card({ valueUsd: null, calculating: true }), now)).toBe("Reading this wallet…");
+  });
+  it("puts P&L calculating before anything about where the figure came from", () => {
+    expect(walletStatus(card({ calculating: true }), now)).toBe("P&L calculating…");
+  });
+  it("names the wallet when its figures are live", () => {
+    expect(walletStatus(card({ isPrimary: true }), now)).toBe("Your Mercury wallet");
+    expect(walletStatus(card({}), now)).toBe("Linked wallet");
+  });
+  it("dates an hourly reading when the live one is not there", () => {
+    expect(walletStatus(card({ isLive: false, asOf: "2026-11-24T11:22:00.000Z" }), now)).toBe(
+      "Updated 38m ago",
+    );
+    expect(walletStatus(card({ isLive: false, asOf: null }), now)).toBe("");
   });
 });

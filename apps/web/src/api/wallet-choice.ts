@@ -7,8 +7,7 @@
  * with it. Remembered per browser, because it is how somebody left the app
  * rather than anything about their account.
  */
-export const WALLET_HEADER = "X-Mercury-Wallet";
-export const ALL_WALLETS = "all";
+export { ALL_WALLETS, WALLET_HEADER } from "@mercury/view";
 
 /** Null is the Mercury wallet, which is what the server reads with no header. */
 export type WalletChoice = string | null;

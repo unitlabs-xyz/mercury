@@ -24,6 +24,7 @@ import { useActions } from "../../src/actions/Actions";
 import { Attention } from "../../src/home/Attention";
 import { ComingUp } from "../../src/home/ComingUp";
 import { Watching } from "../../src/home/Watching";
+import { AllWalletsCard, LinkedWalletsCard, useWalletsOverview } from "../../src/home/Wallets";
 import { usePrefs } from "../../src/prefs";
 import { EventRow, EventRowSkeleton } from "../../src/activity/EventRow";
 import { color, font, radius, space } from "../../src/theme";
@@ -66,6 +67,7 @@ function PortfolioScreen() {
   const money = useMoney();
   const borrow = useBorrow();
   const activity = useActivityFeed();
+  const overview = useWalletsOverview();
 
   const p = portfolio.data;
   const holdings = useMemo(
@@ -105,7 +107,13 @@ function PortfolioScreen() {
 
   const refreshAll = async (): Promise<void> => {
     setRefreshing(true);
-    await Promise.all([portfolio.refetch(), money.refetch(), borrow.refetch(), activity.refetch()]);
+    await Promise.all([
+      portfolio.refetch(),
+      money.refetch(),
+      borrow.refetch(),
+      activity.refetch(),
+      overview.refetch(),
+    ]);
     setRefreshing(false);
   };
 
@@ -144,10 +152,14 @@ function PortfolioScreen() {
           </View>
         </View>
 
+        {/* ── Every wallet together, once anything is linked ──────────────── */}
+        {overview.any && <AllWalletsCard overview={overview} hidden={hidden} />}
+
         {/* ── What you are worth, and what to do about it ─────────────────── */}
         <View style={s.card}>
           <View style={s.account}>
-            <RNText style={s.label}>Net worth</RNText>
+            {/* With wallets linked, this card is the Mercury wallet's alone: the one the phone acts for. */}
+            <RNText style={s.label}>{overview.any ? "Mercury wallet" : "Net worth"}</RNText>
             {/*
              * Missing is not zero. An account that could not be read says so;
              * $0.00 there would be a figure somebody could act on, and wrong.
@@ -325,6 +337,9 @@ function PortfolioScreen() {
             </View>
           </View>
         )}
+
+        {/* ── The wallets linked beside it, to look at ───────────────────── */}
+        <LinkedWalletsCard overview={overview} hidden={hidden} />
 
         {/* ── What you're watching, and what's ahead ─────────────────────── */}
         <Watching />

@@ -8,8 +8,8 @@ import {
   walletCards,
   walletLoans,
   walletSlices,
+  walletStatus,
   type Series,
-  type WalletCard,
   type WalletSlice,
 } from "@mercury/view";
 import { ALL_WALLETS, useActingWallet, type Acting } from "../../api/acting-wallet";
@@ -357,20 +357,6 @@ const BADGE = {
   down: "bg-down-tint text-down-deep",
 } as const;
 
-/** What a wallet's row says under its name. */
-const status = (card: WalletCard): string =>
-  card.valueUsd === null
-    ? "Reading this wallet…"
-    : card.calculating
-      ? "P&L calculating…"
-      : card.isLive
-        ? card.isPrimary
-          ? "Your Mercury wallet"
-          : "Linked wallet"
-        : card.asOf === null
-          ? ""
-          : `Updated ${relTime(card.asOf)}`;
-
 /** One wallet in the list: its colour, name, loan, value, the day's move and its share. */
 const Row = ({
   slice,
@@ -428,7 +414,7 @@ const Row = ({
       )}
       <span className="text-[14px] font-semibold">{slice.valueUsd === null ? "—" : usd(slice.valueUsd)}</span>
     </span>
-    <span className="truncate pl-[18px] text-[11px] text-faint">{status(slice)}</span>
+    <span className="truncate pl-[18px] text-[11px] text-faint">{walletStatus(slice)}</span>
     <span className="text-right text-[11px] text-muted">
       {slice.share === null ? "" : sharePct(slice.share)}
     </span>
