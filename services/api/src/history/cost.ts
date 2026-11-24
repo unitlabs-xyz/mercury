@@ -1,9 +1,19 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, notInArray, sql } from "drizzle-orm";
-import { D, type Decimal, ZERO } from "@mercury/core";
+import {
+  D,
+  EMPTY_OPEN,
+  replayPosition,
+  type Decimal,
+  type Movement,
+  type OpenPosition,
+  ZERO,
+} from "@mercury/core";
+import { movementsByToken } from "../portfolio/open.js";
 import type { PastPriceSource, PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
 import {
   activities,
+  disposals,
   historyEvents,
   historyJobs,
   historyTxs,
@@ -199,21 +209,47 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
   const later: { event: HistoryEvent; stock: (typeof stocks)[number] }[] = [];
   const dividends: { shares: Decimal; at: Date; stock: (typeof stocks)[number] }[] = [];
 
+  /** A later costing's writes, in the order they happened: each buy as a lot, each sale as a departure. */
+  const sequence: (
+    | { readonly type: "lot"; readonly lot: PlannedLot; readonly stock: (typeof stocks)[number] }
+    | {
+        readonly type: "out";
+        readonly event: HistoryEvent;
+        readonly shares: Decimal;
+        readonly realisedUsd: Decimal | null;
+        readonly stock: (typeof stocks)[number];
+      }
+  )[] = [];
+
   for (const stock of stocks) {
     const events = pending.filter((e) => e.mint === stock.mint);
     const tokenSteps = steps.get(stock.tokenId) ?? [];
     const current = D(stock.multiplier);
     const at = (e: HistoryEvent) => e.blockTime ?? linkedAt;
 
+    if (!first) {
+      const arrived = await laterCosting(
+        deps,
+        prices,
+        own,
+        walletId,
+        stock,
+        events,
+        tokenSteps,
+        current,
+        at,
+        toMercury,
+      );
+      for (const step of arrived.sequence) sequence.push({ ...step, stock });
+      for (const e of arrived.toMercury) later.push({ event: e, stock });
+      for (const d of dividendsSince(arrived.lots, tokenSteps, stock.decimals))
+        dividends.push({ ...d, stock });
+      continue;
+    }
+
     const movements: CostMovement[] = [];
     for (const e of events) {
       if (e.amountRaw === null || e.amountRaw <= 0n) continue;
-      // After the first costing, departures are position-sync's; only arrivals are priced here,
-      // and a move to the Mercury wallet is carried there.
-      if (!first && e.kind !== "in") {
-        if (toMercury(e)) later.push({ event: e, stock });
-        continue;
-      }
       // A pledge to Kamino or a withdrawal from it: the shares stayed the person's, at their cost.
       if (e.kind !== "in" && e.kind !== "out") continue;
       const multiplier = multiplierAt(at(e), tokenSteps, current);
@@ -233,18 +269,16 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     }
 
     // What was held before the oldest movement read, where the walk back stopped at its cap.
-    const opening = first
-      ? await openingBalance(
-          db,
-          wallet.address,
-          stock,
-          events[0],
-          openingPledged,
-          tokenSteps,
-          prices,
-          linkedAt,
-        )
-      : undefined;
+    const opening = await openingBalance(
+      db,
+      wallet.address,
+      stock,
+      events[0],
+      openingPledged,
+      tokenSteps,
+      prices,
+      linkedAt,
+    );
     const { lots: planned, departures } = replayWithDepartures(movements, stock.decimals, opening);
     for (const lot of planned) written.push({ lot, stock });
     for (const taken of departures) {
@@ -316,6 +350,43 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
           estimateSource: lot.estimateSource,
         })),
       );
+    }
+    // In the order they happened, each recorded a moment after the last, so the replay
+    // takes a sale out of what was held before a buy that followed it.
+    let tick = 0;
+    for (const step of sequence) {
+      const recordedAt = new Date(now.getTime() + tick++);
+      if (step.type === "lot") {
+        await tx.insert(lots).values({
+          userId: wallet.userId,
+          walletId,
+          tokenId: step.stock.tokenId,
+          instrumentId: step.stock.instrumentId,
+          tokenQty: step.lot.tokenQty,
+          shares: fixed(step.lot.shares),
+          unitCostUsd: fixed(step.lot.unitCostUsd),
+          feeUsd: "0",
+          referencePriceUsd: step.lot.referencePriceUsd === null ? null : fixed(step.lot.referencePriceUsd),
+          acquiredAt: step.lot.acquiredAt,
+          recordedAt,
+          source: "chain" as const,
+          isEstimated: step.lot.estimateSource !== null,
+          estimateSource: step.lot.estimateSource,
+        });
+        continue;
+      }
+      await tx.insert(disposals).values({
+        userId: wallet.userId,
+        walletId,
+        tokenId: step.stock.tokenId,
+        instrumentId: step.stock.instrumentId,
+        tokenQty: step.event.amountRaw!,
+        shares: fixed(step.shares),
+        kind: "chain" as const,
+        occurredAt: step.event.blockTime ?? now,
+        recordedAt,
+        realisedPnlUsd: step.realisedUsd === null ? null : fixed(step.realisedUsd),
+      });
     }
     if (dividendRows.length > 0) {
       await tx.insert(lots).values(
@@ -437,7 +508,146 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
       .where(and(eq(historyJobs.walletId, walletId), eq(historyJobs.status, "read")));
   });
 
-  return { lots: written.length, dividends: dividendRows.length, costed: pending.length, ready: first };
+  return {
+    lots: written.length + sequence.filter((s) => s.type === "lot").length,
+    dividends: dividendRows.length,
+    costed: pending.length,
+    ready: first,
+  };
+}
+
+/**
+ * A later costing of one stock: its new arrivals priced as lots, and its
+ * departures as departures, each in the order it happened, so a sale takes
+ * out what was held before a buy that came after it. Position-sync can't do
+ * this for a linked wallet: a sale and a buy back between two of its looks
+ * read as nothing having happened, and the shares sold would then leave later,
+ * at the average of the old and the new.
+ *
+ * A sale swapped for dollars realises what it was swapped for, less the
+ * average cost of the shares just before it. A send to the Mercury wallet is
+ * a move, carried there with its cost (`toMercury`); a pledge is nothing.
+ */
+async function laterCosting(
+  deps: CostDeps,
+  prices: ReturnType<typeof pricer>,
+  own: ReadonlyMap<string, string>,
+  walletId: string,
+  stock: Stock & { readonly instrumentId: string },
+  events: readonly HistoryEvent[],
+  steps: readonly MultiplierStep[],
+  current: Decimal,
+  at: (e: HistoryEvent) => Date,
+  toMercury: (e: HistoryEvent) => boolean,
+): Promise<{
+  readonly sequence: readonly (
+    | { readonly type: "lot"; readonly lot: PlannedLot }
+    | {
+        readonly type: "out";
+        readonly event: HistoryEvent;
+        readonly shares: Decimal;
+        readonly realisedUsd: Decimal | null;
+      }
+  )[];
+  readonly lots: readonly PlannedLot[];
+  readonly toMercury: readonly HistoryEvent[];
+}> {
+  const sequence: (
+    | { readonly type: "lot"; readonly lot: PlannedLot }
+    | {
+        readonly type: "out";
+        readonly event: HistoryEvent;
+        readonly shares: Decimal;
+        readonly realisedUsd: Decimal | null;
+      }
+  )[] = [];
+  const arrived: PlannedLot[] = [];
+  const moved: HistoryEvent[] = [];
+  let held = await heldNow(deps.db, walletId, stock.tokenId);
+
+  for (const e of events) {
+    if (e.amountRaw === null || e.amountRaw <= 0n) continue;
+    const multiplier = multiplierAt(at(e), steps, current);
+    const shares = scaled(e.amountRaw, stock.decimals).mul(multiplier);
+    if (e.kind === "in") {
+      const cost = await arrivalCost(deps, prices, own, stock, e, shares, at(e));
+      const lot: PlannedLot = {
+        tokenQty: e.amountRaw,
+        shares,
+        unitCostUsd: cost.unitCostUsd,
+        referencePriceUsd: cost.referencePriceUsd,
+        estimateSource: cost.estimateSource,
+        acquiredAt: at(e),
+        multiplier,
+      };
+      sequence.push({ type: "lot", lot });
+      arrived.push(lot);
+      held = replayPosition([
+        ...asMovements(held),
+        {
+          kind: "in",
+          tokenQty: lot.tokenQty,
+          shares,
+          costUsd: shares.mul(lot.unitCostUsd),
+          referenceUsd: shares.mul(lot.referencePriceUsd ?? lot.unitCostUsd),
+          feeUsd: ZERO,
+          acquiredAt: lot.acquiredAt,
+          isEstimated: lot.estimateSource !== null,
+        },
+      ]);
+      continue;
+    }
+    if (e.kind !== "out") continue; // a pledge or a withdrawal: the shares stayed the person's
+    if (toMercury(e)) {
+      moved.push(e);
+      continue;
+    }
+    // Swapped for dollars: what they fetched, less their share of what was held, at average cost.
+    const proceeds = dollarCost(e.counterMint, e.counterAmountRaw, D(1));
+    const realisedUsd =
+      proceeds === null || held.tokenQty <= 0n || e.amountRaw > held.tokenQty
+        ? null
+        : proceeds.sub(held.costUsd.mul(D(e.amountRaw.toString())).div(D(held.tokenQty.toString())));
+    sequence.push({ type: "out", event: e, shares, realisedUsd });
+    held = replayPosition([...asMovements(held), { kind: "out", tokenQty: e.amountRaw }]);
+  }
+  return { sequence, lots: arrived, toMercury: moved };
+}
+
+/** An open position as the one movement that would make it, to replay more onto. */
+const asMovements = (open: OpenPosition): Movement[] =>
+  open.tokenQty === 0n
+    ? []
+    : [
+        {
+          kind: "in",
+          tokenQty: open.tokenQty,
+          shares: open.shares,
+          costUsd: open.costUsd,
+          referenceUsd: open.referenceUsd,
+          feeUsd: open.feeUsd,
+          acquiredAt: open.heldSince ?? new Date(0),
+          isEstimated: open.isEstimated,
+        },
+      ];
+
+/** What the wallet's records hold of a token now: every lot and departure, in the order recorded. */
+async function heldNow(db: Db, walletId: string, tokenId: string): Promise<OpenPosition> {
+  const [lotRows, disposalRows] = await Promise.all([
+    db
+      .select()
+      .from(lots)
+      .where(and(eq(lots.walletId, walletId), eq(lots.tokenId, tokenId))),
+    db
+      .select()
+      .from(disposals)
+      .where(and(eq(disposals.walletId, walletId), eq(disposals.tokenId, tokenId))),
+  ]);
+  const moves = movementsByToken(
+    lotRows.map((l) => ({ ...l, recordedAtUs: l.recordedAt.getTime() * 1000 })),
+    disposalRows.map((d) => ({ ...d, recordedAtUs: d.recordedAt.getTime() * 1000 })),
+  ).get(tokenId);
+  return moves === undefined ? EMPTY_OPEN : replayPosition(moves);
 }
 
 type Stock = {

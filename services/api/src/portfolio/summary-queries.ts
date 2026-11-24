@@ -3,6 +3,7 @@ import { D, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import {
   activities,
+  disposals,
   earnEvents,
   historyJobs,
   loanAlerts,
@@ -39,87 +40,102 @@ export async function readSummaryRecords(
   if (walletIds.length === 0) return new Map();
   const ids = [...walletIds];
 
-  const [latest, realised, liquidated, dividends, earnNet, ledger, alerts, read] = await Promise.all([
-    // Each wallet's newest reading: one row per wallet, newest first within it.
-    db
-      .selectDistinctOn([portfolioSnapshots.walletId], {
-        walletId: portfolioSnapshots.walletId,
-        capturedAt: portfolioSnapshots.capturedAt,
-        readAt: portfolioSnapshots.readAt,
-        totalUsd: portfolioSnapshots.totalUsd,
-        debtUsd: portfolioSnapshots.debtUsd,
-        earnUsd: portfolioSnapshots.earnUsd,
-      })
-      .from(portfolioSnapshots)
-      .where(and(eq(portfolioSnapshots.userId, userId), inArray(portfolioSnapshots.walletId, ids)))
-      .orderBy(portfolioSnapshots.walletId, desc(portfolioSnapshots.capturedAt)),
-    db
-      .select({
-        walletId: sql<string>`${orders.walletId}`,
-        total: sql<string | null>`sum(${orders.realisedPnlUsd})`,
-      })
-      .from(orders)
-      .where(and(eq(orders.userId, userId), inArray(orders.walletId, ids), isNotNull(orders.realisedPnlUsd)))
-      .groupBy(orders.walletId),
-    // A liquidation is a sale too: Kamino sold the shares, and the money cleared the debt.
-    db
-      .select({
-        walletId: loanEvents.walletId,
-        total: sql<string | null>`sum(${loanEvents.realisedPnlUsd})`,
-      })
-      .from(loanEvents)
-      .where(
-        and(
-          eq(loanEvents.userId, userId),
-          inArray(loanEvents.walletId, ids),
-          isNotNull(loanEvents.realisedPnlUsd),
-        ),
-      )
-      .groupBy(loanEvents.walletId),
-    db
-      .select({ walletId: activities.walletId, total: sql<string | null>`sum(${activities.amountUsd})` })
-      .from(activities)
-      .where(
-        and(
-          eq(activities.userId, userId),
-          inArray(activities.walletId, ids),
-          eq(activities.kind, "dividend"),
-          isNotNull(activities.amountUsd),
-        ),
-      )
-      .groupBy(activities.walletId),
-    db
-      .select({
-        walletId: earnEvents.walletId,
-        total: sql<
-          string | null
-        >`sum(case when ${earnEvents.kind} = 'deposit' then ${earnEvents.usdcAmount} else -${earnEvents.usdcAmount} end)`,
-      })
-      .from(earnEvents)
-      .where(and(eq(earnEvents.userId, userId), inArray(earnEvents.walletId, ids)))
-      .groupBy(earnEvents.walletId),
-    db
-      .select({
-        walletId: loanEvents.walletId,
-        kind: loanEvents.kind,
-        usdAmount: loanEvents.usdAmount,
-        debtAfterUsd: loanEvents.debtAfterUsd,
-      })
-      .from(loanEvents)
-      .where(and(eq(loanEvents.userId, userId), inArray(loanEvents.walletId, ids)))
-      .orderBy(asc(loanEvents.occurredAt), asc(loanEvents.recordedAt)),
-    db
-      .select({ walletId: loanAlerts.walletId, health: loanAlerts.health })
-      .from(loanAlerts)
-      .where(inArray(loanAlerts.walletId, ids)),
-    db
-      .select({ walletId: historyJobs.walletId })
-      .from(historyJobs)
-      .where(and(inArray(historyJobs.walletId, ids), eq(historyJobs.status, "done"))),
-  ]);
+  const [latest, realised, liquidated, soldElsewhere, dividends, earnNet, ledger, alerts, read] =
+    await Promise.all([
+      // Each wallet's newest reading: one row per wallet, newest first within it.
+      db
+        .selectDistinctOn([portfolioSnapshots.walletId], {
+          walletId: portfolioSnapshots.walletId,
+          capturedAt: portfolioSnapshots.capturedAt,
+          readAt: portfolioSnapshots.readAt,
+          totalUsd: portfolioSnapshots.totalUsd,
+          debtUsd: portfolioSnapshots.debtUsd,
+          earnUsd: portfolioSnapshots.earnUsd,
+        })
+        .from(portfolioSnapshots)
+        .where(and(eq(portfolioSnapshots.userId, userId), inArray(portfolioSnapshots.walletId, ids)))
+        .orderBy(portfolioSnapshots.walletId, desc(portfolioSnapshots.capturedAt)),
+      db
+        .select({
+          walletId: sql<string>`${orders.walletId}`,
+          total: sql<string | null>`sum(${orders.realisedPnlUsd})`,
+        })
+        .from(orders)
+        .where(
+          and(eq(orders.userId, userId), inArray(orders.walletId, ids), isNotNull(orders.realisedPnlUsd)),
+        )
+        .groupBy(orders.walletId),
+      // A liquidation is a sale too: Kamino sold the shares, and the money cleared the debt.
+      db
+        .select({
+          walletId: loanEvents.walletId,
+          total: sql<string | null>`sum(${loanEvents.realisedPnlUsd})`,
+        })
+        .from(loanEvents)
+        .where(
+          and(
+            eq(loanEvents.userId, userId),
+            inArray(loanEvents.walletId, ids),
+            isNotNull(loanEvents.realisedPnlUsd),
+          ),
+        )
+        .groupBy(loanEvents.walletId),
+      // And a sale made outside Mercury, found in a linked wallet's history, where it was swapped for dollars.
+      db
+        .select({ walletId: disposals.walletId, total: sql<string | null>`sum(${disposals.realisedPnlUsd})` })
+        .from(disposals)
+        .where(
+          and(
+            eq(disposals.userId, userId),
+            inArray(disposals.walletId, ids),
+            isNotNull(disposals.realisedPnlUsd),
+          ),
+        )
+        .groupBy(disposals.walletId),
+      db
+        .select({ walletId: activities.walletId, total: sql<string | null>`sum(${activities.amountUsd})` })
+        .from(activities)
+        .where(
+          and(
+            eq(activities.userId, userId),
+            inArray(activities.walletId, ids),
+            eq(activities.kind, "dividend"),
+            isNotNull(activities.amountUsd),
+          ),
+        )
+        .groupBy(activities.walletId),
+      db
+        .select({
+          walletId: earnEvents.walletId,
+          total: sql<
+            string | null
+          >`sum(case when ${earnEvents.kind} = 'deposit' then ${earnEvents.usdcAmount} else -${earnEvents.usdcAmount} end)`,
+        })
+        .from(earnEvents)
+        .where(and(eq(earnEvents.userId, userId), inArray(earnEvents.walletId, ids)))
+        .groupBy(earnEvents.walletId),
+      db
+        .select({
+          walletId: loanEvents.walletId,
+          kind: loanEvents.kind,
+          usdAmount: loanEvents.usdAmount,
+          debtAfterUsd: loanEvents.debtAfterUsd,
+        })
+        .from(loanEvents)
+        .where(and(eq(loanEvents.userId, userId), inArray(loanEvents.walletId, ids)))
+        .orderBy(asc(loanEvents.occurredAt), asc(loanEvents.recordedAt)),
+      db
+        .select({ walletId: loanAlerts.walletId, health: loanAlerts.health })
+        .from(loanAlerts)
+        .where(inArray(loanAlerts.walletId, ids)),
+      db
+        .select({ walletId: historyJobs.walletId })
+        .from(historyJobs)
+        .where(and(inArray(historyJobs.walletId, ids), eq(historyJobs.status, "done"))),
+    ]);
 
   const latestBy = new Map(latest.map((r) => [r.walletId, r]));
-  const realisedBy = sums([...realised, ...liquidated]);
+  const realisedBy = sums([...realised, ...liquidated, ...soldElsewhere]);
   const dividendsBy = sums(dividends);
   const earnBy = sums(earnNet);
   const healthBy = new Map(alerts.map((a) => [a.walletId, a.health]));

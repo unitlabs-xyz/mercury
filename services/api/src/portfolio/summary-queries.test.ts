@@ -6,6 +6,7 @@ import { PortfolioSummary } from "@mercury/types";
 import { mercuryWallet, testDb } from "../db/testing.js";
 import {
   activities,
+  disposals,
   earnEvents,
   historyJobs,
   instruments,
@@ -212,6 +213,24 @@ describe("readSummary", () => {
     });
     const summary = PortfolioSummary.parse(await readSummary(s.db, board, s.userId));
     expect(summary.pnl).toMatchObject({ realisedUsd: "-28", totalUsd: "172" });
+  });
+
+  it("counts what a sale outside Mercury realised, found in the linked wallet's history", async () => {
+    const s = await seed();
+    const [token] = await s.db.select().from(tokens);
+    await s.db.insert(disposals).values({
+      userId: s.userId,
+      walletId: s.read,
+      tokenId: token!.id,
+      instrumentId: token!.instrumentId,
+      tokenQty: 100_000_000n,
+      shares: "1",
+      kind: "chain",
+      occurredAt: hour(6),
+      realisedPnlUsd: "30",
+    });
+    const summary = PortfolioSummary.parse(await readSummary(s.db, board, s.userId));
+    expect(summary.pnl).toMatchObject({ realisedUsd: "42" });
   });
 
   it("keeps a wallet whose past is read but not yet costed calculating, never a $0 P&L", async () => {

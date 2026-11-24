@@ -219,7 +219,7 @@ describe("movementOf", () => {
     expect(m).toMatchObject({ counterMint: USDC, counterAmountRaw: 800n });
   });
 
-  it("reads a departure with no counter", () => {
+  it("reads a sale with what it was sold for: the token that arrived most", () => {
     const m = movementOf(
       tx({ preTokens: [entry(ME, TSLAX, 9n)], postTokens: [entry(ME, TSLAX, 2n), entry(ME, USDC, 70n)] }),
       ME,
@@ -228,8 +228,8 @@ describe("movementOf", () => {
     expect(m).toEqual({
       kind: "out",
       amountRaw: 7n,
-      counterMint: null,
-      counterAmountRaw: null,
+      counterMint: USDC,
+      counterAmountRaw: 70n,
       sourceOwner: null,
       // Dollars came back for it: a sale to a pool, not a send to anyone.
       destinationOwner: null,

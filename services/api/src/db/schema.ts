@@ -460,9 +460,23 @@ export const disposals = pgTable(
     tokenQty: bigint("token_qty", { mode: "bigint" }).notNull(),
     /** token_qty x the multiplier in force when it left. For reading; the replay counts tokens. */
     shares: usd("shares").notNull(),
-    kind: text("kind", { enum: ["sell", "transfer_out"] }).notNull(),
+    /**
+     * `sell`: an order Mercury settled. `transfer_out`: position-sync saw the
+     * chain hold less than the records, and dated it when it looked.
+     * `chain`: the history reader found it in a linked wallet's past, and
+     * dated it when it happened. Once a linked wallet's past is costed, its
+     * departures are the reader's alone (position-sync can't tell a sale and
+     * a buy back between two looks from nothing happening).
+     */
+    kind: text("kind", { enum: ["sell", "transfer_out", "chain"] }).notNull(),
     /** The sell that wrote it. Unique, so a sell settled twice removes its shares once. */
     orderId: uuid("order_id"),
+    /**
+     * What a sale made outside Mercury realised: the dollars it was swapped
+     * for, less the shares' average cost then. Only where it was swapped for
+     * dollars; null on a send, and on a sale for anything else.
+     */
+    realisedPnlUsd: usd("realised_pnl_usd"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
   },

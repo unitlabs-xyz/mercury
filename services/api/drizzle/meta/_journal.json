@@ -253,6 +253,13 @@
       "when": 1795545830960,
       "tag": "0035_liquidation_pnl",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795548552720,
+      "tag": "0036_chain_departures",
+      "breakpoints": true
     }
   ]
 }

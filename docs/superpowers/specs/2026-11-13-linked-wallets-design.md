@@ -621,6 +621,18 @@ After the first read nothing is replayed again: each account's cursor is the new
 and a pass asks only for signatures newer than it, which is usually none. New arrivals are priced
 and added to the lots already written.
 
+**Departures are the reader's too, from then on.** Position-sync sees balances, and a sale and a
+buy back between two of its looks are a balance that didn't move; when the gap showed up later it
+took the sale out at the average of the old shares and the new (10 at $100, sold, 10 bought back
+at $200, read as 10 at $150). So once a linked wallet's past is costed, position-sync only shows a
+balance below the records (the position scaled to the chain), and each later costing writes every
+sale and buy in the order it happened, each recorded a moment after the last, as a `chain`
+departure dated when it happened. A sale swapped for USDC or USDT realises what it was swapped for,
+less the shares' average cost then (`disposal.realised_pnl_usd`), counted with Mercury's own on
+Home. A sale for anything else, or a send, claims no realised figure. Between a sale and the next
+pass the position keeps its old cost, and is then exact. The Mercury wallet is unchanged: every
+trade in it is Mercury's, recorded as it settles.
+
 ## P&L on a linked wallet
 
 - **Value and the day's change:** always, for everything held. These need only prices.

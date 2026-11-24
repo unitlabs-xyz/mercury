@@ -3,7 +3,17 @@ import { D, EMPTY_OPEN, replayPosition, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
-import { activities, disposals, instruments, lots, orders, positions, tokens } from "../db/schema.js";
+import {
+  activities,
+  disposals,
+  historyJobs,
+  instruments,
+  lots,
+  orders,
+  positions,
+  tokens,
+  wallets,
+} from "../db/schema.js";
 import { notifyFor } from "../notify/inbox.js";
 import { movementsByToken } from "./open.js";
 import type { HeldToken, Reconciliation } from "./reconcile.js";
@@ -178,9 +188,32 @@ export async function loadHeldTokens(
 
 const fixed = (v: Decimal): string => v.toFixed(18);
 
+/**
+ * Whether a wallet's departures are the history reader's rather than ours: a
+ * linked wallet whose past has been read and costed. The reader sees each
+ * transaction, in order; this pass sees only balances, and a sale and a buy
+ * back between two looks are a balance that didn't move. Taking the sale out
+ * when the gap shows up later would take it at the average of the old shares
+ * and the new. So for such a wallet a balance below the records is only shown
+ * (the position is scaled to the chain), and the reader writes the departure.
+ */
+async function departuresAreTheReaders(db: Db, walletId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ isPrimary: wallets.isPrimary, status: historyJobs.status })
+    .from(wallets)
+    .leftJoin(historyJobs, eq(historyJobs.walletId, wallets.id))
+    .where(eq(wallets.id, walletId))
+    .limit(1);
+  return row !== undefined && !row.isPrimary && row.status === "done";
+}
+
 /** Writes what the plan decided. One transaction, so a half-written pass cannot exist. */
-export async function applyReconciliation(db: Db, owner: WalletOwner, plan: Reconciliation): Promise<void> {
+export async function applyReconciliation(db: Db, owner: WalletOwner, given: Reconciliation): Promise<void> {
   const { userId, walletId } = owner;
+  const plan =
+    given.disposals.length > 0 && (await departuresAreTheReaders(db, walletId))
+      ? { ...given, disposals: [] }
+      : given;
   if (
     plan.lots.length === 0 &&
     plan.disposals.length === 0 &&

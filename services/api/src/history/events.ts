@@ -40,7 +40,11 @@ export interface Movement {
   readonly kind: "in" | "out" | "loan_deposit" | "loan_withdraw";
   /** Of this token, always positive. */
   readonly amountRaw: bigint;
-  /** For an arrival: the token that left the wallet most in the same transaction, if any did. */
+  /**
+   * The other side of a swap. For an arrival, the token that left the wallet
+   * most in the same transaction (what it was paid with); for a departure, the
+   * token that arrived most (what it was sold for). Null for a plain transfer.
+   */
   readonly counterMint: string | null;
   readonly counterAmountRaw: bigint | null;
   /** For an arrival: the wallet that sent it, where the transaction says. */
@@ -148,15 +152,23 @@ export const movementOf = (tx: TransactionDetail, owner: string, mint: string): 
     };
   }
   if (d < 0n) {
-    // A plain transfer only: something arriving in the same transaction makes it a swap.
-    const swapped = [...all].some(([m, delta]) => m !== mint && delta > 0n);
+    // A plain transfer only: something arriving in the same transaction makes it a swap, sold for it.
+    let soldFor: string | null = null;
+    let soldForRaw: bigint | null = null;
+    for (const [m, delta] of all) {
+      if (m === mint || delta <= 0n) continue;
+      if (soldForRaw === null || delta > soldForRaw) {
+        soldFor = m;
+        soldForRaw = delta;
+      }
+    }
     return {
       kind: "out",
       amountRaw: -d,
-      counterMint: null,
-      counterAmountRaw: null,
+      counterMint: soldFor,
+      counterAmountRaw: soldForRaw,
       sourceOwner: null,
-      destinationOwner: swapped ? null : receiverOf(tx, owner, mint),
+      destinationOwner: soldFor === null ? receiverOf(tx, owner, mint) : null,
     };
   }
 

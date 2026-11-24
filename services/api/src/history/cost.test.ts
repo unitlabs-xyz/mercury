@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { D, type Decimal } from "@mercury/core";
+import { D, replayPosition, type Decimal } from "@mercury/core";
+import { movementsByToken } from "../portfolio/open.js";
 import type { PastPriceSource, PriceBoard } from "@mercury/market";
 import { mercuryWallet, testDb } from "../db/testing.js";
 import {
   activities,
+  disposals,
   earnEvents,
   historyEvents,
   historyJobs,
@@ -418,7 +420,7 @@ describe("costWallet, a first costing", () => {
 });
 
 describe("costWallet, a later costing", () => {
-  it("prices only new arrivals, leaving departures to position-sync, and keeps the wallet ready", async () => {
+  it("prices new arrivals, takes departures out in their place, and keeps the wallet ready", async () => {
     const s = await seed("done");
     await s.found({
       kind: "in",
@@ -443,7 +445,119 @@ describe("costWallet, a later costing", () => {
     const [lot] = await s.chainLots();
     expect(D(lot!.unitCostUsd).toString()).toBe("300");
     expect(lot!.tokenQty).toBe(tokensOf(1));
+    const gone = await s.db.select().from(disposals).where(eq(disposals.walletId, s.walletId));
+    expect(gone.map((d) => [d.kind, d.tokenQty, d.occurredAt, d.realisedPnlUsd])).toEqual([
+      ["chain", tokensOf(1), day(9), null],
+    ]);
     expect((await s.job()).status).toBe("done");
+  });
+
+  describe("a sale and a buy back, outside Mercury", () => {
+    /** 10 TSLAx at $100, already in the wallet's records from its first costing. */
+    const holding = async () => {
+      const s = await seed("done");
+      await s.db.insert(lots).values({
+        userId: s.userId,
+        walletId: s.walletId,
+        tokenId: s.tokenId,
+        instrumentId: s.instrumentId,
+        tokenQty: tokensOf(10),
+        shares: "10",
+        unitCostUsd: "100",
+        feeUsd: "0",
+        acquiredAt: day(1),
+        recordedAt: new Date(NOW.getTime() - 86_400_000),
+        source: "chain",
+      });
+      // The purchase they came from, costed on the first pass.
+      await s.found({
+        kind: "in",
+        amount: tokensOf(10),
+        at: day(1),
+        counterMint: USDC,
+        counterAmount: 1_000_000_000n,
+        costed: true,
+      });
+      return s;
+    };
+    /** What the records hold now, replayed as position-sync replays them. */
+    const held = async (s: Awaited<ReturnType<typeof seed>>) => {
+      const [l, d] = await Promise.all([
+        s.db.select().from(lots).where(eq(lots.walletId, s.walletId)),
+        s.db.select().from(disposals).where(eq(disposals.walletId, s.walletId)),
+      ]);
+      const open = replayPosition(
+        movementsByToken(
+          l.map((x) => ({ ...x, recordedAtUs: x.recordedAt.getTime() * 1000 })),
+          d.map((x) => ({ ...x, recordedAtUs: x.recordedAt.getTime() * 1000 })),
+        ).get(s.tokenId) ?? [],
+      );
+      return [open.tokenQty, open.costUsd.toString()];
+    };
+    const realised = async (s: Awaited<ReturnType<typeof seed>>) =>
+      (await s.db.select().from(disposals).where(eq(disposals.walletId, s.walletId))).map((d) =>
+        d.realisedPnlUsd === null ? null : D(d.realisedPnlUsd).toString(),
+      );
+
+    it("keeps the new shares at what they cost, not the average of old and new", async () => {
+      const s = await holding();
+      // Sold all 10 for $1,500, bought 10 back for $2,000: between two looks, the balance never moved.
+      await s.found({
+        kind: "out",
+        amount: tokensOf(10),
+        at: day(5),
+        counterMint: USDC,
+        counterAmount: 1_500_000_000n,
+      });
+      await s.found({
+        kind: "in",
+        amount: tokensOf(10),
+        at: day(6),
+        counterMint: USDC,
+        counterAmount: 2_000_000_000n,
+      });
+      await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+      expect(await held(s)).toEqual([tokensOf(10), "2000"]);
+      // The sale made $500 on shares that cost $1,000.
+      expect(await realised(s)).toEqual(["500"]);
+    });
+
+    it("takes a partial sale out of the old shares before the buy that followed it", async () => {
+      const s = await holding();
+      await s.found({
+        kind: "out",
+        amount: tokensOf(5),
+        at: day(5),
+        counterMint: USDC,
+        counterAmount: 600_000_000n,
+      });
+      await s.found({
+        kind: "in",
+        amount: tokensOf(5),
+        at: day(6),
+        counterMint: USDC,
+        counterAmount: 1_000_000_000n,
+      });
+      await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+      // 5 left at $100 and 5 bought at $200: $1,500, not the $1,333 the average of all fifteen gave.
+      expect(await held(s)).toEqual([tokensOf(10), "1500"]);
+      expect(await realised(s)).toEqual(["100"]);
+    });
+
+    it("claims no realised figure for a sale for something other than dollars, or a send", async () => {
+      const s = await holding();
+      await s.found({
+        kind: "out",
+        amount: tokensOf(2),
+        at: day(5),
+        counterMint: SOL_MINT,
+        counterAmount: 5_000_000_000n,
+      });
+      await s.found({ kind: "out", amount: tokensOf(1), at: day(6), destinationOwner: "Friend1111" });
+      await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+      expect(await held(s)).toEqual([tokensOf(7), "700"]);
+      expect(await realised(s)).toEqual([null, null]);
+    });
   });
 
   it("carries a send by hand to the Mercury wallet there, at what the shares cost in this wallet", async () => {
