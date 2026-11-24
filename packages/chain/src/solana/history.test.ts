@@ -279,3 +279,56 @@ describe("SolanaRpc.tokenAccounts", () => {
     expect(await rpc.tokenAccounts(FIXTURE_OWNER)).toEqual([]);
   });
 });
+
+describe("SolanaRpc.ownedTokenAccounts", () => {
+  const account = (pubkey: string, mint: string, amount: string, decimals: number) => ({
+    pubkey,
+    account: { data: { parsed: { info: { mint, tokenAmount: { amount, decimals } } } } },
+  });
+
+  /* The history reader keeps only the mints Mercury lists, so it needs each account's mint, not only its address. */
+  it("asks both token programs and returns each account with its mint and balance, empty ones included", async () => {
+    const bodies: string[] = [];
+    const answers = [
+      {
+        context: { slot: 1 },
+        value: [account("UsdcAccount1111111111111111111111111111111", USDC_MINT, "0", 6)],
+      },
+      {
+        context: { slot: 1 },
+        value: [account("StockAccount111111111111111111111111111111", NVDAX_MINT, "250000000", 8)],
+      },
+    ];
+    let i = 0;
+    const doFetch = ((_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return Promise.resolve(
+        new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: answers[i++] }), {
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    }) as typeof fetch;
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: doFetch });
+
+    const owned = await rpc.ownedTokenAccounts(FIXTURE_OWNER);
+
+    expect([...owned].sort((a, b) => a.address.localeCompare(b.address))).toEqual([
+      {
+        address: "StockAccount111111111111111111111111111111",
+        mint: NVDAX_MINT,
+        rawAmount: 250000000n,
+        decimals: 8,
+      },
+      { address: "UsdcAccount1111111111111111111111111111111", mint: USDC_MINT, rawAmount: 0n, decimals: 6 },
+    ]);
+    expect(bodies.join(" ")).toContain(TOKEN_PROGRAM);
+    expect(bodies.join(" ")).toContain(TOKEN_2022_PROGRAM);
+    expect(bodies.join(" ")).toContain("jsonParsed");
+  });
+
+  it("is empty for a wallet with no token accounts", async () => {
+    const n = node({ getTokenAccountsByOwner: { context: { slot: 1 }, value: [] } });
+    const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: n.doFetch });
+    expect(await rpc.ownedTokenAccounts(FIXTURE_OWNER)).toEqual([]);
+  });
+});

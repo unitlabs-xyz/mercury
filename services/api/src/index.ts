@@ -39,6 +39,10 @@ import { watchAddresses, type Watch } from "./jobs/watch.js";
 import { tokenAccountAddresses } from "./portfolio/accounts.js";
 import { streamAddresses } from "./wallet-events/streams.js";
 import { logger } from "./log/index.js";
+import { SolanaRpc, USDC_MINT } from "@mercury/chain";
+import { budget, budgeted } from "./history/budget.js";
+import { historyPass, listedMints } from "./history/runner.js";
+import { laneRefusedWithin } from "./jobs/strain.js";
 
 /*
  * First, so that nothing after it, a bad config included, logs a stack trace.
@@ -671,6 +675,42 @@ every(
   },
   // Four minutes: after the first passes of the jobs that read every wallet, not on top of them.
   jobClock(240_000),
+);
+
+/**
+ * The history reader: each linked wallet's past, read back from its token
+ * accounts, so its P&L can be worked out (step 7 costs what it reads).
+ *
+ * Inside the API rather than a process of its own, which is what lets it see
+ * that the jobs' lane is being refused and give way: that signal is memory in
+ * this process. On the paid RPC, through its own client with retries off and a
+ * budget of `HISTORY_RPC_RPS` calls a second, so a refusal stops it rather than
+ * being retried at the node, and the app's reads and trades always come first.
+ *
+ * Five seconds between passes, each one job; a first read can run for minutes,
+ * and the next pass waits for it. Starts after the other jobs' first passes.
+ */
+const historyChain = budgeted(
+  new SolanaRpc({ rpcUrl: config.solanaRpcUrl, attempts: 1 }),
+  budget({ rps: config.historyRps }),
+);
+every(
+  "history-reader",
+  5_000,
+  historyPass({
+    db: auth.db,
+    reader: {
+      history: historyChain,
+      listedMints: listedMints({
+        db: auth.db,
+        usdcMint: USDC_MINT,
+        earnShareMints: async () => (await deps.earn.list()).map((v) => v.sharesMint),
+      }),
+      laneBusy: () => laneRefusedWithin(60_000),
+    },
+    log: logger("history"),
+  }),
+  jobClock(5 * 60_000),
 );
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {

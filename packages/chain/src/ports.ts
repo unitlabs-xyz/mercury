@@ -231,6 +231,14 @@ export interface ChainReader {
   rentExemption?(bytes: number): Promise<bigint>;
 }
 
+/** A token account, what it holds, and how much of it. */
+export interface OwnedTokenAccount {
+  readonly address: string;
+  readonly mint: string;
+  readonly rawAmount: bigint;
+  readonly decimals: number;
+}
+
 /** One signature from an address's history. */
 export interface SignatureRef {
   readonly signature: string;
@@ -316,6 +324,13 @@ export interface ChainHistory {
    * wanted to watch holdings reads them on a clock instead.
    */
   tokenAccounts?(owner: string): Promise<readonly string[]>;
+  /**
+   * Every token account the owner holds, under either token program, with its
+   * mint and balance: the history reader keeps only the mints Mercury lists,
+   * and reads an account back to the last time it was empty. Empty accounts
+   * are kept, as `tokenAccounts` keeps them. Optional, as a capability.
+   */
+  ownedTokenAccounts?(owner: string): Promise<readonly OwnedTokenAccount[]>;
   /** Newest first, as the node returns them. */
   signatures(address: string, page: SignaturePage): Promise<readonly SignatureRef[]>;
   /** Null when the node has no such transaction, or has pruned it. */

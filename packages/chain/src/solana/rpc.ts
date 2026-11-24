@@ -8,6 +8,7 @@ import type {
   SignatureRef,
   TokenBalance,
   TokenBalanceEntry,
+  OwnedTokenAccount,
   TokenTransfer,
   TransactionDetail,
 } from "../ports.js";
@@ -397,6 +398,35 @@ export class SolanaRpc implements ChainReader, ChainHistory {
     );
     // A set: the same account answered twice is one account to watch.
     return [...new Set(pages.flatMap((page) => page.value.map((a) => a.pubkey)))];
+  }
+
+  /**
+   * The owner's token accounts under both programs, with each one's mint and
+   * balance, empty ones included. Parsed by the node, so no account layout is
+   * decoded here.
+   */
+  async ownedTokenAccounts(owner: string): Promise<readonly OwnedTokenAccount[]> {
+    const pages = await Promise.all(
+      [TOKEN_PROGRAM, TOKEN_2022_PROGRAM].map((programId) =>
+        this.call<{ value: readonly (ParsedTokenAccount & { readonly pubkey: string })[] }>(
+          "getTokenAccountsByOwner",
+          [owner, { programId }, { encoding: "jsonParsed" }],
+        ),
+      ),
+    );
+    const byAddress = new Map<string, OwnedTokenAccount>();
+    for (const page of pages) {
+      for (const entry of page.value) {
+        const info = entry.account.data.parsed.info;
+        byAddress.set(entry.pubkey, {
+          address: entry.pubkey,
+          mint: info.mint,
+          rawAmount: BigInt(info.tokenAmount.amount),
+          decimals: info.tokenAmount.decimals,
+        });
+      }
+    }
+    return [...byAddress.values()];
   }
 
   async tokenAccountsFor(owner: string, mint: string): Promise<readonly string[]> {

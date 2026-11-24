@@ -4,7 +4,9 @@ import { mercuryWallet, testDb } from "../db/testing.js";
 import type { Db } from "../db/client.js";
 import {
   activities,
+  historyJobs,
   loanAlerts,
+  walletStreams,
   orders,
   instruments,
   users,
@@ -399,6 +401,59 @@ describe("linking a wallet again", () => {
     });
     expect(await db.select().from(wallets).where(eq(wallets.address, phantom.address))).toHaveLength(1);
     expect(await db.select().from(activities).where(eq(activities.walletId, phantom.id))).toHaveLength(1);
+  });
+
+  it("queues the linked wallet's past to be read, in the same step as linking it", async () => {
+    const db = await testDb();
+    const { userId } = await person(db, "did:privy:a");
+    const phantom = await linked(db, userId);
+    const [job] = await db.select().from(historyJobs).where(eq(historyJobs.walletId, phantom.id));
+    expect(job).toMatchObject({ userId, status: "queued", cursors: {}, runAfter: NOW });
+  });
+
+  it("queues only the gap when linked again, from the kept cursors, and calculates until it is read", async () => {
+    const db = await testDb();
+    const { userId } = await person(db, "did:privy:a");
+    const phantom = await linked(db, userId);
+    await db
+      .update(historyJobs)
+      .set({ status: "done", cursors: { acct: "SigNewest" } })
+      .where(eq(historyJobs.walletId, phantom.id));
+    await unlinkWallet(db, { userId, walletId: phantom.id, deleteHistory: false, now: NOW });
+
+    await linkWith(db, userId, phantom, { now: later(60_000) });
+    const [job] = await db.select().from(historyJobs).where(eq(historyJobs.walletId, phantom.id));
+    expect(job).toMatchObject({ status: "queued", cursors: { acct: "SigNewest" }, runAfter: later(60_000) });
+  });
+
+  it("starts the live activity job afresh on a wallet linked again, so the gap is not announced as news", async () => {
+    const db = await testDb();
+    const { userId } = await person(db, "did:privy:a");
+    const phantom = await linked(db, userId);
+    await db
+      .insert(walletStreams)
+      .values({ walletId: phantom.id, address: phantom.address, cursor: "SigOld" });
+    await unlinkWallet(db, { userId, walletId: phantom.id, deleteHistory: false, now: NOW });
+
+    await linkWith(db, userId, phantom, { now: later(60_000) });
+    expect(await db.select().from(walletStreams).where(eq(walletStreams.walletId, phantom.id))).toEqual([]);
+  });
+
+  it("leaves the live activity job alone on a first link", async () => {
+    const db = await testDb();
+    const { userId } = await person(db, "did:privy:a");
+    const other = await linked(db, userId);
+    await db.insert(walletStreams).values({ walletId: other.id, address: other.address, cursor: "SigKept" });
+    await linked(db, userId);
+    expect(await db.select().from(walletStreams)).toHaveLength(1);
+  });
+
+  it("queues no read for a link that was refused", async () => {
+    const db = await testDb();
+    const { userId } = await person(db, "did:privy:a");
+    const phantom = await testWallet();
+    await linkWith(db, userId, phantom, { limit: 0 });
+    expect(await db.select().from(historyJobs)).toEqual([]);
   });
 
   it("counts toward the limit like a new link", async () => {

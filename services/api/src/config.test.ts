@@ -175,4 +175,16 @@ describe("readConfig, linked wallets", () => {
       expect(() => readConfig({ ...base, LINKED_WALLET_LIMIT: bad })).toThrow("LINKED_WALLET_LIMIT");
     }
   });
+
+  it("gives the history reader two calls a second when nothing says otherwise", () => {
+    expect(readConfig(base).historyRps).toBe(2);
+    expect(readConfig({ ...base, HISTORY_RPC_RPS: "" }).historyRps).toBe(2);
+    expect(readConfig({ ...base, HISTORY_RPC_RPS: "0.5" }).historyRps).toBe(0.5);
+  });
+
+  it("refuses a history rate that would stop it, or that is not a number", () => {
+    for (const bad of ["0", "-1", "fast", "Infinity"]) {
+      expect(() => readConfig({ ...base, HISTORY_RPC_RPS: bad })).toThrow("HISTORY_RPC_RPS");
+    }
+  });
 });

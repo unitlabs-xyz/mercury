@@ -1040,7 +1040,13 @@ export const historyJobs = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    status: text("status", { enum: ["queued", "running", "done", "failed"] })
+    /**
+     * How far the first read has got: queued, running, read (everything read,
+     * costs still to come), done (read and costed; the wallet's P&L is ready),
+     * or failed (retried, rarely). Later passes never change it. See
+     * `history/queue.ts`. Plain text, so a new status needs no migration.
+     */
+    status: text("status", { enum: ["queued", "running", "read", "done", "failed"] })
       .notNull()
       .default("queued"),
     /**

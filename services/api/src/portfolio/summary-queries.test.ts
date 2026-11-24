@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import type { PriceBoard, TokenPrice } from "@mercury/market";
 import { PortfolioSummary } from "@mercury/types";
@@ -178,6 +179,22 @@ describe("readSummary", () => {
     // $105 owed on $100 borrowed.
     expect(summary.loanInterestUsd).toBe("5");
     expect(summary.calculating).toBe(1);
+  });
+
+  it("keeps a wallet whose past is read but not yet costed calculating, never a $0 P&L", async () => {
+    const s = await seed();
+    await s.db.update(historyJobs).set({ status: "read" }).where(eq(historyJobs.walletId, s.read));
+    const summary = PortfolioSummary.parse(await readSummary(s.db, board, s.userId));
+
+    expect(summary.wallets.map((w) => [w.address, w.history])).toEqual([
+      ["Mercury", "ready"],
+      ["Read", "calculating"],
+      ["Reading", "calculating"],
+    ]);
+    expect(summary.calculating).toBe(2);
+    // Only the Mercury wallet's figures count until the others are costed; still in net worth.
+    expect(summary.pnl.unrealisedUsd).toBe("100");
+    expect(summary.netWorthUsd).toBe("3000");
   });
 
   it("is empty for someone whose Mercury wallet is still being made", async () => {

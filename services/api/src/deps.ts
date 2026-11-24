@@ -219,6 +219,12 @@ export interface Config {
    * wallet. `LINKED_WALLET_LIMIT`, defaulting to 5.
    */
   readonly linkedWalletLimit: number;
+  /**
+   * The history reader's own ceiling on the paid RPC, in calls a second.
+   * `HISTORY_RPC_RPS`, defaulting to 2: well under the plan's limit, since it
+   * shares one allowance with everything the app reads and sends.
+   */
+  readonly historyRps: number;
 }
 
 /**
@@ -306,6 +312,19 @@ const appUrl = (env: NodeJS.ProcessEnv): string => {
  * A whole number of at least one, or the server does not start. Zero would
  * offer linking and refuse every link.
  */
+const DEFAULT_HISTORY_RPS = 2;
+
+/** A positive number of calls a second; anything else stops the server at boot. */
+const historyRps = (env: NodeJS.ProcessEnv): number => {
+  const raw = env["HISTORY_RPC_RPS"];
+  if (raw === undefined || raw.length === 0) return DEFAULT_HISTORY_RPS;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`HISTORY_RPC_RPS must be a number of calls a second above 0, got "${raw}"`);
+  }
+  return n;
+};
+
 const linkedWalletLimit = (env: NodeJS.ProcessEnv): number => {
   const raw = env["LINKED_WALLET_LIMIT"];
   if (raw === undefined || raw.length === 0) return DEFAULT_LINKED_WALLET_LIMIT;
@@ -425,6 +444,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
     appUrl: appUrl(env),
     linkedWalletLimit: linkedWalletLimit(env),
+    historyRps: historyRps(env),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
   };

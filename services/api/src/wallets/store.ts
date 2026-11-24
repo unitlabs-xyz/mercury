@@ -1,7 +1,8 @@
 import { and, asc, count, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { loanAlerts, walletLinkChallenges, wallets, type Wallet } from "../db/schema.js";
+import { loanAlerts, walletLinkChallenges, walletStreams, wallets, type Wallet } from "../db/schema.js";
 import { logger } from "../log/index.js";
+import { queueHistory } from "../history/queue.js";
 import { CHALLENGE_TTL_MS, linkMessage, linkNonce } from "./message.js";
 
 const log = logger("wallets");
@@ -196,6 +197,24 @@ export async function completeLink(
       .update(walletLinkChallenges)
       .set({ usedAt: input.now })
       .where(eq(walletLinkChallenges.id, challenge.id));
+
+    /*
+     * Its past is read by the history reader. Queued in this transaction, so a
+     * linked wallet never lacks a job; linking again queues the gap from the
+     * kept cursors, and the wallet is "Calculating…" until it is read.
+     */
+    await queueHistory(tx, { walletId: wallet!.id, userId: input.userId, now: input.now });
+
+    /*
+     * Linked again: what happened while it was unlinked is the history
+     * reader's to read, from its kept cursors. The live activity job forgets
+     * where it stopped and starts from now, as for a wallet it has never seen:
+     * walking months of gap from its old cursor stalls it at its page cap, and
+     * a transfer from the gap is not news to announce.
+     */
+    if (check.existing !== null) {
+      await tx.delete(walletStreams).where(eq(walletStreams.walletId, wallet!.id));
+    }
 
     const relinked = check.existing !== null;
     /* The person, never the address: an address in a log is a person's holdings in a log. */
