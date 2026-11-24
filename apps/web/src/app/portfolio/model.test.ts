@@ -276,3 +276,17 @@ it("still reports a day's move for an account holding only baskets", () => {
   // The six figures partition the account rather than overlapping it.
   expect(model!.stocks + model!.basketUsd + model!.cash - model!.debt).toBeCloseTo(model!.total, 10);
 });
+
+it("marks a holding whose cost is partly estimated, and says where the estimate came from", () => {
+  const m = modelOf(stacked({ estimatedCostUsd: "120", estimateSource: "link_day_price" }));
+  expect(m.rows[0]!.estimated).toBe(true);
+  expect(m.rows[0]!.estimateLine).toBe("Estimated from the price when you linked this wallet");
+});
+
+it("marks nothing on a holding whose cost is exact, or from a server that does not say", () => {
+  expect(modelOf(stacked({ estimatedCostUsd: "0", estimateSource: null })).rows[0]).toMatchObject({
+    estimated: false,
+    estimateLine: null,
+  });
+  expect(modelOf(stacked()).rows[0]).toMatchObject({ estimated: false, estimateLine: null });
+});

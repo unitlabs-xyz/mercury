@@ -221,7 +221,13 @@ const SAMPLE_SUMMARY: PortfolioSummary = {
  * and a loan in a margin call. No baskets and no Earn: those are Mercury's.
  */
 const phantomHoldings = [
-  { ...holding("TSLA", "Tesla", "8.400", 2950, 3200, "-2.41"), pledgedShares: "6" },
+  // Read from the wallet's history: arrived by plain transfer, so its cost is estimated.
+  {
+    ...holding("TSLA", "Tesla", "8.400", 2950, 3200, "-2.41"),
+    pledgedShares: "6",
+    estimatedCostUsd: "3200.00",
+    estimateSource: "link_day_price" as const,
+  },
   { ...holding("NVDA", "Nvidia", "10.200", 1885.1, 1500, "0.18"), pledgedShares: "0" },
 ];
 const phantomCash = 900;
@@ -1523,6 +1529,8 @@ export const sampleResponse = (path: string, body?: string, wallet?: string): un
   const inbox = inboxResponse(route, body);
   if (inbox !== undefined) return inbox;
   if (route === "/v1/wallets") return SAMPLE_WALLETS;
+  // "Set cost": accepted, as the server would for an estimated holding.
+  if (/^\/v1\/portfolio\/holdings\/[^/]+\/cost$/.test(route)) return { lots: 1 };
   if (route === "/v1/portfolio/summary") return SAMPLE_SUMMARY;
   /*
    * The chosen wallet's own figures. "all" is every wallet at once; the

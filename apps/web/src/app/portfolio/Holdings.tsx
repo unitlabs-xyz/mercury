@@ -144,11 +144,18 @@ const Line = ({
                 : "no fees or spread",
             `= ${signed(r.returnUsd, usd(Math.abs(r.returnUsd)))} on what you paid`,
             r.returnPartial ? "Shares with no recorded cost are left out" : "",
+            r.estimateLine ?? "",
           ]
             .filter(Boolean)
             .join("\n")}
         >
           <span className={`font-medium ${r.marketReturnUsd < 0 ? "text-ds-loss" : "text-ds-up"}`}>
+            {/* `~`: measured against a cost that is partly estimated; the tooltip says from what. */}
+            {r.estimated && (
+              <span className="mr-0.5 font-normal text-ds-muted" aria-label="estimated">
+                ~
+              </span>
+            )}
             {signed(r.marketReturnUsd, usd(Math.abs(r.marketReturnUsd)))}
           </span>
           <span className="text-[12px] text-ds-muted">

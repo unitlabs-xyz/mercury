@@ -1,4 +1,5 @@
 import { D, type Decimal, ZERO } from "@mercury/core";
+import type { EstimateSource } from "@mercury/types";
 // The floor below which a rise is arithmetic, not a dividend: position-sync's own, so the two agree.
 import { DIVIDEND_FLOOR } from "../portfolio/reconcile.js";
 
@@ -10,9 +11,8 @@ export const DOLLAR_MINTS: ReadonlySet<string> = new Set([
 /** Both carry six decimals. */
 const DOLLAR_DECIMALS = 6;
 
-/** Where an estimated cost came from. Null on a lot is an exact cost. */
-export type EstimateSource =
-  "sol_price" | "market_price" | "earliest_price" | "link_day_price" | "own_wallet";
+/** Where an estimated cost came from: the wire's own list, so the two cannot drift. Null on a lot is exact. */
+export type { EstimateSource };
 
 /** What one arrival's shares cost, each. */
 export interface ArrivalCost {

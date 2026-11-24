@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { Portfolio } from "@mercury/types";
+import { estimateLine, estimateMark } from "@mercury/view";
 import type { Borrow } from "../../api/borrow";
 import type { Dashboard } from "../../api/dashboard";
 import type { CreditMarket, Instrument } from "../../market/hooks";
@@ -14,6 +15,10 @@ export type Row = {
   readonly costBasisUsd: number;
   readonly sharesWithBasis: number;
   readonly returnPartial: boolean;
+  /** Part of the cost is estimated: the return is shown with `~`. */
+  readonly estimated: boolean;
+  /** Where the estimate came from, said under the holding; null when exact. */
+  readonly estimateLine: string | null;
   readonly value: number;
   readonly weight: number;
   readonly returnUsd: number;
@@ -159,6 +164,8 @@ export const useModel = (
         costBasisUsd: cost,
         sharesWithBasis,
         returnPartial: sharesWithBasis > 0 && sharesWithBasis < shares - 1e-9,
+        estimated: estimateMark(h) === "~",
+        estimateLine: estimateLine(h),
         value,
         weight: assets > 0 ? value / assets : 0,
         returnUsd,

@@ -32,6 +32,7 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
   feeUsd: ZERO,
   avgUnitCostUsd: D(150),
   estimatedCostUsd: ZERO,
+  estimateSource: null,
   wrappers: [{ mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 }],
   ...over,
 });

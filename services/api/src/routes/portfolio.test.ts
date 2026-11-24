@@ -49,6 +49,7 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
   feeUsd: ZERO,
   avgUnitCostUsd: D(150),
   estimatedCostUsd: ZERO,
+  estimateSource: null,
   wrappers: [{ mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 }],
   ...over,
 });
@@ -837,6 +838,28 @@ describe("GET /v1/portfolio, across wallets", () => {
     });
   });
 
+  it("adds up how much of a stock's cost was estimated, and says where most of it came from", async () => {
+    const { d } = twoWallets({
+      walletHoldings: async (_userId, walletId) =>
+        walletId === MERCURY.id
+          ? [holding({ estimatedCostUsd: D(50), estimateSource: "own_wallet" })]
+          : [holding({ estimatedCostUsd: D(120), estimateSource: "market_price" }), tsla()],
+    });
+    const all = await portfolioOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio"));
+    expect(all.holdings[0]).toMatchObject({
+      ticker: "NVDA",
+      estimatedCostUsd: "170",
+      estimateSource: "market_price",
+    });
+    // A holding whose cost is all exact names no source.
+    expect(all.holdings[1]).toMatchObject({ ticker: "TSLA", estimatedCostUsd: "0", estimateSource: null });
+
+    const one = await portfolioOf(
+      await appWith(d, "Mercury", { all: false, wallets: [MERCURY] }).request("/v1/portfolio"),
+    );
+    expect(one.holdings[0]).toMatchObject({ estimatedCostUsd: "50", estimateSource: "own_wallet" });
+  });
+
   it("measures the day's change over the sum, not as an average of each wallet's", async () => {
     const { d } = twoWallets({
       prices: {
@@ -993,5 +1016,74 @@ describe("GET /v1/portfolio/summary", () => {
 
   it("is not there when it is not wired", async () => {
     expect((await appWith(deps()).request("/v1/portfolio/summary")).status).toBe(404);
+  });
+});
+
+describe("POST /v1/portfolio/holdings/:ticker/cost", () => {
+  const LINKED = actingLinked("Phantom", { id: "wallet-phantom" });
+  const post = (d: PortfolioDeps, body: unknown, acting: Acting = { all: false, wallets: [LINKED] }) =>
+    appWith(d, "Mercury", acting).request("/v1/portfolio/holdings/tsla/cost", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const recording = (
+    answer: Awaited<ReturnType<NonNullable<PortfolioDeps["declareCost"]>>> = { kind: "set", lots: 2 },
+  ) => {
+    const calls: unknown[] = [];
+    const d = deps({
+      declareCost: async (owner, ticker, cost) => {
+        calls.push([owner, ticker, cost.toString()]);
+        return answer;
+      },
+    });
+    return { d, calls };
+  };
+
+  it("sets the cost for the chosen wallet, a linked one included, on the stock asked", async () => {
+    const { d, calls } = recording();
+    const res = await post(d, { unitCostUsd: "212.50" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ lots: 2 });
+    expect(calls).toEqual([[{ userId: "user-1", walletId: "wallet-phantom" }, "TSLA", "212.5"]]);
+  });
+
+  it("takes a number as readily as a string", async () => {
+    const { d, calls } = recording();
+    expect((await post(d, { unitCostUsd: 99 })).status).toBe(200);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("refuses a cost that is not dollars above zero, before touching anything", async () => {
+    const { d, calls } = recording();
+    for (const bad of [
+      { unitCostUsd: "0" },
+      { unitCostUsd: "-5" },
+      { unitCostUsd: "1e3" },
+      { unitCostUsd: "abc" },
+      {},
+      null,
+    ]) {
+      const res = await post(d, bad);
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_cost");
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it("asks which wallet when every wallet is shown: a cost for all would not say whose shares", async () => {
+    const { d, calls } = recording();
+    const res = await post(d, { unitCostUsd: "10" }, { all: true, wallets: [actingAs("Mercury"), LINKED] });
+    expect(res.status).toBe(400);
+    expect(calls).toEqual([]);
+  });
+
+  it("says when every cost is exact already, and when the stock is not one Mercury lists", async () => {
+    expect((await post(recording({ kind: "nothing_estimated" }).d, { unitCostUsd: "10" })).status).toBe(409);
+    expect((await post(recording({ kind: "unknown_stock" }).d, { unitCostUsd: "10" })).status).toBe(404);
+  });
+
+  it("is not there without the dependency", async () => {
+    expect((await post(deps(), { unitCostUsd: "10" })).status).toBe(404);
   });
 });

@@ -1,4 +1,4 @@
-import type { Portfolio, PortfolioSummary } from "@mercury/types";
+import type { EstimateSource, Portfolio, PortfolioSummary } from "@mercury/types";
 import type { Borrow, BorrowRow } from "./borrow.js";
 import { usd, usdSigned } from "./format.js";
 import { shortAddress } from "./receipt.js";
@@ -304,3 +304,29 @@ export const alsoHoldLine = (held: readonly HeldElsewhere[], mercuryHolds: boole
     parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]!}`;
   return `${mercuryHolds ? "You also hold" : "You hold"} ${list}`;
 };
+
+/** What each estimate source says, under a holding whose cost was estimated. */
+const ESTIMATED_FROM: Record<EstimateSource, string> = {
+  market_price: "Estimated from the share price when it arrived",
+  sol_price: "Estimated from what SOL was worth when it was swapped in",
+  earliest_price: "Estimated from the earliest price Mercury has",
+  link_day_price: "Estimated from the price when you linked this wallet",
+  own_wallet: "The cost it had in your other wallet",
+};
+
+/**
+ * The line under a holding whose cost is estimated, saying where the estimate
+ * came from; null when its cost is exact. Paired with "Set cost", which
+ * replaces the estimate with what the person paid.
+ */
+export const estimateLine = (h: {
+  readonly estimatedCostUsd?: string | undefined;
+  readonly estimateSource?: EstimateSource | null | undefined;
+}): string | null => {
+  if (!(Number(h.estimatedCostUsd ?? 0) > 0)) return null;
+  return h.estimateSource == null ? "Part of this cost is estimated" : ESTIMATED_FROM[h.estimateSource];
+};
+
+/** `~` before a figure measured against a cost that is partly estimated, and nothing before an exact one. */
+export const estimateMark = (h: { readonly estimatedCostUsd?: string | undefined }): "~" | "" =>
+  Number(h.estimatedCostUsd ?? 0) > 0 ? "~" : "";

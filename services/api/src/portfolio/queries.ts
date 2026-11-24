@@ -1,7 +1,8 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, max, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, max, sql, sum } from "drizzle-orm";
 import { D, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
-import { activities, instruments, portfolioSnapshots, positions, tokens } from "../db/schema.js";
+import { activities, instruments, lots, portfolioSnapshots, positions, tokens } from "../db/schema.js";
+import type { EstimateSource } from "@mercury/types";
 import { USDC_MINT } from "@mercury/chain";
 import type { HoldingRow } from "../routes/portfolio.js";
 import type { Flow, Reading } from "./history.js";
@@ -33,6 +34,28 @@ export async function readHoldings(db: Db, userId: string, walletId: string): Pr
 
   if (rows.length === 0) return [];
 
+  /*
+   * Where each holding's estimated cost mostly came from, for the line that
+   * says so: of the wallet's estimated lots, the source behind the most cost.
+   */
+  const estimated = await db
+    .select({
+      instrumentId: lots.instrumentId,
+      source: lots.estimateSource,
+      costUsd: sql<string>`sum(${lots.shares} * ${lots.unitCostUsd})`,
+    })
+    .from(lots)
+    .where(and(eq(lots.walletId, walletId), eq(lots.isEstimated, true), isNotNull(lots.estimateSource)))
+    .groupBy(lots.instrumentId, lots.estimateSource);
+  const mainSource = new Map<string, { source: EstimateSource; costUsd: Decimal }>();
+  for (const e of estimated) {
+    if (e.source === null) continue;
+    const seen = mainSource.get(e.instrumentId);
+    if (seen === undefined || D(e.costUsd).gt(seen.costUsd)) {
+      mainSource.set(e.instrumentId, { source: e.source, costUsd: D(e.costUsd) });
+    }
+  }
+
   const wrappers = await db
     .select({
       instrumentId: tokens.instrumentId,
@@ -54,6 +77,7 @@ export async function readHoldings(db: Db, userId: string, walletId: string): Pr
     feeUsd: D(row.feeUsd),
     avgUnitCostUsd: D(row.avgUnitCostUsd),
     estimatedCostUsd: D(row.estimatedCostUsd),
+    estimateSource: mainSource.get(row.instrumentId)?.source ?? null,
     wrappers: wrappers
       .filter((w) => w.instrumentId === row.instrumentId)
       .map((w) => ({ mint: w.mint, symbol: w.symbol, issuer: w.issuer, decimals: w.decimals })),

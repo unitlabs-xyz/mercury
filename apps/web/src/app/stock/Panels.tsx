@@ -4,7 +4,7 @@ import type { Instrument, Priced } from "../../market/hooks";
 import { useHistory, useReturns } from "../../market/hooks";
 import { InfoTip, MoveChip, RailFigure, RailHead } from "../../ui/ds";
 import { ISSUER_NAME } from "../IssuerCompare";
-import { usd, usdCompact, usdSigned } from "@mercury/view";
+import { estimateMark, usd, usdCompact, usdSigned } from "@mercury/view";
 import { compact } from "../invest/shared";
 import { HeaderFigure } from "../portfolio/Summary";
 import { TOKEN_NAME, type HeldPart } from "./heldAs";
@@ -224,6 +224,7 @@ export const Position = ({
   stockTodayPct,
   parts,
   accepted,
+  footer,
 }: {
   h: Holding | undefined;
   basketValue: number;
@@ -232,7 +233,11 @@ export const Position = ({
   parts?: readonly HeldPart[] | null | undefined;
   /** Kamino takes this ticker at all. */
   accepted?: boolean | null | undefined;
+  /** Under the figures: where an estimated cost came from, and "Set cost". The page's, so this stays plain. */
+  footer?: ReactNode;
 }) => {
+  // `~` on figures measured against a cost that is partly estimated.
+  const mark = h ? estimateMark(h) : "";
   const shares = Number(h?.shares ?? 0);
   const walletValue = Number(h?.valueUsd ?? 0);
   const value = walletValue + basketValue;
@@ -267,6 +272,7 @@ export const Position = ({
         <Fact k="Share price move">
           {h && cost > 0 ? (
             <span className={move < 0 ? "text-ds-loss" : "text-ds-up"}>
+              {mark}
               {usdSigned(move)}{" "}
               <span className="text-[12px] font-normal text-ds-muted">
                 {move >= 0 ? "+" : "−"}
@@ -298,8 +304,9 @@ export const Position = ({
             <MoveChip value={today} light />
           </span>
         </Fact>
-        <Fact k="Wallet cost basis">{h && cost > 0 ? usd(cost) : "—"}</Fact>
+        <Fact k="Wallet cost basis">{h && cost > 0 ? `${mark}${usd(cost)}` : "—"}</Fact>
       </dl>
+      {footer}
       {/* One stock to the reader, but two tokens underneath, and only one of them
           backs a loan. Shown when that difference is real: more than one token
           held, or a ticker Kamino lends against. */}

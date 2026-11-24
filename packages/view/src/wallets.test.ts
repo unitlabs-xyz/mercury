@@ -18,6 +18,8 @@ import {
   alsoHoldLine,
   heldElsewhere,
   linkOnWebUrl,
+  estimateLine,
+  estimateMark,
   updatedAgo,
   walletLoans,
   walletSlices,
@@ -462,5 +464,32 @@ describe("heldElsewhere and alsoHoldLine", () => {
 
   it("says nothing when no linked wallet holds it", () => {
     expect(alsoHoldLine([], true)).toBeNull();
+  });
+});
+
+describe("estimateLine and estimateMark", () => {
+  it("says where an estimated cost came from, and marks it", () => {
+    const h = { estimatedCostUsd: "120", estimateSource: "link_day_price" as const };
+    expect(estimateLine(h)).toBe("Estimated from the price when you linked this wallet");
+    expect(estimateMark(h)).toBe("~");
+    expect(estimateLine({ estimatedCostUsd: "1", estimateSource: "sol_price" })).toBe(
+      "Estimated from what SOL was worth when it was swapped in",
+    );
+    expect(estimateLine({ estimatedCostUsd: "1", estimateSource: "own_wallet" })).toBe(
+      "The cost it had in your other wallet",
+    );
+  });
+
+  it("still says so when the server named no source", () => {
+    expect(estimateLine({ estimatedCostUsd: "1", estimateSource: null })).toBe(
+      "Part of this cost is estimated",
+    );
+  });
+
+  it("says nothing, and marks nothing, for an exact cost or an older server", () => {
+    expect(estimateLine({ estimatedCostUsd: "0", estimateSource: "market_price" })).toBeNull();
+    expect(estimateLine({})).toBeNull();
+    expect(estimateMark({ estimatedCostUsd: "0" })).toBe("");
+    expect(estimateMark({})).toBe("");
   });
 });

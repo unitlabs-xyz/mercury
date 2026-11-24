@@ -11,7 +11,7 @@ import {
   type WrapperHolding,
 } from "@mercury/core";
 import type { ChainReader, TokenBalance } from "@mercury/chain";
-import type { PortfolioSummary } from "@mercury/types";
+import type { EstimateSource, PortfolioSummary } from "@mercury/types";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import {
   basketStockMints,
@@ -39,6 +39,8 @@ import {
 // Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
 import type { ActingWallet } from "../wallets/acting.js";
+import type { DeclaredCost } from "../portfolio/declared-cost.js";
+import { actingOne, oneWalletOnly } from "../wallets/acting.js";
 import type { WalletOwner } from "../wallets/active.js";
 
 export interface HoldingWrapper {
@@ -63,6 +65,8 @@ export interface HoldingRow {
   readonly avgUnitCostUsd: Decimal;
   /** Of `costBasisUsd`, how much was estimated rather than read off a trade. */
   readonly estimatedCostUsd: Decimal;
+  /** Where most of the estimated cost came from; null when none is estimated. */
+  readonly estimateSource: EstimateSource | null;
   readonly wrappers: readonly HoldingWrapper[];
 }
 
@@ -108,7 +112,12 @@ export interface PortfolioDeps {
   ) => Promise<{ movements: readonly BasketMovement[]; inKindExits: readonly InKindExit[] }>;
   /** The summary at the top of Home, across every followed wallet. Absent, the route is not there. */
   readonly summary?: (userId: string) => Promise<PortfolioSummary>;
+  /** "Set cost": what the person paid, in place of a holding's estimates. Absent, the route is not there. */
+  readonly declareCost?: (owner: WalletOwner, ticker: string, unitCostUsd: Decimal) => Promise<DeclaredCost>;
 }
+
+/** A cost per share as a person types it: dollars, up to a billion, to the cent or finer. */
+const COST = /^\d{1,9}(\.\d{1,12})?$/;
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
@@ -143,6 +152,8 @@ interface HoldingView {
   readonly changePct24h: Decimal;
   readonly wrapperCount: number;
   readonly pledgedShares: Decimal;
+  readonly estimatedCostUsd: Decimal;
+  readonly estimateSource: EstimateSource | null;
 }
 
 /** One wallet, valued: everything the page shows, as numbers, before any sum. */
@@ -189,6 +200,11 @@ const sumViews = (views: readonly WalletView[]) => {
             sharesWithBasis: seen.sharesWithBasis.add(h.sharesWithBasis),
             wrapperCount: Math.max(seen.wrapperCount, h.wrapperCount),
             pledgedShares: seen.pledgedShares.add(h.pledgedShares),
+            estimatedCostUsd: seen.estimatedCostUsd.add(h.estimatedCostUsd),
+            // Said for the wallet whose estimate is the larger part of the stock's.
+            estimateSource: h.estimatedCostUsd.gt(seen.estimatedCostUsd)
+              ? (h.estimateSource ?? seen.estimateSource)
+              : (seen.estimateSource ?? h.estimateSource),
           },
     );
   }
@@ -224,6 +240,8 @@ const sumViews = (views: readonly WalletView[]) => {
       changePct24h: toWire(h.changePct24h),
       wrapperCount: h.wrapperCount,
       pledgedShares: toWire(h.pledgedShares),
+      estimatedCostUsd: toWire(h.estimatedCostUsd),
+      estimateSource: h.estimatedCostUsd.gt(ZERO) ? h.estimateSource : null,
     })),
     // Each wallet's own figures, for its card: live, where the summary's are hourly.
     wallets: views.map((v) => ({
@@ -344,6 +362,8 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
         changePct24h: priced?.changePct24h ?? ZERO,
         wrapperCount: row.wrappers.length,
         pledgedShares: pledgedShares.gt(row.shares) ? row.shares : pledgedShares,
+        estimatedCostUsd: row.estimatedCostUsd,
+        estimateSource: row.estimateSource,
       });
     }
 
@@ -395,6 +415,39 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
    * poll; while Home is open it shows the live figures from /v1/portfolio
    * beside these, and these are what it falls back to.
    */
+  /*
+   * "Set cost" on one holding in the chosen wallet. Mercury's records only, so
+   * a linked wallet may: nothing is signed or sent. One wallet at a time; a
+   * cost for "all" would not say whose shares it was.
+   */
+  app.post("/v1/portfolio/holdings/:ticker/cost", oneWalletOnly(), async (c) => {
+    if (deps.declareCost === undefined) return c.json(fail("not_found", "No such route."), 404);
+    const body: unknown = await c.req.json().catch(() => null);
+    const raw =
+      body !== null && typeof body === "object" && "unitCostUsd" in body
+        ? (body as { unitCostUsd: unknown }).unitCostUsd
+        : undefined;
+    const text = typeof raw === "number" ? String(raw) : raw;
+    if (typeof text !== "string" || !COST.test(text) || !D(text).gt(ZERO)) {
+      return c.json(fail("bad_cost", "Enter what you paid per share, in dollars, above zero."), 400);
+    }
+    const wallet = actingOne(c);
+    // A session whose Mercury wallet is still being made has no holding to cost.
+    if (wallet === null)
+      return c.json(fail("wallet_not_ready", "Your Mercury wallet is still being set up."), 409);
+    const result = await deps.declareCost(
+      { userId: c.get("identity").userId, walletId: wallet.id },
+      c.req.param("ticker").toUpperCase(),
+      D(text),
+    );
+    if (result.kind === "unknown_stock")
+      return c.json(fail("unknown_stock", "Mercury doesn't list that stock."), 404);
+    if (result.kind === "nothing_estimated") {
+      return c.json(fail("nothing_estimated", "Every cost on this holding is exact already."), 409);
+    }
+    return c.json({ lots: result.lots });
+  });
+
   app.get("/v1/portfolio/summary", async (c) => {
     if (deps.summary === undefined) return c.json(fail("not_found", "No summary here."), 404);
     return c.json(await deps.summary(c.get("identity").userId));

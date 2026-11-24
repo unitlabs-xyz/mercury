@@ -1,6 +1,21 @@
 import { z } from "zod";
 import { Issuer, Mint, Ratio, Ticker, Usd } from "./primitives.js";
 
+/**
+ * Where an estimated cost came from: SOL's price in a swap paid in SOL, the
+ * share's market price when it arrived, the earliest price Mercury has, the
+ * price when the wallet was linked, or the cost it had in another of the
+ * person's wallets.
+ */
+export const EstimateSource = z.enum([
+  "sol_price",
+  "market_price",
+  "earliest_price",
+  "link_day_price",
+  "own_wallet",
+]);
+export type EstimateSource = z.infer<typeof EstimateSource>;
+
 export const Holding = z.object({
   ticker: Ticker,
   name: z.string(),
@@ -19,6 +34,13 @@ export const Holding = z.object({
   wrapperCount: z.number().int().positive(),
   /** Of `shares`, how many are pledged to Kamino as collateral. Still owned; not sellable until withdrawn. */
   pledgedShares: Usd.optional(),
+  /**
+   * Of `costBasisUsd`, how much was estimated rather than read off a trade.
+   * Above zero, the holding's return is shown with `~`. Optional for older servers.
+   */
+  estimatedCostUsd: Usd.optional(),
+  /** Where most of that estimate came from, for the line that says so. Null when none is estimated. */
+  estimateSource: EstimateSource.nullable().optional(),
 });
 
 /** One wallet's part of a portfolio read for several, live: what a wallet's card on Home shows. */

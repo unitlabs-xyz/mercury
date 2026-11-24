@@ -169,7 +169,8 @@ const harness = async (
           }),
     },
     instruments: {},
-    portfolio: {},
+    // Only "Set cost" is read through this harness: no estimate to replace, as on a new account.
+    portfolio: { declareCost: async () => ({ kind: "nothing_estimated" }) },
     money: {},
     activity: {},
     notifications: {},
@@ -466,5 +467,17 @@ describe("which wallet a write is for", () => {
   it("refuses a wallet that isn't the caller's before anything else", async () => {
     const h = await signedInWithLinked();
     expect((await h.postAs("6f1c9b8e-0000-4000-8000-000000000000", "/v1/orders", order)).status).toBe(403);
+  });
+  /*
+   * "Set cost" writes Mercury's records, not the chain, so a linked wallet may:
+   * the guard that keeps a linked wallet from acting stays out of its way.
+   */
+  it("lets a linked wallet set a holding's cost, which signs nothing", async () => {
+    const h = await signedInWithLinked();
+    const res = await h.postAs(h.linkedId, "/v1/portfolio/holdings/NVDA/cost", { unitCostUsd: "10" });
+    const body = (await res.json()) as { error?: { code: string } };
+    // Through the guard to the route itself, which finds no estimate to replace on a new account.
+    expect(res.status).toBe(409);
+    expect(body.error?.code).toBe("nothing_estimated");
   });
 });

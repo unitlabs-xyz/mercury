@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import {
   displayBasketName,
+  estimateMark,
   liquidationLine,
   manageOnWebUrl,
   pct,
@@ -212,7 +213,9 @@ export default function LinkedWallet() {
                     <RNText style={s.sub} numberOfLines={1}>
                       {calculating
                         ? `${num(h.shares).toFixed(4)} ${h.ticker} · P&L calculating`
-                        : `${num(h.shares).toFixed(4)} ${h.ticker}`}
+                        : estimateMark(h) === "~"
+                          ? `${num(h.shares).toFixed(4)} ${h.ticker} · ~ cost estimated`
+                          : `${num(h.shares).toFixed(4)} ${h.ticker}`}
                     </RNText>
                   </View>
                   <View style={s.end}>

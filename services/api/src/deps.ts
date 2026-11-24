@@ -90,6 +90,7 @@ import { JsonBasketStore } from "./baskets/glider/store.js";
 import { SolanaBasketFunding } from "./baskets/glider/funding.js";
 import type { BasketProvider } from "./baskets/core/deps.js";
 import { logger } from "./log/index.js";
+import { declareCost } from "./portfolio/declared-cost.js";
 import { noteStrain } from "./jobs/strain.js";
 
 /** Pyth in front of the issuer's quote, or the issuer's quote alone. */
@@ -761,6 +762,7 @@ export function buildReadDeps(
       flows: (userId, walletIds, from) => readFlows(db, userId, walletIds, from),
       basketMovements: (owner) => readBasketMovements(db, owner),
       summary: (userId) => readSummary(db, deps.prices, userId),
+      declareCost: (owner, ticker, unitCostUsd) => declareCost(db, owner, ticker, unitCostUsd),
       earn: onlyIfUsed(usedEarn, (wallet) => earnBalance(deps.earn, wallet), ZERO),
     },
     money: {
