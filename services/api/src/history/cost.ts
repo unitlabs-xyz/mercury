@@ -105,6 +105,8 @@ export async function walletToCost(db: Db, resting: readonly string[] = []): Pro
       and(
         followed,
         resting.length === 0 ? undefined : notInArray(historyJobs.walletId, [...resting]),
+        // Not while a walk is unfinished: its events so far are part of a pass, and a pass is costed whole, in order.
+        sql`${historyJobs.walks} = '{}'::jsonb`,
         sql`(${historyJobs.status} = 'read' or (${historyJobs.status} = 'done' and exists (
           select 1 from ${historyEvents}
           where ${historyEvents.walletId} = ${historyJobs.walletId} and ${historyEvents.costedAt} is null

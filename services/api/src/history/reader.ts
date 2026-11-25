@@ -3,7 +3,7 @@ import type { ChainHistory, SignatureRef } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { earnEvents, historyEvents, historyTxs, orders } from "../db/schema.js";
 import { balanceOf, emptyBefore, movementsOf, rawJson, transactionFromRaw } from "./events.js";
-import { holdLease, keepCursor } from "./queue.js";
+import { dropWalk, holdLease, keepCursor, keepWalk } from "./queue.js";
 import { stillFollowed, Unlinked } from "../wallets/active.js";
 
 /** Signatures asked for at a time: the node's most. */
@@ -27,6 +27,36 @@ export class TransactionUnavailable extends Error {
     super(`the node did not return a listed transaction (${signature.slice(0, 8)}…); trying again later`);
     this.name = "TransactionUnavailable";
   }
+}
+
+/**
+ * This wallet's turn is up and another is waiting: where it got to is kept
+ * (`history_job.walks`), and it goes back in the queue to carry on from there.
+ */
+export class TurnOver extends Error {
+  constructor() {
+    super("history reader took its turn and gave the next wallet one");
+    this.name = "TurnOver";
+  }
+}
+
+/**
+ * Where a walk through one token account got to when its wallet's turn was up:
+ * enough to carry on exactly as if it had never stopped. Raw amounts are
+ * strings, as JSON keeps them.
+ */
+export interface Walk {
+  /** The newest signature on the account when the walk began: its cursor once the walk ends. */
+  readonly newest: string;
+  /** The last signature dealt with; the walk carries on from just older than it. */
+  readonly before: string;
+  /** What was pledged to Kamino just before that point, worked back so far. */
+  readonly pledged: string;
+  /** What was held before the oldest transaction with its details read so far, pledged included; null before any. */
+  readonly oldestRaw: string | null;
+  readonly oldestAt: string | null;
+  /** Transactions read into events so far, for a cap. */
+  readonly count: number;
 }
 
 /** The jobs' own lane was refused mid-pass: the reader stops and gives way, and the pass is tried again later. */
@@ -64,6 +94,12 @@ export interface ReaderDeps {
   readonly cap?: number;
   /** Signatures asked for at a time; the node's most unless a test needs paging on less. */
   readonly page?: number;
+  /**
+   * Whether this wallet's turn is up and another wallet is waiting for the
+   * reader. Asked before each call to the node; true, the walk keeps its place
+   * and gives way (`TurnOver`). Absent, a pass runs to its end.
+   */
+  readonly turnOver?: () => Promise<boolean>;
 }
 
 export interface ReadResult {
@@ -132,6 +168,8 @@ export async function readWallet(
     readonly cursors: Readonly<Record<string, string>>;
     /** Only these mints' accounts: the Mercury wallet's Earn shares, never its stocks or cash. */
     readonly onlyMints?: ReadonlySet<string>;
+    /** Walks a turn ended part way through, by account: carried on from where each stopped. */
+    readonly walks?: Readonly<Record<string, Walk>>;
   },
 ): Promise<ReadResult> {
   const { db, history } = deps;
@@ -158,16 +196,25 @@ export async function readWallet(
   let transactions = 0;
   let events = 0;
   let capped = 0;
+  /*
+   * Transactions dealt with this turn. A turn ends only once it has done some:
+   * calls slowed by the reader's budget could otherwise use up a turn before
+   * its first transaction, and two wallets hand the reader back and forth for
+   * ever without either moving.
+   */
+  let handled = 0;
+  const turnIsOver = async () => handled > 0 && (await deps.turnOver?.()) === true;
 
   for (const account of accounts) {
     if (deps.laneBusy()) throw new GiveWay();
     const cursor = job.cursors[account.address];
+    const resumed = job.walks?.[account.address];
 
     // Pledged today, worked back through each pledge and withdrawal the walk passes.
-    let pledged = pledgedNow.get(account.mint) ?? 0n;
+    let pledged = resumed === undefined ? (pledgedNow.get(account.mint) ?? 0n) : BigInt(resumed.pledged);
 
     // Empty today, nothing pledged, and never read: nothing held needs a cost. Note where it is, for later arrivals.
-    if (cursor === undefined && account.rawAmount === 0n && pledged === 0n) {
+    if (resumed === undefined && cursor === undefined && account.rawAmount === 0n && pledged === 0n) {
       const [newest] = await history.signatures(account.address, { limit: 1 });
       if (newest !== undefined) {
         await db.transaction(async (tx) => {
@@ -181,19 +228,75 @@ export async function readWallet(
 
     const read: { ref: SignatureRef; tx: NonNullable<Awaited<ReturnType<ChainHistory["transaction"]>>> }[] =
       [];
-    let newest: string | undefined;
-    let before: string | undefined;
+    let newest: string | undefined = resumed?.newest;
+    let before: string | undefined = resumed?.before;
     let done = false;
     let hitCap = false;
     /** The first read found the moment before which the wallet held none of the token. */
     let reachedEmpty = false;
-    /** The oldest transaction with its details that a first read reached, and what was pledged just before it. */
-    let oldest:
-      | { tx: NonNullable<Awaited<ReturnType<ChainHistory["transaction"]>>>; pledgedBefore: bigint }
-      | undefined;
+    /**
+     * What was held just before the oldest transaction with its details a first
+     * read reached, in the account and pledged, and when.
+     */
+    let oldest: { raw: bigint; at: number | null } | undefined =
+      resumed?.oldestRaw == null
+        ? undefined
+        : {
+            raw: BigInt(resumed.oldestRaw),
+            at: resumed.oldestAt === null ? null : Date.parse(resumed.oldestAt) / 1000,
+          };
+    /** Transactions read into events by earlier turns of this walk. */
+    const earlier = resumed?.count ?? 0;
+    /** The last signature dealt with: where the walk carries on from if its turn ends here. */
+    let lastDone: string | undefined;
+
+    /*
+     * The wallet's turn is up and another is waiting: what this walk read so far
+     * becomes events, its place is kept, and it gives way. Events from a later
+     * pass are written before the rest of that pass is read; the cost pass
+     * leaves a wallet alone while any of its walks is unfinished, so they are
+     * costed together, in order.
+     */
+    const giveTurn = async (): Promise<never> => {
+      const at = lastDone ?? before;
+      if (newest === undefined || at === undefined) throw new TurnOver();
+      const rows = eventRows(read);
+      const walk: Walk = {
+        newest,
+        before: at,
+        pledged: pledged.toString(),
+        oldestRaw: oldest === undefined ? null : oldest.raw.toString(),
+        oldestAt: oldest?.at == null ? null : new Date(oldest.at * 1000).toISOString(),
+        count: earlier + read.length,
+      };
+      await db.transaction(async (tx) => {
+        if (!(await stillFollowed(tx, job.walletId))) throw new Unlinked();
+        if (rows.length > 0) await tx.insert(historyEvents).values(rows).onConflictDoNothing();
+        await keepWalk(tx, job.walletId, account.address, walk);
+      });
+      throw new TurnOver();
+    };
+
+    const eventRows = (txs: typeof read) =>
+      txs.flatMap(({ ref, tx }) =>
+        movementsOf(tx, job.address, account.mint).map((m) => ({
+          walletId: job.walletId,
+          account: account.address,
+          signature: ref.signature,
+          blockTime: tx.blockTime === null ? null : new Date(tx.blockTime * 1000),
+          kind: m.kind,
+          mint: account.mint,
+          amountRaw: m.amountRaw,
+          counterMint: m.counterMint,
+          counterAmountRaw: m.counterAmountRaw,
+          sourceOwner: m.sourceOwner,
+          destinationOwner: m.destinationOwner,
+        })),
+      );
 
     while (!done) {
       if (deps.laneBusy()) throw new GiveWay();
+      if (await turnIsOver()) await giveTurn();
       await holdLease(db, job.walletId, new Date());
       const page = await history.signatures(account.address, {
         limit: pageSize,
@@ -223,16 +326,20 @@ export async function readWallet(
       );
 
       for (const ref of page) {
-        if (read.length >= cap) {
+        if (earlier + read.length >= cap) {
           done = true;
           hitCap = true;
           break;
         }
-        if (skip(ref)) continue;
+        if (skip(ref)) {
+          lastDone = ref.signature;
+          continue;
+        }
         const ours = recorded.has(ref.signature);
         let tx = kept.get(ref.signature) ?? null;
         if (tx === null) {
           if (deps.laneBusy()) throw new GiveWay();
+          if (await turnIsOver()) await giveTurn();
           tx = await history.transaction(ref.signature);
           // Listed but not given: not indexed yet, or pruned by this node. Skipped, a buy in it
           // would never get its cost, so the pass fails and is tried again, further out each
@@ -250,6 +357,8 @@ export async function readWallet(
             .onConflictDoNothing();
         }
         if (!ours) read.push({ ref, tx });
+        lastDone = ref.signature;
+        handled += 1;
         if (cursor !== undefined) continue;
         // A transaction the node kept without its details says nothing about balances: its
         // empty token lists are not "held none before", so the walk goes on past it.
@@ -258,7 +367,7 @@ export async function readWallet(
           if (m.kind === "loan_deposit") pledged = pledged > m.amountRaw ? pledged - m.amountRaw : 0n;
           else if (m.kind === "loan_withdraw") pledged += m.amountRaw;
         }
-        oldest = { tx, pledgedBefore: pledged };
+        oldest = { raw: balanceOf(tx.preTokens, job.address, account.mint) + pledged, at: tx.blockTime };
         // Held nowhere before this: in neither the wallet nor the loan.
         if (pledged === 0n && emptyBefore(tx, job.address, account.mint)) {
           reachedEmpty = true;
@@ -272,21 +381,7 @@ export async function readWallet(
       if (before === undefined) done = true;
     }
 
-    const rows = read.flatMap(({ ref, tx }) =>
-      movementsOf(tx, job.address, account.mint).map((m) => ({
-        walletId: job.walletId,
-        account: account.address,
-        signature: ref.signature,
-        blockTime: tx.blockTime === null ? null : new Date(tx.blockTime * 1000),
-        kind: m.kind,
-        mint: account.mint,
-        amountRaw: m.amountRaw,
-        counterMint: m.counterMint,
-        counterAmountRaw: m.counterAmountRaw,
-        sourceOwner: m.sourceOwner,
-        destinationOwner: m.destinationOwner,
-      })),
-    );
+    const rows = eventRows(read);
 
     /*
      * This account is read: its events and its cursor kept now, together, so a
@@ -298,6 +393,8 @@ export async function readWallet(
       if (!(await stillFollowed(tx, job.walletId))) throw new Unlinked();
       if (rows.length > 0) await tx.insert(historyEvents).values(rows).onConflictDoNothing();
       if (newest !== undefined) await keepCursor(tx, job.walletId, account.address, newest);
+      // The walk is over: nothing left to carry on.
+      if (resumed !== undefined) await dropWalk(tx, job.walletId, account.address);
     });
     if (newest !== undefined) cursors[account.address] = newest;
     transactions += read.length;
@@ -305,12 +402,9 @@ export async function readWallet(
     if (hitCap) capped += 1;
     // A first read that never reached an empty moment: what was held before the oldest one it read.
     if (cursor === undefined && !reachedEmpty) {
-      const raw =
-        oldest === undefined
-          ? account.rawAmount + pledged
-          : balanceOf(oldest.tx.preTokens, job.address, account.mint) + oldest.pledgedBefore;
+      const raw = oldest === undefined ? account.rawAmount + pledged : oldest.raw;
       if (raw > 0n) {
-        const at = oldest?.tx.blockTime ?? null;
+        const at = oldest?.at ?? null;
         opening[account.address] = {
           mint: account.mint,
           raw: raw.toString(),

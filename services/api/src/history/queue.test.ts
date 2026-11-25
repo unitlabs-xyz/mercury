@@ -8,6 +8,10 @@ import {
   MAX_ATTEMPTS,
   claimHistoryJob,
   deferHistoryPass,
+  dropWalk,
+  keepWalk,
+  othersWaiting,
+  takeTurn,
   failHistoryPass,
   failureBackoffMs,
   finishHistoryPass,
@@ -310,5 +314,49 @@ describe("a wallet linked again while a pass of it ran", () => {
       claimedAt: claimed!.startedAt,
     });
     expect((await s.job(w)).status).toBe("read");
+  });
+});
+
+describe("taking turns", () => {
+  it("puts a wallet whose turn ended behind everyone already waiting, later passes included", async () => {
+    const s = await seed();
+    const long = await s.link("Phantom1111111111111111111111111111111111111");
+    const other = await s.link("Phantom2222222222222222222222222222222222222");
+    await queueHistory(s.db, { walletId: long, userId: s.userId, now: T0 });
+    // The other wallet, read before, waits for a later pass.
+    await queueHistory(s.db, { walletId: other, userId: s.userId, now: T0 });
+    await s.db
+      .update(historyJobs)
+      .set({ status: "done", startedAt: at(-1), runAfter: at(5_000) })
+      .where(eq(historyJobs.walletId, other));
+
+    const first = await claimHistoryJob(s.db, at(1_000));
+    expect(first?.walletId).toBe(long);
+    expect(await othersWaiting(s.db, long, at(11_000))).toBe(true);
+    await takeTurn(s.db, { walletId: long, now: at(11_000), claimedAt: first!.startedAt });
+    expect((await s.job(long)).status).toBe("queued");
+
+    // The other wallet's later pass has waited longer: it goes next, then the long one again.
+    expect((await claimHistoryJob(s.db, at(11_000)))?.walletId).toBe(other);
+    expect((await claimHistoryJob(s.db, at(11_000)))?.walletId).toBe(long);
+  });
+
+  it("finds nobody waiting where only Mercury wallets' Earn reads are due: they come last anyway", async () => {
+    const s = await seed();
+    const long = await s.link("Phantom1111111111111111111111111111111111111");
+    await queueHistory(s.db, { walletId: long, userId: s.userId, now: T0 });
+    await queueMercuryEarnReads(s.db, T0);
+    expect(await othersWaiting(s.db, long, at(1_000))).toBe(false);
+  });
+
+  it("keeps a walk's place, and forgets it once the walk is over", async () => {
+    const s = await seed();
+    const w = await s.link("Phantom1111111111111111111111111111111111111");
+    await queueHistory(s.db, { walletId: w, userId: s.userId, now: T0 });
+    const walk = { newest: "S9", before: "S5", pledged: "0", oldestRaw: null, oldestAt: null, count: 4 };
+    await keepWalk(s.db, w, "acct-a", walk);
+    await keepWalk(s.db, w, "acct-b", { ...walk, before: "S2" });
+    await dropWalk(s.db, w, "acct-a");
+    expect((await s.job(w)).walks).toEqual({ "acct-b": { ...walk, before: "S2" } });
   });
 });

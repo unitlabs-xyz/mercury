@@ -10,9 +10,11 @@ import {
   deferHistoryPass,
   failHistoryPass,
   finishHistoryPass,
+  othersWaiting,
   queueMercuryEarnReads,
+  takeTurn,
 } from "./queue.js";
-import { GiveWay, PledgeUnknown, readWallet, type ReaderDeps } from "./reader.js";
+import { GiveWay, PledgeUnknown, readWallet, TurnOver, type ReaderDeps } from "./reader.js";
 import { costWallet, walletToCost, type CostDeps } from "./cost.js";
 import { readLoanHistory, type LoanHistoryDeps } from "./loan.js";
 import { settleLiquidations } from "../lending/liquidation-pnl.js";
@@ -40,7 +42,20 @@ export interface HistoryRunDeps {
   readonly loan?: Omit<LoanHistoryDeps, "db">;
   readonly now?: () => number;
   readonly log: Log;
+  /** How long one wallet may read while another waits. `HISTORY_TURN_MS` by default. */
+  readonly turnMs?: number;
 }
+
+/**
+ * One wallet's turn with the reader, while another waits: ten seconds, about
+ * twenty calls at the reader's two a second. A first read has no cap (a cost
+ * guessed where a walk stopped short would be wrong for good), so a wallet
+ * with a vast past, or one sent dust to keep it from ever reading empty, could
+ * otherwise hold the reader for days while everyone else stayed "Calculating…".
+ * Turn about, it gets the reader whenever nobody else wants it, and everybody
+ * else still gets theirs.
+ */
+export const HISTORY_TURN_MS = 10_000;
 
 /**
  * One pass of the history reader: take the next due job, read it, and say
@@ -88,8 +103,18 @@ export const historyPass = (deps: HistoryRunDeps) => {
         : undefined;
       // Its Earn shares are never pledged: no need to ask Kamino, or to wait on it when it is down.
       const { pledged, ...reader } = deps.reader;
+      // Its turn: once it has had its time, it carries on only while nobody else is waiting.
+      const began = now();
+      const turnMs = deps.turnMs ?? HISTORY_TURN_MS;
+      const turnOver = async () =>
+        now() - began >= turnMs && (await othersWaiting(deps.db, job.walletId, new Date(now())));
       const r = await readWallet(
-        { ...reader, ...(wallet.isPrimary || pledged === undefined ? {} : { pledged }), db: deps.db },
+        {
+          ...reader,
+          ...(wallet.isPrimary || pledged === undefined ? {} : { pledged }),
+          db: deps.db,
+          turnOver,
+        },
         { ...job, address: wallet.address, ...(onlyMints === undefined ? {} : { onlyMints }) },
       );
       const done = new Date(now());
@@ -131,6 +156,11 @@ export const historyPass = (deps: HistoryRunDeps) => {
     } catch (error: unknown) {
       // Unlinked mid-pass: what it read stays as it was, frozen, and its job waits for a link again.
       if (error instanceof Unlinked) return "stopped: the wallet was unlinked";
+      // Its turn is up and another wallet is waiting: back in line, to carry on from where it stopped.
+      if (error instanceof TurnOver) {
+        await takeTurn(deps.db, { walletId: job.walletId, now: new Date(now()), claimedAt: job.startedAt });
+        return "took its turn: carrying on after the next wallet";
+      }
       // Kamino unreadable is a wait too: without the pledge, a pledged holding would be read as sold.
       if (error instanceof RateLimited || error instanceof GiveWay || error instanceof PledgeUnknown) {
         await deferHistoryPass(deps.db, {

@@ -1154,6 +1154,27 @@ export const historyJobs = pgTable(
      */
     cursors: jsonb("cursors").$type<Record<string, string>>().notNull().default({}),
     /**
+     * Per account, a walk a turn ended part way through: where it got to, so
+     * the next turn carries on from there (`Walk` in `history/reader.ts`).
+     * Empty once every walk is finished; the cost pass waits until it is.
+     */
+    walks: jsonb("walks")
+      .$type<
+        Record<
+          string,
+          {
+            newest: string;
+            before: string;
+            pledged: string;
+            oldestRaw: string | null;
+            oldestAt: string | null;
+            count: number;
+          }
+        >
+      >()
+      .notNull()
+      .default({}),
+    /**
      * Per token account whose first read never reached a moment the wallet
      * held none (it stopped at its cap, or the node keeps no older history):
      * what was held just before the oldest transaction read, in the account

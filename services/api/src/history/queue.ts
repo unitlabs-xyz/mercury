@@ -1,7 +1,7 @@
-import { and, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, isNull, lte, ne, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { historyJobs, wallets, type HistoryJob } from "../db/schema.js";
-import type { Opening } from "./reader.js";
+import type { Opening, Walk } from "./reader.js";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -104,8 +104,15 @@ export async function claimHistoryJob(db: Db, now: Date): Promise<HistoryJob | n
          * on them, and on the deploy that adds one for every person they must
          * not queue ahead of anyone's new link.
          */
+        /*
+         * Then a wallet never yet started, and after that, turn and turn about:
+         * whoever has waited longest. A wallet whose turn ended part way through
+         * a long first read goes to the back of the line (`takeTurn`) behind
+         * every other, later passes included, so one wallet with a vast past
+         * can't hold the reader while the rest wait.
+         */
         sql`case when ${wallets.isPrimary} then 2
-                 when ${historyJobs.status} in ('queued', 'running', 'failed') then 0
+                 when ${historyJobs.status} in ('queued', 'running', 'failed') and ${historyJobs.startedAt} is null then 0
                  else 1 end`,
         historyJobs.runAfter,
       )
@@ -211,6 +218,63 @@ export async function finishHistoryPass(
       })
       .where(and(eq(historyJobs.walletId, input.walletId), sameClaim(input.claimedAt)));
   });
+}
+
+/** One account's walk left part way, at the end of its wallet's turn: carried on from here. */
+export async function keepWalk(db: Db | Tx, walletId: string, account: string, walk: Walk): Promise<void> {
+  await db
+    .update(historyJobs)
+    .set({ walks: sql`${historyJobs.walks} || ${JSON.stringify({ [account]: walk })}::jsonb` })
+    .where(eq(historyJobs.walletId, walletId));
+}
+
+/** One account's walk finished: nothing of it left to carry on. */
+export async function dropWalk(db: Db | Tx, walletId: string, account: string): Promise<void> {
+  await db
+    .update(historyJobs)
+    .set({ walks: sql`${historyJobs.walks} - ${account}::text` })
+    .where(eq(historyJobs.walletId, walletId));
+}
+
+/**
+ * A wallet's turn ended with its reading unfinished: back in the queue at
+ * once, behind everyone already waiting, to carry on from where its walks
+ * stopped. Not a failure, and not a wait. A first read stays "Calculating…".
+ */
+export async function takeTurn(
+  db: Db,
+  input: { readonly walletId: string; readonly now: Date; readonly claimedAt?: Date | null },
+): Promise<void> {
+  await db
+    .update(historyJobs)
+    .set({
+      runAfter: input.now,
+      status: sql`case when ${historyJobs.status} = 'running' then 'queued' else ${historyJobs.status} end`,
+    })
+    .where(and(eq(historyJobs.walletId, input.walletId), sameClaim(input.claimedAt)));
+}
+
+/**
+ * Whether a linked wallet other than this one is waiting for the reader now:
+ * who a turn ends for. Not a Mercury wallet's Earn read, which waits behind
+ * every linked wallet by design (`claimHistoryJob`): a turn given up for one
+ * would come straight back.
+ */
+export async function othersWaiting(db: Db, walletId: string, now: Date): Promise<boolean> {
+  const [row] = await db
+    .select({ id: historyJobs.walletId })
+    .from(historyJobs)
+    .innerJoin(wallets, eq(wallets.id, historyJobs.walletId))
+    .where(
+      and(
+        lte(historyJobs.runAfter, now),
+        isNull(wallets.unlinkedAt),
+        eq(wallets.isPrimary, false),
+        ne(historyJobs.walletId, walletId),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
 }
 
 /**

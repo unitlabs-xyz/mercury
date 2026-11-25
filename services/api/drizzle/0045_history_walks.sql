@@ -1,0 +1,1 @@
+ALTER TABLE "history_job" ADD COLUMN "walks" jsonb DEFAULT '{}'::jsonb NOT NULL;

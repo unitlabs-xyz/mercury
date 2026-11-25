@@ -991,6 +991,25 @@ describe("walletToCost", () => {
     await s.db.update(wallets).set({ unlinkedAt: NOW }).where(eq(wallets.id, s.walletId));
     expect(await walletToCost(s.db)).toBeNull();
   });
+
+  it("leaves a wallet whose walk a turn left part way alone: a pass is costed whole, in order", async () => {
+    const s = await seed("done");
+    await s.found({
+      kind: "in",
+      amount: tokensOf(1),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 50_000_000n,
+    });
+    const walk = { newest: "S9", before: "S5", pledged: "0", oldestRaw: null, oldestAt: null, count: 1 };
+    await s.db
+      .update(historyJobs)
+      .set({ walks: { [`${TSLAX}-acct`]: walk } })
+      .where(eq(historyJobs.walletId, s.walletId));
+    expect(await walletToCost(s.db)).toBeNull();
+    await s.db.update(historyJobs).set({ walks: {} }).where(eq(historyJobs.walletId, s.walletId));
+    expect(await walletToCost(s.db)).toBe(s.walletId);
+  });
 });
 
 describe("costWallet, a linked wallet's Earn", () => {

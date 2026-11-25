@@ -508,6 +508,16 @@ accounts its transaction opened, and only from 0.01 SOL up; less is a tip, and t
 as one from outside. Shares out of one of the person's own Mercury baskets are left to the basket's
 reconciler, which records them with their share of the basket's cost.
 
+**Wallets take turns.** With no cap, one wallet with a vast past (or one sent dust to keep its
+account from ever reading empty) could hold the reader for days while every other wallet stayed
+"Calculating…". So a wallet reads for ten seconds at a time while another linked wallet is
+waiting. When its turn is up it keeps its place (`history_job.walks`: where each unfinished walk
+got to, and what it had worked out so far), writes the events it has read, and goes to the back of
+the line; the next turn carries on exactly where it stopped. Newly linked wallets go first, and
+after that whoever has waited longest. A wallet nobody is waiting behind just keeps reading, and
+a turn always reads something before it can end. The cost pass leaves a wallet alone while any of
+its walks is unfinished, so a pass is costed whole and in order.
+
 **There is no cap.** An account is read back until it was empty, however many transactions that
 is: a cost guessed where a walk stopped short would be wrong for good, and a longer "Calculating…"
 is the better trade. At the reader's two calls a second, 5,000 transactions is about forty

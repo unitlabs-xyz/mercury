@@ -500,3 +500,49 @@ describe("costPass", () => {
     expect(D(lot!.unitCostUsd).toString()).toBe("77");
   });
 });
+
+describe("historyPass, taking turns", () => {
+  it("gives the reader to a waiting wallet once its turn is up, and goes back in line with its place kept", async () => {
+    const s = await seed();
+    const [other] = await s.db
+      .insert(wallets)
+      .values({
+        userId: s.userId,
+        address: "Other1111111111111111111111111111111111111",
+        kind: "external",
+        isPrimary: false,
+        linkedAt: new Date(T0),
+      })
+      .returning();
+    await queueHistory(s.db, { walletId: s.walletId, userId: s.userId, now: new Date(T0 - 2_000) });
+    await queueHistory(s.db, { walletId: other!.id, userId: s.userId, now: new Date(T0 - 1_000) });
+    // Two transactions: bought 10 (S1), then 2 more (S2).
+    const later: TransactionDetail = {
+      ...bought,
+      signature: "S2",
+      blockTime: bought.blockTime! + 1,
+      preTokens: [{ owner: ME, mint: TSLAX, rawAmount: 10n, decimals: 8 }],
+      postTokens: [{ owner: ME, mint: TSLAX, rawAmount: 12n, decimals: 8 }],
+    };
+    const history = chain({
+      signatures: async () => [
+        { signature: "S2", slot: 2, blockTime: later.blockTime, failed: false },
+        { signature: "S1", slot: 1, blockTime: bought.blockTime, failed: false },
+      ],
+      transaction: async (sig) => (sig === "S2" ? later : bought),
+    });
+    const pass = historyPass({
+      db: s.db,
+      reader: { history, listedMints: async () => new Set([TSLAX]), laneBusy: () => false },
+      now: () => T0,
+      log,
+      turnMs: 0,
+    });
+
+    expect(await pass()).toBe("took its turn: carrying on after the next wallet");
+    const job = await s.job();
+    expect(job.status).toBe("queued");
+    expect(job.walks[ACCT]).toMatchObject({ newest: "S2", before: "S2" });
+    expect(job.runAfter).toEqual(new Date(T0));
+  });
+});

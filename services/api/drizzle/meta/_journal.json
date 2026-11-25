@@ -316,6 +316,13 @@
       "when": 1795612904993,
       "tag": "0044_sponsored_token_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1795613617256,
+      "tag": "0045_history_walks",
+      "breakpoints": true
     }
   ]
 }

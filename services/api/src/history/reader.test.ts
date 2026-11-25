@@ -15,7 +15,7 @@ import { KAMINO_LENDING_PROGRAM, rawJson } from "./events.js";
 import { RateLimited } from "./budget.js";
 import { finishHistoryPass } from "./queue.js";
 import { Unlinked } from "../wallets/active.js";
-import { GiveWay, PledgeUnknown, readWallet, TransactionUnavailable } from "./reader.js";
+import { GiveWay, PledgeUnknown, readWallet, TransactionUnavailable, TurnOver } from "./reader.js";
 
 const ME = "Phantom1111111111111111111111111111111111111";
 const TSLAX = "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB";
@@ -688,5 +688,122 @@ describe("readWallet, a wallet unlinked mid-pass", () => {
     expect(await s.db.select().from(historyEvents).where(eq(historyEvents.walletId, s.walletId))).toEqual([]);
     const [job] = await s.db.select().from(historyJobs).where(eq(historyJobs.walletId, s.walletId));
     expect(job!.cursors).toEqual({});
+  });
+});
+
+describe("readWallet, taking turns", () => {
+  // Bought 10, then 2, then 3, sold 8, bought 2: nothing held before the first.
+  const history = () =>
+    chain([owned(TSLA_ACCT, TSLAX, 9n)], {
+      [TSLA_ACCT]: [
+        { tx: move("S1", 1, 0n, 10n) },
+        { tx: move("S2", 2, 10n, 12n) },
+        { tx: move("S3", 3, 12n, 15n) },
+        { tx: move("S4", 4, 15n, 7n) },
+        { tx: move("S5", 5, 7n, 9n) },
+      ],
+    });
+  /** Its turn ends at the `at`th time it is asked, and never again. */
+  const endsAt = (at: number) => {
+    let asked = 0;
+    return async () => ++asked === at;
+  };
+
+  it("keeps its place when its turn ends, and carries on to the same end as one read straight through", async () => {
+    const s = await seed();
+    await s.db.insert(historyJobs).values({ walletId: s.walletId, userId: s.userId, status: "running" });
+    const c = history();
+    const deps = { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet };
+
+    // Asked only once something is read this turn: before S4, with S5 read, the turn ends.
+    await expect(
+      readWallet({ ...deps, turnOver: endsAt(1) }, { walletId: s.walletId, address: ME, cursors: {} }),
+    ).rejects.toBeInstanceOf(TurnOver);
+    const [paused] = await s.db.select().from(historyJobs).where(eq(historyJobs.walletId, s.walletId));
+    expect(paused!.walks[TSLA_ACCT]).toMatchObject({ newest: "S5", before: "S5", count: 1 });
+    expect(paused!.cursors).toEqual({});
+
+    const r = await readWallet(deps, {
+      walletId: s.walletId,
+      address: ME,
+      cursors: paused!.cursors,
+      walks: paused!.walks,
+    });
+    expect(r.cursors).toEqual({ [TSLA_ACCT]: "S5" });
+    expect(r.opening).toEqual({});
+    // Every transaction asked of the node once, across both turns.
+    expect(c.asked).toEqual(["S5", "S4", "S3", "S2", "S1"]);
+    const events = await s.db.select().from(historyEvents).where(eq(historyEvents.walletId, s.walletId));
+    expect(events.map((e) => e.signature).sort()).toEqual(["S1", "S2", "S3", "S4", "S5"]);
+    const [done] = await s.db.select().from(historyJobs).where(eq(historyJobs.walletId, s.walletId));
+    expect(done!.walks).toEqual({});
+    expect(done!.cursors).toEqual({ [TSLA_ACCT]: "S5" });
+  });
+
+  it("carries the pledge it worked back across turns, so it stops where the loan was empty too", async () => {
+    const s = await seed();
+    await s.db.insert(historyJobs).values({ walletId: s.walletId, userId: s.userId, status: "running" });
+    // Bought 10, pledged them all, bought 5: before the 5, the wallet's account was empty but 10 were held.
+    const c = chain([owned(TSLA_ACCT, TSLAX, 5n)], {
+      [TSLA_ACCT]: [
+        { tx: move("Old1", 1, 0n, 7n) },
+        { tx: move("Old2", 2, 7n, 0n) },
+        { tx: move("S1", 3, 0n, 10n) },
+        { tx: atKamino("S2", 4, 10n, 0n) },
+        { tx: move("S3", 5, 0n, 5n) },
+      ],
+    });
+    const deps = {
+      db: s.db,
+      history: c.history,
+      listedMints: LISTED,
+      laneBusy: quiet,
+      pledged: pledgedOf(10n),
+    };
+    // The turn ends with S3 and S2 read: 10 worked back off the pledge.
+    await expect(
+      readWallet({ ...deps, turnOver: endsAt(2) }, { walletId: s.walletId, address: ME, cursors: {} }),
+    ).rejects.toBeInstanceOf(TurnOver);
+    const [paused] = await s.db.select().from(historyJobs).where(eq(historyJobs.walletId, s.walletId));
+    expect(paused!.walks[TSLA_ACCT]).toMatchObject({ before: "S2", pledged: "0" });
+    await readWallet(deps, { walletId: s.walletId, address: ME, cursors: {}, walks: paused!.walks });
+    expect(c.asked).toEqual(["S3", "S2", "S1"]);
+  });
+
+  it("never ends a turn before it has read anything, so two wallets can't hand the reader back and forth for ever", async () => {
+    const s = await seed();
+    await s.db.insert(historyJobs).values({ walletId: s.walletId, userId: s.userId, status: "running" });
+    const c = history();
+    let asked = 0;
+    await expect(
+      readWallet(
+        {
+          db: s.db,
+          history: c.history,
+          listedMints: LISTED,
+          laneBusy: quiet,
+          turnOver: async () => {
+            asked += 1;
+            return true;
+          },
+        },
+        { walletId: s.walletId, address: ME, cursors: {} },
+      ),
+    ).rejects.toBeInstanceOf(TurnOver);
+    // One transaction read, then the turn given up.
+    expect(c.asked).toEqual(["S5"]);
+    expect(asked).toBe(1);
+  });
+
+  it("reads straight on when nobody else is waiting", async () => {
+    const s = await seed();
+    await s.db.insert(historyJobs).values({ walletId: s.walletId, userId: s.userId, status: "running" });
+    const c = history();
+    const r = await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet, turnOver: async () => false },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(r.cursors).toEqual({ [TSLA_ACCT]: "S5" });
+    expect(c.asked).toEqual(["S5", "S4", "S3", "S2", "S1"]);
   });
 });
