@@ -1,3 +1,4 @@
+import { D } from "@mercury/core";
 import type { EstimateSource, Portfolio, PortfolioSummary } from "@mercury/types";
 import type { Borrow, BorrowRow } from "./borrow.js";
 import { usd, usdSigned } from "./format.js";
@@ -71,6 +72,12 @@ export const HEALTH: Record<Health, { readonly label: string; readonly tone: "up
 export const calculatingNote = (n: number): string | null =>
   n === 0 ? null : `${n} wallet${n === 1 ? "" : "s"} calculating`;
 
+/*
+ * Money here is added as decimals (`D`), as everywhere else. What is left as
+ * `Number` is display only, never added up: comparing a figure with zero,
+ * sorting loans by size, a percentage's sign, and the ring's proportions.
+ */
+
 /**
  * The summary's lines, as text. P&L starts with `~` when any of the cost
  * behind it is estimated, and says how much. With every wallet still being
@@ -81,8 +88,9 @@ export const summaryLines = (s: PortfolioSummary) => {
   const estimated = Number(s.pnl.estimatedCostUsd) > 0;
   const waiting = ready === 0;
   const earnEstimated = s.income.earnEstimated === true;
-  const paid = Number(s.loanInterestPaidUsd ?? 0);
-  const loanCost = paid + Number(s.loanInterestUsd);
+  // Dollars added as decimals, never as floats: money is never a float, on screen either.
+  const paid = D(s.loanInterestPaidUsd ?? 0);
+  const loanCost = paid.add(D(s.loanInterestUsd));
   return {
     netWorth: usd(s.netWorthUsd),
     pnl: waiting
@@ -100,8 +108,9 @@ export const summaryLines = (s: PortfolioSummary) => {
       : `Earn ${earnEstimated ? "~" : ""}${usd(s.income.earnUsd)} · Dividends ${usd(s.income.dividendsUsd)}`,
     // What borrowing has cost: interest paid already, and interest owed now. A loan repaid in full
     // still shows what it cost, where it used to read $0.
-    loanInterest: waiting ? "Calculating…" : loanCost === 0 ? usd(0) : `−${usd(loanCost)}`,
-    loanInterestSub: waiting || loanCost === 0 ? null : `${usd(paid)} paid · ${usd(s.loanInterestUsd)} owing`,
+    loanInterest: waiting ? "Calculating…" : loanCost.isZero() ? usd(0) : `−${usd(loanCost.toFixed())}`,
+    loanInterestSub:
+      waiting || loanCost.isZero() ? null : `${usd(paid.toFixed())} paid · ${usd(s.loanInterestUsd)} owing`,
     calculating: calculatingNote(s.calculating),
   };
 };

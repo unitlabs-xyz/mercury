@@ -1,4 +1,5 @@
 import type { Portfolio } from "@mercury/types";
+import { sharesBrief, usd } from "@mercury/view";
 
 type Holding = Portfolio["holdings"][number];
 
@@ -43,11 +44,6 @@ export const toRaw = (text: string, decimals: number): bigint | null => {
   return BigInt(whole!) * 10n ** BigInt(decimals) + BigInt(fraction.padEnd(decimals, "0") || "0");
 };
 
-const shares = (s: string): string => {
-  const n = Number(s);
-  return Number.isInteger(n) ? String(n) : n.toLocaleString("en-US", { maximumFractionDigits: 4 });
-};
-
 /**
  * What a stock's cost is, beside its line in the move: "cost known for 12 of
  * 15 shares". The cost travels with the shares into the Mercury wallet, so
@@ -64,16 +60,14 @@ export const costLine = (token: MovableToken, holdings: readonly Holding[]): str
   if (known <= 0) return "Cost not known: it arrives without one";
   if (known >= held)
     return estimated ? "Cost estimated, and it moves with them" : "Cost known, and it moves with them";
-  return `Cost ${estimated ? "estimated" : "known"} for ${shares(String(known))} of ${shares(h.shares)} shares`;
+  return `Cost ${estimated ? "estimated" : "known"} for ${sharesBrief(known)} of ${sharesBrief(h.shares)} shares`;
 };
 
 /** The stocks held in a loan, which stay where they are: "NVDA 2 · in a loan, stays here". */
 export const pledgedLines = (holdings: readonly Holding[]): readonly string[] =>
   holdings
     .filter((h) => Number(h.pledgedShares ?? 0) > 0)
-    .map((h) => `${h.ticker} ${shares(h.pledgedShares!)} · In a loan, stays here`);
-
-const dollars = (s: string) => `$${Number(s).toFixed(2)}`;
+    .map((h) => `${h.ticker} ${sharesBrief(h.pledgedShares!)} · In a loan, stays here`);
 
 /**
  * What the move costs the linked wallet, said once above the button. It pays
@@ -83,7 +77,7 @@ const dollars = (s: string) => `$${Number(s).toFixed(2)}`;
 export const moveCostLine = (p: Pick<PreparedMove, "rentUsd" | "rentSol">): string => {
   if (Number(p.rentUsd) > 0 || Number(p.rentSol ?? 0) > 0) {
     const sol = p.rentSol === undefined ? "" : ` (${Number(p.rentSol)} SOL)`;
-    return `This wallet pays about ${dollars(p.rentUsd)}${sol} in SOL to open accounts in your Mercury wallet, plus the network fee.`;
+    return `This wallet pays about ${usd(p.rentUsd)}${sol} in SOL to open accounts in your Mercury wallet, plus the network fee.`;
   }
   return "This wallet pays the network fee in SOL, a fraction of a cent.";
 };

@@ -15,9 +15,6 @@ import { color, font, radius, space } from "../src/theme";
 /** The web's support address, so both clients send people to the same inbox. */
 const SUPPORT = "mailto:support@trymercury.xyz";
 
-/** "6xyD…z9fv": an address short enough for a row. */
-const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
-
 /**
  * Settings, kept small on purpose: who you are, the wallet the account lives
  * in, the two preferences worth having, where to get help, and the way out.
@@ -84,7 +81,7 @@ export default function Settings() {
             <Row
               icon="wallet"
               title="Your Solana address"
-              detail={address === null ? "Loading…" : short(address)}
+              detail={address === null ? "Loading…" : shortAddress(address)}
               trailing={copied ? "Copied" : "Copy"}
               onPress={() => void copy()}
             />

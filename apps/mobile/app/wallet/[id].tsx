@@ -9,6 +9,7 @@ import {
   liquidationLine,
   manageOnWebUrl,
   moveOnWebUrl,
+  numberOf,
   pct,
   pledgedStocks,
   shortAddress,
@@ -44,7 +45,7 @@ import {
 import { color, font, radius, space } from "../../src/theme";
 
 const MASK = "••••";
-const num = (v: string | number | null | undefined): number => Number(v ?? 0);
+const num = numberOf;
 
 /** The web's words for each state of a loan, as the borrow screen uses them. */
 const HEALTH: Record<Borrow["health"], { tone: "up" | "warn" | "down"; label: string }> = {

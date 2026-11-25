@@ -3,7 +3,16 @@ import { RefreshControl, ScrollView, StyleSheet, Text as RNText, View } from "re
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { GROUPS, displayBasketName, pct, toEvent, usd, usdSigned, type EventKind } from "@mercury/view";
+import {
+  GROUPS,
+  displayBasketName,
+  numberOf,
+  pct,
+  toEvent,
+  usd,
+  usdSigned,
+  type EventKind,
+} from "@mercury/view";
 import { TabScene } from "../../src/ui/TabScene";
 import {
   Button,
@@ -42,7 +51,7 @@ const FEED_ROWS = 4;
    tint, cash in the neutral grey — the web's allocation palette. */
 const ALLOC = { stocks: "#007682", baskets: "#7CC3C9", cash: "#D9D7D0" };
 
-const num = (v: string | number | null | undefined): number => Number(v ?? 0);
+const num = numberOf;
 const MASK = "••••";
 
 /**

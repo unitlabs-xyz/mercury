@@ -1,3 +1,4 @@
+import { D } from "@mercury/core";
 import { useNavigate } from "react-router-dom";
 import { usd } from "@mercury/view";
 import { useActingWallet } from "../../api/acting-wallet";
@@ -39,7 +40,7 @@ const Basket = ({ basket, wallet }: { basket: OutsideBasket; wallet: string }) =
 
   if (next.kind !== "withdraw") {
     const landed = basket.arrived!.holdings;
-    const landedUsd = landed.reduce((s, h) => s + Number(h.valueUsd), 0);
+    const landedUsd = landed.reduce((s, h) => s.add(D(h.valueUsd)), D(0)).toFixed();
     return (
       <li className="flex flex-col gap-3 rounded-lg bg-ds-panel px-4 py-4">
         <p className="text-[13px] font-medium text-ds-ink" role="status">
@@ -111,7 +112,7 @@ export const OutsideBaskets = ({ name }: { name: string }) => {
   const baskets = useOutsideBaskets();
   const list = baskets.data ?? [];
   if (list.length === 0) return null;
-  const total = list.reduce((s, b) => s + Number(b.valueUsd), 0);
+  const total = list.reduce((s, b) => s.add(D(b.valueUsd)), D(0));
   const waiting = list.filter((b) => nextStep(b).kind === "withdraw").length;
 
   return (
@@ -123,7 +124,7 @@ export const OutsideBaskets = ({ name }: { name: string }) => {
         <h2 className="text-[16px] font-medium text-ds-ink">
           {list.length === 1 ? "A basket on Glider" : `${list.length} baskets on Glider`}
         </h2>
-        {total > 0 && <p className="text-[16px] font-medium text-ds-ink">{usd(total)}</p>}
+        {total.gt(0) && <p className="text-[16px] font-medium text-ds-ink">{usd(total.toFixed())}</p>}
       </div>
       {waiting > 0 && (
         <p className="text-[13px] leading-[1.45] text-ds-muted">

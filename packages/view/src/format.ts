@@ -35,6 +35,20 @@ export const shares = (v: string | number | null | undefined): string =>
 export const count = (n: number): string => new Intl.NumberFormat("en-US").format(n);
 
 /**
+ * Shares said briefly, as a line of text has room for: whole where whole, else
+ * to four places with the trailing zeros trimmed ("2.1", "0.0085", "1,250").
+ * Not `shares`, which keeps three places for a column that has to line up.
+ */
+export const sharesBrief = (v: string | number): string =>
+  Number(v).toLocaleString("en-US", { maximumFractionDigits: 4 });
+
+/**
+ * A wire figure as a number, nothing as zero: for drawing and comparing on a
+ * screen, never for adding up money (that is `D`, in `@mercury/core`).
+ */
+export const numberOf = (v: string | number | null | undefined): number => Number(v ?? 0);
+
+/**
  * Thousands, millions, billions: `$1.83M`, `$48.2K`, `$912`.
  *
  * Hand-rolled rather than `Intl`'s `notation: "compact"`, which Hermes does not

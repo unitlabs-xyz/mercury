@@ -1,13 +1,10 @@
 import { StyleSheet, Text as RNText, View } from "react-native";
 import { useRouter } from "expo-router";
-import { alsoHoldLine, heldElsewhere, usd, walletName } from "@mercury/view";
+import { alsoHoldLine, heldElsewhere, sharesBrief, usd, walletName } from "@mercury/view";
 import { useAccountWallets, useLinkedPortfolios } from "../api";
 import { usePrefs } from "../prefs";
 import { Icon, PressableScale } from "../ui";
 import { color, font, radius, space } from "../theme";
-
-/** Shares to four places, trimmed, as the exposure card above says them. */
-const shares = (v: number) => Number(v.toFixed(4)).toString();
 
 /**
  * "You also hold 2.1 in Phantom main", under the Mercury wallet's position:
@@ -42,13 +39,13 @@ export const AlsoHeld = ({ ticker, mercuryHolds }: { ticker: string; mercuryHold
             activeScale={0.985}
             onPress={() => router.push({ pathname: "/wallet/[id]", params: { id: h.walletId } })}
             accessibilityRole="button"
-            accessibilityLabel={`${h.name}: ${shares(h.shares)} shares${hideBalances ? "" : `, ${usd(h.valueUsd)}`}`}
+            accessibilityLabel={`${h.name}: ${sharesBrief(h.shares)} shares${hideBalances ? "" : `, ${usd(h.valueUsd)}`}`}
           >
             <View style={s.fill}>
               <RNText style={s.rowTitle} numberOfLines={1}>
                 {h.name}
               </RNText>
-              <RNText style={s.rowSub}>{`${shares(h.shares)} shares · linked wallet`}</RNText>
+              <RNText style={s.rowSub}>{`${sharesBrief(h.shares)} shares · linked wallet`}</RNText>
             </View>
             <RNText style={s.value}>{hideBalances ? "••••" : usd(h.valueUsd)}</RNText>
             <Icon name="chevronRight" size={12} color={color.chevron} />
