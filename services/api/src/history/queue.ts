@@ -96,7 +96,16 @@ export async function claimHistoryJob(db: Db, now: Date): Promise<HistoryJob | n
       .innerJoin(wallets, eq(wallets.id, historyJobs.walletId))
       .where(and(lte(historyJobs.runAfter, now), isNull(wallets.unlinkedAt)))
       .orderBy(
-        sql`case when ${historyJobs.status} in ('queued', 'running', 'failed') then 0 else 1 end`,
+        /*
+         * Linked wallets first, first reads before later passes: a person who
+         * just linked is waiting on "Calculating…". The Mercury wallets' Earn
+         * reads (`queueMercuryEarnReads`) come last, all of them: nothing waits
+         * on them, and on the deploy that adds one for every person they must
+         * not queue ahead of anyone's new link.
+         */
+        sql`case when ${wallets.isPrimary} then 2
+                 when ${historyJobs.status} in ('queued', 'running', 'failed') then 0
+                 else 1 end`,
         historyJobs.runAfter,
       )
       .limit(1)

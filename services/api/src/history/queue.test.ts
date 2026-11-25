@@ -12,6 +12,7 @@ import {
   failureBackoffMs,
   finishHistoryPass,
   queueHistory,
+  queueMercuryEarnReads,
 } from "./queue.js";
 
 const T0 = new Date("2026-11-24T12:00:00.000Z");
@@ -20,7 +21,7 @@ const at = (ms: number) => new Date(T0.getTime() + ms);
 const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:history" }).returning();
-  await mercuryWallet(db, user!.id);
+  const mercuryId = await mercuryWallet(db, user!.id);
   const link = async (address: string) => {
     const [w] = await db
       .insert(wallets)
@@ -30,7 +31,7 @@ const seed = async () => {
   };
   const job = async (walletId: string) =>
     (await db.select().from(historyJobs).where(eq(historyJobs.walletId, walletId)))[0]!;
-  return { db, userId: user!.id, link, job };
+  return { db, userId: user!.id, mercuryId, link, job };
 };
 
 describe("queueHistory", () => {
@@ -244,5 +245,27 @@ describe("failureBackoffMs", () => {
     expect(failureBackoffMs(2)).toBe(120_000);
     expect(failureBackoffMs(5)).toBe(16 * 60_000);
     expect(failureBackoffMs(50)).toBe(BACKOFF_CAP_MS);
+  });
+});
+
+describe("the Mercury wallets' Earn reads", () => {
+  it("gives every Mercury wallet a job once, and nothing to a linked wallet", async () => {
+    const s = await seed();
+    const linked = await s.link("Phantom1111111111111111111111111111111111111");
+    await queueMercuryEarnReads(s.db, T0);
+    await queueMercuryEarnReads(s.db, at(60_000));
+    const jobs = await s.db.select().from(historyJobs);
+    expect(jobs.map((j) => [j.walletId, j.status, j.runAfter])).toEqual([[s.mercuryId, "queued", T0]]);
+    expect(jobs.some((j) => j.walletId === linked)).toBe(false);
+  });
+
+  it("come after linked wallets' reads, however long they have waited", async () => {
+    const s = await seed();
+    // The Mercury wallet's job has waited a day; a wallet linked just now waits on "Calculating…".
+    await queueMercuryEarnReads(s.db, at(-86_400_000));
+    const linked = await s.link("Phantom1111111111111111111111111111111111111");
+    await queueHistory(s.db, { walletId: linked, userId: s.userId, now: T0 });
+    expect((await claimHistoryJob(s.db, T0))?.walletId).toBe(linked);
+    expect((await claimHistoryJob(s.db, T0))?.walletId).toBe(s.mercuryId);
   });
 });

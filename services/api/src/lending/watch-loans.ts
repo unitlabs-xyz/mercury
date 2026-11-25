@@ -8,7 +8,7 @@ import { capacity } from "./capacity.js";
 import { capacityInputFor } from "./input.js";
 import type { LendingSource } from "./ports.js";
 import type { ChainReader } from "@mercury/chain";
-import { alertFor, forWallet, markAfter } from "./watch.js";
+import { alertFor, forWallet, markAfter, rank } from "./watch.js";
 import { followed } from "../wallets/active.js";
 import { notifyFor } from "../notify/inbox.js";
 import type { Health } from "./capacity.js";
@@ -221,10 +221,11 @@ export async function watchAllLoans(
 
         const summary = capacity(input);
         const [existing] = await db
-          .select({ health: loanAlerts.health })
+          .select({ health: loanAlerts.health, shown: loanAlerts.shownHealth })
           .from(loanAlerts)
           .where(eq(loanAlerts.walletId, row.walletId));
         const told = (existing?.health ?? null) as Health | null;
+        const shown = (existing?.shown ?? null) as Health | null;
 
         const found = alertFor(told, summary);
         const alert = found === null ? null : forWallet(found, row);
@@ -235,10 +236,16 @@ export async function watchAllLoans(
               if (!(await stillFollowed(tx, row.walletId))) return;
               await tx
                 .insert(loanAlerts)
-                .values({ walletId: row.walletId, userId: row.userId, health: "healthy", notifiedAt: now })
+                .values({
+                  walletId: row.walletId,
+                  userId: row.userId,
+                  health: "healthy",
+                  shownHealth: null,
+                  notifiedAt: now,
+                })
                 .onConflictDoUpdate({
                   target: loanAlerts.walletId,
-                  set: { health: "healthy", notifiedAt: now },
+                  set: { health: "healthy", shownHealth: null, notifiedAt: now },
                 });
             });
           }
@@ -253,8 +260,27 @@ export async function watchAllLoans(
          * which is the harder and more important half. Its notification goes
          * with it, in the same transaction.
          */
+        /*
+         * Once per level, though. The mail is tried again every pass until it
+         * gets through (`markAfter`), and the feed row used to be written again
+         * with each try: the same warning every five minutes for someone with
+         * no address, or while the mail provider was down.
+         */
+        const inApp = shown === null || rank(alert.health) > rank(shown);
         const stillHere = await db.transaction(async (tx) => {
           if (!(await stillFollowed(tx, row.walletId))) return false;
+          if (!inApp) return true;
+          await tx
+            .insert(loanAlerts)
+            .values({
+              walletId: row.walletId,
+              userId: row.userId,
+              // Never told before: nothing to remember yet but that the app has said this.
+              health: told ?? "healthy",
+              shownHealth: alert.health,
+              notifiedAt: now,
+            })
+            .onConflictDoUpdate({ target: loanAlerts.walletId, set: { shownHealth: alert.health } });
           const written = await tx
             .insert(activities)
             .values({
@@ -277,7 +303,7 @@ export async function watchAllLoans(
         });
         // Unlinked while this pass was reading the chain: nothing said, nothing remembered.
         if (!stillHere) continue;
-        alerted += 1;
+        if (inApp) alerted += 1;
 
         const sent = row.email === null ? false : await deps.notifier.send({ to: row.email, ...alert });
         if (sent) delivered += 1;

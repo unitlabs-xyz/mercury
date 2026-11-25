@@ -796,7 +796,8 @@ already computes everything from the loan's current state: collateral, debt with
 LTV, the liquidation threshold, liquidation price per stock and the health state. None of that
 needs history. A linked wallet's loan is fully visible on the first sync.
 
-`loan-watch` warns per wallet. The email and inbox entry name the wallet by its label (or a
+`loan-watch` warns per wallet, and says each level once in the feed and the inbox; the email is
+tried again each pass until it gets through, without writing the warning into the app again. The email and inbox entry name the wallet by its label (or a
 shortened address), because the person may have two loans and needs to know which to repay, and
 for a linked wallet they add: "Mercury can't act for this wallet. Repay or add collateral from it
 to avoid liquidation."
@@ -933,6 +934,14 @@ Loan warnings for linked wallets reach iOS users by email now, and through the i
 comes to mobile (`TODO.md`, Notifications).
 
 ## RPC budget
+
+**What the newer reads cost, and where they run.** All of it is on the jobs' lane, none on the
+paid request path: the history reader's Kamino reads (what is pledged, and a linked wallet's loan
+history), the hourly `dividend-notices` read of every listed mint (one call per hundred), and
+loan-watch's read of a loan's history from Kamino's API when its collateral or debt fell, when it
+was last warned it was close, and at least hourly. Each Mercury wallet's Earn shares are read once a
+day, after every linked wallet's reads (two calls for its token accounts, and one per Earn account
+it has), and that job asks Kamino nothing.
 
 The risk is load. On 23 October and again on 13 November the paid allowance ran out, and the
 user-facing reads (`/v1/money`, `/v1/portfolio`, `/v1/borrow`) failed until it recovered, at

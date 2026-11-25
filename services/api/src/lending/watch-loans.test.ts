@@ -177,6 +177,36 @@ describe("watchAllLoans", () => {
     expect(sent).toHaveLength(2);
   });
 
+  /* The mail is tried again each pass; the app is told once. */
+  it("puts the warning in the feed and the inbox once while it keeps trying the mail", async () => {
+    const { db } = await seed();
+    const { sent, notifier } = collect(false);
+    for (let i = 0; i < 3; i++) await watchAllLoans(db, deps("60", notifier), NOW);
+    expect(sent).toHaveLength(3);
+    expect(await db.select().from(activities)).toHaveLength(1);
+    expect(await db.select().from(notifications)).toHaveLength(1);
+  });
+
+  it("tells someone with no address in the app once, not every pass", async () => {
+    const { db } = await seed(null);
+    for (let i = 0; i < 3; i++) await watchAllLoans(db, deps("60", collect().notifier), NOW);
+    expect(await db.select().from(activities)).toHaveLength(1);
+    expect(await db.select().from(notifications)).toHaveLength(1);
+  });
+
+  it("says it again in the app when the loan gets worse, and again after it recovers and relapses", async () => {
+    const { db } = await seed(null);
+    const { notifier } = collect();
+    await watchAllLoans(db, deps("60", notifier), NOW);
+    // Worse: past the margin call.
+    await watchAllLoans(db, deps("70", notifier), NOW);
+    expect(await db.select().from(activities)).toHaveLength(2);
+    // Healthy, then over its limit again.
+    await watchAllLoans(db, deps("10", notifier), NOW);
+    await watchAllLoans(db, deps("60", notifier), NOW);
+    expect(await db.select().from(activities)).toHaveLength(3);
+  });
+
   it("leaves a healthy loan alone", async () => {
     const { db } = await seed();
     const { sent, notifier } = collect();

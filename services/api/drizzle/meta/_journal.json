@@ -274,6 +274,13 @@
       "when": 1795592366030,
       "tag": "0038_multiplier_announcements",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795598406231,
+      "tag": "0039_loan_alert_shown",
+      "breakpoints": true
     }
   ]
 }

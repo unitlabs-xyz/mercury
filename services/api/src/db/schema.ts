@@ -920,6 +920,13 @@ export const loanAlerts = pgTable("loan_alert", {
     .references(() => users.id, { onDelete: "cascade" }),
   /** healthy, over_limit, margin_call or liquidation. See lending/capacity.ts. */
   health: text("health").notNull(),
+  /**
+   * The worst level already put in the feed and the inbox. `health` moves only
+   * once the mail gets through, and the mail is tried again each pass until it
+   * does; this keeps those retries from writing the same warning into the app
+   * every five minutes for someone with no address, or while mail is down.
+   */
+  shownHealth: text("shown_health"),
   notifiedAt: timestamp("notified_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type LoanAlert = typeof loanAlerts.$inferSelect;

@@ -51,6 +51,9 @@ export interface HistoryRunDeps {
  * Null when nothing was due, or the pass found nothing new: a quiet reader
  * says nothing in the log.
  */
+/** How often a Mercury wallet's Earn shares are read: they are rarely sent in or out by hand. */
+const MERCURY_EVERY_MS = 24 * 60 * 60_000;
+
 /** How often Mercury wallets that have no job get one. */
 const QUEUE_MERCURY_EVERY_MS = 10 * 60_000;
 
@@ -82,8 +85,10 @@ export const historyPass = (deps: HistoryRunDeps) => {
       const onlyMints = wallet.isPrimary
         ? ((await deps.reader.earnShareMints?.()) ?? new Set<string>())
         : undefined;
+      // Its Earn shares are never pledged: no need to ask Kamino, or to wait on it when it is down.
+      const { pledged, ...reader } = deps.reader;
       const r = await readWallet(
-        { ...deps.reader, db: deps.db },
+        { ...reader, ...(wallet.isPrimary || pledged === undefined ? {} : { pledged }), db: deps.db },
         { ...job, address: wallet.address, ...(onlyMints === undefined ? {} : { onlyMints }) },
       );
       const done = new Date(now());
@@ -92,7 +97,11 @@ export const historyPass = (deps: HistoryRunDeps) => {
         cursors: r.cursors,
         openingPledged: r.openingPledged,
         now: done,
-        nextRunAfter: new Date(done.getTime() + nextPassIn(wallet.lastViewedAt, done.getTime())),
+        // A Mercury wallet's Earn shares are rarely sent in by hand: a pass a day.
+        nextRunAfter: new Date(
+          done.getTime() +
+            (wallet.isPrimary ? MERCURY_EVERY_MS : nextPassIn(wallet.lastViewedAt, done.getTime())),
+        ),
       });
       // The person and the wallet's id, never the address: an address in a log is a person's holdings in a log.
       if (r.capped > 0) {
@@ -101,11 +110,14 @@ export const historyPass = (deps: HistoryRunDeps) => {
           "history read stopped at its cap on an account that never went to zero",
         );
       }
-      const loan = await loanPass(deps, {
-        userId: job.userId,
-        walletId: job.walletId,
-        address: wallet.address,
-      });
+      // Loan-watch reads every loan's history already, the Mercury wallet's included.
+      const loan = wallet.isPrimary
+        ? 0
+        : await loanPass(deps, {
+            userId: job.userId,
+            walletId: job.walletId,
+            address: wallet.address,
+          });
       const first = job.status === "running";
       if (!first && r.transactions === 0 && loan === 0) return null;
       return `${first ? "first read" : "later pass"}: ${r.transactions} transactions, ${r.events} events across ${r.accounts} accounts${loan > 0 ? `, ${loan} loan events` : ""}`;

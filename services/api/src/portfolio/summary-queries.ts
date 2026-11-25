@@ -121,6 +121,7 @@ export async function readSummaryRecords(
           kind: loanEvents.kind,
           usdAmount: loanEvents.usdAmount,
           debtAfterUsd: loanEvents.debtAfterUsd,
+          occurredAt: loanEvents.occurredAt,
         })
         .from(loanEvents)
         .where(and(eq(loanEvents.userId, userId), inArray(loanEvents.walletId, ids)))
@@ -147,6 +148,7 @@ export async function readSummaryRecords(
       kind: r.kind,
       usdAmount: r.usdAmount === null ? null : D(r.usdAmount),
       debtAfterUsd: D(r.debtAfterUsd),
+      at: r.occurredAt,
     };
     const rows = ledgerBy.get(r.walletId);
     if (rows === undefined) ledgerBy.set(r.walletId, [row]);

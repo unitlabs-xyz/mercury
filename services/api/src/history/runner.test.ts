@@ -215,15 +215,34 @@ describe("historyPass, the Mercury wallet's Earn shares", () => {
         listedMints: async () => new Set([TSLAX, SHARES]),
         laneBusy: () => false,
         earnShareMints: async () => new Set([SHARES]),
+        // Earn shares are never pledged: Kamino is not asked, and its being down holds nothing up.
+        pledged: async () => {
+          throw new Error("kamino down");
+        },
+      },
+      // Loan-watch reads every loan's history: this job doesn't.
+      loan: {
+        lending: {
+          position: async () => {
+            throw new Error("asked for the loan");
+          },
+        },
+        loans: { transactions: async () => [], days: async () => [] },
+        market: "Market",
+        usdcMint: "USDC",
       },
       now: () => T0,
       log,
     });
 
+    warned.length = 0;
     expect(await pass()).toBe("first read: 1 transactions, 1 events across 1 accounts");
     expect(asked).toEqual(["X1"]);
+    expect(warned).toEqual([]);
     const [job] = await db.select().from(historyJobs).where(eq(historyJobs.walletId, mainId));
     expect([job!.status, job!.cursors]).toEqual(["read", { [SHARES_ACCT]: "X1" }]);
+    // A pass a day: shares are rarely sent to it by hand.
+    expect(job!.runAfter).toEqual(new Date(T0 + 24 * 60 * 60_000));
     const events = await db.select().from(historyEvents);
     expect(events.map((e) => e.mint)).toEqual([SHARES]);
   });

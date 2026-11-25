@@ -397,7 +397,7 @@ every(
   "dividend-notices",
   60 * 60 * 1000,
   async () => {
-    const s = await watchMultiplierAnnouncements(auth.db, { chain: deps.chain }, new Date());
+    const s = await watchMultiplierAnnouncements(auth.db, { chain: jobs.deps.chain }, new Date());
     return s.announced === 0 ? null : `${s.announced} announced, ${s.told} holders told`;
   },
   jobClock(150_000),
@@ -740,13 +740,13 @@ every(
       }),
       laneBusy: () => laneRefusedWithin(60_000),
       // Pledged shares are still held: an account emptied by pledging is read, not skipped.
-      pledged: (owner) => pledgedByMint(deps.lending, owner),
+      pledged: (owner) => pledgedByMint(jobs.deps.lending, owner),
       // The Mercury wallet's Earn shares, read for shares sent in or out by hand.
       earnShareMints: async () => new Set((await deps.earn.list()).map((v) => v.sharesMint)),
     },
     // A linked wallet's loan, from Kamino's own record of it: when it opened, each pledge at its price then.
     loan: {
-      lending: deps.lending,
+      lending: jobs.deps.lending,
       loans: kaminoLoans(),
       market: XSTOCKS_MARKET,
       usdcMint: USDC_MINT,

@@ -98,7 +98,16 @@ export function summarise(
   const interest = sum(ready, ({ records: r }) => {
     const owed = r.latest?.debtUsd ?? ZERO;
     if (owed.lte(ZERO)) return ZERO;
-    return loanParts(owed, outstandingPrincipal(r.loanLedger)).interest ?? ZERO;
+    /*
+     * What was owed is the hourly reading's; what was borrowed has to be as of
+     * the same moment. A repay or a liquidation recorded since took the
+     * principal down at once while the debt waited for the next reading, and
+     * the gap read as interest: a $500 liquidation showed $550 of it for up to
+     * an hour.
+     */
+    const asOf = r.latest!.asOf.getTime();
+    const then = r.loanLedger.filter((row) => row.at === undefined || row.at.getTime() <= asOf);
+    return loanParts(owed, outstandingPrincipal(then)).interest ?? ZERO;
   });
 
   const oldest = readings.reduce<Date | null>((o, r) => (o === null || r.asOf < o ? r.asOf : o), null);

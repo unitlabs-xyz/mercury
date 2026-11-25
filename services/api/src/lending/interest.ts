@@ -18,6 +18,8 @@ export interface LedgerRow {
   readonly usdAmount: Decimal | null;
   /** The debt straight after, as Kamino reported it. */
   readonly debtAfterUsd: Decimal;
+  /** When it happened, where a caller needs the ledger as it stood at a moment. */
+  readonly at?: Date;
 }
 
 /**

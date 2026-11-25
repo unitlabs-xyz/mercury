@@ -207,6 +207,23 @@ describe("summarise: loans", () => {
     expect(s.loanInterestUsd).toBe("3.5");
   });
 
+  it("measures interest against what was borrowed as of the debt's own reading, not since", () => {
+    const before = new Date(AT.getTime() - 60 * 60_000);
+    const since = new Date(AT.getTime() + 5 * 60_000);
+    // The reading said $1,000 owed on $950 borrowed. A $500 liquidation recorded after it
+    // must wait for the next reading, or $550 of it reads as interest.
+    const s = run({
+      wallet: MERCURY,
+      records: owing(1000, {
+        loanLedger: [
+          { kind: "borrow", usdAmount: D(950), debtAfterUsd: D(950), at: before },
+          { kind: "liquidation", usdAmount: D(500), debtAfterUsd: D(500), at: since },
+        ],
+      }),
+    });
+    expect(s.loanInterestUsd).toBe("50");
+  });
+
   it("adds nothing for a debt its ledger can't explain, rather than calling it all interest", () => {
     expect(run({ wallet: MERCURY, records: owing(103.5) }).loanInterestUsd).toBe("0");
   });

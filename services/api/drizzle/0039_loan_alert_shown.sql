@@ -1,0 +1,1 @@
+ALTER TABLE "loan_alert" ADD COLUMN "shown_health" text;

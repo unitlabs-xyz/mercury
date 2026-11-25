@@ -15,7 +15,7 @@ export interface Alert {
 /** Worst last. A move up this list is worth interrupting somebody for. */
 const SEVERITY: readonly Health[] = ["healthy", "over_limit", "margin_call", "liquidation"];
 
-const rank = (h: Health): number => SEVERITY.indexOf(h);
+export const rank = (h: Health): number => SEVERITY.indexOf(h);
 
 const money = (n: number): string =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
