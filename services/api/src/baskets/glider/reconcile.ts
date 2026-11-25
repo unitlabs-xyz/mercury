@@ -14,6 +14,8 @@ import type { ExitIntentPayload } from "../core/primitives.js";
 import { walletIdAt } from "../../wallets/primary.js";
 import { D } from "@mercury/core";
 
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:";
 const PAGE = 100;
 const MAX_PAGES = 3;
@@ -184,45 +186,42 @@ async function recordTransfer(
   tx: TransactionDetail,
   transfer: VerifiedExitTransfer,
 ): Promise<boolean> {
-  const expected = row.payload.expectedTransfers.find((item) => item.mint === transfer.mint);
-  if (!expected) return false;
-  const quantity = fixedQuantity(transfer.rawAmount, transfer.decimals);
-  const isUsdc = row.payload.mode === "liquidate_usdc";
-  // Whose feed: the wallet the payout landed in, the owner's or the Mercury wallet a move went to.
-  const walletId = walletIdAt(row.userId, addressOf(row.payload.recipientAccountId));
-  const [already] = await db
-    .select({ id: activities.id })
-    .from(activities)
-    .where(
-      and(
-        eq(activities.refTable, "basket_action"),
-        eq(activities.refId, row.id),
-        eq(activities.txSignature, tx.signature),
-        eq(activities.mint, transfer.mint),
-      ),
-    )
-    .limit(1);
-  const inserted = await db
-    .insert(activities)
-    .values({
-      userId: row.userId,
-      walletId,
-      kind: isUsdc ? "liquidate_to_usdc" : "withdraw_in_kind",
-      occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1_000),
-      title: isUsdc ? `Sold ${row.payload.templateName} to cash` : `Received ${expected.symbol}`,
-      subtitle: `${displayQuantity(transfer.rawAmount, transfer.decimals)} ${expected.symbol} from ${row.payload.templateName}`,
-      amountUsd: isUsdc ? quantity : null,
-      tokenQuantity: quantity,
-      refTable: "basket_action",
-      refId: row.id,
-      txSignature: tx.signature,
-      mint: transfer.mint,
-      basketSlug: row.slug,
-      basketPortfolioId: row.portfolioId,
-    })
-    .onConflictDoUpdate({
-      target: [activities.walletId, activities.txSignature, activities.mint],
-      set: {
+  /*
+   * One transaction, under a lock on the exit's own row: the feed row and the
+   * shares' cost are written together or not at all (a crash between them left
+   * shares that never got their cost, since the retry found the row and stopped),
+   * and two passes over the same exit take turns, so the second finds the first's
+   * row and writes no second lot.
+   */
+  return db.transaction(async (trx) => {
+    await trx
+      .select({ id: basketActions.id })
+      .from(basketActions)
+      .where(eq(basketActions.id, row.id))
+      .for("update");
+    const expected = row.payload.expectedTransfers.find((item) => item.mint === transfer.mint);
+    if (!expected) return false;
+    const quantity = fixedQuantity(transfer.rawAmount, transfer.decimals);
+    const isUsdc = row.payload.mode === "liquidate_usdc";
+    // Whose feed: the wallet the payout landed in, the owner's or the Mercury wallet a move went to.
+    const walletId = walletIdAt(row.userId, addressOf(row.payload.recipientAccountId));
+    const [already] = await trx
+      .select({ id: activities.id })
+      .from(activities)
+      .where(
+        and(
+          eq(activities.refTable, "basket_action"),
+          eq(activities.refId, row.id),
+          eq(activities.txSignature, tx.signature),
+          eq(activities.mint, transfer.mint),
+        ),
+      )
+      .limit(1);
+    const inserted = await trx
+      .insert(activities)
+      .values({
+        userId: row.userId,
+        walletId,
         kind: isUsdc ? "liquidate_to_usdc" : "withdraw_in_kind",
         occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1_000),
         title: isUsdc ? `Sold ${row.payload.templateName} to cash` : `Received ${expected.symbol}`,
@@ -231,17 +230,34 @@ async function recordTransfer(
         tokenQuantity: quantity,
         refTable: "basket_action",
         refId: row.id,
+        txSignature: tx.signature,
+        mint: transfer.mint,
         basketSlug: row.slug,
         basketPortfolioId: row.portfolioId,
-      },
-      setWhere: sql`${activities.kind} = 'transfer_in' OR (${activities.refTable} = 'basket_action' AND ${activities.refId} = ${row.id})`,
-    })
-    .returning({ id: activities.id, walletId: activities.walletId });
-  const written = inserted[0];
-  // The shares arrive with their share of what the basket cost, once.
-  if (written !== undefined && already === undefined && !isUsdc)
-    await carryExitCost(db, row, tx, transfer, written.walletId);
-  return inserted.length === 1;
+      })
+      .onConflictDoUpdate({
+        target: [activities.walletId, activities.txSignature, activities.mint],
+        set: {
+          kind: isUsdc ? "liquidate_to_usdc" : "withdraw_in_kind",
+          occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1_000),
+          title: isUsdc ? `Sold ${row.payload.templateName} to cash` : `Received ${expected.symbol}`,
+          subtitle: `${displayQuantity(transfer.rawAmount, transfer.decimals)} ${expected.symbol} from ${row.payload.templateName}`,
+          amountUsd: isUsdc ? quantity : null,
+          tokenQuantity: quantity,
+          refTable: "basket_action",
+          refId: row.id,
+          basketSlug: row.slug,
+          basketPortfolioId: row.portfolioId,
+        },
+        setWhere: sql`${activities.kind} = 'transfer_in' OR (${activities.refTable} = 'basket_action' AND ${activities.refId} = ${row.id})`,
+      })
+      .returning({ id: activities.id, walletId: activities.walletId });
+    const written = inserted[0];
+    // The shares arrive with their share of what the basket cost, once.
+    if (written !== undefined && already === undefined && !isUsdc)
+      await carryExitCost(trx, row, tx, transfer, written.walletId);
+    return inserted.length === 1;
+  });
 }
 
 /**
@@ -252,7 +268,7 @@ async function recordTransfer(
  * outside are.
  */
 async function carryExitCost(
-  db: Db,
+  db: Db | Tx,
   row: ExitRow,
   tx: TransactionDetail,
   transfer: VerifiedExitTransfer,

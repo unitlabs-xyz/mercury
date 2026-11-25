@@ -129,6 +129,11 @@ export interface BasketStore {
   }): Promise<ExitIntent>;
   attachExitOperation(id: string, operationId: string, submittedAt: Date): Promise<void>;
   /**
+   * Whether an exit from this portfolio was submitted and is not yet resolved
+   * (recorded, failed, cancelled or given up on). Absent, never.
+   */
+  exitSettling?(portfolioId: string): Promise<boolean>;
+  /**
    * Which Glider smart account this owner's basket money moves through.
    *
    * Recorded as soon as it is resolved, which is before any money can reach

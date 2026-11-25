@@ -758,13 +758,14 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
   });
 
   /** A basket holding $300 of TSLAx (100 raw) and $900 of NVDAx (300 raw): $1,200, into which $600 went. */
-  const moving = (netFunding?: () => Promise<Decimal | null>) => {
+  const moving = (netFunding?: () => Promise<Decimal | null>, settling = false) => {
     let saved: Parameters<BasketStore["saveExitIntent"]>[0] | undefined;
     let preparedFor = "";
     const signed = message(mercury);
     const service = new BasketService({
       store: {
         ...store(basket),
+        exitSettling: async () => settling,
         saveExitIntent: async (action) => {
           saved = action;
           return { id: "intent-1", ...action, operationId: null, submittedAt: null, createdAt: new Date() };
@@ -848,6 +849,24 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
       ),
     ).resolves.toMatchObject({ recipientAccountId: mercury });
     expect(m.preparedFor()).toBe(mercury);
+  });
+
+  it("refuses a second exit while the last one from the basket is still settling, before anything is signed", async () => {
+    const m = moving(async () => D(600), true);
+    await expect(
+      m.service.prepareExit(
+        "nvidia",
+        owner,
+        "in_kind",
+        [{ assetId: asset(TSLAX), amountRaw: "100" }],
+        mercury,
+      ),
+    ).rejects.toMatchObject({ code: "exit_settling", status: 409 });
+    await expect(
+      m.service.submitExit("nvidia", "user-1", owner, "in_kind", m.signed, "sig", "withdraw", mercury),
+    ).rejects.toMatchObject({ code: "exit_settling" });
+    // Nothing saved, so no second share of the same funding.
+    expect(m.saved()).toBeUndefined();
   });
 
   it("refuses a signed move whose recipient is not the one it was submitted for", async () => {

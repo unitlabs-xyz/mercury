@@ -672,11 +672,15 @@ interface ExitSheetProps {
   /** The linked wallet that approves the withdrawal; null for the Mercury wallet. */
   approver?: string | null;
   /**
-   * A move rather than a withdrawal: a linked wallet's basket paid out in kind
-   * straight into the person's Mercury wallet, at this address. Undefined for
-   * a withdrawal to the owner.
+   * A move rather than a withdrawal: a linked wallet's basket paid out straight
+   * into the person's Mercury wallet, at this address. Undefined for a
+   * withdrawal to the owner. In kind it is "Hold as shares"; for USDC it is
+   * "Keep it as a basket", invested again from the Mercury wallet
+   * (`onInvestFromMercury`) once it lands.
    */
   toMercury?: string | undefined;
+  /** "Keep it as a basket": switch to the Mercury wallet, where the same basket is one tap. */
+  onInvestFromMercury?: () => void;
   onPrepare: (assets?: BasketExitAsset[]) => void;
   onSubmit: () => void;
   onBack: () => void;
@@ -720,6 +724,7 @@ export const ExitSheet = ({
   error,
   approver = null,
   toMercury,
+  onInvestFromMercury,
   onPrepare,
   onSubmit,
   onBack,
@@ -813,9 +818,31 @@ export const ExitSheet = ({
             This is not settled yet. Track the operation under Your position; your wallet and basket balances
             will update after confirmation.
           </p>
-          <Button variant="primary" size="lg" onClick={close} className="mt-6 w-full">
-            Done
-          </Button>
+          {moving && mode === "liquidate_usdc" && onInvestFromMercury !== undefined ? (
+            <>
+              <p className="mx-auto mt-3 max-w-[40ch] text-[14px] leading-[1.45] text-ds-muted">
+                When the USDC lands in your Mercury wallet, invest it in {name} there: one tap, no pop-up.
+              </p>
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => {
+                  close();
+                  onInvestFromMercury();
+                }}
+                className="mt-6 w-full"
+              >
+                Invest in {name} from your Mercury wallet
+              </Button>
+              <Button size="lg" onClick={close} className="mt-2 w-full">
+                Later
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" size="lg" onClick={close} className="mt-6 w-full">
+              Done
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -838,8 +865,12 @@ export const ExitSheet = ({
                   : `${count} ${count === 1 ? "asset" : "assets"} · ${usd(account.totalValueUsd)}`
               }
             />
-            {/* A move hands over the shares themselves: there is nothing to convert. */}
-            {!prepared && !moving && (
+            {/*
+              A withdrawal: the assets themselves, or USDC. A move: hold the shares
+              (the default, nothing sold), or keep it as a basket (sold for USDC into
+              the Mercury wallet, and invested in the same basket there).
+            */}
+            {!prepared && (
               <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-ds-panel p-1 text-[13px]">
                 {(["in_kind", "liquidate_usdc"] as const).map((choice) => (
                   <button
@@ -849,7 +880,13 @@ export const ExitSheet = ({
                     onClick={() => onMode(choice)}
                     className={`rounded-md px-2 py-2.5 font-medium ${mode === choice ? "bg-white text-ds-ink shadow-sm" : "text-ds-muted hover:text-ds-ink"}`}
                   >
-                    {choice === "in_kind" ? "Assets in kind" : "Convert to USDC"}
+                    {moving
+                      ? choice === "in_kind"
+                        ? "Hold as shares"
+                        : "Keep it as a basket"
+                      : choice === "in_kind"
+                        ? "Assets in kind"
+                        : "Convert to USDC"}
                   </button>
                 ))}
               </div>
@@ -1035,7 +1072,9 @@ export const ExitSheet = ({
             </div>
             <SheetNote>
               {moving
-                ? "These shares move into your Mercury wallet without being sold, with their share of what the basket cost, so you can trade them in one tap. Anything you leave behind stays in this basket."
+                ? mode === "in_kind"
+                  ? "These shares move into your Mercury wallet without being sold, with their share of what the basket cost, so you can trade them in one tap. Anything you leave behind stays in this basket."
+                  : `Glider sells this basket for USDC, paid into your Mercury wallet, and you invest it in ${name} there. Selling now and buying again pays the spread twice, and the money is out of the market until Glider’s next daily rebalance.`
                 : mode === "in_kind"
                   ? "These tokens move to your wallet without being sold. Anything left behind may rebalance on the next scheduled run, and values can shift while it settles."
                   : "Glider sells the listed assets for USDC and sends the proceeds to your wallet. Small or illiquid balances may stay behind and rebalance later."}

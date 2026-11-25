@@ -201,6 +201,22 @@ export class JsonBasketStore implements BasketStore {
     if (row?.operationId !== operationId) throw new Error("Basket exit operation conflicts with its intent");
   }
 
+  async exitSettling(portfolioId: string): Promise<boolean> {
+    const [row] = await this.actionsDb()
+      .select({ id: basketActions.id })
+      .from(basketActions)
+      .where(
+        and(
+          eq(basketActions.portfolioId, portfolioId),
+          or(eq(basketActions.kind, "withdraw_in_kind"), eq(basketActions.kind, "liquidate_to_usdc")),
+          isNotNull(basketActions.operationId),
+          isNull(basketActions.resolvedAt),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   async recentActions(userId: string, portfolioId: string) {
     return this.actionsDb()
       .select({

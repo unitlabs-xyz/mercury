@@ -359,6 +359,8 @@ export class BasketService {
     if (!SOLANA_ACCOUNT.test(ownerAccountId) || !SOLANA_ACCOUNT.test(recipientAccountId))
       throw new BasketEnrollmentError("wallet_required", 400, "A Solana wallet is required to exit.");
     const { provider, portfolio } = await this.exitPortfolio(slug, ownerAccountId);
+    // Said before anything is signed: the same check guards the submission.
+    await this.refuseWhileExitSettles(portfolio.portfolioId);
     const positions = await provider.positions(portfolio.portfolioId);
     if (positions.portfolioId !== portfolio.portfolioId)
       throw new BasketEnrollmentError(
@@ -491,6 +493,8 @@ export class BasketService {
           }));
     let intent = await this.deps.store.exitIntent(userId, message.nonce);
     if (!intent) {
+      // A new exit, not this one sent again: not while another from the basket is still settling.
+      await this.refuseWhileExitSettles(portfolio.portfolioId);
       if (message.expiresAt * 1000 <= Date.now())
         throw new BasketEnrollmentError(
           "authorization_expired",
@@ -581,6 +585,23 @@ export class BasketService {
       new Date(submitted.submittedAt),
     );
     return { ...submitted, mode };
+  }
+
+  /**
+   * One exit from a basket at a time. An exit's cost is the basket's net
+   * funding less what earlier exits took, and an earlier exit counts only once
+   * it has landed and been recorded: a second exit signed before then split
+   * the same funding again, and both carried the basket's whole cost.
+   * Resolved means recorded, failed, cancelled or given up on, so an exit that
+   * never lands holds nothing up for good.
+   */
+  private async refuseWhileExitSettles(portfolioId: string): Promise<void> {
+    if (await this.deps.store.exitSettling?.(portfolioId))
+      throw new BasketEnrollmentError(
+        "exit_settling",
+        409,
+        "Your last withdrawal from this basket is still settling. Try again once it lands.",
+      );
   }
 
   /**

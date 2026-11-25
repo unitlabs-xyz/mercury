@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { USDC_MINT, type TransactionDetail } from "@mercury/chain";
 import { mercuryWallet, testDb } from "../../../db/testing.js";
 import { activities, basketActions, instruments, lots, tokens, users, wallets } from "../../../db/schema.js";
@@ -321,6 +321,35 @@ describe("an in-kind exit, recorded where it landed with its cost", () => {
       .set({ reconciliationState: "pending", reconcileAfter: new Date("2026-10-07T00:04:00Z") })
       .where(eq(basketActions.id, s.action.id));
     await s.reconcile();
+    expect(await s.db.select().from(lots).where(eq(lots.walletId, s.mercuryId))).toHaveLength(1);
+  });
+
+  it("carries the cost once when two passes look at the same exit at once", async () => {
+    const s = await seed(MERCURY);
+    await Promise.all([s.reconcile(), s.reconcile()]);
+    expect(await s.db.select().from(lots).where(eq(lots.walletId, s.mercuryId))).toHaveLength(1);
+  });
+
+  it("writes the feed row and the shares' cost together: one that fails leaves neither, and the next pass writes both", async () => {
+    const s = await seed(MERCURY);
+    await s.db.execute(sql`alter table lot add constraint no_lots_yet check (false) not valid`);
+    expect(await s.reconcile()).toMatchObject({ recorded: 0, failed: 1 });
+    // Neither the exit's feed row nor its cost: the transaction that would have written both rolled back.
+    const exitRows = () => s.db.select().from(activities).where(eq(activities.refId, s.action.id));
+    expect(await exitRows()).toEqual([]);
+    expect(await s.db.select().from(lots)).toEqual([]);
+
+    await s.db.execute(sql`alter table lot drop constraint no_lots_yet`);
+    await s.db
+      .update(basketActions)
+      .set({
+        reconciliationState: "pending",
+        reconcileAfter: new Date("2026-10-07T00:04:00Z"),
+        resolvedAt: null,
+      })
+      .where(eq(basketActions.id, s.action.id));
+    await s.reconcile();
+    expect(await exitRows()).toHaveLength(1);
     expect(await s.db.select().from(lots).where(eq(lots.walletId, s.mercuryId))).toHaveLength(1);
   });
 

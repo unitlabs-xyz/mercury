@@ -419,7 +419,7 @@ export const Basket = () => {
   const fundingAction = useBasketFundingAction(slug);
   const rebalanceAction = useBasketRebalanceAction(slug);
   // A linked wallet's basket can move straight into the person's Mercury wallet, in one approval.
-  const { acting, wallets } = useActingWallet();
+  const { acting, wallets, choose } = useActingWallet();
   const mercuryAddress = wallets.find((w) => w.isPrimary)?.address;
   const canMove = acting.kind === "linked" && mercuryAddress !== undefined;
   const toMercury = canMove && exitTo === "mercury" ? mercuryAddress : undefined;
@@ -1547,6 +1547,11 @@ export const Basket = () => {
             walletReady={exitAction.walletReady}
             approver={exitAction.approver}
             toMercury={toMercury}
+            // "Keep it as a basket": the same basket, from the Mercury wallet, once the USDC lands there.
+            onInvestFromMercury={() => {
+              const mercury = wallets.find((w) => w.isPrimary);
+              if (mercury !== undefined) choose(mercury.id);
+            }}
             error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
             onPrepare={(assets) =>
               void exitAction.prepare
