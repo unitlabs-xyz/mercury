@@ -183,8 +183,12 @@
           "name": "activity_user_id_user_id_fk",
           "tableFrom": "activity",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -231,8 +235,12 @@
           "name": "basket_account_user_id_user_id_fk",
           "tableFrom": "basket_account",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -240,7 +248,10 @@
       "compositePrimaryKeys": {
         "basket_account_user_id_address_pk": {
           "name": "basket_account_user_id_address_pk",
-          "columns": ["user_id", "address"]
+          "columns": [
+            "user_id",
+            "address"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -443,8 +454,12 @@
           "name": "basket_action_user_id_user_id_fk",
           "tableFrom": "basket_action",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -565,8 +580,12 @@
           "name": "loan_alert_user_id_user_id_fk",
           "tableFrom": "loan_alert",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -711,8 +730,12 @@
           "name": "loan_event_user_id_user_id_fk",
           "tableFrom": "loan_event",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -838,8 +861,12 @@
           "name": "lot_user_id_user_id_fk",
           "tableFrom": "lot",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -847,8 +874,12 @@
           "name": "lot_token_id_token_id_fk",
           "tableFrom": "lot",
           "tableTo": "token",
-          "columnsFrom": ["token_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "token_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -856,8 +887,12 @@
           "name": "lot_instrument_id_instrument_id_fk",
           "tableFrom": "lot",
           "tableTo": "instrument",
-          "columnsFrom": ["instrument_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "instrument_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -939,8 +974,12 @@
           "name": "multiplier_event_token_id_token_id_fk",
           "tableFrom": "multiplier_event",
           "tableTo": "token",
-          "columnsFrom": ["token_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "token_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1104,8 +1143,12 @@
           "name": "order_user_id_user_id_fk",
           "tableFrom": "order",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1113,8 +1156,12 @@
           "name": "order_instrument_id_instrument_id_fk",
           "tableFrom": "order",
           "tableTo": "instrument",
-          "columnsFrom": ["instrument_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "instrument_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1122,8 +1169,12 @@
           "name": "order_chosen_token_id_token_id_fk",
           "tableFrom": "order",
           "tableTo": "token",
-          "columnsFrom": ["chosen_token_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "chosen_token_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1194,8 +1245,12 @@
           "name": "portfolio_snapshot_user_id_user_id_fk",
           "tableFrom": "portfolio_snapshot",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1203,7 +1258,10 @@
       "compositePrimaryKeys": {
         "portfolio_snapshot_user_id_captured_at_pk": {
           "name": "portfolio_snapshot_user_id_captured_at_pk",
-          "columns": ["user_id", "captured_at"]
+          "columns": [
+            "user_id",
+            "captured_at"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1280,8 +1338,12 @@
           "name": "position_user_id_user_id_fk",
           "tableFrom": "position",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1289,8 +1351,12 @@
           "name": "position_instrument_id_instrument_id_fk",
           "tableFrom": "position",
           "tableTo": "instrument",
-          "columnsFrom": ["instrument_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "instrument_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1298,7 +1364,10 @@
       "compositePrimaryKeys": {
         "position_user_id_instrument_id_pk": {
           "name": "position_user_id_instrument_id_pk",
-          "columns": ["user_id", "instrument_id"]
+          "columns": [
+            "user_id",
+            "instrument_id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1412,8 +1481,12 @@
           "name": "token_instrument_id_instrument_id_fk",
           "tableFrom": "token",
           "tableTo": "instrument",
-          "columnsFrom": ["instrument_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "instrument_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1642,8 +1715,12 @@
           "name": "wallet_stream_wallet_id_wallet_id_fk",
           "tableFrom": "wallet_stream",
           "tableTo": "wallet",
-          "columnsFrom": ["wallet_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "wallet_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1651,7 +1728,10 @@
       "compositePrimaryKeys": {
         "wallet_stream_wallet_id_address_pk": {
           "name": "wallet_stream_wallet_id_address_pk",
-          "columns": ["wallet_id", "address"]
+          "columns": [
+            "wallet_id",
+            "address"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1725,8 +1805,12 @@
           "name": "wallet_user_id_user_id_fk",
           "tableFrom": "wallet",
           "tableTo": "user",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
