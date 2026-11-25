@@ -798,15 +798,18 @@ What the first draft's resumable flow was for (an approval left to give, "Finish
 approval left" on Home and in the inbox) has nothing to resume with one approval: the
 `basket_action` row survives a reload, and the operation is tracked under the basket's position.
 
-**The Mercury wallet's token accounts are opened first.** Glider pays an exit to "any address
-that the owner authorizes" and its paymaster "sponsors the fee", but its documentation
-([docs.glider.fi/llms-full.txt](https://docs.glider.fi/llms-full.txt), read 25 November 2026) says
-nothing about opening the recipient's token account for an asset it has never held. So before the
-authorization is prepared, the relayer opens every account the payout needs in the Mercury wallet
-(each stock's for in kind, USDC's for "Keep it as a basket"), with the idempotent instruction that
-needs only the payer's signature. Mercury pays that rent, as it does for every account the Mercury
-wallet opens: only what Mercury builds can close them. If they can't be opened, nothing is asked
-to be signed (`503 accounts_unavailable`).
+**The Mercury wallet's token accounts are opened first, once the owner has signed.** Glider pays
+an exit to "any address that the owner authorizes" and its paymaster "sponsors the fee", but its
+documentation ([docs.glider.fi/llms-full.txt](https://docs.glider.fi/llms-full.txt), read 25
+November 2026) says nothing about opening the recipient's token account for an asset it has never
+held. So when the signed exit comes back, the server checks the owner's signature over the text it
+was given to sign, then the relayer opens every account the payout needs in the Mercury wallet
+(each stock's for in kind, USDC's for "Keep it as a basket"), and only then does the exit go to
+Glider. Nothing is opened when a move is merely prepared: anyone can ask for that. Mercury pays the
+rent, and opens any one account once ever (`sponsored_token_account`): the Mercury wallet's key can
+be exported, so an account closed since, its rent taken back, stays closed. If the accounts can't
+be opened, nothing is sent to Glider (`503 accounts_unavailable`); the same signature can be sent
+again while it is valid.
 
 **Baskets made outside Mercury.** A linked wallet's Glider baskets made somewhere else (Glider's own
 app, or another app built on Glider) are found on the chain (accounts it funded that the Swig

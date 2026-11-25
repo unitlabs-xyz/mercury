@@ -10,6 +10,7 @@ import type {
   ManagedBasketTemplate,
 } from "@mercury/types";
 import { USDC_MINT, USDC_DECIMALS, type ChainHistory, type TransactionDetail } from "@mercury/chain";
+import { verifyWalletSignature } from "../../wallets/verify.js";
 import {
   BasketFundingPreflightError,
   BasketExitUnsupportedError,
@@ -410,27 +411,6 @@ export class BasketService {
         selected.add(asset.assetId);
       }
     }
-    /*
-     * Paid into the Mercury wallet rather than back to the owner: every token
-     * account the payout lands in exists first. Glider's documentation says
-     * nothing about opening one for an asset the wallet has never held, and an
-     * exit that fails after the owner signed is the one failure worth paying
-     * the rent to rule out. Before the authorization, so nobody signs one that
-     * could not land.
-     */
-    if (recipientAccountId !== ownerAccountId && this.deps.openRecipientAccounts) {
-      const mints =
-        mode === "in_kind" ? assets.map((a) => a.assetId.slice(SOLANA_ASSET.length)) : [USDC_MINT];
-      try {
-        await this.deps.openRecipientAccounts(addressOf(recipientAccountId), mints);
-      } catch {
-        throw new BasketEnrollmentError(
-          "accounts_unavailable",
-          503,
-          "Your Mercury wallet couldn't be made ready for these assets. Try again shortly.",
-        );
-      }
-    }
     try {
       const prepared = await provider.prepareExit(
         portfolio.portfolioId,
@@ -462,6 +442,14 @@ export class BasketService {
           JSON.stringify(assets.slice().sort((a, b) => a.assetId.localeCompare(b.assetId)))
       )
         throw new Error("Glider returned a different selected asset set.");
+      // A move into the Mercury wallet: what the owner will sign, kept to check the signature against.
+      if (recipientAccountId !== ownerAccountId) {
+        this.rememberAuthorization(message.nonce, {
+          owner: addressOf(ownerAccountId),
+          text: prepared.authorization.text,
+          expiresAt: message.expiresAt * 1000,
+        });
+      }
       return {
         ...prepared,
         mode,
@@ -529,6 +517,15 @@ export class BasketService {
           409,
           "The withdrawal authorization expired. Review it again.",
         );
+      if (recipientAccountId !== ownerAccountId) {
+        await this.openForPayout(
+          message,
+          signature,
+          ownerAccountId,
+          recipientAccountId,
+          mode === "in_kind" ? authorizedAssets.map((a) => a.mint) : [USDC_MINT],
+        );
+      }
       await this.deps.store.rememberBasketAccount({
         ownerAccountId,
         portfolioId: portfolio.portfolioId,
@@ -613,6 +610,63 @@ export class BasketService {
       new Date(submitted.submittedAt),
     );
     return { ...submitted, mode };
+  }
+
+  /** What each prepared move asked its owner to sign, by nonce, until it expires. */
+  private readonly authorizations = new Map<string, { owner: string; text: string; expiresAt: number }>();
+
+  private rememberAuthorization(nonce: string, entry: { owner: string; text: string; expiresAt: number }) {
+    const now = Date.now();
+    for (const [key, held] of this.authorizations) if (held.expiresAt <= now) this.authorizations.delete(key);
+    this.authorizations.set(nonce, entry);
+  }
+
+  /**
+   * Opens the Mercury wallet's token accounts for a move's payout: only once
+   * the owner has signed the exit, and only after the server has checked that
+   * signature itself, against the text it was given to sign.
+   *
+   * Glider's documentation says nothing about opening the recipient's account
+   * for an asset it has never held, so the accounts are made to exist before
+   * the exit goes to Glider, on the relayer's SOL. Opened at preparation, as it
+   * first was, anyone could have the relayer open accounts by asking, close
+   * them (a Privy key can be exported), and ask again. Here each opening needs
+   * a real signed exit, one exit from a basket runs at a time, and the relayer
+   * opens any one account once ever (`openTokenAccounts`' ledger).
+   *
+   * The text is kept from preparation, in memory: lost to a restart, the
+   * person is asked to review the move again, which costs them one more
+   * signature and nobody any SOL.
+   */
+  private async openForPayout(
+    message: BasketExitMessage,
+    signature: string,
+    ownerAccountId: string,
+    recipientAccountId: string,
+    mints: readonly string[],
+  ): Promise<void> {
+    if (!this.deps.openRecipientAccounts) return;
+    const asked = this.authorizations.get(message.nonce);
+    if (asked === undefined || asked.expiresAt <= Date.now())
+      throw new BasketEnrollmentError(
+        "authorization_expired",
+        409,
+        "The withdrawal authorization expired. Review it again.",
+      );
+    if (
+      asked.owner !== addressOf(ownerAccountId) ||
+      !(await verifyWalletSignature(asked.owner, asked.text, signature))
+    )
+      throw new BasketEnrollmentError("invalid_exit", 400, "The signature does not match this wallet.");
+    try {
+      await this.deps.openRecipientAccounts(addressOf(recipientAccountId), mints);
+    } catch {
+      throw new BasketEnrollmentError(
+        "accounts_unavailable",
+        503,
+        "Your Mercury wallet couldn't be made ready for these assets. Try again shortly.",
+      );
+    }
   }
 
   /**

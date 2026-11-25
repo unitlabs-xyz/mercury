@@ -17,6 +17,9 @@ import {
   type Signature,
 } from "@solana/kit";
 import { findAssociatedTokenPda, getCreateAssociatedTokenIdempotentInstruction } from "@solana-program/token";
+import { and, eq, inArray } from "drizzle-orm";
+import type { Db } from "../../db/client.js";
+import { sponsoredTokenAccounts } from "../../db/schema.js";
 import type { RelaySigner } from "../../relay/signer.js";
 
 /** The chain calls this needs, so a test can stand in for the node. */
@@ -61,6 +64,35 @@ export const solanaAccountsRpc = (rpcUrl: string): AccountsRpc => {
   };
 };
 
+/**
+ * Which accounts the relayer has opened before, for whom: each is opened once
+ * ever (`sponsored_token_account`). An account its owner closed since, taking
+ * the rent back, is not opened again on the relayer's SOL.
+ */
+export interface SponsoredAccounts {
+  /** Of these mints, the ones the relayer already opened an account for, for this owner. */
+  opened(owner: string, mints: readonly string[]): Promise<ReadonlySet<string>>;
+  record(owner: string, mints: readonly string[]): Promise<void>;
+}
+
+export const pgSponsoredAccounts = (db: Db): SponsoredAccounts => ({
+  async opened(owner, mints) {
+    if (mints.length === 0) return new Set();
+    const rows = await db
+      .select({ mint: sponsoredTokenAccounts.mint })
+      .from(sponsoredTokenAccounts)
+      .where(and(eq(sponsoredTokenAccounts.owner, owner), inArray(sponsoredTokenAccounts.mint, [...mints])));
+    return new Set(rows.map((r) => r.mint));
+  },
+  async record(owner, mints) {
+    if (mints.length === 0) return;
+    await db
+      .insert(sponsoredTokenAccounts)
+      .values(mints.map((mint) => ({ owner, mint })))
+      .onConflictDoNothing();
+  },
+});
+
 /** A token account that could not be opened before an exit paid into it. */
 export class AccountsNotOpened extends Error {
   constructor(detail: string) {
@@ -82,15 +114,23 @@ const POLL_MS = 1_000;
  * docs.glider.fi/llms-full.txt, 25 November 2026). Rather than find out on a
  * signed exit, every account the payout needs is made to exist first.
  *
- * Mercury pays the rent, as it does for every account the Mercury wallet
- * opens: only what Mercury builds can close those accounts, so the rent can't
- * be drained back out. Opening needs the payer's signature alone (the
- * idempotent instruction makes the owner's account, and is a no-op where it
- * already exists), so nothing is asked of the person. One transaction for at
- * most ten accounts, which is as many assets as an exit can name.
+ * Mercury pays the rent, as it does for the Mercury wallet's accounts. Its
+ * owner can close one and take the rent back (a Privy key can be exported), so
+ * the relayer opens any one account once ever (`SponsoredAccounts`): one closed
+ * since stays closed, and the payout into it is the owner's to have broken. It
+ * runs only for an exit the owner has signed, which the caller checks first
+ * (`BasketService.openForPayout`). Opening needs the payer's signature alone
+ * (the idempotent instruction makes the owner's account, and is a no-op where
+ * it already exists), so nothing more is asked of the person. One transaction
+ * for at most ten accounts, which is as many assets as an exit can name.
  */
 export const openTokenAccounts =
-  (deps: { readonly rpc: AccountsRpc; readonly signer: RelaySigner; readonly now?: () => number }) =>
+  (deps: {
+    readonly rpc: AccountsRpc;
+    readonly signer: RelaySigner;
+    readonly ledger: SponsoredAccounts;
+    readonly now?: () => number;
+  }) =>
   async (owner: string, mints: readonly string[]): Promise<number> => {
     const unique = [...new Set(mints)];
     if (unique.length === 0) return 0;
@@ -108,8 +148,14 @@ export const openTokenAccounts =
       });
       wanted.push({ mint: address(mint), program: address(program), ata });
     }
-    const existing = await deps.rpc.owners(wanted.map((w) => w.ata));
-    const missing = wanted.filter((_, i) => existing[i] === null || existing[i] === undefined);
+    const [existing, before] = await Promise.all([
+      deps.rpc.owners(wanted.map((w) => w.ata)),
+      deps.ledger.opened(owner, unique),
+    ]);
+    // Missing, and never opened on the relayer's SOL before: one opened and closed since stays closed.
+    const missing = wanted.filter(
+      (w, i) => (existing[i] === null || existing[i] === undefined) && !before.has(w.mint),
+    );
     if (missing.length === 0) return 0;
 
     const payer = createNoopSigner(address(deps.signer.address));
@@ -146,7 +192,13 @@ export const openTokenAccounts =
     const deadline = now() + CONFIRM_MS;
     for (;;) {
       const status = await deps.rpc.status(signature);
-      if (status === "confirmed") return missing.length;
+      if (status === "confirmed") {
+        await deps.ledger.record(
+          owner,
+          missing.map((m) => String(m.mint)),
+        );
+        return missing.length;
+      }
       if (status === "failed") throw new AccountsNotOpened("the transaction failed");
       if (now() >= deadline) throw new AccountsNotOpened("not confirmed in time");
       await new Promise((r) => setTimeout(r, POLL_MS));

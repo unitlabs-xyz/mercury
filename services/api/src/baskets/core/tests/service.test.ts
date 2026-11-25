@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { D, type Decimal } from "@mercury/core";
 import { BasketService } from "../service.js";
+import { testWallet } from "../../../wallets/testing.js";
 import { BasketFundingPreflightError, type BasketProvider, type BasketStore } from "../deps.js";
 import type { BasketTemplate } from "../primitives.js";
 
@@ -762,7 +763,9 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
     netFunding?: () => Promise<Decimal | null>,
     settling = false,
     openRecipientAccounts?: (owner: string, mints: readonly string[]) => Promise<number>,
+    who: string = owner,
   ) => {
+    let submitted = 0;
     let saved: Parameters<BasketStore["saveExitIntent"]>[0] | undefined;
     let preparedFor = "";
     const signed = message(mercury);
@@ -780,14 +783,14 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
         portfolios: async () => [
           {
             portfolioId: "p-1",
-            ownerAccountId: owner,
+            ownerAccountId: who,
             strategyId: "remote-1",
             smartAccounts: [{ accountId: `${SOL}:Vau1tAccount1111111111111111111111111111` }],
           },
         ],
         portfolio: async () => ({
           portfolioId: "p-1",
-          ownerAccountId: owner,
+          ownerAccountId: who,
           strategyId: "remote-1",
           smartAccounts: [{ accountId: `${SOL}:Vau1tAccount1111111111111111111111111111` }],
           schedule: null,
@@ -829,7 +832,10 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
             message: signed,
           };
         },
-        submitExit: async () => ({ operationId: "op-move", submittedAt: new Date().toISOString() }),
+        submitExit: async () => {
+          submitted += 1;
+          return { operationId: "op-move", submittedAt: new Date().toISOString() };
+        },
       }),
       history: {
         tokenAccountsFor: async () => [],
@@ -839,7 +845,13 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
       ...(netFunding === undefined ? {} : { netFunding }),
       ...(openRecipientAccounts === undefined ? {} : { openRecipientAccounts }),
     });
-    return { service, signed, saved: () => saved, preparedFor: () => preparedFor };
+    return {
+      service,
+      signed,
+      saved: () => saved,
+      preparedFor: () => preparedFor,
+      submitted: () => submitted,
+    };
   };
 
   it("asks Glider for an exit paid out to the Mercury wallet, and checks that is what came back", async () => {
@@ -874,41 +886,101 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
     expect(m.saved()).toBeUndefined();
   });
 
-  it("opens the Mercury wallet's accounts for what it will receive before asking for a signature", async () => {
-    const opened: [string, readonly string[]][] = [];
-    const m = moving(undefined, false, async (o, mints) => {
-      opened.push([o, mints]);
-      return mints.length;
-    });
-    await m.service.prepareExit(
+  /** A real key, so the owner's signature over what Glider asked them to sign is checked as it is live. */
+  const signedMove = async (
+    openRecipientAccounts: (o: string, mints: readonly string[]) => Promise<number>,
+  ) => {
+    const phantom = await testWallet();
+    const who = `${SOL}:${phantom.address}`;
+    const m = moving(undefined, false, openRecipientAccounts, who);
+    const prepared = await m.service.prepareExit(
       "nvidia",
-      owner,
+      who,
       "in_kind",
       [{ assetId: asset(TSLAX), amountRaw: "100" }],
       mercury,
     );
-    expect(opened).toEqual([["MercuryWa11et111111111111111111111111111111", [TSLAX]]]);
-    // To USDC, the USDC account.
-    opened.length = 0;
-    // (This fake Glider answers every exit in kind, so the authorization is refused after: what matters is before.)
-    await m.service.prepareExit("nvidia", owner, "liquidate_usdc", undefined, mercury).catch(() => undefined);
-    expect(opened.map(([, mints]) => mints)).toEqual([["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]]);
+    return { ...m, phantom, who, prepared };
+  };
+
+  it("opens nothing when a move is prepared: anyone can ask, and nothing is signed yet", async () => {
+    const opened: unknown[] = [];
+    await signedMove(async (o, mints) => {
+      opened.push([o, mints]);
+      return 1;
+    });
+    expect(opened).toEqual([]);
   });
 
-  it("asks for no signature when those accounts could not be opened", async () => {
-    const m = moving(undefined, false, async () => {
+  it("opens the Mercury wallet's accounts once the owner's signature checks, before the exit goes to Glider", async () => {
+    const order: string[] = [];
+    const opened: [string, readonly string[]][] = [];
+    const m = await signedMove(async (o, mints) => {
+      order.push(`opened, ${m.submitted()} sent`);
+      opened.push([o, mints]);
+      return mints.length;
+    });
+    const signature = await m.phantom.sign(m.prepared.authorization.text);
+    await m.service.submitExit(
+      "nvidia",
+      "user-1",
+      m.who,
+      "in_kind",
+      m.signed,
+      signature,
+      "withdraw",
+      mercury,
+    );
+    expect(opened).toEqual([["MercuryWa11et111111111111111111111111111111", [TSLAX]]]);
+    expect(order).toEqual(["opened, 0 sent"]);
+    expect(m.submitted()).toBe(1);
+  });
+
+  it("opens nothing and sends nothing for a signature that is not the owner's", async () => {
+    let opened = false;
+    const m = await signedMove(async () => {
+      opened = true;
+      return 1;
+    });
+    const stranger = await testWallet();
+    const forged = await stranger.sign(m.prepared.authorization.text);
+    await expect(
+      m.service.submitExit("nvidia", "user-1", m.who, "in_kind", m.signed, forged, "withdraw", mercury),
+    ).rejects.toMatchObject({ code: "invalid_exit", status: 400 });
+    expect(opened).toBe(false);
+    expect(m.submitted()).toBe(0);
+    expect(m.saved()).toBeUndefined();
+  });
+
+  it("asks for the move to be reviewed again where it was never prepared here, opening nothing", async () => {
+    let opened = false;
+    const phantom = await testWallet();
+    const who = `${SOL}:${phantom.address}`;
+    const m = moving(
+      undefined,
+      false,
+      async () => {
+        opened = true;
+        return 1;
+      },
+      who,
+    );
+    const signature = await phantom.sign("Withdraw to your Mercury wallet");
+    await expect(
+      m.service.submitExit("nvidia", "user-1", who, "in_kind", m.signed, signature, "withdraw", mercury),
+    ).rejects.toMatchObject({ code: "authorization_expired" });
+    expect(opened).toBe(false);
+  });
+
+  it("sends nothing to Glider when the accounts could not be opened", async () => {
+    const m = await signedMove(async () => {
       throw new Error("node down");
     });
+    const signature = await m.phantom.sign(m.prepared.authorization.text);
     await expect(
-      m.service.prepareExit(
-        "nvidia",
-        owner,
-        "in_kind",
-        [{ assetId: asset(TSLAX), amountRaw: "100" }],
-        mercury,
-      ),
+      m.service.submitExit("nvidia", "user-1", m.who, "in_kind", m.signed, signature, "withdraw", mercury),
     ).rejects.toMatchObject({ code: "accounts_unavailable", status: 503 });
-    expect(m.preparedFor()).toBe("");
+    expect(m.submitted()).toBe(0);
   });
 
   it("opens nothing for a withdrawal back to the owner", async () => {

@@ -1,4 +1,4 @@
-import { openTokenAccounts, solanaAccountsRpc } from "./baskets/glider/open-accounts.js";
+import { openTokenAccounts, pgSponsoredAccounts, solanaAccountsRpc } from "./baskets/glider/open-accounts.js";
 import {
   JupiterLite,
   JupiterRegistry,
@@ -766,6 +766,7 @@ export function buildReadDeps(
           openRecipientAccounts: openTokenAccounts({
             rpc: solanaAccountsRpc(config.solanaRpcUrl),
             signer: relay.signer,
+            ledger: pgSponsoredAccounts(db),
           }),
         }),
     ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),

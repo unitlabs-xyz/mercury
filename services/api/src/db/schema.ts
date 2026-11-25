@@ -130,6 +130,23 @@ export const walletLinkChallenges = pgTable(
 );
 export type WalletLinkChallenge = typeof walletLinkChallenges.$inferSelect;
 
+/**
+ * Every token account the relayer opened for a wallet, on its own SOL, outside
+ * a transaction the wallet paid for: today, the Mercury wallet's accounts for a
+ * basket paid into it (`baskets/glider/open-accounts.ts`). Opened once ever:
+ * an account its owner closed (a Privy key can be exported, and the rent
+ * comes back to them) is not opened again on the relayer's SOL.
+ */
+export const sponsoredTokenAccounts = pgTable(
+  "sponsored_token_account",
+  {
+    owner: text("owner").notNull(),
+    mint: text("mint").notNull(),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.owner, t.mint] })],
+);
+
 /** Enrollment authorizations and accepted manual rebalances. Provider balances stay at Glider. */
 export const basketActions = pgTable(
   "basket_action",
