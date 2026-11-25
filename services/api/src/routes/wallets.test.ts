@@ -70,8 +70,27 @@ describe("GET /v1/wallets", () => {
         { ...phantom, linkedAt: "2026-11-21T10:00:00.000Z" },
       ],
       limit: 5,
+      kept: [],
     });
     expect(asked).toBe("user-1");
+  });
+
+  it("lists the wallets unlinked with their history kept, so it can be deleted without linking again", async () => {
+    const res = await appWith(
+      stub({
+        kept: async () => [
+          {
+            id: WALLET_ID,
+            address: PHANTOM,
+            label: "Phantom main",
+            unlinkedAt: new Date("2026-11-22T09:00:00Z"),
+          },
+        ],
+      }),
+    ).request("/v1/wallets");
+    expect(((await res.json()) as { kept: unknown }).kept).toEqual([
+      { id: WALLET_ID, address: PHANTOM, label: "Phantom main", unlinkedAt: "2026-11-22T09:00:00.000Z" },
+    ]);
   });
 });
 

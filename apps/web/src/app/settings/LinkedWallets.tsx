@@ -11,6 +11,7 @@ import {
   walletName,
   type AccountWallet,
 } from "../../api/wallets";
+import type { KeptWallet } from "@mercury/view";
 import { usePortfolioSummary } from "../../api/hooks";
 
 /*
@@ -34,6 +35,7 @@ const LABEL_MAX = 40;
 export const LinkedWallets = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
   const account = useAccountWallets();
   const [unlinking, setUnlinking] = useState<AccountWallet | null>(null);
+  const [forgetting, setForgetting] = useState<KeptWallet | null>(null);
 
   const sub =
     account.data === undefined
@@ -42,7 +44,9 @@ export const LinkedWallets = ({ open, onClose }: { open: boolean; onClose: () =>
 
   return (
     <SidePanel open={open} onClose={onClose} labelledBy="linked-wallets-title">
-      {unlinking === null ? (
+      {forgetting !== null ? (
+        <ConfirmForget wallet={forgetting} onBack={() => setForgetting(null)} onClose={onClose} />
+      ) : unlinking === null ? (
         <>
           <PanelHeader id="linked-wallets-title" title="Linked wallets" sub={sub} onClose={onClose} />
           <div className="flex flex-col gap-6 px-6 pt-6 pb-8">
@@ -66,6 +70,9 @@ export const LinkedWallets = ({ open, onClose }: { open: boolean; onClose: () =>
                     <WalletRow key={w.id} wallet={w} onUnlink={() => setUnlinking(w)} />
                   ))}
                 </ul>
+                {(account.data.kept?.length ?? 0) > 0 && (
+                  <KeptHistory kept={account.data.kept!} onForget={setForgetting} />
+                )}
                 <Suspense fallback={<p className="text-[14px] text-ds-muted">Loading…</p>}>
                   <LinkWalletSection wallets={account.data.wallets} limit={account.data.limit} />
                 </Suspense>
@@ -81,6 +88,94 @@ export const LinkedWallets = ({ open, onClose }: { open: boolean; onClose: () =>
         <ConfirmUnlink wallet={unlinking} onBack={() => setUnlinking(null)} onClose={onClose} />
       )}
     </SidePanel>
+  );
+};
+
+/**
+ * Wallets unlinked with their history kept. Nothing reads or shows them, so
+ * this is the one place that history can be deleted without linking the
+ * wallet again. It is the account's, not the wallet's: being signed in is
+ * enough, and the wallet doesn't have to sign anything.
+ */
+export const KeptHistory = ({
+  kept,
+  onForget,
+}: {
+  kept: readonly KeptWallet[];
+  onForget: (w: KeptWallet) => void;
+}) => (
+  <div className="flex flex-col gap-2">
+    <p className="text-[13px] font-medium text-ds-ink">Kept history</p>
+    <ul className="flex flex-col divide-y divide-black/[0.06] rounded-xl outline-1 outline-black/10">
+      {kept.map((w) => (
+        <li key={w.id} className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-[14px] font-medium text-ds-ink">
+              {w.label ?? shortAddress(w.address)}
+            </p>
+            <p className="truncate text-[13px] text-ds-muted">
+              Unlinked{" "}
+              {new Date(w.unlinkedAt).toLocaleDateString("en-US", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 text-[13px] text-ds-muted hover:text-ds-ink"
+            onClick={() => onForget(w)}
+          >
+            Delete history
+          </button>
+        </li>
+      ))}
+    </ul>
+    <p className="text-[13px] leading-[1.45] text-ds-muted text-pretty">
+      Kept so linking a wallet again brings its history back. Nothing is tracked or shown for them.
+    </p>
+  </div>
+);
+
+/** Deleting kept history, said once more before it happens: it can't be undone. */
+const ConfirmForget = ({
+  wallet,
+  onBack,
+  onClose,
+}: {
+  wallet: KeptWallet;
+  onBack: () => void;
+  onClose: () => void;
+}) => {
+  const forget = useUnlinkWallet();
+  const name = wallet.label ?? shortAddress(wallet.address);
+  return (
+    <>
+      <PanelHeader
+        id="linked-wallets-title"
+        title={`Delete ${name}'s history`}
+        sub={shortAddress(wallet.address)}
+        onClose={onClose}
+        onBack={onBack}
+      />
+      <div className="flex flex-col gap-5 px-6 pt-6 pb-8 text-[14px] leading-[1.45] text-ds-muted text-pretty">
+        <p>
+          Deletes everything Mercury kept about this wallet: costs, activity and loan history. Linking it
+          again would start from nothing.
+        </p>
+        <p>The wallet itself and everything in it stay exactly as they are.</p>
+        <Button
+          size="lg"
+          loading={forget.isPending}
+          onClick={() => forget.mutate({ id: wallet.id, deleteHistory: true }, { onSuccess: onBack })}
+        >
+          Delete history
+        </Button>
+        <p className="text-[13px]">This can't be undone.</p>
+        {forget.isError && <p className="text-[13px]">{linkErrorCopy(forget.error)}</p>}
+      </div>
+    </>
   );
 };
 

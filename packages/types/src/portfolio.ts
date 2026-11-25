@@ -229,6 +229,12 @@ export const PortfolioSummary = z.object({
   }),
   /** Interest owed on every ready wallet's loan: what is owed beyond what was borrowed. */
   loanInterestUsd: Usd,
+  /**
+   * Interest already paid on every ready wallet's loans: what repayments took
+   * beyond what was borrowed. With `loanInterestUsd`, what borrowing has cost.
+   * Optional for older servers.
+   */
+  loanInterestPaidUsd: Usd.optional(),
   /** Wallets whose past is still being read, and so are not in P&L, income or interest. */
   calculating: z.number().int().nonnegative(),
 });

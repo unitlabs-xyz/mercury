@@ -1,6 +1,13 @@
 import type { Db } from "../db/client.js";
 import type { WalletDeps } from "../routes/wallets.js";
-import { completeLink, listWallets, openChallenge, renameWallet, unlinkWallet } from "./store.js";
+import {
+  completeLink,
+  keptWallets,
+  listWallets,
+  openChallenge,
+  renameWallet,
+  unlinkWallet,
+} from "./store.js";
 import { verifyWalletSignature } from "./verify.js";
 
 /**
@@ -14,6 +21,7 @@ export const pgWalletDeps = (
 ): WalletDeps => ({
   limit: opts.limit,
   list: (userId) => listWallets(db, userId),
+  kept: (userId) => keptWallets(db, userId),
   challenge: (userId, address) =>
     openChallenge(db, { userId, address, appUrl: opts.appUrl, limit: opts.limit, now: new Date() }),
   link: (userId, challengeId, signature) =>

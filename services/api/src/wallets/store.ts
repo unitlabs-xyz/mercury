@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { loanAlerts, walletLinkChallenges, walletStreams, wallets, type Wallet } from "../db/schema.js";
 import { logger } from "../log/index.js";
@@ -49,6 +49,34 @@ export async function listWallets(db: Db, userId: string): Promise<readonly Wall
     .where(and(eq(wallets.userId, userId), isNull(wallets.unlinkedAt)))
     .orderBy(desc(wallets.isPrimary), asc(wallets.linkedAt), asc(wallets.createdAt));
   return rows.map(view);
+}
+
+/** A wallet unlinked with its history kept: what the person can still delete. */
+export interface KeptWallet {
+  readonly id: string;
+  readonly address: string;
+  readonly label: string | null;
+  readonly unlinkedAt: Date;
+}
+
+/**
+ * Wallets unlinked with their history kept, newest unlinked first. Nothing
+ * reads or shows them, so without this list the only way to delete what was
+ * kept was to link the wallet again. The account owns that history, not the
+ * address: the person's own session is enough to delete it, no signature.
+ */
+export async function keptWallets(db: Db, userId: string): Promise<readonly KeptWallet[]> {
+  const rows = await db
+    .select({
+      id: wallets.id,
+      address: wallets.address,
+      label: wallets.label,
+      unlinkedAt: wallets.unlinkedAt,
+    })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), isNotNull(wallets.unlinkedAt)))
+    .orderBy(desc(wallets.unlinkedAt));
+  return rows.map((r) => ({ ...r, unlinkedAt: r.unlinkedAt! }));
 }
 
 /** Linked wallets being followed, which is what the limit counts. The Mercury wallet is not one. */

@@ -137,6 +137,17 @@ describe("summaryLines", () => {
     expect(l.incomeSub).toBe("Earn ~$12.50 · Dividends $3.25");
   });
 
+  it("says what borrowing has cost: interest paid already and owed now, split beneath", () => {
+    const l = summaryLines(summary({ loanInterestUsd: "3.5", loanInterestPaidUsd: "12" }));
+    expect(l.loanInterest).toBe("−$15.50");
+    expect(l.loanInterestSub).toBe("$12.00 paid · $3.50 owing");
+  });
+
+  it("still shows what a loan repaid in full cost, rather than $0", () => {
+    const l = summaryLines(summary({ loanInterestUsd: "0", loanInterestPaidUsd: "12" }));
+    expect([l.loanInterest, l.loanInterestSub]).toEqual(["−$12.00", "$12.00 paid · $0.00 owing"]);
+  });
+
   it("shows a loss as one", () => {
     const l = summaryLines(summary({ pnl: { ...summary().pnl, totalUsd: "-40", returnPct: "-5" } }));
     expect(l.pnl).toBe("−$40.00 (−5.0%)");

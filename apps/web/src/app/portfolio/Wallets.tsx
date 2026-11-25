@@ -165,7 +165,11 @@ export const WalletsOverview = () => {
               tone={tone(summary.data.pnl.totalUsd, lines.pnl)}
             />
             <Figure label="Income" value={lines.income} sub={lines.incomeSub ?? undefined} />
-            <Figure label="Loan interest" value={lines.loanInterest} />
+            <Figure
+              label="Loan interest"
+              value={lines.loanInterest}
+              sub={lines.loanInterestSub ?? undefined}
+            />
           </div>
 
           <div className="order-1 justify-self-center lg:order-none">

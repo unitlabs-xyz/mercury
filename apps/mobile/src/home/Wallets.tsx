@@ -122,7 +122,11 @@ export const AllWalletsCard = ({ overview, hidden }: { overview: Overview; hidde
             tone={hidden ? undefined : tone(summary.data, lines.pnl)}
           />
           <Figure label="Income" value={hidden ? MASK : lines.income} sub={null} />
-          <Figure label="Loan interest" value={hidden ? MASK : lines.loanInterest} sub={null} />
+          <Figure
+            label="Loan interest"
+            value={hidden ? MASK : lines.loanInterest}
+            sub={hidden ? null : lines.loanInterestSub}
+          />
         </View>
       </View>
     </View>

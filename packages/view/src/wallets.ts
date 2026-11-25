@@ -29,6 +29,19 @@ export interface AccountWallets {
   readonly wallets: readonly AccountWallet[];
   /** How many may be linked at once, beside the Mercury wallet. */
   readonly limit: number;
+  /**
+   * Wallets unlinked with their history kept: not followed, nothing shown, but
+   * what Mercury kept is still there to delete. Absent from an older server.
+   */
+  readonly kept?: readonly KeptWallet[];
+}
+
+/** A wallet unlinked with its history kept. */
+export interface KeptWallet {
+  readonly id: string;
+  readonly address: string;
+  readonly label: string | null;
+  readonly unlinkedAt: string;
 }
 
 /** What a wallet is called on screen: "Mercury", its label, or its short address. */
@@ -68,6 +81,8 @@ export const summaryLines = (s: PortfolioSummary) => {
   const estimated = Number(s.pnl.estimatedCostUsd) > 0;
   const waiting = ready === 0;
   const earnEstimated = s.income.earnEstimated === true;
+  const paid = Number(s.loanInterestPaidUsd ?? 0);
+  const loanCost = paid + Number(s.loanInterestUsd);
   return {
     netWorth: usd(s.netWorthUsd),
     pnl: waiting
@@ -83,11 +98,10 @@ export const summaryLines = (s: PortfolioSummary) => {
     incomeSub: waiting
       ? null
       : `Earn ${earnEstimated ? "~" : ""}${usd(s.income.earnUsd)} · Dividends ${usd(s.income.dividendsUsd)}`,
-    loanInterest: waiting
-      ? "Calculating…"
-      : Number(s.loanInterestUsd) === 0
-        ? usd(0)
-        : `−${usd(s.loanInterestUsd)}`,
+    // What borrowing has cost: interest paid already, and interest owed now. A loan repaid in full
+    // still shows what it cost, where it used to read $0.
+    loanInterest: waiting ? "Calculating…" : loanCost === 0 ? usd(0) : `−${usd(loanCost)}`,
+    loanInterestSub: waiting || loanCost === 0 ? null : `${usd(paid)} paid · ${usd(s.loanInterestUsd)} owing`,
     calculating: calculatingNote(s.calculating),
   };
 };

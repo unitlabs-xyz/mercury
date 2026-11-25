@@ -200,6 +200,13 @@ Under **Unlink**, the wallet stops being followed at all:
   on `unlinked_at is null`, so an unlinked wallet's rows are invisible, not just its card. Inbox
   items about it are hidden with it.
 
+**Kept history can be deleted later, without linking again.** Settings → Linked wallets lists the
+wallets unlinked with their history kept ("Kept history", from `GET /v1/wallets`'s `kept`), each
+with "Delete history" behind its own confirmation, which does what Unlink and delete history does.
+The history is the account's, not the address's, so the person's own session is the proof: the
+Mercury wallet is the account's own wallet, made at sign-in, and nothing has to be signed by the
+unlinked wallet, which may be long gone.
+
 **When the wallet has an open loan,** the unlink confirmation says so plainly: "This wallet has a
 loan. After unlinking, Mercury won't warn you if it gets close to liquidation." Unlinking still
 goes ahead if confirmed.
@@ -614,8 +621,12 @@ time and its amounts:
 | Liquidations            | Date, shares taken, debt cleared                                             |
 
 The share price "at the time" of a deposit is the market price at that moment, from the same
-historical source. From these rows: **interest paid = current debt − (total borrowed − total
-repaid)**, exact once the history is complete.
+historical source. From these rows, two figures: **interest owed now = current debt − (total
+borrowed − total repaid)**, and **interest paid = what repayments took beyond what was borrowed**
+(a repay comes off the principal first, so this is the repay that closes a loan, and a debt a
+liquidation cleared counts the same way). Home's "Loan interest" is what borrowing has cost, the
+two added up, with "$12.00 paid · $3.50 owing" beneath, so a loan repaid in full still shows what it
+cost rather than $0.
 
 The loan account is read rather than the wallet because liquidations are sent by bots: they always
 touch the loan account and not always the owner's wallet.

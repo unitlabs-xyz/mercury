@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { isAddress } from "@solana/kit";
 // Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
 import type {} from "../auth/middleware.js";
-import type { LinkRefusal, WalletView } from "../wallets/store.js";
+import type { KeptWallet, LinkRefusal, WalletView } from "../wallets/store.js";
 
 /**
  * Linking, listing, naming and unlinking a person's wallets. The queries are
@@ -12,6 +12,8 @@ export interface WalletDeps {
   /** How many wallets a person may have linked at once. */
   readonly limit: number;
   readonly list: (userId: string) => Promise<readonly WalletView[]>;
+  /** Unlinked wallets whose history was kept, to delete it. Absent, none is listed. */
+  readonly kept?: (userId: string) => Promise<readonly KeptWallet[]>;
   readonly challenge: (
     userId: string,
     address: string,
@@ -85,8 +87,19 @@ export function walletRoutes(deps: WalletDeps): Hono {
 
   /** The Mercury wallet first, then linked wallets in the order they were linked. */
   app.get("/v1/wallets", async (c) => {
-    const rows = await deps.list(c.get("identity").userId);
-    return c.json({ wallets: rows.map(wire), limit: deps.limit });
+    const userId = c.get("identity").userId;
+    const [rows, kept] = await Promise.all([deps.list(userId), deps.kept?.(userId) ?? []]);
+    return c.json({
+      wallets: rows.map(wire),
+      limit: deps.limit,
+      // Unlinked with their history kept: deleted with DELETE /v1/wallets/:id?history=delete.
+      kept: kept.map((k) => ({
+        id: k.id,
+        address: k.address,
+        label: k.label,
+        unlinkedAt: k.unlinkedAt.toISOString(),
+      })),
+    });
   });
 
   /*

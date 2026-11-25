@@ -1,7 +1,7 @@
 import { stackedReturn, toWire, ZERO, type Decimal } from "@mercury/core";
 import type { TokenPrice } from "@mercury/market";
 import type { PortfolioSummary } from "@mercury/types";
-import { loanParts, outstandingPrincipal, type LedgerRow } from "../lending/interest.js";
+import { interestPaid, loanParts, outstandingPrincipal, type LedgerRow } from "../lending/interest.js";
 import type { HoldingRow } from "../routes/portfolio.js";
 import type { ActingWallet } from "../wallets/acting.js";
 import { marketPricePerShare, priceFor } from "./value.js";
@@ -134,6 +134,8 @@ export function summarise(
       earnEstimated: ready.some((w) => w.records.earnEstimated === true),
     },
     loanInterestUsd: toWire(interest),
+    // Paid already: what repayments took beyond what was borrowed, every ready wallet's loans.
+    loanInterestPaidUsd: toWire(sum(ready, ({ records: r }) => interestPaid(r.loanLedger))),
     calculating: wallets.length - ready.length,
   };
 }

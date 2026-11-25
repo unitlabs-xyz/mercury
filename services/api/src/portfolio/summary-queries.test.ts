@@ -184,6 +184,8 @@ describe("readSummary", () => {
     });
     // $105 owed on $100 borrowed.
     expect(summary.loanInterestUsd).toBe("5");
+    // Nothing repaid yet, so nothing paid.
+    expect(summary.loanInterestPaidUsd).toBe("0");
     expect(summary.calculating).toBe(1);
   });
 

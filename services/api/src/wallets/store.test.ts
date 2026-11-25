@@ -16,6 +16,7 @@ import {
 import { CHALLENGE_TTL_MS } from "./message.js";
 import {
   completeLink,
+  keptWallets,
   listWallets,
   openChallenge,
   pruneLinkChallenges,
@@ -549,6 +550,23 @@ describe("unlinkWallet", () => {
     expect(row!.unlinkedAt).toEqual(NOW);
     expect(await db.select().from(activities).where(eq(activities.walletId, phantom.id))).toHaveLength(1);
     expect(await db.select().from(loanAlerts).where(eq(loanAlerts.walletId, phantom.id))).toEqual([]);
+  });
+
+  it("lists a wallet unlinked with its history kept, until that history is deleted, with no relink", async () => {
+    const db = await testDb();
+    const { userId } = await person(db, "did:privy:a");
+    const phantom = await linked(db, userId);
+    expect(await keptWallets(db, userId)).toEqual([]);
+
+    await unlinkWallet(db, { userId, walletId: phantom.id, deleteHistory: false, now: NOW });
+    expect((await keptWallets(db, userId)).map((k) => [k.id, k.unlinkedAt])).toEqual([[phantom.id, NOW]]);
+    // Nobody else's: another person sees none of it.
+    const other = await person(db, "did:privy:b");
+    expect(await keptWallets(db, other.userId)).toEqual([]);
+
+    await unlinkWallet(db, { userId, walletId: phantom.id, deleteHistory: true, now: later(1_000) });
+    expect(await keptWallets(db, userId)).toEqual([]);
+    expect(await db.select().from(wallets).where(eq(wallets.id, phantom.id))).toEqual([]);
   });
 
   it("is the same answer the second time, and keeps the first time it was unlinked", async () => {
