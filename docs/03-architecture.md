@@ -39,26 +39,26 @@ returns decisions. That is the whole reason the execution engine can be tested w
 
 ## Stack, and why
 
-| Layer         | Choice                                             | Reason                                                                                                                                                           |
-| ------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Monorepo      | pnpm workspaces + Turborepo                        | Standard, fast, good caching. Node 24, pnpm 10                                                                                                                   |
-| Language      | TypeScript, strict, `noUncheckedIndexedAccess`     | One language across server, web and mobile                                                                                                                       |
-| API           | Hono on Node                                       | Tiny, excellent type inference, and its RPC mode gives the SDK end-to-end types from the route definitions                                                       |
-| Validation    | Zod                                                | One schema shared by server and client. Parse at the boundary, trust inside                                                                                      |
-| Database      | Postgres + Drizzle                                 | SQL we can read, migrations we control, types generated from the schema                                                                                          |
-| Chain access  | `@solana/kit`                                      | The current Solana client. Tree-shakeable, typed, no legacy `web3.js` baggage                                                                                    |
-| Routing       | Jupiter Swap API and Trigger API                   | Best aggregate liquidity on Solana, and Trigger gives on-chain limit orders that keepers fill without our server                                                 |
-| Lending       | Kamino SDK                                         | Already accepts tokenized stocks with an off-hours price band                                                                                                    |
-| Prices        | Chainlink xStocks Data Streams                     | Official oracle for these assets. Pyth reads ~17bp low on them. [ADR 0006](adr/0006-pricing.md)                                                                  |
-| Baskets       | Glider managed portfolios (`api.glider.fi/v2`)     | One user-owned smart account per strategy, rebalanced daily by Glider. No pooled token. [ADR 0013](adr/0013-baskets-on-glider.md)                                |
-| Funding       | Privy universal deposit addresses and card onramps | Fixes the empty-wallet cold start without us operating a ramp. [ADR 0007](adr/0007-wallet-funding.md)                                                            |
-| Wallets       | Privy embedded only                                | An email becomes a Solana wallet in seconds. Delegated actions let basket rebalancing run unattended. No external wallets in v1. [ADR 0003](adr/0003-custody.md) |
-| Web app       | Vite + React + React Router                        | Fast, no server rendering needed. It is an app, not a document                                                                                                   |
-| Mobile app    | Expo + React Native, Expo Router                   | One codebase, over-the-air updates, and a build judges can install                                                                                               |
-| Landing       | Next.js                                            | Server rendering and metadata matter for exactly one surface, and this is it                                                                                     |
-| Styling       | Tailwind on web, NativeWind on mobile              | Same token names either side                                                                                                                                     |
-| Data fetching | TanStack Query                                     | Same cache semantics on web and mobile                                                                                                                           |
-| Tests         | Vitest                                             | `core` is where the tests live                                                                                                                                   |
+| Layer         | Choice                                             | Reason                                                                                                                                                                                                                                      |
+| ------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monorepo      | pnpm workspaces + Turborepo                        | Standard, fast, good caching. Node 24, pnpm 10                                                                                                                                                                                              |
+| Language      | TypeScript, strict, `noUncheckedIndexedAccess`     | One language across server, web and mobile                                                                                                                                                                                                  |
+| API           | Hono on Node                                       | Tiny, excellent type inference, and its RPC mode gives the SDK end-to-end types from the route definitions                                                                                                                                  |
+| Validation    | Zod                                                | One schema shared by server and client. Parse at the boundary, trust inside                                                                                                                                                                 |
+| Database      | Postgres + Drizzle                                 | SQL we can read, migrations we control, types generated from the schema                                                                                                                                                                     |
+| Chain access  | `@solana/kit`                                      | The current Solana client. Tree-shakeable, typed, no legacy `web3.js` baggage                                                                                                                                                               |
+| Routing       | Jupiter Swap API and Trigger API                   | Best aggregate liquidity on Solana, and Trigger gives on-chain limit orders that keepers fill without our server                                                                                                                            |
+| Lending       | Kamino SDK                                         | Already accepts tokenized stocks with an off-hours price band                                                                                                                                                                               |
+| Prices        | Chainlink xStocks Data Streams                     | Official oracle for these assets. Pyth reads ~17bp low on them. [ADR 0006](adr/0006-pricing.md)                                                                                                                                             |
+| Baskets       | Glider managed portfolios (`api.glider.fi/v2`)     | One user-owned smart account per strategy, rebalanced daily by Glider. No pooled token. [ADR 0013](adr/0013-baskets-on-glider.md)                                                                                                           |
+| Funding       | Privy universal deposit addresses and card onramps | Fixes the empty-wallet cold start without us operating a ramp. [ADR 0007](adr/0007-wallet-funding.md)                                                                                                                                       |
+| Wallets       | Privy embedded, plus linked wallets                | An email becomes a Solana wallet in seconds, and it is the account. Up to 5 Solana wallets a person already holds can be linked beside it, each signing for itself. [ADR 0003](adr/0003-custody.md), [ADR 0017](adr/0017-linked-wallets.md) |
+| Web app       | Vite + React + React Router                        | Fast, no server rendering needed. It is an app, not a document                                                                                                                                                                              |
+| Mobile app    | Expo + React Native, Expo Router                   | One codebase, over-the-air updates, and a build judges can install                                                                                                                                                                          |
+| Landing       | Next.js                                            | Server rendering and metadata matter for exactly one surface, and this is it                                                                                                                                                                |
+| Styling       | Tailwind on web, NativeWind on mobile              | Same token names either side                                                                                                                                                                                                                |
+| Data fetching | TanStack Query                                     | Same cache semantics on web and mobile                                                                                                                                                                                                      |
+| Tests         | Vitest                                             | `core` is where the tests live                                                                                                                                                                                                              |
 
 ## Services
 
@@ -90,20 +90,30 @@ is already long-running and the worker package could not reach the database. The
 `services/api/src/index.ts`'s interval loop, which reschedules after a pass finishes rather than
 on a fixed tick, so a slow pass never has a second one starting behind it.
 
-| Job                  | Cadence                           | Does                                                                                    |
-| -------------------- | --------------------------------- | --------------------------------------------------------------------------------------- |
-| `prices`             | 20s                               | Keeps every listed mint's price warm, and records the minute bars the charts draw       |
-| `price-bar-prune`    | 6h                                | Drops minute bars older than thirty days                                                |
-| `stocks`             | 6h                                | Refreshes the instrument and token universe, and writes a `multiplier_event` per change |
-| `position-sync`      | 10s for an open app, 1m otherwise | Reconciles our view of balances against chain, and recognises dividends                 |
-| `funding-poll`       | 60s                               | Asks Relay about deposits its webhook has not settled                                   |
-| `wallet-events`      | 30s                               | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers  |
-| `portfolio-snapshot` | 1h, two minutes after boot        | Records what every account is worth, which is the only history the chart can draw       |
-| `snapshot-retry`     | 5m, within the hour               | Takes the readings the hour's snapshot missed                                           |
-| `loan-watch`         | 5m                                | Checks every open loan and warns its owner when it crosses a line they must act on      |
+| Job                    | Cadence                           | Does                                                                                    |
+| ---------------------- | --------------------------------- | --------------------------------------------------------------------------------------- |
+| `prices`               | 20s                               | Keeps every listed mint's price warm, and records the minute bars the charts draw       |
+| `price-bar-prune`      | 6h                                | Drops minute bars older than thirty days                                                |
+| `stocks`               | 6h                                | Refreshes the instrument and token universe, and writes a `multiplier_event` per change |
+| `position-sync`        | 10s for an open app, 1m otherwise | Reconciles our view of balances against chain, and recognises dividends                 |
+| `funding-poll`         | 60s                               | Asks Relay about deposits its webhook has not settled                                   |
+| `wallet-events`        | 30s                               | Walks each wallet's Solana history and writes activity rows for SOL and USDC transfers  |
+| `portfolio-snapshot`   | 1h, two minutes after boot        | Records what every account is worth, which is the only history the chart can draw       |
+| `snapshot-retry`       | 5m, within the hour               | Takes the readings the hour's snapshot missed                                           |
+| `loan-watch`           | 5m                                | Checks every open loan and warns its owner when it crosses a line they must act on      |
+| `notification-prune`   | 24h                               | Drops inbox entries older than ninety days                                              |
+| `link-challenge-prune` | 24h                               | Drops wallet-link challenges older than a day                                           |
+| `dividend-notices`     | 1h                                | Tells each holder of a stock about a dividend or split its issuer has announced         |
+| `history-reader`       | 5s, a turn of 10s per wallet      | Reads each linked wallet's past from its token accounts and loan, on its own RPC budget |
+| `history-cost`         | 30s                               | Turns what the reader found into lots, so a linked wallet's P&L is real                 |
 
 `wallet-events` reads transaction history, not balances, and writes to the activity feed only —
 it never touches `lot` or `position`; that stays `position-sync`'s job.
+
+Every per-wallet job reads every followed wallet: the Mercury wallet and each linked wallet not
+unlinked. A linked wallet is read as often as the Mercury wallet while its streams are healthy, and
+by how recently it was viewed when they are not. See the
+[linked wallets design](superpowers/specs/2026-11-13-linked-wallets-design.md).
 
 **One the design called for is not built:** a poller for Jupiter trigger orders, which is why an
 order that would have queued is refused with "the price moved" rather than joining a queue nobody
