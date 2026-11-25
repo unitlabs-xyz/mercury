@@ -487,10 +487,17 @@ waits a minute, uncounted, rather than read a pledged holding as sold.
 What this gives up is realised P&L on positions closed before that point, outside Mercury and
 before linking. Realised P&L on anything sold through Mercury, or after linking, is kept.
 
-An account that never went to zero is read back at most 5,000 signatures. The shares it held at
-the oldest point reached, in the wallet and in the loan, are priced at the price then, marked `~`, and the replay goes forward
-from there. At the reader's two calls a second that is about forty minutes for the worst account,
-once, behind "Calculating…".
+**There is no cap.** An account is read back until it was empty, however many transactions that
+is: a cost guessed where a walk stopped short would be wrong for good, and a longer "Calculating…"
+is the better trade. At the reader's two calls a second, 5,000 transactions is about forty
+minutes. It needn't be one unbroken window: each transaction is kept in `history_tx` the moment it
+is read and read back from there before the node is asked, and each account's cursor is kept as
+soon as it is done, so a pass the node refuses part way loses nothing, and the next asks the node
+only for what it never got (re-listing signatures is one call a thousand). On a shared or free RPC
+allowance, a long first read finishes across several short windows. Later passes have no cap
+either: everything newer than the cursor is read. (A cap can still be set, for tests; where a walk
+stops at one, the shares held at the oldest point reached, in the wallet and in the loan, are
+priced at the price then and marked `~`.)
 
 What it reads is kept raw, so a better rule later can re-derive without reading the chain again:
 

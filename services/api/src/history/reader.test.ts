@@ -11,7 +11,8 @@ import {
   users,
   wallets,
 } from "../db/schema.js";
-import { KAMINO_LENDING_PROGRAM } from "./events.js";
+import { KAMINO_LENDING_PROGRAM, rawJson } from "./events.js";
+import { RateLimited } from "./budget.js";
 import { finishHistoryPass } from "./queue.js";
 import { GiveWay, PledgeUnknown, readWallet } from "./reader.js";
 
@@ -429,6 +430,118 @@ describe("readWallet, a later pass", () => {
     await readWallet(deps, { walletId: s.walletId, address: ME, cursors: {} });
     expect(await s.db.select().from(historyEvents)).toHaveLength(1);
     expect(await s.db.select().from(historyTxs)).toHaveLength(1);
+  });
+});
+
+describe("readWallet, stopped part way and read again", () => {
+  /** A busy account: 0 to 1, then up by one each time, so the walk back never finds it empty before S0. */
+  const busy = (n: number) => {
+    const txs = [{ tx: move("S0", 0, 0n, 1n) }];
+    for (let i = 1; i < n; i++) txs.push({ tx: move(`S${i}`, i, BigInt(i), BigInt(i + 1)) });
+    return txs;
+  };
+  /** The same chain, refusing from its `n`th transaction on, as a node out of allowance does. */
+  const refusingFrom = (c: ReturnType<typeof chain>, n: number): ChainHistory => {
+    let asked = 0;
+    return {
+      ...c.history,
+      transaction: async (sig) => {
+        asked += 1;
+        if (asked >= n) throw new RateLimited();
+        return c.history.transaction(sig);
+      },
+    };
+  };
+
+  it("keeps what it read before the node refused, and asks the node only for the rest next time", async () => {
+    const s = await seed();
+    const c = chain([owned(TSLA_ACCT, TSLAX, 8n)], { [TSLA_ACCT]: busy(8) });
+    const deps = { db: s.db, listedMints: LISTED, laneBusy: quiet, page: 3 };
+    await expect(
+      readWallet(
+        { ...deps, history: refusingFrom(c, 5) },
+        { walletId: s.walletId, address: ME, cursors: {} },
+      ),
+    ).rejects.toBeInstanceOf(RateLimited);
+    // Four read before the refusal, all kept.
+    expect((await s.db.select().from(historyTxs)).map((t) => t.signature).sort()).toEqual([
+      "S4",
+      "S5",
+      "S6",
+      "S7",
+    ]);
+
+    c.asked.length = 0;
+    const r = await readWallet(
+      { ...deps, history: c.history },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    // Only what the first pass never got: the node is not asked for S7 to S4 again.
+    expect(c.asked).toEqual(["S3", "S2", "S1", "S0"]);
+    expect(r).toMatchObject({ transactions: 8, events: 8, capped: 0 });
+    expect(await s.db.select().from(historyEvents)).toHaveLength(8);
+  });
+
+  it("reads what it kept back exactly as the node said it, SOL and all", async () => {
+    const s = await seed();
+    const paidInSol: TransactionDetail = {
+      ...move("S1", 1, 0n, 10n),
+      preLamports: [3_000_000_000n],
+      postLamports: [1_999_995_000n],
+      preTokens: [],
+      postTokens: [{ owner: ME, mint: TSLAX, rawAmount: 10n, decimals: 8 }],
+    };
+    const c = chain([owned(TSLA_ACCT, TSLAX, 10n)], { [TSLA_ACCT]: [{ tx: paidInSol }] });
+    // Kept by an earlier pass that stopped before writing its events.
+    await s.db
+      .insert(historyTxs)
+      .values({ signature: "S1", slot: 1n, blockTime: null, raw: rawJson(paidInSol) });
+    await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(c.asked).toEqual([]);
+    const [e] = await s.db.select().from(historyEvents);
+    expect([e!.counterMint, e!.counterAmountRaw]).toEqual([
+      "So11111111111111111111111111111111111111112",
+      1_000_000_000n,
+    ]);
+  });
+
+  it("keeps each account's cursor as soon as it is read, so a pass stopped on the next doesn't walk it again", async () => {
+    const s = await seed();
+    await s.db.insert(historyJobs).values({ walletId: s.walletId, userId: s.userId, status: "running" });
+    const c = chain([owned(TSLA_ACCT, TSLAX, 10n), owned(USDC_ACCT, USDC, 5n)], {
+      [TSLA_ACCT]: [{ tx: move("S1", 1, 0n, 10n) }],
+      [USDC_ACCT]: [{ tx: move("U1", 1, 0n, 5n) }],
+    });
+    const stopsOnUsdc: ChainHistory = {
+      ...c.history,
+      transaction: async (sig) => {
+        if (sig === "U1") throw new RateLimited();
+        return c.history.transaction(sig);
+      },
+    };
+    await expect(
+      readWallet(
+        { db: s.db, history: stopsOnUsdc, listedMints: LISTED, laneBusy: quiet },
+        { walletId: s.walletId, address: ME, cursors: {} },
+      ),
+    ).rejects.toBeInstanceOf(RateLimited);
+    const [job] = await s.db.select().from(historyJobs).where(eq(historyJobs.walletId, s.walletId));
+    expect(job!.cursors).toEqual({ [TSLA_ACCT]: "S1" });
+    // Still a first read until every account is done.
+    expect(job!.status).toBe("running");
+  });
+
+  it("reads a long account all the way back to where it was empty: no cap unless one is set", async () => {
+    const s = await seed();
+    const c = chain([owned(TSLA_ACCT, TSLAX, 12n)], { [TSLA_ACCT]: busy(12) });
+    const r = await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet, page: 5 },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(r).toMatchObject({ transactions: 12, capped: 0 });
   });
 });
 

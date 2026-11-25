@@ -226,6 +226,8 @@ export const transactionFromRaw = (raw: unknown): TransactionDetail | null => {
           decimals: Number(e["decimals"] ?? 0),
         }))
       : [];
+  // Kept as strings by `rawJson`; a swap paid in SOL is read from these.
+  const lamports = (v: unknown): bigint[] => (Array.isArray(v) ? v.map((x) => BigInt(String(x))) : []);
   const transfers = Array.isArray(r["tokenTransfersIn"])
     ? (r["tokenTransfersIn"] as Record<string, unknown>[]).map((t) => ({
         programId: String(t["programId"] ?? ""),
@@ -244,9 +246,9 @@ export const transactionFromRaw = (raw: unknown): TransactionDetail | null => {
     blockTime: typeof r["blockTime"] === "number" ? r["blockTime"] : null,
     succeeded: r["succeeded"] === true,
     accountKeys: Array.isArray(r["accountKeys"]) ? r["accountKeys"].map(String) : [],
-    feeLamports: 0n,
-    preLamports: [],
-    postLamports: [],
+    feeLamports: BigInt(String(r["feeLamports"] ?? "0")),
+    preLamports: lamports(r["preLamports"]),
+    postLamports: lamports(r["postLamports"]),
     preTokens: entries(r["preTokens"]),
     postTokens: entries(r["postTokens"]),
     tokenTransfersIn: transfers,

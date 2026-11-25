@@ -1,13 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { ChainHistory, SignatureRef } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { earnEvents, historyEvents, historyTxs, orders } from "../db/schema.js";
-import { emptyBefore, movementOf, rawJson } from "./events.js";
+import { emptyBefore, movementOf, rawJson, transactionFromRaw } from "./events.js";
+import { holdLease, keepCursor } from "./queue.js";
 
 /** Signatures asked for at a time: the node's most. */
 export const PAGE = 1_000;
-/** The most transactions read back on one account in one pass. About forty minutes at two a second. */
-export const READ_CAP = 5_000;
 
 /** Kamino could not be read, so what is pledged is unknown: the pass is tried again later, uncounted. */
 export class PledgeUnknown extends Error {
@@ -43,6 +42,12 @@ export interface ReaderDeps {
   readonly pledged?: (
     owner: string,
   ) => Promise<readonly { readonly mint: string; readonly rawAmount: bigint }[]>;
+  /**
+   * The most transactions read back on one account. None by default: a walk
+   * goes back until the account was empty, however long that takes, because
+   * a cost guessed where a walk stopped short is wrong for good, and an
+   * interrupted walk loses nothing (each transaction is kept as it is read).
+   */
   readonly cap?: number;
   /** Signatures asked for at a time; the node's most unless a test needs paging on less. */
   readonly page?: number;
@@ -69,17 +74,23 @@ export interface ReadResult {
  *
  * - **First read** (no cursor): newest first, until the transaction before
  *   which the wallet held none of the token, in its account or pledged to
- *   Kamino. Nothing older can change what today's shares cost. At most
- *   `READ_CAP` transactions back. An account empty today with nothing
- *   pledged needs none of its past, only a cursor: nothing it holds needs a
- *   cost.
- * - **Later passes** (a cursor): only what is newer than the cursor.
+ *   Kamino. Nothing older can change what today's shares cost. An account
+ *   empty today with nothing pledged needs none of its past, only a cursor:
+ *   nothing it holds needs a cost.
+ * - **Later passes** (a cursor): everything newer than the cursor.
  *
- * Each transaction is kept raw in `history_tx` and, where it moved the token,
- * as a `history_event`. Signatures Mercury itself recorded (its own trades,
- * loans and Earn actions) are skipped: those are already in its books, at
- * their exact figures. Cursors move only once the account's writes commit, so
- * a pass that stops part way reads the rest next time and writes nothing twice.
+ * Each transaction is kept raw in `history_tx` the moment it is read, and
+ * read back from there before the node is asked. So a pass the node or the
+ * jobs' lane stops part way loses nothing: the next one lists the signatures
+ * again (one call a thousand) and asks the node only for what it never got.
+ * On a shared allowance, a long account's first read finishes across several
+ * short windows rather than needing one long one it may never get.
+ *
+ * Where a transaction moved the token, it is also a `history_event`.
+ * Signatures Mercury itself recorded (its own trades and Earn actions) are
+ * skipped: those are already in its books, at their exact figures. An
+ * account's cursor is kept as soon as its events are written, so a pass
+ * stopped on a later account doesn't walk this one again.
  */
 export async function readWallet(
   deps: ReaderDeps,
@@ -90,7 +101,7 @@ export async function readWallet(
   },
 ): Promise<ReadResult> {
   const { db, history } = deps;
-  const cap = deps.cap ?? READ_CAP;
+  const cap = deps.cap ?? Number.POSITIVE_INFINITY;
   const pageSize = deps.page ?? PAGE;
   if (history.ownedTokenAccounts === undefined)
     throw new Error("the chain client cannot list token accounts");
@@ -122,7 +133,10 @@ export async function readWallet(
     // Empty today, nothing pledged, and never read: nothing held needs a cost. Note where it is, for later arrivals.
     if (cursor === undefined && account.rawAmount === 0n && pledged === 0n) {
       const [newest] = await history.signatures(account.address, { limit: 1 });
-      if (newest !== undefined) cursors[account.address] = newest.signature;
+      if (newest !== undefined) {
+        cursors[account.address] = newest.signature;
+        await keepCursor(db, job.walletId, account.address, newest.signature);
+      }
       continue;
     }
 
@@ -135,12 +149,25 @@ export async function readWallet(
 
     while (!done) {
       if (deps.laneBusy()) throw new GiveWay();
+      await holdLease(db, job.walletId, new Date());
       const page = await history.signatures(account.address, {
         limit: pageSize,
         ...(cursor === undefined ? {} : { until: cursor }),
         ...(before === undefined ? {} : { before }),
       });
       newest ??= page[0]?.signature;
+      // What an earlier pass already read of this page: from the database, not the node.
+      const wanted = page.filter((r) => !r.failed && !recorded.has(r.signature)).map((r) => r.signature);
+      const kept = new Map(
+        wanted.length === 0
+          ? []
+          : (
+              await db
+                .select({ signature: historyTxs.signature, raw: historyTxs.raw })
+                .from(historyTxs)
+                .where(inArray(historyTxs.signature, wanted))
+            ).map((r) => [r.signature, transactionFromRaw(r.raw)]),
+      );
 
       for (const ref of page) {
         if (read.length >= cap) {
@@ -149,9 +176,22 @@ export async function readWallet(
           break;
         }
         if (ref.failed || recorded.has(ref.signature)) continue;
-        if (deps.laneBusy()) throw new GiveWay();
-        const tx = await history.transaction(ref.signature);
-        if (tx === null) continue; // pruned by the node: nothing to learn from it
+        let tx = kept.get(ref.signature) ?? null;
+        if (tx === null) {
+          if (deps.laneBusy()) throw new GiveWay();
+          tx = await history.transaction(ref.signature);
+          if (tx === null) continue; // pruned by the node: nothing to learn from it
+          // Kept at once: whatever stops this pass, the next one won't ask for it again.
+          await db
+            .insert(historyTxs)
+            .values({
+              signature: ref.signature,
+              slot: BigInt(ref.slot),
+              blockTime: tx.blockTime === null ? null : new Date(tx.blockTime * 1000),
+              raw: rawJson(tx),
+            })
+            .onConflictDoNothing();
+        }
         read.push({ ref, tx });
         if (cursor !== undefined) continue;
         const m = movementOf(tx, job.address, account.mint);
@@ -190,24 +230,13 @@ export async function readWallet(
           ];
     });
 
-    await db.transaction(async (tx) => {
-      if (read.length > 0) {
-        await tx
-          .insert(historyTxs)
-          .values(
-            read.map(({ ref, tx: detail }) => ({
-              signature: ref.signature,
-              slot: BigInt(ref.slot),
-              blockTime: detail.blockTime === null ? null : new Date(detail.blockTime * 1000),
-              raw: rawJson(detail),
-            })),
-          )
-          .onConflictDoNothing();
-      }
-      if (rows.length > 0) await tx.insert(historyEvents).values(rows).onConflictDoNothing();
-    });
+    if (rows.length > 0) await db.insert(historyEvents).values(rows).onConflictDoNothing();
 
-    if (newest !== undefined) cursors[account.address] = newest;
+    // This account is read: kept now, so a pass stopped on a later account doesn't walk it again.
+    if (newest !== undefined) {
+      cursors[account.address] = newest;
+      await keepCursor(db, job.walletId, account.address, newest);
+    }
     transactions += read.length;
     events += rows.length;
     if (hitCap) {

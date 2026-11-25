@@ -100,6 +100,36 @@ export async function claimHistoryJob(db: Db, now: Date): Promise<HistoryJob | n
 }
 
 /**
+ * Still reading: the lease moved out again. A first read has no cap, so a
+ * long account can take longer than one lease, and another reader must not
+ * take the job from one that is still at it.
+ */
+export async function holdLease(db: Db, walletId: string, now: Date): Promise<void> {
+  await db
+    .update(historyJobs)
+    .set({ runAfter: new Date(now.getTime() + LEASE_MS) })
+    .where(eq(historyJobs.walletId, walletId));
+}
+
+/**
+ * One account read, mid-pass: its cursor kept now, so a pass the node stops on
+ * a later account doesn't walk this one again. The status is left to
+ * `finishHistoryPass`: a first read is still a first read until every account
+ * is done.
+ */
+export async function keepCursor(
+  db: Db,
+  walletId: string,
+  account: string,
+  signature: string,
+): Promise<void> {
+  await db
+    .update(historyJobs)
+    .set({ cursors: sql`${historyJobs.cursors} || ${JSON.stringify({ [account]: signature })}::jsonb` })
+    .where(eq(historyJobs.walletId, walletId));
+}
+
+/**
  * A pass finished. Its cursors are merged in (an account not read this pass
  * keeps its own), the next pass is due at `nextRunAfter`, and a first read
  * becomes `read`. A wallet already `read` or `done` keeps its status.
