@@ -20,7 +20,7 @@ import { pct, usd } from "@mercury/view";
 import { Skeleton } from "../portfolio/ui";
 import { RailLine } from "../stock/Panels";
 import { continueIn } from "../../api/signer-rules";
-import { ApproveIn } from "../ApproveIn";
+import { ApproveIn, MercuryTip } from "../ApproveIn";
 import { chip } from "../stock/Ticket";
 
 export type EarnTab = "add" | "withdraw";
@@ -258,7 +258,10 @@ export const EarnSheet = ({
                   <RailLine k="Arrives">Usually in seconds</RailLine>
                 </>
               )}
-              <RailLine k="Network fee">Paid by Mercury</RailLine>
+              {/* A linked wallet pays its own network fee, in SOL; Mercury pays the Mercury wallet's. */}
+              <RailLine k="Network fee">
+                {action.approver === null ? "Paid by Mercury" : `Paid in SOL by ${action.approver}`}
+              </RailLine>
             </dl>
 
             {asking && <RiskConsent agreed={agreed} onAgreed={setAgreed} className="mt-5" />}
@@ -270,17 +273,18 @@ export const EarnSheet = ({
               </p>
             )}
 
+            <ApproveIn approver={action.approver} />
             <Button
               variant="primary"
               size="lg"
               disabled={!canSubmit}
               loading={busy}
               onClick={() => void submit()}
-              className="mt-6 w-full"
+              className={`${action.approver === null ? "mt-6" : "mt-3"} w-full`}
             >
               {action.approver !== null ? continueIn(action.approver) : label}
             </Button>
-            <ApproveIn approver={action.approver} />
+            <MercuryTip approver={action.approver} />
           </>
         )}
       </div>

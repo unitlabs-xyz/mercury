@@ -24,7 +24,7 @@ import { LoanMeter, loanNow, loanShape } from "../money/LoanMeter";
 import { Skeleton, SkeletonRows } from "../portfolio/ui";
 import { Fact, RailLine } from "../stock/Panels";
 import { continueIn } from "../../api/signer-rules";
-import { ApproveIn } from "../ApproveIn";
+import { ApproveIn, MercuryTip } from "../ApproveIn";
 import { chip } from "../stock/Ticket";
 
 export type Tab = BorrowTab;
@@ -406,13 +406,14 @@ export const BorrowSheet = ({
               </p>
             )}
 
+            <ApproveIn approver={action.approver} />
             <Button
               variant="primary"
               size="lg"
               disabled={!canSubmit}
               loading={busy}
               onClick={() => intent && action.mutate(intent)}
-              className="mt-6 w-full"
+              className={`${action.approver === null ? "mt-6" : "mt-3"} w-full`}
             >
               {action.approver !== null
                 ? continueIn(action.approver)
@@ -424,23 +425,31 @@ export const BorrowSheet = ({
                       ? "Add collateral"
                       : "Withdraw"}
             </Button>
-            <ApproveIn approver={action.approver} />
-            {/* Opening the Kamino account is Mercury's to pay. The relayer covers its
-                rent inside this same transaction, so it is paid only if this lands. */}
-            {b.obligation === null && (tab === "borrow" || tab === "pledge") && (
-              <p className="mt-3 flex justify-center">
-                <StatusChip tone="up" size="md">
-                  One-time account setup
-                  {b.setupCostUsd !== null && (
-                    <>
-                      <span className="sr-only">, worth</span>
-                      <s className="ml-1.5">{usd(b.setupCostUsd)}</s>
-                    </>
-                  )}
-                  <span className="ml-1.5 font-medium">Paid by Mercury</span>
-                </StatusChip>
-              </p>
-            )}
+            <MercuryTip approver={action.approver} />
+            {/* Opening the Kamino account is Mercury's to pay for the Mercury wallet: the
+                relayer covers its rent inside this same transaction, so it is paid only if
+                this lands. A linked wallet pays its own, in SOL (about 0.03), and is told
+                before signing if it holds too little. */}
+            {b.obligation === null &&
+              (tab === "borrow" || tab === "pledge") &&
+              (action.approver === null ? (
+                <p className="mt-3 flex justify-center">
+                  <StatusChip tone="up" size="md">
+                    One-time account setup
+                    {b.setupCostUsd !== null && (
+                      <>
+                        <span className="sr-only">, worth</span>
+                        <s className="ml-1.5">{usd(b.setupCostUsd)}</s>
+                      </>
+                    )}
+                    <span className="ml-1.5 font-medium">Paid by Mercury</span>
+                  </StatusChip>
+                </p>
+              ) : (
+                <p className="mt-3 text-center text-[12px] text-ds-muted">
+                  A first loan opens Kamino accounts {action.approver} pays for: about 0.03 SOL, once.
+                </p>
+              ))}
           </>
         )}
       </div>

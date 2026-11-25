@@ -163,16 +163,16 @@ export const MoveSheet = ({ open, onClose }: { open: boolean; onClose: () => voi
               <Note tone="down">{move.error.message}</Note>
             </div>
           )}
+          <ApproveIn approver={name} />
           <Button
             variant="primary"
             size="lg"
             loading={move.isPending}
             onClick={confirm}
-            className="mt-6 w-full"
+            className="mt-3 w-full"
           >
             {continueIn(name!)}
           </Button>
-          <ApproveIn approver={name} tip={false} />
         </div>
       ) : (
         <div className="flex flex-col px-6 pt-5 pb-6">

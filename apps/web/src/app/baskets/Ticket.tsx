@@ -1,4 +1,4 @@
-import { ApproveIn } from "../ApproveIn";
+import { ApproveIn, MercuryTip } from "../ApproveIn";
 import { continueIn } from "../../api/signer-rules";
 import { useEarn } from "../../api/earn";
 import { earnCovers } from "../earn/moves";
@@ -299,17 +299,25 @@ const RebalanceNote = () => (
   </SheetNote>
 );
 
-const SheetFoot = ({ children }: { children: ReactNode }) => (
-  <div className="mt-5 flex gap-2.5 px-5 pb-4">{children}</div>
+/**
+ * The step's buttons. Where a linked wallet takes the step, "You'll approve
+ * this in Phantom" above them and the quiet Mercury tip below.
+ */
+const SheetFoot = ({ children, approver = null }: { children: ReactNode; approver?: string | null }) => (
+  <>
+    {approver !== null && (
+      <div className="px-5">
+        <ApproveIn approver={approver} />
+      </div>
+    )}
+    <div className={`flex gap-2.5 px-5 ${approver === null ? "mt-5 pb-4" : "mt-3"}`}>{children}</div>
+    {approver !== null && (
+      <div className="px-5 pb-4">
+        <MercuryTip approver={approver} />
+      </div>
+    )}
+  </>
 );
-
-/** "You'll approve this in Phantom", under the buttons, when a linked wallet takes the step. */
-const Approval = ({ approver }: { approver: string | null }) =>
-  approver === null ? null : (
-    <div className="px-5 pb-4">
-      <ApproveIn approver={approver} />
-    </div>
-  );
 
 const sendLabel = (amount: string) => (validUsdc(amount) ? `Send ${usd(Number(amount))}` : "Send USDC");
 
@@ -364,7 +372,7 @@ const EnrollmentStep = ({
     </div>
     {!walletReady && <p className="mx-5 mt-4 text-[12px] text-ds-muted">Waiting for your wallet…</p>}
     {error && <SheetError>{error}</SheetError>}
-    <SheetFoot>
+    <SheetFoot approver={approver}>
       <Button size="lg" onClick={onClose} disabled={busy} className="flex-1">
         Cancel
       </Button>
@@ -379,7 +387,6 @@ const EnrollmentStep = ({
         {approver === null ? "Set up portfolio" : continueIn(approver)}
       </Button>
     </SheetFoot>
-    <Approval approver={approver} />
   </>
 );
 
@@ -546,7 +553,7 @@ const FundingStep = ({
       <RebalanceNote />
       {!walletReady && <p className="mx-5 mt-3 text-[12px] text-ds-muted">Waiting for your wallet…</p>}
       {error && <SheetError>{error} Check your wallet balance before trying again.</SheetError>}
-      <SheetFoot>
+      <SheetFoot approver={approver}>
         <Button size="lg" onClick={onClose} disabled={busy} className="flex-1">
           {firstDeposit ? "Later" : "Cancel"}
         </Button>
@@ -561,7 +568,6 @@ const FundingStep = ({
           {approver === null ? sendLabel(amount) : continueIn(approver)}
         </Button>
       </SheetFoot>
-      <Approval approver={approver} />
     </>
   );
 };
@@ -1045,7 +1051,7 @@ export const ExitSheet = ({
               </SheetError>
             )}
           </div>
-          <SheetFoot>
+          <SheetFoot approver={prepared ? approver : null}>
             <Button size="lg" onClick={prepared ? onBack : close} disabled={busy} className="flex-1">
               {prepared ? "Back" : "Cancel"}
             </Button>
@@ -1068,7 +1074,6 @@ export const ExitSheet = ({
                 : "Review withdrawal"}
             </Button>
           </SheetFoot>
-          {prepared && <Approval approver={approver} />}
         </>
       )}
     </Dialog>
