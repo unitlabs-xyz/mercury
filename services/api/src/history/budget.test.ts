@@ -7,6 +7,7 @@ import {
   REFUSAL_PAUSE_MS,
   budget,
   budgeted,
+  budgetedLending,
   isRateLimit,
 } from "./budget.js";
 
@@ -169,5 +170,36 @@ describe("budgeted", () => {
     const h = budgeted(history(), budget({ rps: 1 }));
     expect(h.tokenAccounts).toBeUndefined();
     expect(h.ownedTokenAccounts).toBeUndefined();
+  });
+});
+
+describe("budgetedLending", () => {
+  it("paces the reader's loan reads with its chain reads: one ceiling on everything it reads", async () => {
+    const c = clock();
+    const b = budget({ rps: 1, now: c.now, sleep: c.sleep });
+    const lending = budgetedLending({ position: async () => null }, b);
+    const h = budgeted(
+      { tokenAccountsFor: async () => [], signatures: async () => [], transaction: async () => null },
+      b,
+    );
+    await lending.position("owner");
+    await h.transaction("sig");
+    // Two turns for the loan (its obligation and reserves), then the transaction's.
+    expect(c.slept).toEqual([1000, 1000]);
+  });
+
+  it("stops the reader on a refusal from the jobs' lane, as on any other", async () => {
+    const c = clock();
+    const b = budget({ rps: 2, now: c.now, sleep: c.sleep });
+    const lending = budgetedLending(
+      {
+        position: async () => {
+          throw new Error("solana getMultipleAccounts returned 429");
+        },
+      },
+      b,
+    );
+    await expect(lending.position("owner")).rejects.toBeInstanceOf(RateLimited);
+    expect(b.rate()).toBe(1);
   });
 });

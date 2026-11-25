@@ -65,4 +65,11 @@ describe("applyReconciliation, a balance below the records", () => {
     await applyReconciliation(s.db, { userId: s.userId, walletId: s.linked }, s.plan);
     expect(await s.gone(s.linked)).toBe(1);
   });
+
+  it("writes nothing for a wallet unlinked since the pass read its list: it is frozen as it was", async () => {
+    const s = await seed("read");
+    await s.db.update(wallets).set({ unlinkedAt: new Date() }).where(eq(wallets.id, s.linked));
+    await applyReconciliation(s.db, { userId: s.userId, walletId: s.linked }, s.plan);
+    expect(await s.gone(s.linked)).toBe(0);
+  });
 });

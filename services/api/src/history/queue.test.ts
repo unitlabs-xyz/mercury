@@ -269,3 +269,46 @@ describe("the Mercury wallets' Earn reads", () => {
     expect((await claimHistoryJob(s.db, T0))?.walletId).toBe(s.mercuryId);
   });
 });
+
+describe("a wallet linked again while a pass of it ran", () => {
+  it("is not marked read by the old pass: the gap it was queued to read is still to come", async () => {
+    const s = await seed();
+    const w = await s.link("Phantom1111111111111111111111111111111111111");
+    await queueHistory(s.db, { walletId: w, userId: s.userId, now: T0 });
+    await finishHistoryPass(s.db, { walletId: w, cursors: { a: "Sig1" }, now: at(1), nextRunAfter: at(2) });
+    await s.db.update(historyJobs).set({ status: "done" }).where(eq(historyJobs.walletId, w));
+
+    // A later pass is claimed; meanwhile the wallet is unlinked and linked again.
+    const claimed = await claimHistoryJob(s.db, at(10));
+    await queueHistory(s.db, { walletId: w, userId: s.userId, now: at(20) });
+
+    await finishHistoryPass(s.db, {
+      walletId: w,
+      cursors: { a: "Sig2" },
+      now: at(30),
+      nextRunAfter: at(3_600_000),
+      claimedAt: claimed!.startedAt,
+    });
+    // What it read is kept; the wallet still calculates, due at once.
+    expect(await s.job(w)).toMatchObject({ status: "queued", cursors: { a: "Sig2" }, runAfter: at(20) });
+
+    await deferHistoryPass(s.db, { walletId: w, until: at(60_000), claimedAt: claimed!.startedAt });
+    await failHistoryPass(s.db, { walletId: w, error: "x", now: at(40), claimedAt: claimed!.startedAt });
+    expect(await s.job(w)).toMatchObject({ status: "queued", runAfter: at(20), attempts: 0 });
+  });
+
+  it("is finished by the pass that claimed it", async () => {
+    const s = await seed();
+    const w = await s.link("Phantom1111111111111111111111111111111111111");
+    await queueHistory(s.db, { walletId: w, userId: s.userId, now: T0 });
+    const claimed = await claimHistoryJob(s.db, T0);
+    await finishHistoryPass(s.db, {
+      walletId: w,
+      cursors: {},
+      now: at(1),
+      nextRunAfter: at(2),
+      claimedAt: claimed!.startedAt,
+    });
+    expect((await s.job(w)).status).toBe("read");
+  });
+});

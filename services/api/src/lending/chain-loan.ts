@@ -3,6 +3,7 @@ import { D, toWire, type Decimal, ZERO } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { activities, loanEvents } from "../db/schema.js";
 import { notifyFor } from "../notify/inbox.js";
+import { stillFollowed } from "../wallets/active.js";
 import type { KaminoLoanDay, KaminoLoanTx } from "./kamino-loans.js";
 import { tokenText } from "./events.js";
 
@@ -288,6 +289,8 @@ export async function recordChainLoan(
   return db.transaction(async (tx) => {
     let written = 0;
     const liquidations: NewLiquidation[] = [];
+    // A wallet unlinked since its loan was read is frozen as it was: nothing written, nobody told.
+    if (!(await stillFollowed(tx, owner.walletId))) return { written, liquidations };
     for (const e of events) {
       const [row] = await tx
         .insert(loanEvents)

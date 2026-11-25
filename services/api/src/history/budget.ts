@@ -1,4 +1,5 @@
 import type { ChainHistory, SignaturePage } from "@mercury/chain";
+import type { LendingSource } from "../lending/ports.js";
 
 /**
  * The history reader's share of the paid RPC, and how it gives way.
@@ -85,14 +86,14 @@ export const isRateLimit = (error: unknown): boolean =>
   error instanceof Error && /returned 429\b|-32029|rate limit|too many requests/i.test(error.message);
 
 /**
- * The chain's history, read through the budget: every call waits its turn,
- * and a refusal stops the reader rather than being retried at it. The client
- * underneath is built with retries off, so the budget alone decides when to
- * ask again.
+ * One call through the budget: it waits its turn (`cost` turns, for a call
+ * that makes several RPC requests), and a refusal stops the reader rather
+ * than being retried. Every chain read the reader makes goes through this,
+ * whichever lane it is on, so its rate is a ceiling on all of them together.
  */
-export const budgeted = (history: ChainHistory, b: Budget): ChainHistory => {
-  /** `cost` is how many RPC calls the method makes: a token account listing asks both token programs. */
-  const paced = async <T>(call: () => Promise<T>, cost = 1): Promise<T> => {
+export const pacedBy =
+  (b: Budget) =>
+  async <T>(call: () => Promise<T>, cost = 1): Promise<T> => {
     for (let i = 0; i < cost; i++) await b.take();
     try {
       const out = await call();
@@ -106,6 +107,32 @@ export const budgeted = (history: ChainHistory, b: Budget): ChainHistory => {
       throw error;
     }
   };
+
+/**
+ * A loan read through the reader's budget. What is pledged, and a linked
+ * wallet's loan for its history, are read on the jobs' lane (the klend SDK
+ * batches them there), and were read outside the reader's budget: a pass every
+ * five seconds could add to that lane as fast as passes came. Paced here, they
+ * count against `HISTORY_RPC_RPS` with the reader's other reads, and a refusal
+ * stops the reader as any other does. Two turns: the obligation and its
+ * reserves.
+ */
+export const budgetedLending = <L extends Pick<LendingSource, "position">>(
+  lending: L,
+  b: Budget,
+): Pick<LendingSource, "position"> => {
+  const paced = pacedBy(b);
+  return { position: (wallet: string) => paced(() => lending.position(wallet), 2) };
+};
+
+/**
+ * The chain's history, read through the budget: every call waits its turn,
+ * and a refusal stops the reader rather than being retried at it. The client
+ * underneath is built with retries off, so the budget alone decides when to
+ * ask again.
+ */
+export const budgeted = (history: ChainHistory, b: Budget): ChainHistory => {
+  const paced = pacedBy(b);
   return {
     tokenAccountsFor: (owner, mint) => paced(() => history.tokenAccountsFor(owner, mint)),
     ...(history.tokenAccounts

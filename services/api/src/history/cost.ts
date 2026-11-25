@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, ne, notInArray, sql } from "drizzle-orm";
 import {
   D,
   EMPTY_OPEN,
@@ -27,7 +27,7 @@ import {
   wallets,
   type HistoryEvent,
 } from "../db/schema.js";
-import { followed } from "../wallets/active.js";
+import { followed, stillFollowed, Unlinked } from "../wallets/active.js";
 import {
   dividendsSince,
   dollarCost,
@@ -173,21 +173,23 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
       .where(and(eq(historyEvents.walletId, walletId), isNull(historyEvents.costedAt)))
       .orderBy(asc(historyTxs.slot), asc(historyEvents.blockTime), asc(historyEvents.id))
   ).map((r) => r.event);
-  const [costedBefore] = await db
-    .select({ id: historyEvents.id })
-    .from(historyEvents)
-    .where(and(eq(historyEvents.walletId, walletId), isNotNull(historyEvents.costedAt)))
+  /*
+   * The first costing is the one that has never finished for this wallet, said
+   * by the job itself (`costed_at`), not by whether any movement was costed: a
+   * first costing can find none (an account whose past the node no longer
+   * keeps has only its opening balance), and taking the next costing for a
+   * first one again priced that opening a second time, and wrote its sales
+   * with no realised figure. A link again keeps it: what happened while
+   * unlinked is a later costing's.
+   */
+  const [job] = await db
+    .select({ opening: historyJobs.opening, costedAt: historyJobs.costedAt })
+    .from(historyJobs)
+    .where(eq(historyJobs.walletId, walletId))
     .limit(1);
-  const first = costedBefore === undefined;
+  const first = job === undefined || job.costedAt === null;
   // Shares held before the oldest transaction a first read reached, where it found no empty moment.
-  const [job] = first
-    ? await db
-        .select({ opening: historyJobs.opening })
-        .from(historyJobs)
-        .where(eq(historyJobs.walletId, walletId))
-        .limit(1)
-    : [];
-  const openings = Object.values(job?.opening ?? {});
+  const openings = first ? Object.values(job?.opening ?? {}) : [];
 
   // The stocks among what moved, or held from before what was read: USDC and Earn shares are not lots.
   const mints = [
@@ -387,199 +389,214 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     earnPriced.push({ ...move, usdc: move.transferShares.mul(price) });
   }
 
-  await db.transaction(async (tx) => {
-    for (const move of earnPriced) {
-      await writeEarnRecord(tx, {
-        ...move,
-        userId: wallet.userId,
-        walletId,
-        origin: "chain",
-        transfer: move.transferShares !== undefined,
-      });
-    }
-    if (written.length > 0) {
-      await tx.insert(lots).values(
-        written.map(({ lot, stock }) => ({
+  const kept = await db
+    .transaction(async (tx) => {
+      // A wallet unlinked since this costing began is frozen as it was: nothing written.
+      if (!(await stillFollowed(tx, walletId))) throw new Unlinked();
+      for (const move of earnPriced) {
+        await writeEarnRecord(tx, {
+          ...move,
           userId: wallet.userId,
           walletId,
-          tokenId: stock.tokenId,
-          instrumentId: stock.instrumentId,
-          tokenQty: lot.tokenQty,
-          shares: fixed(lot.shares),
-          unitCostUsd: fixed(lot.unitCostUsd),
-          feeUsd: "0",
-          referencePriceUsd: lot.referencePriceUsd === null ? null : fixed(lot.referencePriceUsd),
-          acquiredAt: lot.acquiredAt,
-          recordedAt: now,
-          source: "chain" as const,
-          isEstimated: lot.estimateSource !== null,
-          estimateSource: lot.estimateSource,
-        })),
-      );
-    }
-    // In the order they happened, each recorded a moment after the last, so the replay
-    // takes a sale out of what was held before a buy that followed it.
-    let tick = 0;
-    for (const step of sequence) {
-      const recordedAt = new Date(now.getTime() + tick++);
-      if (step.type === "move") {
-        // In its place: the cost it carries is what was held just before it, not after a buy that followed.
-        if (mercury === null) continue;
-        const at = step.event.blockTime ?? now;
-        await recordMoveIn(tx, {
-          userId: wallet.userId,
-          fromWalletId: walletId,
-          toWalletId: mercury.id,
-          signature: step.event.signature,
-          occurredAt: at,
-          startedAt: new Date(at.getTime() - SEEN_EARLY_MS),
-          moved: [{ mint: step.stock.mint, amountRaw: step.event.amountRaw! }],
-          recordedAt,
+          origin: "chain",
+          transfer: move.transferShares !== undefined,
         });
-        continue;
       }
-      if (step.type === "lot") {
-        await tx.insert(lots).values({
+      if (written.length > 0) {
+        await tx.insert(lots).values(
+          written.map(({ lot, stock }) => ({
+            userId: wallet.userId,
+            walletId,
+            tokenId: stock.tokenId,
+            instrumentId: stock.instrumentId,
+            tokenQty: lot.tokenQty,
+            shares: fixed(lot.shares),
+            unitCostUsd: fixed(lot.unitCostUsd),
+            feeUsd: "0",
+            referencePriceUsd: lot.referencePriceUsd === null ? null : fixed(lot.referencePriceUsd),
+            acquiredAt: lot.acquiredAt,
+            recordedAt: now,
+            source: "chain" as const,
+            isEstimated: lot.estimateSource !== null,
+            estimateSource: lot.estimateSource,
+          })),
+        );
+      }
+      // In the order they happened, each recorded a moment after the last, so the replay
+      // takes a sale out of what was held before a buy that followed it.
+      let tick = 0;
+      for (const step of sequence) {
+        const recordedAt = new Date(now.getTime() + tick++);
+        if (step.type === "move") {
+          // In its place: the cost it carries is what was held just before it, not after a buy that followed.
+          if (mercury === null) continue;
+          const at = step.event.blockTime ?? now;
+          await recordMoveIn(tx, {
+            userId: wallet.userId,
+            fromWalletId: walletId,
+            toWalletId: mercury.id,
+            signature: step.event.signature,
+            occurredAt: at,
+            startedAt: new Date(at.getTime() - SEEN_EARLY_MS),
+            moved: [{ mint: step.stock.mint, amountRaw: step.event.amountRaw! }],
+            recordedAt,
+          });
+          continue;
+        }
+        if (step.type === "lot") {
+          await tx.insert(lots).values({
+            userId: wallet.userId,
+            walletId,
+            tokenId: step.stock.tokenId,
+            instrumentId: step.stock.instrumentId,
+            tokenQty: step.lot.tokenQty,
+            shares: fixed(step.lot.shares),
+            unitCostUsd: fixed(step.lot.unitCostUsd),
+            feeUsd: "0",
+            referencePriceUsd: step.lot.referencePriceUsd === null ? null : fixed(step.lot.referencePriceUsd),
+            acquiredAt: step.lot.acquiredAt,
+            recordedAt,
+            source: "chain" as const,
+            isEstimated: step.lot.estimateSource !== null,
+            estimateSource: step.lot.estimateSource,
+          });
+          continue;
+        }
+        await tx.insert(disposals).values({
           userId: wallet.userId,
           walletId,
           tokenId: step.stock.tokenId,
           instrumentId: step.stock.instrumentId,
-          tokenQty: step.lot.tokenQty,
-          shares: fixed(step.lot.shares),
-          unitCostUsd: fixed(step.lot.unitCostUsd),
-          feeUsd: "0",
-          referencePriceUsd: step.lot.referencePriceUsd === null ? null : fixed(step.lot.referencePriceUsd),
-          acquiredAt: step.lot.acquiredAt,
+          tokenQty: step.event.amountRaw!,
+          shares: fixed(step.shares),
+          kind: "chain" as const,
+          occurredAt: step.event.blockTime ?? now,
           recordedAt,
-          source: "chain" as const,
-          isEstimated: step.lot.estimateSource !== null,
-          estimateSource: step.lot.estimateSource,
+          realisedPnlUsd: step.realisedUsd === null ? null : fixed(step.realisedUsd),
         });
-        continue;
       }
-      await tx.insert(disposals).values({
-        userId: wallet.userId,
-        walletId,
-        tokenId: step.stock.tokenId,
-        instrumentId: step.stock.instrumentId,
-        tokenQty: step.event.amountRaw!,
-        shares: fixed(step.shares),
-        kind: "chain" as const,
-        occurredAt: step.event.blockTime ?? now,
-        recordedAt,
-        realisedPnlUsd: step.realisedUsd === null ? null : fixed(step.realisedUsd),
-      });
-    }
-    if (dividendRows.length > 0) {
-      await tx.insert(lots).values(
-        dividendRows.map((d) => ({
-          userId: wallet.userId,
-          walletId,
-          tokenId: d.stock.tokenId,
-          instrumentId: d.stock.instrumentId,
-          tokenQty: 0n,
-          shares: fixed(d.shares),
-          unitCostUsd: "0",
-          feeUsd: "0",
-          acquiredAt: d.at,
-          recordedAt: now,
-          source: d.split === true ? ("split" as const) : ("dividend" as const),
-        })),
-      );
-      // Found in history: in the feed and the income line, dated when paid, and never announced as news.
-      // A split is in the feed as one, with no amount, and never in income.
-      await tx.insert(activities).values(
-        dividendRows.map((d) => ({
-          userId: wallet.userId,
-          walletId,
-          kind: d.split === true ? ("split" as const) : ("dividend" as const),
-          occurredAt: d.at,
-          title: d.split === true ? `${d.stock.ticker} stock split` : `${d.stock.ticker} dividend`,
-          subtitle:
-            d.split === true
-              ? `${d.shares.toDecimalPlaces(6).toString()} more shares, each worth less · found in history`
-              : `Paid as ${d.shares.toDecimalPlaces(6).toString()} shares · found in history`,
-          amountUsd: d.amountUsd === null ? null : fixed(d.amountUsd),
-          refTable: "token",
-          refId: d.stock.tokenId,
-        })),
-      );
-    }
-    // Moves to the Mercury wallet: the shares arrive there with what they cost here.
-    if (mercury !== null) {
-      const titles = moveTitles(
-        { label: wallet.label, address: wallet.address, isPrimary: false },
-        { label: null, address: mercury.address, isPrimary: true },
-      );
-      for (const c of carried) {
-        const at = c.event.blockTime ?? linkedAt;
-        // The feed row here is the record that it was carried, as for a move the relayer sent.
-        const [row] = await tx
-          .insert(activities)
-          .values({
+      if (dividendRows.length > 0) {
+        await tx.insert(lots).values(
+          dividendRows.map((d) => ({
             userId: wallet.userId,
             walletId,
-            kind: "transfer_out",
-            occurredAt: at,
-            title: titles.out,
-            subtitle: null,
-            amountUsd: null,
-            txSignature: c.event.signature,
-            mint: c.stock.mint,
-          })
-          .onConflictDoNothing()
-          .returning({ id: activities.id });
-        if (row === undefined) continue;
-        await tx
-          .insert(activities)
-          .values({
+            tokenId: d.stock.tokenId,
+            instrumentId: d.stock.instrumentId,
+            tokenQty: 0n,
+            shares: fixed(d.shares),
+            unitCostUsd: "0",
+            feeUsd: "0",
+            acquiredAt: d.at,
+            recordedAt: now,
+            source: d.split === true ? ("split" as const) : ("dividend" as const),
+          })),
+        );
+        // Found in history: in the feed and the income line, dated when paid, and never announced as news.
+        // A split is in the feed as one, with no amount, and never in income.
+        await tx.insert(activities).values(
+          dividendRows.map((d) => ({
+            userId: wallet.userId,
+            walletId,
+            kind: d.split === true ? ("split" as const) : ("dividend" as const),
+            occurredAt: d.at,
+            title: d.split === true ? `${d.stock.ticker} stock split` : `${d.stock.ticker} dividend`,
+            subtitle:
+              d.split === true
+                ? `${d.shares.toDecimalPlaces(6).toString()} more shares, each worth less · found in history`
+                : `Paid as ${d.shares.toDecimalPlaces(6).toString()} shares · found in history`,
+            amountUsd: d.amountUsd === null ? null : fixed(d.amountUsd),
+            refTable: "token",
+            refId: d.stock.tokenId,
+          })),
+        );
+      }
+      // Moves to the Mercury wallet: the shares arrive there with what they cost here.
+      if (mercury !== null) {
+        const titles = moveTitles(
+          { label: wallet.label, address: wallet.address, isPrimary: false },
+          { label: null, address: mercury.address, isPrimary: true },
+        );
+        for (const c of carried) {
+          const at = c.event.blockTime ?? linkedAt;
+          // The feed row here is the record that it was carried, as for a move the relayer sent.
+          const [row] = await tx
+            .insert(activities)
+            .values({
+              userId: wallet.userId,
+              walletId,
+              kind: "transfer_out",
+              occurredAt: at,
+              title: titles.out,
+              subtitle: null,
+              amountUsd: null,
+              txSignature: c.event.signature,
+              mint: c.stock.mint,
+            })
+            .onConflictDoNothing()
+            .returning({ id: activities.id });
+          if (row === undefined) continue;
+          await tx
+            .insert(activities)
+            .values({
+              userId: wallet.userId,
+              walletId: mercury.id,
+              kind: "transfer_in",
+              occurredAt: at,
+              title: titles.in,
+              subtitle: null,
+              amountUsd: null,
+              txSignature: c.event.signature,
+              mint: c.stock.mint,
+            })
+            .onConflictDoNothing();
+          if (c.taken.tokenQty <= 0n || !c.taken.shares.gt(ZERO)) continue;
+          await tx.insert(lots).values({
             userId: wallet.userId,
             walletId: mercury.id,
-            kind: "transfer_in",
-            occurredAt: at,
-            title: titles.in,
-            subtitle: null,
-            amountUsd: null,
-            txSignature: c.event.signature,
-            mint: c.stock.mint,
-          })
-          .onConflictDoNothing();
-        if (c.taken.tokenQty <= 0n || !c.taken.shares.gt(ZERO)) continue;
-        await tx.insert(lots).values({
-          userId: wallet.userId,
-          walletId: mercury.id,
-          tokenId: c.stock.tokenId,
-          instrumentId: c.stock.instrumentId,
-          tokenQty: c.taken.tokenQty,
-          shares: fixed(scaled(c.taken.tokenQty, c.stock.decimals).mul(c.multiplier)),
-          unitCostUsd: fixed(c.taken.costUsd.div(c.taken.shares)),
-          feeUsd: "0",
-          referencePriceUsd: fixed(c.taken.referenceUsd.div(c.taken.shares)),
-          acquiredAt: at,
-          recordedAt: now,
-          source: "transfer_in" as const,
-          isEstimated: c.taken.estimated,
-          estimateSource: c.taken.estimated ? ("own_wallet" as const) : null,
-        });
+            tokenId: c.stock.tokenId,
+            instrumentId: c.stock.instrumentId,
+            tokenQty: c.taken.tokenQty,
+            shares: fixed(scaled(c.taken.tokenQty, c.stock.decimals).mul(c.multiplier)),
+            unitCostUsd: fixed(c.taken.costUsd.div(c.taken.shares)),
+            feeUsd: "0",
+            referencePriceUsd: fixed(c.taken.referenceUsd.div(c.taken.shares)),
+            acquiredAt: at,
+            recordedAt: now,
+            source: "transfer_in" as const,
+            isEstimated: c.taken.estimated,
+            estimateSource: c.taken.estimated ? ("own_wallet" as const) : null,
+          });
+        }
       }
-    }
-    if (pending.length > 0) {
+      if (pending.length > 0) {
+        await tx
+          .update(historyEvents)
+          .set({ costedAt: now })
+          .where(
+            inArray(
+              historyEvents.id,
+              pending.map((e) => e.id),
+            ),
+          );
+      }
+      // Costed: the wallet's P&L is real now. A later costing leaves the status as it was.
       await tx
-        .update(historyEvents)
-        .set({ costedAt: now })
-        .where(
-          inArray(
-            historyEvents.id,
-            pending.map((e) => e.id),
-          ),
-        );
-    }
-    // Costed: the wallet's P&L is real now. A later costing leaves the status as it was.
-    await tx
-      .update(historyJobs)
-      .set({ status: "done" })
-      .where(and(eq(historyJobs.walletId, walletId), eq(historyJobs.status, "read")));
-  });
+        .update(historyJobs)
+        .set({ status: "done" })
+        .where(and(eq(historyJobs.walletId, walletId), eq(historyJobs.status, "read")));
+      if (first) {
+        await tx
+          .update(historyJobs)
+          .set({ costedAt: now })
+          .where(and(eq(historyJobs.walletId, walletId), isNull(historyJobs.costedAt)));
+      }
+      return true;
+    })
+    .catch((error: unknown) => {
+      if (error instanceof Unlinked) return false;
+      throw error;
+    });
+  if (!kept) return { lots: 0, dividends: 0, costed: 0, ready: false };
 
   return {
     lots: written.length + sequence.filter((s) => s.type === "lot").length,

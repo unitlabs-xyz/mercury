@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { earnEvents, historyEvents, historyTxs, orders } from "../db/schema.js";
 import { balanceOf, emptyBefore, movementOf, rawJson, transactionFromRaw } from "./events.js";
 import { holdLease, keepCursor } from "./queue.js";
+import { stillFollowed, Unlinked } from "../wallets/active.js";
 
 /** Signatures asked for at a time: the node's most. */
 export const PAGE = 1_000;
@@ -169,8 +170,11 @@ export async function readWallet(
     if (cursor === undefined && account.rawAmount === 0n && pledged === 0n) {
       const [newest] = await history.signatures(account.address, { limit: 1 });
       if (newest !== undefined) {
+        await db.transaction(async (tx) => {
+          if (!(await stillFollowed(tx, job.walletId))) throw new Unlinked();
+          await keepCursor(tx, job.walletId, account.address, newest.signature);
+        });
         cursors[account.address] = newest.signature;
-        await keepCursor(db, job.walletId, account.address, newest.signature);
       }
       continue;
     }
@@ -288,13 +292,18 @@ export async function readWallet(
           ];
     });
 
-    if (rows.length > 0) await db.insert(historyEvents).values(rows).onConflictDoNothing();
-
-    // This account is read: kept now, so a pass stopped on a later account doesn't walk it again.
-    if (newest !== undefined) {
-      cursors[account.address] = newest;
-      await keepCursor(db, job.walletId, account.address, newest);
-    }
+    /*
+     * This account is read: its events and its cursor kept now, together, so a
+     * pass stopped on a later account doesn't walk it again, and a crash between
+     * the two can't leave events with no cursor. Only while the wallet is still
+     * followed: one unlinked mid-pass is frozen as it was, and the pass stops.
+     */
+    await db.transaction(async (tx) => {
+      if (!(await stillFollowed(tx, job.walletId))) throw new Unlinked();
+      if (rows.length > 0) await tx.insert(historyEvents).values(rows).onConflictDoNothing();
+      if (newest !== undefined) await keepCursor(tx, job.walletId, account.address, newest);
+    });
+    if (newest !== undefined) cursors[account.address] = newest;
     transactions += read.length;
     events += rows.length;
     if (hitCap) capped += 1;

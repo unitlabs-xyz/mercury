@@ -1149,6 +1149,12 @@ export const historyJobs = pgTable(
       .$type<Record<string, { mint: string; raw: string; at: string | null }>>()
       .notNull()
       .default({}),
+    /**
+     * When the wallet's first costing finished: after it, every costing is a
+     * later one, writing each sale and buy in its place. Kept through an unlink
+     * and a link again. Null until then, whatever the status says.
+     */
+    costedAt: timestamp("costed_at", { withTimezone: true }),
     attempts: integer("attempts").notNull().default(0),
     /** Not before this. Set further out after a failure, so a broken wallet does not spin. */
     runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),

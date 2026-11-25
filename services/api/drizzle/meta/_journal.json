@@ -302,6 +302,13 @@
       "when": 1795603440634,
       "tag": "0042_liquidation_per_stock",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1795604519360,
+      "tag": "0043_history_costed_at",
+      "breakpoints": true
     }
   ]
 }

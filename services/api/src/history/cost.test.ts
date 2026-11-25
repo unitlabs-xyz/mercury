@@ -84,7 +84,10 @@ const seed = async (status: "read" | "done" = "read") => {
     .insert(tokens)
     .values({ instrumentId: instrument!.id, mint: TSLAX, symbol: "TSLAx", issuer: "backed", decimals: 8 })
     .returning();
-  await db.insert(historyJobs).values({ walletId, userId, status });
+  // A wallet already `done` has had its first costing.
+  await db
+    .insert(historyJobs)
+    .values({ walletId, userId, status, costedAt: status === "done" ? day(1) : null });
 
   let n = 0;
   /** One movement found in history, with the transaction it came from kept raw. */
@@ -1109,5 +1112,51 @@ describe("costWallet, a linked wallet's Earn", () => {
     await shareMove(s, "E1", "in", 500_000_000n, day(2));
     expect(await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW)).toMatchObject({ costed: 1 });
     expect(await s.db.select().from(earnEvents)).toEqual([]);
+  });
+});
+
+describe("costWallet, which costing is the first", () => {
+  it("takes the costing after a first that found no movement as a later one, never pricing the opening twice", async () => {
+    const s = await seed();
+    // The node keeps none of the account's past: its 2 are all from before.
+    await s.db
+      .update(historyJobs)
+      .set({ opening: { [`${TSLAX}-acct`]: { mint: TSLAX, raw: tokensOf(2).toString(), at: null } } })
+      .where(eq(historyJobs.walletId, s.walletId));
+    const first = await costWallet(deps(s.db, pastOf({ TSLA: 50 }).past), s.walletId, NOW);
+    expect(first).toMatchObject({ ready: true, lots: 1 });
+    expect((await s.job()).costedAt).toEqual(NOW);
+
+    // Then one sold for USDC, found by a later pass.
+    await s.found({
+      kind: "out",
+      amount: tokensOf(1),
+      at: day(20),
+      counterMint: USDC,
+      counterAmount: 80_000_000n,
+    });
+    const later = await costWallet(deps(s.db, pastOf({ TSLA: 50 }).past), s.walletId, NOW);
+    expect(later.ready).toBe(false);
+    // Still the one opening lot: not priced again.
+    expect((await s.chainLots()).map((l) => l.tokenQty)).toEqual([tokensOf(2)]);
+    // And the sale is a departure, with what it realised: $80 for a share that cost $50.
+    const sold = await s.db.select().from(disposals).where(eq(disposals.walletId, s.walletId));
+    expect(sold.map((d) => [d.tokenQty, D(d.realisedPnlUsd!).toString()])).toEqual([[tokensOf(1), "30"]]);
+  });
+
+  it("writes nothing for a wallet unlinked since its costing began", async () => {
+    const s = await seed();
+    await s.found({
+      kind: "in",
+      amount: tokensOf(1),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 50_000_000n,
+    });
+    await s.db.update(wallets).set({ unlinkedAt: NOW }).where(eq(wallets.id, s.walletId));
+    const r = await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+    expect(r).toEqual({ lots: 0, dividends: 0, costed: 0, ready: false });
+    expect(await s.chainLots()).toEqual([]);
+    expect((await s.job()).status).toBe("read");
   });
 });

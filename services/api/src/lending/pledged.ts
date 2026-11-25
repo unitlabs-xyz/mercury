@@ -8,7 +8,7 @@ import type { LendingSource } from "./ports.js";
  * Only stocks count. Cash pledged as collateral is not a holding.
  */
 export async function pledgedByMint(
-  lending: LendingSource,
+  lending: Pick<LendingSource, "position">,
   wallet: string,
 ): Promise<readonly TokenBalance[]> {
   const position = await lending.position(wallet);

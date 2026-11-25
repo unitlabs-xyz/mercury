@@ -14,6 +14,7 @@ import {
 import { KAMINO_LENDING_PROGRAM, rawJson } from "./events.js";
 import { RateLimited } from "./budget.js";
 import { finishHistoryPass } from "./queue.js";
+import { Unlinked } from "../wallets/active.js";
 import { GiveWay, PledgeUnknown, readWallet, TransactionUnavailable } from "./reader.js";
 
 const ME = "Phantom1111111111111111111111111111111111111";
@@ -668,5 +669,24 @@ describe("readWallet, giving way", () => {
         { walletId: s.walletId, address: ME, cursors: {} },
       ),
     ).rejects.toThrow("cannot list token accounts");
+  });
+});
+
+describe("readWallet, a wallet unlinked mid-pass", () => {
+  it("writes nothing for it and stops: it is frozen as it was", async () => {
+    const s = await seed();
+    await s.db.insert(historyJobs).values({ walletId: s.walletId, userId: s.userId, status: "running" });
+    const c = chain([owned(TSLA_ACCT, TSLAX, 10n)], { [TSLA_ACCT]: [{ tx: move("S1", 1, 0n, 10n) }] });
+    // Unlinked after the pass took its job and before it wrote anything.
+    await s.db.update(wallets).set({ unlinkedAt: new Date() }).where(eq(wallets.id, s.walletId));
+    await expect(
+      readWallet(
+        { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet },
+        { walletId: s.walletId, address: ME, cursors: {} },
+      ),
+    ).rejects.toBeInstanceOf(Unlinked);
+    expect(await s.db.select().from(historyEvents).where(eq(historyEvents.walletId, s.walletId))).toEqual([]);
+    const [job] = await s.db.select().from(historyJobs).where(eq(historyJobs.walletId, s.walletId));
+    expect(job!.cursors).toEqual({});
   });
 });

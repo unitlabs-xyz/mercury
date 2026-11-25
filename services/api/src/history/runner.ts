@@ -16,6 +16,7 @@ import { GiveWay, PledgeUnknown, readWallet, type ReaderDeps } from "./reader.js
 import { costWallet, walletToCost, type CostDeps } from "./cost.js";
 import { readLoanHistory, type LoanHistoryDeps } from "./loan.js";
 import { settleLiquidations } from "../lending/liquidation-pnl.js";
+import { Unlinked } from "../wallets/active.js";
 
 /**
  * When a wallet's next later pass is due, by how recently anyone looked at
@@ -97,6 +98,7 @@ export const historyPass = (deps: HistoryRunDeps) => {
         cursors: r.cursors,
         opening: r.opening,
         now: done,
+        claimedAt: job.startedAt,
         // A Mercury wallet's Earn shares are rarely sent in by hand: a pass a day.
         nextRunAfter: new Date(
           done.getTime() +
@@ -110,23 +112,31 @@ export const historyPass = (deps: HistoryRunDeps) => {
           "history read stopped at its cap on an account that never went to zero",
         );
       }
-      // Loan-watch reads every loan's history already, the Mercury wallet's included.
-      const loan = wallet.isPrimary
-        ? 0
-        : await loanPass(deps, {
-            userId: job.userId,
-            walletId: job.walletId,
-            address: wallet.address,
-          });
+      /*
+       * Loan-watch reads every loan's history already, the Mercury wallet's
+       * included. Not while the jobs' lane is being refused, whose reads this
+       * is: the next pass reads it.
+       */
+      const loan =
+        wallet.isPrimary || deps.reader.laneBusy()
+          ? 0
+          : await loanPass(deps, {
+              userId: job.userId,
+              walletId: job.walletId,
+              address: wallet.address,
+            });
       const first = job.status === "running";
       if (!first && r.transactions === 0 && loan === 0) return null;
       return `${first ? "first read" : "later pass"}: ${r.transactions} transactions, ${r.events} events across ${r.accounts} accounts${loan > 0 ? `, ${loan} loan events` : ""}`;
     } catch (error: unknown) {
+      // Unlinked mid-pass: what it read stays as it was, frozen, and its job waits for a link again.
+      if (error instanceof Unlinked) return "stopped: the wallet was unlinked";
       // Kamino unreadable is a wait too: without the pledge, a pledged holding would be read as sold.
       if (error instanceof RateLimited || error instanceof GiveWay || error instanceof PledgeUnknown) {
         await deferHistoryPass(deps.db, {
           walletId: job.walletId,
           until: new Date(now() + REFUSAL_PAUSE_MS),
+          claimedAt: job.startedAt,
         });
         return error instanceof RateLimited
           ? "paused: the node refused the reader"
@@ -138,6 +148,7 @@ export const historyPass = (deps: HistoryRunDeps) => {
         walletId: job.walletId,
         error: errorLine(error),
         now: new Date(now()),
+        claimedAt: job.startedAt,
       });
       throw error;
     }

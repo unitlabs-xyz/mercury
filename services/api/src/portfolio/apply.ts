@@ -17,7 +17,7 @@ import {
 import { notifyFor } from "../notify/inbox.js";
 import { movementsByToken } from "./open.js";
 import type { HeldToken, Reconciliation } from "./reconcile.js";
-import type { WalletOwner } from "../wallets/active.js";
+import { stillFollowed, type WalletOwner } from "../wallets/active.js";
 
 export interface ReconcileDeps {
   readonly chain: ChainReader;
@@ -224,6 +224,8 @@ export async function applyReconciliation(db: Db, owner: WalletOwner, given: Rec
   }
 
   await db.transaction(async (tx) => {
+    // A wallet unlinked since this pass read its list is frozen as it was: nothing written for it.
+    if (!(await stillFollowed(tx, walletId))) return;
     if (plan.retracted.length > 0) {
       await tx
         .delete(disposals)

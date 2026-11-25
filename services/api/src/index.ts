@@ -45,7 +45,7 @@ import { tokenAccountAddresses } from "./portfolio/accounts.js";
 import { streamAddresses } from "./wallet-events/streams.js";
 import { logger } from "./log/index.js";
 import { SolanaRpc, USDC_MINT } from "@mercury/chain";
-import { budget, budgeted } from "./history/budget.js";
+import { budget, budgeted, budgetedLending } from "./history/budget.js";
 import { costPass, historyPass, listedMints } from "./history/runner.js";
 import { YahooHistory } from "@mercury/market";
 import { laneRefusedWithin } from "./jobs/strain.js";
@@ -722,10 +722,10 @@ every(
  * Five seconds between passes, each one job; a first read can run for minutes,
  * and the next pass waits for it. Starts after the other jobs' first passes.
  */
-const historyChain = budgeted(
-  new SolanaRpc({ rpcUrl: config.solanaRpcUrl, attempts: 1 }),
-  budget({ rps: config.historyRps }),
-);
+const historyBudget = budget({ rps: config.historyRps });
+const historyChain = budgeted(new SolanaRpc({ rpcUrl: config.solanaRpcUrl, attempts: 1 }), historyBudget);
+// Its loan reads are on the jobs' lane, and paced by the same budget: one ceiling on everything it reads.
+const historyLending = budgetedLending(jobs.deps.lending, historyBudget);
 every(
   "history-reader",
   5_000,
@@ -740,13 +740,13 @@ every(
       }),
       laneBusy: () => laneRefusedWithin(60_000),
       // Pledged shares are still held: an account emptied by pledging is read, not skipped.
-      pledged: (owner) => pledgedByMint(jobs.deps.lending, owner),
+      pledged: (owner) => pledgedByMint(historyLending, owner),
       // The Mercury wallet's Earn shares, read for shares sent in or out by hand.
       earnShareMints: async () => new Set((await deps.earn.list()).map((v) => v.sharesMint)),
     },
     // A linked wallet's loan, from Kamino's own record of it: when it opened, each pledge at its price then.
     loan: {
-      lending: jobs.deps.lending,
+      lending: historyLending,
       loans: kaminoLoans(),
       market: XSTOCKS_MARKET,
       usdcMint: USDC_MINT,

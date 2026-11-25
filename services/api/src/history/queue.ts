@@ -147,7 +147,7 @@ export async function holdLease(db: Db, walletId: string, now: Date): Promise<vo
  * is done.
  */
 export async function keepCursor(
-  db: Db,
+  db: Db | Tx,
   walletId: string,
   account: string,
   signature: string,
@@ -159,9 +159,26 @@ export async function keepCursor(
 }
 
 /**
+ * The job is still the one this pass claimed: not queued again since (a link
+ * again clears `started_at`, and a later claim sets a new one). Absent, any.
+ */
+const sameClaim = (claimedAt: Date | null | undefined) =>
+  claimedAt === undefined
+    ? undefined
+    : claimedAt === null
+      ? isNull(historyJobs.startedAt)
+      : eq(historyJobs.startedAt, claimedAt);
+
+/**
  * A pass finished. Its cursors are merged in (an account not read this pass
  * keeps its own), the next pass is due at `nextRunAfter`, and a first read
  * becomes `read`. A wallet already `read` or `done` keeps its status.
+ *
+ * Given the claim's `startedAt`, only that claim finishes the job. A wallet
+ * unlinked and linked again while the pass ran was queued again, to read what
+ * happened while it was unlinked: what this pass read is kept (its cursors),
+ * but it does not mark the wallet read, or push the reading of the gap out by
+ * a later pass's wait, which showed P&L as ready before the gap was read.
  */
 export async function finishHistoryPass(
   db: Db,
@@ -172,20 +189,28 @@ export async function finishHistoryPass(
     readonly opening?: Readonly<Record<string, Opening>>;
     readonly now: Date;
     readonly nextRunAfter: Date;
+    readonly claimedAt?: Date | null;
   },
 ): Promise<void> {
-  await db
-    .update(historyJobs)
-    .set({
-      cursors: sql`${historyJobs.cursors} || ${JSON.stringify(input.cursors)}::jsonb`,
-      opening: sql`${historyJobs.opening} || ${JSON.stringify(input.opening ?? {})}::jsonb`,
-      status: sql`case when ${historyJobs.status} in ('queued', 'running', 'failed') then 'read' else ${historyJobs.status} end`,
-      attempts: 0,
-      lastError: null,
-      runAfter: input.nextRunAfter,
-      finishedAt: input.now,
-    })
-    .where(eq(historyJobs.walletId, input.walletId));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(historyJobs)
+      .set({
+        cursors: sql`${historyJobs.cursors} || ${JSON.stringify(input.cursors)}::jsonb`,
+        opening: sql`${historyJobs.opening} || ${JSON.stringify(input.opening ?? {})}::jsonb`,
+      })
+      .where(eq(historyJobs.walletId, input.walletId));
+    await tx
+      .update(historyJobs)
+      .set({
+        status: sql`case when ${historyJobs.status} in ('queued', 'running', 'failed') then 'read' else ${historyJobs.status} end`,
+        attempts: 0,
+        lastError: null,
+        runAfter: input.nextRunAfter,
+        finishedAt: input.now,
+      })
+      .where(and(eq(historyJobs.walletId, input.walletId), sameClaim(input.claimedAt)));
+  });
 }
 
 /**
@@ -198,15 +223,16 @@ export async function finishHistoryPass(
  */
 export async function deferHistoryPass(
   db: Db,
-  input: { readonly walletId: string; readonly until: Date },
+  input: { readonly walletId: string; readonly until: Date; readonly claimedAt?: Date | null },
 ): Promise<void> {
+  // A job queued again since its claim is due now, as queued: this pass's wait is not its.
   await db
     .update(historyJobs)
     .set({
       runAfter: input.until,
       status: sql`case when ${historyJobs.status} = 'running' then 'queued' else ${historyJobs.status} end`,
     })
-    .where(eq(historyJobs.walletId, input.walletId));
+    .where(and(eq(historyJobs.walletId, input.walletId), sameClaim(input.claimedAt)));
 }
 
 /** How long to wait after the `n`th failure in a row: a minute, doubling, up to the cap. */
@@ -224,12 +250,18 @@ export const failureBackoffMs = (attempts: number): number =>
  */
 export async function failHistoryPass(
   db: Db,
-  input: { readonly walletId: string; readonly error: string; readonly now: Date },
+  input: {
+    readonly walletId: string;
+    readonly error: string;
+    readonly now: Date;
+    /** Given, a job queued again since this claim is left as queued: the failure was the old pass's. */
+    readonly claimedAt?: Date | null;
+  },
 ): Promise<void> {
   const [job] = await db
     .select({ status: historyJobs.status, attempts: historyJobs.attempts })
     .from(historyJobs)
-    .where(eq(historyJobs.walletId, input.walletId))
+    .where(and(eq(historyJobs.walletId, input.walletId), sameClaim(input.claimedAt)))
     .limit(1);
   if (job === undefined) return;
   const attempts = job.attempts + 1;
@@ -242,5 +274,5 @@ export async function failHistoryPass(
       runAfter: new Date(input.now.getTime() + failureBackoffMs(attempts)),
       ...(first ? { status: attempts >= MAX_ATTEMPTS ? ("failed" as const) : ("queued" as const) } : {}),
     })
-    .where(eq(historyJobs.walletId, input.walletId));
+    .where(and(eq(historyJobs.walletId, input.walletId), sameClaim(input.claimedAt)));
 }

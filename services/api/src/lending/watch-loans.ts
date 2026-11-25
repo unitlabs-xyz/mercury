@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Decimal } from "@mercury/core";
 import { logger } from "../log/index.js";
 import type { Db } from "../db/client.js";
@@ -9,32 +9,19 @@ import { capacityInputFor } from "./input.js";
 import type { LendingSource } from "./ports.js";
 import type { ChainReader } from "@mercury/chain";
 import { alertFor, forWallet, markAfter, rank } from "./watch.js";
-import { followed } from "../wallets/active.js";
+import { followed, stillFollowed } from "../wallets/active.js";
 import { notifyFor } from "../notify/inbox.js";
 import type { Health } from "./capacity.js";
 import type { LendingPosition } from "./ports.js";
 import { readLoanHistory, type LoanHistoryDeps } from "../history/loan.js";
 
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-
 /*
- * Whether the wallet is still followed, read under a share lock on its row.
- *
+ * Every write below checks the wallet is still followed (`stillFollowed`).
  * The pass reads its wallets once, then spends seconds on the chain. An
  * unlink in between must not be undone: no warning about a wallet the person
  * stopped following, and no `loan_alert` written back after unlinking cleared
- * it, or a relink would stay silent about a loan already in trouble. The lock
- * orders this write against the unlink: one that committed first is seen
- * here, and one that comes after waits, then clears the row as usual.
+ * it, or a relink would stay silent about a loan already in trouble.
  */
-const stillFollowed = async (tx: Tx, walletId: string): Promise<boolean> =>
-  (
-    await tx
-      .select({ id: wallets.id })
-      .from(wallets)
-      .where(and(eq(wallets.id, walletId), followed))
-      .for("share")
-  ).length > 0;
 
 const log = logger("loan-watch");
 
