@@ -27,6 +27,8 @@ export interface WalletRecords {
   readonly dividendsUsd: Decimal;
   /** Put into Earn less taken out. Null when nothing is recorded, which is no basis to measure from. */
   readonly earnNetDepositedUsd: Decimal | null;
+  /** Some of that was Earn shares sent in or out, valued at a day's share price: earned is `~`. */
+  readonly earnEstimated?: boolean;
   /** Its loan's events, oldest first. */
   readonly loanLedger: readonly LedgerRow[];
   /** What the loan watch last recorded about its loan. */
@@ -129,6 +131,7 @@ export function summarise(
       totalUsd: toWire(earn.add(dividends)),
       earnUsd: toWire(earn),
       dividendsUsd: toWire(dividends),
+      earnEstimated: ready.some((w) => w.records.earnEstimated === true),
     },
     loanInterestUsd: toWire(interest),
     calculating: wallets.length - ready.length,

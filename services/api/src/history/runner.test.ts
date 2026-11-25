@@ -178,6 +178,57 @@ describe("historyPass", () => {
   });
 });
 
+describe("historyPass, the Mercury wallet's Earn shares", () => {
+  const SHARES = "SteakShares1111111111111111111111111111111";
+  const SHARES_ACCT = "SharesAcct111111111111111111111111111111111";
+  const sharesIn: TransactionDetail = {
+    ...bought,
+    signature: "X1",
+    postTokens: [{ owner: "MercuryMain", mint: SHARES, rawAmount: 1_000_000n, decimals: 6 }],
+  };
+
+  it("gives the Mercury wallet a job, and reads only its Earn share accounts: never its stocks", async () => {
+    const db = await testDb();
+    const [user] = await db.insert(users).values({ privyUserId: "did:privy:main" }).returning();
+    const mainId = await mercuryWallet(db, user!.id, "MercuryMain");
+    const asked: string[] = [];
+    const history = chain({
+      ownedTokenAccounts: async () => [
+        { address: ACCT, mint: TSLAX, programId: "Tokenz", rawAmount: 10n, decimals: 8 },
+        { address: SHARES_ACCT, mint: SHARES, programId: "Tokenkeg", rawAmount: 1_000_000n, decimals: 6 },
+      ],
+      signatures: async (address, page) =>
+        page.until !== undefined
+          ? []
+          : address === SHARES_ACCT
+            ? [{ signature: "X1", slot: 1, blockTime: bought.blockTime, failed: false }]
+            : [{ signature: "S1", slot: 1, blockTime: bought.blockTime, failed: false }],
+      transaction: async (sig) => {
+        asked.push(sig);
+        return sig === "X1" ? sharesIn : bought;
+      },
+    });
+    const pass = historyPass({
+      db,
+      reader: {
+        history,
+        listedMints: async () => new Set([TSLAX, SHARES]),
+        laneBusy: () => false,
+        earnShareMints: async () => new Set([SHARES]),
+      },
+      now: () => T0,
+      log,
+    });
+
+    expect(await pass()).toBe("first read: 1 transactions, 1 events across 1 accounts");
+    expect(asked).toEqual(["X1"]);
+    const [job] = await db.select().from(historyJobs).where(eq(historyJobs.walletId, mainId));
+    expect([job!.status, job!.cursors]).toEqual(["read", { [SHARES_ACCT]: "X1" }]);
+    const events = await db.select().from(historyEvents);
+    expect(events.map((e) => e.mint)).toEqual([SHARES]);
+  });
+});
+
 describe("historyPass, with the wallet's loan", () => {
   const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
   const borrowed = {

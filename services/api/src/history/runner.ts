@@ -5,7 +5,13 @@ import { DORMANT_IDLE_MS, RECENT_IDLE_MS, VIEWED_WITHIN_MS } from "../jobs/tiers
 import type { Log } from "../log/index.js";
 import { errorLine } from "../log.js";
 import { RateLimited, REFUSAL_PAUSE_MS } from "./budget.js";
-import { claimHistoryJob, deferHistoryPass, failHistoryPass, finishHistoryPass } from "./queue.js";
+import {
+  claimHistoryJob,
+  deferHistoryPass,
+  failHistoryPass,
+  finishHistoryPass,
+  queueMercuryEarnReads,
+} from "./queue.js";
 import { GiveWay, PledgeUnknown, readWallet, type ReaderDeps } from "./reader.js";
 import { costWallet, walletToCost, type CostDeps } from "./cost.js";
 import { readLoanHistory, type LoanHistoryDeps } from "./loan.js";
@@ -21,7 +27,14 @@ export const nextPassIn = (lastViewedAt: Date | null, now: number): number =>
 
 export interface HistoryRunDeps {
   readonly db: Db;
-  readonly reader: Omit<ReaderDeps, "db">;
+  readonly reader: Omit<ReaderDeps, "db"> & {
+    /**
+     * The Earn vaults' share tokens. A Mercury wallet's job reads only these:
+     * shares sent to or from it by hand are money in or out, not interest.
+     * Absent, Mercury wallets are not read.
+     */
+    readonly earnShareMints?: () => Promise<ReadonlySet<string>>;
+  };
   /** The wallet's Kamino loan, read with its tokens. Absent, a pass reads tokens only. */
   readonly loan?: Omit<LoanHistoryDeps, "db">;
   readonly now?: () => number;
@@ -38,63 +51,85 @@ export interface HistoryRunDeps {
  * Null when nothing was due, or the pass found nothing new: a quiet reader
  * says nothing in the log.
  */
-export const historyPass = (deps: HistoryRunDeps) => async (): Promise<string | null> => {
-  const now = deps.now ?? Date.now;
-  const at = new Date(now());
+/** How often Mercury wallets that have no job get one. */
+const QUEUE_MERCURY_EVERY_MS = 10 * 60_000;
 
-  // Not even a claim while the jobs' own lane is refused: their reads come first.
-  if (deps.reader.laneBusy()) return null;
+export const historyPass = (deps: HistoryRunDeps) => {
+  let queuedAt = Number.NEGATIVE_INFINITY;
+  return async (): Promise<string | null> => {
+    const now = deps.now ?? Date.now;
+    const at = new Date(now());
 
-  const job = await claimHistoryJob(deps.db, at);
-  if (job === null) return null;
-  const [wallet] = await deps.db
-    .select({ address: wallets.address, lastViewedAt: wallets.lastViewedAt })
-    .from(wallets)
-    .where(eq(wallets.id, job.walletId))
-    .limit(1);
-  if (wallet === undefined) return null; // deleted mid-claim; its job went with it
+    // Not even a claim while the jobs' own lane is refused: their reads come first.
+    if (deps.reader.laneBusy()) return null;
 
-  try {
-    const r = await readWallet({ ...deps.reader, db: deps.db }, { ...job, address: wallet.address });
-    const done = new Date(now());
-    await finishHistoryPass(deps.db, {
-      walletId: job.walletId,
-      cursors: r.cursors,
-      openingPledged: r.openingPledged,
-      now: done,
-      nextRunAfter: new Date(done.getTime() + nextPassIn(wallet.lastViewedAt, done.getTime())),
-    });
-    // The person and the wallet's id, never the address: an address in a log is a person's holdings in a log.
-    if (r.capped > 0) {
-      deps.log.warn(
-        { userId: job.userId, walletId: job.walletId, capped: r.capped },
-        "history read stopped at its cap on an account that never went to zero",
+    if (deps.reader.earnShareMints !== undefined && at.getTime() - queuedAt >= QUEUE_MERCURY_EVERY_MS) {
+      queuedAt = at.getTime();
+      await queueMercuryEarnReads(deps.db, at);
+    }
+
+    const job = await claimHistoryJob(deps.db, at);
+    if (job === null) return null;
+    const [wallet] = await deps.db
+      .select({ address: wallets.address, lastViewedAt: wallets.lastViewedAt, isPrimary: wallets.isPrimary })
+      .from(wallets)
+      .where(eq(wallets.id, job.walletId))
+      .limit(1);
+    if (wallet === undefined) return null; // deleted mid-claim; its job went with it
+
+    try {
+      // The Mercury wallet: its Earn shares alone. A deployment without Earn reads none of it.
+      const onlyMints = wallet.isPrimary
+        ? ((await deps.reader.earnShareMints?.()) ?? new Set<string>())
+        : undefined;
+      const r = await readWallet(
+        { ...deps.reader, db: deps.db },
+        { ...job, address: wallet.address, ...(onlyMints === undefined ? {} : { onlyMints }) },
       );
-    }
-    const loan = await loanPass(deps, {
-      userId: job.userId,
-      walletId: job.walletId,
-      address: wallet.address,
-    });
-    const first = job.status === "running";
-    if (!first && r.transactions === 0 && loan === 0) return null;
-    return `${first ? "first read" : "later pass"}: ${r.transactions} transactions, ${r.events} events across ${r.accounts} accounts${loan > 0 ? `, ${loan} loan events` : ""}`;
-  } catch (error: unknown) {
-    // Kamino unreadable is a wait too: without the pledge, a pledged holding would be read as sold.
-    if (error instanceof RateLimited || error instanceof GiveWay || error instanceof PledgeUnknown) {
-      await deferHistoryPass(deps.db, {
+      const done = new Date(now());
+      await finishHistoryPass(deps.db, {
         walletId: job.walletId,
-        until: new Date(now() + REFUSAL_PAUSE_MS),
+        cursors: r.cursors,
+        openingPledged: r.openingPledged,
+        now: done,
+        nextRunAfter: new Date(done.getTime() + nextPassIn(wallet.lastViewedAt, done.getTime())),
       });
-      return error instanceof RateLimited
-        ? "paused: the node refused the reader"
-        : error instanceof GiveWay
-          ? "gave way to the jobs' lane"
-          : "paused: Kamino could not be read";
+      // The person and the wallet's id, never the address: an address in a log is a person's holdings in a log.
+      if (r.capped > 0) {
+        deps.log.warn(
+          { userId: job.userId, walletId: job.walletId, capped: r.capped },
+          "history read stopped at its cap on an account that never went to zero",
+        );
+      }
+      const loan = await loanPass(deps, {
+        userId: job.userId,
+        walletId: job.walletId,
+        address: wallet.address,
+      });
+      const first = job.status === "running";
+      if (!first && r.transactions === 0 && loan === 0) return null;
+      return `${first ? "first read" : "later pass"}: ${r.transactions} transactions, ${r.events} events across ${r.accounts} accounts${loan > 0 ? `, ${loan} loan events` : ""}`;
+    } catch (error: unknown) {
+      // Kamino unreadable is a wait too: without the pledge, a pledged holding would be read as sold.
+      if (error instanceof RateLimited || error instanceof GiveWay || error instanceof PledgeUnknown) {
+        await deferHistoryPass(deps.db, {
+          walletId: job.walletId,
+          until: new Date(now() + REFUSAL_PAUSE_MS),
+        });
+        return error instanceof RateLimited
+          ? "paused: the node refused the reader"
+          : error instanceof GiveWay
+            ? "gave way to the jobs' lane"
+            : "paused: Kamino could not be read";
+      }
+      await failHistoryPass(deps.db, {
+        walletId: job.walletId,
+        error: errorLine(error),
+        now: new Date(now()),
+      });
+      throw error;
     }
-    await failHistoryPass(deps.db, { walletId: job.walletId, error: errorLine(error), now: new Date(now()) });
-    throw error;
-  }
+  };
 };
 
 /**

@@ -167,7 +167,12 @@ describe("summarise: income", () => {
         dividendsUsd: D(3.25),
       }),
     });
-    expect(s.income).toEqual({ earnUsd: "12.5", dividendsUsd: "3.25", totalUsd: "15.75" });
+    expect(s.income).toEqual({
+      earnUsd: "12.5",
+      dividendsUsd: "3.25",
+      totalUsd: "15.75",
+      earnEstimated: false,
+    });
   });
 
   it("earns nothing in Earn with nothing recorded going in, rather than the whole balance", () => {

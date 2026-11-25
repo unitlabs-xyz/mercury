@@ -1035,9 +1035,17 @@ export const earnEvents = pgTable(
     walletId: walletId(),
     /** deposit or withdraw. */
     kind: text("kind").notNull(),
-    /** USDC that left the wallet (deposit) or arrived in it (withdraw). */
+    /**
+     * USDC that left the wallet (deposit) or arrived in it (withdraw). For vault
+     * shares that arrived or left with no USDC (sent from or to another wallet),
+     * what they were worth then, at the vault's share price that day, and
+     * `estimated`: money put in or taken out all the same, so only what the
+     * shares earn while here counts as earned.
+     */
     usdcAmount: usd("usdc_amount").notNull(),
     vault: text("vault").notNull(),
+    /** A share transfer valued at the day's share price, not dollars that moved. Earned is then marked `~`. */
+    estimated: boolean("estimated").notNull().default(false),
     originSource: originSource(),
     txSignature: text("tx_signature").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
@@ -1045,8 +1053,12 @@ export const earnEvents = pgTable(
   },
   (t) => [
     index("earn_event_user_idx").on(t.userId, t.vault),
-    // Confirming the same transaction twice writes nothing new.
-    uniqueIndex("earn_event_signature_idx").on(t.txSignature),
+    /*
+     * Confirming the same transaction twice writes nothing new. Per wallet:
+     * shares sent between a person's own wallets are one transaction, a
+     * withdrawal from one and a deposit into the other.
+     */
+    uniqueIndex("earn_event_wallet_signature_idx").on(t.walletId, t.txSignature),
   ],
 );
 export type EarnEvent = typeof earnEvents.$inferSelect;

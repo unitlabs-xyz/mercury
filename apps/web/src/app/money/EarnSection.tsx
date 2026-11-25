@@ -63,7 +63,7 @@ export const EarnSection = () => {
                 {reading
                   ? READING_HISTORY
                   : h.earnedUsd > 0
-                    ? `+ ${interestText(h.earnedUsd)} earned`
+                    ? `+ ${h.earnedEstimated ? "~" : ""}${interestText(h.earnedUsd)} earned`
                     : "Just started"}
               </span>
             </span>

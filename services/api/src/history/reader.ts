@@ -98,6 +98,8 @@ export async function readWallet(
     readonly walletId: string;
     readonly address: string;
     readonly cursors: Readonly<Record<string, string>>;
+    /** Only these mints' accounts: the Mercury wallet's Earn shares, never its stocks or cash. */
+    readonly onlyMints?: ReadonlySet<string>;
   },
 ): Promise<ReadResult> {
   const { db, history } = deps;
@@ -107,7 +109,9 @@ export async function readWallet(
     throw new Error("the chain client cannot list token accounts");
 
   const listed = await deps.listedMints();
-  const accounts = (await history.ownedTokenAccounts(job.address)).filter((a) => listed.has(a.mint));
+  const accounts = (await history.ownedTokenAccounts(job.address)).filter(
+    (a) => listed.has(a.mint) && (job.onlyMints === undefined || job.onlyMints.has(a.mint)),
+  );
   const recorded = await mercurySignatures(db, job.walletId);
   const pledgedNow = new Map<string, bigint>();
   if (deps.pledged !== undefined) {

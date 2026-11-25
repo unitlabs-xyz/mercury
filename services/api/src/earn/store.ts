@@ -18,6 +18,12 @@ export interface EarnRecord {
   readonly occurredAt: Date;
   /** Who wrote it: Mercury at confirm time, or the history reader afterwards. Mercury unless said. */
   readonly origin?: "mercury" | "chain";
+  /**
+   * Vault shares that arrived or left with no USDC beside them: sent from or to
+   * another wallet. `usdc` is then what they were worth that day, an estimate,
+   * and the feed says shares moved rather than cash.
+   */
+  readonly transfer?: boolean;
 }
 
 export interface EarnSettings {
@@ -34,6 +40,11 @@ export interface EarnLedger {
   save(userId: string, change: Partial<EarnSettings>): Promise<void>;
   /** One wallet's deposits less withdrawals, in USDC, per vault. A vault with nothing recorded is absent. */
   netDeposited(owner: WalletOwner): Promise<ReadonlyMap<string, Decimal>>;
+  /**
+   * The vaults whose ledger holds a share transfer valued at a day's share
+   * price rather than dollars that moved: what they earned is marked `~`.
+   */
+  estimatedVaults(owner: WalletOwner): Promise<ReadonlySet<string>>;
   /** True when written; false when this signature was already recorded. */
   record(event: EarnRecord): Promise<boolean>;
 }
@@ -42,6 +53,12 @@ export interface EarnLedger {
 const FEED = {
   deposit: { kind: "earn_deposit", title: "Moved to Earn" },
   withdraw: { kind: "earn_withdraw", title: "Withdrew from Earn" },
+} as const;
+
+/** Shares that moved without cash: said as shares, so nobody reads them as money added or taken out. */
+const SHARES = {
+  deposit: { kind: "earn_deposit", title: "Earn shares received" },
+  withdraw: { kind: "earn_withdraw", title: "Earn shares sent" },
 } as const;
 
 export const pgEarnLedger = (db: Db): EarnLedger => ({
@@ -72,6 +89,19 @@ export const pgEarnLedger = (db: Db): EarnLedger => ({
       .groupBy(earnEvents.vault);
     return new Map(rows.map((r) => [r.vault, D(r.net)]));
   },
+  async estimatedVaults(owner) {
+    const rows = await db
+      .selectDistinct({ vault: earnEvents.vault })
+      .from(earnEvents)
+      .where(
+        and(
+          eq(earnEvents.userId, owner.userId),
+          eq(earnEvents.walletId, owner.walletId),
+          eq(earnEvents.estimated, true),
+        ),
+      );
+    return new Set(rows.map((r) => r.vault));
+  },
   /*
    * The ledger row and the feed row together, or neither: a move that is in
    * "earned so far" but not in Activity, or the other way round, is the gap
@@ -100,6 +130,7 @@ export async function writeEarnRecord(tx: Tx, e: EarnRecord): Promise<boolean> {
       kind: e.kind,
       usdcAmount: toWire(e.usdc),
       vault: e.vault,
+      estimated: e.transfer === true,
       ...(e.origin === undefined ? {} : { originSource: e.origin }),
       txSignature: e.signature,
       occurredAt: e.occurredAt,
@@ -112,10 +143,15 @@ export async function writeEarnRecord(tx: Tx, e: EarnRecord): Promise<boolean> {
     .values({
       userId: e.userId,
       walletId: e.walletId,
-      kind: FEED[e.kind].kind,
+      kind: (e.transfer === true ? SHARES : FEED)[e.kind].kind,
       occurredAt: e.occurredAt,
-      title: FEED[e.kind].title,
-      subtitle: e.origin === "chain" ? `${e.vaultName} · found in history` : e.vaultName,
+      title: (e.transfer === true ? SHARES : FEED)[e.kind].title,
+      subtitle:
+        e.transfer === true
+          ? `${e.vaultName} · worth about this then`
+          : e.origin === "chain"
+            ? `${e.vaultName} · found in history`
+            : e.vaultName,
       amountUsd: toWire(e.usdc),
       refTable: "earn_event",
       refId: row.id,

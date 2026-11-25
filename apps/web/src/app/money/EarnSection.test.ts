@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ reading: false }));
+const state = vi.hoisted(() => ({ reading: false, earned: 0, estimated: false }));
 vi.mock("../../api/history-reading", () => ({ useHistoryReading: () => state.reading }));
 vi.mock("../Panels", () => ({ usePanels: () => ({ earn: () => undefined }) }));
 vi.mock("../../ui/ds", () => ({ InfoTip: () => null }));
@@ -11,7 +11,16 @@ vi.mock("../earn/VaultMark", () => ({ VaultMark: () => null, rate: (v: number | 
 vi.mock("../../api/earn", () => ({
   useEarn: () => ({
     data: {
-      holdings: [{ address: "v", name: "Steakhouse USDC", balanceUsd: 1000, earnedUsd: 0, apy: 0.05 }],
+      holdings: [
+        {
+          address: "v",
+          name: "Steakhouse USDC",
+          balanceUsd: 1000,
+          earnedUsd: state.earned,
+          earnedEstimated: state.estimated,
+          apy: 0.05,
+        },
+      ],
       walletUsd: 0,
     },
   }),
@@ -22,6 +31,8 @@ const render = () => renderToStaticMarkup(createElement(MemoryRouter, null, crea
 
 beforeEach(() => {
   state.reading = false;
+  state.earned = 0;
+  state.estimated = false;
 });
 
 describe("EarnSection, for a linked wallet", () => {
@@ -36,5 +47,18 @@ describe("EarnSection, for a linked wallet", () => {
     const html = render();
     expect(html).toContain("Just started");
     expect(html).not.toContain("Reading history…");
+  });
+});
+
+describe("EarnSection, earned", () => {
+  it("marks what was earned with `~` where shares sent in or out were valued at a day's price", () => {
+    state.earned = 12.5;
+    state.estimated = true;
+    expect(render()).toContain("+ ~$12.50 earned");
+  });
+
+  it("says it plainly where every figure is dollars that moved", () => {
+    state.earned = 12.5;
+    expect(render()).toContain("+ $12.50 earned");
   });
 });

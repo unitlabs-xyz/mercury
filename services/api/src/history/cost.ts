@@ -40,7 +40,7 @@ import {
   type PlannedLot,
 } from "./cost-plan.js";
 import { SOL_MINT } from "./events.js";
-import { planChainEarn, type EarnVault } from "./earn.js";
+import { planChainEarn, type ChainEarnMove, type EarnVault } from "./earn.js";
 import { writeEarnRecord } from "../earn/store.js";
 import { USDC_MINT } from "@mercury/chain";
 import { recordMoveIn } from "../moves/record.js";
@@ -69,6 +69,13 @@ export interface CostDeps {
    * movements are marked costed and nothing more.
    */
   readonly earnVaults?: () => Promise<ReadonlyMap<string, EarnVault>>;
+  /**
+   * A vault's share price on a day, in dollars a share: what vault shares
+   * that arrived or left with no USDC were worth then. Null when Kamino has
+   * no figure for it. A transfer it cannot price waits, as a stock with no
+   * price does, rather than be guessed. Absent, such transfers are left out.
+   */
+  readonly earnSharePrice?: (vault: string, at: Date) => Promise<Decimal | null>;
 }
 
 export interface CostResult {
@@ -327,9 +334,28 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     linkedAt,
   );
 
+  // Shares that moved without dollars: worth what the vault's share price said that day.
+  const earnPriced: (ChainEarnMove & { readonly usdc: Decimal })[] = [];
+  for (const move of earnMoves) {
+    if (move.usdc !== null) {
+      earnPriced.push({ ...move, usdc: move.usdc });
+      continue;
+    }
+    if (deps.earnSharePrice === undefined || move.transferShares === undefined) continue;
+    const price = await deps.earnSharePrice(move.vault, move.occurredAt);
+    if (price === null) throw new Error(`no share price for Earn vault ${move.vault} on that day`);
+    earnPriced.push({ ...move, usdc: move.transferShares.mul(price) });
+  }
+
   await db.transaction(async (tx) => {
-    for (const move of earnMoves) {
-      await writeEarnRecord(tx, { ...move, userId: wallet.userId, walletId, origin: "chain" });
+    for (const move of earnPriced) {
+      await writeEarnRecord(tx, {
+        ...move,
+        userId: wallet.userId,
+        walletId,
+        origin: "chain",
+        transfer: move.transferShares !== undefined,
+      });
     }
     if (written.length > 0) {
       await tx.insert(lots).values(

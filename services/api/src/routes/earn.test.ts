@@ -126,6 +126,7 @@ const ledger = (
       settings = { ...settings, ...change };
     },
     netDeposited: async () => new Map(Object.entries(net)),
+    estimatedVaults: async () => new Set(),
     record: async (e) => {
       records.push(e);
       return true;

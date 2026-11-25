@@ -221,6 +221,11 @@ export const PortfolioSummary = z.object({
     totalUsd: Usd,
     earnUsd: Usd,
     dividendsUsd: Usd,
+    /**
+     * Some Earn shares were sent in or out by hand and valued at a day's share
+     * price, so what was earned starts with `~`. Optional for older servers.
+     */
+    earnEstimated: z.boolean().optional(),
   }),
   /** Interest owed on every ready wallet's loan: what is owed beyond what was borrowed. */
   loanInterestUsd: Usd,

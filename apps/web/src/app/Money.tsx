@@ -98,7 +98,9 @@ export const Money = () => {
                 />
                 <HeaderFigure
                   label="Earned so far"
-                  value={e.earnedUsd > 0 ? interestText(e.earnedUsd) : usd(0)}
+                  value={
+                    e.earnedUsd > 0 ? `${e.earnedEstimated ? "~" : ""}${interestText(e.earnedUsd)}` : usd(0)
+                  }
                   sub="Added to your Earn balance"
                   tone={e.earnedUsd > 0 ? "up" : undefined}
                 />

@@ -67,6 +67,7 @@ export const summaryLines = (s: PortfolioSummary) => {
   const ready = s.wallets.length - s.calculating;
   const estimated = Number(s.pnl.estimatedCostUsd) > 0;
   const waiting = ready === 0;
+  const earnEstimated = s.income.earnEstimated === true;
   return {
     netWorth: usd(s.netWorthUsd),
     pnl: waiting
@@ -77,8 +78,11 @@ export const summaryLines = (s: PortfolioSummary) => {
             : ` (${Number(s.pnl.returnPct) >= 0 ? "+" : "−"}${Math.abs(Number(s.pnl.returnPct)).toFixed(1)}%)`
         }`,
     pnlSub: waiting ? null : estimated ? `${usd(s.pnl.estimatedCostUsd, 0)} of cost estimated` : null,
-    income: waiting ? "Calculating…" : usdSigned(s.income.totalUsd),
-    incomeSub: waiting ? null : `Earn ${usd(s.income.earnUsd)} · Dividends ${usd(s.income.dividendsUsd)}`,
+    // Earn shares sent in or out by hand were valued at a day's share price: `~`, as an estimated cost is.
+    income: waiting ? "Calculating…" : `${earnEstimated ? "~" : ""}${usdSigned(s.income.totalUsd)}`,
+    incomeSub: waiting
+      ? null
+      : `Earn ${earnEstimated ? "~" : ""}${usd(s.income.earnUsd)} · Dividends ${usd(s.income.dividendsUsd)}`,
     loanInterest: waiting
       ? "Calculating…"
       : Number(s.loanInterestUsd) === 0

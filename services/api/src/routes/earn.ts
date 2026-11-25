@@ -149,14 +149,20 @@ export function earnRoutes(deps: EarnDeps): Hono {
    * balance with a different basis.
    */
   const walletEarn = async (userId: string, wallet: ActingWallet) => {
-    const [net, cash, holdings] = await Promise.all([
+    const [net, estimated, cash, holdings] = await Promise.all([
       deps.ledger.netDeposited({ userId, walletId: wallet.id }),
+      deps.ledger.estimatedVaults({ userId, walletId: wallet.id }),
       walletUsdc(wallet.address),
       deps.directory.holdings(wallet.address),
     ]);
     return {
       cash,
-      holdings: holdings.map((h) => ({ ...h, earned: earnedOn(h.usdc, net.get(h.listing.address)) })),
+      holdings: holdings.map((h) => ({
+        ...h,
+        earned: earnedOn(h.usdc, net.get(h.listing.address)),
+        // Shares sent in or out were valued at a day's share price: earned is `~`.
+        estimated: estimated.has(h.listing.address),
+      })),
     };
   };
 
@@ -174,7 +180,14 @@ export function earnRoutes(deps: EarnDeps): Hono {
       const seen = byVault.get(h.listing.address);
       byVault.set(
         h.listing.address,
-        seen === undefined ? h : { ...seen, usdc: seen.usdc.add(h.usdc), earned: seen.earned.add(h.earned) },
+        seen === undefined
+          ? h
+          : {
+              ...seen,
+              usdc: seen.usdc.add(h.usdc),
+              earned: seen.earned.add(h.earned),
+              estimated: seen.estimated || h.estimated,
+            },
       );
     }
     const holdings = [...byVault.values()];
@@ -183,6 +196,7 @@ export function earnRoutes(deps: EarnDeps): Hono {
       ...vaultJson(h.listing),
       balanceUsd: usd(h.usdc),
       earnedUsd: tiny(h.earned),
+      earnedEstimated: h.estimated,
     }));
     const total = holdings.reduce((s, h) => s.add(h.usdc), ZERO);
     const earned = holdings.reduce((s, h) => s.add(h.earned), ZERO);
@@ -191,6 +205,7 @@ export function earnRoutes(deps: EarnDeps): Hono {
       holdings: rows,
       balanceUsd: usd(total),
       earnedUsd: tiny(earned),
+      earnedEstimated: holdings.some((h) => h.estimated),
       // The rate the whole balance earns now: each vault's, weighted by what is in it.
       apy: total.isZero()
         ? null

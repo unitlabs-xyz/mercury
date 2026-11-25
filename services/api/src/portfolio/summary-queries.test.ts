@@ -176,7 +176,12 @@ describe("readSummary", () => {
       estimatedCostUsd: "100",
     });
     // $10 earned over $200 in Earn, and $4 of dividends in each ready wallet.
-    expect(summary.income).toEqual({ earnUsd: "10", dividendsUsd: "8", totalUsd: "18" });
+    expect(summary.income).toEqual({
+      earnUsd: "10",
+      dividendsUsd: "8",
+      totalUsd: "18",
+      earnEstimated: false,
+    });
     // $105 owed on $100 borrowed.
     expect(summary.loanInterestUsd).toBe("5");
     expect(summary.calculating).toBe(1);

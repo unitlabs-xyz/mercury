@@ -63,7 +63,7 @@ describe("planChainEarn", () => {
       vaultName: "Steakhouse USDC",
       occurredAt: AT,
     });
-    expect(move!.usdc.toString()).toBe("250");
+    expect(move!.usdc!.toString()).toBe("250");
   });
 
   it("reads shares that left for USDC as money taken out, at the USDC that came back", () => {
@@ -75,24 +75,30 @@ describe("planChainEarn", () => {
       LINKED,
     );
     expect(move).toMatchObject({ kind: "withdraw", vault: "SteakVault" });
-    expect(move!.usdc.toString()).toBe("262.5");
+    expect(move!.usdc!.toString()).toBe("262.5");
   });
 
-  it("leaves out shares moved with no dollars on the other side: no figure is invented", () => {
-    expect(
-      planChainEarn(
-        [
-          event({ kind: "in", counterMint: null }),
-          event({ kind: "in", counterMint: "SomeOtherToken", counterAmountRaw: 5n }),
-          event({ kind: "out", raw: withdrawal(0n) }),
-          event({ kind: "out", raw: null }),
-        ],
-        VAULTS,
-        ME,
-        USDC,
-        LINKED,
-      ),
-    ).toEqual([]);
+  it("reads shares moved with no dollars beside them as a transfer, for the cost pass to value", () => {
+    const moves = planChainEarn(
+      [
+        event({ kind: "in", counterMint: null, signature: "In1" }),
+        event({ kind: "in", counterMint: "SomeOtherToken", counterAmountRaw: 5n, signature: "In2" }),
+        event({ kind: "out", raw: withdrawal(0n), signature: "Out1" }),
+      ],
+      VAULTS,
+      ME,
+      USDC,
+      LINKED,
+    );
+    expect(moves.map((m) => [m.signature, m.kind, m.usdc, m.transferShares?.toString()])).toEqual([
+      ["In1", "deposit", null, expect.any(String)],
+      ["In2", "deposit", null, expect.any(String)],
+      ["Out1", "withdraw", null, expect.any(String)],
+    ]);
+  });
+
+  it("leaves out a departure whose transaction wasn't kept: nothing to read it from", () => {
+    expect(planChainEarn([event({ kind: "out", raw: null })], VAULTS, ME, USDC, LINKED)).toEqual([]);
   });
 
   it("leaves out tokens that are not an Earn vault's shares", () => {

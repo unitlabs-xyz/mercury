@@ -110,6 +110,7 @@ export async function readSummaryRecords(
           total: sql<
             string | null
           >`sum(case when ${earnEvents.kind} = 'deposit' then ${earnEvents.usdcAmount} else -${earnEvents.usdcAmount} end)`,
+          estimated: sql<boolean>`bool_or(${earnEvents.estimated})`,
         })
         .from(earnEvents)
         .where(and(eq(earnEvents.userId, userId), inArray(earnEvents.walletId, ids)))
@@ -171,6 +172,7 @@ export async function readSummaryRecords(
           realisedUsd: zero(realisedBy, id),
           dividendsUsd: zero(dividendsBy, id),
           earnNetDepositedUsd: earnBy.get(id) ?? null,
+          earnEstimated: earnNet.some((r) => r.walletId === id && r.estimated === true),
           loanLedger: ledgerBy.get(id) ?? [],
           loanHealth: healthBy.get(id) ?? null,
           historyRead: readSet.has(id),

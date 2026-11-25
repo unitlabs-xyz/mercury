@@ -819,6 +819,84 @@ describe("costWallet, a linked wallet's Earn", () => {
     ]);
   });
 
+  /** Shares sent in or out by hand: no USDC beside them, 1,000,000 of them at the vault's six decimals. */
+  const shareTransfer = async (
+    s: Awaited<ReturnType<typeof seed>>,
+    sig: string,
+    kind: "in" | "out",
+    at: Date,
+  ) => {
+    const raw = rawJson({
+      signature: sig,
+      blockTime: 1,
+      succeeded: true,
+      accountKeys: [ME],
+      feeLamports: 0n,
+      preLamports: [],
+      postLamports: [],
+      preTokens: [],
+      postTokens: [],
+    });
+    await s.db.insert(historyTxs).values({ signature: sig, slot: 1n, blockTime: at, raw });
+    await s.db.insert(historyEvents).values({
+      walletId: s.walletId,
+      account: "shares-acct",
+      signature: sig,
+      blockTime: at,
+      kind,
+      mint: SHARES,
+      amountRaw: 1_000_000n,
+      counterMint: null,
+      counterAmountRaw: null,
+    });
+  };
+
+  it("counts shares sent in or out by hand as money in or out, at the share price that day, not as interest", async () => {
+    const s = await seed();
+    await shareMove(s, "E1", "in", 500_000_000n, day(2));
+    await shareTransfer(s, "T1", "in", day(5));
+    await shareTransfer(s, "T2", "out", day(8));
+    const asked: string[] = [];
+    // One share was $1.04 on day 5 and $1.05 on day 8.
+    const earnSharePrice = async (vault: string, at: Date) => {
+      asked.push(`${vault}@${at.toISOString()}`);
+      return at.getTime() === day(5).getTime() ? D("1.04") : D("1.05");
+    };
+
+    await costWallet({ ...deps(s.db, pastOf({}).past), earnVaults, earnSharePrice }, s.walletId, NOW);
+
+    const rows = await s.db.select().from(earnEvents).where(eq(earnEvents.walletId, s.walletId));
+    expect(rows.map((r) => [r.txSignature, r.kind, D(r.usdcAmount).toString(), r.estimated]).sort()).toEqual([
+      ["E1", "deposit", "500", false],
+      ["T1", "deposit", "1.04", true],
+      ["T2", "withdraw", "1.05", true],
+    ]);
+    expect(asked).toEqual([`SteakVault@${day(5).toISOString()}`, `SteakVault@${day(8).toISOString()}`]);
+    const ledger = pgEarnLedger(s.db);
+    expect([...(await ledger.estimatedVaults({ userId: s.userId, walletId: s.walletId }))]).toEqual([
+      "SteakVault",
+    ]);
+    const feed = await s.db.select().from(activities).where(eq(activities.txSignature, "T1"));
+    expect([feed[0]!.title, feed[0]!.subtitle]).toEqual([
+      "Earn shares received",
+      "Steakhouse USDC · worth about this then",
+    ]);
+  });
+
+  it("waits, writing nothing, when the share price for a transfer can't be read", async () => {
+    const s = await seed();
+    await shareTransfer(s, "T1", "in", day(5));
+    await expect(
+      costWallet(
+        { ...deps(s.db, pastOf({}).past), earnVaults, earnSharePrice: async () => null },
+        s.walletId,
+        NOW,
+      ),
+    ).rejects.toThrow("no share price");
+    expect(await s.db.select().from(earnEvents)).toEqual([]);
+    expect((await s.job()).status).toBe("read");
+  });
+
   it("keeps an Earn move Mercury recorded as it was, and writes the rest once", async () => {
     const s = await seed();
     await shareMove(s, "E1", "in", 500_000_000n, day(2));

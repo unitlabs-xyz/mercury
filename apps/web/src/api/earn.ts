@@ -31,13 +31,15 @@ type VaultWire = {
   offered?: boolean;
 };
 
-type HoldingWire = VaultWire & { balanceUsd: string; earnedUsd: string };
+/** `earnedEstimated` is absent from an older server: nothing was estimated then. */
+type HoldingWire = VaultWire & { balanceUsd: string; earnedUsd: string; earnedEstimated?: boolean };
 
 type EarnWire = {
   selected: string;
   holdings: HoldingWire[];
   balanceUsd: string;
   earnedUsd: string;
+  earnedEstimated?: boolean;
   apy: string | null;
   walletUsd: string;
   /** Absent from an older server, which asked nothing before a deposit. */
@@ -74,7 +76,11 @@ export type EarnVault = {
   offered: boolean;
 };
 
-export type EarnHolding = EarnVault & { balanceUsd: number; earnedUsd: number };
+/**
+ * `earnedEstimated`: some Earn shares were sent in or out by hand and valued at
+ * a day's share price, so what was earned is shown with `~`.
+ */
+export type EarnHolding = EarnVault & { balanceUsd: number; earnedUsd: number; earnedEstimated: boolean };
 
 export type Earn = {
   /** Where new cash goes unless another vault is picked: the last one moved into. */
@@ -83,6 +89,7 @@ export type Earn = {
   holdings: EarnHolding[];
   balanceUsd: number;
   earnedUsd: number;
+  earnedEstimated: boolean;
   /** What the whole balance earns now; null with nothing in. */
   apy: number | null;
   /** Idle in the wallet: what could move in. */
@@ -129,9 +136,11 @@ export const useEarn = () => {
           ...vaultFromWire(h),
           balanceUsd: Number(h.balanceUsd),
           earnedUsd: Number(h.earnedUsd),
+          earnedEstimated: h.earnedEstimated === true,
         })),
         balanceUsd: Number(w.balanceUsd),
         earnedUsd: Number(w.earnedUsd),
+        earnedEstimated: w.earnedEstimated === true,
         apy: n(w.apy),
         walletUsd: Number(w.walletUsd),
         riskAccepted: w.riskAccepted ?? true,

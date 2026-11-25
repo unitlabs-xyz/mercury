@@ -168,7 +168,7 @@ export const Earn = () => {
                       {reading
                         ? READING_HISTORY
                         : e.earnedUsd > 0
-                          ? `+ ${interestText(e.earnedUsd)}`
+                          ? `+ ${e.earnedEstimated ? "~" : ""}${interestText(e.earnedUsd)}`
                           : "Earning"}
                     </span>
                   </span>
@@ -244,7 +244,7 @@ export const Earn = () => {
                         {reading
                           ? READING_HISTORY
                           : h.earnedUsd > 0
-                            ? `+ ${interestText(h.earnedUsd)}`
+                            ? `+ ${h.earnedEstimated ? "~" : ""}${interestText(h.earnedUsd)}`
                             : "Just started"}
                       </span>
                     </span>
@@ -591,7 +591,12 @@ const VaultPanel = ({
               {reading ? (
                 <span>{READING_HISTORY}</span>
               ) : (
-                held.earnedUsd > 0 && <span>+ {interestText(held.earnedUsd)}</span>
+                held.earnedUsd > 0 && (
+                  <span>
+                    + {held.earnedEstimated ? "~" : ""}
+                    {interestText(held.earnedUsd)}
+                  </span>
+                )
               )}
             </p>
           )}

@@ -131,6 +131,12 @@ describe("summaryLines", () => {
     expect(l.pnlSub).toBe("$9,100 of cost estimated");
   });
 
+  it("marks income with `~` when Earn shares sent in or out were valued at a day's share price", () => {
+    const l = summaryLines(summary({ income: { ...summary().income, earnEstimated: true } }));
+    expect(l.income).toBe("~+$15.75");
+    expect(l.incomeSub).toBe("Earn ~$12.50 · Dividends $3.25");
+  });
+
   it("shows a loss as one", () => {
     const l = summaryLines(summary({ pnl: { ...summary().pnl, totalUsd: "-40", returnPct: "-5" } }));
     expect(l.pnl).toBe("−$40.00 (−5.0%)");

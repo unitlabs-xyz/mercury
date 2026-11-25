@@ -28,6 +28,7 @@ import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
 import { missedSnapshots } from "./portfolio/snapshot-retry.js";
 import { watchAllLoans } from "./lending/watch-loans.js";
 import { pledgedByMint } from "./lending/pledged.js";
+import { sharePriceOn } from "./earn/share-price.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
@@ -723,6 +724,8 @@ every(
       laneBusy: () => laneRefusedWithin(60_000),
       // Pledged shares are still held: an account emptied by pledging is read, not skipped.
       pledged: (owner) => pledgedByMint(deps.lending, owner),
+      // The Mercury wallet's Earn shares, read for shares sent in or out by hand.
+      earnShareMints: async () => new Set((await deps.earn.list()).map((v) => v.sharesMint)),
     },
     // A linked wallet's loan, from Kamino's own record of it: when it opened, each pledge at its price then.
     loan: {
@@ -755,7 +758,14 @@ every(
     board: deps.prices,
     // Earn's vaults by share token, so a linked wallet's Earn moves are read into the ledger.
     earnVaults: async () =>
-      new Map((await deps.earn.list()).map((v) => [v.sharesMint, { address: v.address, name: v.name }])),
+      new Map(
+        (await deps.earn.list()).map((v) => [
+          v.sharesMint,
+          { address: v.address, name: v.name, sharesDecimals: v.sharesDecimals },
+        ]),
+      ),
+    // Earn shares sent in or out with no USDC: valued at the vault's share price that day.
+    earnSharePrice: (vault, at) => sharePriceOn(deps.earn.api, vault, at),
     log: logger("history-cost"),
   }),
   jobClock(6 * 60_000),

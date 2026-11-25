@@ -616,6 +616,21 @@ The Earn vault's share token is a token account like any other. Its arrivals and
 the USDC that moved in the same transactions, give the net USDC put in. **Interest earned = the
 shares' value now − net USDC put in.** Exact, written as `earn_event` rows with `origin_source: "chain"`.
 
+**Shares that move without USDC are money in or out, not interest.** Vault shares sent to the
+wallet by hand (from an exchange, a person, or the person's own other wallet) would otherwise count
+whole as earned, and shares sent away would take what they had earned with them. Each such move is
+a deposit or a withdrawal at what the shares were worth that day: the vault's share price from
+Kamino's daily history (`/kvaults/{vault}/metrics/history`), the last reading at or before the
+move. Marked `estimated`, since a daily price can be up to a day's interest off; what was earned
+then starts with `~` on the Earn page and in Home's income, as an estimated cost does on P&L. A
+move whose day has no price waits, as a stock with no price does. Shares sent between two of the
+person's own wallets are both: a withdrawal from one and a deposit into the other, so the interest
+stays where it was earned (the ledger is unique per wallet and signature for that reason).
+
+The Mercury wallet has the same gap, so it is read too: its Earn share accounts only, never its
+stocks or cash, which are Mercury's own records. Every Mercury wallet gets a history job for this;
+its P&L never waits for it.
+
 ### After the first read
 
 The reader keeps each account's cursor and reads only newer signatures, every 5 minutes for wallets

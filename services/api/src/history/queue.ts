@@ -62,6 +62,25 @@ export async function queueHistory(
 }
 
 /**
+ * A job for every Mercury wallet that has none: its Earn share accounts are
+ * read like a linked wallet's tokens, so vault shares sent to or from it by
+ * hand are money in or out rather than interest (`planChainEarn`). Only those
+ * accounts: everything else in it is Mercury's own and already in its books.
+ * Its P&L never waits for this; the summary counts the Mercury wallet ready
+ * whatever its job says.
+ */
+export async function queueMercuryEarnReads(db: Db, now: Date): Promise<void> {
+  await db.execute(sql`
+    insert into ${historyJobs} (wallet_id, user_id, status, run_after)
+    select ${wallets.id}, ${wallets.userId}, 'queued', ${now.toISOString()}::timestamptz
+    from ${wallets}
+    where ${wallets.isPrimary} = true
+      and not exists (select 1 from ${historyJobs} where ${historyJobs.walletId} = ${wallets.id})
+    on conflict do nothing
+  `);
+}
+
+/**
  * Take the next job that is due, or null. First reads come before later
  * passes, and the longest-waiting first. Only a followed wallet's job is
  * taken: an unlinked wallet's waits, cursors and all, for a link again.
