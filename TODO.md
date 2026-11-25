@@ -35,7 +35,7 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 
 ## Local branches nobody has pushed
 
-- [ ] `feat/import-stocks`: one docs commit, Part B of importing stocks answered and Part C corrected.
+- [ ] `feat/import-stocks`: one docs commit, Part B of importing stocks answered and Part C corrected. Its spec is superseded by linked wallets; keep only what that branch adds to the transfer and basis rules.
       Push it or drop it
 - [ ] `feat/trade-router`: its docs are on `main` now. The branch can go once #97 merges
 - [ ] Prune the local branches whose pull requests have merged
@@ -103,6 +103,27 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 - [ ] Move the fees out of the relayer's hot wallet. The trade router is the design
 - [ ] Weekly check: SOL the relayer spent against the USDC it collected
 - [ ] Decide whether Send keeps absorbing its signature
+
+## Linked wallets: designed, in review
+
+[ADR 0017](docs/adr/0017-linked-wallets.md) (proposed),
+[spec](docs/superpowers/specs/2026-11-13-linked-wallets-design.md). Link up to 5 Solana wallets
+beside the Mercury wallet, see them on web and iOS, act for them on web, move funds and baskets
+into the Mercury wallet, and rebuild their past (cost, loan deposits, Earn interest) with a
+history reader inside the API.
+
+- [ ] Review the spec and accept or amend ADR 0017
+- [ ] Sanctions screening for linked wallets: designed separately, not in this spec. Choose a
+      provider and settle with counsel what happens to a wallet flagged after it was linked, before
+      linking opens to the public
+- [ ] Before linking opens (build step 3): `loan-watch` reads loans from Kamino's API instead of the chain.
+      Token accounts and wallet streams already subscribe (#112); linking needs only
+      `portfolio/accounts.ts` and `wallet-events/streams.ts` to list active wallets
+- [ ] Watch public-lane connection count as links grow: ~10 subscriptions per wallet, 398 per
+      Solana Vibe Station connection, no SLA
+- [ ] Test on mainnet whether Phantom's scanner flags a multi-token move, and start domain
+      verification with its security provider
+- [ ] Build steps 1–7 (link, track, read on web and iOS, cost and P&L from history): the first release
 
 ## Trade router: designed, not to be built until the go-ahead
 
