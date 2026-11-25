@@ -24,6 +24,12 @@ export interface MoveRecord {
   readonly moved: readonly { readonly mint: string; readonly amountRaw: bigint }[];
   /** USDC's mint: its rows carry their dollars, so the two sides cancel under every wallet at once. */
   readonly usdcMint?: string;
+  /**
+   * When the source's departure is recorded, where the order matters: the cost
+   * pass writes a later costing's buys, sales and moves one after another, and
+   * the replay goes by this. Now, unless given.
+   */
+  readonly recordedAt?: Date;
 }
 
 const fixed = (d: Decimal) => d.toFixed();
@@ -146,6 +152,7 @@ export async function recordMoveIn(tx: Tx, input: MoveRecord): Promise<{ written
       shares: fixed(scaled(m.amountRaw, stock.decimals).mul(multiplier)),
       kind: "transfer_out",
       occurredAt: input.occurredAt,
+      ...(input.recordedAt === undefined ? {} : { recordedAt: input.recordedAt }),
     });
 
     const costedRaw = m.amountRaw < open.tokenQty ? m.amountRaw : open.tokenQty;

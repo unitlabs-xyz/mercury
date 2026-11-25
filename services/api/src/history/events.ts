@@ -91,8 +91,29 @@ const solSpent = (tx: TransactionDetail, owner: string): bigint => {
   const before = tx.preLamports[i] ?? 0n;
   const after = tx.postLamports[i] ?? 0n;
   const fee = i === 0 ? tx.feeLamports : 0n;
-  const spent = before - after - fee;
-  return spent > 0n ? spent : 0n;
+  // Rent for accounts this transaction opened (the token account the shares landed in) is not a price.
+  const spent = before - after - fee - rentOpened(tx, i);
+  // Below this it is a tip or dust, not what shares were bought with: the arrival is priced as one from outside.
+  return spent >= MIN_SOL_PAYMENT ? spent : 0n;
+};
+
+/**
+ * The least SOL that reads as paying for shares: 0.01 SOL, about a dollar
+ * and a half. Below it, what the wallet spent beyond the fee and any rent is
+ * a priority tip or dust, and dividing it by the shares gave a cost of cents.
+ */
+export const MIN_SOL_PAYMENT = 10_000_000n;
+
+/** Lamports put into accounts that had none before this transaction: their rent, paid by whoever opened them. */
+const rentOpened = (tx: TransactionDetail, owner: number): bigint => {
+  let rent = 0n;
+  tx.accountKeys.forEach((_, j) => {
+    if (j === owner) return;
+    const pre = tx.preLamports[j] ?? 0n;
+    const post = tx.postLamports[j] ?? 0n;
+    if (pre === 0n && post > 0n) rent += post;
+  });
+  return rent;
 };
 
 /** Who sent `mint` to `owner`, from the parsed transfers, else from whose balance of it fell. */

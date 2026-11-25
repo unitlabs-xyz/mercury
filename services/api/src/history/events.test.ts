@@ -49,6 +49,53 @@ describe("balanceOf", () => {
   });
 });
 
+describe("movementOf, SOL that isn't a price", () => {
+  const NEW_ACCT = "NewTslaAcct1111111111111111111111111111111";
+
+  it("reads shares landing in an account the transaction opened, with only its rent spent, as from outside", () => {
+    // 0.00204 SOL of rent for the new account, and the fee: no price in that.
+    const m = movementOf(
+      tx({
+        accountKeys: [ME, NEW_ACCT, FRIEND],
+        preLamports: [1_000_000_000n, 0n, 5n],
+        postLamports: [997_955_720n, 2_039_280n, 5n],
+        preTokens: [entry(FRIEND, TSLAX, 10n)],
+        postTokens: [entry(ME, TSLAX, 10n), entry(FRIEND, TSLAX, 0n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m).toMatchObject({ kind: "in", counterMint: null, counterAmountRaw: null, sourceOwner: FRIEND });
+  });
+
+  it("reads a tip of SOL as no price either", () => {
+    const m = movementOf(
+      tx({
+        preLamports: [1_000_000_000n],
+        postLamports: [999_895_000n],
+        postTokens: [entry(ME, TSLAX, 10n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m).toMatchObject({ counterMint: null });
+  });
+
+  it("still reads a real payment in SOL as the price, beyond any rent", () => {
+    const m = movementOf(
+      tx({
+        accountKeys: [ME, NEW_ACCT],
+        preLamports: [3_000_000_000n, 0n],
+        postLamports: [1_997_955_720n, 2_039_280n],
+        postTokens: [entry(ME, TSLAX, 50_000_000n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m).toMatchObject({ counterMint: SOL_MINT, counterAmountRaw: 1_000_000_000n });
+  });
+});
+
 describe("movementOf, at Kamino", () => {
   const RESERVE = "Reserve11111111111111111111111111111111111";
 

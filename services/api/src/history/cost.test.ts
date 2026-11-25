@@ -6,6 +6,7 @@ import type { PastPriceSource, PriceBoard } from "@mercury/market";
 import { mercuryWallet, testDb } from "../db/testing.js";
 import {
   activities,
+  basketAccounts,
   disposals,
   earnEvents,
   historyEvents,
@@ -700,6 +701,123 @@ describe("costWallet, a later costing", () => {
         ["mercury", "transfer_in", "Moved from Phan…1111"],
       ].sort(),
     );
+  });
+
+  it("carries a move at what was held just before it, not after a buy that came in the same pass", async () => {
+    const s = await seed("done");
+    await s.db.insert(lots).values({
+      userId: s.userId,
+      walletId: s.walletId,
+      tokenId: s.tokenId,
+      instrumentId: s.instrumentId,
+      tokenQty: tokensOf(10),
+      shares: "10",
+      unitCostUsd: "100",
+      acquiredAt: day(1),
+      recordedAt: day(1),
+      source: "chain",
+    });
+    await s.found({
+      kind: "in",
+      amount: tokensOf(10),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 1_000_000_000n,
+      costed: true,
+    });
+    // Sent all 10 to the Mercury wallet, then bought 10 at $200.
+    await s.found({ kind: "out", amount: tokensOf(10), at: day(5), destinationOwner: MAIN });
+    await s.found({
+      kind: "in",
+      amount: tokensOf(10),
+      at: day(6),
+      counterMint: USDC,
+      counterAmount: 2_000_000_000n,
+    });
+
+    await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+
+    const [carried] = await mercurySide(s);
+    expect([carried!.tokenQty, D(carried!.unitCostUsd).toString()]).toEqual([tokensOf(10), "100"]);
+  });
+
+  it("replays in slot order, so a buy and a sale in the same second never swap places", async () => {
+    const s = await seed();
+    // Bought 10 and sold them in the same second. The sale's event is written first, and event ids are random.
+    const at = day(3);
+    await s.db.insert(historyTxs).values([
+      { signature: "Buy", slot: 100n, blockTime: at, raw: {} },
+      { signature: "Sell", slot: 101n, blockTime: at, raw: {} },
+    ]);
+    const event = (signature: string, kind: "in" | "out") => ({
+      walletId: s.walletId,
+      account: `${TSLAX}-acct`,
+      signature,
+      blockTime: at,
+      kind,
+      mint: TSLAX,
+      amountRaw: tokensOf(10),
+      counterMint: USDC,
+      counterAmountRaw: 1_000_000_000n,
+    });
+    await s.db.insert(historyEvents).values(event("Sell", "out"));
+    await s.db.insert(historyEvents).values(event("Buy", "in"));
+
+    await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+
+    // Nothing left: the sale took the shares the buy brought.
+    expect(await s.chainLots()).toEqual([]);
+  });
+
+  it("leaves shares out of one of the person's own baskets to the basket's reconciler", async () => {
+    const s = await seed("done");
+    await s.found({
+      kind: "in",
+      amount: tokensOf(1),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 100_000_000n,
+      costed: true,
+    });
+    await s.db
+      .insert(basketAccounts)
+      .values({ userId: s.userId, address: "BasketSmartAcct1111", portfolioId: "p1" });
+    await s.found({ kind: "in", amount: tokensOf(4), at: day(5), sourceOwner: "BasketSmartAcct1111" });
+    const { past, asked } = pastOf({ TSLA: 250 });
+
+    const r = await costWallet(deps(s.db, past), s.walletId, NOW);
+
+    expect(r.costed).toBe(1);
+    expect(await s.chainLots()).toEqual([]);
+    expect(asked).toEqual([]);
+  });
+
+  it("doesn't let an Earn transfer it can't price hold every stock's cost up once it has given up waiting", async () => {
+    const s = await seed();
+    await s.found({
+      kind: "in",
+      amount: tokensOf(1),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 100_000_000n,
+    });
+    await s.found({
+      kind: "in",
+      amount: 1_000_000n,
+      at: day(2),
+      mint: "SteakShares1111111111111111111111111111111",
+    });
+    const earnVaults = async () =>
+      new Map([
+        ["SteakShares1111111111111111111111111111111", { address: "SteakVault", name: "Steakhouse USDC" }],
+      ]);
+    await costWallet(
+      { ...deps(s.db, pastOf({}).past), earnVaults, earnSharePrice: async () => null, skipPast: true },
+      s.walletId,
+      NOW,
+    );
+    expect((await s.chainLots()).map((l) => l.tokenQty)).toEqual([tokensOf(1)]);
+    expect((await s.job()).status).toBe("done");
   });
 
   it("carries a move the relayer already recorded only once, on the first costing or a later one", async () => {

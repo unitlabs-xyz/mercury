@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -13,7 +14,16 @@ import { defineConfig } from "vitest/config";
  *
  * Twenty seconds is far above what any of these tests need and still well
  * under a wait anyone would sit through, so a genuine hang is still caught.
+ *
+ * And no more than four files at once. A file per core started that many
+ * databases together, and on a full `pnpm test`, beside the other packages'
+ * suites, first tests timed out even at twenty seconds, eight at a time, and
+ * the order tests that build real transactions failed under the load. Every
+ * one passed alone, and the whole suite passed at four. Half the cores, two
+ * to four, keeps a green run meaning green.
  */
+const workers = Math.max(2, Math.min(4, Math.floor(availableParallelism() / 2)));
+
 export default defineConfig({
-  test: { testTimeout: 20_000, hookTimeout: 20_000 },
+  test: { testTimeout: 20_000, hookTimeout: 20_000, maxWorkers: workers, minWorkers: 1 },
 });

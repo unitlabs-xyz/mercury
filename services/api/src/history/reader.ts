@@ -16,6 +16,18 @@ export class PledgeUnknown extends Error {
   }
 }
 
+/**
+ * The node listed a signature on the account but would not return the
+ * transaction: not indexed yet, or pruned. Thrown rather than skipped, so a
+ * purchase in it is not lost for good; the pass fails and is tried again.
+ */
+export class TransactionUnavailable extends Error {
+  constructor(readonly signature: string) {
+    super(`the node did not return a listed transaction (${signature.slice(0, 8)}…); trying again later`);
+    this.name = "TransactionUnavailable";
+  }
+}
+
 /** The jobs' own lane was refused mid-pass: the reader stops and gives way, and the pass is tried again later. */
 export class GiveWay extends Error {
   constructor() {
@@ -184,7 +196,10 @@ export async function readWallet(
         if (tx === null) {
           if (deps.laneBusy()) throw new GiveWay();
           tx = await history.transaction(ref.signature);
-          if (tx === null) continue; // pruned by the node: nothing to learn from it
+          // Listed but not given: not indexed yet, or pruned by this node. Skipped, a buy in it
+          // would never get its cost, so the pass fails and is tried again, further out each
+          // time. What it read so far is kept, so a retry asks the node for nothing twice.
+          if (tx === null) throw new TransactionUnavailable(ref.signature);
           // Kept at once: whatever stops this pass, the next one won't ask for it again.
           await db
             .insert(historyTxs)
@@ -198,6 +213,9 @@ export async function readWallet(
         }
         read.push({ ref, tx });
         if (cursor !== undefined) continue;
+        // A transaction the node kept without its details says nothing about balances: its
+        // empty token lists are not "held none before", so the walk goes on past it.
+        if (!tx.succeeded) continue;
         const m = movementOf(tx, job.address, account.mint);
         if (m?.kind === "loan_deposit") pledged = pledged > m.amountRaw ? pledged - m.amountRaw : 0n;
         else if (m?.kind === "loan_withdraw") pledged += m.amountRaw;

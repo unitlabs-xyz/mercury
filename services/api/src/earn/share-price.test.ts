@@ -28,6 +28,11 @@ describe("sharePriceOn", () => {
     expect(price?.toString()).toBe("1.02");
   });
 
+  it("takes the vault's share price now where Kamino's history has nothing near the day", async () => {
+    const withNow = { ...api([]), metrics: async () => ({ tokensPerShare: D("1.07") }) };
+    expect((await sharePriceOn(withNow as never, "Vault", new Date()))?.toString()).toBe("1.07");
+  });
+
   it("says nothing when Kamino has no reading near it, or can't be read", async () => {
     expect(await sharePriceOn(api([]), "Vault", new Date())).toBeNull();
     expect(await sharePriceOn(api(null), "Vault", new Date())).toBeNull();

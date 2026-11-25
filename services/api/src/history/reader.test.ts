@@ -14,7 +14,7 @@ import {
 import { KAMINO_LENDING_PROGRAM, rawJson } from "./events.js";
 import { RateLimited } from "./budget.js";
 import { finishHistoryPass } from "./queue.js";
-import { GiveWay, PledgeUnknown, readWallet } from "./reader.js";
+import { GiveWay, PledgeUnknown, readWallet, TransactionUnavailable } from "./reader.js";
 
 const ME = "Phantom1111111111111111111111111111111111111";
 const TSLAX = "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB";
@@ -207,21 +207,52 @@ describe("readWallet, a first read", () => {
     expect(r).toMatchObject({ transactions: 3, capped: 1, cursors: { [TSLA_ACCT]: "S10" } });
   });
 
-  it("skips failed and pruned transactions", async () => {
+  it("skips a transaction that failed on chain, which moved nothing", async () => {
     const s = await seed();
     const c = chain([owned(TSLA_ACCT, TSLAX, 10n)], {
       [TSLA_ACCT]: [{ tx: move("S1", 1, 0n, 10n) }, { tx: move("Failed", 2, 10n, 10n), failed: true }],
     });
-    const pruned: ChainHistory = {
-      ...c.history,
-      transaction: async (sig) => (sig === "S1" ? c.history.transaction(sig) : null),
-    };
     const r = await readWallet(
-      { db: s.db, history: pruned, listedMints: LISTED, laneBusy: quiet },
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet },
       { walletId: s.walletId, address: ME, cursors: {} },
     );
     expect(c.asked).toEqual(["S1"]);
     expect(r.events).toBe(1);
+  });
+
+  it("fails the pass, rather than lose a purchase for good, when the node won't return a listed transaction", async () => {
+    const s = await seed();
+    const c = chain([owned(TSLA_ACCT, TSLAX, 10n)], {
+      [TSLA_ACCT]: [{ tx: move("S1", 1, 0n, 10n) }],
+    });
+    const missing: ChainHistory = { ...c.history, transaction: async () => null };
+    await expect(
+      readWallet(
+        { db: s.db, history: missing, listedMints: LISTED, laneBusy: quiet },
+        { walletId: s.walletId, address: ME, cursors: {} },
+      ),
+    ).rejects.toBeInstanceOf(TransactionUnavailable);
+  });
+
+  it('walks on past a transaction the node kept without its details: no balances there is not "held none"', async () => {
+    const s = await seed();
+    const noDetails: TransactionDetail = {
+      ...move("Bare", 2, 0n, 0n),
+      succeeded: false,
+      preTokens: [],
+      postTokens: [],
+    };
+    // Bought 10 at $100, a transaction with no details, then 5 more.
+    const c = chain([owned(TSLA_ACCT, TSLAX, 15n)], {
+      [TSLA_ACCT]: [{ tx: move("S1", 1, 0n, 10n) }, { tx: noDetails }, { tx: move("S3", 3, 10n, 15n) }],
+    });
+    await readWallet(
+      { db: s.db, history: c.history, listedMints: LISTED, laneBusy: quiet },
+      { walletId: s.walletId, address: ME, cursors: {} },
+    );
+    expect(c.asked).toEqual(["S3", "Bare", "S1"]);
+    const events = await s.db.select().from(historyEvents).where(eq(historyEvents.walletId, s.walletId));
+    expect(events.map((e) => e.signature).sort()).toEqual(["S1", "S3"]);
   });
 
   it("skips what Mercury itself recorded for the wallet, which its books already have exactly", async () => {

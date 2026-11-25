@@ -494,6 +494,15 @@ waits a minute, uncounted, rather than read a pledged holding as sold.
 What this gives up is realised P&L on positions closed before that point, outside Mercury and
 before linking. Realised P&L on anything sold through Mercury, or after linking, is kept.
 
+**What the walk never mistakes.** A transaction the node keeps without its details (no balances)
+doesn't stop the walk: "no balances" is not "held none". One the node lists but won't return (not
+indexed yet, or pruned) fails the pass, retried further out each time, rather than being skipped
+with a purchase in it. Events are replayed in slot order, not block time, which is whole seconds: a
+buy and a sale in one second never swap places. SOL is an arrival's price only beyond the rent of
+accounts its transaction opened, and only from 0.01 SOL up; less is a tip, and the arrival is priced
+as one from outside. Shares out of one of the person's own Mercury baskets are left to the basket's
+reconciler, which records them with their share of the basket's cost.
+
 **There is no cap.** An account is read back until it was empty, however many transactions that
 is: a cost guessed where a walk stopped short would be wrong for good, and a longer "Calculating…"
 is the better trade. At the reader's two calls a second, 5,000 transactions is about forty

@@ -182,8 +182,9 @@ export async function finishHistoryPass(
  * Put a job back without counting a failure: the node refused the reader, or
  * the jobs' own lane was being refused, which says nothing about the wallet.
  * A first read goes back to `queued`, so it is still "Calculating…"; a later
- * pass keeps its status. What it read before stopping stands: its cursors
- * only move once a pass finishes.
+ * pass keeps its status. What it read before stopping stands: every
+ * transaction it fetched is kept, and the cursor of every account it finished
+ * was kept as that account finished (`keepCursor`).
  */
 export async function deferHistoryPass(
   db: Db,
