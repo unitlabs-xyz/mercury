@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { ChainHistory, SignatureRef } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { earnEvents, historyEvents, historyTxs, orders } from "../db/schema.js";
-import { emptyBefore, movementOf, rawJson, transactionFromRaw } from "./events.js";
+import { balanceOf, emptyBefore, movementOf, rawJson, transactionFromRaw } from "./events.js";
 import { holdLease, keepCursor } from "./queue.js";
 
 /** Signatures asked for at a time: the node's most. */
@@ -73,8 +73,23 @@ export interface ReadResult {
   readonly events: number;
   /** Accounts whose walk back stopped at the cap rather than at an empty balance. */
   readonly capped: number;
-  /** Of those, the ones with shares pledged just before the oldest transaction read: how many, raw. */
-  readonly openingPledged: Record<string, string>;
+  /**
+   * Per token account whose first read ended without reaching a moment the
+   * wallet held none (the cap, or a node that keeps no older history): what
+   * was held just before the oldest transaction read, in the wallet's account
+   * and pledged to Kamino, in raw units, and when. Shares no transaction read
+   * explains, so the cost pass prices them at the price then, marked `~`.
+   */
+  readonly opening: Record<string, Opening>;
+}
+
+/** Tokens held before the oldest transaction a first read reached. See `ReadResult.opening`. */
+export interface Opening {
+  readonly mint: string;
+  /** In the wallet's account and pledged to Kamino together, raw. */
+  readonly raw: string;
+  /** The oldest transaction's time, as ISO; null when the node gave none (or no transaction was read). */
+  readonly at: string | null;
 }
 
 /**
@@ -100,7 +115,11 @@ export interface ReadResult {
  *
  * Where a transaction moved the token, it is also a `history_event`.
  * Signatures Mercury itself recorded (its own trades and Earn actions) are
- * skipped: those are already in its books, at their exact figures. An
+ * not: those are already in its books, at their exact figures. A first read
+ * still fetches them for the walk back, which must see where the wallet held
+ * none; later passes skip them outright. A first read that never reaches such
+ * a moment says what was held before the oldest transaction it read
+ * (`opening`), and only that is priced as held from before. An
  * account's cursor is kept as soon as its events are written, so a pass
  * stopped on a later account doesn't walk this one again.
  */
@@ -134,7 +153,7 @@ export async function readWallet(
   }
 
   const cursors: Record<string, string> = {};
-  const openingPledged: Record<string, string> = {};
+  const opening: Record<string, Opening> = {};
   let transactions = 0;
   let events = 0;
   let capped = 0;
@@ -162,6 +181,12 @@ export async function readWallet(
     let before: string | undefined;
     let done = false;
     let hitCap = false;
+    /** The first read found the moment before which the wallet held none of the token. */
+    let reachedEmpty = false;
+    /** The oldest transaction with its details that a first read reached, and what was pledged just before it. */
+    let oldest:
+      | { tx: NonNullable<Awaited<ReturnType<ChainHistory["transaction"]>>>; pledgedBefore: bigint }
+      | undefined;
 
     while (!done) {
       if (deps.laneBusy()) throw new GiveWay();
@@ -172,8 +197,16 @@ export async function readWallet(
         ...(before === undefined ? {} : { before }),
       });
       newest ??= page[0]?.signature;
+      /*
+       * Mercury's own transactions are in its books already, so they become no
+       * event. On a first read they are still fetched: the walk back has to see
+       * them, because a buy through Mercury can be the moment the wallet went
+       * from holding none to holding some, and a walk that skipped it read on
+       * past the point it should have stopped. Later passes skip them outright.
+       */
+      const skip = (r: SignatureRef) => r.failed || (cursor !== undefined && recorded.has(r.signature));
       // What an earlier pass already read of this page: from the database, not the node.
-      const wanted = page.filter((r) => !r.failed && !recorded.has(r.signature)).map((r) => r.signature);
+      const wanted = page.filter((r) => !skip(r)).map((r) => r.signature);
       const kept = new Map(
         wanted.length === 0
           ? []
@@ -191,7 +224,8 @@ export async function readWallet(
           hitCap = true;
           break;
         }
-        if (ref.failed || recorded.has(ref.signature)) continue;
+        if (skip(ref)) continue;
+        const ours = recorded.has(ref.signature);
         let tx = kept.get(ref.signature) ?? null;
         if (tx === null) {
           if (deps.laneBusy()) throw new GiveWay();
@@ -211,7 +245,7 @@ export async function readWallet(
             })
             .onConflictDoNothing();
         }
-        read.push({ ref, tx });
+        if (!ours) read.push({ ref, tx });
         if (cursor !== undefined) continue;
         // A transaction the node kept without its details says nothing about balances: its
         // empty token lists are not "held none before", so the walk goes on past it.
@@ -219,8 +253,10 @@ export async function readWallet(
         const m = movementOf(tx, job.address, account.mint);
         if (m?.kind === "loan_deposit") pledged = pledged > m.amountRaw ? pledged - m.amountRaw : 0n;
         else if (m?.kind === "loan_withdraw") pledged += m.amountRaw;
+        oldest = { tx, pledgedBefore: pledged };
         // Held nowhere before this: in neither the wallet nor the loan.
         if (pledged === 0n && emptyBefore(tx, job.address, account.mint)) {
+          reachedEmpty = true;
           done = true;
           break;
         }
@@ -261,13 +297,25 @@ export async function readWallet(
     }
     transactions += read.length;
     events += rows.length;
-    if (hitCap) {
-      capped += 1;
-      if (pledged > 0n) openingPledged[account.address] = pledged.toString();
+    if (hitCap) capped += 1;
+    // A first read that never reached an empty moment: what was held before the oldest one it read.
+    if (cursor === undefined && !reachedEmpty) {
+      const raw =
+        oldest === undefined
+          ? account.rawAmount + pledged
+          : balanceOf(oldest.tx.preTokens, job.address, account.mint) + oldest.pledgedBefore;
+      if (raw > 0n) {
+        const at = oldest?.tx.blockTime ?? null;
+        opening[account.address] = {
+          mint: account.mint,
+          raw: raw.toString(),
+          at: at === null ? null : new Date(at * 1000).toISOString(),
+        };
+      }
     }
   }
 
-  return { cursors, accounts: accounts.length, transactions, events, capped, openingPledged };
+  return { cursors, accounts: accounts.length, transactions, events, capped, opening };
 }
 
 /**

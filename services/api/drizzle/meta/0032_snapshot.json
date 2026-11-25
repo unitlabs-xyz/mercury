@@ -209,26 +209,18 @@
         "activity_user_id_user_id_fk": {
           "name": "activity_user_id_user_id_fk",
           "tableFrom": "activity",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "activity_wallet_id_wallet_id_fk": {
           "name": "activity_wallet_id_wallet_id_fk",
           "tableFrom": "activity",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -274,13 +266,9 @@
         "basket_account_user_id_user_id_fk": {
           "name": "basket_account_user_id_user_id_fk",
           "tableFrom": "basket_account",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -288,10 +276,7 @@
       "compositePrimaryKeys": {
         "basket_account_user_id_address_pk": {
           "name": "basket_account_user_id_address_pk",
-          "columns": [
-            "user_id",
-            "address"
-          ]
+          "columns": ["user_id", "address"]
         }
       },
       "uniqueConstraints": {},
@@ -493,13 +478,9 @@
         "basket_action_user_id_user_id_fk": {
           "name": "basket_action_user_id_user_id_fk",
           "tableFrom": "basket_action",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -646,52 +627,36 @@
         "disposal_user_id_user_id_fk": {
           "name": "disposal_user_id_user_id_fk",
           "tableFrom": "disposal",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "disposal_wallet_id_wallet_id_fk": {
           "name": "disposal_wallet_id_wallet_id_fk",
           "tableFrom": "disposal",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "disposal_token_id_token_id_fk": {
           "name": "disposal_token_id_token_id_fk",
           "tableFrom": "disposal",
-          "columnsFrom": [
-            "token_id"
-          ],
+          "columnsFrom": ["token_id"],
           "tableTo": "token",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "disposal_instrument_id_instrument_id_fk": {
           "name": "disposal_instrument_id_instrument_id_fk",
           "tableFrom": "disposal",
-          "columnsFrom": [
-            "instrument_id"
-          ],
+          "columnsFrom": ["instrument_id"],
           "tableTo": "instrument",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -812,26 +777,18 @@
         "earn_event_user_id_user_id_fk": {
           "name": "earn_event_user_id_user_id_fk",
           "tableFrom": "earn_event",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "earn_event_wallet_id_wallet_id_fk": {
           "name": "earn_event_wallet_id_wallet_id_fk",
           "tableFrom": "earn_event",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1016,13 +973,9 @@
         "funding_intent_user_id_user_id_fk": {
           "name": "funding_intent_user_id_user_id_fk",
           "tableFrom": "funding_intent",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1171,26 +1124,18 @@
         "history_event_wallet_id_wallet_id_fk": {
           "name": "history_event_wallet_id_wallet_id_fk",
           "tableFrom": "history_event",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "history_event_signature_history_tx_signature_fk": {
           "name": "history_event_signature_history_tx_signature_fk",
           "tableFrom": "history_event",
-          "columnsFrom": [
-            "signature"
-          ],
+          "columnsFrom": ["signature"],
           "tableTo": "history_tx",
-          "columnsTo": [
-            "signature"
-          ],
+          "columnsTo": ["signature"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -1298,26 +1243,18 @@
         "history_job_wallet_id_wallet_id_fk": {
           "name": "history_job_wallet_id_wallet_id_fk",
           "tableFrom": "history_job",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "history_job_user_id_user_id_fk": {
           "name": "history_job_user_id_user_id_fk",
           "tableFrom": "history_job",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1487,26 +1424,18 @@
         "loan_alert_wallet_id_wallet_id_fk": {
           "name": "loan_alert_wallet_id_wallet_id_fk",
           "tableFrom": "loan_alert",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "loan_alert_user_id_user_id_fk": {
           "name": "loan_alert_user_id_user_id_fk",
           "tableFrom": "loan_alert",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1669,26 +1598,18 @@
         "loan_event_user_id_user_id_fk": {
           "name": "loan_event_user_id_user_id_fk",
           "tableFrom": "loan_event",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "loan_event_wallet_id_wallet_id_fk": {
           "name": "loan_event_wallet_id_wallet_id_fk",
           "tableFrom": "loan_event",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -1847,52 +1768,36 @@
         "lot_user_id_user_id_fk": {
           "name": "lot_user_id_user_id_fk",
           "tableFrom": "lot",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "lot_wallet_id_wallet_id_fk": {
           "name": "lot_wallet_id_wallet_id_fk",
           "tableFrom": "lot",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "lot_token_id_token_id_fk": {
           "name": "lot_token_id_token_id_fk",
           "tableFrom": "lot",
-          "columnsFrom": [
-            "token_id"
-          ],
+          "columnsFrom": ["token_id"],
           "tableTo": "token",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "lot_instrument_id_instrument_id_fk": {
           "name": "lot_instrument_id_instrument_id_fk",
           "tableFrom": "lot",
-          "columnsFrom": [
-            "instrument_id"
-          ],
+          "columnsFrom": ["instrument_id"],
           "tableTo": "instrument",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -1973,13 +1878,9 @@
         "multiplier_event_token_id_token_id_fk": {
           "name": "multiplier_event_token_id_token_id_fk",
           "tableFrom": "multiplier_event",
-          "columnsFrom": [
-            "token_id"
-          ],
+          "columnsFrom": ["token_id"],
           "tableTo": "token",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2097,26 +1998,18 @@
         "notification_user_id_user_id_fk": {
           "name": "notification_user_id_user_id_fk",
           "tableFrom": "notification",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "notification_activity_id_activity_id_fk": {
           "name": "notification_activity_id_activity_id_fk",
           "tableFrom": "notification",
-          "columnsFrom": [
-            "activity_id"
-          ],
+          "columnsFrom": ["activity_id"],
           "tableTo": "activity",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2312,52 +2205,36 @@
         "order_user_id_user_id_fk": {
           "name": "order_user_id_user_id_fk",
           "tableFrom": "order",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "order_wallet_id_wallet_id_fk": {
           "name": "order_wallet_id_wallet_id_fk",
           "tableFrom": "order",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "set null"
         },
         "order_instrument_id_instrument_id_fk": {
           "name": "order_instrument_id_instrument_id_fk",
           "tableFrom": "order",
-          "columnsFrom": [
-            "instrument_id"
-          ],
+          "columnsFrom": ["instrument_id"],
           "tableTo": "instrument",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         },
         "order_chosen_token_id_token_id_fk": {
           "name": "order_chosen_token_id_token_id_fk",
           "tableFrom": "order",
-          "columnsFrom": [
-            "chosen_token_id"
-          ],
+          "columnsFrom": ["chosen_token_id"],
           "tableTo": "token",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "no action"
         }
@@ -2476,26 +2353,18 @@
         "portfolio_snapshot_user_id_user_id_fk": {
           "name": "portfolio_snapshot_user_id_user_id_fk",
           "tableFrom": "portfolio_snapshot",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "portfolio_snapshot_wallet_id_wallet_id_fk": {
           "name": "portfolio_snapshot_wallet_id_wallet_id_fk",
           "tableFrom": "portfolio_snapshot",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2503,10 +2372,7 @@
       "compositePrimaryKeys": {
         "portfolio_snapshot_wallet_id_captured_at_pk": {
           "name": "portfolio_snapshot_wallet_id_captured_at_pk",
-          "columns": [
-            "wallet_id",
-            "captured_at"
-          ]
+          "columns": ["wallet_id", "captured_at"]
         }
       },
       "uniqueConstraints": {},
@@ -2611,39 +2477,27 @@
         "position_user_id_user_id_fk": {
           "name": "position_user_id_user_id_fk",
           "tableFrom": "position",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "position_wallet_id_wallet_id_fk": {
           "name": "position_wallet_id_wallet_id_fk",
           "tableFrom": "position",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         },
         "position_instrument_id_instrument_id_fk": {
           "name": "position_instrument_id_instrument_id_fk",
           "tableFrom": "position",
-          "columnsFrom": [
-            "instrument_id"
-          ],
+          "columnsFrom": ["instrument_id"],
           "tableTo": "instrument",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2651,10 +2505,7 @@
       "compositePrimaryKeys": {
         "position_wallet_id_instrument_id_pk": {
           "name": "position_wallet_id_instrument_id_pk",
-          "columns": [
-            "wallet_id",
-            "instrument_id"
-          ]
+          "columns": ["wallet_id", "instrument_id"]
         }
       },
       "uniqueConstraints": {},
@@ -2790,13 +2641,9 @@
         "price_bar_token_id_token_id_fk": {
           "name": "price_bar_token_id_token_id_fk",
           "tableFrom": "price_bar",
-          "columnsFrom": [
-            "token_id"
-          ],
+          "columnsFrom": ["token_id"],
           "tableTo": "token",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -2804,11 +2651,7 @@
       "compositePrimaryKeys": {
         "price_bar_token_id_width_bucket_start_pk": {
           "name": "price_bar_token_id_width_bucket_start_pk",
-          "columns": [
-            "token_id",
-            "width",
-            "bucket_start"
-          ]
+          "columns": ["token_id", "width", "bucket_start"]
         }
       },
       "uniqueConstraints": {},
@@ -2921,13 +2764,9 @@
         "token_instrument_id_instrument_id_fk": {
           "name": "token_instrument_id_instrument_id_fk",
           "tableFrom": "token",
-          "columnsFrom": [
-            "instrument_id"
-          ],
+          "columnsFrom": ["instrument_id"],
           "tableTo": "instrument",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -3209,13 +3048,9 @@
         "wallet_link_challenge_user_id_user_id_fk": {
           "name": "wallet_link_challenge_user_id_user_id_fk",
           "tableFrom": "wallet_link_challenge",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -3260,13 +3095,9 @@
         "wallet_stream_wallet_id_wallet_id_fk": {
           "name": "wallet_stream_wallet_id_wallet_id_fk",
           "tableFrom": "wallet_stream",
-          "columnsFrom": [
-            "wallet_id"
-          ],
+          "columnsFrom": ["wallet_id"],
           "tableTo": "wallet",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }
@@ -3274,10 +3105,7 @@
       "compositePrimaryKeys": {
         "wallet_stream_wallet_id_address_pk": {
           "name": "wallet_stream_wallet_id_address_pk",
-          "columns": [
-            "wallet_id",
-            "address"
-          ]
+          "columns": ["wallet_id", "address"]
         }
       },
       "uniqueConstraints": {},
@@ -3390,13 +3218,9 @@
         "wallet_user_id_user_id_fk": {
           "name": "wallet_user_id_user_id_fk",
           "tableFrom": "wallet",
-          "columnsFrom": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
           "tableTo": "user",
-          "columnsTo": [
-            "id"
-          ],
+          "columnsTo": ["id"],
           "onUpdate": "no action",
           "onDelete": "cascade"
         }

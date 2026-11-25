@@ -281,6 +281,20 @@
       "when": 1795598406231,
       "tag": "0039_loan_alert_shown",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795603120508,
+      "tag": "0040_history_opening",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1795603126565,
+      "tag": "0041_drop_opening_pledged",
+      "breakpoints": true
     }
   ]
 }

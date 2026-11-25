@@ -1,6 +1,7 @@
 import { and, eq, isNull, lte, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { historyJobs, wallets, type HistoryJob } from "../db/schema.js";
+import type { Opening } from "./reader.js";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -167,8 +168,8 @@ export async function finishHistoryPass(
   input: {
     readonly walletId: string;
     readonly cursors: Readonly<Record<string, string>>;
-    /** What was pledged before the oldest transaction read, on accounts whose walk stopped at its cap. */
-    readonly openingPledged?: Readonly<Record<string, string>>;
+    /** What was held before the oldest transaction read, on accounts whose first read found no empty moment. */
+    readonly opening?: Readonly<Record<string, Opening>>;
     readonly now: Date;
     readonly nextRunAfter: Date;
   },
@@ -177,7 +178,7 @@ export async function finishHistoryPass(
     .update(historyJobs)
     .set({
       cursors: sql`${historyJobs.cursors} || ${JSON.stringify(input.cursors)}::jsonb`,
-      openingPledged: sql`${historyJobs.openingPledged} || ${JSON.stringify(input.openingPledged ?? {})}::jsonb`,
+      opening: sql`${historyJobs.opening} || ${JSON.stringify(input.opening ?? {})}::jsonb`,
       status: sql`case when ${historyJobs.status} in ('queued', 'running', 'failed') then 'read' else ${historyJobs.status} end`,
       attempts: 0,
       lastError: null,

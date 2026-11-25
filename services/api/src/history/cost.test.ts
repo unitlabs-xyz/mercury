@@ -384,25 +384,62 @@ describe("costWallet, a first costing", () => {
     expect(asked).toEqual([]);
   });
 
-  it("prices what was held before the oldest movement read, where the walk stopped at its cap", async () => {
+  it("prices what was held before the oldest transaction read, where the walk stopped at its cap", async () => {
     const s = await seed();
+    await s.db
+      .update(historyJobs)
+      .set({
+        opening: {
+          [`${TSLAX}-acct`]: { mint: TSLAX, raw: tokensOf(3).toString(), at: day(6).toISOString() },
+        },
+      })
+      .where(eq(historyJobs.walletId, s.walletId));
     await s.found({ kind: "out", amount: tokensOf(1), at: day(6), preRaw: tokensOf(3) });
     await costWallet(deps(s.db, pastOf({ TSLA: 50 }).past), s.walletId, NOW);
     const held = await s.chainLots();
     expect(held.map((l) => [l.tokenQty, l.estimateSource])).toEqual([[tokensOf(2), "market_price"]]);
   });
 
-  it("prices what was pledged to Kamino before the oldest movement read, with the wallet's own", async () => {
+  it("prices what was pledged to Kamino before the oldest transaction read, with the wallet's own", async () => {
     const s = await seed();
+    // 3 in the wallet and 2 in the loan before it, as the reader worked it out.
     await s.db
       .update(historyJobs)
-      .set({ openingPledged: { [`${TSLAX}-acct`]: tokensOf(2).toString() } })
+      .set({
+        opening: {
+          [`${TSLAX}-acct`]: { mint: TSLAX, raw: tokensOf(5).toString(), at: day(6).toISOString() },
+        },
+      })
       .where(eq(historyJobs.walletId, s.walletId));
     await s.found({ kind: "out", amount: tokensOf(1), at: day(6), preRaw: tokensOf(3) });
     await costWallet(deps(s.db, pastOf({ TSLA: 50 }).past), s.walletId, NOW);
     const held = await s.chainLots();
-    // 3 in the wallet and 2 in the loan before it; 1 left.
+    // 1 left; 4 still held.
     expect(held.map((l) => [l.tokenQty, l.estimateSource])).toEqual([[tokensOf(4), "market_price"]]);
+  });
+
+  it("prices shares no movement read explains even where the wallet had no movement of the token", async () => {
+    const s = await seed();
+    // The node keeps no history of the account: all of today's 2 are from before.
+    await s.db
+      .update(historyJobs)
+      .set({ opening: { [`${TSLAX}-acct`]: { mint: TSLAX, raw: tokensOf(2).toString(), at: null } } })
+      .where(eq(historyJobs.walletId, s.walletId));
+    const r = await costWallet(deps(s.db, pastOf({ TSLA: 50 }).past), s.walletId, NOW);
+    expect(r).toMatchObject({ lots: 1, ready: true });
+    const held = await s.chainLots();
+    expect(held.map((l) => [l.tokenQty, l.estimateSource])).toEqual([[tokensOf(2), "market_price"]]);
+  });
+
+  it("never prices a balance before the oldest event as held from before: it can be Mercury's own buy", async () => {
+    const s = await seed();
+    // Mercury bought 10 (in its books, exact, and no event); then 3 sold from Phantom. The walk
+    // reached the moment before Mercury's buy, when none were held, so there is no opening.
+    await s.found({ kind: "out", amount: tokensOf(3), at: day(6), preRaw: tokensOf(10) });
+    const { past, asked } = pastOf({ TSLA: 50 });
+    await costWallet(deps(s.db, past), s.walletId, NOW);
+    expect(await s.chainLots()).toEqual([]);
+    expect(asked).toEqual([]);
   });
 
   it("keeps shares pledged to Kamino at the cost they were bought at: a pledge sells nothing", async () => {

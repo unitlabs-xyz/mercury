@@ -1,0 +1,1 @@
+ALTER TABLE "history_job" DROP COLUMN "opening_pledged";

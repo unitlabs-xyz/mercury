@@ -179,18 +179,23 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
     .where(and(eq(historyEvents.walletId, walletId), isNotNull(historyEvents.costedAt)))
     .limit(1);
   const first = costedBefore === undefined;
-  // Shares pledged before the oldest transaction read, where a walk back stopped at its cap: held then too.
+  // Shares held before the oldest transaction a first read reached, where it found no empty moment.
   const [job] = first
     ? await db
-        .select({ openingPledged: historyJobs.openingPledged })
+        .select({ opening: historyJobs.opening })
         .from(historyJobs)
         .where(eq(historyJobs.walletId, walletId))
         .limit(1)
     : [];
-  const openingPledged = job?.openingPledged ?? {};
+  const openings = Object.values(job?.opening ?? {});
 
-  // The stocks among what moved: USDC and Earn shares are not lots.
-  const mints = [...new Set(pending.map((e) => e.mint).filter((m): m is string => m !== null))];
+  // The stocks among what moved, or held from before what was read: USDC and Earn shares are not lots.
+  const mints = [
+    ...new Set([
+      ...pending.map((e) => e.mint).filter((m): m is string => m !== null),
+      ...openings.map((o) => o.mint),
+    ]),
+  ];
   const stocks =
     mints.length === 0
       ? []
@@ -307,13 +312,10 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
       movements.push({ kind: "in", amountRaw: e.amountRaw, at: at(e), multiplier, cost });
     }
 
-    // What was held before the oldest movement read, where the walk back stopped at its cap.
+    // What was held before the oldest transaction read, where the first read found no empty moment.
     const opening = await openingBalance(
-      db,
-      wallet.address,
       stock,
-      events[0],
-      openingPledged,
+      openings.filter((o) => o.mint === stock.mint),
       tokenSteps,
       prices,
       linkedAt,
@@ -827,39 +829,32 @@ async function barClose(
 }
 
 /**
- * Tokens held before the oldest movement read, where the walk back stopped
- * at its cap rather than at an empty balance: the balance just before that
- * movement, from the transaction kept raw, and what was pledged to Kamino
- * then, as the reader worked it back, priced at the share's price then.
+ * Tokens held before the oldest transaction a first read reached, where it
+ * never reached a moment the wallet held none: the reader's own figure, in the
+ * account and pledged to Kamino together (`history_job.opening`), priced at
+ * the share's price then and marked estimated whatever answered.
+ *
+ * Only that. The balance before the oldest *event* is not used: a buy through
+ * Mercury is no event (it is in Mercury's books already, at its exact cost),
+ * so shares it bought would be read as held from before and counted twice.
  */
 async function openingBalance(
-  db: Db,
-  owner: string,
   stock: Stock,
-  oldest: HistoryEvent | undefined,
-  pledgedBefore: Readonly<Record<string, string>>,
+  openings: readonly { readonly raw: string; readonly at: string | null }[],
   steps: readonly MultiplierStep[],
   prices: ReturnType<typeof pricer>,
   linkedAt: Date,
 ): Promise<Parameters<typeof replayAccount>[2]> {
-  if (oldest === undefined) return undefined;
-  const [tx] = await db
-    .select({ raw: historyTxs.raw })
-    .from(historyTxs)
-    .where(eq(historyTxs.signature, oldest.signature));
-  const pre =
-    (
-      (tx?.raw as { preTokens?: { owner: string | null; mint: string; rawAmount: string }[] } | undefined)
-        ?.preTokens ?? []
-    )
-      .filter((t) => t.owner === owner && t.mint === stock.mint)
-      .reduce((sum, t) => sum + BigInt(t.rawAmount), 0n) + BigInt(pledgedBefore[oldest.account] ?? "0");
-  if (pre <= 0n) return undefined;
-  const at = oldest.blockTime ?? linkedAt;
+  const raw = openings.reduce((sum, o) => sum + BigInt(o.raw), 0n);
+  if (raw <= 0n) return undefined;
+  // The earliest of the token's accounts, where it has more than one.
+  const at = openings
+    .map((o) => (o.at === null ? linkedAt : new Date(o.at)))
+    .reduce((a, b) => (b < a ? b : a));
   const price = await prices.share(stock, at);
   if (price === null) throw new Error(`no price answered for ${stock.ticker}`);
   return {
-    amountRaw: pre,
+    amountRaw: raw,
     at,
     multiplier: multiplierAt(at, steps, D(stock.multiplier ?? 1)),
     // Held before the walk reached: the price then is an estimate whatever answered it.

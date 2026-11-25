@@ -1127,12 +1127,18 @@ export const historyJobs = pgTable(
      */
     cursors: jsonb("cursors").$type<Record<string, string>>().notNull().default({}),
     /**
-     * Per token account whose first read stopped at its cap while shares were
-     * pledged to Kamino: how many were pledged just before the oldest
-     * transaction read, in raw units. Held then, so the cost pass prices them
-     * into the opening balance with the wallet's own.
+     * Per token account whose first read never reached a moment the wallet
+     * held none (it stopped at its cap, or the node keeps no older history):
+     * what was held just before the oldest transaction read, in the account
+     * and pledged to Kamino together, raw, and when. Shares no transaction
+     * read explains, which the cost pass prices at the price then, marked `~`.
+     * Nothing else is ever priced as held from before: a balance before the
+     * oldest *event* can be Mercury's own buy, already in its books.
      */
-    openingPledged: jsonb("opening_pledged").$type<Record<string, string>>().notNull().default({}),
+    opening: jsonb("opening")
+      .$type<Record<string, { mint: string; raw: string; at: string | null }>>()
+      .notNull()
+      .default({}),
     attempts: integer("attempts").notNull().default(0),
     /** Not before this. Set further out after a failure, so a broken wallet does not spin. */
     runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),

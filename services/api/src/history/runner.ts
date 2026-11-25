@@ -95,7 +95,7 @@ export const historyPass = (deps: HistoryRunDeps) => {
       await finishHistoryPass(deps.db, {
         walletId: job.walletId,
         cursors: r.cursors,
-        openingPledged: r.openingPledged,
+        opening: r.opening,
         now: done,
         // A Mercury wallet's Earn shares are rarely sent in by hand: a pass a day.
         nextRunAfter: new Date(
