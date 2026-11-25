@@ -1205,3 +1205,56 @@ describe("costWallet, which costing is the first", () => {
     expect((await s.job()).status).toBe("read");
   });
 });
+
+describe("costWallet, cash that moved while the wallet was unlinked", () => {
+  /** A transaction that moved the wallet's USDC from `before` to `after`, kept raw, and its event. */
+  const cash = async (
+    s: Awaited<ReturnType<typeof seed>>,
+    signature: string,
+    at: Date,
+    before: bigint,
+    after: bigint,
+  ) => {
+    const detail = {
+      signature,
+      blockTime: Math.floor(at.getTime() / 1000),
+      succeeded: true,
+      accountKeys: [ME],
+      feeLamports: 5_000n,
+      preLamports: [1_000_000_000n],
+      postLamports: [999_995_000n],
+      preTokens: [{ owner: ME, mint: USDC, rawAmount: before, decimals: 6 }],
+      postTokens: [{ owner: ME, mint: USDC, rawAmount: after, decimals: 6 }],
+    };
+    await s.db.insert(historyTxs).values({ signature, slot: 1n, blockTime: at, raw: rawJson(detail) });
+    await s.db.insert(historyEvents).values({
+      walletId: s.walletId,
+      account: `${USDC}-acct`,
+      signature,
+      blockTime: at,
+      kind: after > before ? "in" : "out",
+      mint: USDC,
+      amountRaw: after > before ? after - before : before - after,
+    });
+  };
+
+  it("puts it in the feed as found in history, worded as the live feed words it, and tells nobody", async () => {
+    const s = await seed("done");
+    // Linked again at LINKED; $25 arrived while it was unlinked, and $5 left after, which the live job has.
+    await cash(s, "Gap", new Date(LINKED.getTime() - 86_400_000), 0n, 25_000_000n);
+    await cash(s, "Since", new Date(LINKED.getTime() + 60_000), 25_000_000n, 20_000_000n);
+    await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+    const feed = await s.db.select().from(activities).where(eq(activities.walletId, s.walletId));
+    expect(feed.map((a) => [a.txSignature, a.kind, a.title, a.subtitle, D(a.amountUsd!).toString()])).toEqual(
+      [["Gap", "transfer_in", "Added cash", "Found in history", "25"]],
+    );
+    expect(await s.db.select().from(notifications)).toEqual([]);
+  });
+
+  it("writes none of a first costing's past to the feed: that is from before Mercury followed the wallet", async () => {
+    const s = await seed("read");
+    await cash(s, "Past", new Date(LINKED.getTime() - 86_400_000), 0n, 25_000_000n);
+    await costWallet(deps(s.db, pastOf({}).past), s.walletId, NOW);
+    expect(await s.db.select().from(activities).where(eq(activities.walletId, s.walletId))).toEqual([]);
+  });
+});

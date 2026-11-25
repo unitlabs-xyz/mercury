@@ -25,12 +25,7 @@ export const viewedRecorder = (db: Db, opts: { readonly now?: () => Date } = {})
     const at = now();
     const last = written.get(address);
     if (last !== undefined && at.getTime() - last < VIEWED_EVERY_MS) return;
-    written.set(address, at.getTime());
-    // Bounded by who has been looked at lately, not by everyone who ever was.
-    if (written.size > 1_000) {
-      for (const [a, t] of written) if (at.getTime() - t >= VIEWED_EVERY_MS) written.delete(a);
-    }
-    await db
+    const matched = await db
       .update(wallets)
       .set({ lastViewedAt: at })
       .where(
@@ -43,6 +38,29 @@ export const viewedRecorder = (db: Db, opts: { readonly now?: () => Date } = {})
             lte(wallets.lastViewedAt, new Date(at.getTime() - VIEWED_EVERY_MS)),
           ),
         ),
-      );
+      )
+      .returning({ id: wallets.id });
+    /*
+     * Remembered only once it is known to hold: the row was written now, or a
+     * followed linked wallet's row already says it was viewed within the hour.
+     * Remembered before the write, a write that failed (or found the wallet
+     * mid-unlink, and so matched nothing) kept every viewing out for an hour,
+     * and a wallet linked again in that hour stayed on its slowest tier.
+     */
+    const holds =
+      matched.length > 0 ||
+      (
+        await db
+          .select({ id: wallets.id })
+          .from(wallets)
+          .where(and(eq(wallets.address, address), eq(wallets.kind, "external"), followed))
+          .limit(1)
+      ).length > 0;
+    if (!holds) return;
+    written.set(address, at.getTime());
+    // Bounded by who has been looked at lately, not by everyone who ever was.
+    if (written.size > 1_000) {
+      for (const [a, t] of written) if (at.getTime() - t >= VIEWED_EVERY_MS) written.delete(a);
+    }
   };
 };

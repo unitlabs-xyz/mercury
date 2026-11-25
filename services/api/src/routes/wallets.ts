@@ -61,7 +61,7 @@ const wire = (w: WalletView) => ({
  * cases are conflicts with what the account already holds; a challenge or a
  * signature that does not check out is a bad request.
  */
-const REFUSED: Record<LinkRefusal, { status: 400 | 409; message: string }> = {
+const REFUSED: Record<LinkRefusal, { status: 400 | 409 | 429; message: string }> = {
   link_limit: { status: 409, message: "Unlink a wallet to link another." },
   already_linked: { status: 409, message: "This wallet is already on your account." },
   linked_elsewhere: {
@@ -71,6 +71,10 @@ const REFUSED: Record<LinkRefusal, { status: 400 | 409; message: string }> = {
   },
   challenge_invalid: { status: 400, message: "That request to link has expired. Start again." },
   bad_signature: { status: 400, message: "The signature does not match this wallet." },
+  too_many_challenges: {
+    status: 429,
+    message: "Too many tries to link a wallet. Wait a few minutes and try again.",
+  },
 };
 
 const bodyOf = async (c: {

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { loanAlerts, walletLinkChallenges, walletStreams, wallets, type Wallet } from "../db/schema.js";
 import { logger } from "../log/index.js";
@@ -27,7 +27,20 @@ export interface WalletView {
  * - `bad_signature`: the signature is not this address's, over this message.
  */
 export type LinkRefusal =
-  "link_limit" | "already_linked" | "linked_elsewhere" | "challenge_invalid" | "bad_signature";
+  | "link_limit"
+  | "already_linked"
+  | "linked_elsewhere"
+  | "challenge_invalid"
+  | "bad_signature"
+  | "too_many_challenges";
+
+/**
+ * The most link challenges one person may open in a challenge's lifetime (ten
+ * minutes). Linking takes one, and a person retrying a wallet that won't sign
+ * a few more; nobody needs twenty. Without a ceiling, each request wrote a row
+ * until the daily prune, as fast as it was sent.
+ */
+export const CHALLENGES_PER_WINDOW = 20;
 
 const view = (w: Wallet): WalletView => ({
   id: w.id,
@@ -131,6 +144,16 @@ export async function openChallenge(
 > {
   const check = await linkable(db, input.userId, input.address, input.limit);
   if (!check.ok) return { kind: "refused", reason: check.reason };
+  const [recent] = await db
+    .select({ n: count() })
+    .from(walletLinkChallenges)
+    .where(
+      and(
+        eq(walletLinkChallenges.userId, input.userId),
+        gt(walletLinkChallenges.createdAt, new Date(input.now.getTime() - CHALLENGE_TTL_MS)),
+      ),
+    );
+  if ((recent?.n ?? 0) >= CHALLENGES_PER_WINDOW) return { kind: "refused", reason: "too_many_challenges" };
 
   const expiresAt = new Date(input.now.getTime() + CHALLENGE_TTL_MS);
   const message = linkMessage({
@@ -142,7 +165,7 @@ export async function openChallenge(
   });
   const [row] = await db
     .insert(walletLinkChallenges)
-    .values({ userId: input.userId, address: input.address, message, expiresAt })
+    .values({ userId: input.userId, address: input.address, message, expiresAt, createdAt: input.now })
     .returning({ id: walletLinkChallenges.id });
   return { kind: "ok", challengeId: row!.id, message, expiresAt };
 }

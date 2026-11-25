@@ -55,4 +55,36 @@ describe("viewedRecorder", () => {
     expect(await viewedAt("Mercury")).toBeNull();
     expect(await viewedAt("Gone")).toBeNull();
   });
+
+  it("records a wallet linked again within the hour it was last seen unlinked", async () => {
+    const { db, viewedAt } = await world();
+    let now = T0;
+    const seen = viewedRecorder(db, { now: () => now });
+    // Seen while unlinked (mid-unlink, say): nothing written, and nothing remembered.
+    await seen("Gone");
+    await db.update(wallets).set({ unlinkedAt: null }).where(eq(wallets.address, "Gone"));
+    now = at(60_000);
+    await seen("Gone");
+    expect(await viewedAt("Gone")).toEqual(now);
+  });
+
+  it("remembers nothing when the write failed, so the next viewing writes it", async () => {
+    const { db, viewedAt } = await world();
+    let failing = true;
+    const flaky = new Proxy(db, {
+      get: (target, key, receiver) =>
+        key === "update" && failing
+          ? () => {
+              throw new Error("database busy");
+            }
+          : Reflect.get(target, key, receiver),
+    });
+    let now = T0;
+    const seen = viewedRecorder(flaky, { now: () => now });
+    await expect(seen("Phantom")).rejects.toThrow("database busy");
+    failing = false;
+    now = at(60_000);
+    await seen("Phantom");
+    expect(await viewedAt("Phantom")).toEqual(now);
+  });
 });

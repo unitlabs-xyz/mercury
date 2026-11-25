@@ -15,6 +15,7 @@ import {
 } from "../db/schema.js";
 import { CHALLENGE_TTL_MS } from "./message.js";
 import {
+  CHALLENGES_PER_WINDOW,
   completeLink,
   keptWallets,
   listWallets,
@@ -89,6 +90,33 @@ describe("openChallenge", () => {
     const [stored] = await db.select().from(walletLinkChallenges);
     expect(stored).toMatchObject({ id: opened.challengeId, userId, address: phantom.address, usedAt: null });
     expect(stored!.message).toBe(opened.message);
+  });
+
+  it("opens no more than its ceiling of challenges in ten minutes, and opens again after", async () => {
+    const db = await testDb();
+    const { userId } = await person(db, "did:privy:a");
+    const phantom = await testWallet();
+    const ask = (now: Date) =>
+      openChallenge(db, { userId, address: phantom.address, appUrl: APP, limit: LIMIT, now });
+    for (let i = 0; i < CHALLENGES_PER_WINDOW; i++) expect((await ask(later(i))).kind).toBe("ok");
+    expect(await ask(later(CHALLENGES_PER_WINDOW))).toEqual({
+      kind: "refused",
+      reason: "too_many_challenges",
+    });
+    // Someone else is not held up by it.
+    const other = await person(db, "did:privy:b");
+    expect(
+      (
+        await openChallenge(db, {
+          userId: other.userId,
+          address: phantom.address,
+          appUrl: APP,
+          limit: LIMIT,
+          now: NOW,
+        })
+      ).kind,
+    ).toBe("ok");
+    expect((await ask(later(CHALLENGE_TTL_MS + CHALLENGES_PER_WINDOW))).kind).toBe("ok");
   });
 
   it("refuses before anything is signed when the person is at the limit", async () => {
