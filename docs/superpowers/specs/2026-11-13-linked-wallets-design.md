@@ -798,17 +798,26 @@ What the first draft's resumable flow was for (an approval left to give, "Finish
 approval left" on Home and in the inbox) has nothing to resume with one approval: the
 `basket_action` row survives a reload, and the operation is tracked under the basket's position.
 
-**Baskets made outside Mercury.** A linked wallet's Glider baskets made on Glider directly are
-found on the chain (accounts it funded that the Swig program runs) and shown with their value. They
-cannot be exited through Mercury, so the card walks the person through it: withdraw on Glider,
-then move the shares here, or move the USDC and invest it in the closest Mercury basket. Each next
-step is read from what has arrived in the wallet, so the card needs no stored state either.
+**The Mercury wallet's token accounts are opened first.** Glider pays an exit to "any address
+that the owner authorizes" and its paymaster "sponsors the fee", but its documentation
+([docs.glider.fi/llms-full.txt](https://docs.glider.fi/llms-full.txt), read 25 November 2026) says
+nothing about opening the recipient's token account for an asset it has never held. So before the
+authorization is prepared, the relayer opens every account the payout needs in the Mercury wallet
+(each stock's for in kind, USDC's for "Keep it as a basket"), with the idempotent instruction that
+needs only the payer's signature. Mercury pays that rent, as it does for every account the Mercury
+wallet opens: only what Mercury builds can close them. If they can't be opened, nothing is asked
+to be signed (`503 accounts_unavailable`).
 
-**Still to verify on mainnet:** whether Glider opens the Mercury wallet's token account for an
-asset it has never held when it pays an in-kind exit there, and who pays that rent. Glider's API
-says a Solana withdrawal is "a direct paymaster-sponsored transfer"; it doesn't say more. Until a
-real move has been watched, an in-kind move of an asset new to the Mercury wallet is the case to
-test first.
+**Baskets made outside Mercury.** A linked wallet's Glider baskets made somewhere else (Glider's own
+app, or another app built on Glider) are found on the chain (accounts it funded that the Swig
+program runs) and shown with their value. Mercury can't exit them: Glider's API is scoped to the
+app that enrolled a portfolio, and answers `404` for a portfolio "your API key does not have access
+to". The API could pay such an exit out in kind or to USDC, but which of those the other app
+offers can't be checked from here. So the card sends the person back to the app they deposited
+with, to withdraw the basket to their wallet, and promises none of that app's screens. Whatever
+arrives, Mercury follows from the chain: shares, moved here in one approval; USDC, moved here and
+then invested in the closest Mercury basket. Each next step is read from what has arrived, so the
+card needs no stored state.
 
 **Cost basis:** the basket's assets have no per-share lots today (Mercury records the basket's
 fundings, not Glider's buys). Shares exited in kind get a cost by splitting the basket's net

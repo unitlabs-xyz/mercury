@@ -758,7 +758,11 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
   });
 
   /** A basket holding $300 of TSLAx (100 raw) and $900 of NVDAx (300 raw): $1,200, into which $600 went. */
-  const moving = (netFunding?: () => Promise<Decimal | null>, settling = false) => {
+  const moving = (
+    netFunding?: () => Promise<Decimal | null>,
+    settling = false,
+    openRecipientAccounts?: (owner: string, mints: readonly string[]) => Promise<number>,
+  ) => {
     let saved: Parameters<BasketStore["saveExitIntent"]>[0] | undefined;
     let preparedFor = "";
     const signed = message(mercury);
@@ -833,6 +837,7 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
         transaction: async () => null,
       },
       ...(netFunding === undefined ? {} : { netFunding }),
+      ...(openRecipientAccounts === undefined ? {} : { openRecipientAccounts }),
     });
     return { service, signed, saved: () => saved, preparedFor: () => preparedFor };
   };
@@ -867,6 +872,55 @@ describe("moving a linked wallet's basket into the Mercury wallet", () => {
     ).rejects.toMatchObject({ code: "exit_settling" });
     // Nothing saved, so no second share of the same funding.
     expect(m.saved()).toBeUndefined();
+  });
+
+  it("opens the Mercury wallet's accounts for what it will receive before asking for a signature", async () => {
+    const opened: [string, readonly string[]][] = [];
+    const m = moving(undefined, false, async (o, mints) => {
+      opened.push([o, mints]);
+      return mints.length;
+    });
+    await m.service.prepareExit(
+      "nvidia",
+      owner,
+      "in_kind",
+      [{ assetId: asset(TSLAX), amountRaw: "100" }],
+      mercury,
+    );
+    expect(opened).toEqual([["MercuryWa11et111111111111111111111111111111", [TSLAX]]]);
+    // To USDC, the USDC account.
+    opened.length = 0;
+    // (This fake Glider answers every exit in kind, so the authorization is refused after: what matters is before.)
+    await m.service.prepareExit("nvidia", owner, "liquidate_usdc", undefined, mercury).catch(() => undefined);
+    expect(opened.map(([, mints]) => mints)).toEqual([["EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"]]);
+  });
+
+  it("asks for no signature when those accounts could not be opened", async () => {
+    const m = moving(undefined, false, async () => {
+      throw new Error("node down");
+    });
+    await expect(
+      m.service.prepareExit(
+        "nvidia",
+        owner,
+        "in_kind",
+        [{ assetId: asset(TSLAX), amountRaw: "100" }],
+        mercury,
+      ),
+    ).rejects.toMatchObject({ code: "accounts_unavailable", status: 503 });
+    expect(m.preparedFor()).toBe("");
+  });
+
+  it("opens nothing for a withdrawal back to the owner", async () => {
+    let asked = false;
+    const m = moving(undefined, false, async () => {
+      asked = true;
+      return 0;
+    });
+    await m.service
+      .prepareExit("nvidia", owner, "in_kind", [{ assetId: asset(TSLAX), amountRaw: "100" }])
+      .catch(() => undefined);
+    expect(asked).toBe(false);
   });
 
   it("refuses a signed move whose recipient is not the one it was submitted for", async () => {

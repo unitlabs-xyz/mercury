@@ -41,7 +41,9 @@ describe("OutsideBaskets", () => {
     expect(html).toContain("$470.00");
     expect(html).toContain("1.5 TSLAx · 20 USDC");
     expect(html).toContain("Mercury can see it but can&#x27;t withdraw it for you");
-    expect(html).toContain("Open Glider and withdraw the basket to Phantom.");
+    expect(html).toContain(
+      "Open the app you put this basket in (Glider, or another app built on it) and withdraw it to Phantom.",
+    );
     expect(html).toContain("When it lands in Phantom, this card offers the next step");
     expect(html).toContain(`href="${GLIDER_APP_URL}"`);
     // No option it can't vouch for.

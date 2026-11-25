@@ -1,3 +1,4 @@
+import { openTokenAccounts, solanaAccountsRpc } from "./baskets/glider/open-accounts.js";
 import {
   JupiterLite,
   JupiterRegistry,
@@ -758,6 +759,15 @@ export function buildReadDeps(
     // What went into a basket, so shares that leave it in kind carry their share of that cost.
     netFunding: (userId, owner, portfolioId) =>
       basketNetFunding(db, userId, owner.slice(owner.lastIndexOf(":") + 1), portfolioId),
+    // A linked wallet's basket paid into the Mercury wallet: its token accounts opened first, by the relayer.
+    ...(relay === undefined
+      ? {}
+      : {
+          openRecipientAccounts: openTokenAccounts({
+            rpc: solanaAccountsRpc(config.solanaRpcUrl),
+            signer: relay.signer,
+          }),
+        }),
     ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
   });
   return {

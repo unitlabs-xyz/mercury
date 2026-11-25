@@ -26,11 +26,13 @@ export const nextStep = (b: Pick<OutsideBasket, "arrived" | "similar">): NextSte
 
 /**
  * The steps to bring a basket in, for a wallet called `wallet`: only what
- * Mercury can stand behind. What Glider's own app offers when withdrawing
- * can't be checked from here, so the card promises none of its screens; it
- * says to withdraw to the wallet, and then follows whatever arrives.
+ * Mercury can stand behind. Glider's API answers only the app that enrolled a
+ * basket, so the withdrawal is the deposit app's to make, and what that app
+ * offers (shares or USDC) can't be checked from here: the card sends the
+ * person back to it, promises none of its screens, and then follows whatever
+ * arrives.
  */
 export const handoffSteps = (wallet: string): readonly string[] => [
-  `Open Glider and withdraw the basket to ${wallet}.`,
+  `Open the app you put this basket in (Glider, or another app built on it) and withdraw it to ${wallet}.`,
   `When it lands in ${wallet}, this card offers the next step: move it to your Mercury wallet in one approval.`,
 ];

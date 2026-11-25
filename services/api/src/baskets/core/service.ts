@@ -103,6 +103,13 @@ export class BasketService {
        * is not fully known (something already left it in kind).
        */
       netFunding?: (userId: string, ownerAccountId: string, portfolioId: string) => Promise<Decimal | null>;
+      /**
+       * Opens the token accounts a wallet lacks for these mints, relayer-paid,
+       * returning how many it opened. Run before a linked wallet's basket is
+       * paid out into the Mercury wallet (`openTokenAccounts`). Absent, nothing
+       * is opened first and Glider's payout is trusted to.
+       */
+      openRecipientAccounts?: (owner: string, mints: readonly string[]) => Promise<number>;
     },
   ) {}
 
@@ -401,6 +408,27 @@ export class BasketService {
             "Selected asset amounts are invalid or exceed the current portfolio balance. Review them again.",
           );
         selected.add(asset.assetId);
+      }
+    }
+    /*
+     * Paid into the Mercury wallet rather than back to the owner: every token
+     * account the payout lands in exists first. Glider's documentation says
+     * nothing about opening one for an asset the wallet has never held, and an
+     * exit that fails after the owner signed is the one failure worth paying
+     * the rent to rule out. Before the authorization, so nobody signs one that
+     * could not land.
+     */
+    if (recipientAccountId !== ownerAccountId && this.deps.openRecipientAccounts) {
+      const mints =
+        mode === "in_kind" ? assets.map((a) => a.assetId.slice(SOLANA_ASSET.length)) : [USDC_MINT];
+      try {
+        await this.deps.openRecipientAccounts(addressOf(recipientAccountId), mints);
+      } catch {
+        throw new BasketEnrollmentError(
+          "accounts_unavailable",
+          503,
+          "Your Mercury wallet couldn't be made ready for these assets. Try again shortly.",
+        );
       }
     }
     try {

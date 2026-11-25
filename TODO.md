@@ -126,8 +126,10 @@ history reader inside the API.
 - [x] Build steps 8–11 (acting, moving tokens, moving baskets, loan and Earn history). Step 10 is one
       approval paid straight into the Mercury wallet, not the first draft's resumable `wallet_move`
       flow: see the spec, "A Glider basket, moved by Mercury"
-- [ ] Watch one real in-kind basket move on mainnet of an asset the Mercury wallet has never held:
-      does Glider open its token account, and who pays the rent?
+- [x] A basket paid into the Mercury wallet no longer depends on Glider opening its token
+      accounts, which its docs don't promise: the relayer opens them before the authorization
+      (`baskets/glider/open-accounts.ts`). Baskets made in another app are withdrawn in that app,
+      since Glider's API answers only the app that enrolled them; the card sends the person there
 - [ ] Wallets already costed before the reader stopped at Mercury's own buys (4866e4c) may hold an
       estimated opening lot on top of Mercury's exact one. Find any linked wallet whose lots exceed
       its chain balance and cost it again

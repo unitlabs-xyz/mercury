@@ -32,7 +32,7 @@ describe("nextStep", () => {
 describe("handoffSteps", () => {
   it("asks only for the withdrawal to the wallet, and promises the next step from what lands", () => {
     expect(handoffSteps("Phantom")).toEqual([
-      "Open Glider and withdraw the basket to Phantom.",
+      "Open the app you put this basket in (Glider, or another app built on it) and withdraw it to Phantom.",
       "When it lands in Phantom, this card offers the next step: move it to your Mercury wallet in one approval.",
     ]);
   });
