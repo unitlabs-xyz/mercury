@@ -4,6 +4,7 @@ import type { Db } from "../db/client.js";
 import { users, wallets } from "../db/schema.js";
 import { applyReconciliation, loadHeldTokens, type ReconcileDeps } from "./apply.js";
 import { planReconciliation } from "./reconcile.js";
+import { followed } from "../wallets/active.js";
 
 const log = logger("position-sync");
 
@@ -49,11 +50,12 @@ export async function syncAllPositions(
   deps: ReconcileDeps,
   opts: SyncOptions = {},
 ): Promise<SyncSummary> {
+  // Every wallet followed, the linked ones beside each person's Mercury wallet.
   const all = await db
-    .select({ userId: users.id, address: wallets.address })
+    .select({ userId: users.id, walletId: wallets.id, address: wallets.address })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
-    .where(eq(wallets.isPrimary, true));
+    .where(followed);
   const rows = opts.due === undefined ? all : all.filter((r) => opts.due!(r.address));
 
   let reconciled = 0;
@@ -69,10 +71,11 @@ export async function syncAllPositions(
       if (row === undefined) return;
       opts.read?.(row.address);
       try {
-        const held = await loadHeldTokens(db, deps, row.userId, row.address);
+        const owner = { userId: row.userId, walletId: row.walletId };
+        const held = await loadHeldTokens(db, deps, owner, row.address);
         if (held.length === 0) continue;
         const plan = planReconciliation(held, new Date());
-        await applyReconciliation(db, row.userId, plan);
+        await applyReconciliation(db, owner, plan);
         // A transfer out is only taken back when the chain read low and then
         // recovered, which is a lagging read at work. Rare enough to say so,
         // and a rise in them is the first sign a node is behind. The user,

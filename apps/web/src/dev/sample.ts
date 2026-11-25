@@ -1,4 +1,5 @@
-import type { Money, Portfolio } from "@mercury/types";
+import type { Money, Portfolio, PortfolioSummary } from "@mercury/types";
+import type { AccountWallets } from "../api/wallets";
 import type { Dashboard } from "../api/dashboard";
 import { toEvent, type ActivityReceipt, type Event } from "@mercury/view";
 
@@ -31,6 +32,12 @@ import { toEvent, type ActivityReceipt, type Event } from "@mercury/view";
  * asserts the member form so it cannot come back.
  */
 export const SAMPLE = import.meta.env.VITE_SAMPLE === "1";
+/**
+ * `VITE_SAMPLE_WALLETS=mercury`: the person has only the Mercury wallet, no
+ * linked wallets, to see the app as most people do. Read as a member
+ * expression, like `VITE_SAMPLE`, so it folds away in a production build.
+ */
+const MERCURY_ONLY = import.meta.env.VITE_SAMPLE_WALLETS === "mercury";
 /** Local sample runs only: straight past sign-in. A deployed sample build keeps it. */
 export const SAMPLE_NO_LOGIN = SAMPLE && import.meta.env.DEV;
 
@@ -125,6 +132,193 @@ const portfolio: Portfolio = {
   changePct: "0.32",
   holdings,
   baskets: sampleBaskets,
+};
+
+/*
+ * Linked wallets: the Mercury wallet, a Phantom wallet with a loan, and one
+ * linked minutes ago whose past is still being read. Enough to show the
+ * switcher, Home's summary and each card's states.
+ */
+const NOW = Date.now();
+const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString();
+const SAMPLE_WALLETS: AccountWallets = {
+  limit: 5,
+  wallets: [
+    {
+      id: "w-mercury",
+      address: "Merc1111111111111111111111111111111111111111",
+      kind: "privy_embedded",
+      isPrimary: true,
+      label: null,
+      linkedAt: null,
+    },
+    {
+      id: "w-phantom",
+      address: "Phan7om22222222222222222222222222222222222Xy",
+      kind: "external",
+      isPrimary: false,
+      label: "Phantom",
+      linkedAt: ago(60 * 24 * 9),
+    },
+    {
+      id: "w-new",
+      address: "9xQe3333333333333333333333333333333333333Kp4",
+      kind: "external",
+      isPrimary: false,
+      label: null,
+      linkedAt: ago(4),
+    },
+  ],
+};
+
+const SAMPLE_SUMMARY: PortfolioSummary = {
+  wallets: [
+    {
+      id: "w-mercury",
+      address: SAMPLE_WALLETS.wallets[0]!.address,
+      isPrimary: true,
+      label: null,
+      valueUsd: "12380.12",
+      asOf: ago(38),
+      debtUsd: debt.toFixed(2),
+      loanHealth: debt > 0 ? "healthy" : null,
+      history: "ready",
+    },
+    {
+      id: "w-phantom",
+      address: SAMPLE_WALLETS.wallets[1]!.address,
+      isPrimary: false,
+      label: "Phantom",
+      valueUsd: "4210.55",
+      asOf: ago(38),
+      debtUsd: "1500.00",
+      loanHealth: "margin_call",
+      history: "ready",
+    },
+    {
+      id: "w-new",
+      address: SAMPLE_WALLETS.wallets[2]!.address,
+      isPrimary: false,
+      label: null,
+      valueUsd: null,
+      asOf: null,
+      debtUsd: "0",
+      loanHealth: null,
+      history: "calculating",
+    },
+  ],
+  netWorthUsd: "16590.67",
+  asOf: ago(38),
+  pnl: {
+    totalUsd: "1842.30",
+    unrealisedUsd: "1520.10",
+    realisedUsd: "322.20",
+    returnPct: "11.4",
+    estimatedCostUsd: "640.00",
+  },
+  income: { totalUsd: "96.42", earnUsd: "71.12", dividendsUsd: "25.30" },
+  loanInterestUsd: "18.77",
+  calculating: 1,
+};
+
+/*
+ * The Phantom wallet's own figures, so choosing it shows Phantom and not the
+ * Mercury wallet: Tesla and Nvidia (Tesla well under its cost), some cash,
+ * and a loan in a margin call. No baskets and no Earn: those are Mercury's.
+ */
+const phantomHoldings = [
+  // Read from the wallet's history: arrived by plain transfer, so its cost is estimated.
+  {
+    ...holding("TSLA", "Tesla", "8.400", 2950, 3200, "-2.41"),
+    pledgedShares: "6",
+    estimatedCostUsd: "3200.00",
+    estimateSource: "link_day_price" as const,
+  },
+  { ...holding("NVDA", "Nvidia", "10.200", 1885.1, 1500, "0.18"), pledgedShares: "0" },
+];
+const phantomCash = 900;
+const phantomDebt = 1500;
+const phantomPortfolio: Portfolio = {
+  totalValueUsd: (
+    phantomHoldings.reduce((sum, h) => sum + Number(h.valueUsd), 0) +
+    phantomCash -
+    phantomDebt
+  ).toFixed(2),
+  cashUsd: phantomCash.toFixed(2),
+  earnUsd: "0.00",
+  basketUsd: "0.00",
+  debtUsd: phantomDebt.toFixed(2),
+  debtIsStale: false,
+  changeUsd: "-61.40",
+  changePct: "-1.43",
+  holdings: phantomHoldings,
+  baskets: [],
+};
+
+/*
+ * Linked minutes ago. Its balance is read like any wallet's, so it counts in
+ * net worth and shows what it holds; what it paid is not known until its past
+ * is read, so its shares carry no cost yet and its P&L is "calculating".
+ */
+const freshHoldings = [
+  {
+    ...holding("AMZN", "Amazon", "1.400", 295.4, 0, "1.12"),
+    costBasisUsd: "0.00",
+    unrealisedPnlUsd: "0.00",
+    tradingCostUsd: "0.00",
+    marketPnlUsd: "0.00",
+  },
+];
+const freshCash = 345;
+const freshPortfolio: Portfolio = {
+  totalValueUsd: (295.4 + freshCash).toFixed(2),
+  cashUsd: freshCash.toFixed(2),
+  earnUsd: "0.00",
+  basketUsd: "0.00",
+  debtUsd: "0.00",
+  debtIsStale: false,
+  changeUsd: "3.27",
+  changePct: "0.51",
+  holdings: freshHoldings,
+  baskets: [],
+};
+
+/** Every wallet read at once: the two wallets added up, a stock in both one row, plus each wallet's own. */
+const allWallets: Portfolio = {
+  ...portfolio,
+  totalValueUsd: (
+    Number(portfolio.totalValueUsd) +
+    Number(phantomPortfolio.totalValueUsd) +
+    Number(freshPortfolio.totalValueUsd)
+  ).toFixed(2),
+  cashUsd: (cash + phantomCash + freshCash).toFixed(2),
+  debtUsd: (debt + phantomDebt).toFixed(2),
+  changeUsd: (39.32 - 61.4 + 3.27).toFixed(2),
+  changePct: "-0.13",
+  holdings: [...holdings, ...phantomHoldings, ...freshHoldings],
+  wallets: [
+    {
+      walletId: "w-mercury",
+      totalValueUsd: portfolio.totalValueUsd,
+      debtUsd: portfolio.debtUsd,
+      changeUsd: "39.32",
+      changePct: "0.32",
+    },
+    {
+      walletId: "w-phantom",
+      totalValueUsd: phantomPortfolio.totalValueUsd,
+      debtUsd: phantomPortfolio.debtUsd,
+      changeUsd: phantomPortfolio.changeUsd,
+      changePct: phantomPortfolio.changePct,
+    },
+    {
+      walletId: "w-new",
+      totalValueUsd: freshPortfolio.totalValueUsd,
+      debtUsd: "0.00",
+      changeUsd: freshPortfolio.changeUsd,
+      changePct: freshPortfolio.changePct,
+    },
+  ],
 };
 
 const money: Money = {
@@ -469,6 +663,47 @@ const borrow = {
     row("AAPL", 0.4, 0.5, 246.2, 0, 1.2),
     row("HOOD", 0.3, 0.4, 122.79, 0, 4.8),
   ],
+};
+
+/** Phantom's loan: $1,500 against pledged Tesla that has fallen, so a margin call. */
+const phantomBorrow = {
+  ...borrow,
+  cashUsd: phantomCash.toFixed(2),
+  collateralUsd: (6 * (2950 / 8.4)).toFixed(2),
+  debtUsd: phantomDebt.toFixed(2),
+  borrowableNowUsd: "0",
+  overTargetUsd: "210.00",
+  health: "margin_call",
+  usage: "0.86",
+  repayToClearMarginCallUsd: "210.00",
+  borrowableUsd: "0",
+  spendableUsd: phantomCash.toFixed(2),
+  ltv: "0.71",
+  safeUntilDrop: "0.09",
+  obligation: "SamplePhantomObligation111111111111111111",
+  owedUsdc: "1500.000000",
+  principalUsdc: "1482.5",
+  interestUsdc: "17.500000",
+  closeLoanUsdc: "1500.010000",
+};
+
+const emptyBorrow = {
+  ...borrow,
+  cashUsd: "0",
+  collateralUsd: "0",
+  debtUsd: "0",
+  borrowableNowUsd: "0",
+  health: "healthy",
+  usage: "0",
+  borrowableUsd: "0",
+  spendableUsd: "0",
+  ltv: "0",
+  obligation: null,
+  owedUsdc: "0",
+  principalUsdc: "0",
+  interestUsdc: "0",
+  closeLoanUsdc: "0",
+  collateral: [],
 };
 
 export const SAMPLE_DASHBOARD: Dashboard = {
@@ -1295,14 +1530,219 @@ const inboxResponse = (route: string, body?: string): unknown | undefined => {
   return undefined;
 };
 
-export const sampleResponse = (path: string, body?: string): unknown | undefined => {
+/*
+ * Which sample wallets are linked: both, or none with VITE_SAMPLE_WALLETS=mercury.
+ * Linking in Settings adds the next one, and unlinking takes it away, for this
+ * page load, so the whole flow can be walked through and seen to change Home.
+ */
+let linkedIds: string[] = MERCURY_ONLY ? [] : ["w-phantom", "w-new"];
+const visibleWallets = () => SAMPLE_WALLETS.wallets.filter((w) => w.isPrimary || linkedIds.includes(w.id));
+
+/**
+ * The next sample wallet to "connect" in Settings, as a wallet app would hand
+ * it over: Phantom first (it holds stocks and a loan), then a fresh one. Null
+ * once both are linked.
+ */
+export const sampleConnectable = (): { address: string; name: string } | null => {
+  const next = SAMPLE_WALLETS.wallets.find((w) => !w.isPrimary && !linkedIds.includes(w.id));
+  return next === undefined ? null : { address: next.address, name: next.label ?? "Solflare" };
+};
+
+/** Linking and unlinking, as the server answers them, against the sample's list. */
+const linkResponse = (route: string, body?: string, method?: string): unknown | undefined => {
+  if (route === "/v1/wallets/link/challenge") {
+    const { address } = JSON.parse(body ?? "{}") as { address?: string };
+    const issued = new Date();
+    const expires = new Date(issued.getTime() + 10 * 60_000);
+    return {
+      challengeId: `sample-${address ?? ""}`,
+      expiresAt: expires.toISOString(),
+      message: [
+        "beta.trymercury.xyz wants you to link this wallet to your Mercury account:",
+        address ?? "",
+        "",
+        "Linking lets Mercury show this wallet's positions and build transactions for you to sign.",
+        "It does not let Mercury move funds without your signature.",
+        "",
+        "URI: https://beta.trymercury.xyz",
+        "Version: 1",
+        "Chain ID: mainnet",
+        "Nonce: 7Gq2sAmpLeN0nce5tR1ng",
+        `Issued At: ${issued.toISOString()}`,
+        `Expiration Time: ${expires.toISOString()}`,
+      ].join("\n"),
+    };
+  }
+  if (route === "/v1/wallets/link") {
+    const { challengeId } = JSON.parse(body ?? "{}") as { challengeId?: string };
+    const address = (challengeId ?? "").replace(/^sample-/, "");
+    const wallet = SAMPLE_WALLETS.wallets.find((w) => w.address === address && !w.isPrimary);
+    if (wallet === undefined) return undefined;
+    if (!linkedIds.includes(wallet.id)) linkedIds = [...linkedIds, wallet.id];
+    return { wallet: { ...wallet, linkedAt: new Date().toISOString() }, relinked: false };
+  }
+  const unlink = /^\/v1\/wallets\/([^/]+)$/.exec(route);
+  if (unlink && method === "DELETE" && linkedIds.includes(decodeURIComponent(unlink[1]!))) {
+    linkedIds = linkedIds.filter((id) => id !== decodeURIComponent(unlink[1]!));
+    return null;
+  }
+  return undefined;
+};
+
+export const sampleResponse = (
+  path: string,
+  body?: string,
+  wallet?: string,
+  method?: string,
+): unknown | undefined => {
   const route = path.split("?")[0] ?? path;
   const inbox = inboxResponse(route, body);
   if (inbox !== undefined) return inbox;
-  if (route === "/v1/portfolio") return portfolio;
-  if (route === "/v1/money") return money;
-  if (route === "/v1/borrow") return borrow;
-  if (route === "/v1/earn") return earn;
+  const linking = linkResponse(route, body, method);
+  if (linking !== undefined) return linking;
+  if (route === "/v1/wallets") return { ...SAMPLE_WALLETS, wallets: visibleWallets() };
+  // "Set cost": accepted, as the server would for an estimated holding.
+  if (/^\/v1\/portfolio\/holdings\/[^/]+\/cost$/.test(route)) return { lots: 1 };
+  if (route === "/v1/portfolio/summary") {
+    const shown = SAMPLE_SUMMARY.wallets.filter((w) => w.isPrimary || linkedIds.includes(w.id));
+    return {
+      ...SAMPLE_SUMMARY,
+      wallets: shown,
+      netWorthUsd: shown.reduce((sum, w) => sum + Number(w.valueUsd ?? 0), 0).toFixed(2),
+      calculating: shown.filter((w) => w.history === "calculating").length,
+    };
+  }
+  /*
+   * The chosen wallet's own figures. "all" is every wallet at once; the
+   * account-wide routes (the card, the inbox) answer the same for any choice,
+   * and so do routes nothing here distinguishes.
+   */
+  const phantom = wallet === "w-phantom";
+  const fresh = wallet === "w-new";
+  if (route === "/v1/portfolio")
+    return wallet === "all" ? allWallets : phantom ? phantomPortfolio : fresh ? freshPortfolio : portfolio;
+  if (route === "/v1/money")
+    return phantom || fresh
+      ? {
+          ...money,
+          balanceUsd: (phantom ? phantomCash : freshCash).toFixed(2),
+          earnUsd: "0.00",
+          borrowingPower: { availableUsd: "0", enabled: phantom },
+        }
+      : money;
+  if (route === "/v1/borrow") return phantom ? phantomBorrow : fresh ? emptyBorrow : borrow;
+  // The move into the Mercury wallet: Phantom's unpledged shares and its cash. The 6 Tesla in the loan stay.
+  if (route === "/v1/move/tokens")
+    return {
+      available: true,
+      tokens: phantom
+        ? [
+            {
+              mint: "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+              symbol: "TSLAx",
+              ticker: "TSLA",
+              name: "Tesla",
+              decimals: 8,
+              amountRaw: "240000000",
+              amount: "2.4",
+            },
+            {
+              mint: "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+              symbol: "NVDAx",
+              ticker: "NVDA",
+              name: "Nvidia",
+              decimals: 8,
+              amountRaw: "1020000000",
+              amount: "10.2",
+            },
+            {
+              mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+              symbol: "USDC",
+              ticker: null,
+              name: "US dollars",
+              decimals: 6,
+              amountRaw: "900000000",
+              amount: "900",
+            },
+          ]
+        : [],
+    };
+  // A basket Phantom runs in Glider's own app: Mercury sees it, and shows the way to bring it in.
+  if (route === "/v1/move/outside-baskets")
+    return {
+      baskets: phantom
+        ? [
+            {
+              address: "8kSn2Z2nUzR1x5kqG3cZB1ozSUhLkV3m1gD9Zw3xGl1d",
+              valueUsd: "1186.40",
+              holdings: [
+                {
+                  mint: "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+                  symbol: "AAPLx",
+                  ticker: "AAPL",
+                  amount: "2.1",
+                  valueUsd: "486.15",
+                },
+                {
+                  mint: "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+                  symbol: "QQQx",
+                  ticker: "QQQ",
+                  amount: "1.05",
+                  valueUsd: "650.25",
+                },
+                {
+                  mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                  symbol: "USDC",
+                  ticker: null,
+                  amount: "50",
+                  valueUsd: "50",
+                },
+              ],
+              arrived: null,
+              similar: { slug: "mag7", name: "Magnificent Seven", overlap: "0.41" },
+            },
+            // A second one, withdrawn as USDC this morning: the card asks for the next step.
+            {
+              address: "3QvJmXc7nB6T1tK8YdKp2fJ9tA4wLrS5hQ1eG8mN2xZa",
+              valueUsd: "0",
+              holdings: [],
+              arrived: {
+                at: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
+                holdings: [
+                  {
+                    mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                    symbol: "USDC",
+                    ticker: null,
+                    amount: "640",
+                    valueUsd: "640",
+                  },
+                ],
+              },
+              similar: { slug: "mag7", name: "Magnificent Seven", overlap: "0.62" },
+            },
+          ]
+        : [],
+    };
+  // Built, as the server would: one transaction, the linked wallet paying two new accounts' rent in SOL.
+  if (route === "/v1/move/prepare")
+    return {
+      transactions: [{ transaction: "AA==", moved: [] }],
+      feeUsd: "0",
+      rentUsd: "0.84",
+      rentSol: "0.004176",
+      coveredByMercury: false,
+    };
+  if (route === "/v1/earn")
+    return phantom || fresh
+      ? {
+          ...earn,
+          holdings: [],
+          balanceUsd: "0",
+          earnedUsd: "0",
+          apy: null,
+          walletUsd: (phantom ? phantomCash : freshCash).toFixed(2),
+        }
+      : earn;
   if (route === "/v1/earn/risk") return { accepted: "2026-10-22" };
   if (route === "/v1/earn/vaults") return { vaults: earnVaults };
   if (route.startsWith("/v1/earn/vaults/")) return earnHistory(path);
@@ -1320,7 +1760,14 @@ export const sampleResponse = (path: string, body?: string): unknown | undefined
   if (route === "/v1/money/fund/intents") return { intents: [] };
   if (route === "/v1/portfolio/history") {
     const range = new URLSearchParams(path.split("?")[1] ?? "").get("range") ?? "1D";
-    return { range, points: SAMPLE_HISTORY[range] ?? SAMPLE_HISTORY["1D"] };
+    const points = SAMPLE_HISTORY[range] ?? SAMPLE_HISTORY["1D"]!;
+    // The same shape per wallet, scaled to each one's size. The new wallet has no past read yet.
+    const scale = wallet === "all" ? 1.416 : wallet === "w-phantom" ? 0.416 : wallet === "w-new" ? 0 : 1;
+    return {
+      range,
+      points:
+        scale === 0 ? [] : points.map((p) => ({ ...p, valueUsd: (Number(p.valueUsd) * scale).toFixed(2) })),
+    };
   }
   return undefined;
 };

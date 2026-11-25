@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { walletStreams, wallets } from "../db/schema.js";
 import type { WatchedAddress } from "../jobs/watch.js";
+import { followed } from "../wallets/active.js";
 
 /**
  * Every address whose news belongs to somebody, and whose wallet that is.
@@ -22,7 +23,7 @@ export const streamAddresses = async (db: Db): Promise<readonly WatchedAddress[]
     .select({ wallet: wallets.address, stream: walletStreams.address })
     .from(wallets)
     .leftJoin(walletStreams, eq(walletStreams.walletId, wallets.id))
-    .where(eq(wallets.isPrimary, true));
+    .where(followed);
 
   const seen = new Set<string>();
   const watched: WatchedAddress[] = [];

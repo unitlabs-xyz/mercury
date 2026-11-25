@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useBorrow } from "../api/borrow";
 import { useDashboard } from "../api/dashboard";
-import { usePortfolio, useSignedIn } from "../api/hooks";
+import { usePortfolio, usePortfolioSummary, useSignedIn } from "../api/hooks";
 import { useCreditMarket, useInstruments } from "../market/hooks";
 import { Alert } from "../ui/icons";
 import { AppShell } from "./AppShell";
@@ -14,6 +14,12 @@ import { USDC_ASSET_ID } from "@mercury/view";
 import { AssetIcon } from "./baskets/AssetIcon";
 import { displayBasketName } from "./baskets/catalog";
 import { useModel } from "./portfolio/model";
+import { AllWalletLoans, WalletsOverview } from "./portfolio/Wallets";
+import { LinkPrompt } from "./settings/LinkPrompt";
+import { useActingWallet } from "../api/acting-wallet";
+import { walletName } from "../api/wallets";
+import { MoveBanner } from "./move/MoveBanner";
+import { OutsideBaskets } from "./move/OutsideBaskets";
 import { AccountHeader, Allocation, Performance } from "./portfolio/Summary";
 import { useEvents } from "./useEvents";
 import type { Range } from "./ValueChart";
@@ -98,6 +104,12 @@ export const Portfolio = () => {
   const { events, loading: eventsLoading } = useEvents();
 
   const borrow = useBorrow();
+  const { acting, linked } = useActingWallet();
+  // A linked wallet whose past is still being read has no P&L yet; the summary knows which.
+  const summary = usePortfolioSummary(linked.length > 0);
+  const calculating =
+    acting.kind === "linked" &&
+    summary.data?.wallets.find((w) => w.id === acting.wallet.id)?.history === "calculating";
   const m = useModel(portfolio.data, universe.data, credit.data, dash.data, borrow.data);
   const failed = portfolio.isError;
   const inEarn = Number(portfolio.data?.earnUsd ?? 0);
@@ -126,15 +138,36 @@ export const Portfolio = () => {
       )}
 
       <div className="flex flex-col gap-4 md:gap-6">
+        {/* 1 — every wallet together, once anything is linked; until then, the way to link one. */}
+        <WalletsOverview />
+        <LinkPrompt />
+
+        {/* A linked wallet: the light reminder that the Mercury wallet is one tap. */}
+        {acting.kind === "linked" && (
+          <MoveBanner walletId={acting.wallet.id} name={walletName(acting.wallet)} />
+        )}
+
+        {/* A linked wallet's baskets made outside Mercury, and the way to bring them in. */}
+        {acting.kind === "linked" && <OutsideBaskets name={walletName(acting.wallet)} />}
+
         {/* 2 — the account, and what you can do with it. */}
-        <AccountHeader m={m} dash={dash.data} inEarn={inEarn} earnIsStale={earnIsStale} failed={failed} />
+        <AccountHeader
+          m={m}
+          dash={dash.data}
+          inEarn={inEarn}
+          earnIsStale={earnIsStale}
+          failed={failed}
+          together={acting.kind === "all"}
+          calculating={calculating}
+          movable={acting.kind === "linked"}
+        />
 
         <div className="grid grid-cols-1 items-start gap-4 md:gap-6 xl:grid-cols-[minmax(0,1fr)_416px]">
           {/* 3 — what you own, then how it has moved and where it sits. */}
           <div className="flex min-w-0 flex-col gap-4 md:gap-6">
-            <Holdings m={m} signedIn={signedIn} failed={failed} baskets={baskets} />
+            <Holdings m={m} signedIn={signedIn} failed={failed} baskets={baskets} calculating={calculating} />
             <div className="grid grid-cols-1 items-stretch gap-4 md:gap-6 lg:grid-cols-2">
-              <Performance m={m} range={range} setRange={setRange} />
+              <Performance total={m?.total} range={range} setRange={setRange} />
               <Allocation m={m} />
             </div>
           </div>
@@ -142,7 +175,11 @@ export const Portfolio = () => {
           {/* 4 — the things you manage, each led by its action, then what happened. */}
           <div className="flex flex-col gap-4 md:gap-6">
             <CardPanel m={m} card={dash.data?.card} loading={dash.isLoading} />
-            <Borrowing m={m} loading={signedIn && borrow.isLoading} />
+            {acting.kind === "all" ? (
+              <AllWalletLoans />
+            ) : (
+              <Borrowing m={m} loading={signedIn && borrow.isLoading} />
+            )}
             <Upcoming items={dash.data?.upcoming ?? []} loading={dash.isLoading} />
             <Recent events={events} loading={eventsLoading || (signedIn && portfolio.isLoading && !failed)} />
           </div>

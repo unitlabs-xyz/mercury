@@ -14,6 +14,7 @@ import type {
 } from "../core/primitives.js";
 import type { Db } from "../../db/client.js";
 import { activities, basketAccounts, basketActions, wallets } from "../../db/schema.js";
+import { walletIdAt } from "../../wallets/primary.js";
 
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const LOCK_KEY = 4_919_208;
@@ -200,6 +201,22 @@ export class JsonBasketStore implements BasketStore {
     if (row?.operationId !== operationId) throw new Error("Basket exit operation conflicts with its intent");
   }
 
+  async exitSettling(portfolioId: string): Promise<boolean> {
+    const [row] = await this.actionsDb()
+      .select({ id: basketActions.id })
+      .from(basketActions)
+      .where(
+        and(
+          eq(basketActions.portfolioId, portfolioId),
+          or(eq(basketActions.kind, "withdraw_in_kind"), eq(basketActions.kind, "liquidate_to_usdc")),
+          isNotNull(basketActions.operationId),
+          isNull(basketActions.resolvedAt),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  }
+
   async recentActions(userId: string, portfolioId: string) {
     return this.actionsDb()
       .select({
@@ -244,6 +261,8 @@ export class JsonBasketStore implements BasketStore {
 
   async confirmFunding(input: {
     userId: string;
+    /** The wallet that paid into the basket: its feed gets the row, not always the Mercury wallet's. */
+    ownerAddress?: string;
     slug: string;
     portfolioId: string;
     title: string;
@@ -257,6 +276,8 @@ export class JsonBasketStore implements BasketStore {
       .insert(activities)
       .values({
         userId: input.userId,
+        // The wallet that funded it, so its own transfer_out row is the one re-kinded below; the Mercury wallet when none is named.
+        walletId: walletIdAt(input.userId, input.ownerAddress ?? ""),
         kind: "basket_funding",
         occurredAt: input.occurredAt,
         title: input.title,
@@ -268,7 +289,7 @@ export class JsonBasketStore implements BasketStore {
         basketPortfolioId: input.portfolioId,
       })
       .onConflictDoUpdate({
-        target: [activities.userId, activities.txSignature, activities.mint],
+        target: [activities.walletId, activities.txSignature, activities.mint],
         set: {
           kind: "basket_funding",
           occurredAt: input.occurredAt,

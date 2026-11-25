@@ -1,10 +1,11 @@
-import { useSignTransaction } from "@privy-io/react-auth/solana";
-import { useEmbeddedWallet } from "../auth/embedded";
+import { useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
+import { ALL_WALLETS, chosenWallet, subscribeChoice } from "./wallet-choice";
 import { refreshAfterChain } from "./settle";
-import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { claimWallet, forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { useTransactionSigner } from "./signer";
 import { borrowFromWire, type BorrowIntent, type BorrowWire } from "@mercury/view";
 
 /* The position's shape and its reading off the wire are shared with the phone. */
@@ -12,18 +13,24 @@ export type { Borrow, BorrowIntent, BorrowRow, Health } from "@mercury/view";
 
 const KIND = "loan";
 
-type SentLoan = { signature: string; action: BorrowIntent };
+type SentLoan = { signature: string; action: BorrowIntent; wallet?: string };
 
-const confirmSentLoan = (sent: SentLoan) =>
-  apiFetch("/v1/borrow/confirm", { method: "POST", body: JSON.stringify(sent) });
+const confirmSentLoan = ({ signature, action, wallet }: SentLoan) =>
+  apiFetch("/v1/borrow/confirm", {
+    method: "POST",
+    headers: claimWallet({ signature, ...(wallet === undefined ? {} : { wallet }) }),
+    body: JSON.stringify({ signature, action }),
+  });
 
 /** The account's Kamino position and what it can spend: cash plus what it could borrow. */
 export const useBorrow = () => {
   const signedIn = useSignedIn();
+  // A loan is one wallet's: every wallet at once has no position to read, and the server says so with a 400.
+  const all = useSyncExternalStore(subscribeChoice, chosenWallet, chosenWallet) === ALL_WALLETS;
   return useQuery({
     queryKey: ["api", "borrow"],
     queryFn: async () => borrowFromWire(await apiFetch<BorrowWire>("/v1/borrow")),
-    enabled: signedIn,
+    enabled: signedIn && !all,
     staleTime: 20_000,
     refetchInterval: 60_000,
   });
@@ -36,17 +43,17 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
  * One borrowing action, end to end: the server checks it against the safety
  * target and builds unsigned transactions, the embedded wallet signs each, and
  * the server broadcasts them in order, waiting for each to confirm. A first
- * action opens the Kamino account in its own transaction, so a first-time
- * borrower signs once too, and Mercury pays for the account.
+ * action opens the Kamino account in the same transaction, so a first-time
+ * borrower signs once too. Mercury pays for that account in the Mercury
+ * wallet; a linked wallet pays for its own, in SOL.
  */
 export const useBorrowAction = () => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signTransaction } = useSignTransaction();
+  // The wallet chosen signs: the Mercury wallet through Privy, a linked one in its own pop-up.
+  const signer = useTransactionSigner();
 
   const mutation = useMutation({
     mutationFn: async (intent: BorrowIntent) => {
-      if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
       const built = await apiFetch<{ transactions: string[]; firstTime: boolean }>(
         "/v1/borrow/transactions",
         {
@@ -56,7 +63,7 @@ export const useBorrowAction = () => {
       );
       const signatures: string[] = [];
       for (const tx of built.transactions) {
-        const { signedTransaction } = await signTransaction({ transaction: toBytes(tx), wallet });
+        const signedTransaction = await signer.sign(toBytes(tx));
         const sent = await apiFetch<{
           signature: string;
           status: string;
@@ -111,7 +118,7 @@ export const useBorrowAction = () => {
 
   /* Same race the buy sheet waits out: Privy fills the wallet list a beat
      after load, and an empty list there is not a missing wallet. */
-  const walletReady = wallet !== undefined;
+  const walletReady = signer.walletReady;
 
   /* Loans whose confirm the node was too slow to answer. Nothing else records one. */
   usePendingConfirms<SentLoan>(KIND, confirmSentLoan, {
@@ -119,5 +126,5 @@ export const useBorrowAction = () => {
     onSettled: () => refreshAfterChain(qc),
   });
 
-  return { ...mutation, walletReady };
+  return { ...mutation, walletReady, approver: signer.approver };
 };

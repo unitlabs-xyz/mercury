@@ -6,13 +6,15 @@ import type { PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
 import { portfolioSnapshots, users, wallets } from "../db/schema.js";
 import { hourOf } from "./history.js";
+import { followed } from "../wallets/active.js";
 import { cashFrom, valuePortfolio, type ValuableHolding } from "./value.js";
 import type { BasketValueReader } from "./baskets.js";
 
 const log = logger("portfolio-snapshot");
 
 export interface SnapshotDeps {
-  readonly holdings: (userId: string) => Promise<readonly ValuableHolding[]>;
+  /** One wallet's holdings. Each wallet is its own reading. */
+  readonly walletHoldings: (userId: string, walletId: string) => Promise<readonly ValuableHolding[]>;
   /** Owed to Kamino. Null when Kamino could not be read, which costs this account its reading. */
   readonly debt: (walletAddress: string) => Promise<Decimal | null>;
   readonly prices: PriceBoard;
@@ -27,7 +29,7 @@ export interface SnapshotSummary {
   readonly wallets: number;
   readonly written: number;
   readonly failed: number;
-  /** The accounts that could not be read, for a retry inside the same hour. See `snapshot-retry.ts`. */
+  /** The wallets that could not be read, by id, for a retry inside the same hour. See `snapshot-retry.ts`. */
   readonly missed: readonly string[];
 }
 
@@ -50,14 +52,15 @@ export async function snapshotAllPortfolios(
   db: Db,
   deps: SnapshotDeps,
   now: Date,
+  /** Only these wallets, by id. */
   opts: { readonly only?: ReadonlySet<string> } = {},
 ): Promise<SnapshotSummary> {
   const all = await db
-    .select({ userId: users.id, address: wallets.address })
+    .select({ userId: users.id, walletId: wallets.id, address: wallets.address })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
-    .where(eq(wallets.isPrimary, true));
-  const rows = opts.only === undefined ? all : all.filter((r) => opts.only!.has(r.userId));
+    .where(followed);
+  const rows = opts.only === undefined ? all : all.filter((r) => opts.only!.has(r.walletId));
 
   const capturedAt = hourOf(now);
   let written = 0;
@@ -73,7 +76,7 @@ export async function snapshotAllPortfolios(
       if (row === undefined) return;
       try {
         const [held, debtUsd, basketValue, earnUsd] = await Promise.all([
-          deps.holdings(row.userId),
+          deps.walletHoldings(row.userId, row.walletId),
           deps.debt(row.address),
           deps.baskets(row.userId, row.address),
           // Unreadable throws, and the reading is skipped, for the reason below.
@@ -107,6 +110,7 @@ export async function snapshotAllPortfolios(
           .insert(portfolioSnapshots)
           .values({
             userId: row.userId,
+            walletId: row.walletId,
             capturedAt,
             readAt: now,
             totalUsd: toWire(value.totalUsd),
@@ -119,7 +123,7 @@ export async function snapshotAllPortfolios(
           // A deploy mid-hour re-reads the same hour. The later reading is the
           // better one — it is closer to the top of the next hour — so it wins.
           .onConflictDoUpdate({
-            target: [portfolioSnapshots.userId, portfolioSnapshots.capturedAt],
+            target: [portfolioSnapshots.walletId, portfolioSnapshots.capturedAt],
             set: {
               readAt: now,
               totalUsd: toWire(value.totalUsd),
@@ -133,12 +137,12 @@ export async function snapshotAllPortfolios(
         written += 1;
       } catch (error: unknown) {
         failed += 1;
-        missed.push(row.userId);
+        missed.push(row.walletId);
         // The wallet, never the address: an address in a log is a person's
         // holdings in a log.
         /* The only reading of what an account was worth at this hour, and
              nothing can reconstruct one that was never taken. */
-        log.error({ userId: row.userId, err: error }, "snapshot failed for a wallet");
+        log.error({ userId: row.userId, walletId: row.walletId, err: error }, "snapshot failed for a wallet");
       }
     }
   };

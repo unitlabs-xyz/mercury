@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { instruments, orders, tokens } from "../db/schema.js";
 import { logger } from "../log/index.js";
+import { primaryWalletId } from "../wallets/primary.js";
 
 /*
  * `partially_filled` and `expired` were here with nothing able to write them.
@@ -14,6 +15,12 @@ export type OrderStatus = "pending" | "executing" | "filled" | "queued" | "cance
 
 export interface NewOrder {
   readonly userId: string;
+  /**
+   * The wallet the order is for: the one chosen when it was placed. Executing
+   * and confirming act for this wallet, never for whichever is chosen by then.
+   * Left out, the Mercury wallet.
+   */
+  readonly walletId?: string;
   readonly ticker: string;
   readonly side: "buy" | "sell";
   readonly usdAmount: string;
@@ -58,6 +65,8 @@ export interface StoredOrder {
   /** Mercury's fee in the last transaction built for it. Null until one is. */
   readonly mercuryFeeUsd: string | null;
   readonly createdAt: string;
+  /** The wallet it was placed for. Null only on an order whose wallet was since deleted. */
+  readonly walletId: string | null;
 }
 
 export interface OrderStore {
@@ -106,6 +115,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
       .insert(orders)
       .values({
         userId: order.userId,
+        walletId: order.walletId ?? primaryWalletId(order.userId),
         instrumentId: instrument.id,
         side: order.side,
         usdAmount: order.usdAmount,
@@ -124,6 +134,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         max: orders.max,
         mercuryFeeUsd: orders.mercuryFeeUsd,
         createdAt: orders.createdAt,
+        walletId: orders.walletId,
       });
     if (saved === undefined) throw new Error("order insert returned nothing");
 
@@ -157,6 +168,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
       max: saved.max,
       mercuryFeeUsd: saved.mercuryFeeUsd,
       createdAt: saved.createdAt.toISOString(),
+      walletId: saved.walletId,
     };
   },
 
@@ -170,6 +182,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
         max: orders.max,
         mercuryFeeUsd: orders.mercuryFeeUsd,
         createdAt: orders.createdAt,
+        walletId: orders.walletId,
       })
       .from(orders)
       // Scoped to the caller. An order id is a uuid, but a route that trusts one
@@ -187,6 +200,7 @@ export const pgOrderStore = (db: Db): OrderStore => ({
           max: row.max,
           mercuryFeeUsd: row.mercuryFeeUsd,
           createdAt: row.createdAt.toISOString(),
+          walletId: row.walletId,
         };
   },
 

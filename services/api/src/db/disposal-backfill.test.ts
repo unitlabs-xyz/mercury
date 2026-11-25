@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { testDb } from "./testing.js";
+import { mercuryWallet, testDb } from "./testing.js";
 import { disposals, instruments, lots, orders, tokens, users } from "./schema.js";
 
 /**
@@ -35,6 +35,14 @@ const decision = (filledShares: string | null, multiplier = "1.001") => ({
 const world = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:backfill" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
+  /*
+   * 0026 predates `wallet_id` and inserts disposals without one. In production
+   * it ran before 0030 added the column, and 0030 then filled it from the
+   * person's Mercury wallet. Run here against today's schema, a default stands
+   * in for that backfill, so this still tests what 0026 itself does.
+   */
+  await db.execute(sql.raw(`ALTER TABLE "disposal" ALTER COLUMN "wallet_id" SET DEFAULT '${walletId}'`));
   const [instrument] = await db
     .insert(instruments)
     .values({ ticker: "NVDA", name: "Nvidia", sector: "Technology" })
@@ -48,6 +56,7 @@ const world = async () => {
       .insert(orders)
       .values({
         userId: user!.id,
+        walletId,
         instrumentId: instrument!.id,
         side: "sell",
         usdAmount: "100",
@@ -61,6 +70,7 @@ const world = async () => {
   const lot = (over: Partial<typeof lots.$inferInsert>) =>
     db.insert(lots).values({
       userId: user!.id,
+      walletId,
       tokenId: token!.id,
       instrumentId: instrument!.id,
       tokenQty: 100_000_000n,

@@ -31,6 +31,10 @@ const KIND: Record<string, EventKind> = {
   transfer_out: "send",
   basket_funding: "send",
   dividend: "dividend",
+  // Announced, not paid: shown as a dividend, with no amount and no direction (see NO_DIRECTION).
+  dividend_notice: "dividend",
+  // More shares, each worth less: nothing earned, so no amount and no direction.
+  split: "dividend",
   interest: "interest",
   buy: "buy",
   sell: "sell",
@@ -44,6 +48,7 @@ const KIND: Record<string, EventKind> = {
   repay: "repay",
   pledge: "pledge",
   unpledge: "unpledge",
+  liquidation: "liquidation",
   loan_alert: "loan_alert",
   earn_deposit: "earn_deposit",
   earn_withdraw: "earn_withdraw",
@@ -73,6 +78,14 @@ const FLOW: Partial<Record<EventKind, "in" | "out">> = {
   repay: "out",
 };
 
+/**
+ * Rows with no direction: collateral Kamino sold to clear a debt, and a
+ * dividend announced but not paid yet, which moved nothing.
+ * The shares left and the debt went down by what they fetched; no cash reached
+ * the holder or left them, so neither sign is true.
+ */
+const NO_DIRECTION = new Set(["liquidation", "dividend_notice", "split"]);
+
 export const toEvent = (i: ActivityItem): Event => {
   const kind = KIND[i.kind] ?? "receive";
   return {
@@ -88,10 +101,15 @@ export const toEvent = (i: ActivityItem): Event => {
         ? null
         : Math.abs(Number(i.amountUsd)).toLocaleString("en-US", { style: "currency", currency: "USD" }),
     // Money moving within the account, to a basket or to Earn and back: no sign either way.
-    flow: INTERNAL.has(i.kind)
-      ? null
-      : (FLOW[kind] ??
-        (i.amountUsd === null || Number(i.amountUsd) === 0 ? null : Number(i.amountUsd) < 0 ? "out" : "in")),
+    flow:
+      INTERNAL.has(i.kind) || NO_DIRECTION.has(i.kind)
+        ? null
+        : (FLOW[kind] ??
+          (i.amountUsd === null || Number(i.amountUsd) === 0
+            ? null
+            : Number(i.amountUsd) < 0
+              ? "out"
+              : "in")),
     details: [],
     ...(i.txSignature ? { signature: i.txSignature } : {}),
     ...(i.mint ? { mint: i.mint } : {}),

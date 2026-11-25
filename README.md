@@ -29,21 +29,22 @@ Everything still open, across the product, the code and the partners, is in [TOD
 
 ## Read the docs in this order
 
-| Doc                                                | What it covers                                                  |
-| -------------------------------------------------- | --------------------------------------------------------------- |
-| [00 Overview](docs/00-overview.md)                 | What we are building and for whom, in one page                  |
-| [01 Evidence](docs/01-evidence.md)                 | What we measured on-chain, and why it justifies the product     |
-| [02 Product](docs/02-product.md)                   | Every feature, in scope and out                                 |
-| [03 Architecture](docs/03-architecture.md)         | Monorepo layout, stack, and why each choice                     |
-| [04 Execution engine](docs/04-execution-engine.md) | The core algorithm. Read this one properly                      |
-| [05 Data model](docs/05-data-model.md)             | Entities, and the cost-basis rules that are easy to get wrong   |
-| [06 API](docs/06-api.md)                           | Endpoint contract between apps and server                       |
-| [07 Design](docs/07-design.md)                     | Screens, states, and the apps we are copying                    |
-| [08 Roadmap](docs/08-roadmap.md)                   | The hackathon plan, and where it stands                         |
-| [09 Open questions](docs/09-open-questions.md)     | What is settled, and what is still open                         |
-| [10 Baskets](docs/10-baskets.md)                   | The vault, and how a basket becomes one token                   |
-| [11 References](docs/11-references.md)             | What to read and look at before writing code                    |
-| [12 Roadmap to 2028](docs/12-roadmap-2028.md)      | Where Mercury is heading, and what it owns and rents on the way |
+| Doc                                                                          | What it covers                                                            |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [00 Overview](docs/00-overview.md)                                           | What we are building and for whom, in one page                            |
+| [01 Evidence](docs/01-evidence.md)                                           | What we measured on-chain, and why it justifies the product               |
+| [02 Product](docs/02-product.md)                                             | Every feature, in scope and out                                           |
+| [03 Architecture](docs/03-architecture.md)                                   | Monorepo layout, stack, and why each choice                               |
+| [04 Execution engine](docs/04-execution-engine.md)                           | The core algorithm. Read this one properly                                |
+| [05 Data model](docs/05-data-model.md)                                       | Entities, and the cost-basis rules that are easy to get wrong             |
+| [06 API](docs/06-api.md)                                                     | Endpoint contract between apps and server                                 |
+| [07 Design](docs/07-design.md)                                               | Screens, states, and the apps we are copying                              |
+| [08 Roadmap](docs/08-roadmap.md)                                             | The hackathon plan, and where it stands                                   |
+| [09 Open questions](docs/09-open-questions.md)                               | What is settled, and what is still open                                   |
+| [10 Baskets](docs/10-baskets.md)                                             | The vault, and how a basket becomes one token                             |
+| [11 References](docs/11-references.md)                                       | What to read and look at before writing code                              |
+| [12 Roadmap to 2028](docs/12-roadmap-2028.md)                                | Where Mercury is heading, and what it owns and rents on the way           |
+| [Linked wallets](docs/superpowers/specs/2026-11-13-linked-wallets-design.md) | Phantom and the like beside the Mercury wallet: link, track, act, move in |
 
 Decisions live in [`docs/adr`](docs/adr). The backend design and its implementation plans are in
 [`docs/superpowers`](docs/superpowers). Research reports, with the researchers' notes, are in
@@ -257,9 +258,9 @@ Changing either one needs a rebuild, not a restart.
 | `packages/sdk`    | Typed client, every response parsed. Neither app imports it                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `packages/view`   | **Done.** What web and mobile both compute: formatting, the activity feed, the order and borrow models, receipts. No DOM, by compiler                                                                                                                                                                                                                                                                                                                                                     |
 | `services/api`    | **Identity, read models and execution done**: Privy tokens verified against the app's JWKS; instruments, portfolio, exposure, money and activity answer from Postgres and chain; an order prices, builds, settles and writes its own lot. Borrowing against stocks and Earn run on Kamino, adding cash from another chain runs on Relay, and the relayer sponsors network fees. The clocked jobs run in-process, listed in `src/index.ts`. Trigger orders are the one piece still missing |
-| `apps/web`        | Landing, card and credit pages, and the account screens: invest, baskets, borrow, Earn, add cash and send. Sign-in creates a real Solana wallet, and the buy sheet places a real order                                                                                                                                                                                                                                                                                                    |
+| `apps/web`        | Landing, card and credit pages, and the account screens: invest, baskets, borrow, Earn, add cash and send. Sign-in creates a real Solana wallet, and the buy sheet places a real order. Linked wallets: up to 5 Solana wallets beside the Mercury wallet, each signing for itself, and moved in when the person chooses ([ADR 0017](docs/adr/0017-linked-wallets.md))                                                                                                                     |
 | `apps/landing`    | **Scaffolded on Astro.** Eight sections of the designed page, placeholder artwork, SEO and sitemap wired                                                                                                                                                                                                                                                                                                                                                                                  |
-| `apps/mobile`     | **In progress.** Sign-in, the four tabs, stock pages, buying and selling, send, borrow, baskets and adding cash, on the same API and `packages/view`. Needs a custom dev client for Privy                                                                                                                                                                                                                                                                                                 |
+| `apps/mobile`     | **In progress.** Sign-in, the four tabs, stock pages, buying and selling, send, borrow, baskets and adding cash, on the same API and `packages/view`; linked wallets shown read-only, managed on web. Needs a custom dev client for Privy                                                                                                                                                                                                                                                 |
 
 ## Ground rules
 

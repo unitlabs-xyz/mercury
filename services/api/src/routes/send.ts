@@ -4,10 +4,6 @@ import { z } from "zod";
 import {
   address,
   createSolanaRpc,
-  getBase58Decoder,
-  getBase64Encoder,
-  getCompiledTransactionMessageDecoder,
-  getTransactionDecoder,
   isSolanaError,
   SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
   SOLANA_ERROR__TRANSACTION_ERROR__ALREADY_PROCESSED,
@@ -25,7 +21,9 @@ import type {} from "../auth/middleware.js";
 import { decodeSponsored } from "../relay/decode.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
 import type { RelaySigner } from "../relay/signer.js";
+import { writerOf } from "../wallets/acting.js";
 import { validateSponsored } from "../relay/validate.js";
+import { awaitLanding, feePayerSignature } from "../relay/confirm.js";
 
 export interface SendDeps {
   readonly rpcUrl: string;
@@ -81,20 +79,6 @@ export interface SendDeps {
  */
 const STATUS_FIRST_MS = 1_000;
 const STATUS_EVERY_MS = 2_000;
-
-/** The transaction id is the fee payer's signature, which is the first one. */
-const feePayerSignature = (wire: string): string | null => {
-  try {
-    const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
-    const message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
-    const payer = message.staticAccounts[0];
-    if (payer === undefined) return null;
-    const sig = tx.signatures[payer as keyof typeof tx.signatures];
-    return sig ? getBase58Decoder().decode(sig) : null;
-  } catch {
-    return null;
-  }
-};
 
 /**
  * `@solana/kit` does not put the failure in the message.
@@ -242,10 +226,17 @@ export function sendRoutes(deps: SendDeps): Hono {
    * own network costs in SOL on that path, so charging USDC as well would be
    * charging twice.
    */
-  const rentOwed = async (destination: string): Promise<Decimal> =>
-    deps.relay === undefined || deps.fees === undefined
-      ? D(0)
-      : (await quoteTransferFee(deps.fees, { destination })).usdc;
+  const rentOwed = async (destination: string, sponsored: boolean): Promise<Decimal> =>
+    !sponsored || deps.fees === undefined ? D(0) : (await quoteTransferFee(deps.fees, { destination })).usdc;
+
+  /**
+   * The relayer, for the Mercury wallet alone. A linked wallet pays its own
+   * network fee and rent in SOL, so it takes the wallet-paid path and owes
+   * nothing in USDC: its keys are its own, and rent Mercury put up for it
+   * could be taken straight back out.
+   */
+  const relayFor = (writer: { readonly isPrimary: boolean } | null) =>
+    writer?.isPrimary === true ? deps.relay : undefined;
 
   /**
    * What a transfer to this recipient will cost, before an amount is typed.
@@ -256,8 +247,11 @@ export function sendRoutes(deps: SendDeps): Hono {
    * enough for a field to ask on every address it accepts.
    */
   app.post("/v1/money/send/quote", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+    // The wallet chosen, which the money leaves. See `writerOf`.
+    const writer = writerOf(c);
+    const wallet = writer?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const sponsored = relayFor(writer) !== undefined;
     const parsed = QuoteBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", "Enter a recipient address."), 400);
 
@@ -269,8 +263,8 @@ export function sendRoutes(deps: SendDeps): Hono {
     }
 
     try {
-      const feeUsdc = await rentOwed(destination);
-      return c.json({ feeUsd: feeUsdc.toString(), sponsored: deps.relay !== undefined });
+      const feeUsdc = await rentOwed(destination, sponsored);
+      return c.json({ feeUsd: feeUsdc.toString(), sponsored });
     } catch (err) {
       /*
        * A quote we cannot get is not a reason to block a transfer. Zero and
@@ -278,12 +272,14 @@ export function sendRoutes(deps: SendDeps): Hono {
        * `prepare` prices it again for real.
        */
       log.error({ err }, "could not quote the transfer fee");
-      return c.json({ feeUsd: "0", sponsored: deps.relay !== undefined });
+      return c.json({ feeUsd: "0", sponsored });
     }
   });
 
   app.post("/v1/money/send/prepare", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+    // The wallet chosen, which the money leaves. See `writerOf`.
+    const writer = writerOf(c);
+    const wallet = writer?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = PrepareBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
@@ -303,11 +299,11 @@ export function sendRoutes(deps: SendDeps): Hono {
     if (destination === wallet)
       return c.json(fail("validation_failed", "You cannot send to your own wallet."), 400);
 
-    const relay = deps.relay;
+    const relay = relayFor(writer);
     try {
       const [{ value: lifetime }, feeUsdc] = await Promise.all([
         rpc.getLatestBlockhash({ commitment: "confirmed" }).send(),
-        rentOwed(destination),
+        rentOwed(destination, relay !== undefined),
       ]);
 
       /*
@@ -365,7 +361,12 @@ export function sendRoutes(deps: SendDeps): Hono {
   });
 
   app.post("/v1/transactions/send", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+    /*
+     * The wallet chosen: the Mercury wallet at the address Privy signed into
+     * the session, or a linked wallet the caller proved theirs when it was
+     * linked. See `writerOf`.
+     */
+    const wallet = writerOf(c)?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = Body.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
@@ -385,7 +386,8 @@ export function sendRoutes(deps: SendDeps): Hono {
       /*
        * We are being asked to pay. The session proves who is calling; it does
        * not prove the transaction is theirs, so everything about the message
-       * is checked against the wallet Privy signed for before the key is used.
+       * is checked against the wallet chosen (the one it must be signed by)
+       * before the key is used.
        */
       const verdict = validateSponsored(decoded.tx, wallet, {
         relayer: deps.relay.signer.address,
@@ -428,24 +430,14 @@ export function sendRoutes(deps: SendDeps): Hono {
     }
     void deps.accepted?.(decoded.messageBytes, signature).catch(() => undefined);
 
-    const deadline = Date.now() + confirmMs;
-    let wait = STATUS_FIRST_MS;
-    for (;;) {
-      await new Promise((r) => setTimeout(r, Math.min(wait, Math.max(0, deadline - Date.now()))));
-      wait = STATUS_EVERY_MS;
-      const { value } = await rpc.getSignatureStatuses([signature as Signature]).send();
-      const status = value[0];
-      if (status?.err) {
-        deps.sent?.(wallet);
-        return c.json({ signature, status: "failed", error: JSON.stringify(status.err) }, 422);
-      }
-      if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") {
-        deps.sent?.(wallet);
-        return c.json({ signature, status: "confirmed" });
-      }
-      if (Date.now() >= deadline) break;
-    }
+    const landed = await awaitLanding(
+      async (sig) => (await rpc.getSignatureStatuses([sig as Signature]).send()).value[0] ?? null,
+      signature,
+      { timeoutMs: confirmMs, firstMs: STATUS_FIRST_MS, everyMs: STATUS_EVERY_MS },
+    );
     deps.sent?.(wallet);
+    if (landed.kind === "failed") return c.json({ signature, status: "failed", error: landed.error }, 422);
+    if (landed.kind === "confirmed") return c.json({ signature, status: "confirmed" });
     return c.json({ signature, status: "pending" }, 202);
   });
 

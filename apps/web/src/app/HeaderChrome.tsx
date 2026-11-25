@@ -16,15 +16,13 @@ import { relTime } from "./portfolio/ui";
 
 /**
  * Global chrome, the same on every app screen: the inbox behind the bell, and
- * the settings placeholder, which still says it is not built: a control that
- * does nothing when pressed reads as broken rather than as unfinished.
+ * settings. Settings holds linked wallets, and says plainly that the rest is
+ * not built: a control that does nothing when pressed reads as broken rather
+ * than as unfinished.
  */
 type Panel = "alerts" | "settings";
 
-const SETTINGS = {
-  title: "Not built yet",
-  body: "Your profile, security, and exporting the wallet to somewhere else will live here.",
-};
+const NOT_YET = "Your profile, security, and exporting the wallet to somewhere else will live here too.";
 
 /*
  * Under the button on a wide screen. On a phone the bell is not at the screen's
@@ -38,6 +36,7 @@ export const HeaderChrome = () => {
   const [open, setOpen] = useState<Panel | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const unread = useUnreadCount().data ?? 0;
+  const panels = usePanels();
   const badge = badgeText(unread);
 
   useEffect(() => {
@@ -96,10 +95,22 @@ export const HeaderChrome = () => {
         <div
           role="dialog"
           aria-label="Settings"
-          className={`${PLACED} w-[300px] rounded-xl bg-white px-5 py-4 outline-1 outline-black/10`}
+          className={`${PLACED} w-[300px] rounded-xl bg-white py-2 outline-1 outline-black/10`}
         >
-          <p className="text-[14px] leading-none font-medium text-ds-ink">{SETTINGS.title}</p>
-          <p className="mt-3 text-[14px] leading-[1.45] text-ds-muted text-pretty">{SETTINGS.body}</p>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(null);
+              panels.linkedWallets();
+            }}
+            className="flex w-full flex-col items-start gap-1 px-5 py-2.5 text-left hover:bg-black/[0.03]"
+          >
+            <span className="text-[14px] leading-none font-medium text-ds-ink">Linked wallets</span>
+            <span className="text-[13px] leading-[1.45] text-ds-muted">
+              See the Solana wallets you already hold beside your Mercury wallet.
+            </span>
+          </button>
+          <p className="px-5 pt-2 pb-2.5 text-[13px] leading-[1.45] text-ds-muted text-pretty">{NOT_YET}</p>
         </div>
       )}
     </div>

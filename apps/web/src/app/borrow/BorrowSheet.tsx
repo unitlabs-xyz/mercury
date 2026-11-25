@@ -1,3 +1,4 @@
+import { useHistoryReading } from "../../api/history-reading";
 import { useEffect, useMemo, useState } from "react";
 import { useBorrow, useBorrowAction } from "../../api/borrow";
 import { useInstrument, useInstruments } from "../../market/hooks";
@@ -15,12 +16,15 @@ import {
   usd,
   type BorrowRow,
   type BorrowTab,
+  READING_HISTORY,
 } from "@mercury/view";
 import { Mark } from "../invest/shared";
 import { TipLine } from "../review";
 import { LoanMeter, loanNow, loanShape } from "../money/LoanMeter";
 import { Skeleton, SkeletonRows } from "../portfolio/ui";
 import { Fact, RailLine } from "../stock/Panels";
+import { continueIn } from "../../api/signer-rules";
+import { ApproveIn, MercuryTip } from "../ApproveIn";
 import { chip } from "../stock/Ticket";
 
 export type Tab = BorrowTab;
@@ -47,6 +51,8 @@ export const BorrowSheet = ({
   /** Opened from that stock's own page: show just it, not the list to choose from. */
   only?: boolean;
 }) => {
+  // A linked wallet whose past is still being read: its interest and earnings wait for it.
+  const reading = useHistoryReading();
   const borrow = useBorrow();
   const action = useBorrowAction();
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -361,7 +367,16 @@ export const BorrowSheet = ({
                    */}
                   {tab === "repay" && b.owedUsdc > 0 && (
                     <dl className="mt-3 flex flex-col gap-3 border-t border-ds-divider px-1 pt-3">
-                      {b.principalUsdc !== null && b.interestUsdc !== null && (
+                      {/* A linked wallet's loan before its past is read: no split to show yet, and it says why. */}
+                      {reading && (
+                        <TipLine
+                          k="Interest so far"
+                          tip="Read from this wallet's past, which is being read now."
+                        >
+                          {READING_HISTORY}
+                        </TipLine>
+                      )}
+                      {!reading && b.principalUsdc !== null && b.interestUsdc !== null && (
                         <>
                           <TipLine k="Borrowed" tip="What you borrowed and have not repaid yet.">
                             {usd(b.principalUsdc)}
@@ -391,38 +406,50 @@ export const BorrowSheet = ({
               </p>
             )}
 
+            <ApproveIn approver={action.approver} />
             <Button
               variant="primary"
               size="lg"
               disabled={!canSubmit}
               loading={busy}
               onClick={() => intent && action.mutate(intent)}
-              className="mt-6 w-full"
+              className={`${action.approver === null ? "mt-6" : "mt-3"} w-full`}
             >
-              {tab === "borrow"
-                ? `Borrow ${value > 0 ? usd(value) : ""}`.trim()
-                : tab === "repay"
-                  ? `Repay ${value > 0 ? usd(value) : ""}`.trim()
-                  : tab === "pledge"
-                    ? "Add collateral"
-                    : "Withdraw"}
+              {action.approver !== null
+                ? continueIn(action.approver)
+                : tab === "borrow"
+                  ? `Borrow ${value > 0 ? usd(value) : ""}`.trim()
+                  : tab === "repay"
+                    ? `Repay ${value > 0 ? usd(value) : ""}`.trim()
+                    : tab === "pledge"
+                      ? "Add collateral"
+                      : "Withdraw"}
             </Button>
-            {/* Opening the Kamino account is Mercury's to pay. The relayer covers its
-                rent inside this same transaction, so it is paid only if this lands. */}
-            {b.obligation === null && (tab === "borrow" || tab === "pledge") && (
-              <p className="mt-3 flex justify-center">
-                <StatusChip tone="up" size="md">
-                  One-time account setup
-                  {b.setupCostUsd !== null && (
-                    <>
-                      <span className="sr-only">, worth</span>
-                      <s className="ml-1.5">{usd(b.setupCostUsd)}</s>
-                    </>
-                  )}
-                  <span className="ml-1.5 font-medium">Paid by Mercury</span>
-                </StatusChip>
-              </p>
-            )}
+            <MercuryTip approver={action.approver} />
+            {/* Opening the Kamino account is Mercury's to pay for the Mercury wallet: the
+                relayer covers its rent inside this same transaction, so it is paid only if
+                this lands. A linked wallet pays its own, in SOL (about 0.03), and is told
+                before signing if it holds too little. */}
+            {b.obligation === null &&
+              (tab === "borrow" || tab === "pledge") &&
+              (action.approver === null ? (
+                <p className="mt-3 flex justify-center">
+                  <StatusChip tone="up" size="md">
+                    One-time account setup
+                    {b.setupCostUsd !== null && (
+                      <>
+                        <span className="sr-only">, worth</span>
+                        <s className="ml-1.5">{usd(b.setupCostUsd)}</s>
+                      </>
+                    )}
+                    <span className="ml-1.5 font-medium">Paid by Mercury</span>
+                  </StatusChip>
+                </p>
+              ) : (
+                <p className="mt-3 text-center text-[12px] text-ds-muted">
+                  A first loan opens Kamino accounts {action.approver} pays for: about 0.03 SOL, once.
+                </p>
+              ))}
           </>
         )}
       </div>

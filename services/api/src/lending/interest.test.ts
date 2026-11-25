@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import { closeLoanUsdc, leavesDust, loanParts, outstandingPrincipal, type LedgerRow } from "./interest.js";
+import {
+  closeLoanUsdc,
+  interestPaid,
+  leavesDust,
+  loanParts,
+  outstandingPrincipal,
+  type LedgerRow,
+} from "./interest.js";
 
 const row = (kind: string, usdAmount: string | null, debtAfterUsd: string): LedgerRow => ({
   kind,
@@ -105,5 +112,35 @@ describe("leavesDust", () => {
     expect(leavesDust(D("0"), D("0.01"))).toBe(false);
     expect(leavesDust(D("0.01"), D("0.01"))).toBe(false);
     expect(leavesDust(D("-1"), D("0.01"))).toBe(false);
+  });
+});
+
+describe("interestPaid", () => {
+  it("is what the repay that closed the loan took beyond what was borrowed", () => {
+    const rows = [row("borrow", "100", "100"), row("repay", "40", "61"), row("repay", "62.5", "0")];
+    // $100 borrowed, $102.50 repaid in all.
+    expect(interestPaid(rows).toString()).toBe("2.5");
+  });
+
+  it("is nothing while repayments have only paid down what was borrowed", () => {
+    expect(interestPaid([row("borrow", "100", "100"), row("repay", "40", "61")]).toString()).toBe("0");
+  });
+
+  it("adds up across loans, one closed and a new one opened", () => {
+    const rows = [
+      row("borrow", "100", "100"),
+      row("repay", "101", "0"),
+      row("borrow", "50", "50"),
+      row("repay", "50.25", "0"),
+    ];
+    expect(interestPaid(rows).toString()).toBe("1.25");
+  });
+
+  it("counts a debt a liquidation cleared, which the borrower's collateral paid", () => {
+    expect(interestPaid([row("borrow", "100", "100"), row("liquidation", "103", "0")]).toString()).toBe("3");
+  });
+
+  it("guesses nothing for a repay of everything recorded with no amount", () => {
+    expect(interestPaid([row("borrow", "100", "100"), row("repay", null, "0")]).toString()).toBe("0");
   });
 });

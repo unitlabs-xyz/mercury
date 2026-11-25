@@ -3,7 +3,13 @@ import { D } from "@mercury/core";
 import { earnSends, type EarnMove } from "./sends.js";
 import type { Recorded } from "./record.js";
 
-const MOVE: EarnMove = { userId: "user-1", wallet: "WaLLeT", kind: "deposit", vault: "Vault" };
+const MOVE: EarnMove = {
+  userId: "user-1",
+  wallet: "WaLLeT",
+  walletId: "wallet-1",
+  kind: "deposit",
+  vault: "Vault",
+};
 const BYTES = new Uint8Array([1, 2, 3]);
 const RECORDED: Recorded = { kind: "recorded", written: true, usdc: D(20) };
 

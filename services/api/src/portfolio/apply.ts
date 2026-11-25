@@ -3,10 +3,21 @@ import { D, EMPTY_OPEN, replayPosition, type Decimal } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard } from "@mercury/market";
 import type { Db } from "../db/client.js";
-import { activities, disposals, instruments, lots, orders, positions, tokens } from "../db/schema.js";
+import {
+  activities,
+  disposals,
+  historyJobs,
+  instruments,
+  lots,
+  orders,
+  positions,
+  tokens,
+  wallets,
+} from "../db/schema.js";
 import { notifyFor } from "../notify/inbox.js";
 import { movementsByToken } from "./open.js";
 import type { HeldToken, Reconciliation } from "./reconcile.js";
+import { stillFollowed, type WalletOwner } from "../wallets/active.js";
 
 export interface ReconcileDeps {
   readonly chain: ChainReader;
@@ -49,7 +60,7 @@ const PROVISIONAL_MS = 2 * 60_000;
 export async function loadHeldTokens(
   db: Db,
   deps: ReconcileDeps,
-  userId: string,
+  owner: WalletOwner,
   walletAddress: string,
   now: Date = new Date(),
 ): Promise<readonly HeldToken[]> {
@@ -69,7 +80,8 @@ export async function loadHeldTokens(
       })
       .from(tokens)
       .innerJoin(instruments, eq(instruments.id, tokens.instrumentId)),
-    // Every lot and every disposal the user has, to be replayed. A token they
+    // Every lot and every disposal of this wallet, to be replayed. Per wallet,
+    // not per person: a person's other wallets hold their own positions. A token they
     // have emptied still needs a pass, or its position would stay stale at
     // what it used to be.
     db
@@ -88,7 +100,7 @@ export async function loadHeldTokens(
         isEstimated: lots.isEstimated,
       })
       .from(lots)
-      .where(eq(lots.userId, userId)),
+      .where(eq(lots.walletId, owner.walletId)),
     db
       .select({
         id: disposals.id,
@@ -100,7 +112,7 @@ export async function loadHeldTokens(
         ),
       })
       .from(disposals)
-      .where(eq(disposals.userId, userId)),
+      .where(eq(disposals.walletId, owner.walletId)),
     // Stocks with a sell executing. See `HeldToken.settling`. Whether one
     // holds its stock is for the plan to say, from what the chain reads.
     db
@@ -108,7 +120,7 @@ export async function loadHeldTokens(
       .from(orders)
       .where(
         and(
-          eq(orders.userId, userId),
+          eq(orders.walletId, owner.walletId),
           eq(orders.side, "sell"),
           eq(orders.status, "executing"),
           gt(orders.createdAt, new Date(now.getTime() - EXECUTING_WINDOW_MS)),
@@ -167,6 +179,7 @@ export async function loadHeldTokens(
       recordedCostUsd: held.costUsd,
       recordedReferenceUsd: held.referenceUsd,
       recordedFeeUsd: held.feeUsd,
+      recordedIsEstimated: held.isEstimated,
       settling: settling.has(token.instrumentId),
       provisional: provisional.get(token.tokenId) ?? [],
     } satisfies HeldToken;
@@ -175,8 +188,32 @@ export async function loadHeldTokens(
 
 const fixed = (v: Decimal): string => v.toFixed(18);
 
+/**
+ * Whether a wallet's departures are the history reader's rather than ours: a
+ * linked wallet whose past has been read and costed. The reader sees each
+ * transaction, in order; this pass sees only balances, and a sale and a buy
+ * back between two looks are a balance that didn't move. Taking the sale out
+ * when the gap shows up later would take it at the average of the old shares
+ * and the new. So for such a wallet a balance below the records is only shown
+ * (the position is scaled to the chain), and the reader writes the departure.
+ */
+async function departuresAreTheReaders(db: Db, walletId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ isPrimary: wallets.isPrimary, status: historyJobs.status })
+    .from(wallets)
+    .leftJoin(historyJobs, eq(historyJobs.walletId, wallets.id))
+    .where(eq(wallets.id, walletId))
+    .limit(1);
+  return row !== undefined && !row.isPrimary && row.status === "done";
+}
+
 /** Writes what the plan decided. One transaction, so a half-written pass cannot exist. */
-export async function applyReconciliation(db: Db, userId: string, plan: Reconciliation): Promise<void> {
+export async function applyReconciliation(db: Db, owner: WalletOwner, given: Reconciliation): Promise<void> {
+  const { userId, walletId } = owner;
+  const plan =
+    given.disposals.length > 0 && (await departuresAreTheReaders(db, walletId))
+      ? { ...given, disposals: [] }
+      : given;
   if (
     plan.lots.length === 0 &&
     plan.disposals.length === 0 &&
@@ -187,16 +224,19 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
   }
 
   await db.transaction(async (tx) => {
+    // A wallet unlinked since this pass read its list is frozen as it was: nothing written for it.
+    if (!(await stillFollowed(tx, walletId))) return;
     if (plan.retracted.length > 0) {
       await tx
         .delete(disposals)
-        .where(and(eq(disposals.userId, userId), inArray(disposals.id, [...plan.retracted])));
+        .where(and(eq(disposals.walletId, walletId), inArray(disposals.id, [...plan.retracted])));
     }
 
     if (plan.lots.length > 0) {
       await tx.insert(lots).values(
         plan.lots.map((l) => ({
           userId,
+          walletId,
           tokenId: l.tokenId,
           instrumentId: l.instrumentId,
           tokenQty: l.tokenQty,
@@ -213,6 +253,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
       await tx.insert(disposals).values(
         plan.disposals.map((d) => ({
           userId,
+          walletId,
           tokenId: d.tokenId,
           instrumentId: d.instrumentId,
           tokenQty: d.tokenQty,
@@ -229,6 +270,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
         .values(
           plan.activity.map((a) => ({
             userId,
+            walletId,
             kind: a.kind,
             occurredAt: a.occurredAt,
             title: a.title,
@@ -239,7 +281,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
           })),
         )
         .returning({ id: activities.id });
-      // Every row a pass writes here is a dividend (`ActivityWrite.kind`), and a dividend is news.
+      // Every row a pass writes here is a dividend or a split (`ActivityWrite.kind`): both are news.
       await notifyFor(
         tx,
         userId,
@@ -252,6 +294,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
         .insert(positions)
         .values({
           userId,
+          walletId,
           instrumentId: p.instrumentId,
           shares: fixed(p.shares),
           sharesWithBasis: fixed(p.sharesWithBasisUsd),
@@ -259,10 +302,11 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
           referenceBasisUsd: fixed(p.referenceBasisUsd),
           feeUsd: fixed(p.feeUsd),
           avgUnitCostUsd: fixed(p.avgUnitCostUsd),
+          estimatedCostUsd: fixed(p.estimatedCostUsd),
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
-          target: [positions.userId, positions.instrumentId],
+          target: [positions.walletId, positions.instrumentId],
           set: {
             shares: fixed(p.shares),
             sharesWithBasis: fixed(p.sharesWithBasisUsd),
@@ -270,6 +314,7 @@ export async function applyReconciliation(db: Db, userId: string, plan: Reconcil
             referenceBasisUsd: fixed(p.referenceBasisUsd),
             feeUsd: fixed(p.feeUsd),
             avgUnitCostUsd: fixed(p.avgUnitCostUsd),
+            estimatedCostUsd: fixed(p.estimatedCostUsd),
             updatedAt: new Date(),
           },
         });

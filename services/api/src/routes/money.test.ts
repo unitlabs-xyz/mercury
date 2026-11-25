@@ -4,6 +4,8 @@ import { D, ZERO } from "@mercury/core";
 import { Money } from "@mercury/types";
 import { moneyRoutes, type MoneyDeps } from "./money.js";
 import type { CollateralTerms, LendingSource, LendingTerms } from "../lending/ports.js";
+import type { Acting } from "../wallets/acting.js";
+import { actingAs, actingLinked } from "../wallets/testing.js";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
@@ -57,10 +59,14 @@ const deps = (over: Partial<MoneyDeps> = {}): MoneyDeps => ({
   ...over,
 });
 
-const appWith = (d: MoneyDeps, walletAddress: string | null = "WaLLeT") => {
+const appWith = (d: MoneyDeps, walletAddress: string | null = "WaLLeT", acting?: Acting) => {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress });
+    c.set(
+      "acting",
+      acting ?? { all: false, wallets: walletAddress === null ? [] : [actingAs(walletAddress)] },
+    );
     await next();
   });
   app.route("/", moneyRoutes(d));
@@ -183,5 +189,68 @@ describe("GET /v1/money", () => {
     const body = (await res.json()) as { balanceUsd: string; depositAddress: string | null };
     expect(body.balanceUsd).toBe("0");
     expect(body.depositAddress).toBeNull();
+  });
+});
+
+describe("GET /v1/money, across wallets", () => {
+  const MERCURY = actingAs("Mercury");
+  const PHANTOM = actingLinked("Phantom");
+  const twoWallets = (over: Partial<MoneyDeps> = {}) =>
+    deps({
+      chain: {
+        tokenBalances: async (wallet) => [
+          { mint: USDC, rawAmount: wallet === "Mercury" ? 100_000_000n : 50_000_000n, decimals: 6 },
+        ],
+        mintConfig: async () => null,
+      },
+      earn: async (wallet) =>
+        wallet === "Mercury" ? { balance: D(300), apy: D("0.04") } : { balance: D(100), apy: D("0.08") },
+      ...over,
+    });
+
+  it("reads the chosen linked wallet, and still names the Mercury wallet to deposit to", async () => {
+    const body = Money.parse(
+      await (
+        await appWith(twoWallets(), "Mercury", { all: false, wallets: [PHANTOM] }).request("/v1/money")
+      ).json(),
+    );
+    expect(body.balanceUsd).toBe("50");
+    expect(body.earnUsd).toBe("100");
+    expect(body.yieldApr).toBe("0.08");
+    expect(body.depositAddress).toBe("Mercury");
+  });
+
+  it("adds every wallet up, the rate weighted by what each has in Earn", async () => {
+    const body = Money.parse(
+      await (
+        await appWith(twoWallets(), "Mercury", { all: true, wallets: [MERCURY, PHANTOM] }).request(
+          "/v1/money",
+        )
+      ).json(),
+    );
+    expect(body.balanceUsd).toBe("150");
+    expect(body.earnUsd).toBe("400");
+    // (300 × 4% + 100 × 8%) / 400
+    expect(body.yieldApr).toBe("0.05");
+    expect(body.borrowingPower.enabled).toBe(true);
+  });
+
+  it("gives no borrowable figure when any wallet's loan can't be read, rather than a short one", async () => {
+    const d = twoWallets({
+      lending: {
+        ...lending,
+        position: async (wallet) => {
+          if (wallet === "Phantom") throw new Error("kamino down");
+          return null;
+        },
+      },
+    });
+    const body = Money.parse(
+      await (
+        await appWith(d, "Mercury", { all: true, wallets: [MERCURY, PHANTOM] }).request("/v1/money")
+      ).json(),
+    );
+    expect(body.borrowingPower).toEqual({ availableUsd: "0", enabled: false });
+    expect(body.balanceUsd).toBe("150");
   });
 });

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { forgetConfirm, rememberConfirm } from "./pending-confirm";
+import { claimWallet, forgetConfirm, rememberConfirm } from "./pending-confirm";
+import { setChosenWallet } from "./wallet-choice";
 
 /*
  * These tests run in node, as every test in this app does, so the one browser
@@ -45,5 +46,25 @@ describe("pending confirms", () => {
     rememberConfirm("loan", { signature: "b" });
     forgetConfirm("loan", "a");
     expect(keys()).toEqual(["pending-confirm:loan:b"]);
+  });
+
+  /*
+   * A trade or a loan is one wallet's. Asked again after the person has
+   * switched wallets, the retry has to name the wallet it was made for, or the
+   * server refuses it and the claim is lost.
+   */
+  it("keeps the wallet a claim was made for, and asks about that one", () => {
+    setChosenWallet("wallet-linked");
+    rememberConfirm("order", { signature: "sig-a" });
+    setChosenWallet(null);
+    rememberConfirm("order", { signature: "sig-b" });
+    const read = (sig: string) => JSON.parse(storage.getItem(`pending-confirm:order:${sig}`) ?? "null");
+    expect(claimWallet(read("sig-a"))).toEqual({ "X-Mercury-Wallet": "wallet-linked" });
+    // The Mercury wallet is the empty header, which the server reads as itself whichever is chosen now.
+    expect(claimWallet(read("sig-b"))).toEqual({ "X-Mercury-Wallet": "" });
+  });
+
+  it("names no wallet for a claim kept before wallets were recorded", () => {
+    expect(claimWallet({ signature: "old" })).toEqual({});
   });
 });

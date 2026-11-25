@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { badgeText, destinationOf, type Notification } from "./notifications";
 
-const of = (kind: Notification["kind"]): Notification => ({
+const of = (kind: Notification["kind"], activityKind = "transfer_in"): Notification => ({
   id: "n1",
   kind,
   createdAt: "2026-10-27T11:00:00.000Z",
   readAt: null,
   activity: {
     id: "a1",
-    kind: "transfer_in",
+    kind: activityKind,
     occurredAt: "2026-10-27T10:59:00.000Z",
     title: "Added cash",
     subtitle: null,
@@ -34,6 +34,9 @@ describe("destinationOf", () => {
     expect(destinationOf(of("dividend"))).toEqual({ receipt: "a1" });
   });
   it("goes to the portfolio for a loan warning", () => {
-    expect(destinationOf(of("loan_alert"))).toEqual({ path: "/portfolio" });
+    expect(destinationOf(of("loan_alert", "loan_alert"))).toEqual({ path: "/portfolio" });
+  });
+  it("opens the receipt for a liquidation: what Kamino sold, and what it repaid", () => {
+    expect(destinationOf(of("loan_alert", "liquidation"))).toEqual({ receipt: "a1" });
   });
 });

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { VersionedTransaction } from "@solana/web3.js";
-import { borrowFromWire, type BorrowIntent, type BorrowWire } from "@mercury/view";
+import { WALLET_HEADER, borrowFromWire, type BorrowIntent, type BorrowWire } from "@mercury/view";
 import { apiFetch } from "./client.js";
 import { useSignedIn } from "./hooks.js";
 import { toBase64, toBytes } from "./orders.js";
@@ -20,6 +20,23 @@ export const useBorrow = () => {
     queryKey: ["api", "borrow"],
     queryFn: async () => borrowFromWire(await apiFetch<BorrowWire>("/v1/borrow")),
     enabled: signedIn,
+    staleTime: 20_000,
+    refetchInterval: 60_000,
+  });
+};
+
+/**
+ * One linked wallet's loan, read for its page: its health, what is owed and
+ * each pledged stock's liquidation price. Read only; the phone acts for the
+ * Mercury wallet alone.
+ */
+export const useWalletBorrow = (walletId: string) => {
+  const signedIn = useSignedIn();
+  return useQuery({
+    queryKey: ["api", "wallet", walletId, "borrow"],
+    queryFn: async () =>
+      borrowFromWire(await apiFetch<BorrowWire>("/v1/borrow", { headers: { [WALLET_HEADER]: walletId } })),
+    enabled: signedIn && walletId.length > 0,
     staleTime: 20_000,
     refetchInterval: 60_000,
   });

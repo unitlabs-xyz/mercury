@@ -1,3 +1,5 @@
+import { kaminoLoans } from "./lending/kamino-loans.js";
+import { XSTOCKS_MARKET } from "./lending/kamino.js";
 import { serve } from "@hono/node-server";
 import {
   backgroundDeps,
@@ -13,15 +15,21 @@ import { createRelayClient } from "./funding/relay.js";
 import { createFundingStore } from "./funding/store.js";
 import { pollUnsettledDeposits } from "./funding/poll.js";
 import { syncStocks } from "./stocks/sync.js";
+import { watchMultiplierAnnouncements } from "./stocks/announcements.js";
 import { warmPrices } from "./prices/warm.js";
 import { RECORD_MAX_AGE_MS, prunePriceBars, recordPriceBars } from "./prices/record.js";
 import { pruneNotifications } from "./notify/inbox-queries.js";
+import { pruneLinkChallenges } from "./wallets/store.js";
+import { viewedRecorder } from "./wallets/viewed.js";
+import { linkedViewings, viewedTiers } from "./jobs/tiers.js";
 import { syncAllPositions } from "./portfolio/sync.js";
 import { syncAllWalletEvents } from "./wallet-events/sync.js";
 import { KAMINO_LENDING_PROGRAM } from "./lending/kamino.js";
 import { snapshotAllPortfolios } from "./portfolio/snapshot.js";
 import { missedSnapshots } from "./portfolio/snapshot-retry.js";
 import { watchAllLoans } from "./lending/watch-loans.js";
+import { pledgedByMint } from "./lending/pledged.js";
+import { sharePriceOn } from "./earn/share-price.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { createApp } from "./app.js";
 import { inMemoryBuilds } from "./relay/builds.js";
@@ -36,6 +44,11 @@ import { watchAddresses, type Watch } from "./jobs/watch.js";
 import { tokenAccountAddresses } from "./portfolio/accounts.js";
 import { streamAddresses } from "./wallet-events/streams.js";
 import { logger } from "./log/index.js";
+import { SolanaRpc, USDC_MINT } from "@mercury/chain";
+import { budget, budgeted, budgetedLending } from "./history/budget.js";
+import { costPass, historyPass, listedMints } from "./history/runner.js";
+import { YahooHistory } from "@mercury/market";
+import { laneRefusedWithin } from "./jobs/strain.js";
 
 /*
  * First, so that nothing after it, a bad config included, logs a stack trace.
@@ -103,7 +116,18 @@ await syncConfiguredCatalog(config);
 
 /* Who is using the app right now, so position-sync can be quick for them alone. */
 const here = presence();
-const auth = { ...buildAuthDeps(config), onSeen: here.seen };
+const authDeps = buildAuthDeps(config);
+/* When a linked wallet was last looked at, which sets how often the jobs read it. See `jobs/tiers.ts`. */
+const viewed = viewedRecorder(authDeps.db);
+const walletsLog = logger("wallets");
+const auth = {
+  ...authDeps,
+  onSeen: here.seen,
+  onViewed: (wallet: string) =>
+    void viewed(wallet).catch((err: unknown) =>
+      walletsLog.warn({ err }, "couldn't record a linked wallet as viewed"),
+    ),
+};
 const deps = buildDeps(config);
 /*
  * The relayer, if one is configured. Built here because loading a key is async.
@@ -245,17 +269,18 @@ const jobClock = (startAfterMs: number): EveryDeps => ({ startAfterMs });
  * its job plan was deleted rather than left to describe a system that does not
  * exist — and no serverless cron, because this is not deployed as functions.
  *
- * | Job                  | Cadence | Writes                                                                        |
- * | -------------------- | ------- | ----------------------------------------------------------------------------- |
- * | `prices`             | 20s     | `price_bar`, and it fills the shared price board                              |
- * | `price-bar-prune`    | 6h      | deletes minute bars past thirty days                                          |
- * | `stocks`             | 6h      | `instrument`, `token`, `multiplier_event`                                     |
- * | `position-sync`      | 10s     | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
- * | `wallet-events`      | 30s     | `activity`, for SOL and USDC transfers                                        |
- * | `funding-poll`       | 60s     | `funding_intent`, Relay's verdict on a deposit; only when Relay is configured |
- * | `portfolio-snapshot` | 1h      | `portfolio_snapshot`                                                          |
- * | `snapshot-retry`     | 5m      | `portfolio_snapshot`, for accounts the hour's pass missed, within that hour   |
- * | `loan-watch`         | 5m      | `loan_alert`, `activity`, and an email                                        |
+ * | Job                    | Cadence | Writes                                                                        |
+ * | ---------------------- | ------- | ----------------------------------------------------------------------------- |
+ * | `prices`               | 20s     | `price_bar`, and it fills the shared price board                              |
+ * | `price-bar-prune`      | 6h      | deletes minute bars past thirty days                                          |
+ * | `stocks`               | 6h      | `instrument`, `token`, `multiplier_event`                                     |
+ * | `position-sync`        | 10s     | `lot`, `position`, `activity` (dividends too); `disposal` written and deleted |
+ * | `wallet-events`        | 30s     | `activity`, for SOL and USDC transfers                                        |
+ * | `funding-poll`         | 60s     | `funding_intent`, Relay's verdict on a deposit; only when Relay is configured |
+ * | `portfolio-snapshot`   | 1h      | `portfolio_snapshot`                                                          |
+ * | `snapshot-retry`       | 5m      | `portfolio_snapshot`, for accounts the hour's pass missed, within that hour   |
+ * | `loan-watch`           | 5m      | `loan_alert`, `activity`, and an email                                        |
+ * | `link-challenge-prune` | 24h     | deletes wallet-link challenges past a day                                     |
  *
  * The two per-wallet jobs tick at those intervals but read almost nothing on
  * most of them: the chain tells them which wallets moved, and a wallet nobody
@@ -337,6 +362,21 @@ every(
   jobClock(150_000),
 );
 
+/**
+ * Once a day. A challenge to link a wallet is good for ten minutes and read by
+ * nothing once used; a day of them is plenty to look back on. Quiet when there
+ * was nothing to drop.
+ */
+every(
+  "link-challenge-prune",
+  24 * 60 * 60 * 1000,
+  async () => {
+    const dropped = await pruneLinkChallenges(auth.db, new Date());
+    return dropped === 0 ? null : `${dropped} wallet-link challenges past a day dropped`;
+  },
+  jobClock(210_000),
+);
+
 every(
   "stocks",
   6 * 60 * 60 * 1000,
@@ -345,6 +385,22 @@ every(
     return `${s.instruments} instruments, ${s.tokens} tokens`;
   },
   jobClock(60_000),
+);
+
+/**
+ * Dividends told before they land: every listed mint read for a multiplier
+ * change the issuer has written ahead of its date, and each holder told once,
+ * in the feed and the inbox. Hourly, one call per hundred mints: a dividend
+ * is written days ahead, and an hour late is still well before it.
+ */
+every(
+  "dividend-notices",
+  60 * 60 * 1000,
+  async () => {
+    const s = await watchMultiplierAnnouncements(auth.db, { chain: jobs.deps.chain }, new Date());
+    return s.announced === 0 ? null : `${s.announced} announced, ${s.told} holders told`;
+  },
+  jobClock(150_000),
 );
 
 /*
@@ -391,14 +447,34 @@ const ACCOUNT_DISCOVERY_MS = 10 * 60_000;
 const eventsLog = logger("wallet-events");
 const positionsLog = logger("position-sync");
 
+/*
+ * When the stream cannot be trusted, linked wallets are polled by how recently
+ * anyone looked at them: every five minutes if viewed this week, hourly if not.
+ * Loaded from the database at the start of each pass of either job.
+ */
+const tiers = viewedTiers();
+const loadTiers = async (log: ReturnType<typeof logger>) => {
+  try {
+    tiers.load(await linkedViewings(auth.db));
+  } catch (error) {
+    /* Without it a linked wallet falls back to its job's own cadence, which
+       reads it more often, not less: the cheaper mistake. */
+    log.error({ err: error }, "could not read when linked wallets were last viewed");
+  }
+};
+
 /* Ten seconds for a wallet whose owner has the app open, and once a minute for
    anyone else's: what decided a pass before anything was pushed, and what
-   decides one again whenever the stream cannot be trusted. */
-const syncCadence = cadence({ here });
+   decides one again whenever the stream cannot be trusted. Linked wallets by
+   their tier. */
+const syncCadence = cadence({ here, idleFor: tiers.idleFor });
+/* Every pass for the Mercury wallet, as before; linked wallets by their tier. */
+const eventsCadence = cadence({ here, idleMs: 30_000, idleFor: tiers.idleFor });
 
 let heldAccounts: Watch | null = null;
 const eventsPushed = pushed({
   live: () => jobs.subscriptions?.live ?? false,
+  blind: eventsCadence,
   sweepMs: EVENTS_SWEEP_MS,
 });
 const positionsPushed = pushed({
@@ -451,6 +527,7 @@ every(
   "position-sync",
   10_000,
   async () => {
+    await loadTiers(positionsLog);
     if (heldAccounts !== null) {
       try {
         await heldAccounts.refresh();
@@ -507,6 +584,7 @@ every(
   "wallet-events",
   30_000,
   async () => {
+    await loadTiers(eventsLog);
     let watchNote = "";
     if (eventStreams !== null) {
       try {
@@ -610,15 +688,104 @@ every(
   "loan-watch",
   5 * 60 * 1000,
   async () => {
-    const s = await watchAllLoans(auth.db, { ...jobRead.borrow, notifier }, new Date());
-    if (s.alerted === 0 && s.failed === 0) return null;
+    const s = await watchAllLoans(
+      auth.db,
+      {
+        ...jobRead.borrow,
+        notifier,
+        // Kamino's record of each loan: a liquidation is sent by a bot, so only this sees it.
+        loanHistory: { loans: kaminoLoans(), market: XSTOCKS_MARKET },
+      },
+      new Date(),
+    );
+    if (s.alerted === 0 && s.failed === 0 && s.liquidations === 0) return null;
     return (
       `${s.alerted} alerts across ${s.loans} loans, ${s.delivered} delivered` +
+      (s.liquidations > 0 ? `, ${s.liquidations} liquidations told` : "") +
       (s.failed > 0 ? `, ${s.failed} failed` : "")
     );
   },
   // Four minutes: after the first passes of the jobs that read every wallet, not on top of them.
   jobClock(240_000),
+);
+
+/**
+ * The history reader: each linked wallet's past, read back from its token
+ * accounts, so its P&L can be worked out (the cost pass below costs what it reads).
+ *
+ * Inside the API rather than a process of its own, which is what lets it see
+ * that the jobs' lane is being refused and give way: that signal is memory in
+ * this process. On the paid RPC, through its own client with retries off and a
+ * budget of `HISTORY_RPC_RPS` calls a second, so a refusal stops it rather than
+ * being retried at the node, and the app's reads and trades always come first.
+ *
+ * Five seconds between passes, each one job; a first read can run for minutes,
+ * and the next pass waits for it. Starts after the other jobs' first passes.
+ */
+const historyBudget = budget({ rps: config.historyRps });
+const historyChain = budgeted(new SolanaRpc({ rpcUrl: config.solanaRpcUrl, attempts: 1 }), historyBudget);
+// Its loan reads are on the jobs' lane, and paced by the same budget: one ceiling on everything it reads.
+const historyLending = budgetedLending(jobs.deps.lending, historyBudget);
+every(
+  "history-reader",
+  5_000,
+  historyPass({
+    db: auth.db,
+    reader: {
+      history: historyChain,
+      listedMints: listedMints({
+        db: auth.db,
+        usdcMint: USDC_MINT,
+        earnShareMints: async () => (await deps.earn.list()).map((v) => v.sharesMint),
+      }),
+      laneBusy: () => laneRefusedWithin(60_000),
+      // Pledged shares are still held: an account emptied by pledging is read, not skipped.
+      pledged: (owner) => pledgedByMint(historyLending, owner),
+      // The Mercury wallet's Earn shares, read for shares sent in or out by hand.
+      earnShareMints: async () => new Set((await deps.earn.list()).map((v) => v.sharesMint)),
+    },
+    // A linked wallet's loan, from Kamino's own record of it: when it opened, each pledge at its price then.
+    loan: {
+      lending: historyLending,
+      loans: kaminoLoans(),
+      market: XSTOCKS_MARKET,
+      usdcMint: USDC_MINT,
+      notifier,
+    },
+    log: logger("history"),
+  }),
+  jobClock(5 * 60_000),
+);
+
+/**
+ * The cost pass: what the history reader found, turned into lots, so a linked
+ * wallet's shares have a cost and its P&L stops saying "Calculating…".
+ *
+ * Its own job rather than the reader's last step, so a price source that is
+ * down holds up costing and never reading. Thirty seconds between passes, one
+ * wallet each; past prices from Yahoo through its own client, whose answers
+ * are kept, since a past close does not change.
+ */
+every(
+  "history-cost",
+  30_000,
+  costPass({
+    db: auth.db,
+    past: new YahooHistory(),
+    board: deps.prices,
+    // Earn's vaults by share token, so a linked wallet's Earn moves are read into the ledger.
+    earnVaults: async () =>
+      new Map(
+        (await deps.earn.list()).map((v) => [
+          v.sharesMint,
+          { address: v.address, name: v.name, sharesDecimals: v.sharesDecimals },
+        ]),
+      ),
+    // Earn shares sent in or out with no USDC: valued at the vault's share price that day.
+    earnSharePrice: (vault, at) => sharePriceOn(deps.earn.api, vault, at),
+    log: logger("history-cost"),
+  }),
+  jobClock(6 * 60_000),
 );
 
 serve({ fetch: createApp(() => deps, auth, read).fetch, port }, (info) => {

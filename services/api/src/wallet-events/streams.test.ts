@@ -61,7 +61,7 @@ describe("streamAddresses", () => {
     expect(watched.find((w) => w.address === USDC_ACCOUNT)!.wallet).toBe(OTHER);
   });
 
-  it("leaves out a wallet that is not the account's primary one", async () => {
+  it("watches a wallet linked beside the Mercury wallet, as its own", async () => {
     const db = await seed([WALLET]);
     const [row] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
     await db.insert(wallets).values({
@@ -69,6 +69,27 @@ describe("streamAddresses", () => {
       address: OTHER,
       kind: "external",
       isPrimary: false,
+    });
+
+    const watched = await streamAddresses(db);
+    expect(watched).toHaveLength(2);
+    expect(watched).toEqual(
+      expect.arrayContaining([
+        { wallet: WALLET, address: WALLET },
+        { wallet: OTHER, address: OTHER },
+      ]),
+    );
+  });
+
+  it("leaves out a wallet that was unlinked, so nothing is heard about it", async () => {
+    const db = await seed([WALLET]);
+    const [row] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
+    await db.insert(wallets).values({
+      userId: row!.userId,
+      address: OTHER,
+      kind: "external",
+      isPrimary: false,
+      unlinkedAt: new Date(),
     });
 
     await expect(streamAddresses(db)).resolves.toEqual([{ wallet: WALLET, address: WALLET }]);

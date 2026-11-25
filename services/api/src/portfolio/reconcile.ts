@@ -1,4 +1,5 @@
 import { D, Decimal, ZERO, type LotSource } from "@mercury/core";
+import { kindOf } from "../stocks/plan.js";
 
 /** One wrapper the user holds or has held, with everything needed to judge it. */
 export interface HeldToken {
@@ -28,6 +29,12 @@ export interface HeldToken {
   readonly recordedReferenceUsd: Decimal;
   /** Fees paid to acquire the open shares. */
   readonly recordedFeeUsd: Decimal;
+  /**
+   * Whether any of that cost was estimated rather than read off a trade: a
+   * linked wallet's shares priced at a past moment, say. The replay pools a
+   * token's lots, so it is the token's cost that is marked, not a lot's.
+   */
+  readonly recordedIsEstimated: boolean;
   /**
    * A sell of this stock is executing, created within the last ten minutes.
    *
@@ -74,7 +81,8 @@ export interface DisposalWrite {
 }
 
 export interface ActivityWrite {
-  readonly kind: "dividend";
+  /** A split is said as one, with no amount: more shares, each worth less, nothing earned. */
+  readonly kind: "dividend" | "split";
   readonly title: string;
   readonly subtitle: string;
   readonly amountUsd: Decimal | null;
@@ -95,6 +103,8 @@ export interface PositionWrite {
   /** Fees paid to acquire the shares still held. */
   readonly feeUsd: Decimal;
   readonly avgUnitCostUsd: Decimal;
+  /** Of `costBasisUsd`, how much was estimated: what the summary marks `~`. */
+  readonly estimatedCostUsd: Decimal;
 }
 
 export interface Reconciliation {
@@ -120,7 +130,7 @@ export interface Reconciliation {
  * A billionth of a share is far below any dividend a holder could receive and
  * far above what that rounding can produce, so it separates the two cleanly.
  */
-const DIVIDEND_FLOOR = D("0.000000001");
+export const DIVIDEND_FLOOR = D("0.000000001");
 
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
 
@@ -150,7 +160,14 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
   const disposals: DisposalWrite[] = [];
   const byInstrument = new Map<
     string,
-    { shares: Decimal; withBasis: Decimal; cost: Decimal; reference: Decimal; fee: Decimal }
+    {
+      shares: Decimal;
+      withBasis: Decimal;
+      cost: Decimal;
+      reference: Decimal;
+      fee: Decimal;
+      estimated: Decimal;
+    }
   >();
 
   // A stock with a sell in flight sits this pass out when any wrapper of it
@@ -264,7 +281,36 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     if (standing && recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
       const recordedMultiplier = recordedShares.div(recordedQty);
       const gained = recordedQty.mul(token.multiplier.sub(recordedMultiplier));
-      if (gained.gte(DIVIDEND_FLOOR)) {
+      /*
+       * A split raises the multiplier too, and by far more: the stocks job's own
+       * rule, more than doubling. The shares it adds come at no cost all the
+       * same, so the cost per share falls as it should, but nothing was earned:
+       * each share is worth less by as much. Said as a split, with no amount,
+       * so it never reaches the dividend income on Home.
+       */
+      const split = gained.gte(DIVIDEND_FLOOR) && kindOf(recordedMultiplier, token.multiplier) === "split";
+      if (split) {
+        lots.push({
+          tokenId: token.tokenId,
+          instrumentId: token.instrumentId,
+          tokenQty: 0n,
+          shares: gained,
+          unitCostUsd: ZERO,
+          source: "split",
+          isEstimated: false,
+          acquiredAt: now,
+        });
+        activity.push({
+          kind: "split",
+          title: `${token.ticker} stock split`,
+          subtitle: `Each share became ${token.multiplier.div(recordedMultiplier).toDecimalPlaces(4).toString()}: ${plural(gained)} more, each worth less`,
+          amountUsd: null,
+          refTable: "token",
+          refId: token.tokenId,
+          occurredAt: now,
+        });
+        recordedShares = recordedShares.add(gained);
+      } else if (gained.gte(DIVIDEND_FLOOR)) {
         lots.push({
           tokenId: token.tokenId,
           instrumentId: token.instrumentId,
@@ -317,11 +363,13 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
       cost: ZERO,
       reference: ZERO,
       fee: ZERO,
+      estimated: ZERO,
     };
     byInstrument.set(token.instrumentId, {
       shares: running.shares.add(chainShares),
       withBasis: running.withBasis.add(withBasis),
       cost: running.cost.add(cost.mul(ratio)),
+      estimated: running.estimated.add(token.recordedIsEstimated ? cost.mul(ratio) : ZERO),
       // Scaled by the same ratio as the cost, and they have to be: a capped
       // cost whose reference was not capped with it would report the tokens
       // that left as a market move, and the two lines would stop summing to
@@ -339,6 +387,7 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     referenceBasisUsd: r.reference,
     feeUsd: r.fee,
     avgUnitCostUsd: r.withBasis.isZero() ? ZERO : r.cost.div(r.withBasis),
+    estimatedCostUsd: r.estimated,
   }));
 
   return { lots, activity, disposals, retracted, positions };

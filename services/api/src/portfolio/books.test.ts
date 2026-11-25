@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import { testDb } from "../db/testing.js";
+import { primaryWalletId } from "../wallets/primary.js";
 import {
   activities,
   disposals,
@@ -66,9 +67,11 @@ const books = async () => {
   const userId = user!.id;
   const instrumentId = instrument!.id;
   const tokenId = token!.id;
-  await db
+  const [wallet] = await db
     .insert(wallets)
-    .values({ userId: user!.id, address: WALLET, kind: "privy_embedded", isPrimary: true });
+    .values({ userId: user!.id, address: WALLET, kind: "privy_embedded", isPrimary: true })
+    .returning();
+  const owner = { userId, walletId: wallet!.id };
 
   const state = { wallet: 0n, pledged: 0n, multiplier: D(1) };
 
@@ -135,6 +138,7 @@ const books = async () => {
       .insert(orders)
       .values({
         userId,
+        walletId: owner.walletId,
         instrumentId,
         side,
         usdAmount: String(usd),
@@ -149,6 +153,7 @@ const books = async () => {
       settle: () =>
         settleOrder(db, {
           userId,
+          walletId: owner.walletId,
           orderId: row!.id,
           signature: `sig-${row!.id}`,
           side,
@@ -172,8 +177,8 @@ const books = async () => {
   };
   /** The read and the plan of a pass, apart from its write. */
   const plan = async (now = new Date()) =>
-    planReconciliation(await loadHeldTokens(db, deps, userId, WALLET, now), now);
-  const apply = (p: Reconciliation) => applyReconciliation(db, userId, p);
+    planReconciliation(await loadHeldTokens(db, deps, owner, WALLET, now), now);
+  const apply = (p: Reconciliation) => applyReconciliation(db, owner, p);
   const pass = async (now = new Date()) => apply(await plan(now));
   /** A pass as position-sync runs it, wallet lookup and all. */
   const sync = () => syncAllPositions(db, deps);
@@ -570,6 +575,7 @@ describe("the books, end to end", () => {
     await b.pass();
     await b.db.insert(lots).values({
       userId: b.userId,
+      walletId: primaryWalletId(b.userId),
       tokenId: b.tokenId,
       instrumentId: b.instrumentId,
       tokenQty: 0n,

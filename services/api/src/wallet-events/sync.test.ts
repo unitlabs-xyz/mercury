@@ -345,6 +345,70 @@ describe("syncAllWalletEvents", () => {
     expect(ataAfterSecond[0]!.cursor).toBe(SIG_U);
   });
 
+  it("baselines a linked wallet whose first pass failed, rather than backfilling its whole past", async () => {
+    // A linked wallet arrives with years of USDC behind it. One refused read on
+    // its first pass must not turn the retry into a backfill of all of it.
+    const db = await testDb();
+    const [user] = await db.insert(users).values({ privyUserId: "did:privy:linked" }).returning();
+    await db.insert(wallets).values({
+      userId: user!.id,
+      address: WALLET,
+      kind: "external",
+      isPrimary: false,
+      linkedAt: new Date(),
+    });
+
+    const OLD_A = "sig-old-deposit-a";
+    const OLD_B = "sig-old-deposit-b";
+    const refs: SignatureRef[] = [
+      { signature: OLD_B, slot: 200, blockTime: 1_700_000_200, failed: false },
+      { signature: OLD_A, slot: 100, blockTime: 1_700_000_100, failed: false },
+    ];
+    const old = (signature: string, before: bigint, after: bigint): TransactionDetail => ({
+      signature,
+      blockTime: 1_700_000_100,
+      succeeded: true,
+      accountKeys: [],
+      feeLamports: 0n,
+      preLamports: [],
+      postLamports: [],
+      preTokens: before === 0n ? [] : [{ mint: USDC_MINT, owner: WALLET, rawAmount: before, decimals: 6 }],
+      postTokens: [{ mint: USDC_MINT, owner: WALLET, rawAmount: after, decimals: 6 }],
+    });
+
+    let refused = false;
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve([USDC_ACCOUNT]),
+      signatures: (addr) => {
+        if (addr !== USDC_ACCOUNT) return Promise.resolve([]);
+        if (!refused) {
+          refused = true;
+          return Promise.reject(new Error("429 from the public lane"));
+        }
+        return Promise.resolve(refs);
+      },
+      transaction: (sig) =>
+        Promise.resolve(
+          sig === OLD_A
+            ? old(OLD_A, 0n, 100_000_000n)
+            : sig === OLD_B
+              ? old(OLD_B, 100_000_000n, 300_000_000n)
+              : null,
+        ),
+    };
+
+    const first = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
+    expect(first.failed).toBe(1);
+
+    const second = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
+    expect(second.failed).toBe(0);
+    expect(second.written).toBe(0);
+    expect(await db.select().from(activities)).toEqual([]);
+    // Baselined at the newest signature: what arrives from now on is recorded, nothing before it.
+    const [usdc] = await db.select().from(walletStreams).where(eq(walletStreams.address, USDC_ACCOUNT));
+    expect(usdc!.cursor).toBe(OLD_B);
+  });
+
   describe("which wallets a pass reads", () => {
     const OTHER = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PQfuzkt";
 
@@ -436,5 +500,75 @@ describe("syncAllWalletEvents", () => {
     expect(summary.written).toBe(0);
     const streams = await db.select().from(walletStreams).where(eq(walletStreams.address, WALLET));
     expect(streams[0]!.cursor).toBe("older");
+  });
+});
+
+describe("syncAllWalletEvents, linked wallets", () => {
+  it("reads every followed wallet, a linked one included, and no unlinked one", async () => {
+    const { db, userId } = await seed();
+    await db.insert(wallets).values([
+      { userId, address: "Phantom1", kind: "external", isPrimary: false },
+      { userId, address: "Gone", kind: "external", isPrimary: false, unlinkedAt: new Date() },
+    ]);
+    const asked = new Set<string>();
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve([]),
+      signatures: (address) => (asked.add(address), Promise.resolve([])),
+      transaction: () => Promise.resolve(null),
+    };
+
+    const summary = await syncAllWalletEvents(db, { history, lendingProgram: KAMINO });
+
+    expect(summary.wallets).toBe(2);
+    expect(asked.has(WALLET)).toBe(true);
+    expect(asked.has("Phantom1")).toBe(true);
+    expect(asked.has("Gone")).toBe(false);
+  });
+});
+
+describe("syncAllWalletEvents, a move between the person's own wallets", () => {
+  it("writes a move into the Mercury wallet from a linked one, and tells nobody: they made it", async () => {
+    const { db, userId } = await seed();
+    const PHANTOM = "FMVHP1xw6ZHB9zLGyrJeeAvEzCBgouH8bPzdkYqq2C5W";
+    await db
+      .insert(wallets)
+      .values({ userId, address: PHANTOM, kind: "external", isPrimary: false, label: "Phantom" });
+    const [mercury] = await db.select().from(wallets).where(eq(wallets.address, WALLET));
+    await db.insert(walletStreams).values([
+      { walletId: mercury!.id, address: WALLET, cursor: "older" },
+      { walletId: mercury!.id, address: USDC_ACCOUNT, cursor: "older" },
+    ]);
+    const moved: TransactionDetail = {
+      ...deposit,
+      preTokens: [{ mint: USDC_MINT, owner: PHANTOM, rawAmount: 500_000_000n, decimals: 6 }],
+      postTokens: [
+        { mint: USDC_MINT, owner: PHANTOM, rawAmount: 0n, decimals: 6 },
+        { mint: USDC_MINT, owner: WALLET, rawAmount: 500_000_000n, decimals: 6 },
+      ],
+    };
+    const history: ChainHistory = {
+      tokenAccountsFor: () => Promise.resolve([USDC_ACCOUNT]),
+      signatures: (address) => Promise.resolve(address === USDC_ACCOUNT ? [ref] : []),
+      transaction: () => Promise.resolve(moved),
+    };
+
+    await syncAllWalletEvents(
+      db,
+      {
+        history,
+        lendingProgram: KAMINO,
+        now: () => new Date(1_790_573_221 * 1000 + 60_000),
+      },
+      // The Mercury wallet's pass: where "money in" would have been told.
+      { due: (a) => a === WALLET },
+    );
+
+    const [row] = await db.select().from(activities).where(eq(activities.walletId, mercury!.id));
+    expect([row!.kind, row!.title, row!.amountUsd]).toEqual([
+      "transfer_in",
+      "Moved from Phantom",
+      "500.000000000000000000",
+    ]);
+    expect(await db.select().from(notifications)).toHaveLength(0);
   });
 });

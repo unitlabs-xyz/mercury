@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { usdCompact } from "./format.js";
+import { numberOf, sharesBrief, usdCompact } from "./format.js";
 
 /**
  * Every expectation here is what `Intl.NumberFormat` with
@@ -57,5 +57,22 @@ describe("usdCompact", () => {
     expect(usdCompact(undefined)).toBe("—");
     expect(usdCompact("")).toBe("—");
     expect(usdCompact(Number.NaN)).toBe("—");
+  });
+});
+
+describe("sharesBrief", () => {
+  it("says whole shares whole, and the rest to four places, trimmed", () => {
+    expect(sharesBrief("15")).toBe("15");
+    expect(sharesBrief("2.1000")).toBe("2.1");
+    expect(sharesBrief("0.00851234")).toBe("0.0085");
+    expect(sharesBrief(1250)).toBe("1,250");
+  });
+});
+
+describe("numberOf", () => {
+  it("reads a wire figure as a number, and nothing as zero", () => {
+    expect(numberOf("12.5")).toBe(12.5);
+    expect(numberOf(null)).toBe(0);
+    expect(numberOf(undefined)).toBe(0);
   });
 });

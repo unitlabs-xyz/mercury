@@ -1,19 +1,24 @@
-import { and, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { activities, instruments, tokens } from "../db/schema.js";
 import type { ActivityRow, Cursor } from "../routes/activity.js";
+import type { WalletScope } from "../wallets/active.js";
 
 /**
- * One page of the feed, newest first. The cursor compares the pair
+ * One page of the feed for these wallets, newest first. Several wallets are one
+ * feed, in one order, so "All wallets" pages the same way as one wallet does.
+ * The cursor compares the pair
  * (occurred_at, id) so two rows written in the same transaction — a transfer and
  * the dividend it revealed — cannot straddle a page boundary and be lost.
  */
 export async function readActivity(
   db: Db,
-  userId: string,
+  scope: WalletScope,
   limit: number,
   cursor: Cursor | null,
 ): Promise<readonly ActivityRow[]> {
+  if (scope.walletIds.length === 0) return [];
+  const mine = and(eq(activities.userId, scope.userId), inArray(activities.walletId, [...scope.walletIds]));
   const before =
     cursor === null
       ? undefined
@@ -42,7 +47,7 @@ export async function readActivity(
     .from(activities)
     .leftJoin(tokens, eq(tokens.mint, activities.mint))
     .leftJoin(instruments, eq(instruments.id, tokens.instrumentId))
-    .where(before === undefined ? eq(activities.userId, userId) : and(eq(activities.userId, userId), before))
+    .where(before === undefined ? mine : and(mine, before))
     .orderBy(desc(activities.occurredAt), desc(activities.id))
     .limit(limit);
 

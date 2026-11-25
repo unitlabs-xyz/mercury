@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { USDC_MINT } from "@mercury/chain";
-import { testDb } from "../db/testing.js";
-import { activities, users } from "../db/schema.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
+import { activities, users, wallets } from "../db/schema.js";
+import { primaryWalletId } from "../wallets/primary.js";
 import { readFlows } from "./queries.js";
 
 /**
@@ -17,11 +18,13 @@ const FROM = new Date("2026-10-01T00:00:00.000Z");
 const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:flows" }).returning();
-  return { db, userId: user!.id };
+  const walletId = await mercuryWallet(db, user!.id);
+  return { db, userId: user!.id, walletIds: [walletId] };
 };
 
 const row = (userId: string, over: Partial<typeof activities.$inferInsert> = {}) => ({
   userId,
+  walletId: primaryWalletId(userId),
   kind: "transfer_out",
   occurredAt: AT,
   title: "Sent cash",
@@ -37,7 +40,7 @@ describe("readFlows", () => {
     await s.db
       .insert(activities)
       .values([row(s.userId, { kind: "transfer_in", title: "Added cash", amountUsd: "300" }), row(s.userId)]);
-    const flows = await readFlows(s.db, s.userId, FROM);
+    const flows = await readFlows(s.db, s.userId, s.walletIds, FROM);
     expect(flows.map((f) => f.usd.toFixed()).sort()).toEqual(["-500", "300"]);
   });
 
@@ -46,7 +49,7 @@ describe("readFlows", () => {
     await s.db.insert(activities).values(row(s.userId, { basketPortfolioId: "portfolio-7" }));
     // The $500 is still in the account, as basket value. Counted as a
     // withdrawal it would print +$500 of performance against an unchanged total.
-    expect(await readFlows(s.db, s.userId, FROM)).toEqual([]);
+    expect(await readFlows(s.db, s.userId, s.walletIds, FROM)).toEqual([]);
   });
 
   it("leaves out money coming back out of a basket", async () => {
@@ -54,7 +57,7 @@ describe("readFlows", () => {
     await s.db
       .insert(activities)
       .values(row(s.userId, { kind: "transfer_in", basketPortfolioId: "portfolio-7" }));
-    expect(await readFlows(s.db, s.userId, FROM)).toEqual([]);
+    expect(await readFlows(s.db, s.userId, s.walletIds, FROM)).toEqual([]);
   });
 
   it("excludes a basket row whatever its kind says, which is the point", async () => {
@@ -69,7 +72,37 @@ describe("readFlows", () => {
         row(s.userId, { kind: "basket_funding", basketPortfolioId: "portfolio-7" }),
         row(s.userId, { amountUsd: "25" }),
       ]);
-    const flows = await readFlows(s.db, s.userId, FROM);
+    const flows = await readFlows(s.db, s.userId, s.walletIds, FROM);
     expect(flows.map((f) => f.usd.toFixed())).toEqual(["-25"]);
+  });
+});
+
+describe("readFlows, across wallets", () => {
+  it("reads only the wallets asked for, and a move between two of them adds to nothing", async () => {
+    const s = await seed();
+    const [linked] = await s.db
+      .insert(wallets)
+      .values({ userId: s.userId, address: "Linked", kind: "external", isPrimary: false, linkedAt: AT })
+      .returning();
+    const mercury = s.walletIds[0]!;
+    // $200 from the Mercury wallet to the linked one: one signature, a row on each side.
+    await s.db
+      .insert(activities)
+      .values([
+        row(s.userId, { walletId: mercury, amountUsd: "200", txSignature: "move" }),
+        row(s.userId, { walletId: linked!.id, kind: "transfer_in", amountUsd: "200", txSignature: "move" }),
+      ]);
+
+    const sum = (flows: readonly { usd: { toFixed(): string } }[]) =>
+      flows.reduce((t, f) => t + Number(f.usd.toFixed()), 0);
+    expect(sum(await readFlows(s.db, s.userId, [mercury], FROM))).toBe(-200);
+    expect(sum(await readFlows(s.db, s.userId, [linked!.id], FROM))).toBe(200);
+    expect(sum(await readFlows(s.db, s.userId, [mercury, linked!.id], FROM))).toBe(0);
+  });
+
+  it("reads nothing for no wallets", async () => {
+    const s = await seed();
+    await s.db.insert(activities).values(row(s.userId));
+    expect(await readFlows(s.db, s.userId, [], FROM)).toEqual([]);
   });
 });

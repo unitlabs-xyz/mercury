@@ -256,6 +256,47 @@ describe("SolanaRpc.mintConfig", () => {
     expect(config!.multiplier.toFixed()).toBe("1.0009180758490996");
   });
 
+  it("says what is announced and when, while it is still ahead", async () => {
+    const body = mintWith(
+      {
+        multiplier: "1.0009180758490996",
+        newMultiplier: "1.001701196801074",
+        newMultiplierEffectiveTimestamp: 1_789_000_200,
+      },
+      false,
+    );
+    const ahead = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: body }),
+      now: () => 1_789_000_000_000,
+    });
+    const config = await ahead.mintConfig(NVDAX_MINT);
+    expect([config!.scheduled?.multiplier.toFixed(), config!.scheduled?.effectiveAt]).toEqual([
+      "1.001701196801074",
+      new Date(1_789_000_200_000),
+    ]);
+    // Once in force, nothing is pending.
+    const after = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: body }),
+      now: () => 1_789_000_300_000,
+    });
+    expect((await after.mintConfig(NVDAX_MINT))!.scheduled).toBeUndefined();
+  });
+
+  it("says nothing is pending when the next multiplier is the one in force", async () => {
+    const body = mintWith(
+      { multiplier: "1.0017", newMultiplier: "1.0017", newMultiplierEffectiveTimestamp: 1_789_000_200 },
+      false,
+    );
+    const rpc = new SolanaRpc({
+      rpcUrl: RPC,
+      fetch: fakeFetch({ [RPC]: body }),
+      now: () => 1_789_000_000_000,
+    });
+    expect((await rpc.mintConfig(NVDAX_MINT))!.scheduled).toBeUndefined();
+  });
+
   it("reads the recorded mint without inventing a shape", async () => {
     const rpc = new SolanaRpc({ rpcUrl: RPC, fetch: fakeFetch({ [RPC]: rpcMintNvda }) });
     const config = await rpc.mintConfig(NVDAX_MINT);

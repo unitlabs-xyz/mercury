@@ -23,6 +23,7 @@ const held = (over: Partial<HeldToken> = {}): HeldToken => ({
   // is not what most of these tests are about.
   recordedReferenceUsd: over.recordedCostUsd ?? ZERO,
   recordedFeeUsd: ZERO,
+  recordedIsEstimated: false,
   settling: false,
   provisional: [],
   ...over,
@@ -52,6 +53,7 @@ describe("planReconciliation: tokens that arrived from outside", () => {
         referenceBasisUsd: ZERO,
         feeUsd: ZERO,
         avgUnitCostUsd: ZERO,
+        estimatedCostUsd: ZERO,
       },
     ]);
   });
@@ -106,7 +108,18 @@ describe("planReconciliation: a dividend", () => {
     // A multiplier that hands over exactly 100 whole shares must read "100
     // shares", not "1 shares" — the failure mode of a trim that strips
     // trailing zeros without checking for a decimal point first.
-    const plan = planReconciliation([withLot({ multiplier: D(101) })], NOW);
+    // 1,000 tokens and a 10% dividend: exactly 100 whole shares.
+    const plan = planReconciliation(
+      [
+        withLot({
+          chainRawAmount: 1_000n * ONE_TOKEN,
+          recordedRawAmount: 1_000n * ONE_TOKEN,
+          recordedShares: D(1_000),
+          multiplier: D("1.1"),
+        }),
+      ],
+      NOW,
+    );
     expect(plan.activity[0]!.subtitle).toBe("Paid as 100 shares");
     expect(plan.activity[0]!.title).toMatch(/^[A-Z]+ dividend$/);
   });
@@ -121,6 +134,32 @@ describe("planReconciliation: a dividend", () => {
     // The same money. More shares. Nothing was spent.
     expect(position.costBasisUsd).toEqual(D(200));
     expect(position.avgUnitCostUsd.toFixed(4)).toBe("133.3333");
+  });
+
+  /*
+   * A split raises the multiplier too, by far more. Its shares come at no cost
+   * all the same, so the cost per share falls by the split, but nothing was
+   * earned: no amount, never in income, and said as a split.
+   */
+  it("writes a split as a split: its shares at no cost, but no income and no amount", () => {
+    const plan = planReconciliation([withLot({ multiplier: D(3) })], NOW);
+    expect(plan.lots).toEqual([
+      {
+        tokenId: "token-nvdax",
+        instrumentId: "instrument-nvda",
+        tokenQty: 0n,
+        shares: D(2),
+        unitCostUsd: ZERO,
+        source: "split",
+        isEstimated: false,
+        acquiredAt: NOW,
+      },
+    ]);
+    expect(plan.activity.map((a) => [a.kind, a.title, a.subtitle, a.amountUsd])).toEqual([
+      ["split", "NVDA stock split", "Each share became 3: 2 shares more, each worth less", null],
+    ]);
+    // The same $200, three shares: $66.67 each.
+    expect(plan.positions[0]!.avgUnitCostUsd.toFixed(2)).toBe("66.67");
   });
 
   it("writes the dividend once", () => {
@@ -227,6 +266,7 @@ describe("planReconciliation: tokens that left", () => {
       // Average cost does not move when a position shrinks. That is what
       // average-cost accounting means, and it is why the scaling is pro rata.
       avgUnitCostUsd: D(200),
+      estimatedCostUsd: ZERO,
     });
   });
 
@@ -276,6 +316,7 @@ describe("planReconciliation: tokens that left", () => {
       referenceBasisUsd: ZERO,
       feeUsd: ZERO,
       avgUnitCostUsd: ZERO,
+      estimatedCostUsd: ZERO,
     });
   });
 
@@ -424,6 +465,7 @@ describe("planReconciliation: a sell in flight", () => {
         referenceBasisUsd: D(200),
         feeUsd: ZERO,
         avgUnitCostUsd: D(200),
+        estimatedCostUsd: ZERO,
       },
     ]);
   });
@@ -583,6 +625,7 @@ describe("planReconciliation: open shares above the chain's", () => {
       referenceBasisUsd: D(200),
       feeUsd: D("0.46"),
       avgUnitCostUsd: D(200),
+      estimatedCostUsd: ZERO,
     });
   });
 });
@@ -646,7 +689,44 @@ describe("planReconciliation: rolling up", () => {
         referenceBasisUsd: ZERO,
         feeUsd: ZERO,
         avgUnitCostUsd: ZERO,
+        estimatedCostUsd: ZERO,
       },
     ]);
+  });
+});
+
+describe("planReconciliation: estimated cost", () => {
+  it("carries a token's estimated cost into its position, and none for a cost read off a trade", async () => {
+    const estimated = held({
+      chainRawAmount: 200_000_000n,
+      recordedRawAmount: 200_000_000n,
+      recordedShares: D(2),
+      recordedCostUsd: D(300),
+      recordedIsEstimated: true,
+    });
+    const traded = held({
+      tokenId: "token-nvdaon",
+      mint: "9Mjb",
+      symbol: "NVDAon",
+      chainRawAmount: 100_000_000n,
+      recordedRawAmount: 100_000_000n,
+      recordedShares: D(1),
+      recordedCostUsd: D(180),
+    });
+    const [position] = planReconciliation([estimated, traded], NOW).positions;
+    // One stock across both wrappers: $480 of cost, $300 of it estimated.
+    expect(position).toMatchObject({ costBasisUsd: D(480), estimatedCostUsd: D(300) });
+  });
+
+  it("takes the estimated cost down with the shares that leave", async () => {
+    const token = held({
+      chainRawAmount: 100_000_000n,
+      recordedRawAmount: 200_000_000n,
+      recordedShares: D(2),
+      recordedCostUsd: D(300),
+      recordedIsEstimated: true,
+    });
+    const [position] = planReconciliation([token], NOW).positions;
+    expect(position).toMatchObject({ costBasisUsd: D(150), estimatedCostUsd: D(150) });
   });
 });

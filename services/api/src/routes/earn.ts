@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { D, Decimal, toWire, ZERO } from "@mercury/core";
 import type { ChainHistory, ChainReader } from "@mercury/chain";
-import { SponsorShort } from "../lending/ports.js";
+import { OwnerShort, SponsorShort } from "../lending/ports.js";
 import { EarnRefused } from "../earn/kamino-vault.js";
 import type { EarnDirectory, EarnListing } from "../earn/directory.js";
 import type { KaminoApi, VaultPoint } from "../earn/kamino-api.js";
@@ -10,9 +10,10 @@ import type { EarnLedger } from "../earn/store.js";
 import { recordMove } from "../earn/record.js";
 import { EARN_RISK_VERSION } from "../earn/risk.js";
 import type { EarnSends } from "../earn/sends.js";
-// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
+import { writerOf, type ActingWallet } from "../wallets/acting.js";
 import { logger } from "../log/index.js";
 
 const log = logger("earn");
@@ -142,29 +143,69 @@ export function earnRoutes(deps: EarnDeps): Hono {
     return (await deps.directory.list())[0]?.address ?? deps.directory.defaultVault;
   };
 
-  /** What this account has in Earn, vault by vault. */
-  app.get("/v1/earn", async (c) => {
-    const identity = c.get("identity");
-    const wallet = identity.walletAddress;
-    const [selected, settings, net, cash, holdings] = await Promise.all([
-      defaultFor(identity.userId),
-      deps.ledger.settings(identity.userId),
-      deps.ledger.netDeposited(identity.userId),
-      wallet === null ? ZERO : walletUsdc(wallet),
-      wallet === null ? [] : deps.directory.holdings(wallet),
+  /**
+   * One wallet's vaults, each with what it earned measured against that
+   * wallet's own deposits: the same vault in another wallet is a different
+   * balance with a different basis.
+   */
+  const walletEarn = async (userId: string, wallet: ActingWallet) => {
+    const [net, estimated, cash, holdings] = await Promise.all([
+      deps.ledger.netDeposited({ userId, walletId: wallet.id }),
+      deps.ledger.estimatedVaults({ userId, walletId: wallet.id }),
+      walletUsdc(wallet.address),
+      deps.directory.holdings(wallet.address),
     ]);
+    return {
+      cash,
+      holdings: holdings.map((h) => ({
+        ...h,
+        earned: earnedOn(h.usdc, net.get(h.listing.address)),
+        // Shares sent in or out were valued at a day's share price: earned is `~`.
+        estimated: estimated.has(h.listing.address),
+      })),
+    };
+  };
+
+  /** What the chosen wallet has in Earn, vault by vault; under `all`, every wallet's, a vault in two wallets as one row. */
+  app.get("/v1/earn", async (c) => {
+    const { userId } = c.get("identity");
+    const { wallets } = c.get("acting");
+    const [selected, settings, each] = await Promise.all([
+      defaultFor(userId),
+      deps.ledger.settings(userId),
+      Promise.all(wallets.map((w) => walletEarn(userId, w))),
+    ]);
+    const byVault = new Map<string, (typeof each)[number]["holdings"][number]>();
+    for (const h of each.flatMap((e) => e.holdings)) {
+      const seen = byVault.get(h.listing.address);
+      byVault.set(
+        h.listing.address,
+        seen === undefined
+          ? h
+          : {
+              ...seen,
+              usdc: seen.usdc.add(h.usdc),
+              earned: seen.earned.add(h.earned),
+              estimated: seen.estimated || h.estimated,
+            },
+      );
+    }
+    const holdings = [...byVault.values()];
+    const cash = each.reduce((s, e) => s.add(e.cash), ZERO);
     const rows = holdings.map((h) => ({
       ...vaultJson(h.listing),
       balanceUsd: usd(h.usdc),
-      earnedUsd: tiny(earnedOn(h.usdc, net.get(h.listing.address))),
+      earnedUsd: tiny(h.earned),
+      earnedEstimated: h.estimated,
     }));
     const total = holdings.reduce((s, h) => s.add(h.usdc), ZERO);
-    const earned = holdings.reduce((s, h) => s.add(earnedOn(h.usdc, net.get(h.listing.address))), ZERO);
+    const earned = holdings.reduce((s, h) => s.add(h.earned), ZERO);
     return c.json({
       selected,
       holdings: rows,
       balanceUsd: usd(total),
       earnedUsd: tiny(earned),
+      earnedEstimated: holdings.some((h) => h.estimated),
       // The rate the whole balance earns now: each vault's, weighted by what is in it.
       apy: total.isZero()
         ? null
@@ -245,8 +286,10 @@ export function earnRoutes(deps: EarnDeps): Hono {
 
   app.post("/v1/earn/transactions", async (c) => {
     const identity = c.get("identity");
-    const wallet = identity.walletAddress;
-    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    // The wallet chosen, whose own Earn position this moves. See `writerOf`.
+    const writer = writerOf(c);
+    if (writer === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const wallet = writer.address;
     const parsed = Request.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
     const body = parsed.data;
@@ -294,8 +337,22 @@ export function earnRoutes(deps: EarnDeps): Hono {
 
     let built;
     try {
-      built = await deps.directory.source(vault).build(wallet, intent, deps.relay?.relayer);
+      // Sponsored for the Mercury wallet alone: a linked wallet pays its own network fee and rent.
+      built = await deps.directory
+        .source(vault)
+        .build(wallet, intent, writer.isPrimary ? deps.relay?.relayer : undefined);
     } catch (error: unknown) {
+      // A linked wallet pays its own network fee and rent: say how much SOL it needs, before it signs.
+      if (error instanceof OwnerShort) {
+        const sol = (n: bigint) => (Number(n) / 1e9).toFixed(3);
+        return c.json(
+          fail(
+            "needs_sol",
+            `This wallet pays its own network fee and account rent in SOL: it needs about ${sol(error.neededLamports)} SOL, and holds ${sol(error.heldLamports)}. Add some SOL to it and try again.`,
+          ),
+          409,
+        );
+      }
       if (error instanceof SponsorShort) {
         log.error(
           {
@@ -324,7 +381,13 @@ export function earnRoutes(deps: EarnDeps): Hono {
     }
     for (const m of built.messages) {
       deps.relay?.builds.remember(m);
-      deps.sends?.remember(m, { userId: identity.userId, wallet, kind: body.kind, vault });
+      deps.sends?.remember(m, {
+        userId: identity.userId,
+        wallet,
+        walletId: writer.id,
+        kind: body.kind,
+        vault,
+      });
     }
     return c.json({ transactions: built.transactions, vault, expiresAt: built.expiresAt.toISOString() });
   });
@@ -335,8 +398,9 @@ export function earnRoutes(deps: EarnDeps): Hono {
    */
   app.post("/v1/earn/confirm", async (c) => {
     const identity = c.get("identity");
-    const wallet = identity.walletAddress;
-    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const writer = writerOf(c);
+    if (writer === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const wallet = writer.address;
     const parsed = ConfirmRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
     const { signature, action } = parsed.data;
@@ -344,6 +408,7 @@ export function earnRoutes(deps: EarnDeps): Hono {
     const result = await recordMove(deps, {
       userId: identity.userId,
       wallet,
+      walletId: writer.id,
       kind: action.kind,
       vault: action.vault ?? (await defaultFor(identity.userId)),
       signature,

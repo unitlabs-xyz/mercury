@@ -1,13 +1,21 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getBase64Encoder, getCompiledTransactionMessageDecoder, getTransactionDecoder } from "@solana/kit";
+import { eq } from "drizzle-orm";
+import {
+  generateKeyPairSigner,
+  getBase64Encoder,
+  getCompiledTransactionMessageDecoder,
+  getTransactionDecoder,
+} from "@solana/kit";
 import { D } from "@mercury/core";
 import { USDC_MINT, type TokenBalance } from "@mercury/chain";
 import { createApp } from "./app.js";
 import { testDb } from "./db/testing.js";
+import { users, wallets } from "./db/schema.js";
 import { memoryOrderStore } from "./orders/memory.js";
 import { inMemoryBuilds } from "./relay/builds.js";
+import { heldInAssociated } from "./relay/testing.js";
 import type { AuthDeps } from "./auth/middleware.js";
 import type { Deps, ReadDeps } from "./deps.js";
 
@@ -63,6 +71,12 @@ const chargedIn = (wire: string): bigint => {
   return n;
 };
 
+/** Who pays a built transaction's network fee: the message's first account. */
+const feePayerOf = (wire: string): string => {
+  const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
+  return getCompiledTransactionMessageDecoder().decode(tx.messageBytes).staticAccounts[0]!;
+};
+
 const held = (mint: string, whole: string, decimals: number): TokenBalance => ({
   mint,
   rawAmount: BigInt(D(whole).mul(D(10).pow(decimals)).toFixed(0)),
@@ -82,6 +96,8 @@ const harness = async (
   const db = await testDb();
   const priced: string[] = [];
   /* What each quote was for, in the units the side trades: dollars on a buy. */
+  /** What the server was told it built, so it can settle the order itself when the transaction goes out. */
+  const remembered: { message: Uint8Array; item: unknown }[] = [];
   const amounts: string[] = [];
 
   const market = {
@@ -130,6 +146,8 @@ const harness = async (
     chain: {
       tokenBalances: async (_owner: string) => over.balances ?? [held(XSC9, "10", 8)],
     },
+    // The same balances, each in the owner's associated account: what the fee quote checks exists.
+    history: { ownedTokenAccounts: heldInAssociated(() => over.balances ?? [held(XSC9, "10", 8)]) },
     prices: {
       pricesFor: async () =>
         new Map([
@@ -149,9 +167,25 @@ const harness = async (
     },
   } as unknown as Deps;
 
+  /*
+   * Orders in memory, with the one thing Postgres would do to them here:
+   * `order.wallet_id` is `on delete set null`, so an order whose wallet was
+   * deleted reads back with no wallet.
+   */
+  const memoryOrders = memoryOrderStore();
+  const orders: typeof memoryOrders = {
+    ...memoryOrders,
+    async byId(userId, id) {
+      const order = await memoryOrders.byId(userId, id);
+      if (order?.walletId == null) return order;
+      const [kept] = await db.select({ id: wallets.id }).from(wallets).where(eq(wallets.id, order.walletId));
+      return kept === undefined ? { ...order, walletId: null } : order;
+    },
+  };
+
   const read = {
     tradingFeeBps: over.tradingFeeBps ?? 50,
-    orders: memoryOrderStore(),
+    orders,
     send: {
       rpcUrl,
       ...(over.sponsored === false
@@ -166,12 +200,32 @@ const harness = async (
             },
           }),
     },
+    // A move from a wallet holding nothing: enough to show who may ask for one.
+    move: {
+      chain: { tokenBalances: async () => [] },
+      history: { ownedTokenAccounts: async () => [] },
+      prices: { pricesFor: async () => new Map() },
+      usdcMint: USDC_MINT,
+      listed: async () =>
+        new Map([[USDC_MINT, { symbol: "USDC", ticker: null, name: "US dollars", decimals: 6 }]]),
+      mercuryWalletId: async () => "w-mercury",
+      latestBlockhash: async () => ({
+        blockhash: "EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k",
+        lastValidBlockHeight: 1n,
+      }),
+      relay: { relayer: "AkZjMBy3SAfbend3qq22aMh9nsAehS7a8HXk15VxGJmJ", builds: inMemoryBuilds() },
+      sends: { remember: () => undefined },
+    },
     instruments: {},
-    portfolio: {},
+    // Only "Set cost" is read through this harness: no estimate to replace, as on a new account.
+    portfolio: { declareCost: async () => ({ kind: "nothing_estimated" }) },
     money: {},
     activity: {},
     notifications: {},
     fills: {},
+    orderSends: {
+      remember: (message: Uint8Array, item: unknown) => void remembered.push({ message, item }),
+    },
     borrow: {},
   } as unknown as ReadDeps;
 
@@ -190,8 +244,15 @@ const harness = async (
   const post = (path: string, body: unknown) =>
     app.request(path, { method: "POST", headers, body: JSON.stringify(body) });
   const get = (path: string) => app.request(path, { headers });
+  /* As `post`, with a wallet chosen the way the web chooses one. */
+  const postAs = (wallet: string, path: string, body: unknown) =>
+    app.request(path, {
+      method: "POST",
+      headers: { ...headers, "x-mercury-wallet": wallet },
+      body: JSON.stringify(body),
+    });
 
-  return { post, get, priced, amounts };
+  return { post, get, postAs, db, priced, amounts, remembered };
 };
 
 describe("POST /v1/quote, selling", () => {
@@ -386,6 +447,26 @@ describe("POST /v1/orders/:id/execute", () => {
     expect(order.mercuryFeeUsd).toBe("2.5");
   });
 
+  /*
+   * The order is settled by the server when its transaction goes out, so a
+   * person who switches wallets or closes the tab after signing still gets
+   * the fill. That needs the server to remember what it built, and for whom.
+   */
+  it("remembers the transaction it builds, for the wallet the order is for", async () => {
+    const h = await harness();
+    const { orderId } = (await (
+      await h.post("/v1/orders", { ticker: "NVDA", side: "buy", amount: "500" })
+    ).json()) as { orderId: string };
+    await h.post(`/v1/orders/${orderId}/execute`, {});
+    expect(h.remembered).toHaveLength(1);
+    expect(h.remembered[0]!.item).toMatchObject({
+      orderId,
+      userId: expect.any(String),
+      walletId: expect.any(String),
+    });
+    expect(h.remembered[0]!.message.length).toBeGreaterThan(0);
+  });
+
   it("swaps what is left of a buy after both fees", async () => {
     const h = await harness();
     await execute(h, { ticker: "NVDA", side: "buy", amount: "500" });
@@ -411,5 +492,163 @@ describe("POST /v1/orders/:id/execute", () => {
     const res = await execute(h, { ticker: "NVDA", side: "sell", amount: "0.30" });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { error: { message: string } }).error.message).toContain("$0.33");
+  });
+});
+
+/*
+ * Until a linked wallet can act, every action acts for the Mercury wallet.
+ * The web sends the chosen wallet on every request, so an order placed while
+ * a linked wallet is chosen must be refused, not quietly placed for the
+ * Mercury wallet instead.
+ */
+describe("which wallet a write is for", () => {
+  const order = { ticker: "NVDA", side: "buy", amount: "50" };
+
+  const signedInWithLinked = async () => {
+    const h = await harness();
+    await h.get("/v1/me"); // the first request makes the person and their Mercury wallet
+    const [me] = await h.db.select().from(users);
+    const [linked] = await h.db
+      .insert(wallets)
+      .values({ userId: me!.id, address: "Linked", kind: "external", isPrimary: false, linkedAt: new Date() })
+      .returning();
+    const [mercury] = await h.db.select().from(wallets).where(eq(wallets.isPrimary, true));
+    return { ...h, linkedId: linked!.id, mercuryId: mercury!.id };
+  };
+
+  it("places an order for the Mercury wallet, chosen by name or not at all", async () => {
+    const h = await signedInWithLinked();
+    expect((await h.post("/v1/orders", order)).status).toBe(200);
+    expect((await h.postAs(h.mercuryId, "/v1/orders", order)).status).toBe(200);
+  });
+
+  it("places an order for a linked wallet when it is chosen, and keeps the wallet on the order", async () => {
+    const h = await signedInWithLinked();
+    const res = await h.postAs(h.linkedId, "/v1/orders", order);
+    expect(res.status).toBe(200);
+    const { orderId } = (await res.json()) as { orderId: string };
+    expect(await (await h.get(`/v1/orders/${orderId}`)).json()).toMatchObject({ walletId: h.linkedId });
+  });
+
+  /*
+   * A linked wallet's keys are its own, so rent Mercury put up for it could be
+   * taken back out. It pays its own network fee and rent in SOL, as the fee
+   * payer of its own trade, and is charged Mercury's fee alone.
+   */
+  it("has a linked wallet pay its own network fee: it is the fee payer, and only Mercury's fee is charged", async () => {
+    const h = await harness();
+    await h.get("/v1/me");
+    const [me] = await h.db.select().from(users);
+    const address = (await generateKeyPairSigner()).address;
+    const [linked] = await h.db
+      .insert(wallets)
+      .values({ userId: me!.id, address, kind: "external", isPrimary: false, linkedAt: new Date() })
+      .returning();
+    const { orderId } = (await (
+      await h.postAs(linked!.id, "/v1/orders", { ticker: "NVDA", side: "buy", amount: "500" })
+    ).json()) as { orderId: string };
+    const res = await h.postAs(linked!.id, `/v1/orders/${orderId}/execute`, {});
+    expect(res.status).toBe(200);
+    const { transactions } = (await res.json()) as { transactions: string[] };
+    expect(feePayerOf(transactions[0]!)).toBe(address);
+    // $2.50 to Mercury, and nothing for a network it pays itself.
+    expect(chargedIn(transactions[0]!)).toBe(2_500_000n);
+  });
+
+  it("finishes an order only for the wallet it was placed for, never the one switched to", async () => {
+    const h = await signedInWithLinked();
+    const { orderId } = (await (await h.postAs(h.linkedId, "/v1/orders", order)).json()) as {
+      orderId: string;
+    };
+    for (const path of [`/v1/orders/${orderId}/execute`, `/v1/orders/${orderId}/confirm`]) {
+      // A signature of the right shape, so the wallet check is what answers.
+      const res = await h.postAs(h.mercuryId, path, { signature: "5".repeat(88) });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "wallet_changed" } });
+    }
+  });
+
+  it("finishes no order whose wallet was deleted, for whichever wallet is chosen now", async () => {
+    // "Unlink and delete history" keeps the order for its fee and sets its wallet to null.
+    const h = await signedInWithLinked();
+    const { orderId } = (await (await h.postAs(h.linkedId, "/v1/orders", order)).json()) as {
+      orderId: string;
+    };
+    await h.db.delete(wallets).where(eq(wallets.id, h.linkedId));
+    for (const path of [`/v1/orders/${orderId}/execute`, `/v1/orders/${orderId}/confirm`]) {
+      for (const res of [
+        await h.postAs(h.mercuryId, path, { signature: "5".repeat(88) }),
+        await h.post(path, { signature: "5".repeat(88) }),
+      ]) {
+        expect(res.status, path).toBe(409);
+        expect(await res.json()).toMatchObject({ error: { code: "wallet_gone" } });
+      }
+    }
+  });
+
+  it("lets a linked wallet through to a loan, Earn and a send, which now act for it", async () => {
+    const h = await signedInWithLinked();
+    for (const path of ["/v1/borrow/transactions", "/v1/earn/transactions", "/v1/money/send/quote"]) {
+      const res = await h.postAs(h.linkedId, path, {});
+      const body = (await res
+        .clone()
+        .json()
+        .catch(() => ({}))) as { error?: { code: string } };
+      expect(body.error?.code, path).not.toBe("wallet_read_only");
+      expect(body.error?.code, path).not.toBe("wallet_all");
+    }
+  });
+
+  it("refuses a loan, Earn and a send for every wallet at once", async () => {
+    const h = await signedInWithLinked();
+    for (const path of ["/v1/borrow/transactions", "/v1/earn/transactions", "/v1/money/send/quote"]) {
+      expect((await h.postAs("all", path, {})).status, path).toBe(400);
+    }
+  });
+
+  it("lets a linked wallet ask to move into the Mercury wallet, and refuses it for every wallet at once", async () => {
+    const h = await signedInWithLinked();
+    const linked = await h.postAs(h.linkedId, "/v1/move/prepare", {});
+    // Through every gate to the move itself, which finds nothing to move in this harness.
+    expect(linked.status).toBe(400);
+    expect(await linked.json()).toMatchObject({ error: { code: "nothing_to_move" } });
+    expect((await h.postAs("all", "/v1/move/prepare", {})).status).toBe(400);
+    const mercury = await h.postAs(h.mercuryId, "/v1/move/prepare", {});
+    expect(await mercury.json()).toMatchObject({ error: { code: "wallet_mercury" } });
+  });
+
+  it("lets a linked wallet run a basket, and refuses one for every wallet at once", async () => {
+    const h = await signedInWithLinked();
+    const linked = await h.postAs(h.linkedId, "/v1/basket-templates/mag7/rebalance", {});
+    const body = (await linked.json()) as { error?: { code: string } };
+    // Through the wallet gate to the basket itself, which has no Glider behind it in this harness.
+    expect(body.error?.code).not.toBe("wallet_read_only");
+    expect(body.error?.code).not.toBe("wallet_all");
+    const all = await h.postAs("all", "/v1/basket-templates/mag7/rebalance", {});
+    expect(all.status).toBe(400);
+    expect(await all.json()).toMatchObject({ error: { code: "wallet_all" } });
+  });
+
+  it("refuses an order, and a quote, for every wallet at once", async () => {
+    const h = await signedInWithLinked();
+    expect((await h.postAs("all", "/v1/orders", order)).status).toBe(400);
+    expect((await h.postAs("all", "/v1/quote", order)).status).toBe(400);
+  });
+
+  it("refuses a wallet that isn't the caller's before anything else", async () => {
+    const h = await signedInWithLinked();
+    expect((await h.postAs("6f1c9b8e-0000-4000-8000-000000000000", "/v1/orders", order)).status).toBe(403);
+  });
+  /*
+   * "Set cost" writes Mercury's records, not the chain, so a linked wallet may:
+   * the guard that keeps a linked wallet from acting stays out of its way.
+   */
+  it("lets a linked wallet set a holding's cost, which signs nothing", async () => {
+    const h = await signedInWithLinked();
+    const res = await h.postAs(h.linkedId, "/v1/portfolio/holdings/NVDA/cost", { unitCostUsd: "10" });
+    const body = (await res.json()) as { error?: { code: string } };
+    // Through the guard to the route itself, which finds no estimate to replace on a new account.
+    expect(res.status).toBe(409);
+    expect(body.error?.code).toBe("nothing_estimated");
   });
 });

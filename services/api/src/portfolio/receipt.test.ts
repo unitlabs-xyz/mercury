@@ -145,6 +145,7 @@ const loan = (over: Partial<LoanSource> = {}): LoanSource => ({
   debtAfterUsd: D("2.11"),
   collateralAfterUsd: D("4.36"),
   openedAccount: true,
+  fromHistory: false,
   earlier: [],
   ...over,
 });

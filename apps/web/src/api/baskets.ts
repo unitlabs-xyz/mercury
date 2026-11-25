@@ -2,7 +2,6 @@ import { SAMPLE_NO_LOGIN } from "../dev/sample";
 import { queryOptions, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
-import { useSignMessage, useSignTransaction } from "@privy-io/react-auth/solana";
 import { useEmbeddedWallet } from "../auth/embedded";
 import { getBase58Decoder } from "@solana/kit";
 import type {
@@ -24,8 +23,9 @@ import type { PreparedBasketFunding } from "@mercury/types";
 import { useSignedIn } from "./hooks";
 import { enrollBasket, fundBasket, type FundingReceipt } from "@mercury/view";
 import { apiFetch, ApiError } from "./client";
-import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { claimWallet, forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 import { refreshAfterChain } from "./settle";
+import { useTransactionSigner } from "./signer";
 
 /**
  * A basket as the app reads it: GET /v1/baskets, plus what Symmetry knows
@@ -258,34 +258,47 @@ export const useBasketRebalanceAction = (slug: string) => {
 };
 
 /** Prepare first so the review sheet shows the exact assets and recipient before signing. */
-export const useBasketExitAction = (slug: string) => {
+/**
+ * Whether what the wallet is about to sign pays out to `address` and nowhere
+ * else: the review shown, the message signed and the portfolio all agree.
+ * Checked before every exit signature, so a wallet never signs a payout to an
+ * address nobody chose.
+ */
+export const paysOutTo = (
+  prepared: Pick<PreparedBasketExit, "recipientAccountId" | "portfolioId" | "message">,
+  address: string,
+): boolean =>
+  prepared.recipientAccountId === `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${address}` &&
+  prepared.message.recipientAccountId === prepared.recipientAccountId &&
+  prepared.message.portfolioId === prepared.portfolioId;
+
+export const useBasketExitAction = (
+  slug: string,
+  /** A move: pay out in kind to the person's Mercury wallet, at this address, instead of to the owner. */
+  toMercury?: string,
+) => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signMessage } = useSignMessage();
+  // The basket's owner approves: the Mercury wallet in Mercury, a linked wallet in its own pop-up.
+  const signer = useTransactionSigner();
   const path = `/v1/basket-templates/${encodeURIComponent(slug)}/exit`;
+  const query = toMercury === undefined ? "" : "?to=mercury";
   const prepare = useMutation({
     mutationFn: ({ mode, assets }: { mode: BasketExitMode; assets?: BasketExitAsset[] }) =>
-      apiFetch<PreparedBasketExit>(`${path}/${mode}/prepare`, {
+      apiFetch<PreparedBasketExit>(`${path}/${mode}/prepare${query}`, {
         method: "POST",
         ...(assets ? { body: JSON.stringify({ assets }) } : {}),
       }),
   });
   const submit = useMutation({
     mutationFn: async (prepared: PreparedBasketExit) => {
-      if (!wallet) throw new Error("Your Solana wallet is unavailable.");
-      if (
-        prepared.recipientAccountId !== `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:${wallet.address}` ||
-        prepared.message.recipientAccountId !== prepared.recipientAccountId ||
-        prepared.message.portfolioId !== prepared.portfolioId
-      )
+      if (signer.address === null) throw new Error("Your Solana wallet is unavailable.");
+      // Paid out where it was asked to go, and nowhere else: the owner, or the Mercury wallet for a move.
+      if (!paysOutTo(prepared, toMercury ?? signer.address))
         throw new Error("Withdrawal destination changed. Review the exit again.");
       if (Date.parse(prepared.expiresAt) <= Date.now() + 5_000)
         throw new Error("Withdrawal review expired. Prepare it again.");
-      const signed = await signMessage({
-        message: new TextEncoder().encode(prepared.authorization.text),
-        wallet,
-      });
-      const signature = getBase58Decoder().decode(signed.signature);
+      const signed = await signer.signMessage(new TextEncoder().encode(prepared.authorization.text));
+      const signature = getBase58Decoder().decode(signed);
       return apiFetch<SubmittedBasketExit>(`${path}/${prepared.mode}`, {
         method: "POST",
         body: JSON.stringify({ message: prepared.message, signature, submission: prepared.submission }),
@@ -293,7 +306,7 @@ export const useBasketExitAction = (slug: string) => {
     },
     onSettled: () => refreshAfterChain(qc),
   });
-  return { prepare, submit, walletReady: wallet !== undefined };
+  return { prepare, submit, walletReady: signer.walletReady, approver: signer.approver };
 };
 
 export const useBasketActivity = (slug: string, enrolled: boolean) => {
@@ -322,16 +335,19 @@ export const useBasketActivity = (slug: string, enrolled: boolean) => {
 export { enrollBasket, fundBasket } from "@mercury/view";
 
 const toBytes = (base64: string) => Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
-const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+const toBase64 = (bytes: Uint8Array) => {
+  let text = "";
+  for (const b of bytes) text += String.fromCharCode(b);
+  return btoa(text);
+};
 
 export const useBasketEnrollmentAction = (slug: string) => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signMessage } = useSignMessage();
-  const { signTransaction } = useSignTransaction();
+  // The wallet chosen becomes the basket's owner, and approves: Glider takes any Solana wallet's key.
+  const signer = useTransactionSigner();
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!wallet) throw new Error("Your Solana wallet is still loading.");
+      if (!signer.walletReady) throw new Error("Your Solana wallet is still loading.");
       const path = enrollmentPath(slug);
       return enrollBasket(slug, {
         prepare: () => apiFetch<PreparedBasketEnrollment>(`${path}/prepare`, { method: "POST" }),
@@ -342,35 +358,30 @@ export const useBasketEnrollmentAction = (slug: string) => {
               body: JSON.stringify(body),
             })
           ).portfolio,
-        signMessage: async (text) => {
-          const result = await signMessage({ message: new TextEncoder().encode(text), wallet });
-          return getBase58Decoder().decode(result.signature);
-        },
-        signTransaction: async (base64) => {
-          const result = await signTransaction({ transaction: toBytes(base64), wallet });
-          return toBase64(result.signedTransaction);
-        },
+        signMessage: async (text) =>
+          getBase58Decoder().decode(await signer.signMessage(new TextEncoder().encode(text))),
+        signTransaction: async (base64) => toBase64(await signer.sign(toBytes(base64))),
       });
     },
     onSettled: () => refreshAfterChain(qc),
   });
-  return { ...mutation, walletReady: wallet !== undefined };
+  return { ...mutation, walletReady: signer.walletReady, approver: signer.approver };
 };
 
 const FUNDING_KIND = "funding";
 
-type SentFunding = { slug: string; signature: string };
+type SentFunding = { slug: string; signature: string; wallet?: string };
 
-const confirmSentFunding = ({ slug, signature }: SentFunding) =>
+const confirmSentFunding = ({ slug, signature, wallet }: SentFunding) =>
   apiFetch(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`, {
     method: "POST",
+    headers: claimWallet({ signature, ...(wallet === undefined ? {} : { wallet }) }),
     body: JSON.stringify({ signature }),
   });
 
 export const useBasketFundingAction = (slug: string) => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signTransaction } = useSignTransaction();
+  const signer = useTransactionSigner();
   const [step, setStep] = useState<"preparing" | "signing" | "sending" | null>(null);
   const mutation = useMutation({
     mutationFn: async ({
@@ -380,7 +391,7 @@ export const useBasketFundingAction = (slug: string) => {
       amountUsd: string;
       portfolio: ManagedBasketPortfolio;
     }) => {
-      if (!wallet) throw new Error("Your Solana wallet is still loading.");
+      if (!signer.walletReady) throw new Error("Your Solana wallet is still loading.");
       setStep("preparing");
       const receipt = await fundBasket(amountUsd, portfolio, {
         prepare: (amount) =>
@@ -390,8 +401,7 @@ export const useBasketFundingAction = (slug: string) => {
           ),
         sign: async (wire) => {
           setStep("signing");
-          const result = await signTransaction({ transaction: toBytes(wire), wallet });
-          return toBase64(result.signedTransaction);
+          return toBase64(await signer.sign(toBytes(wire)));
         },
         send: async (wire) => {
           setStep("sending");
@@ -442,7 +452,8 @@ export const useBasketFundingAction = (slug: string) => {
     ...mutation,
     data: mutation.data ?? receipt,
     step,
-    walletReady: wallet !== undefined,
+    walletReady: signer.walletReady,
+    approver: signer.approver,
     reset: () => {
       mutation.reset();
       setStep(null);

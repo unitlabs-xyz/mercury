@@ -1,4 +1,5 @@
 import { usePortfolioHistory } from "../api/hooks";
+import type { ALL_WALLETS } from "../api/wallet-choice";
 import type { Point } from "./DotChart";
 import { Clock } from "../ui/icons";
 import { DotChart } from "./DotChart";
@@ -70,8 +71,11 @@ export const drawnSeries = (
  * Whether there is a chart at all stays the server's call: it withholds a lone
  * reading, so this never has to decide what one point means.
  */
-export const useHistory = (range: Range): { points: readonly Point[]; excludesTransfers: boolean } | null => {
-  const recorded = usePortfolioHistory(range);
+export const useHistory = (
+  range: Range,
+  wallet?: typeof ALL_WALLETS,
+): { points: readonly Point[]; excludesTransfers: boolean } | null => {
+  const recorded = usePortfolioHistory(range, wallet);
 
   const points = recorded.data?.points ?? [];
   if (points.length < 2) return null;
@@ -83,15 +87,24 @@ export const useHistory = (range: Range): { points: readonly Point[]; excludesTr
   };
 };
 
-export const ValueChart = ({ range, onZoom }: { range: Range; onZoom?: (dir: 1 | -1) => void }) => {
-  const history = useHistory(range);
+/** `wallet` reads every wallet at once whichever is chosen; left out, the chosen wallet's. */
+export const ValueChart = ({
+  range,
+  onZoom,
+  wallet,
+}: {
+  range: Range;
+  onZoom?: (dir: 1 | -1) => void;
+  wallet?: typeof ALL_WALLETS;
+}) => {
+  const history = useHistory(range, wallet);
   /*
    * Same query, already cached — this costs no extra request, and it separates
    * the two things `useHistory` collapses into null. Without it a chart that
    * had simply not loaded yet claimed "Not enough history yet", which is a
    * statement about the account rather than about the request, and wrong.
    */
-  const loading = usePortfolioHistory(range).isLoading;
+  const loading = usePortfolioHistory(range, wallet).isLoading;
 
   if (!history && loading) {
     return (

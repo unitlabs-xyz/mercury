@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { logger } from "../../log/index.js";
+import { D, type Decimal } from "@mercury/core";
 import type {
   BasketExitAsset,
   BasketExitMessage,
@@ -9,6 +10,7 @@ import type {
   ManagedBasketTemplate,
 } from "@mercury/types";
 import { USDC_MINT, USDC_DECIMALS, type ChainHistory, type TransactionDetail } from "@mercury/chain";
+import { verifyWalletSignature } from "../../wallets/verify.js";
 import {
   BasketFundingPreflightError,
   BasketExitUnsupportedError,
@@ -96,6 +98,19 @@ export class BasketService {
       store: BasketStore;
       funding?: BasketFunding;
       history?: ChainHistory;
+      /**
+       * What went into a basket and came back out, in dollars: its net
+       * funding, for splitting across shares exited in kind. Null where that
+       * is not fully known (something already left it in kind).
+       */
+      netFunding?: (userId: string, ownerAccountId: string, portfolioId: string) => Promise<Decimal | null>;
+      /**
+       * Opens the token accounts a wallet lacks for these mints, relayer-paid,
+       * returning how many it opened. Run before a linked wallet's basket is
+       * paid out into the Mercury wallet (`openTokenAccounts`). Absent, nothing
+       * is opened first and Glider's payout is trusted to.
+       */
+      openRecipientAccounts?: (owner: string, mints: readonly string[]) => Promise<number>;
     },
   ) {}
 
@@ -346,10 +361,14 @@ export class BasketService {
     ownerAccountId: string,
     mode: BasketExitMode,
     requestedAssets?: readonly BasketExitAsset[],
+    /** Where the exit pays out: the owner, or the person's Mercury wallet for a move. */
+    recipientAccountId: string = ownerAccountId,
   ) {
-    if (!SOLANA_ACCOUNT.test(ownerAccountId))
+    if (!SOLANA_ACCOUNT.test(ownerAccountId) || !SOLANA_ACCOUNT.test(recipientAccountId))
       throw new BasketEnrollmentError("wallet_required", 400, "A Solana wallet is required to exit.");
     const { provider, portfolio } = await this.exitPortfolio(slug, ownerAccountId);
+    // Said before anything is signed: the same check guards the submission.
+    await this.refuseWhileExitSettles(portfolio.portfolioId);
     const positions = await provider.positions(portfolio.portfolioId);
     if (positions.portfolioId !== portfolio.portfolioId)
       throw new BasketEnrollmentError(
@@ -396,14 +415,14 @@ export class BasketService {
       const prepared = await provider.prepareExit(
         portfolio.portfolioId,
         mode,
-        ownerAccountId,
+        recipientAccountId,
         assets,
         submission,
       );
       const { message } = prepared;
       if (
         message.portfolioId !== portfolio.portfolioId ||
-        message.recipientAccountId !== ownerAccountId ||
+        message.recipientAccountId !== recipientAccountId ||
         Boolean(message.liquidate) !== (mode === "liquidate_usdc") ||
         (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC)
       )
@@ -423,12 +442,20 @@ export class BasketService {
           JSON.stringify(assets.slice().sort((a, b) => a.assetId.localeCompare(b.assetId)))
       )
         throw new Error("Glider returned a different selected asset set.");
+      // A move into the Mercury wallet: what the owner will sign, kept to check the signature against.
+      if (recipientAccountId !== ownerAccountId) {
+        this.rememberAuthorization(message.nonce, {
+          owner: addressOf(ownerAccountId),
+          text: prepared.authorization.text,
+          expiresAt: message.expiresAt * 1000,
+        });
+      }
       return {
         ...prepared,
         mode,
         submission,
         portfolioId: portfolio.portfolioId,
-        recipientAccountId: ownerAccountId,
+        recipientAccountId,
       };
     } catch (error) {
       if (error instanceof BasketExitUnsupportedError)
@@ -445,11 +472,13 @@ export class BasketService {
     message: BasketExitMessage,
     signature: string,
     submission: BasketExitSubmission = mode === "in_kind" ? "withdraw" : "liquidate_all",
+    /** Where it pays out: the owner, or the person's Mercury wallet for a move. */
+    recipientAccountId: string = ownerAccountId,
   ) {
     const { template, provider, portfolio, smartAccount } = await this.exitPortfolio(slug, ownerAccountId);
     if (
       message.portfolioId !== portfolio.portfolioId ||
-      message.recipientAccountId !== ownerAccountId ||
+      message.recipientAccountId !== recipientAccountId ||
       Boolean(message.liquidate) !== (mode === "liquidate_usdc") ||
       (mode === "in_kind" && submission !== "withdraw") ||
       (mode === "liquidate_usdc" && (message.settlementAssetId ?? SOLANA_USDC) !== SOLANA_USDC) ||
@@ -480,23 +509,39 @@ export class BasketService {
           }));
     let intent = await this.deps.store.exitIntent(userId, message.nonce);
     if (!intent) {
+      // A new exit, not this one sent again: not while another from the basket is still settling.
+      await this.refuseWhileExitSettles(portfolio.portfolioId);
       if (message.expiresAt * 1000 <= Date.now())
         throw new BasketEnrollmentError(
           "authorization_expired",
           409,
           "The withdrawal authorization expired. Review it again.",
         );
+      if (recipientAccountId !== ownerAccountId) {
+        await this.openForPayout(
+          message,
+          signature,
+          ownerAccountId,
+          recipientAccountId,
+          mode === "in_kind" ? authorizedAssets.map((a) => a.mint) : [USDC_MINT],
+        );
+      }
       await this.deps.store.rememberBasketAccount({
         ownerAccountId,
         portfolioId: portfolio.portfolioId,
         address: addressOf(smartAccount.accountId),
       });
       const latest = await this.deps.history.signatures(addressOf(smartAccount.accountId), { limit: 1 });
+      const exitCosts =
+        mode === "in_kind"
+          ? await this.exitCosts(userId, ownerAccountId, portfolio.portfolioId, authorizedAssets)
+          : undefined;
       const payload: ExitIntentPayload = {
         mode,
         submission,
         smartAccountId: smartAccount.accountId,
-        recipientAccountId: ownerAccountId,
+        recipientAccountId,
+        ...(exitCosts === undefined ? {} : { exitCosts }),
         baselineSignature: latest[0]?.signature ?? null,
         authorization: { message, signature },
         authorizedAssets,
@@ -518,7 +563,7 @@ export class BasketService {
       mode,
       submission,
       smartAccountId: smartAccount.accountId,
-      recipientAccountId: ownerAccountId,
+      recipientAccountId,
       authorization: { message, signature },
       authorizedAssets,
       expectedTransfers,
@@ -567,7 +612,112 @@ export class BasketService {
     return { ...submitted, mode };
   }
 
-  async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string) {
+  /** What each prepared move asked its owner to sign, by nonce, until it expires. */
+  private readonly authorizations = new Map<string, { owner: string; text: string; expiresAt: number }>();
+
+  private rememberAuthorization(nonce: string, entry: { owner: string; text: string; expiresAt: number }) {
+    const now = Date.now();
+    for (const [key, held] of this.authorizations) if (held.expiresAt <= now) this.authorizations.delete(key);
+    this.authorizations.set(nonce, entry);
+  }
+
+  /**
+   * Opens the Mercury wallet's token accounts for a move's payout: only once
+   * the owner has signed the exit, and only after the server has checked that
+   * signature itself, against the text it was given to sign.
+   *
+   * Glider's documentation says nothing about opening the recipient's account
+   * for an asset it has never held, so the accounts are made to exist before
+   * the exit goes to Glider, on the relayer's SOL. Opened at preparation, as it
+   * first was, anyone could have the relayer open accounts by asking, close
+   * them (a Privy key can be exported), and ask again. Here each opening needs
+   * a real signed exit, one exit from a basket runs at a time, and the relayer
+   * opens any one account once ever (`openTokenAccounts`' ledger).
+   *
+   * The text is kept from preparation, in memory: lost to a restart, the
+   * person is asked to review the move again, which costs them one more
+   * signature and nobody any SOL.
+   */
+  private async openForPayout(
+    message: BasketExitMessage,
+    signature: string,
+    ownerAccountId: string,
+    recipientAccountId: string,
+    mints: readonly string[],
+  ): Promise<void> {
+    if (!this.deps.openRecipientAccounts) return;
+    const asked = this.authorizations.get(message.nonce);
+    if (asked === undefined || asked.expiresAt <= Date.now())
+      throw new BasketEnrollmentError(
+        "authorization_expired",
+        409,
+        "The withdrawal authorization expired. Review it again.",
+      );
+    if (
+      asked.owner !== addressOf(ownerAccountId) ||
+      !(await verifyWalletSignature(asked.owner, asked.text, signature))
+    )
+      throw new BasketEnrollmentError("invalid_exit", 400, "The signature does not match this wallet.");
+    try {
+      await this.deps.openRecipientAccounts(addressOf(recipientAccountId), mints);
+    } catch {
+      throw new BasketEnrollmentError(
+        "accounts_unavailable",
+        503,
+        "Your Mercury wallet couldn't be made ready for these assets. Try again shortly.",
+      );
+    }
+  }
+
+  /**
+   * One exit from a basket at a time. An exit's cost is the basket's net
+   * funding less what earlier exits took, and an earlier exit counts only once
+   * it has landed and been recorded: a second exit signed before then split
+   * the same funding again, and both carried the basket's whole cost.
+   * Resolved means recorded, failed, cancelled or given up on, so an exit that
+   * never lands holds nothing up for good.
+   */
+  private async refuseWhileExitSettles(portfolioId: string): Promise<void> {
+    if (await this.deps.store.exitSettling?.(portfolioId))
+      throw new BasketEnrollmentError(
+        "exit_settling",
+        409,
+        "Your last withdrawal from this basket is still settling. Try again once it lands.",
+      );
+  }
+
+  /**
+   * What each exited asset's share of the basket cost: the basket's net
+   * funding, split across what it holds by value now, at Glider's own prices.
+   * The shares carry that into the wallet they land in, so leaving a basket
+   * in kind is not leaving its cost behind. Undefined when the funding is not
+   * fully known or nothing was put in: no cost is better than an invented one.
+   */
+  private async exitCosts(
+    userId: string,
+    ownerAccountId: string,
+    portfolioId: string,
+    assets: readonly { mint: string; amountRaw: string }[],
+  ): Promise<ExitIntentPayload["exitCosts"]> {
+    const provider = this.deps.provider;
+    if (!this.deps.netFunding || !provider) return undefined;
+    const [invested, positions] = await Promise.all([
+      this.deps.netFunding(userId, ownerAccountId, portfolioId),
+      provider.positions(portfolioId),
+    ]);
+    const total = D(positions.totalValueUsd);
+    if (invested === null || !invested.gt(0) || !total.gt(0)) return undefined;
+    const costs: { mint: string; costUsd: string }[] = [];
+    for (const asset of assets) {
+      const held = positions.assets.find((a) => a.assetId === `${SOLANA_ASSET}${asset.mint}`);
+      if (!held || !/^[1-9]\d*$/.test(held.balanceRaw)) continue;
+      const exited = D(held.valueUsd).mul(D(asset.amountRaw)).div(D(held.balanceRaw));
+      costs.push({ mint: asset.mint, costUsd: invested.mul(exited).div(total).toFixed() });
+    }
+    return costs.length === 0 ? undefined : costs;
+  }
+
+  async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string, sponsored = true) {
     const amountRaw = usdcRaw(amountUsd);
     const { template, provider } = await this.templateForEnrollment(slug);
     if (!this.deps.funding)
@@ -593,7 +743,7 @@ export class BasketService {
 
     let prepared;
     try {
-      prepared = await this.deps.funding.prepare(ownerAccountId, destinationAccountId, amountRaw);
+      prepared = await this.deps.funding.prepare(ownerAccountId, destinationAccountId, amountRaw, sponsored);
     } catch (error) {
       if (error instanceof BasketFundingPreflightError)
         throw new BasketEnrollmentError(
@@ -651,6 +801,8 @@ export class BasketService {
       );
     await this.deps.store.confirmFunding({
       userId,
+      // The funding wallet, so a linked wallet's funding shows in its own feed and not the Mercury wallet's.
+      ownerAddress: addressOf(ownerAccountId),
       slug,
       portfolioId: portfolio.portfolioId,
       title: `Invested in ${template.name}`,

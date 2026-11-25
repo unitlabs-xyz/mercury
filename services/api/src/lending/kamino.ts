@@ -34,7 +34,7 @@ import { fromCode } from "@kamino-finance/klend-sdk/dist/@codegen/klend/errors/i
 import { topUp, transferSol } from "./sponsor.js";
 import { kaminoSetupRent } from "./setup.js";
 import { WALLET_BYTES, rentFor } from "../rent.js";
-import { LendingRefused, SponsorShort } from "./ports.js";
+import { LendingRefused, OwnerShort, SponsorShort } from "./ports.js";
 import type {
   BuiltTransactions,
   CollateralTerms,
@@ -370,6 +370,8 @@ export class KaminoLending implements LendingSource {
       return { wire: getBase64EncodedWireTransaction(tx), messageBytes: Uint8Array.from(tx.messageBytes) };
     };
 
+    // Paying its own way, a first loan's setup is the wallet's rent: say so before it signs, not after.
+    if (sponsor === undefined && firstTime) await this.affordsSetup(owner.address);
     const ixs =
       sponsor === undefined
         ? actionIxs
@@ -390,6 +392,17 @@ export class KaminoLending implements LendingSource {
       // A blockhash lives about 150 slots, a minute; leave room for signing.
       expiresAt: new Date(Date.now() + 45_000),
     };
+  }
+
+  /** Throws `OwnerShort` when the wallet can't pay its own first-loan setup, the network fee and its own rent. */
+  private async affordsSetup(owner: Address): Promise<void> {
+    const [{ value: held }, setupRent, walletRent] = await Promise.all([
+      this.rpc.getBalance(owner).send(),
+      kaminoSetupRent(this.rent),
+      rentFor(this.rent, WALLET_BYTES),
+    ]);
+    const needed = setupRent + walletRent + OWNER_FEE_RESERVE;
+    if (held < needed) throw new OwnerShort(held, needed);
   }
 
   /**
@@ -451,6 +464,9 @@ export class KaminoLending implements LendingSource {
 
 /** The most a serialised transaction may be. */
 const MAX_TRANSACTION_BYTES = 1232;
+
+/** What a wallet paying its own way keeps for the network fee on top of its first loan's rent. */
+const OWNER_FEE_RESERVE = 100_000n;
 
 /** SOL the relayer keeps for its own signature fees while probing what a top-up needs. */
 const FEE_RESERVE = 1_000_000n;

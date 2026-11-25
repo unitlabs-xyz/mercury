@@ -1,6 +1,8 @@
 import { Hono } from "hono";
-// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
+import type { ActingWallet } from "../wallets/acting.js";
+import type { WalletScope } from "../wallets/active.js";
 import type { ReceiptDetail } from "../portfolio/receipt.js";
 
 export interface ActivityRow {
@@ -23,14 +25,19 @@ export interface Cursor {
 }
 
 export interface ActivityDeps {
-  readonly read: (userId: string, limit: number, cursor: Cursor | null) => Promise<readonly ActivityRow[]>;
+  /** The chosen wallets' feed: one wallet's, or every followed wallet's as one. */
+  readonly read: (
+    scope: WalletScope,
+    limit: number,
+    cursor: Cursor | null,
+  ) => Promise<readonly ActivityRow[]>;
   /**
-   * One row and what it is made of. Null when the row is not this account's,
-   * which is the same answer as no row at all.
+   * One row and what it is made of. Null when the row is not in one of these
+   * wallets, which is the same answer as no row at all.
    */
   readonly receipt: (
     userId: string,
-    wallet: string | null,
+    wallets: readonly ActingWallet[],
     id: string,
   ) => Promise<{ readonly row: ActivityRow; readonly detail: ReceiptDetail | null } | null>;
 }
@@ -75,7 +82,8 @@ export function activityRoutes(deps: ActivityDeps): Hono {
   const app = new Hono();
 
   app.get("/v1/activity", async (c) => {
-    const identity = c.get("identity");
+    const { userId } = c.get("identity");
+    const walletIds = c.get("acting").wallets.map((w) => w.id);
 
     const asked = Number(c.req.query("limit"));
     const limit =
@@ -87,7 +95,7 @@ export function activityRoutes(deps: ActivityDeps): Hono {
       return c.json(fail("validation_failed", "That cursor is not one we issued."), 400);
     }
 
-    const items = await deps.read(identity.userId, limit, cursor);
+    const items = await deps.read({ userId, walletIds }, limit, cursor);
     const last = items[items.length - 1];
 
     return c.json({
@@ -104,10 +112,11 @@ export function activityRoutes(deps: ActivityDeps): Hono {
    * A receipt: the row again, with the record behind it read back — the fee
    * in a trade, both halves of a pledge-and-borrow, who a send went to. Fetched
    * when somebody opens a row, so the feed itself stays one cheap query.
+   *
+   * Any of the chosen wallets' rows, so a row opened from "All wallets" opens.
    */
   app.get("/v1/activity/:id", async (c) => {
-    const identity = c.get("identity");
-    const found = await deps.receipt(identity.userId, identity.walletAddress, c.req.param("id"));
+    const found = await deps.receipt(c.get("identity").userId, c.get("acting").wallets, c.req.param("id"));
     if (found === null) return c.json(fail("not_found", "There is no such event on this account."), 404);
     return c.json({ item: activityWire(found.row), detail: found.detail });
   });

@@ -1,3 +1,5 @@
+import { ApproveIn, MercuryTip } from "../ApproveIn";
+import { continueIn } from "../../api/signer-rules";
 import { useEarn } from "../../api/earn";
 import { earnCovers } from "../earn/moves";
 import { exitAssets, fullSelection, rawTokenAmount, tokenAmount } from "@mercury/view";
@@ -297,8 +299,24 @@ const RebalanceNote = () => (
   </SheetNote>
 );
 
-const SheetFoot = ({ children }: { children: ReactNode }) => (
-  <div className="mt-5 flex gap-2.5 px-5 pb-4">{children}</div>
+/**
+ * The step's buttons. Where a linked wallet takes the step, "You'll approve
+ * this in Phantom" above them and the quiet Mercury tip below.
+ */
+const SheetFoot = ({ children, approver = null }: { children: ReactNode; approver?: string | null }) => (
+  <>
+    {approver !== null && (
+      <div className="px-5">
+        <ApproveIn approver={approver} />
+      </div>
+    )}
+    <div className={`flex gap-2.5 px-5 ${approver === null ? "mt-5 pb-4" : "mt-3"}`}>{children}</div>
+    {approver !== null && (
+      <div className="px-5 pb-4">
+        <MercuryTip approver={approver} />
+      </div>
+    )}
+  </>
 );
 
 const sendLabel = (amount: string) => (validUsdc(amount) ? `Send ${usd(Number(amount))}` : "Send USDC");
@@ -312,6 +330,8 @@ interface EnrollmentStepProps {
   walletReady: boolean;
   busy: boolean;
   error?: string | undefined;
+  /** The linked wallet that approves, for "Continue in Phantom"; null for the Mercury wallet. */
+  approver?: string | null;
   onClose: () => void;
   onConfirm: () => void;
 }
@@ -326,6 +346,7 @@ const EnrollmentStep = ({
   walletReady,
   busy,
   error,
+  approver = null,
   onClose,
   onConfirm,
 }: EnrollmentStepProps) => (
@@ -351,7 +372,7 @@ const EnrollmentStep = ({
     </div>
     {!walletReady && <p className="mx-5 mt-4 text-[12px] text-ds-muted">Waiting for your wallet…</p>}
     {error && <SheetError>{error}</SheetError>}
-    <SheetFoot>
+    <SheetFoot approver={approver}>
       <Button size="lg" onClick={onClose} disabled={busy} className="flex-1">
         Cancel
       </Button>
@@ -363,7 +384,7 @@ const EnrollmentStep = ({
         onClick={onConfirm}
         className="flex-[1.6]"
       >
-        Set up portfolio
+        {approver === null ? "Set up portfolio" : continueIn(approver)}
       </Button>
     </SheetFoot>
   </>
@@ -451,6 +472,8 @@ interface FundingStepProps {
   walletReady: boolean;
   receipt: { signature: string; status: "confirmed" | "pending" } | null;
   error?: string | undefined;
+  /** The linked wallet that approves, for "Continue in Phantom"; null for the Mercury wallet. */
+  approver?: string | null;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -472,6 +495,7 @@ const FundingStep = ({
   walletReady,
   receipt,
   error,
+  approver = null,
   onConfirm,
   onClose,
 }: FundingStepProps) => {
@@ -529,7 +553,7 @@ const FundingStep = ({
       <RebalanceNote />
       {!walletReady && <p className="mx-5 mt-3 text-[12px] text-ds-muted">Waiting for your wallet…</p>}
       {error && <SheetError>{error} Check your wallet balance before trying again.</SheetError>}
-      <SheetFoot>
+      <SheetFoot approver={approver}>
         <Button size="lg" onClick={onClose} disabled={busy} className="flex-1">
           {firstDeposit ? "Later" : "Cancel"}
         </Button>
@@ -541,7 +565,7 @@ const FundingStep = ({
           onClick={onConfirm}
           className="flex-[1.6]"
         >
-          {sendLabel(amount)}
+          {approver === null ? sendLabel(amount) : continueIn(approver)}
         </Button>
       </SheetFoot>
     </>
@@ -561,8 +585,20 @@ interface InvestSheetProps {
   /** Opened before set-up: the transfer is step 2 of 2. */
   firstDeposit: boolean;
   receipt: FundingStepProps["receipt"];
-  enroll: { walletReady: boolean; busy: boolean; error?: string | undefined; onConfirm: () => void };
-  fund: { walletReady: boolean; busy: boolean; error?: string | undefined; onConfirm: () => void };
+  enroll: {
+    walletReady: boolean;
+    busy: boolean;
+    error?: string | undefined;
+    approver?: string | null;
+    onConfirm: () => void;
+  };
+  fund: {
+    walletReady: boolean;
+    busy: boolean;
+    error?: string | undefined;
+    approver?: string | null;
+    onConfirm: () => void;
+  };
   onClose: () => void;
 }
 
@@ -633,6 +669,18 @@ interface ExitSheetProps {
   busy: boolean;
   walletReady: boolean;
   error?: string | undefined;
+  /** The linked wallet that approves the withdrawal; null for the Mercury wallet. */
+  approver?: string | null;
+  /**
+   * A move rather than a withdrawal: a linked wallet's basket paid out straight
+   * into the person's Mercury wallet, at this address. Undefined for a
+   * withdrawal to the owner. In kind it is "Hold as shares"; for USDC it is
+   * "Keep it as a basket", invested again from the Mercury wallet
+   * (`onInvestFromMercury`) once it lands.
+   */
+  toMercury?: string | undefined;
+  /** "Keep it as a basket": switch to the Mercury wallet, where the same basket is one tap. */
+  onInvestFromMercury?: () => void;
   onPrepare: (assets?: BasketExitAsset[]) => void;
   onSubmit: () => void;
   onBack: () => void;
@@ -674,6 +722,9 @@ export const ExitSheet = ({
   busy,
   walletReady,
   error,
+  approver = null,
+  toMercury,
+  onInvestFromMercury,
   onPrepare,
   onSubmit,
   onBack,
@@ -692,7 +743,8 @@ export const ExitSheet = ({
   const available = exitAssets(account);
   const byAsset = new Map(account.assets.map((asset) => [asset.assetId, asset]));
   const count = available.length;
-  const destination = account.ownerAccountId.split(":").at(-1) ?? "Unavailable";
+  const destination = toMercury ?? account.ownerAccountId.split(":").at(-1) ?? "Unavailable";
+  const moving = toMercury !== undefined;
   const selectedAssets: BasketExitAsset[] = [];
   let selectionError: string | null = null;
   if (manual && !prepared) {
@@ -760,15 +812,37 @@ export const ExitSheet = ({
             <Check className="size-5" />
           </span>
           <h2 id="basket-exit-title" className="mt-4 text-[20px] font-medium text-ds-ink">
-            Withdrawal submitted
+            {moving ? "Move submitted" : "Withdrawal submitted"}
           </h2>
           <p className="mx-auto mt-3 max-w-[40ch] text-[14px] leading-[1.45] text-ds-muted">
             This is not settled yet. Track the operation under Your position; your wallet and basket balances
             will update after confirmation.
           </p>
-          <Button variant="primary" size="lg" onClick={close} className="mt-6 w-full">
-            Done
-          </Button>
+          {moving && mode === "liquidate_usdc" && onInvestFromMercury !== undefined ? (
+            <>
+              <p className="mx-auto mt-3 max-w-[40ch] text-[14px] leading-[1.45] text-ds-muted">
+                When the USDC lands in your Mercury wallet, invest it in {name} there: one tap, no pop-up.
+              </p>
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => {
+                  close();
+                  onInvestFromMercury();
+                }}
+                className="mt-6 w-full"
+              >
+                Invest in {name} from your Mercury wallet
+              </Button>
+              <Button size="lg" onClick={close} className="mt-2 w-full">
+                Later
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" size="lg" onClick={close} className="mt-6 w-full">
+              Done
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -776,13 +850,26 @@ export const ExitSheet = ({
             <SheetHead
               id="basket-exit-title"
               mark={mark}
-              title={prepared ? "Review withdrawal" : `Withdraw ${name}`}
+              title={
+                prepared
+                  ? moving
+                    ? "Review move"
+                    : "Review withdrawal"
+                  : moving
+                    ? `Move ${name} to your Mercury wallet`
+                    : `Withdraw ${name}`
+              }
               sub={
                 prepared
                   ? "Check this before your wallet signs it"
                   : `${count} ${count === 1 ? "asset" : "assets"} · ${usd(account.totalValueUsd)}`
               }
             />
+            {/*
+              A withdrawal: the assets themselves, or USDC. A move: hold the shares
+              (the default, nothing sold), or keep it as a basket (sold for USDC into
+              the Mercury wallet, and invested in the same basket there).
+            */}
             {!prepared && (
               <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-ds-panel p-1 text-[13px]">
                 {(["in_kind", "liquidate_usdc"] as const).map((choice) => (
@@ -793,7 +880,13 @@ export const ExitSheet = ({
                     onClick={() => onMode(choice)}
                     className={`rounded-md px-2 py-2.5 font-medium ${mode === choice ? "bg-white text-ds-ink shadow-sm" : "text-ds-muted hover:text-ds-ink"}`}
                   >
-                    {choice === "in_kind" ? "Assets in kind" : "Convert to USDC"}
+                    {moving
+                      ? choice === "in_kind"
+                        ? "Hold as shares"
+                        : "Keep it as a basket"
+                      : choice === "in_kind"
+                        ? "Assets in kind"
+                        : "Convert to USDC"}
                   </button>
                 ))}
               </div>
@@ -966,16 +1059,25 @@ export const ExitSheet = ({
                   >
                     {count}
                   </TipLine>
-                  <TipLine k="Destination" tip={`Your Solana wallet · ${destination}`}>
-                    Wallet · {short(destination)}
+                  <TipLine
+                    k="Destination"
+                    tip={
+                      moving ? `Your Mercury wallet · ${destination}` : `Your Solana wallet · ${destination}`
+                    }
+                  >
+                    {moving ? "Mercury wallet" : "Wallet"} · {short(destination)}
                   </TipLine>
                 </dl>
               </SwapPanel>
             </div>
             <SheetNote>
-              {mode === "in_kind"
-                ? "These tokens move to your wallet without being sold. Anything left behind may rebalance on the next scheduled run, and values can shift while it settles."
-                : "Glider sells the listed assets for USDC and sends the proceeds to your wallet. Small or illiquid balances may stay behind and rebalance later."}
+              {moving
+                ? mode === "in_kind"
+                  ? "These shares move into your Mercury wallet without being sold, with their share of what the basket cost, so you can trade them in one tap. Anything you leave behind stays in this basket."
+                  : `Glider sells this basket for USDC, paid into your Mercury wallet, and you invest it in ${name} there. Selling now and buying again pays the spread twice, and the money is out of the market until Glider’s next daily rebalance.`
+                : mode === "in_kind"
+                  ? "These tokens move to your wallet without being sold. Anything left behind may rebalance on the next scheduled run, and values can shift while it settles."
+                  : "Glider sells the listed assets for USDC and sends the proceeds to your wallet. Small or illiquid balances may stay behind and rebalance later."}
             </SheetNote>
             {!walletReady && (
               <p className="mx-5 mt-3 text-[12px] text-ds-muted">Waiting for your Solana wallet…</p>
@@ -988,7 +1090,7 @@ export const ExitSheet = ({
               </SheetError>
             )}
           </div>
-          <SheetFoot>
+          <SheetFoot approver={prepared ? approver : null}>
             <Button size="lg" onClick={prepared ? onBack : close} disabled={busy} className="flex-1">
               {prepared ? "Back" : "Cancel"}
             </Button>
@@ -1004,7 +1106,11 @@ export const ExitSheet = ({
               onClick={prepared ? onSubmit : () => onPrepare(manual ? selectedAssets : undefined)}
               className="flex-[1.6]"
             >
-              {prepared ? "Sign and submit withdrawal" : "Review withdrawal"}
+              {prepared
+                ? approver === null
+                  ? "Sign and submit withdrawal"
+                  : continueIn(approver)
+                : "Review withdrawal"}
             </Button>
           </SheetFoot>
         </>

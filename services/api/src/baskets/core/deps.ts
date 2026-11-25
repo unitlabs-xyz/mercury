@@ -78,10 +78,15 @@ export interface BasketProvider {
 }
 
 export interface BasketFunding {
+  /**
+   * `sponsored`: whether Mercury's relayer pays the network fee. The Mercury
+   * wallet only; a linked wallet pays its own way in SOL.
+   */
   prepare(
     ownerAccountId: string,
     destinationAccountId: string,
     amountRaw: bigint,
+    sponsored?: boolean,
   ): Promise<{
     transaction: string;
     expiresAt: Date;
@@ -124,6 +129,11 @@ export interface BasketStore {
   }): Promise<ExitIntent>;
   attachExitOperation(id: string, operationId: string, submittedAt: Date): Promise<void>;
   /**
+   * Whether an exit from this portfolio was submitted and is not yet resolved
+   * (recorded, failed, cancelled or given up on). Absent, never.
+   */
+  exitSettling?(portfolioId: string): Promise<boolean>;
+  /**
    * Which Glider smart account this owner's basket money moves through.
    *
    * Recorded as soon as it is resolved, which is before any money can reach
@@ -148,6 +158,8 @@ export interface BasketStore {
   >;
   confirmFunding(input: {
     userId: string;
+    /** The wallet that paid into the basket. Absent, the Mercury wallet. */
+    ownerAddress?: string;
     slug: string;
     portfolioId: string;
     title: string;

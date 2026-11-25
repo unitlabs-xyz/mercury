@@ -73,3 +73,24 @@ describe("borrowedTone", () => {
     }
   });
 });
+
+describe("borrowed line for every wallet at once", () => {
+  it("describes no single loan, since each wallet's is listed on its own", () => {
+    const m = model({ borrowed: 4000, health: "healthy", safeUntilDrop: 0.68, available: 2700, power: 2700 });
+    expect(borrowedSub(m, true)).toBe("Across your wallets' loans");
+  });
+
+  it("says when no wallet owes anything, rather than offering one wallet's headroom", () => {
+    expect(borrowedSub(model({ power: 5000, available: 5000 }), true)).toBe("No wallet has a loan");
+  });
+
+  it("is never red: one wallet's margin call is shown on that wallet's loan", () => {
+    expect(borrowedTone(model({ borrowed: 4000, health: "margin_call" }), true)).toBeUndefined();
+  });
+
+  it("still says the figure is old when Kamino could not be read", () => {
+    expect(borrowedSub(model({ borrowed: 4000, debtIsStale: true }), true)).toBe(
+      "As of an hour ago — we could not reach Kamino",
+    );
+  });
+});

@@ -310,6 +310,8 @@ const Queue = ({ d, amount }: { d: OfferQueueDecision; amount: number }) => {
 
 /* The refusal copy lives in `@mercury/view`, so the phone says the same thing. */
 export { REFUSE_COPY, refuseCopy } from "@mercury/view";
+import { continueIn } from "../api/signer-rules";
+import { ApproveIn, MercuryTip } from "./ApproveIn";
 import { refuseCopy } from "@mercury/view";
 
 const Refuse = ({ d }: { d: RefuseDecision }) => {
@@ -583,7 +585,15 @@ export const OrderSheet = ({
    * A moved price stays, because it is not a status. It is a different offer,
    * and pressing it means agreeing to a number that changed.
    */
-  const cta = moved ? `${selling ? "Sell" : "Buy"} at the new price` : selling ? "Sell now" : "Buy now";
+  // A linked wallet approves in its own app, and the button says where.
+  const cta =
+    buy.approver !== null
+      ? continueIn(buy.approver)
+      : moved
+        ? `${selling ? "Sell" : "Buy"} at the new price`
+        : selling
+          ? "Sell now"
+          : "Buy now";
 
   /* Not while the order is in flight: resetting would drop its result, and the
      ticket would never hear that it went through. */
@@ -708,6 +718,11 @@ export const OrderSheet = ({
             </div>
           </div>
 
+          {buy.approver !== null && (
+            <div className="shrink-0 bg-white px-5 pb-2">
+              <ApproveIn approver={buy.approver} />
+            </div>
+          )}
           <div className="flex shrink-0 gap-2.5 bg-white px-5 pt-1 pb-4">
             {/* The design system's buttons. These were hand-rolled: a teal
                 rectangle at h-11 for the primary action, where every other
@@ -743,6 +758,11 @@ export const OrderSheet = ({
               {cta}
             </Button>
           </div>
+          {buy.approver !== null && (
+            <div className="shrink-0 bg-white px-5 pb-4">
+              <MercuryTip approver={buy.approver} />
+            </div>
+          )}
         </>
       )}
     </Dialog>

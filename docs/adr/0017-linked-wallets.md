@@ -37,8 +37,9 @@ wallet's own signature on each action.**
    read-only, with "Manage on web". An unlinked wallet is not tracked, alerted on or shown anywhere;
    a separate option also deletes its history.
 4. **A linked wallet signs for itself.** Mercury builds the transaction, the linked wallet signs it
-   in its own pop-up, and the relayer co-signs as fee payer, exactly as for the Mercury wallet. No
-   server holds or uses a linked wallet's key.
+   in its own pop-up, and is its own fee payer: it pays the network fee and any rent in SOL, unlike
+   the Mercury wallet, whose fees the relayer sponsors. Its keys are its own, so SOL or rent Mercury
+   put up in it could be taken straight back out. No server holds or uses a linked wallet's key.
 5. **The same fees apply** to anything Mercury builds, whichever wallet signs it. Today that is
    the trading fee on stock buys and sells; baskets, borrowing and Earn carry no Mercury fee yet
    for any wallet.
@@ -98,3 +99,8 @@ wallets spec, and linking cannot open to the public without it.
 
 The design is in
 [2026-11-13 linked wallets](../superpowers/specs/2026-11-13-linked-wallets-design.md).
+
+**As built (25 November 2026).** Steps 1–11 are built. One part differs from the design as first
+drafted: moving a linked wallet's Glider basket is one approval paid straight into the Mercury
+wallet (Glider's exit takes a recipient), so the resumable `wallet_move` flow it planned for two
+approvals is not needed. Nothing in this decision changes with it.

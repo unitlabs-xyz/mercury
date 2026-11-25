@@ -19,7 +19,7 @@ import { Clock } from "../ui/icons";
 import { AppShell } from "./AppShell";
 import { OrderSheet } from "./OrderSheet";
 import { DotChart } from "./DotChart";
-import { usd, usdCompact, usdSigned } from "@mercury/view";
+import { estimateLine, usd, usdCompact, usdSigned } from "@mercury/view";
 import { RailList, Saved } from "./invest/Rail";
 import { Mark, points, type Row } from "./invest/shared";
 import { LiveStatusChip, PriceError } from "./LiveStatus";
@@ -32,6 +32,8 @@ import { localTime } from "../ui/localTime";
 import { Routes } from "./stock/Routes";
 import { Ticket } from "./stock/Ticket";
 import { useWatchlist } from "./watchlist";
+import { SetCost } from "./stock/SetCost";
+import { ActionGate } from "./ActionGate";
 
 const SINCE: Record<Span, string> = {
   "1D": "today",
@@ -334,6 +336,7 @@ export const Stock = () => {
                   stockTodayPct={priced.todayPct}
                   parts={heldAs.parts}
                   accepted={heldAs.accepted}
+                  footer={holding && <SetCost ticker={instrument.ticker} line={estimateLine(holding)} />}
                 />
               )}
               <BorrowPanel ticker={instrument.ticker} name={instrument.name} />
@@ -403,26 +406,28 @@ export const Stock = () => {
         </aside>
       </div>
 
-      <OrderSheet
-        instrument={instrument}
-        prices={prices.data}
-        open={buying}
-        onClose={() => setBuying(false)}
-        onPlaced={() => {
-          /* The order is placed, so the ticket starts over. Left as it was, a
-             "Sell all" keeps quoting a sale of shares that are now gone, and the
-             tabs that could switch it back are hidden with the position. */
-          setRaw("100");
-          setSide("buy");
-          setMax(false);
-          setAcceptImpact(false);
-        }}
-        initial={amount}
-        side={side}
-        max={max}
-        acceptImpact={acceptImpact}
-        onAcceptImpact={setAcceptImpact}
-      />
+      <ActionGate open={buying} onClose={() => setBuying(false)}>
+        <OrderSheet
+          instrument={instrument}
+          prices={prices.data}
+          open={buying}
+          onClose={() => setBuying(false)}
+          onPlaced={() => {
+            /* The order is placed, so the ticket starts over. Left as it was, a
+               "Sell all" keeps quoting a sale of shares that are now gone, and the
+               tabs that could switch it back are hidden with the position. */
+            setRaw("100");
+            setSide("buy");
+            setMax(false);
+            setAcceptImpact(false);
+          }}
+          initial={amount}
+          side={side}
+          max={max}
+          acceptImpact={acceptImpact}
+          onAcceptImpact={setAcceptImpact}
+        />
+      </ActionGate>
     </AppShell>
   );
 };

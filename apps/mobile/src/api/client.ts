@@ -7,6 +7,13 @@ import { authHeaders } from "./identity.js";
  */
 const BASE = process.env["EXPO_PUBLIC_API_URL"] ?? "http://localhost:8787";
 
+/**
+ * The web app, where a linked wallet is managed: the phone cannot get a
+ * linked wallet's signature, so "Manage on web" opens it there. Inlined by
+ * Metro like the API's address.
+ */
+export const WEB_URL = process.env["EXPO_PUBLIC_WEB_URL"] ?? "https://beta.trymercury.xyz";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,

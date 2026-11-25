@@ -29,9 +29,7 @@
     },
     "organicScore": 0,
     "organicScoreLabel": "low",
-    "tags": [
-      "unknown"
-    ],
+    "tags": ["unknown"],
     "createdAt": "2026-01-19T10:02:51Z",
     "updatedAt": "2026-09-14T12:29:42Z"
   },
@@ -66,9 +64,7 @@
     },
     "organicScore": 0,
     "organicScoreLabel": "low",
-    "tags": [
-      "unknown"
-    ],
+    "tags": ["unknown"],
     "createdAt": "2026-02-11T20:18:47Z",
     "updatedAt": "2026-09-14T07:13:04Z"
   },
@@ -127,13 +123,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "token-2022",
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo"
-    ],
+    "tags": ["token-2022", "verified", "stocks", "rwa", "ondo"],
     "createdAt": "2025-12-31T17:34:16Z",
     "updatedAt": "2026-09-24T06:45:33.285391463Z"
   },
@@ -189,13 +179,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "stocks",
-      "rwa",
-      "ondo",
-      "token-2022",
-      "verified"
-    ],
+    "tags": ["stocks", "rwa", "ondo", "token-2022", "verified"],
     "createdAt": "2025-12-31T17:33:33Z",
     "updatedAt": "2026-09-24T06:45:34.639680929Z"
   },
@@ -253,14 +237,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "stocks",
-      "rwa",
-      "ondo",
-      "equities",
-      "token-2022",
-      "verified"
-    ],
+    "tags": ["stocks", "rwa", "ondo", "equities", "token-2022", "verified"],
     "createdAt": "2025-12-31T17:23:03Z",
     "updatedAt": "2026-09-24T06:45:35.114084662Z"
   },
@@ -330,14 +307,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo",
-      "equities",
-      "token-2022"
-    ],
+    "tags": ["verified", "stocks", "rwa", "ondo", "equities", "token-2022"],
     "createdAt": "2025-12-31T17:29:42Z",
     "updatedAt": "2026-09-24T06:45:33.735389517Z"
   },
@@ -385,14 +355,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo",
-      "equities",
-      "token-2022"
-    ],
+    "tags": ["verified", "stocks", "rwa", "ondo", "equities", "token-2022"],
     "createdAt": "2025-12-31T17:23:30Z",
     "updatedAt": "2026-09-24T06:45:23.962769779Z"
   },
@@ -451,14 +414,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "rwa",
-      "ondo",
-      "equities",
-      "token-2022",
-      "verified",
-      "stocks"
-    ],
+    "tags": ["rwa", "ondo", "equities", "token-2022", "verified", "stocks"],
     "createdAt": "2025-12-31T17:30:27Z",
     "updatedAt": "2026-09-24T06:45:46.036996085Z"
   },
@@ -518,13 +474,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "ondo",
-      "token-2022",
-      "verified",
-      "stocks",
-      "rwa"
-    ],
+    "tags": ["ondo", "token-2022", "verified", "stocks", "rwa"],
     "createdAt": "2025-12-31T17:32:26Z",
     "updatedAt": "2026-09-24T06:45:34.492923398Z"
   },
@@ -582,13 +532,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "rwa",
-      "ondo",
-      "token-2022",
-      "verified",
-      "stocks"
-    ],
+    "tags": ["rwa", "ondo", "token-2022", "verified", "stocks"],
     "createdAt": "2025-12-31T17:40:53Z",
     "updatedAt": "2026-09-24T06:45:23.562967545Z"
   },
@@ -643,13 +587,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo",
-      "token-2022"
-    ],
+    "tags": ["verified", "stocks", "rwa", "ondo", "token-2022"],
     "createdAt": "2026-05-29T23:19:49Z",
     "updatedAt": "2026-09-24T06:47:10.562246372Z"
   },
@@ -693,14 +631,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo",
-      "equities",
-      "token-2022"
-    ],
+    "tags": ["verified", "stocks", "rwa", "ondo", "equities", "token-2022"],
     "createdAt": "2025-12-31T17:24:10Z",
     "updatedAt": "2026-09-24T06:45:23.961751006Z"
   },
@@ -749,13 +680,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo",
-      "token-2022"
-    ],
+    "tags": ["verified", "stocks", "rwa", "ondo", "token-2022"],
     "createdAt": "2025-12-31T17:41:40Z",
     "updatedAt": "2026-09-24T06:45:23.362669529Z"
   },
@@ -802,14 +727,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "token-2022",
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo",
-      "equities"
-    ],
+    "tags": ["token-2022", "verified", "stocks", "rwa", "ondo", "equities"],
     "createdAt": "2025-12-31T17:24:13Z",
     "updatedAt": "2026-09-24T06:45:23.362416513Z"
   },
@@ -875,14 +793,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "equities",
-      "token-2022",
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo"
-    ],
+    "tags": ["equities", "token-2022", "verified", "stocks", "rwa", "ondo"],
     "createdAt": "2025-12-31T17:29:28Z",
     "updatedAt": "2026-09-24T06:45:23.363397411Z"
   },
@@ -943,14 +854,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "rwa",
-      "ondo",
-      "equities",
-      "token-2022",
-      "verified",
-      "stocks"
-    ],
+    "tags": ["rwa", "ondo", "equities", "token-2022", "verified", "stocks"],
     "createdAt": "2025-12-31T17:23:36Z",
     "updatedAt": "2026-09-24T06:45:33.533299312Z"
   },
@@ -996,13 +900,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo",
-      "token-2022"
-    ],
+    "tags": ["verified", "stocks", "rwa", "ondo", "token-2022"],
     "createdAt": "2026-03-09T23:08:10Z",
     "updatedAt": "2026-09-24T06:45:23.56391716Z"
   },
@@ -1061,13 +959,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "token-2022",
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo"
-    ],
+    "tags": ["token-2022", "verified", "stocks", "rwa", "ondo"],
     "createdAt": "2026-03-09T23:08:44Z",
     "updatedAt": "2026-09-24T06:45:34.285373239Z"
   },
@@ -1117,13 +1009,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "verified",
-      "stocks",
-      "rwa",
-      "ondo",
-      "token-2022"
-    ],
+    "tags": ["verified", "stocks", "rwa", "ondo", "token-2022"],
     "createdAt": "2025-12-31T17:26:20Z",
     "updatedAt": "2026-09-24T06:45:34.158407034Z"
   },
@@ -1181,14 +1067,7 @@
     "organicScore": 0,
     "organicScoreLabel": "low",
     "isVerified": true,
-    "tags": [
-      "ondo",
-      "equities",
-      "token-2022",
-      "verified",
-      "stocks",
-      "rwa"
-    ],
+    "tags": ["ondo", "equities", "token-2022", "verified", "stocks", "rwa"],
     "createdAt": "2025-12-31T17:27:08Z",
     "updatedAt": "2026-09-24T06:45:33.533453055Z"
   }

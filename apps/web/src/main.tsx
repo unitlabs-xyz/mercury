@@ -7,6 +7,10 @@ import { App } from "./App";
 import { PrivyBoundary } from "./auth/PrivyBoundary";
 import "./tokens.css";
 import { startValueFlash } from "./ui/valueFlash";
+import { adoptWalletFromUrl } from "./api/wallet-choice";
+
+// Opened on one wallet from the phone's "Manage on web": choose it before anything reads the choice.
+adoptWalletFromUrl(window.location, window.history);
 
 // A value that changes on screen dips and comes back, everywhere; see ui/valueFlash.ts.
 startValueFlash();

@@ -104,7 +104,7 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 - [ ] Weekly check: SOL the relayer spent against the USDC it collected
 - [ ] Decide whether Send keeps absorbing its signature
 
-## Linked wallets: designed, in review
+## Linked wallets: built, steps 1–11, on `feat/linked-wallets`
 
 [ADR 0017](docs/adr/0017-linked-wallets.md) (proposed),
 [spec](docs/superpowers/specs/2026-11-13-linked-wallets-design.md). Link up to 5 Solana wallets
@@ -116,14 +116,23 @@ history reader inside the API.
 - [ ] Sanctions screening for linked wallets: designed separately, not in this spec. Choose a
       provider and settle with counsel what happens to a wallet flagged after it was linked, before
       linking opens to the public
-- [ ] Before linking opens (build step 3): `loan-watch` reads loans from Kamino's API instead of the chain.
-      Token accounts and wallet streams already subscribe (#112); linking needs only
-      `portfolio/accounts.ts` and `wallet-events/streams.ts` to list active wallets
+- [x] Build step 3: every job follows linked wallets; `loan-watch` stays on the klend SDK, which
+      batches loans into one read per hundred wallets
 - [ ] Watch public-lane connection count as links grow: ~10 subscriptions per wallet, 398 per
       Solana Vibe Station connection, no SLA
 - [ ] Test on mainnet whether Phantom's scanner flags a multi-token move, and start domain
       verification with its security provider
-- [ ] Build steps 1–7 (link, track, read on web and iOS, cost and P&L from history): the first release
+- [x] Build steps 1–7 (link, track, read on web and iOS, cost and P&L from history): the first release
+- [x] Build steps 8–11 (acting, moving tokens, moving baskets, loan and Earn history). Step 10 is one
+      approval paid straight into the Mercury wallet, not the first draft's resumable `wallet_move`
+      flow: see the spec, "A Glider basket, moved by Mercury"
+- [x] A basket paid into the Mercury wallet no longer depends on Glider opening its token
+      accounts, which its docs don't promise: the relayer opens them before the authorization
+      (`baskets/glider/open-accounts.ts`). Baskets made in another app are withdrawn in that app,
+      since Glider's API answers only the app that enrolled them; the card sends the person there
+- [ ] Wallets already costed before the reader stopped at Mercury's own buys (4866e4c) may hold an
+      estimated opening lot on top of Mercury's exact one. Find any linked wallet whose lots exceed
+      its chain balance and cost it again
 
 ## Trade router: designed, not to be built until the go-ahead
 

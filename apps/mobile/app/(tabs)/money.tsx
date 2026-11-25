@@ -4,13 +4,13 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { TabScene } from "../../src/ui/TabScene";
-import { pct, usd } from "@mercury/view";
+import { numberOf, pct, usd } from "@mercury/view";
 import { useBorrow, useMoney, useSignedIn, type Borrow } from "../../src/api";
 import { useActions } from "../../src/actions/Actions";
 import { Button, Note, Skeleton, StatusChip, Text } from "../../src/ui";
 import { color, font, radius, space } from "../../src/theme";
 
-const num = (v: string | number | null | undefined): number => Number(v ?? 0);
+const num = numberOf;
 
 /**
  * Cash, set as the web's Money page sets it: a white card that leads with what

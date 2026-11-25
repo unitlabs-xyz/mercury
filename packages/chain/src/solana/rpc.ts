@@ -8,6 +8,7 @@ import type {
   SignatureRef,
   TokenBalance,
   TokenBalanceEntry,
+  OwnedTokenAccount,
   TokenTransfer,
   TransactionDetail,
 } from "../ports.js";
@@ -348,9 +349,11 @@ export class SolanaRpc implements ChainReader, ChainHistory {
     const scaled = extensions.find((e) => e.extension === "scaledUiAmountConfig")?.state;
     const pausable = extensions.find((e) => e.extension === "pausableConfig")?.state;
 
+    const scheduled = this.scheduledMultiplier(scaled);
     return {
       decimals: info.decimals,
       multiplier: this.effectiveMultiplier(scaled),
+      ...(scheduled === null ? {} : { scheduled }),
       isPaused: pausable?.["paused"] === true,
     };
   }
@@ -364,6 +367,19 @@ export class SolanaRpc implements ChainReader, ChainHistory {
    * The values arrive as decimal strings, so they go into Decimal untouched. A
    * mint with no extension has a multiplier of one: one token, one share.
    */
+  /** The next multiplier while it is still ahead, and different from the one in force. */
+  private scheduledMultiplier(
+    state: Record<string, unknown> | undefined,
+  ): { multiplier: Decimal; effectiveAt: Date } | null {
+    if (state === undefined) return null;
+    const next = state["newMultiplier"];
+    const at = state["newMultiplierEffectiveTimestamp"];
+    if (typeof next !== "string" || typeof at !== "number" || this.now() >= at * 1000) return null;
+    const current = typeof state["multiplier"] === "string" ? D(state["multiplier"]) : ONE;
+    if (D(next).eq(current)) return null;
+    return { multiplier: D(next), effectiveAt: new Date(at * 1000) };
+  }
+
   private effectiveMultiplier(state: Record<string, unknown> | undefined): Decimal {
     if (state === undefined) return ONE;
     const current = typeof state["multiplier"] === "string" ? D(state["multiplier"]) : ONE;
@@ -397,6 +413,37 @@ export class SolanaRpc implements ChainReader, ChainHistory {
     );
     // A set: the same account answered twice is one account to watch.
     return [...new Set(pages.flatMap((page) => page.value.map((a) => a.pubkey)))];
+  }
+
+  /**
+   * The owner's token accounts under both programs, with each one's mint and
+   * balance, empty ones included. Parsed by the node, so no account layout is
+   * decoded here.
+   */
+  async ownedTokenAccounts(owner: string): Promise<readonly OwnedTokenAccount[]> {
+    const pages = await Promise.all(
+      [TOKEN_PROGRAM, TOKEN_2022_PROGRAM].map((programId) =>
+        this.call<{ value: readonly (ParsedTokenAccount & { readonly pubkey: string })[] }>(
+          "getTokenAccountsByOwner",
+          [owner, { programId }, { encoding: "jsonParsed" }],
+        ),
+      ),
+    );
+    const byAddress = new Map<string, OwnedTokenAccount>();
+    const programs = [TOKEN_PROGRAM, TOKEN_2022_PROGRAM];
+    for (const [i, page] of pages.entries()) {
+      for (const entry of page.value) {
+        const info = entry.account.data.parsed.info;
+        byAddress.set(entry.pubkey, {
+          address: entry.pubkey,
+          mint: info.mint,
+          programId: programs[i]!,
+          rawAmount: BigInt(info.tokenAmount.amount),
+          decimals: info.tokenAmount.decimals,
+        });
+      }
+    }
+    return [...byAddress.values()];
   }
 
   async tokenAccountsFor(owner: string, mint: string): Promise<readonly string[]> {

@@ -35,6 +35,12 @@ export interface SponsoredBuildInput {
    * `ComposeInput.chargePosition`.
    */
   readonly side: "buy" | "sell";
+  /**
+   * The owner pays the network fee and any rent itself, as fee payer: a linked
+   * wallet. The charge is then Mercury's fee alone, and the relayer signs and
+   * remembers nothing, since it pays for nothing.
+   */
+  readonly selfPaying?: boolean;
 }
 
 /**
@@ -53,11 +59,12 @@ const toBaseUnits = (usdc: Decimal): bigint =>
 export const buildSponsored = async (
   deps: SponsoredBuildDeps,
   input: SponsoredBuildInput,
-): Promise<{ wire: string }> => {
+): Promise<{ wire: string; messageBytes: Uint8Array }> => {
   const relayer = deps.relay.signer.address as Address;
+  const payer = input.selfPaying === true ? (input.owner as Address) : relayer;
 
   const [instructions, lifetime] = await Promise.all([
-    deps.quotes.buildSwapInstructions(input.quote, input.owner, relayer),
+    deps.quotes.buildSwapInstructions(input.quote, input.owner, payer),
     deps.blockhash(),
   ]);
 
@@ -85,14 +92,14 @@ export const buildSponsored = async (
         });
 
   const { wire, messageBytes } = composeSponsored({
-    relayer,
+    // The fee payer: the relayer, or the owner paying its own way. Mercury's fee goes to the relayer either way.
+    relayer: payer,
     blockhash: lifetime.blockhash,
     lastValidBlockHeight: lifetime.lastValidBlockHeight,
     computeBudget: instructions.computeBudget.map(toInstruction),
     charge,
     chargePosition: input.side === "buy" ? "before" : "after",
-    // Setup opens the account the shares arrive in, and is paid for by the
-    // relayer like everything else here.
+    // Setup opens the account the shares arrive in, paid for by whoever pays the fee.
     swap: [...instructions.setup.map(toInstruction), toInstruction(instructions.swap)].concat(
       instructions.cleanup === null ? [] : [toInstruction(instructions.cleanup)],
     ),
@@ -100,6 +107,6 @@ export const buildSponsored = async (
   });
 
   /* Remembered before it leaves, or the relayer will not recognise it coming back. */
-  deps.relay.builds.remember(messageBytes);
-  return { wire };
+  if (input.selfPaying !== true) deps.relay.builds.remember(messageBytes);
+  return { wire, messageBytes };
 };

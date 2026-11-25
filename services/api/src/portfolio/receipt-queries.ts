@@ -6,6 +6,7 @@ import { activities, fundingIntents, instruments, loanEvents, lots, orders, toke
 import type { ActivityRow } from "../routes/activity.js";
 import { transferParties } from "../wallet-events/movements.js";
 import { logger } from "../log/index.js";
+import type { WalletOwner } from "../wallets/active.js";
 import { loanReceipt, tradeReceipt, type ReceiptDetail } from "./receipt.js";
 
 const log = logger("activity");
@@ -19,17 +20,17 @@ export interface ReceiptChain {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const LOAN_KINDS = ["borrow", "repay", "pledge", "unpledge"] as const;
+const LOAN_KINDS = ["borrow", "repay", "pledge", "unpledge", "liquidation"] as const;
 type LoanKind = (typeof LOAN_KINDS)[number];
 const isLoan = (kind: string): kind is LoanKind => (LOAN_KINDS as readonly string[]).includes(kind);
 /** A pledge-and-borrow pledges first; that is the order the transaction does them in. */
-const LEG_ORDER: Record<LoanKind, number> = { pledge: 0, borrow: 1, repay: 2, unpledge: 3 };
+const LEG_ORDER: Record<LoanKind, number> = { pledge: 0, borrow: 1, repay: 2, unpledge: 3, liquidation: 4 };
 
 const num = (v: string | null) => (v === null ? null : D(v));
 
 /**
- * One feed row and the receipt behind it, or null when the row is not this
- * account's — or is not a row at all.
+ * One feed row and the receipt behind it, or null when the row is not in one
+ * of these wallets — someone else's, an unlinked wallet's, or not a row at all.
  *
  * Read from the table the row points at, when somebody opens it, rather than
  * written onto the row: the feed is read constantly and never joined, and
@@ -40,10 +41,11 @@ export async function readReceipt(
   db: Db,
   userId: string,
   id: string,
-  wallet: string | null,
+  /** The wallets the row may be in. Its own address is the one a transfer is read against. */
+  wallets: readonly { readonly id: string; readonly address: string }[],
   chain: ReceiptChain,
 ): Promise<{ readonly row: ActivityRow; readonly detail: ReceiptDetail | null } | null> {
-  if (!UUID.test(id)) return null;
+  if (!UUID.test(id) || wallets.length === 0) return null;
 
   const [found] = await db
     .select({
@@ -60,22 +62,33 @@ export async function readReceipt(
       refTable: activities.refTable,
       refId: activities.refId,
       basketPortfolioId: activities.basketPortfolioId,
+      walletId: activities.walletId,
     })
     .from(activities)
     .leftJoin(tokens, eq(tokens.mint, activities.mint))
     .leftJoin(instruments, eq(instruments.id, tokens.instrumentId))
-    .where(and(eq(activities.id, id), eq(activities.userId, userId)))
+    .where(
+      and(
+        eq(activities.id, id),
+        eq(activities.userId, userId),
+        inArray(
+          activities.walletId,
+          wallets.map((w) => w.id),
+        ),
+      ),
+    )
     .limit(1);
   if (found === undefined) return null;
 
-  const { refTable, refId, basketPortfolioId, ticker, ...row } = found;
+  const { refTable, refId, basketPortfolioId, ticker, walletId, ...row } = found;
+  const wallet = wallets.find((w) => w.id === walletId)?.address ?? null;
 
   const detail = await (async (): Promise<ReceiptDetail | null> => {
     if ((row.kind === "buy" || row.kind === "sell") && refTable === "order" && refId !== null) {
       return trade(db, userId, row.kind, refId, row.mint, ticker, row.amountUsd);
     }
     if (isLoan(row.kind) && row.txSignature !== null) {
-      return loan(db, userId, row.txSignature);
+      return loan(db, { userId, walletId }, row.txSignature);
     }
     if (refTable === "funding_intent" && refId !== null) {
       return deposit(db, userId, refId);
@@ -145,12 +158,20 @@ async function trade(
   });
 }
 
-async function loan(db: Db, userId: string, signature: string): Promise<ReceiptDetail | null> {
+/**
+ * A loan transaction's receipt, read within the wallet whose loan it is. Each
+ * wallet has its own Kamino loan, so the account-opening transaction and
+ * everything before this one are that wallet's alone: another wallet's
+ * borrows are no part of this loan's interest, and its first borrow did not
+ * open this wallet's account.
+ */
+async function loan(db: Db, owner: WalletOwner, signature: string): Promise<ReceiptDetail | null> {
+  const ofThisLoan = and(eq(loanEvents.userId, owner.userId), eq(loanEvents.walletId, owner.walletId));
   const legs = (
     await db
       .select()
       .from(loanEvents)
-      .where(and(eq(loanEvents.userId, userId), eq(loanEvents.txSignature, signature)))
+      .where(and(ofThisLoan, eq(loanEvents.txSignature, signature)))
   )
     .filter((l): l is typeof l & { kind: LoanKind } => isLoan(l.kind))
     .sort((a, b) => LEG_ORDER[a.kind] - LEG_ORDER[b.kind]);
@@ -161,14 +182,14 @@ async function loan(db: Db, userId: string, signature: string): Promise<ReceiptD
   const [opening] = await db
     .select({ txSignature: loanEvents.txSignature })
     .from(loanEvents)
-    .where(eq(loanEvents.userId, userId))
+    .where(ofThisLoan)
     .orderBy(asc(loanEvents.occurredAt), asc(loanEvents.recordedAt))
     .limit(1);
 
   const earlier = await db
     .select({ kind: loanEvents.kind, usdAmount: loanEvents.usdAmount, debtAfterUsd: loanEvents.debtAfterUsd })
     .from(loanEvents)
-    .where(and(eq(loanEvents.userId, userId), lt(loanEvents.occurredAt, first.occurredAt)))
+    .where(and(ofThisLoan, lt(loanEvents.occurredAt, first.occurredAt)))
     .orderBy(asc(loanEvents.occurredAt), asc(loanEvents.recordedAt));
 
   // Kamino takes only xStocks, so a pledged ticker is the backed token's.
@@ -197,6 +218,7 @@ async function loan(db: Db, userId: string, signature: string): Promise<ReceiptD
     debtAfterUsd: D(first.debtAfterUsd),
     collateralAfterUsd: D(first.collateralAfterUsd),
     openedAccount: opening?.txSignature === signature,
+    fromHistory: legs.every((l) => l.originSource === "chain"),
     earlier: earlier.map((r) => ({
       kind: r.kind,
       usdAmount: num(r.usdAmount),

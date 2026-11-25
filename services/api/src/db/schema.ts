@@ -70,10 +70,81 @@ export const wallets = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     address: text("address").notNull(),
     kind: text("kind", { enum: ["privy_embedded", "external"] }).notNull(),
+    /**
+     * The Mercury wallet: the one Privy created at sign-in, listed first, and
+     * the only one iOS acts for. Exactly one per user (`wallet_one_primary_idx`).
+     *
+     * The default is `true` because every wallet written before linked wallets
+     * was a Privy one. Anything inserting a linked wallet sets it to `false`
+     * itself rather than trusting the default.
+     */
     isPrimary: boolean("is_primary").notNull().default(true),
+    /** A name the person gave a linked wallet, such as "Phantom main". Null shows a short address. */
+    label: text("label"),
+    /** When a linked wallet was last linked. Null for the Mercury wallet, which is never linked. */
+    linkedAt: timestamp("linked_at", { withTimezone: true }),
+    /**
+     * When a linked wallet was unlinked. Non-null means nothing tracks it, acts
+     * for it or shows it, though its rows are kept until the person deletes
+     * them. Linking it again clears this rather than inserting a second row.
+     */
+    unlinkedAt: timestamp("unlinked_at", { withTimezone: true }),
+    /**
+     * The last time web or iOS showed this wallet's positions. Sets how often a
+     * linked wallet is read when the jobs fall back to polling. Written at most
+     * once an hour, because presence is reported every few seconds.
+     */
+    lastViewedAt: timestamp("last_viewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("wallet_address_idx").on(t.address)],
+  (t) => [
+    uniqueIndex("wallet_address_idx").on(t.address),
+    /* One Mercury wallet per person. Partial, so linked wallets are not counted. */
+    uniqueIndex("wallet_one_primary_idx")
+      .on(t.userId)
+      .where(sql`${t.isPrimary}`),
+  ],
+);
+
+/**
+ * A message a wallet is asked to sign to prove the person controls it.
+ *
+ * The message is stored, never taken back from the client: the signature is
+ * checked against exactly what the server issued. Marked used in the same
+ * transaction that saves the wallet, so one signature can link once.
+ */
+export const walletLinkChallenges = pgTable(
+  "wallet_link_challenge",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    address: text("address").notNull(),
+    message: text("message").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("wallet_link_challenge_created_idx").on(t.createdAt)],
+);
+export type WalletLinkChallenge = typeof walletLinkChallenges.$inferSelect;
+
+/**
+ * Every token account the relayer opened for a wallet, on its own SOL, outside
+ * a transaction the wallet paid for: today, the Mercury wallet's accounts for a
+ * basket paid into it (`baskets/glider/open-accounts.ts`). Opened once ever:
+ * an account its owner closed (a Privy key can be exported, and the rent
+ * comes back to them) is not opened again on the relayer's SOL.
+ */
+export const sponsoredTokenAccounts = pgTable(
+  "sponsored_token_account",
+  {
+    owner: text("owner").notNull(),
+    mint: text("mint").notNull(),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.owner, t.mint] })],
 );
 
 /** Enrollment authorizations and accepted manual rebalances. Provider balances stay at Glider. */
@@ -164,6 +235,27 @@ export const walletStreams = pgTable(
 /** A money column. Wide enough for a share count and a price alike. */
 const usd = (name: string) => numeric(name, { precision: 38, scale: 18 });
 
+/**
+ * The wallet a row belongs to.
+ *
+ * Every per-wallet table had only `user_id`, because a person had one wallet.
+ * With linked wallets one person has several, and two of them can see the same
+ * signature and the same mint. `user_id` stays beside it on every table, so a
+ * read across all of a person's wallets is still one filter.
+ *
+ * Cascades: deleting a wallet (unlink and delete history) takes its rows with it.
+ */
+const walletId = () =>
+  uuid("wallet_id")
+    .notNull()
+    .references(() => wallets.id, { onDelete: "cascade" });
+
+/** Who wrote a ledger row: Mercury at confirm time, or the history reader afterwards. */
+const originSource = () =>
+  text("origin_source", { enum: ["mercury", "chain"] })
+    .notNull()
+    .default("mercury");
+
 /** The real company or fund. One row per ticker. */
 export const instruments = pgTable(
   "instrument",
@@ -216,6 +308,28 @@ export const multiplierEvents = pgTable(
     kind: text("kind", { enum: ["dividend", "split", "unknown"] }).notNull(),
   },
   (t) => [index("multiplier_event_token_idx").on(t.tokenId, t.observedAt)],
+);
+
+/**
+ * A multiplier change an issuer has written to a mint ahead of its date: a
+ * dividend (or a split) announced, not yet in force. One row per change, so
+ * its holders are told once, before it lands; `multiplier_event` records it
+ * again when it does.
+ */
+export const multiplierAnnouncements = pgTable(
+  "multiplier_announcement",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenId: uuid("token_id")
+      .notNull()
+      .references(() => tokens.id, { onDelete: "cascade" }),
+    oldMultiplier: usd("old_multiplier").notNull(),
+    newMultiplier: usd("new_multiplier").notNull(),
+    effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull(),
+    kind: text("kind", { enum: ["dividend", "split", "unknown"] }).notNull(),
+    announcedAt: timestamp("announced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("multiplier_announcement_idx").on(t.tokenId, t.effectiveAt, t.newMultiplier)],
 );
 
 /**
@@ -277,6 +391,7 @@ export const lots = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    walletId: walletId(),
     tokenId: uuid("token_id")
       .notNull()
       .references(() => tokens.id),
@@ -324,12 +439,40 @@ export const lots = pgTable(
      * not here yet.
      */
     recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
-    source: text("source", { enum: ["buy", "transfer_in", "dividend", "basket"] }).notNull(),
+    /**
+     * How the shares were acquired, or for a linked wallet where the cost came from.
+     *
+     * - `chain`: priced from a linked wallet's own history by the history
+     *   reader. Shares that arrive where Mercury did not see them bought get no
+     *   lot from position-sync, so this is what gives a linked wallet a cost.
+     * - `declared`: a cost the person entered. Always wins.
+     * - `basket_exit`: shares that came out of a basket in kind.
+     * - `split`: shares a stock split added, at no cost; not income.
+     *
+     * Plain text with no database check, so a new value needs no migration.
+     */
+    source: text("source", {
+      enum: ["buy", "transfer_in", "dividend", "split", "basket", "chain", "declared", "basket_exit"],
+    }).notNull(),
     /** True when we inferred the cost. The UI has to say so. */
     isEstimated: boolean("is_estimated").notNull().default(false),
+    /**
+     * Where an estimated cost came from, so the screen can say: the price of
+     * SOL paid in a swap, the share's market price when it arrived, the
+     * earliest price Mercury has, the price when the wallet was linked, or the
+     * cost it had in another of the person's wallets. Null when exact.
+     * Plain text, so a new value needs no migration.
+     */
+    estimateSource: text("estimate_source", {
+      enum: ["sol_price", "market_price", "earliest_price", "link_day_price", "own_wallet", "token_price"],
+    }),
     orderId: uuid("order_id"),
   },
-  (t) => [index("lot_user_token_idx").on(t.userId, t.tokenId)],
+  (t) => [
+    // Across all of a person's wallets, which is what "All wallets" reads.
+    index("lot_user_token_idx").on(t.userId, t.tokenId),
+    index("lot_wallet_token_idx").on(t.walletId, t.tokenId),
+  ],
 );
 
 /**
@@ -346,6 +489,7 @@ export const disposals = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    walletId: walletId(),
     tokenId: uuid("token_id")
       .notNull()
       .references(() => tokens.id),
@@ -356,25 +500,41 @@ export const disposals = pgTable(
     tokenQty: bigint("token_qty", { mode: "bigint" }).notNull(),
     /** token_qty x the multiplier in force when it left. For reading; the replay counts tokens. */
     shares: usd("shares").notNull(),
-    kind: text("kind", { enum: ["sell", "transfer_out"] }).notNull(),
+    /**
+     * `sell`: an order Mercury settled. `transfer_out`: position-sync saw the
+     * chain hold less than the records, and dated it when it looked.
+     * `chain`: the history reader found it in a linked wallet's past, and
+     * dated it when it happened. Once a linked wallet's past is costed, its
+     * departures are the reader's alone (position-sync can't tell a sale and
+     * a buy back between two looks from nothing happening).
+     */
+    kind: text("kind", { enum: ["sell", "transfer_out", "chain"] }).notNull(),
     /** The sell that wrote it. Unique, so a sell settled twice removes its shares once. */
     orderId: uuid("order_id"),
+    /**
+     * What a sale made outside Mercury realised: the dollars it was swapped
+     * for, less the shares' average cost then. Only where it was swapped for
+     * dollars; null on a send, and on a sale for anything else.
+     */
+    realisedPnlUsd: usd("realised_pnl_usd"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("disposal_user_token_idx").on(t.userId, t.tokenId),
+    index("disposal_wallet_token_idx").on(t.walletId, t.tokenId),
     uniqueIndex("disposal_order_idx").on(t.orderId),
   ],
 );
 
-/** A derived rollup, per user per instrument. Rebuildable from lots and disposals at any time. */
+/** A derived rollup, per wallet per instrument. Rebuildable from lots and disposals at any time. */
 export const positions = pgTable(
   "position",
   {
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    walletId: walletId(),
     instrumentId: uuid("instrument_id")
       .notNull()
       .references(() => instruments.id, { onDelete: "cascade" }),
@@ -399,9 +559,19 @@ export const positions = pgTable(
     /** Trading charges paid to acquire the shares still held: network cost and Mercury's fee. */
     feeUsd: usd("fee_usd").notNull().default("0"),
     avgUnitCostUsd: usd("avg_unit_cost_usd").notNull(),
+    /**
+     * Of `cost_basis_usd`, how much was estimated rather than read off a trade.
+     * The summary's P&L starts with `~` when any is, and says how much.
+     * Rewritten by position-sync on every pass, like the rest of the row.
+     */
+    estimatedCostUsd: usd("estimated_cost_usd").notNull().default("0"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.instrumentId] })],
+  (t) => [
+    primaryKey({ columns: [t.walletId, t.instrumentId] }),
+    // The key used to lead with user_id, and every read of a person's holdings used it.
+    index("position_user_idx").on(t.userId),
+  ],
 );
 
 export const orders = pgTable(
@@ -411,6 +581,12 @@ export const orders = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * The wallet the order was for. Nullable, and set to null rather than
+     * deleted with its wallet: the row records the Mercury fee charged, which
+     * the books need after the wallet is gone.
+     */
+    walletId: uuid("wallet_id").references(() => wallets.id, { onDelete: "set null" }),
     instrumentId: uuid("instrument_id")
       .notNull()
       .references(() => instruments.id),
@@ -496,6 +672,7 @@ export const activities = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    walletId: walletId(),
     kind: text("kind").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
     title: text("title").notNull(),
@@ -525,8 +702,12 @@ export const activities = pgTable(
      *
      * Rows where `mint` is null are not constrained, which is what lets the
      * dividend rows `position-sync` writes carry no mint and no signature.
+     *
+     * Per wallet, not per user: a move from a linked wallet to the Mercury
+     * wallet is one signature and one mint seen by two wallets of the same
+     * person, and per user the second would be dropped as a duplicate.
      */
-    uniqueIndex("activity_signature_mint_idx").on(t.userId, t.txSignature, t.mint),
+    uniqueIndex("activity_signature_mint_idx").on(t.walletId, t.txSignature, t.mint),
   ],
 );
 export type User = typeof users.$inferSelect;
@@ -613,6 +794,7 @@ export const portfolioSnapshots = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    walletId: walletId(),
     /** The top of the hour this reading belongs to, UTC. */
     capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
     /**
@@ -649,7 +831,9 @@ export const portfolioSnapshots = pgTable(
     earnUsd: usd("earn_usd"),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.capturedAt] }),
+    primaryKey({ columns: [t.walletId, t.capturedAt] }),
+    // A person's chart, across their wallets. The key used to lead with user_id.
+    index("portfolio_snapshot_user_captured_idx").on(t.userId, t.capturedAt),
     /* max(captured_at) over the whole table, and the latest reading per user.
        The primary key leads with user_id, so neither can use it: a max would
        walk the entire PK index. Added for the removed admin dashboard and
@@ -678,6 +862,7 @@ export const loanEvents = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    walletId: walletId(),
     /** borrow, repay, pledge or unpledge. */
     kind: text("kind").notNull(),
     /** Dollars borrowed or repaid. Null when the event only moved collateral. */
@@ -698,6 +883,18 @@ export const loanEvents = pgTable(
     /** The position straight after, as Kamino reported it. */
     debtAfterUsd: usd("debt_after_usd").notNull(),
     collateralAfterUsd: usd("collateral_after_usd").notNull(),
+    /**
+     * The collateral's share price when this happened. Lets the loan screen say
+     * "Pledged 10 TSLAx at $240.10". Null where nobody recorded it.
+     */
+    priceUsd: usd("price_usd"),
+    /**
+     * On a liquidation: what Kamino sold the shares for, less what they had
+     * cost. A liquidation is a sale, so this is realised P&L, counted with the
+     * sells'. Null until the shares' cost is known, and on every other kind.
+     */
+    realisedPnlUsd: usd("realised_pnl_usd"),
+    originSource: originSource(),
     txSignature: text("tx_signature").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
@@ -711,8 +908,18 @@ export const loanEvents = pgTable(
      * one signature carries both a pledge and a borrow. Keyed on the signature
      * alone the second would be rejected as a duplicate of the first; keyed
      * with the kind, both land and confirming twice still writes nothing new.
+     *
+     * A liquidation is keyed by its stock too: one that took two stocks in one
+     * transaction is two sales, each with its own realised P&L. Only a
+     * liquidation, so a row Mercury recorded and the same row read from the
+     * chain are still one whatever each calls the stock.
      */
-    uniqueIndex("loan_event_signature_kind_idx").on(t.userId, t.txSignature, t.kind),
+    uniqueIndex("loan_event_signature_kind_idx").on(
+      t.walletId,
+      t.txSignature,
+      t.kind,
+      sql`(case when ${t.kind} = 'liquidation' then coalesce(${t.ticker}, '') else '' end)`,
+    ),
   ],
 );
 export type LoanEvent = typeof loanEvents.$inferSelect;
@@ -731,11 +938,22 @@ export type LoanEvent = typeof loanEvents.$inferSelect;
  * difference is the point: undelivered is untold, so it is tried again.
  */
 export const loanAlerts = pgTable("loan_alert", {
-  userId: uuid("user_id")
+  /** One remembered health per loan, and a loan belongs to a wallet, not a person. */
+  walletId: uuid("wallet_id")
     .primaryKey()
+    .references(() => wallets.id, { onDelete: "cascade" }),
+  userId: uuid("user_id")
+    .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   /** healthy, over_limit, margin_call or liquidation. See lending/capacity.ts. */
   health: text("health").notNull(),
+  /**
+   * The worst level already put in the feed and the inbox. `health` moves only
+   * once the mail gets through, and the mail is tried again each pass until it
+   * does; this keeps those retries from writing the same warning into the app
+   * every five minutes for someone with no address, or while mail is down.
+   */
+  shownHealth: text("shown_health"),
   notifiedAt: timestamp("notified_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export type LoanAlert = typeof loanAlerts.$inferSelect;
@@ -871,18 +1089,195 @@ export const earnEvents = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    walletId: walletId(),
     /** deposit or withdraw. */
     kind: text("kind").notNull(),
-    /** USDC that left the wallet (deposit) or arrived in it (withdraw). */
+    /**
+     * USDC that left the wallet (deposit) or arrived in it (withdraw). For vault
+     * shares that arrived or left with no USDC (sent from or to another wallet),
+     * what they were worth then, at the vault's share price that day, and
+     * `estimated`: money put in or taken out all the same, so only what the
+     * shares earn while here counts as earned.
+     */
     usdcAmount: usd("usdc_amount").notNull(),
     vault: text("vault").notNull(),
+    /** A share transfer valued at the day's share price, not dollars that moved. Earned is then marked `~`. */
+    estimated: boolean("estimated").notNull().default(false),
+    originSource: originSource(),
     txSignature: text("tx_signature").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("earn_event_user_idx").on(t.userId, t.vault),
-    // Confirming the same transaction twice writes nothing new.
-    uniqueIndex("earn_event_signature_idx").on(t.txSignature),
+    /*
+     * Confirming the same transaction twice writes nothing new. Per wallet:
+     * shares sent between a person's own wallets are one transaction, a
+     * withdrawal from one and a deposit into the other.
+     */
+    uniqueIndex("earn_event_wallet_signature_idx").on(t.walletId, t.txSignature),
   ],
 );
+export type EarnEvent = typeof earnEvents.$inferSelect;
+
+/**
+ * The history reader's queue: one row per wallet whose past is to be read.
+ *
+ * A table rather than memory, so the reader could move into a process of its
+ * own later without changing how work is handed to it, and so a restart loses
+ * nothing. Taken with `for update skip locked`, so two readers could share it.
+ *
+ * One row per wallet, kept after it is done. Its cursors are what let a wallet
+ * that is linked again be read from where it stopped rather than from the start.
+ */
+export const historyJobs = pgTable(
+  "history_job",
+  {
+    walletId: uuid("wallet_id")
+      .primaryKey()
+      .references(() => wallets.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * How far the first read has got: queued, running, read (everything read,
+     * costs still to come), done (read and costed; the wallet's P&L is ready),
+     * or failed (retried, rarely). Later passes never change it. See
+     * `history/queue.ts`. Plain text, so a new status needs no migration.
+     */
+    status: text("status", { enum: ["queued", "running", "read", "done", "failed"] })
+      .notNull()
+      .default("queued"),
+    /**
+     * The newest signature read, per account the reader walks (each token
+     * account and the loan account). An account with no entry has not been read.
+     */
+    cursors: jsonb("cursors").$type<Record<string, string>>().notNull().default({}),
+    /**
+     * Per account, a walk a turn ended part way through: where it got to, so
+     * the next turn carries on from there (`Walk` in `history/reader.ts`).
+     * Empty once every walk is finished; the cost pass waits until it is.
+     */
+    walks: jsonb("walks")
+      .$type<
+        Record<
+          string,
+          {
+            newest: string;
+            before: string;
+            pledged: string;
+            oldestRaw: string | null;
+            oldestAt: string | null;
+            count: number;
+          }
+        >
+      >()
+      .notNull()
+      .default({}),
+    /**
+     * Per token account whose first read never reached a moment the wallet
+     * held none (it stopped at its cap, or the node keeps no older history):
+     * what was held just before the oldest transaction read, in the account
+     * and pledged to Kamino together, raw, and when. Shares no transaction
+     * read explains, which the cost pass prices at the price then, marked `~`.
+     * Nothing else is ever priced as held from before: a balance before the
+     * oldest *event* can be Mercury's own buy, already in its books.
+     */
+    opening: jsonb("opening")
+      .$type<Record<string, { mint: string; raw: string; at: string | null }>>()
+      .notNull()
+      .default({}),
+    /**
+     * When the wallet's first costing finished: after it, every costing is a
+     * later one, writing each sale and buy in its place. Kept through an unlink
+     * and a link again. Null until then, whatever the status says.
+     */
+    costedAt: timestamp("costed_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    /** Not before this. Set further out after a failure, so a broken wallet does not spin. */
+    runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),
+    lastError: text("last_error"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("history_job_status_run_after_idx").on(t.status, t.runAfter)],
+);
+export type HistoryJob = typeof historyJobs.$inferSelect;
+
+/**
+ * A transaction as the chain returned it, kept raw.
+ *
+ * Kept so a better rule later can re-derive events without reading the chain
+ * again. Keyed by signature alone: one transaction can belong to several
+ * wallets' histories, and nothing in it says which account read it, so it is
+ * not deleted with a wallet.
+ */
+export const historyTxs = pgTable("history_tx", {
+  signature: text("signature").primaryKey(),
+  slot: bigint("slot", { mode: "bigint" }).notNull(),
+  /** Null when the node did not know the block's time. */
+  blockTime: timestamp("block_time", { withTimezone: true }),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+  raw: jsonb("raw").notNull(),
+});
+export type HistoryTx = typeof historyTxs.$inferSelect;
+
+/**
+ * One thing the history reader found in a wallet's past.
+ *
+ * Its own table, apart from Mercury's records. Only the reader's last step
+ * turns these into `lot`, `loan_event` and `earn_event` rows.
+ */
+export const historyEvents = pgTable(
+  "history_event",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    walletId: walletId(),
+    /** The token account or loan account whose history this came from. */
+    account: text("account").notNull(),
+    signature: text("signature")
+      .notNull()
+      .references(() => historyTxs.signature),
+    blockTime: timestamp("block_time", { withTimezone: true }),
+    kind: text("kind", {
+      enum: [
+        "in",
+        "out",
+        "loan_open",
+        "loan_deposit",
+        "loan_withdraw",
+        "loan_borrow",
+        "loan_repay",
+        "loan_liquidated",
+        "earn_deposit",
+        "earn_withdraw",
+      ],
+    }).notNull(),
+    mint: text("mint"),
+    /** In the mint's smallest unit. */
+    amountRaw: bigint("amount_raw", { mode: "bigint" }),
+    /** What left the wallet in the same transaction: what a swap paid with. */
+    counterMint: text("counter_mint"),
+    counterAmountRaw: bigint("counter_amount_raw", { mode: "bigint" }),
+    /** For a transfer in, who sent it. Tells a move between a person's own wallets apart. */
+    sourceOwner: text("source_owner"),
+    /**
+     * For a transfer out, who received it. A send by hand from a linked wallet
+     * to the person's Mercury wallet is a move, and carries its cost there.
+     */
+    destinationOwner: text("destination_owner"),
+    /**
+     * When the cost pass took this into the wallet's lots. Null until then, so
+     * a pass picks up exactly what it has not costed, and costing twice writes
+     * nothing twice.
+     */
+    costedAt: timestamp("costed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("history_event_wallet_account_time_idx").on(t.walletId, t.account, t.blockTime),
+    // Reading a transaction twice writes nothing new.
+    uniqueIndex("history_event_identity_idx").on(t.walletId, t.account, t.signature, t.kind),
+  ],
+);
+export type HistoryEvent = typeof historyEvents.$inferSelect;

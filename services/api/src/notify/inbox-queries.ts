@@ -1,6 +1,7 @@
 import { and, count, desc, eq, gt, isNull, lt, lte, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
-import { activities, instruments, notifications, tokens } from "../db/schema.js";
+import { activities, instruments, notifications, tokens, wallets } from "../db/schema.js";
+import { followed } from "../wallets/active.js";
 import type { ActivityRow } from "../routes/activity.js";
 import type { NoticeKind } from "./inbox.js";
 
@@ -23,11 +24,19 @@ export interface InboxItem {
 
 const kept = (now: Date) => gt(notifications.createdAt, new Date(now.getTime() - KEPT_MS));
 
+/*
+ * A notification is about its activity row's wallet, and is hidden with it
+ * when that wallet is unlinked: an unlinked wallet shows nowhere, the inbox
+ * included. Linking it again brings them back.
+ */
+
 export async function countUnread(db: Db, userId: string, now: Date): Promise<number> {
   const [row] = await db
     .select({ n: count() })
     .from(notifications)
-    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt), kept(now)));
+    .innerJoin(activities, eq(activities.id, notifications.activityId))
+    .innerJoin(wallets, eq(wallets.id, activities.walletId))
+    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt), kept(now), followed));
   return row?.n ?? 0;
 }
 
@@ -61,9 +70,10 @@ export async function readInbox(
     })
     .from(notifications)
     .innerJoin(activities, eq(activities.id, notifications.activityId))
+    .innerJoin(wallets, eq(wallets.id, activities.walletId))
     .leftJoin(tokens, eq(tokens.mint, activities.mint))
     .leftJoin(instruments, eq(instruments.id, tokens.instrumentId))
-    .where(and(eq(notifications.userId, userId), kept(now)))
+    .where(and(eq(notifications.userId, userId), kept(now), followed))
     .orderBy(desc(notifications.createdAt), desc(notifications.id))
     .limit(LIST_LIMIT);
 

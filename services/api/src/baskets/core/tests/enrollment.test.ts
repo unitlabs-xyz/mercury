@@ -279,7 +279,9 @@ it("confirms funding only for the signed-in wallet and this portfolio's destinat
     portfolioId: "portfolio-1",
     amountRaw: "5000000",
   });
-  expect(recorded).toMatchObject([{ userId: "user-1", portfolioId: "portfolio-1", amountRaw: 5_000_000n }]);
+  expect(recorded).toMatchObject([
+    { userId: "user-1", ownerAddress: sender, portfolioId: "portfolio-1", amountRaw: 5_000_000n },
+  ]);
   await expect(
     service.confirmFunding("magnificent-seven", "user-2", `${owner}-other`, signature),
   ).rejects.toMatchObject({ code: "portfolio_unavailable" });

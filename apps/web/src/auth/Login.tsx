@@ -1,3 +1,4 @@
+import { landingAfterSignIn, returnTo } from "./landing";
 import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
@@ -30,8 +31,9 @@ const SignInAgain = () => {
  */
 export const Login = () => {
   const { ready, authenticated } = usePrivy();
-  // Back to where they were headed before being asked to sign in.
-  const from = (useLocation().state as { from?: string } | null)?.from ?? "/portfolio";
+  // Back to where they were headed before being asked to sign in, with the query a link carried.
+  const location = useLocation();
+  const from = landingAfterSignIn(location.state, location.search);
   if (SAMPLE_NO_LOGIN) return <Navigate to={from} replace />;
   if (!ready) return <div className="min-h-dvh bg-page" />;
   if (authenticated) return <Navigate to={from} replace />;
@@ -58,6 +60,6 @@ export const RequireAuth = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
   if (SAMPLE_NO_LOGIN) return <>{children}</>;
   if (!ready) return <div className="min-h-dvh bg-page" />;
-  if (!authenticated) return <Navigate to="/" replace state={{ from: location.pathname }} />;
+  if (!authenticated) return <Navigate to="/" replace state={{ from: returnTo(location) }} />;
   return <>{children}</>;
 };

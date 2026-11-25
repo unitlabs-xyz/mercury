@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import catalogJson from "../../../../catalog.json" with { type: "json" };
 import { JsonBasketStore } from "../store.js";
-import { testDb } from "../../../db/testing.js";
-import { activities, users } from "../../../db/schema.js";
+import { mercuryWallet, testDb } from "../../../db/testing.js";
+import { activities, users, wallets } from "../../../db/schema.js";
 import { eq } from "drizzle-orm";
 import { USDC_MINT } from "@mercury/chain";
 
@@ -36,10 +36,12 @@ describe("JsonBasketStore", () => {
   it("enriches a wallet-watcher transfer once and keeps rebalance history", async () => {
     const db = await testDb();
     const [user] = await db.insert(users).values({ privyUserId: "did:privy:activity" }).returning();
+    const walletId = await mercuryWallet(db, user!.id);
     const store = new JsonBasketStore("postgres://unused", catalogJson, db);
     const signature = "5".repeat(88);
     await db.insert(activities).values({
       userId: user!.id,
+      walletId,
       kind: "transfer_out",
       title: "Sent cash",
       amountUsd: "5",
@@ -78,6 +80,48 @@ describe("JsonBasketStore", () => {
       { kind: "rebalance", operationId: "op-1" },
     ]);
     expect(await store.recentFunding(user!.id, "portfolio-1")).toHaveLength(1);
+  });
+  it("files a linked wallet's funding in that wallet's feed, and leaves the Mercury wallet's alone", async () => {
+    const db = await testDb();
+    const [user] = await db.insert(users).values({ privyUserId: "did:privy:linked-funding" }).returning();
+    const mercuryId = await mercuryWallet(db, user!.id);
+    const [linked] = await db
+      .insert(wallets)
+      .values({
+        userId: user!.id,
+        address: "phantom-address",
+        kind: "external",
+        isPrimary: false,
+        linkedAt: new Date(),
+      })
+      .returning({ id: wallets.id });
+    const store = new JsonBasketStore("postgres://unused", catalogJson, db);
+    const signature = "6".repeat(88);
+    // The wallet-watcher saw the USDC leave the linked wallet first.
+    await db.insert(activities).values({
+      userId: user!.id,
+      walletId: linked!.id,
+      kind: "transfer_out",
+      title: "Sent cash",
+      amountUsd: "5",
+      txSignature: signature,
+      mint: USDC_MINT,
+    });
+    await store.confirmFunding({
+      userId: user!.id,
+      ownerAddress: "phantom-address",
+      slug: "magnificent-seven",
+      portfolioId: "portfolio-1",
+      title: "Funded Magnificent Seven",
+      signature,
+      mint: USDC_MINT,
+      amountRaw: 5_000_000n,
+      occurredAt: new Date(),
+    });
+    const rows = await db.select().from(activities).where(eq(activities.userId, user!.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ walletId: linked!.id, kind: "basket_funding" });
+    expect(rows.some((r) => r.walletId === mercuryId)).toBe(false);
   });
   it("keeps one durable exit intent per signed nonce and attaches one operation idempotently", async () => {
     const db = await testDb();

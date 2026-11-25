@@ -17,10 +17,23 @@ export interface Pass {
 
 const scope = new AsyncLocalStorage<Pass>();
 
+/**
+ * When the jobs' lane was last refused, by any pass. The history reader reads
+ * nothing while this is recent: the jobs' own reads come first, and a reader
+ * in the same process is the only kind that can see this at all (memory, one
+ * process, like `presence.ts`).
+ */
+let lastRefusal = Number.NEGATIVE_INFINITY;
+
+/** Whether the jobs' lane was refused within the last `ms`. */
+export const laneRefusedWithin = (ms: number, now: number = Date.now()): boolean => now - lastRefusal < ms;
+
 /** Mark the pass this call is part of as refused. Outside any pass, a route say, nothing. */
 export const noteStrain = (): void => {
   const pass = scope.getStore();
-  if (pass !== undefined) pass.strained = true;
+  if (pass === undefined) return;
+  pass.strained = true;
+  lastRefusal = Date.now();
 };
 
 /** Run one pass of a job in its own scope, so `noteStrain` inside it marks `pass`. */

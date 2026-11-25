@@ -54,6 +54,12 @@ export const spot = (wallet: string, ms: number) => {
 export const cadence = (opts: {
   readonly here: Pick<Presence, "here">;
   readonly idleMs?: number;
+  /**
+   * A wallet's own idle interval, where it has one. A linked wallet is read
+   * less often the longer it is since anyone looked at it (`jobs/tiers.ts`);
+   * undefined keeps `idleMs`. Its owner being here still reads it every pass.
+   */
+  readonly idleFor?: (wallet: string) => number | undefined;
   readonly now?: () => number;
   /** Where in the first window a wallet is first due. A stable hash of the address when left out. */
   readonly spread?: (wallet: string) => number;
@@ -67,7 +73,9 @@ export const cadence = (opts: {
     due: (wallet: string) => {
       if (opts.here.here(wallet)) return true;
       const last = lastRead.get(wallet);
-      return last === undefined ? now() - startedAt >= spotOf(wallet) : now() - last >= idleMs;
+      return last === undefined
+        ? now() - startedAt >= spotOf(wallet)
+        : now() - last >= (opts.idleFor?.(wallet) ?? idleMs);
     },
     read: (wallet: string) => void lastRead.set(wallet, now()),
     spotOf,

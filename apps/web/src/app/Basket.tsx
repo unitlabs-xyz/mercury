@@ -1,3 +1,4 @@
+import { useActingWallet } from "../api/acting-wallet";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useIdentityToken, usePrivy } from "@privy-io/react-auth";
@@ -52,6 +53,7 @@ import { USDC_MINT, UsdcMark } from "./activity-mark";
 import { Skeleton } from "./portfolio/ui";
 import { LIST_DOT } from "./invest/shared";
 import { Fact } from "./stock/Panels";
+import { ActionGate } from "./ActionGate";
 
 type Range = "1W" | "1M" | "3M" | "6M" | "1Y" | "All";
 const WINDOWS = [
@@ -387,6 +389,8 @@ export const Basket = () => {
   const [rebalanceOpen, setRebalanceOpen] = useState(false);
   const [exitOpen, setExitOpen] = useState(false);
   const [exitMode, setExitMode] = useState<BasketExitMode>("in_kind");
+  /** Where an exit goes: to the owner (a withdrawal), or into the Mercury wallet (a linked wallet's move). */
+  const [exitTo, setExitTo] = useState<"owner" | "mercury">("owner");
   const [exitOperation, setExitOperation] = useState<{
     portfolioId: string;
     operationId: string;
@@ -414,7 +418,12 @@ export const Basket = () => {
   const enrollAction = useBasketEnrollmentAction(slug);
   const fundingAction = useBasketFundingAction(slug);
   const rebalanceAction = useBasketRebalanceAction(slug);
-  const exitAction = useBasketExitAction(slug);
+  // A linked wallet's basket can move straight into the person's Mercury wallet, in one approval.
+  const { acting, wallets, choose } = useActingWallet();
+  const mercuryAddress = wallets.find((w) => w.isPrimary)?.address;
+  const canMove = acting.kind === "linked" && mercuryAddress !== undefined;
+  const toMercury = canMove && exitTo === "mercury" ? mercuryAddress : undefined;
+  const exitAction = useBasketExitAction(slug, toMercury);
   const activity = useBasketActivity(slug, enrolled);
   const queryClient = useQueryClient();
   const ownerContext = `${slug}:${user?.id ?? ""}:${address ?? ""}`;
@@ -1122,13 +1131,31 @@ export const Basket = () => {
                         Check withdrawal status again
                       </button>
                     )}
-                    {heldAssets.length > 0 && (
+                    {heldAssets.length > 0 && canMove && (
                       <Button
+                        variant="primary"
                         size="lg"
                         className="mt-5 w-full"
                         disabled={portfolio.isError || exitActive || operationActive}
                         onClick={() => {
                           setExitMode("in_kind");
+                          setExitTo("mercury");
+                          exitAction.prepare.reset();
+                          exitAction.submit.reset();
+                          setExitOpen(true);
+                        }}
+                      >
+                        Move to Mercury wallet
+                      </Button>
+                    )}
+                    {heldAssets.length > 0 && (
+                      <Button
+                        size="lg"
+                        className={canMove ? "mt-2 w-full" : "mt-5 w-full"}
+                        disabled={portfolio.isError || exitActive || operationActive}
+                        onClick={() => {
+                          setExitMode("in_kind");
+                          setExitTo("owner");
                           exitAction.prepare.reset();
                           exitAction.submit.reset();
                           setExitOpen(true);
@@ -1457,78 +1484,93 @@ export const Basket = () => {
           </div>
         </aside>
       </div>
-      <InvestSheet
-        open={investOpen}
-        name={name}
-        assetCount={allocations.length}
-        mark={basketMark}
-        amount={fundingAmount}
-        cash={money.data ? Number(money.data.balanceUsd) : null}
-        portfolio={investPortfolio}
-        firstDeposit={firstDeposit}
-        receipt={fundingAction.data ?? null}
-        enroll={{
-          walletReady: enrollAction.walletReady,
-          busy: enrollmentBusy,
-          error: enrollAction.error?.message ?? enrollment.error?.message,
-          onConfirm: () => void confirmEnrollment(),
-        }}
-        fund={{
-          walletReady: fundingAction.walletReady,
-          busy: fundingAction.isPending,
-          error: fundingAction.error?.message,
-          onConfirm: () => void confirmFunding(),
-        }}
-        onClose={closeInvest}
-      />
-      <RebalanceSheet
-        open={rebalanceOpen}
-        name={name}
-        mark={basketMark}
-        assetCount={allocations.length}
-        busy={rebalanceAction.isPending}
-        error={rebalanceAction.error?.message}
-        onClose={() => {
-          if (!rebalanceAction.isPending) setRebalanceOpen(false);
-        }}
-        onConfirm={() => void confirmRebalance()}
-      />
-      {account && (
-        <ExitSheet
-          key={account.portfolioId}
-          open={exitOpen}
+      <ActionGate open={investOpen} onClose={closeInvest}>
+        <InvestSheet
+          open={investOpen}
+          name={name}
+          assetCount={allocations.length}
+          mark={basketMark}
+          amount={fundingAmount}
+          cash={money.data ? Number(money.data.balanceUsd) : null}
+          portfolio={investPortfolio}
+          firstDeposit={firstDeposit}
+          receipt={fundingAction.data ?? null}
+          enroll={{
+            walletReady: enrollAction.walletReady,
+            approver: enrollAction.approver,
+            busy: enrollmentBusy,
+            error: enrollAction.error?.message ?? enrollment.error?.message,
+            onConfirm: () => void confirmEnrollment(),
+          }}
+          fund={{
+            walletReady: fundingAction.walletReady,
+            approver: fundingAction.approver,
+            busy: fundingAction.isPending,
+            error: fundingAction.error?.message,
+            onConfirm: () => void confirmFunding(),
+          }}
+          onClose={closeInvest}
+        />
+      </ActionGate>
+      <ActionGate open={rebalanceOpen} onClose={() => setRebalanceOpen(false)}>
+        <RebalanceSheet
+          open={rebalanceOpen}
           name={name}
           mark={basketMark}
-          assetMarks={assetMarks}
-          mode={exitMode}
-          onMode={(mode) => {
-            setExitMode(mode);
-            exitAction.prepare.reset();
-            exitAction.submit.reset();
-          }}
-          account={account}
-          prepared={exitAction.prepare.data ?? null}
-          submitted={exitAction.submit.data ?? null}
-          busy={exitAction.prepare.isPending || exitAction.submit.isPending}
-          walletReady={exitAction.walletReady}
-          error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
-          onPrepare={(assets) =>
-            void exitAction.prepare
-              .mutateAsync({ mode: exitMode, ...(assets ? { assets } : {}) })
-              .catch(() => undefined)
-          }
-          onSubmit={() => void confirmExit()}
-          onBack={() => {
-            exitAction.prepare.reset();
-            exitAction.submit.reset();
-          }}
+          assetCount={allocations.length}
+          busy={rebalanceAction.isPending}
+          error={rebalanceAction.error?.message}
           onClose={() => {
-            if (exitAction.prepare.isPending || exitAction.submit.isPending) return;
-            setExitOpen(false);
-            exitAction.prepare.reset();
-            exitAction.submit.reset();
+            if (!rebalanceAction.isPending) setRebalanceOpen(false);
           }}
+          onConfirm={() => void confirmRebalance()}
         />
+      </ActionGate>
+      {account && (
+        <ActionGate open={exitOpen} onClose={() => setExitOpen(false)}>
+          <ExitSheet
+            key={account.portfolioId}
+            open={exitOpen}
+            name={name}
+            mark={basketMark}
+            assetMarks={assetMarks}
+            mode={exitMode}
+            onMode={(mode) => {
+              setExitMode(mode);
+              exitAction.prepare.reset();
+              exitAction.submit.reset();
+            }}
+            account={account}
+            prepared={exitAction.prepare.data ?? null}
+            submitted={exitAction.submit.data ?? null}
+            busy={exitAction.prepare.isPending || exitAction.submit.isPending}
+            walletReady={exitAction.walletReady}
+            approver={exitAction.approver}
+            toMercury={toMercury}
+            // "Keep it as a basket": the same basket, from the Mercury wallet, once the USDC lands there.
+            onInvestFromMercury={() => {
+              const mercury = wallets.find((w) => w.isPrimary);
+              if (mercury !== undefined) choose(mercury.id);
+            }}
+            error={exitAction.prepare.error?.message ?? exitAction.submit.error?.message}
+            onPrepare={(assets) =>
+              void exitAction.prepare
+                .mutateAsync({ mode: exitMode, ...(assets ? { assets } : {}) })
+                .catch(() => undefined)
+            }
+            onSubmit={() => void confirmExit()}
+            onBack={() => {
+              exitAction.prepare.reset();
+              exitAction.submit.reset();
+            }}
+            onClose={() => {
+              if (exitAction.prepare.isPending || exitAction.submit.isPending) return;
+              setExitOpen(false);
+              exitAction.prepare.reset();
+              exitAction.submit.reset();
+            }}
+          />
+        </ActionGate>
       )}
     </AppShell>
   );

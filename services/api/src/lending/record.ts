@@ -1,12 +1,15 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { D, toWire, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { activities, loanEvents } from "../db/schema.js";
 import type { PlannedLoanEvent } from "./events.js";
 import type { LedgerRow } from "./interest.js";
+import type { WalletOwner } from "../wallets/active.js";
 
 export interface RecordInput {
   readonly userId: string;
+  /** The wallet whose loan this is: the one that signed. Each wallet has its own Kamino loan. */
+  readonly walletId: string;
   readonly signature: string;
   readonly occurredAt: Date;
   /** Kamino's borrow APY when this landed. Null if the terms could not be read. */
@@ -43,6 +46,7 @@ export async function recordLoanEvents(
       .insert(loanEvents)
       .values({
         userId: input.userId,
+        walletId: input.walletId,
         kind: event.kind,
         usdAmount: event.usdAmount === null ? null : toWire(event.usdAmount),
         ticker: event.ticker,
@@ -64,6 +68,7 @@ export async function recordLoanEvents(
       .insert(activities)
       .values({
         userId: input.userId,
+        walletId: input.walletId,
         kind: event.kind,
         occurredAt: input.occurredAt,
         title: event.title,
@@ -80,18 +85,18 @@ export async function recordLoanEvents(
 }
 
 /**
- * A borrower's loan events, oldest first: what `outstandingPrincipal` reads to
+ * One wallet's loan events, oldest first — a wallet has its own Kamino loan: what `outstandingPrincipal` reads to
  * tell the interest apart from what was borrowed.
  *
  * Ordered by when each happened, not when it was confirmed, because confirms
  * arrive late and out of order — a retried one can land a day after the repay
  * that followed it.
  */
-export async function loanLedger(db: Db, userId: string): Promise<readonly LedgerRow[]> {
+export async function loanLedger(db: Db, owner: WalletOwner): Promise<readonly LedgerRow[]> {
   const rows = await db
     .select({ kind: loanEvents.kind, usdAmount: loanEvents.usdAmount, debtAfterUsd: loanEvents.debtAfterUsd })
     .from(loanEvents)
-    .where(eq(loanEvents.userId, userId))
+    .where(and(eq(loanEvents.userId, owner.userId), eq(loanEvents.walletId, owner.walletId)))
     .orderBy(asc(loanEvents.occurredAt), asc(loanEvents.recordedAt));
   return rows.map((r) => ({
     kind: r.kind,

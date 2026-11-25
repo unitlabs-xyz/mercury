@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { D } from "@mercury/core";
 import {
   LendingRefused,
+  OwnerShort,
   SponsorShort,
   type LendingIntent,
   type LendingSource,
@@ -12,6 +13,8 @@ import type { LedgerRow } from "../lending/interest.js";
 import type { PlannedLoanEvent } from "../lending/events.js";
 import type { PriceBoard, TokenPrice } from "@mercury/market";
 import { borrowRoutes, type BorrowDeps } from "./borrow.js";
+import type { Acting } from "../wallets/acting.js";
+import { actingAs, actingLinked } from "../wallets/testing.js";
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SPYX = "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W";
@@ -130,10 +133,14 @@ const mints: string[] = [];
 /** What `record` was handed, per test. */
 const recorded: PlannedLoanEvent[] = [];
 
-const app = (d: BorrowDeps, walletAddress: string | null = "WaLLeT") => {
+const app = (d: BorrowDeps, walletAddress: string | null = "WaLLeT", acting?: Acting) => {
   const a = new Hono();
   a.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress });
+    c.set(
+      "acting",
+      acting ?? { all: false, wallets: walletAddress === null ? [] : [actingAs(walletAddress)] },
+    );
     await next();
   });
   a.route("/", borrowRoutes(d));
@@ -209,6 +216,32 @@ describe("POST /v1/borrow/transactions", () => {
     const res = await post(deps(lending()), { kind: "borrow", usd: "4000" });
     expect(res.status).toBe(200);
     expect(((await res.json()) as { transactions: string[] }).transactions).toEqual(["AAAA"]);
+  });
+
+  /*
+   * A loan has no record but the one the server files, and a tab that closes or a
+   * wallet that is switched after signing never confirms. So the server is told
+   * what it built, and files the loan itself when the transaction goes out.
+   */
+  it("tells the send path what it built, so the loan is filed without the app", async () => {
+    const remembered: { message: Uint8Array; item: unknown }[] = [];
+    const d: BorrowDeps = {
+      ...deps(lending()),
+      sends: { remember: (message, item) => void remembered.push({ message, item }) },
+    };
+    const res = await post(d, { kind: "borrow", usd: "4000" });
+    expect(res.status).toBe(200);
+    expect(remembered).toEqual([
+      {
+        message: new Uint8Array([1, 2, 3]),
+        item: {
+          userId: "user-1",
+          walletId: expect.any(String),
+          wallet: "WaLLeT",
+          intent: expect.objectContaining({ kind: "borrow" }),
+        },
+      },
+    ]);
   });
 
   it("refuses a borrow past the 80% target, before anything is built", async () => {
@@ -335,6 +368,51 @@ describe("POST /v1/borrow/transactions", () => {
     expect(sponsor).toBeUndefined();
   });
 
+  it("has a linked wallet pay its own fee and rent: nothing is sponsored, nothing remembered", async () => {
+    let sponsor: string | undefined = "unset";
+    const l = lending();
+    const remembered: Uint8Array[] = [];
+    const d: BorrowDeps = {
+      ...deps({
+        ...l,
+        build: async (wallet, intent, s) => {
+          sponsor = s;
+          return l.build(wallet, intent);
+        },
+      }),
+      relay: {
+        relayer: "ReLaYeR",
+        builds: { remember: (m) => remembered.push(m), recognises: () => false, size: 0 },
+      },
+    };
+    const res = await app(d, "WaLLeT", { all: false, wallets: [actingLinked("WaLLeT")] }).request(
+      "/v1/borrow/transactions",
+      {
+        method: "POST",
+        body: JSON.stringify({ kind: "borrow", usd: "100" }),
+        headers: { "content-type": "application/json" },
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(sponsor).toBeUndefined();
+  });
+
+  it("says how much SOL a linked wallet needs for its first loan, before anything is signed", async () => {
+    const l = lending();
+    const res = await post(
+      deps({
+        ...l,
+        build: async () => {
+          throw new OwnerShort(10_000_000n, 31_000_000n);
+        },
+      }),
+      { kind: "borrow", usd: "100" },
+    );
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect([res.status, body.error.code]).toEqual([409, "needs_sol"]);
+    expect(body.error.message).toContain("it needs about 0.031 SOL, and holds 0.010");
+  });
+
   it("rejects a malformed amount", async () => {
     const res = await post(deps(lending()), { kind: "borrow", usd: "-5" });
     expect(res.status).toBe(400);
@@ -403,6 +481,48 @@ describe("POST /v1/borrow/confirm", () => {
       } as unknown as BorrowDeps["history"],
     };
     const res = await confirm(other, { signature: "SIG", action: { kind: "borrow", usd: "500" } });
+    expect(res.status).toBe(422);
+  });
+
+  it("records a linked wallet's repay under that wallet, read from its own transaction", async () => {
+    const owners: { walletId: string }[] = [];
+    const linked = actingLinked("Phantom", { id: "wallet-phantom" });
+    const d = {
+      ...deps(lending()),
+      history: {
+        transaction: async (signature: string) => ({
+          signature,
+          accountKeys: ["Phantom"],
+          blockTime: 1_790_000_000,
+          preTokens: [],
+          postTokens: [],
+        }),
+      } as unknown as BorrowDeps["history"],
+      record: async (planned: readonly PlannedLoanEvent[], input: { walletId: string }) => {
+        owners.push({ walletId: input.walletId });
+        return { written: planned.length };
+      },
+    } as BorrowDeps;
+    const res = await app(d, "WaLLeT", { all: false, wallets: [linked] }).request("/v1/borrow/confirm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ signature: "SIG", action: { kind: "repay", usd: "100" } }),
+    });
+    expect(res.status).toBe(200);
+    expect(owners).toEqual([{ walletId: "wallet-phantom" }]);
+  });
+
+  it("refuses the Mercury wallet's transaction filed while a linked wallet is chosen", async () => {
+    const linked = actingLinked("Phantom", { id: "wallet-phantom" });
+    // The transaction names only the Mercury wallet: it is not the chosen wallet's loan.
+    const res = await app(deps(lending()), "WaLLeT", { all: false, wallets: [linked] }).request(
+      "/v1/borrow/confirm",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ signature: "SIG", action: { kind: "repay", usd: "100" } }),
+      },
+    );
     expect(res.status).toBe(422);
   });
 
@@ -647,4 +767,41 @@ describe("POST /v1/borrow/transactions, when Kamino or the relayer refuses", () 
     expect(res.status).toBe(503);
     expect((await errorOf(res)).code).toBe("upstream_unavailable");
   });
+});
+
+describe("GET /v1/borrow, and linked wallets", () => {
+  it("reads the chosen linked wallet's own loan and ledger", async () => {
+    const read: string[] = [];
+    const owners: unknown[] = [];
+    const base = deps(lending(1_000));
+    const d: BorrowDeps = {
+      ...base,
+      chain: {
+        ...base.chain,
+        tokenBalances: async (wallet) => {
+          read.push(wallet);
+          return base.chain.tokenBalances(wallet);
+        },
+      },
+      ledger: async (owner) => {
+        owners.push(owner);
+        return [];
+      },
+    };
+    const phantom = actingLinked("Phantom");
+    const res = await app(d, "WaLLeT", { all: false, wallets: [phantom] }).request("/v1/borrow");
+    expect(res.status).toBe(200);
+    expect(new Set(read)).toEqual(new Set(["Phantom"]));
+    expect(owners).toEqual([{ userId: "user-1", walletId: phantom.id }]);
+  });
+
+  it.each(["/v1/borrow", "/v1/borrow/SPY"])(
+    "answers 400 to %s for every wallet at once: a loan's health is one wallet's",
+    async (path) => {
+      const acting: Acting = { all: true, wallets: [actingAs("WaLLeT"), actingLinked("Phantom")] };
+      const res = await app(deps(lending(1_000)), "WaLLeT", acting).request(path);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: { code: "wallet_all" } });
+    },
+  );
 });

@@ -9,6 +9,8 @@ export interface AuthDeps {
   readonly directory: UserDirectory;
   /** Told the wallet behind every signed-in request: who is using the app now. See `jobs/presence.ts`. */
   readonly onSeen?: (wallet: string) => void;
+  /** Told each linked wallet a request reads, for `last_viewed_at`. See `wallets/acting.ts`. */
+  readonly onViewed?: (wallet: string) => void;
 }
 
 declare module "hono" {

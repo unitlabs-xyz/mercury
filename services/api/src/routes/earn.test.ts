@@ -11,7 +11,9 @@ import { EARN_VAULTS } from "../earn/catalog.js";
 import type { KaminoApi } from "../earn/kamino-api.js";
 import { EarnRefused } from "../earn/kamino-vault.js";
 import { EARN_RISK_VERSION } from "../earn/risk.js";
-import { SponsorShort } from "../lending/ports.js";
+import { OwnerShort, SponsorShort } from "../lending/ports.js";
+import type { Acting } from "../wallets/acting.js";
+import { actingAs, actingLinked } from "../wallets/testing.js";
 
 /** The fields these tests read, off any of the routes' answers. */
 type Body = {
@@ -57,7 +59,13 @@ const listing = (address: string, over: Partial<EarnListing> = {}): EarnListing 
   ...over,
 });
 
-type Fake = { position?: EarnPosition | null; built?: EarnIntent[]; fail?: Error };
+type Fake = {
+  position?: EarnPosition | null;
+  built?: EarnIntent[];
+  fail?: Error;
+  /** Each build's sponsor, as it was asked. */
+  sponsors?: (string | undefined)[];
+};
 
 const source = (address: string, f: Fake = {}): EarnSource => ({
   address,
@@ -69,9 +77,10 @@ const source = (address: string, f: Fake = {}): EarnSource => ({
     { market: "Jlp", usdc: D(25) },
   ],
   position: async () => f.position ?? null,
-  build: async (_wallet, intent) => {
+  build: async (_wallet, intent, sponsor) => {
     if (f.fail) throw f.fail;
     f.built?.push(intent);
+    f.sponsors?.push(sponsor);
     return {
       transactions: ["dHg="],
       messages: [new Uint8Array([1])],
@@ -117,6 +126,7 @@ const ledger = (
       settings = { ...settings, ...change };
     },
     netDeposited: async () => new Map(Object.entries(net)),
+    estimatedVaults: async () => new Set(),
     record: async (e) => {
       records.push(e);
       return true;
@@ -154,10 +164,11 @@ const deps = (over: Partial<EarnDeps> = {}): EarnDeps => ({
   ...over,
 });
 
-const appWith = (d: EarnDeps) => {
+const appWith = (d: EarnDeps, acting: Acting = { all: false, wallets: [actingAs(WALLET)] }) => {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: WALLET });
+    c.set("acting", acting);
     await next();
   });
   app.route("/", earnRoutes(d));
@@ -304,7 +315,12 @@ describe("POST /v1/earn/transactions", () => {
     const remembered: unknown[] = [];
     const d = deps({ sends: { remember: (bytes, move) => remembered.push([[...bytes], move]) } });
     await send(appWith(d), "POST", "/v1/earn/transactions", { kind: "deposit", usd: "20" });
-    expect(remembered).toEqual([[[1], { userId: "user-1", wallet: WALLET, kind: "deposit", vault: STEADY }]]);
+    expect(remembered).toEqual([
+      [
+        [1],
+        { userId: "user-1", wallet: WALLET, walletId: "wallet-id-WaLLeT", kind: "deposit", vault: STEADY },
+      ],
+    ]);
   });
 
   it("moves all the wallet's cash when asked for all", async () => {
@@ -387,6 +403,40 @@ describe("POST /v1/earn/transactions", () => {
       usd: "all",
     });
     expect((await json(res)).error.code).toBe("nothing_to_withdraw");
+  });
+
+  it("sponsors the Mercury wallet, and has a linked wallet pay its own fee and rent", async () => {
+    const sponsors: (string | undefined)[] = [];
+    const withRelay = {
+      ...deps({ directory: directory({ [STEADY]: { sponsors } }) }),
+      relay: { relayer: "ReLaYeR", builds: { remember: () => {}, recognises: () => false, size: 0 } },
+    };
+    await send(appWith(withRelay), "POST", "/v1/earn/transactions", { kind: "deposit", usd: "1" });
+    await send(
+      appWith(withRelay, { all: false, wallets: [actingLinked(WALLET)] }),
+      "POST",
+      "/v1/earn/transactions",
+      { kind: "deposit", usd: "1" },
+    );
+    expect(sponsors).toEqual(["ReLaYeR", undefined]);
+  });
+
+  it("says what SOL a linked wallet paying its own way needs, before it signs", async () => {
+    const res = await send(
+      appWith(deps({ directory: directory({ [STEADY]: { fail: new OwnerShort(50_000n, 2_139_280n) } }) }), {
+        all: false,
+        wallets: [actingLinked(WALLET)],
+      }),
+      "POST",
+      "/v1/earn/transactions",
+      { kind: "deposit", usd: "1" },
+    );
+    expect(res.status).toBe(409);
+    const body = await json(res);
+    expect(body.error.code).toBe("needs_sol");
+    expect((body.error as unknown as { message: string }).message).toContain(
+      "needs about 0.002 SOL, and holds 0.000",
+    );
   });
 
   it("says a short relayer as an outage", async () => {
@@ -487,5 +537,64 @@ describe("POST /v1/earn/confirm", () => {
 describe("usdcMoved", () => {
   it("is the wallet's own USDC change, signed", () => {
     expect(usdcMoved(tx(1_000_000n, 3_500_000n), WALLET, USDC).toString()).toBe("2.5");
+  });
+});
+
+describe("GET /v1/earn, across wallets", () => {
+  const MERCURY = actingAs(WALLET);
+  const PHANTOM = actingLinked("Phantom");
+
+  /** The Mercury wallet in STEADY with $20 recorded; the linked one in STEADY and OTHER with nothing recorded. */
+  const twoWallets = () => {
+    const owners: unknown[] = [];
+    const d = deps({
+      directory: {
+        ...directory(),
+        holdings: async (wallet) =>
+          wallet === WALLET
+            ? [{ listing: listing(STEADY), shares: D(10), usdc: D("20.4") }]
+            : [
+                { listing: listing(STEADY), shares: D(5), usdc: D("10") },
+                { listing: listing(OTHER), shares: D(1), usdc: D("3") },
+              ],
+      },
+      ledger: {
+        ...ledger(),
+        netDeposited: async (owner) => {
+          owners.push(owner);
+          return new Map(owner.walletId === MERCURY.id ? [[STEADY, D(20)]] : []);
+        },
+      },
+      chain: {
+        tokenBalances: async (wallet) => [
+          { mint: USDC, rawAmount: wallet === WALLET ? 25_000_000n : 7_000_000n, decimals: 6 },
+        ],
+        mintConfig: async () => null,
+      },
+    });
+    return { d, owners };
+  };
+
+  it("reads the chosen linked wallet's vaults against its own deposits", async () => {
+    const { d, owners } = twoWallets();
+    const body = await json(await appWith(d, { all: false, wallets: [PHANTOM] }).request("/v1/earn"));
+    expect(owners).toEqual([{ userId: "user-1", walletId: PHANTOM.id }]);
+    expect(body.balanceUsd).toBe("13");
+    expect(body.walletUsd).toBe("7");
+    // Nothing recorded against the linked wallet: nothing earned, never its whole balance.
+    expect(body.earnedUsd).toBe("0");
+  });
+
+  it("adds every wallet up, a vault held in two wallets as one row, each earned against its own wallet", async () => {
+    const { d } = twoWallets();
+    const body = await json(await appWith(d, { all: true, wallets: [MERCURY, PHANTOM] }).request("/v1/earn"));
+    expect(body.holdings.map((h) => [h.address, h.balanceUsd])).toEqual([
+      [STEADY, "30.4"],
+      [OTHER, "3"],
+    ]);
+    // Only the Mercury wallet's $0.40 over its $20: the linked wallet's $10 is not measured against it.
+    expect(body.earnedUsd).toBe("0.4");
+    expect(body.balanceUsd).toBe("33.4");
+    expect(body.walletUsd).toBe("32");
   });
 });

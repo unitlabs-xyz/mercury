@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { D } from "@mercury/core";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { activities, instruments, notifications, tokens, users } from "../db/schema.js";
 import { applyReconciliation } from "./apply.js";
 import type { Reconciliation } from "./reconcile.js";
@@ -11,6 +11,7 @@ const NOW = new Date("2026-10-27T12:00:00.000Z");
 const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:div" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
   const [instrument] = await db
     .insert(instruments)
     .values({ ticker: "NVDA", name: "Nvidia", sector: "Technology" })
@@ -19,7 +20,7 @@ const seed = async () => {
     .insert(tokens)
     .values({ instrumentId: instrument!.id, mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 })
     .returning();
-  return { db, userId: user!.id, instrumentId: instrument!.id, tokenId: token!.id };
+  return { db, userId: user!.id, walletId, instrumentId: instrument!.id, tokenId: token!.id };
 };
 
 /** A pass that found a dividend: one free lot, and the feed row that says so. */
@@ -54,8 +55,8 @@ const dividendPlan = (tokenId: string, instrumentId: string): Reconciliation => 
 
 describe("applyReconciliation and the inbox", () => {
   it("tells the holder about a dividend", async () => {
-    const { db, userId, tokenId, instrumentId } = await seed();
-    await applyReconciliation(db, userId, dividendPlan(tokenId, instrumentId));
+    const { db, userId, walletId, tokenId, instrumentId } = await seed();
+    await applyReconciliation(db, { userId, walletId }, dividendPlan(tokenId, instrumentId));
 
     const [row] = await db.select().from(activities);
     const told = await db.select().from(notifications);

@@ -1,6 +1,6 @@
 import { D, type Decimal } from "@mercury/core";
 import { defaultFetch } from "@mercury/chain";
-import type { HistorySource, Series, SeriesPoint, Span } from "./ports.js";
+import type { HistorySource, PastPriceSource, Series, SeriesPoint, Span } from "./ports.js";
 
 /**
  * Yahoo's chart endpoint. No key, and no contract either.
@@ -58,11 +58,48 @@ interface Entry {
   readonly series: Series | null;
 }
 
-export class YahooHistory implements HistorySource {
+const DAY_MS = 86_400_000;
+
+/**
+ * How far back Yahoo serves hourly closes. Measured 14 November 2026 against
+ * AAPL: hourly answered for a window two years old and was refused at three
+ * ("1h data not available"); daily answered for both. Two days inside the
+ * bound, so a moment near it is not refused by the time the request lands.
+ */
+export const HOURLY_WITHIN_MS = 730 * DAY_MS - 2 * DAY_MS;
+
+/** How wide a window is asked for around a moment: enough to span a weekend, or a holiday on a daily series. */
+const WINDOW_MS = { "1h": 3 * DAY_MS, "1d": 10 * DAY_MS } as const;
+
+/** How long an empty answer for a past moment is believed before asking again. */
+export const EMPTY_FOR_MS = 15 * 60_000;
+/** The most past prices remembered. A past close does not change, so nothing expires but by count. */
+const PAST_CACHE_MAX = 5_000;
+
+/** The closes in a chart answer, oldest first, with Yahoo's nulls for untraded intervals left out. */
+const closesOf = (body: Chart): SeriesPoint[] | null => {
+  const result = body.chart?.result?.[0];
+  if (result === undefined || result === null) return null;
+  const times = result.timestamp ?? [];
+  const closes = result.indicators?.quote?.[0]?.close ?? [];
+  const points: SeriesPoint[] = [];
+  for (const [i, at] of times.entries()) {
+    const close = closes[i];
+    // Read as zero they would put a -100% cliff in the middle of a chart.
+    if (close === null || close === undefined || !Number.isFinite(close)) continue;
+    points.push({ at: new Date(at * 1000), price: D(close) });
+  }
+  return points;
+};
+
+export class YahooHistory implements HistorySource, PastPriceSource {
   private readonly base: string;
   private readonly doFetch: typeof fetch;
   private readonly now: () => number;
   private readonly cache = new Map<string, Entry>();
+  private readonly past = new Map<string, Decimal | null>();
+  /** Empty answers, by when to ask again. See `priceAt`. */
+  private readonly empty = new Map<string, number>();
 
   constructor(config: YahooHistoryConfig = {}) {
     this.base = config.baseUrl ?? BASE;
@@ -94,21 +131,8 @@ export class YahooHistory implements HistorySource {
     if (res.status === 404) return this.remember(key, null);
     if (!res.ok) throw new Error(`yahoo chart returned ${res.status}`);
 
-    const body = (await res.json()) as Chart;
-    const result = body.chart?.result?.[0];
-    if (result === undefined || result === null) return this.remember(key, null);
-
-    const times = result.timestamp ?? [];
-    const closes = result.indicators?.quote?.[0]?.close ?? [];
-
-    const points: SeriesPoint[] = [];
-    for (const [i, at] of times.entries()) {
-      const close = closes[i];
-      // Yahoo leaves nulls in a series for halted or untraded intervals. Read
-      // as zero they would put a -100% cliff in the middle of a chart.
-      if (close === null || close === undefined || !Number.isFinite(close)) continue;
-      points.push({ at: new Date(at * 1000), price: D(close) });
-    }
+    const points = closesOf((await res.json()) as Chart);
+    if (points === null) return this.remember(key, null);
 
     // One point is a price, not a history: there is no move to measure across it.
     const first = points[0];
@@ -119,6 +143,63 @@ export class YahooHistory implements HistorySource {
       points,
       changePct: last.price.div(first.price).sub(1).mul(100),
     });
+  }
+
+  /**
+   * What `symbol` closed at around `at`: the last close at or before it, or
+   * the first after it when there is none before (a weekend, a holiday).
+   * Hourly within about two years, daily beyond, which is within what an
+   * estimate needs: the screen says it is one.
+   *
+   * The presets above ask by `range`; a past moment is asked by
+   * `period1`/`period2` instead, against the same endpoint and the same
+   * response shape. Null when Yahoo has no prices for the symbol around then;
+   * a failing Yahoo throws, as `seriesFor` does, so "no price" and "down" stay
+   * different answers. A past close does not change, so an answer is kept.
+   */
+  async priceAt(symbol: string, at: Date): Promise<Decimal | null> {
+    const now = this.now();
+    const interval = now - at.getTime() < HOURLY_WITHIN_MS ? "1h" : "1d";
+    // Keyed by the hour asked about: two arrivals in one hour are one question.
+    const key = `${symbol}:${interval}:${Math.floor(at.getTime() / 3_600_000)}`;
+    if (this.past.has(key)) return this.past.get(key)!;
+    // An empty answer is remembered only a while: it can be Yahoo's passing gap, not the symbol's.
+    const emptyUntil = this.empty.get(key);
+    if (emptyUntil !== undefined) {
+      if (now < emptyUntil) return null;
+      this.empty.delete(key);
+    }
+
+    const from = Math.floor((at.getTime() - WINDOW_MS[interval]) / 1000);
+    const to = Math.floor(Math.min(now, at.getTime() + WINDOW_MS[interval]) / 1000);
+    const url =
+      `${this.base}/v8/finance/chart/${encodeURIComponent(symbol)}` +
+      `?period1=${from}&period2=${to}&interval=${interval}`;
+    const res = await this.doFetch(url, { headers: { "user-agent": USER_AGENT } });
+    if (res.status === 404) return this.keepPast(key, null);
+    if (!res.ok) throw new Error(`yahoo chart returned ${res.status}`);
+
+    const points = closesOf((await res.json()) as Chart) ?? [];
+    const before = points.filter((p) => p.at.getTime() <= at.getTime()).at(-1);
+    const price = (before ?? points[0])?.price ?? null;
+    if (price === null) {
+      /*
+       * A 200 with no closes in it. Not kept for good: Yahoo answers that way
+       * for a while sometimes, and kept, a wallet asking then would fall to a
+       * worse estimate for every arrival in that hour until a restart. Asked
+       * again after a while; a symbol Yahoo doesn't know answers 404, kept above.
+       */
+      if (this.empty.size >= PAST_CACHE_MAX) this.empty.delete(this.empty.keys().next().value!);
+      this.empty.set(key, now + EMPTY_FOR_MS);
+      return null;
+    }
+    return this.keepPast(key, price);
+  }
+
+  private keepPast(key: string, price: Decimal | null): Decimal | null {
+    if (this.past.size >= PAST_CACHE_MAX) this.past.delete(this.past.keys().next().value!);
+    this.past.set(key, price);
+    return price;
   }
 
   private remember(key: string, series: Series | null): Series | null {

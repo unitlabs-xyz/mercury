@@ -15,6 +15,7 @@ import { reconcileBasketExits } from "../baskets/glider/reconcile.js";
 import { reconcileFundingDeposits } from "../funding/enrich.js";
 import { notifyFor } from "../notify/inbox.js";
 import type { ManagedBasketOperation } from "@mercury/types";
+import { followed } from "../wallets/active.js";
 
 const log = logger("wallet-events");
 
@@ -90,6 +91,7 @@ async function syncWallet(
   userId: string,
   walletId: string,
   address: string,
+  kind: "privy_embedded" | "external" = "privy_embedded",
 ): Promise<number> {
   const existing = await db.select().from(walletStreams).where(eq(walletStreams.walletId, walletId));
   const byAddress = new Map(existing.map((s) => [s.address, s]));
@@ -114,7 +116,16 @@ async function syncWallet(
   // the ATA on exactly the pass that needs it backfilled. Whether the row
   // already existed does not have that problem: it is fixed before either
   // stream is walked.
-  const walletKnownBefore = existing.some((r) => r.address === address);
+  //
+  // A linked wallet is different: it arrives with years of history, all of it
+  // from before Mercury followed it, and none of it is to be backfilled. The
+  // own row above is written outside this pass's transaction, so a first pass
+  // that failed partway would leave it behind, and the next pass would take
+  // the wallet as known and backfill its USDC account from the start. So a
+  // linked wallet is known only once a pass over it has committed, which is
+  // when its own stream gets `checkedAt`.
+  const ownBefore = existing.find((r) => r.address === address);
+  const walletKnownBefore = kind === "external" ? ownBefore?.checkedAt != null : ownBefore !== undefined;
 
   // A token stream with no cursor, on a wallet that already existed before
   // this pass, can only be a stream discovered after the wallet became known:
@@ -192,6 +203,14 @@ async function syncWallet(
     ).map((row) => [row.address, row.portfolioId]),
   );
 
+  // The person's wallets, by address: dollars between two of them are a move, not money in or out.
+  const mine = await db
+    .select({ address: wallets.address, label: wallets.label, isPrimary: wallets.isPrimary })
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), followed));
+  const self = mine.find((w) => w.address === address);
+  const ownWallets = new Map(mine.filter((w) => w.address !== address).map((w) => [w.address, w]));
+
   const moved: Movement[] = [];
   const now = deps.now?.() ?? new Date();
   for (const sig of ordered) {
@@ -205,6 +224,8 @@ async function syncWallet(
         now,
         lendingProgram: deps.lendingProgram,
         basketAccounts,
+        ownWallets,
+        ...(self === undefined ? {} : { self }),
         ...(deps.relayer === undefined ? {} : { relayer: deps.relayer }),
       }),
     );
@@ -218,6 +239,7 @@ async function syncWallet(
         .values(
           moved.map((m) => ({
             userId,
+            walletId,
             kind: m.kind,
             occurredAt: m.occurredAt,
             title: m.title,
@@ -229,16 +251,28 @@ async function syncWallet(
           })),
         )
         .onConflictDoNothing({
-          target: [activities.userId, activities.txSignature, activities.mint],
+          target: [activities.walletId, activities.txSignature, activities.mint],
         })
-        .returning({ id: activities.id, kind: activities.kind, occurredAt: activities.occurredAt });
+        .returning({
+          id: activities.id,
+          kind: activities.kind,
+          occurredAt: activities.occurredAt,
+          txSignature: activities.txSignature,
+        });
       written = inserted.length;
 
+      // A move between the person's own wallets is never news: they made it.
+      const moves = new Set(moved.filter((m) => m.ownMove === true).map((m) => m.signature));
       await notifyFor(
         tx,
         userId,
         inserted
-          .filter((r) => r.kind === "transfer_in" && now.getTime() - r.occurredAt.getTime() < NEWS_WITHIN_MS)
+          .filter(
+            (r) =>
+              r.kind === "transfer_in" &&
+              !moves.has(r.txSignature ?? "") &&
+              now.getTime() - r.occurredAt.getTime() < NEWS_WITHIN_MS,
+          )
           .map((r) => ({ activityId: r.id, kind: "money_in" as const })),
       );
     }
@@ -287,10 +321,10 @@ export async function syncAllWalletEvents(
   opts: EventsOptions = {},
 ): Promise<EventsSummary> {
   const all = await db
-    .select({ userId: users.id, walletId: wallets.id, address: wallets.address })
+    .select({ userId: users.id, walletId: wallets.id, address: wallets.address, kind: wallets.kind })
     .from(wallets)
     .innerJoin(users, eq(users.id, wallets.userId))
-    .where(eq(wallets.isPrimary, true));
+    .where(followed);
   const rows = opts.due === undefined ? all : all.filter((r) => opts.due!(r.address));
 
   let checked = 0;
@@ -303,7 +337,7 @@ export async function syncAllWalletEvents(
        refusing from being retried every pass for ever. */
     opts.read?.(row.address);
     try {
-      written += await syncWallet(db, deps, row.userId, row.walletId, row.address);
+      written += await syncWallet(db, deps, row.userId, row.walletId, row.address, row.kind);
       checked += 1;
     } catch (error: unknown) {
       failed += 1;

@@ -1,7 +1,7 @@
 import { hourOf } from "./history.js";
 
 /**
- * The accounts an hour's snapshot could not read, kept until that hour ends.
+ * The wallets an hour's snapshot could not read, by id, kept until that hour ends.
  *
  * A reading belongs to its hour and nothing can take it afterwards, so a
  * failed account waiting for the next hourly pass is a gap in its chart. After
@@ -17,11 +17,11 @@ export const missedSnapshots = () => {
   let pending: ReadonlySet<string> = new Set();
   return {
     /** What a pass, hourly or retry, could not read; `at` is the time the pass was given. */
-    missed(at: Date, userIds: readonly string[]) {
+    missed(at: Date, walletIds: readonly string[]) {
       hour = hourOf(at).getTime();
-      pending = new Set(userIds);
+      pending = new Set(walletIds);
     },
-    /** The accounts to try again now, or null: none left, or their hour is over. */
+    /** The wallets to try again now, or null: none left, or their hour is over. */
     due(now: Date): ReadonlySet<string> | null {
       if (hour === null || pending.size === 0) return null;
       if (hourOf(now).getTime() !== hour) {

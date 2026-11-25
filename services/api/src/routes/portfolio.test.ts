@@ -3,8 +3,10 @@ import { Hono } from "hono";
 import { D, ZERO } from "@mercury/core";
 import type { ChainReader } from "@mercury/chain";
 import type { MultiplierSource, PriceBoard, TokenPrice } from "@mercury/market";
-import { Exposure, Portfolio, PortfolioHistory } from "@mercury/types";
+import { Exposure, Portfolio, PortfolioHistory, PortfolioSummary } from "@mercury/types";
 import { portfolioRoutes, type HoldingRow, type PortfolioDeps } from "./portfolio.js";
+import type { Acting } from "../wallets/acting.js";
+import { actingAs, actingLinked } from "../wallets/testing.js";
 
 /**
  * Parsed through the wire schema rather than cast. `packages/types` is the
@@ -46,6 +48,8 @@ const holding = (over: Partial<HoldingRow> = {}): HoldingRow => ({
   referenceBasisUsd: over.costBasisUsd ?? D(300),
   feeUsd: ZERO,
   avgUnitCostUsd: D(150),
+  estimatedCostUsd: ZERO,
+  estimateSource: null,
   wrappers: [{ mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 }],
   ...over,
 });
@@ -62,7 +66,7 @@ const basket = (valueUsd: string) => ({
 });
 
 const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
-  holdings: async () => [holding()],
+  walletHoldings: async () => [holding()],
   prices: { pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m)])) } satisfies PriceBoard,
   chain: {
     tokenBalances: async () => [{ mint: NVDAX, rawAmount: 200_000_000n, decimals: 8 }],
@@ -83,11 +87,18 @@ const deps = (over: Partial<PortfolioDeps> = {}): PortfolioDeps => ({
   ...over,
 });
 
-/** The route with an identity already resolved, as the auth middleware would leave it. */
-const appWith = (d: PortfolioDeps, walletAddress: string | null = "WaLLeT") => {
+/**
+ * The route with an identity and a wallet already resolved, as the auth and
+ * acting-wallet middleware would leave them: the Mercury wallet unless `acting` says otherwise.
+ */
+const appWith = (d: PortfolioDeps, walletAddress: string | null = "WaLLeT", acting?: Acting) => {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress });
+    c.set(
+      "acting",
+      acting ?? { all: false, wallets: walletAddress === null ? [] : [actingAs(walletAddress)] },
+    );
     await next();
   });
   app.route("/", portfolioRoutes(d));
@@ -265,7 +276,7 @@ describe("GET /v1/portfolio", () => {
     // as free would report their whole value as profit; the honest figure is
     // measured over what we can prove was paid for.
     const d = deps({
-      holdings: async () => [holding({ shares: D(5), sharesWithBasis: D(2), costBasisUsd: D(300) })],
+      walletHoldings: async () => [holding({ shares: D(5), sharesWithBasis: D(2), costBasisUsd: D(300) })],
     });
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.holdings[0]!.valueUsd).toBe("1000"); // 5 shares at $200
@@ -277,7 +288,9 @@ describe("GET /v1/portfolio", () => {
     // now worth $400. The old single figure said +$99.54 and gave no way to
     // see that $4.46 of the move was never the stock.
     const d = deps({
-      holdings: async () => [holding({ costBasisUsd: D(300), referenceBasisUsd: D(296), feeUsd: D("0.46") })],
+      walletHoldings: async () => [
+        holding({ costBasisUsd: D(300), referenceBasisUsd: D(296), feeUsd: D("0.46") }),
+      ],
     });
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.holdings[0]!).toMatchObject({
@@ -291,7 +304,7 @@ describe("GET /v1/portfolio", () => {
     // The symptom this exists to fix: a position whose stock has not moved at
     // all used to report the fee and the premium as a loss.
     const d = deps({
-      holdings: async () => [
+      walletHoldings: async () => [
         holding({ costBasisUsd: D("400.46"), referenceBasisUsd: D(400), feeUsd: D("0.46") }),
       ],
     });
@@ -305,7 +318,9 @@ describe("GET /v1/portfolio", () => {
 
   it("keeps the two lines summing to the dollars, so the split hides nothing", async () => {
     const d = deps({
-      holdings: async () => [holding({ costBasisUsd: D(300), referenceBasisUsd: D(296), feeUsd: D("0.46") })],
+      walletHoldings: async () => [
+        holding({ costBasisUsd: D(300), referenceBasisUsd: D(296), feeUsd: D("0.46") }),
+      ],
     });
     const h = (await portfolioOf(await appWith(d).request("/v1/portfolio"))).holdings[0]!;
     expect(D(h.marketPnlUsd!).sub(D(h.tradingCostUsd!)).toFixed()).toBe(h.unrealisedPnlUsd);
@@ -410,7 +425,9 @@ describe("GET /v1/portfolio", () => {
   it("charges the discount it would be sold into, without calling it the stock falling", async () => {
     // The stock is exactly where it was bought and the token is under it.
     const d = deps({
-      holdings: async () => [holding({ costBasisUsd: D(400), referenceBasisUsd: D(400), feeUsd: ZERO })],
+      walletHoldings: async () => [
+        holding({ costBasisUsd: D(400), referenceBasisUsd: D(400), feeUsd: ZERO }),
+      ],
       prices: {
         pricesFor: async (mints) =>
           new Map(mints.map((m) => [m, price(m, { usdPricePerToken: D(198), pricePerShare: D(200) })])),
@@ -442,7 +459,7 @@ describe("GET /v1/portfolio", () => {
 
   it("says how many of the shares a cost is known for", async () => {
     const d = deps({
-      holdings: async () => [holding({ shares: D(5), sharesWithBasis: D(2) })],
+      walletHoldings: async () => [holding({ shares: D(5), sharesWithBasis: D(2) })],
     });
     const res = await appWith(d).request("/v1/portfolio");
     const body = (await res.json()) as { holdings: { sharesWithBasis: string }[] };
@@ -470,14 +487,14 @@ describe("GET /v1/portfolio", () => {
   });
 
   it("leaves out a holding that has gone to zero", async () => {
-    const d = deps({ holdings: async () => [holding({ shares: ZERO, costBasisUsd: ZERO })] });
+    const d = deps({ walletHoldings: async () => [holding({ shares: ZERO, costBasisUsd: ZERO })] });
     const body = await portfolioOf(await appWith(d).request("/v1/portfolio"));
     expect(body.holdings).toEqual([]);
   });
 
   it("counts both wrappers of one company as one holding", async () => {
     const d = deps({
-      holdings: async () => [
+      walletHoldings: async () => [
         holding({
           wrappers: [
             { mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 },
@@ -517,7 +534,7 @@ it("reads basket returns independently of the portfolio valuation", async () => 
 describe("GET /v1/portfolio/exposure/:ticker", () => {
   it("adds shares across wrappers, never token counts", async () => {
     const d = deps({
-      holdings: async () => [
+      walletHoldings: async () => [
         holding({
           wrappers: [
             { mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 },
@@ -628,7 +645,7 @@ describe("GET /v1/portfolio/history", () => {
   it("asks the store only for the window the range covers", async () => {
     const since: Date[] = [];
     const d = deps({
-      snapshots: async (_userId: string, from: Date) => {
+      snapshots: async (_userId: string, _walletIds: readonly string[], from: Date) => {
         since.push(from);
         return [];
       },
@@ -733,5 +750,393 @@ describe("GET /v1/portfolio, with money in Earn", () => {
     );
     expect(body.earnUsd).toBe("0");
     expect(body.earnIsStale).toBe(true);
+  });
+});
+
+/*
+ * One linked wallet, or every wallet at once. The Mercury wallet holds two
+ * NVDA and $100; the linked one holds one NVDA, three TSLA, $50, and owes
+ * $100. Every figure below is worked out from those, each wallet on its own.
+ */
+describe("GET /v1/portfolio, across wallets", () => {
+  const MERCURY = actingAs("Mercury");
+  const PHANTOM = actingLinked("Phantom", { label: "Phantom" });
+  const ALL: Acting = { all: true, wallets: [MERCURY, PHANTOM] };
+  const tsla = (over: Partial<HoldingRow> = {}) =>
+    holding({
+      instrumentId: "instrument-tsla",
+      ticker: "TSLA",
+      name: "Tesla",
+      shares: D(3),
+      sharesWithBasis: D(3),
+      costBasisUsd: D(600),
+      wrappers: [{ mint: TSLAON, symbol: "TSLAon", issuer: "ondo", decimals: 6 }],
+      ...over,
+    });
+  const usdc = (dollars: number) => [{ mint: USDC, rawAmount: BigInt(dollars * 1_000_000), decimals: 6 }];
+
+  /** Asked about each wallet by its id or address, and remembering who was asked. */
+  const twoWallets = (over: Partial<PortfolioDeps> = {}) => {
+    const asked: string[] = [];
+    const d = deps({
+      walletHoldings: async (_userId, walletId) => {
+        asked.push(walletId);
+        return walletId === MERCURY.id
+          ? [holding()]
+          : [holding({ shares: D(1), sharesWithBasis: D(1), costBasisUsd: D(150) }), tsla()];
+      },
+      chain: {
+        tokenBalances: async (address) => {
+          asked.push(address);
+          return address === MERCURY.address ? usdc(100) : usdc(50);
+        },
+        mintConfig: async () => null,
+      },
+      debt: async (address) => (address === PHANTOM.address ? D(100) : ZERO),
+      ...over,
+    });
+    return { d, asked };
+  };
+
+  it("reads only the linked wallet that is chosen", async () => {
+    const { d, asked } = twoWallets();
+    const body = await portfolioOf(
+      await appWith(d, "Mercury", { all: false, wallets: [PHANTOM] }).request("/v1/portfolio"),
+    );
+    expect(new Set(asked)).toEqual(new Set([PHANTOM.id, PHANTOM.address]));
+    // $800 of stock and $50, less the $100 it owes.
+    expect(body.totalValueUsd).toBe("750");
+    expect(body.cashUsd).toBe("50");
+    expect(body.debtUsd).toBe("100");
+    expect(body.holdings.map((h) => [h.ticker, h.shares])).toEqual([
+      ["NVDA", "1"],
+      ["TSLA", "3"],
+    ]);
+  });
+
+  it("adds every wallet up, a stock held in two wallets as one row", async () => {
+    const { d } = twoWallets();
+    const body = await portfolioOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio"));
+    // $1,200 of stock and $150 of cash, less the linked wallet's $100.
+    expect(body.totalValueUsd).toBe("1250");
+    expect(body.cashUsd).toBe("150");
+    expect(body.debtUsd).toBe("100");
+    expect(body.holdings).toHaveLength(2);
+    expect(body.holdings[0]).toMatchObject({
+      ticker: "NVDA",
+      shares: "3",
+      sharesWithBasis: "3",
+      valueUsd: "600",
+      costBasisUsd: "450",
+      unrealisedPnlUsd: "150",
+    });
+    expect(body.holdings[1]).toMatchObject({
+      ticker: "TSLA",
+      shares: "3",
+      valueUsd: "600",
+      unrealisedPnlUsd: "0",
+    });
+  });
+
+  it("adds up how much of a stock's cost was estimated, and says where most of it came from", async () => {
+    const { d } = twoWallets({
+      walletHoldings: async (_userId, walletId) =>
+        walletId === MERCURY.id
+          ? [holding({ estimatedCostUsd: D(50), estimateSource: "own_wallet" })]
+          : [holding({ estimatedCostUsd: D(120), estimateSource: "market_price" }), tsla()],
+    });
+    const all = await portfolioOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio"));
+    expect(all.holdings[0]).toMatchObject({
+      ticker: "NVDA",
+      estimatedCostUsd: "170",
+      estimateSource: "market_price",
+    });
+    // A holding whose cost is all exact names no source.
+    expect(all.holdings[1]).toMatchObject({ ticker: "TSLA", estimatedCostUsd: "0", estimateSource: null });
+
+    const one = await portfolioOf(
+      await appWith(d, "Mercury", { all: false, wallets: [MERCURY] }).request("/v1/portfolio"),
+    );
+    expect(one.holdings[0]).toMatchObject({ estimatedCostUsd: "50", estimateSource: "own_wallet" });
+  });
+
+  it("measures the day's change over the sum, not as an average of each wallet's", async () => {
+    const { d } = twoWallets({
+      prices: {
+        pricesFor: async (mints) =>
+          new Map(mints.map((m) => [m, price(m, { changePct24h: m === TSLAON ? D(10) : ZERO })])),
+      },
+    });
+    const body = await portfolioOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio"));
+    // Only TSLA moved: $600 now, $600/1.1 yesterday, out of $1,200 of stock.
+    const change = 600 - 600 / 1.1;
+    expect(Number(body.changeUsd)).toBeCloseTo(change, 6);
+    expect(Number(body.changePct)).toBeCloseTo((change / (1200 - change)) * 100, 6);
+  });
+
+  it("falls back to each wallet's own last debt, and says the sum is stale", async () => {
+    const owners: unknown[] = [];
+    const { d } = twoWallets({
+      debt: async (address) => (address === PHANTOM.address ? null : ZERO),
+      lastKnownDebt: async (owner) => {
+        owners.push(owner);
+        return D(80);
+      },
+    });
+    const body = await portfolioOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio"));
+    expect(owners).toEqual([{ userId: "user-1", walletId: PHANTOM.id }]);
+    expect(body.debtUsd).toBe("80");
+    expect(body.debtIsStale).toBe(true);
+  });
+
+  it("is unavailable as a whole when one wallet's baskets can't be valued, rather than quietly short", async () => {
+    const { d } = twoWallets({
+      baskets: async (_userId, address) => {
+        if (address === PHANTOM.address) throw new Error("glider down");
+        return { totalUsd: ZERO, baskets: [], fetchedAt: null };
+      },
+    });
+    const res = await appWith(d, "Mercury", ALL).request("/v1/portfolio");
+    expect(res.status).toBe(503);
+  });
+
+  it("charts the wallets it is asked for, by id", async () => {
+    const asked: (readonly string[])[] = [];
+    const d = deps({
+      snapshots: async (_userId, walletIds) => {
+        asked.push(walletIds);
+        return [];
+      },
+      flows: async (_userId, walletIds) => {
+        asked.push(walletIds);
+        return [];
+      },
+    });
+    await appWith(d, "Mercury", ALL).request("/v1/portfolio/history?range=1D");
+    await appWith(d, "Mercury", { all: false, wallets: [PHANTOM] }).request("/v1/portfolio/history?range=1D");
+    expect(asked).toEqual([[MERCURY.id, PHANTOM.id], [MERCURY.id, PHANTOM.id], [PHANTOM.id], [PHANTOM.id]]);
+  });
+
+  it("adds one stock's tokens up across wallets for its exposure", async () => {
+    const { d } = twoWallets({
+      chain: {
+        tokenBalances: async () => [{ mint: NVDAX, rawAmount: 100_000_000n, decimals: 8 }],
+        mintConfig: async () => null,
+      },
+    });
+    const body = await exposureOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio/exposure/nvda"));
+    // One NVDAx in each wallet.
+    expect(body.shares).toBe("2");
+    expect(body.wrappers).toEqual([expect.objectContaining({ mint: NVDAX, tokenQty: "2" })]);
+  });
+
+  it("counts a wrapper only a later wallet holds, whichever row comes first (even a closed one)", async () => {
+    // The Mercury wallet's NVDA row is closed (sold out) and names NVDAx; the linked wallet holds NVDA as NVDAon.
+    const { d } = twoWallets({
+      walletHoldings: async (_userId, walletId) =>
+        walletId === MERCURY.id
+          ? [holding({ shares: ZERO, sharesWithBasis: ZERO, costBasisUsd: ZERO })]
+          : [
+              holding({
+                shares: D(1),
+                sharesWithBasis: D(1),
+                wrappers: [{ mint: NVDAON, symbol: "NVDAon", issuer: "ondo", decimals: 6 }],
+              }),
+            ],
+      chain: {
+        tokenBalances: async (address) =>
+          address === PHANTOM.address ? [{ mint: NVDAON, rawAmount: 1_000_000n, decimals: 6 }] : [],
+        mintConfig: async () => null,
+      },
+    });
+    const body = await exposureOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio/exposure/NVDA"));
+    expect(body.shares).toBe("1");
+    expect(body.valueUsd).toBe("200");
+    expect(body.wrappers).toEqual([expect.objectContaining({ mint: NVDAON, tokenQty: "1" })]);
+  });
+
+  it("lists a stock held through different wrappers in two wallets, each once", async () => {
+    const { d } = twoWallets({
+      walletHoldings: async (_userId, walletId) =>
+        walletId === MERCURY.id
+          ? [holding({ shares: D(1), sharesWithBasis: D(1) })]
+          : [
+              holding({
+                shares: D(1),
+                sharesWithBasis: D(1),
+                wrappers: [
+                  { mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 },
+                  { mint: NVDAON, symbol: "NVDAon", issuer: "ondo", decimals: 6 },
+                ],
+              }),
+            ],
+      chain: {
+        tokenBalances: async (address) =>
+          address === PHANTOM.address
+            ? [{ mint: NVDAON, rawAmount: 1_000_000n, decimals: 6 }]
+            : [{ mint: NVDAX, rawAmount: 100_000_000n, decimals: 8 }],
+        mintConfig: async () => null,
+      },
+    });
+    const body = await exposureOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio/exposure/NVDA"));
+    expect(body.shares).toBe("2");
+    expect(body.wrappers.map((w) => w.mint).sort()).toEqual([NVDAON, NVDAX].sort());
+  });
+
+  it("finds a stock only the linked wallet holds", async () => {
+    const { d } = twoWallets({
+      chain: {
+        tokenBalances: async (address) =>
+          address === PHANTOM.address ? [{ mint: TSLAON, rawAmount: 3_000_000n, decimals: 6 }] : [],
+        mintConfig: async () => null,
+      },
+    });
+    const all = await appWith(d, "Mercury", ALL).request("/v1/portfolio/exposure/TSLA");
+    expect((await exposureOf(all)).shares).toBe("3");
+    const mercuryOnly = await appWith(d, "Mercury").request("/v1/portfolio/exposure/TSLA");
+    expect(mercuryOnly.status).toBe(404);
+  });
+
+  it("reads each wallet's basket returns", async () => {
+    const asked: string[] = [];
+    const d = deps({
+      basketReturns: async (address) => {
+        asked.push(address);
+        return [{ portfolioId: `portfolio-${address}`, percentChange: "1" }];
+      },
+    });
+    const body = (await (
+      await appWith(d, "Mercury", ALL).request("/v1/portfolio/basket-returns")
+    ).json()) as {
+      returns: { portfolioId: string }[];
+    };
+    expect(asked).toEqual(["Mercury", "Phantom"]);
+    expect(body.returns.map((r) => r.portfolioId)).toEqual(["portfolio-Mercury", "portfolio-Phantom"]);
+  });
+});
+
+describe("GET /v1/portfolio, each wallet's own figures", () => {
+  it("lists each wallet valued on its own, in the order they were added up", async () => {
+    const mercury = actingAs("Mercury");
+    const phantom = actingLinked("Phantom");
+    const d = deps({
+      walletHoldings: async (_userId, walletId) =>
+        walletId === mercury.id ? [holding()] : [holding({ shares: D(1), sharesWithBasis: D(1) })],
+      prices: {
+        pricesFor: async (mints) => new Map(mints.map((m) => [m, price(m, { changePct24h: D(10) })])),
+      },
+      debt: async (address) => (address === "Phantom" ? D(50) : ZERO),
+    });
+    const body = await portfolioOf(
+      await appWith(d, "Mercury", { all: true, wallets: [mercury, phantom] }).request("/v1/portfolio"),
+    );
+    expect(body.wallets?.map((w) => [w.walletId, w.totalValueUsd, w.debtUsd])).toEqual([
+      [mercury.id, "400", "0"],
+      [phantom.id, "150", "50"],
+    ]);
+    // Each wallet's own move: its stock up 10% on the day.
+    for (const w of body.wallets ?? []) expect(Number(w.changePct)).toBeCloseTo(10, 6);
+    expect(Number(body.totalValueUsd)).toBe(550);
+  });
+});
+
+describe("GET /v1/portfolio/summary", () => {
+  const empty = {
+    wallets: [],
+    netWorthUsd: "0",
+    asOf: null,
+    pnl: { totalUsd: "0", unrealisedUsd: "0", realisedUsd: "0", returnPct: null, estimatedCostUsd: "0" },
+    income: { totalUsd: "0", earnUsd: "0", dividendsUsd: "0" },
+    loanInterestUsd: "0",
+    calculating: 0,
+  };
+
+  it("is the whole account's, whichever wallet is chosen", async () => {
+    const asked: string[] = [];
+    const d = deps({
+      summary: async (userId) => {
+        asked.push(userId);
+        return empty;
+      },
+    });
+    const res = await appWith(d, "Mercury", { all: false, wallets: [actingLinked("Phantom")] }).request(
+      "/v1/portfolio/summary",
+    );
+    expect(res.status).toBe(200);
+    expect(PortfolioSummary.parse(await res.json())).toEqual(empty);
+    expect(asked).toEqual(["user-1"]);
+  });
+
+  it("is not there when it is not wired", async () => {
+    expect((await appWith(deps()).request("/v1/portfolio/summary")).status).toBe(404);
+  });
+});
+
+describe("POST /v1/portfolio/holdings/:ticker/cost", () => {
+  const LINKED = actingLinked("Phantom", { id: "wallet-phantom" });
+  const post = (d: PortfolioDeps, body: unknown, acting: Acting = { all: false, wallets: [LINKED] }) =>
+    appWith(d, "Mercury", acting).request("/v1/portfolio/holdings/tsla/cost", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const recording = (
+    answer: Awaited<ReturnType<NonNullable<PortfolioDeps["declareCost"]>>> = { kind: "set", lots: 2 },
+  ) => {
+    const calls: unknown[] = [];
+    const d = deps({
+      declareCost: async (owner, ticker, cost) => {
+        calls.push([owner, ticker, cost.toString()]);
+        return answer;
+      },
+    });
+    return { d, calls };
+  };
+
+  it("sets the cost for the chosen wallet, a linked one included, on the stock asked", async () => {
+    const { d, calls } = recording();
+    const res = await post(d, { unitCostUsd: "212.50" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ lots: 2 });
+    expect(calls).toEqual([[{ userId: "user-1", walletId: "wallet-phantom" }, "TSLA", "212.5"]]);
+  });
+
+  it("takes a number as readily as a string", async () => {
+    const { d, calls } = recording();
+    expect((await post(d, { unitCostUsd: 99 })).status).toBe(200);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("refuses a cost that is not dollars above zero, before touching anything", async () => {
+    const { d, calls } = recording();
+    for (const bad of [
+      { unitCostUsd: "0" },
+      { unitCostUsd: "-5" },
+      { unitCostUsd: "1e3" },
+      { unitCostUsd: "abc" },
+      {},
+      null,
+    ]) {
+      const res = await post(d, bad);
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("bad_cost");
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it("asks which wallet when every wallet is shown: a cost for all would not say whose shares", async () => {
+    const { d, calls } = recording();
+    const res = await post(d, { unitCostUsd: "10" }, { all: true, wallets: [actingAs("Mercury"), LINKED] });
+    expect(res.status).toBe(400);
+    expect(calls).toEqual([]);
+  });
+
+  it("says when every cost is exact already, and when the stock is not one Mercury lists", async () => {
+    expect((await post(recording({ kind: "nothing_estimated" }).d, { unitCostUsd: "10" })).status).toBe(409);
+    expect((await post(recording({ kind: "unknown_stock" }).d, { unitCostUsd: "10" })).status).toBe(404);
+  });
+
+  it("is not there without the dependency", async () => {
+    expect((await post(deps(), { unitCostUsd: "10" })).status).toBe(404);
   });
 });

@@ -1,7 +1,8 @@
+import { useHistoryReading } from "../../api/history-reading";
 import { useEarn } from "../../api/earn";
 import { Button, ButtonLink } from "../../ui/Button";
 import { InfoTip } from "../../ui/ds";
-import { interestText, usd } from "@mercury/view";
+import { interestText, usd, READING_HISTORY } from "@mercury/view";
 import { VaultMark, rate } from "../earn/VaultMark";
 import { usePanels } from "../Panels";
 
@@ -11,6 +12,8 @@ import { usePanels } from "../Panels";
  * verbs that matter. Picking or changing a vault happens on the Earn page.
  */
 export const EarnSection = () => {
+  // A linked wallet whose past is still being read: its interest and earnings wait for it.
+  const reading = useHistoryReading();
   const earn = useEarn();
   const panels = usePanels();
   const e = earn.data;
@@ -55,9 +58,13 @@ export const EarnSection = () => {
                 {usd(h.balanceUsd)}
               </span>
               <span
-                className={`mt-0.5 block text-[12px] leading-4 ${h.earnedUsd > 0 ? "text-ds-up" : "text-ds-muted"}`}
+                className={`mt-0.5 block text-[12px] leading-4 ${!reading && h.earnedUsd > 0 ? "text-ds-up" : "text-ds-muted"}`}
               >
-                {h.earnedUsd > 0 ? `+ ${interestText(h.earnedUsd)} earned` : "Just started"}
+                {reading
+                  ? READING_HISTORY
+                  : h.earnedUsd > 0
+                    ? `+ ${h.earnedEstimated ? "~" : ""}${interestText(h.earnedUsd)} earned`
+                    : "Just started"}
               </span>
             </span>
           </div>

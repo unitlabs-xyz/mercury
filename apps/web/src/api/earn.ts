@@ -1,10 +1,9 @@
-import { useSignTransaction } from "@privy-io/react-auth/solana";
-import { useEmbeddedWallet } from "../auth/embedded";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
 import { refreshAfterChain } from "./settle";
-import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { claimWallet, forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { useTransactionSigner } from "./signer";
 import { reasonOf, runSteps } from "../app/earn/moves";
 
 const KIND = "earn";
@@ -32,13 +31,15 @@ type VaultWire = {
   offered?: boolean;
 };
 
-type HoldingWire = VaultWire & { balanceUsd: string; earnedUsd: string };
+/** `earnedEstimated` is absent from an older server: nothing was estimated then. */
+type HoldingWire = VaultWire & { balanceUsd: string; earnedUsd: string; earnedEstimated?: boolean };
 
 type EarnWire = {
   selected: string;
   holdings: HoldingWire[];
   balanceUsd: string;
   earnedUsd: string;
+  earnedEstimated?: boolean;
   apy: string | null;
   walletUsd: string;
   /** Absent from an older server, which asked nothing before a deposit. */
@@ -75,7 +76,11 @@ export type EarnVault = {
   offered: boolean;
 };
 
-export type EarnHolding = EarnVault & { balanceUsd: number; earnedUsd: number };
+/**
+ * `earnedEstimated`: some Earn shares were sent in or out by hand and valued at
+ * a day's share price, so what was earned is shown with `~`.
+ */
+export type EarnHolding = EarnVault & { balanceUsd: number; earnedUsd: number; earnedEstimated: boolean };
 
 export type Earn = {
   /** Where new cash goes unless another vault is picked: the last one moved into. */
@@ -84,6 +89,7 @@ export type Earn = {
   holdings: EarnHolding[];
   balanceUsd: number;
   earnedUsd: number;
+  earnedEstimated: boolean;
   /** What the whole balance earns now; null with nothing in. */
   apy: number | null;
   /** Idle in the wallet: what could move in. */
@@ -130,9 +136,11 @@ export const useEarn = () => {
           ...vaultFromWire(h),
           balanceUsd: Number(h.balanceUsd),
           earnedUsd: Number(h.earnedUsd),
+          earnedEstimated: h.earnedEstimated === true,
         })),
         balanceUsd: Number(w.balanceUsd),
         earnedUsd: Number(w.earnedUsd),
+        earnedEstimated: w.earnedEstimated === true,
         apy: n(w.apy),
         walletUsd: Number(w.walletUsd),
         riskAccepted: w.riskAccepted ?? true,
@@ -210,15 +218,16 @@ export type EarnIntent =
  */
 export type EarnStep = EarnIntent | { kind: "deposit"; usd: { cameOutUpTo: number }; vault: string };
 
-type SentEarn = { signature: string; action: EarnIntent };
+type SentEarn = { signature: string; action: EarnIntent; wallet?: string };
 
 /** What the server filed: the USDC that actually moved, in cents. */
 type Filed = { recorded: boolean; usd: string };
 
-const confirmSent = (sent: SentEarn) =>
+const confirmSent = ({ signature, action, wallet }: SentEarn) =>
   apiFetch<Filed>("/v1/earn/confirm", {
     method: "POST",
-    body: JSON.stringify(sent),
+    headers: claimWallet({ signature, ...(wallet === undefined ? {} : { wallet }) }),
+    body: JSON.stringify({ signature, action }),
   });
 
 const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
@@ -233,8 +242,8 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
  */
 export const useEarnAction = () => {
   const qc = useQueryClient();
-  const { wallet } = useEmbeddedWallet();
-  const { signTransaction } = useSignTransaction();
+  // The wallet chosen signs: the Mercury wallet through Privy, a linked one in its own pop-up.
+  const signer = useTransactionSigner();
 
   const mutation = useMutation({
     mutationFn: async ({ intents }: { intents: EarnStep[] }) => ({
@@ -245,8 +254,7 @@ export const useEarnAction = () => {
             body: JSON.stringify(intent),
           }),
         signAndSend: async (tx) => {
-          if (wallet === undefined) throw new Error("No wallet is connected to sign with.");
-          const { signedTransaction } = await signTransaction({ transaction: toBytes(tx), wallet });
+          const signedTransaction = await signer.sign(toBytes(tx));
           const sent = await apiFetch<{ signature: string; status: string; error?: string | null }>(
             "/v1/transactions/send",
             { method: "POST", body: JSON.stringify({ transaction: toBase64(signedTransaction) }) },
@@ -271,7 +279,7 @@ export const useEarnAction = () => {
     onSettled: () => refreshAfterChain(qc),
   });
 
-  return { ...mutation, walletReady: wallet !== undefined };
+  return { ...mutation, walletReady: signer.walletReady, approver: signer.approver };
 };
 
 /**

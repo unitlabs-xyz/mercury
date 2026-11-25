@@ -211,6 +211,118 @@
       "when": 1793083368580,
       "tag": "0029_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1795436693162,
+      "tag": "0030_linked_wallets",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795454381364,
+      "tag": "0031_position_estimated_cost",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795504374572,
+      "tag": "0032_history_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795505505187,
+      "tag": "0033_chain_costs",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795523172401,
+      "tag": "0034_history_destination",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1795545830960,
+      "tag": "0035_liquidation_pnl",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795548552720,
+      "tag": "0036_chain_departures",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1795590921886,
+      "tag": "0037_earn_transfers",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1795592366030,
+      "tag": "0038_multiplier_announcements",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1795598406231,
+      "tag": "0039_loan_alert_shown",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1795603120508,
+      "tag": "0040_history_opening",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1795603126565,
+      "tag": "0041_drop_opening_pledged",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1795603440634,
+      "tag": "0042_liquidation_per_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1795604519360,
+      "tag": "0043_history_costed_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795612904993,
+      "tag": "0044_sponsored_token_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1795613617256,
+      "tag": "0045_history_walks",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { D, ZERO } from "@mercury/core";
-import { testDb } from "../db/testing.js";
-import { activities, disposals, instruments, lots, orders, positions, tokens, users } from "../db/schema.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
+import {
+  activities,
+  disposals,
+  instruments,
+  lots,
+  orders,
+  positions,
+  tokens,
+  users,
+  wallets,
+} from "../db/schema.js";
 import { settleOrder, tokenRefFor } from "./settle.js";
 import type { Fill } from "./fill.js";
 
@@ -13,6 +23,7 @@ const AT = new Date("2026-09-29T14:00:00.000Z");
 const seed = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:test" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
   const [instrument] = await db
     .insert(instruments)
     .values({ ticker: "NVDA", name: "Nvidia", sector: "Technology" })
@@ -40,7 +51,14 @@ const seed = async () => {
     })
     .returning();
 
-  return { db, userId: user!.id, instrumentId: instrument!.id, tokenId: token!.id, orderId: order!.id };
+  return {
+    db,
+    userId: user!.id,
+    walletId,
+    instrumentId: instrument!.id,
+    tokenId: token!.id,
+    orderId: order!.id,
+  };
 };
 
 const aFill: Fill = {
@@ -59,6 +77,7 @@ const inputFor = (
   over: Partial<Parameters<typeof settleOrder>[1]> = {},
 ) => ({
   userId: s.userId,
+  walletId: s.walletId,
   orderId: s.orderId,
   signature: SIG,
   side: "buy" as const,
@@ -134,6 +153,7 @@ describe("settleOrder", () => {
     const s = await seed();
     await s.db.insert(positions).values({
       userId: s.userId,
+      walletId: s.walletId,
       instrumentId: s.instrumentId,
       shares: "1",
       sharesWithBasis: "1",
@@ -158,6 +178,7 @@ describe("settleOrder", () => {
     const s = await seed();
     await s.db.insert(positions).values({
       userId: s.userId,
+      walletId: s.walletId,
       instrumentId: s.instrumentId,
       shares: "1",
       // Less basis than is being sold: the rest arrived by a path we never saw.
@@ -219,6 +240,7 @@ describe("settleOrder", () => {
     const s = await seed();
     await s.db.insert(positions).values({
       userId: s.userId,
+      walletId: s.walletId,
       instrumentId: s.instrumentId,
       shares: "1",
       sharesWithBasis: "1",
@@ -269,6 +291,7 @@ describe("settleOrder: the shares a sell removes", () => {
       .insert(orders)
       .values({
         userId: s.userId,
+        walletId: s.walletId,
         instrumentId: s.instrumentId,
         side: "sell",
         usdAmount: "110",
@@ -284,6 +307,7 @@ describe("settleOrder: the shares a sell removes", () => {
   const transferOut = (s: Awaited<ReturnType<typeof seed>>, recordedAt: Date) =>
     s.db.insert(disposals).values({
       userId: s.userId,
+      walletId: s.walletId,
       tokenId: s.tokenId,
       instrumentId: s.instrumentId,
       tokenQty: 44_901_800n,
@@ -372,6 +396,7 @@ describe("settleOrder: the shares a sell removes", () => {
     const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
     await s.db.insert(disposals).values({
       userId: s.userId,
+      walletId: s.walletId,
       tokenId: other!.id,
       instrumentId: s.instrumentId,
       tokenQty: 1_000_000n,
@@ -391,9 +416,11 @@ describe("settleOrder: the shares a sell removes", () => {
   it("leaves another user's transfer out alone", async () => {
     const s = await seed();
     const [stranger] = await s.db.insert(users).values({ privyUserId: "did:privy:stranger" }).returning();
+    const strangerWallet = await mercuryWallet(s.db, stranger!.id);
     const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
     await s.db.insert(disposals).values({
       userId: stranger!.id,
+      walletId: strangerWallet,
       tokenId: s.tokenId,
       instrumentId: s.instrumentId,
       tokenQty: 44_901_800n,
@@ -408,6 +435,49 @@ describe("settleOrder: the shares a sell removes", () => {
       ["transfer_out", stranger!.id],
       ["sell", s.userId],
     ]);
+  });
+
+  it("leaves the same person's other wallet's transfer out alone, and files the sell under its own", async () => {
+    const s = await seed();
+    const [linked] = await s.db
+      .insert(wallets)
+      .values({
+        userId: s.userId,
+        address: "Linked111",
+        kind: "external",
+        isPrimary: false,
+        linkedAt: new Date(),
+      })
+      .returning();
+    const orderId = await sellOrder(s, new Date(Date.now() - 20 * 60_000));
+    // Shares left the Mercury wallet while a linked wallet's sell was in flight.
+    await transferOut(s, new Date());
+    await settleOrder(s.db, inputFor(s, { orderId, side: "sell", fill: sold, walletId: linked!.id }));
+
+    const rows = await s.db.select().from(disposals).orderBy(disposals.recordedAt);
+    expect(rows.map((r) => [r.kind, r.walletId])).toEqual([
+      ["transfer_out", s.walletId],
+      ["sell", linked!.id],
+    ]);
+  });
+
+  it("files a buy's lot and feed row under the wallet the order was for", async () => {
+    const s = await seed();
+    const [linked] = await s.db
+      .insert(wallets)
+      .values({
+        userId: s.userId,
+        address: "Linked111",
+        kind: "external",
+        isPrimary: false,
+        linkedAt: new Date(),
+      })
+      .returning();
+    await settleOrder(s.db, inputFor(s, { walletId: linked!.id }));
+    const [lot] = await s.db.select().from(lots);
+    const [row] = await s.db.select().from(activities);
+    expect(lot!.walletId).toBe(linked!.id);
+    expect(row!.walletId).toBe(linked!.id);
   });
 
   it("leaves a transfer out from before the order alone", async () => {

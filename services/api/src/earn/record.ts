@@ -6,7 +6,9 @@ import type { EarnLedger } from "./store.js";
 /** One move into or out of a vault, as the server built it. */
 export interface EarnMove {
   readonly userId: string;
+  /** The wallet that moved, and its id: the Earn position is that wallet's own. */
   readonly wallet: string;
+  readonly walletId: string;
   readonly kind: "deposit" | "withdraw";
   readonly vault: string;
 }
@@ -76,6 +78,7 @@ export async function recordMove(
 
   const written = await deps.ledger.record({
     userId: move.userId,
+    walletId: move.walletId,
     kind: move.kind,
     usdc,
     vault: move.vault,

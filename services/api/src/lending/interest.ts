@@ -18,16 +18,19 @@ export interface LedgerRow {
   readonly usdAmount: Decimal | null;
   /** The debt straight after, as Kamino reported it. */
   readonly debtAfterUsd: Decimal;
+  /** When it happened, where a caller needs the ledger as it stood at a moment. */
+  readonly at?: Date;
 }
 
 /**
  * What was borrowed and not yet repaid, from the ledger, oldest row first.
  *
- * A repay comes off the principal rather than the interest. That keeps the
- * interest on screen until the loan is closed, which is when it is actually
- * paid: Kamino settles no interest on its own, it only grows the debt. A repay
- * of everything, or any row after which Kamino said nothing was owed, closes
- * the loan, and a later borrow starts a new one.
+ * A repay comes off the principal rather than the interest, and so does the
+ * debt a liquidation repaid. That keeps the interest on screen until the loan
+ * is closed, which is when it is actually paid: Kamino settles no interest on
+ * its own, it only grows the debt. A repay of everything, or any row after
+ * which Kamino said nothing was owed, closes the loan, and a later borrow
+ * starts a new one.
  *
  * Null when the ledger records no borrow at all. A debt it cannot account for
  * — a loan taken outside Mercury, or a confirm that never arrived — has no
@@ -42,10 +45,41 @@ export const outstandingPrincipal = (rows: readonly LedgerRow[]): Decimal | null
       borrowed = true;
     } else if (r.kind === "repay") {
       principal = r.usdAmount === null ? ZERO : Decimal.max(ZERO, principal.sub(r.usdAmount));
+    } else if (r.kind === "liquidation" && r.usdAmount !== null) {
+      // Kamino sold collateral and repaid the debt with it: a repayment the borrower didn't make.
+      principal = Decimal.max(ZERO, principal.sub(r.usdAmount));
     }
     if (r.debtAfterUsd.lte(0)) principal = ZERO;
   }
   return borrowed ? principal : null;
+};
+
+/**
+ * Interest already paid, from the ledger, oldest row first: what repayments
+ * took beyond what was borrowed. A repay comes off the principal first (see
+ * `outstandingPrincipal`), so a repayment pays interest only once the
+ * principal is gone: in practice the repay that closes the loan. A debt a
+ * liquidation cleared counts the same way, since Kamino repaid it with the
+ * borrower's collateral.
+ *
+ * A repay of everything recorded with no amount can't say what it paid, and
+ * adds nothing rather than a guess. Zero with no borrow in the ledger.
+ */
+export const interestPaid = (rows: readonly LedgerRow[]): Decimal => {
+  let principal = ZERO;
+  let paid = ZERO;
+  for (const r of rows) {
+    if (r.kind === "borrow" && r.usdAmount !== null) {
+      principal = principal.add(r.usdAmount);
+    } else if ((r.kind === "repay" || r.kind === "liquidation") && r.usdAmount !== null) {
+      paid = paid.add(Decimal.max(ZERO, r.usdAmount.sub(principal)));
+      principal = Decimal.max(ZERO, principal.sub(r.usdAmount));
+    } else if (r.kind === "repay") {
+      principal = ZERO;
+    }
+    if (r.debtAfterUsd.lte(0)) principal = ZERO;
+  }
+  return paid;
 };
 
 /**

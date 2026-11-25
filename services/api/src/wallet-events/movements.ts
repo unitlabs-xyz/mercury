@@ -1,5 +1,6 @@
 import { D, type Decimal } from "@mercury/core";
 import { USDC_DECIMALS, USDC_MINT, type TokenBalanceEntry, type TransactionDetail } from "@mercury/chain";
+import { moveTitles, type NamedWallet } from "../moves/names.js";
 
 /**
  * Native SOL, recorded under the wrapped-SOL mint.
@@ -27,6 +28,12 @@ export interface Movement {
    * and `readFlows` leaves it out of the performance line because of this.
    */
   readonly basketPortfolioId?: string;
+  /**
+   * Set when the other side was another of the person's own wallets: a move,
+   * not money added or sent. The feed says so, and it is never news. Its
+   * dollars still count for each wallet alone, and cancel across both.
+   */
+  readonly ownMove?: true;
   readonly signature: string;
   readonly occurredAt: Date;
 }
@@ -62,6 +69,10 @@ export interface MovementContext {
    * before `planFill` learned to take it out.
    */
   readonly relayer?: string;
+  /** The person's other wallets, by address: dollars to or from one of them are a move. */
+  readonly ownWallets?: ReadonlyMap<string, NamedWallet>;
+  /** This wallet, for the move's wording. */
+  readonly self?: NamedWallet;
 }
 
 const scaled = (raw: bigint, decimals: number): Decimal => D(raw.toString()).div(D(10).pow(decimals));
@@ -176,6 +187,16 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
     // Read from the balances rather than the account keys: a smart account is
     // named in plenty of transactions it took no money in.
     const basket = basketFor(tx, ctx);
+    // Which of the person's other wallets was on the other end, if one was.
+    const counterparty =
+      basket === undefined && ctx.ownWallets !== undefined && ctx.ownWallets.size > 0
+        ? transferParties(tx, {
+            wallet: ctx.wallet,
+            mint: USDC_MINT,
+            ...(ctx.relayer === undefined ? {} : { relayer: ctx.relayer }),
+          }).counterparty
+        : null;
+    const other = counterparty === null ? undefined : ctx.ownWallets?.get(counterparty);
     // Only on the way out. The relayer gaining dollars while this wallet also
     // gains them is not a charge on this movement, and subtracting it would
     // understate a deposit.
@@ -185,18 +206,23 @@ export function movementsIn(tx: TransactionDetail, ctx: MovementContext): readon
       mint: USDC_MINT,
       kind: usdc > 0n ? "transfer_in" : "transfer_out",
       title:
-        basket === undefined
+        other !== undefined
           ? usdc > 0n
-            ? "Added cash"
-            : "Sent cash"
-          : usdc > 0n
-            ? "Moved from basket"
-            : "Moved to basket",
+            ? moveTitles(other, ctx.self).in
+            : moveTitles(ctx.self, other).out
+          : basket === undefined
+            ? usdc > 0n
+              ? "Added cash"
+              : "Sent cash"
+            : usdc > 0n
+              ? "Moved from basket"
+              : "Moved to basket",
       subtitle:
         charge === 0n ? null : `Plus $${trim(scaled(charge, USDC_DECIMALS), 2)} recipient account setup`,
       // USDC is a dollar. No price lookup, and none to be wrong about.
       amountUsd: amount,
       ...(basket === undefined ? {} : { basketPortfolioId: basket }),
+      ...(other === undefined ? {} : { ownMove: true as const }),
       signature: tx.signature,
       occurredAt,
     });

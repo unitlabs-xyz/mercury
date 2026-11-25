@@ -28,6 +28,7 @@ import {
 import { Haptics } from "../../src/haptics";
 import { toggleWatch, useWatchlist } from "../../src/watchlist";
 import { BorrowCard } from "../../src/stock/BorrowCard";
+import { AlsoHeld } from "../../src/stock/AlsoHeld";
 import { ExposureCard } from "../../src/stock/ExposureCard";
 import { InBaskets } from "../../src/stock/InBaskets";
 import { color, font, radius, space } from "../../src/theme";
@@ -205,6 +206,9 @@ export default function Stock() {
           {held !== undefined && (
             <ExposureCard name={i?.name ?? t} exposure={exposure.data} loading={exposure.isPending} />
           )}
+
+          {/* ── What the linked wallets hold of it, read only ───────────── */}
+          <AlsoHeld ticker={t} mercuryHolds={held !== undefined} />
 
           {/* ── What it is worth as collateral ──────────────────────────── */}
           {i !== undefined && <BorrowCard ticker={t} name={i.name} />}

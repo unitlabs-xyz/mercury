@@ -62,12 +62,29 @@ describe("tokenAccountAddresses", () => {
     expect(new Set(watched.map((w) => w.wallet)).size).toBe(3);
   });
 
-  it("leaves a wallet that is not the account's primary one alone", async () => {
+  it("asks about a linked wallet's token accounts too", async () => {
     const db = await seed(1);
     const [row] = await db.select().from(wallets);
     await db
       .insert(wallets)
       .values({ userId: row!.userId, address: ADDRESS(9), kind: "external", isPrimary: false });
+    const n = node();
+
+    await tokenAccountAddresses(db, n);
+
+    expect([...n.asked].sort()).toEqual([ADDRESS(0), ADDRESS(9)].sort());
+  });
+
+  it("leaves a wallet that was unlinked alone", async () => {
+    const db = await seed(1);
+    const [row] = await db.select().from(wallets);
+    await db.insert(wallets).values({
+      userId: row!.userId,
+      address: ADDRESS(9),
+      kind: "external",
+      isPrimary: false,
+      unlinkedAt: new Date(),
+    });
     const n = node();
 
     await tokenAccountAddresses(db, n);

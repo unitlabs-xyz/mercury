@@ -1,3 +1,4 @@
+import { openTokenAccounts, pgSponsoredAccounts, solanaAccountsRpc } from "./baskets/glider/open-accounts.js";
 import {
   JupiterLite,
   JupiterRegistry,
@@ -43,8 +44,16 @@ import { createPrivyVerifier } from "./auth/verifier.js";
 import { createDb, type Db } from "./db/client.js";
 import type { ActivityDeps } from "./routes/activity.js";
 import type { NotificationDeps } from "./routes/notifications.js";
-import type { BorrowDeps } from "./routes/borrow.js";
+import type { WalletDeps } from "./routes/wallets.js";
+import { recordLoan, type BorrowDeps, type TrackedLoan } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
+import type { MoveDeps } from "./routes/move.js";
+import { recordMove as recordWalletMove } from "./moves/record.js";
+import { moveSends } from "./moves/sends.js";
+import { mercuryWalletIdOf, movableMints } from "./moves/queries.js";
+import { findOutsideBaskets } from "./baskets/outside.js";
+import { remembered } from "./moves/remembered.js";
+import { address, createSolanaRpc } from "@solana/kit";
 import { KaminoLending } from "./lending/kamino.js";
 import { KaminoEarn } from "./earn/kamino-vault.js";
 import { D, ZERO } from "@mercury/core";
@@ -67,9 +76,12 @@ import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import type { FeedbackDeps } from "./routes/feedback.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
+import { confirmOrder, type TrackedOrder } from "./orders/confirm.js";
+import { trackedSends, type TrackedSends } from "./relay/tracked.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import {
   readBasketMovements,
+  basketNetFunding,
   readFlows,
   readHoldings,
   readLatestDebt,
@@ -79,7 +91,9 @@ import {
 import { basketReturnsReader, basketValueReader } from "./portfolio/baskets.js";
 import { readActivity } from "./portfolio/activity-queries.js";
 import { countUnread, markAllRead, markRead, readInbox } from "./notify/inbox-queries.js";
+import { pgWalletDeps } from "./wallets/deps.js";
 import { readReceipt } from "./portfolio/receipt-queries.js";
+import { readSummary } from "./portfolio/summary-queries.js";
 import type { ReconcileDeps } from "./portfolio/apply.js";
 import { BasketService } from "./baskets/core/service.js";
 import { GliderClient } from "./baskets/glider/client.js";
@@ -87,6 +101,7 @@ import { JsonBasketStore } from "./baskets/glider/store.js";
 import { SolanaBasketFunding } from "./baskets/glider/funding.js";
 import type { BasketProvider } from "./baskets/core/deps.js";
 import { logger } from "./log/index.js";
+import { declareCost } from "./portfolio/declared-cost.js";
 import { noteStrain } from "./jobs/strain.js";
 
 /** Pyth in front of the issuer's quote, or the issuer's quote alone. */
@@ -205,6 +220,23 @@ export interface Config {
    * rather than on dislocation.
    */
   readonly pythApiKey?: string;
+  /**
+   * Where the web app is served. A wallet being linked signs a message that
+   * names this domain, so a signature asked for on any other site is no use
+   * here. `APP_URL`, defaulting to the beta.
+   */
+  readonly appUrl: string;
+  /**
+   * How many wallets a person may have linked at once, beside their Mercury
+   * wallet. `LINKED_WALLET_LIMIT`, defaulting to 5.
+   */
+  readonly linkedWalletLimit: number;
+  /**
+   * The history reader's own ceiling on the paid RPC, in calls a second.
+   * `HISTORY_RPC_RPS`, defaulting to 2: well under the plan's limit, since it
+   * shares one allowance with everything the app reads and sends.
+   */
+  readonly historyRps: number;
 }
 
 /**
@@ -260,6 +292,59 @@ const basisPoints = (env: NodeJS.ProcessEnv, key: string, fallback: number): num
     throw new Error(`${key} must be whole basis points from 0 to 9999, got "${raw}"`);
   }
   return bps;
+};
+
+/** The web app, where a wallet is linked. */
+const DEFAULT_APP_URL = "https://beta.trymercury.xyz";
+
+/** Five linked wallets beside the Mercury wallet, the number set on 21 November 2026. */
+const DEFAULT_LINKED_WALLET_LIMIT = 5;
+
+/*
+ * https, or http on this machine for a local web app. The domain is what a
+ * wallet shows the person when it asks them to sign, so it has to be real.
+ */
+const appUrl = (env: NodeJS.ProcessEnv): string => {
+  const raw = env["APP_URL"];
+  if (raw === undefined || raw.length === 0) return DEFAULT_APP_URL;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`APP_URL must be a URL, got "${raw}"`);
+  }
+  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  if (url.protocol !== "https:" && !(local && url.protocol === "http:")) {
+    throw new Error(`APP_URL must be https (or http on localhost), got "${raw}"`);
+  }
+  return url.origin;
+};
+
+/*
+ * A whole number of at least one, or the server does not start. Zero would
+ * offer linking and refuse every link.
+ */
+const DEFAULT_HISTORY_RPS = 2;
+
+/** A positive number of calls a second; anything else stops the server at boot. */
+const historyRps = (env: NodeJS.ProcessEnv): number => {
+  const raw = env["HISTORY_RPC_RPS"];
+  if (raw === undefined || raw.length === 0) return DEFAULT_HISTORY_RPS;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`HISTORY_RPC_RPS must be a number of calls a second above 0, got "${raw}"`);
+  }
+  return n;
+};
+
+const linkedWalletLimit = (env: NodeJS.ProcessEnv): number => {
+  const raw = env["LINKED_WALLET_LIMIT"];
+  if (raw === undefined || raw.length === 0) return DEFAULT_LINKED_WALLET_LIMIT;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error(`LINKED_WALLET_LIMIT must be a whole number of at least 1, got "${raw}"`);
+  }
+  return n;
 };
 
 /*
@@ -369,6 +454,9 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     depositFeeBps: basisPoints(env, "DEPOSIT_FEE_BPS", DEFAULT_DEPOSIT_FEE_BPS),
     ...(depositFeeRecipient === undefined ? {} : { depositFeeRecipient }),
     ...(env["PYTH_API_KEY"] ? { pythApiKey: env["PYTH_API_KEY"] } : {}),
+    appUrl: appUrl(env),
+    linkedWalletLimit: linkedWalletLimit(env),
+    historyRps: historyRps(env),
     // Spread rather than assign: exactOptionalPropertyTypes rejects undefined.
     ...(privyVerificationKey ? { privyVerificationKey } : {}),
   };
@@ -581,11 +669,20 @@ export interface ReadDeps {
   readonly money: MoneyDeps;
   readonly activity: ActivityDeps;
   readonly notifications: NotificationDeps;
+  /** Linking, naming and unlinking the wallets beside the Mercury wallet. */
+  readonly wallets: WalletDeps;
   readonly orders: OrderStore;
   readonly fills: FillDeps;
+  /** Told about every order's transaction as it is built, so the send path settles it whether or not the app confirms. */
+  readonly orderSends?: Pick<TrackedSends<TrackedOrder>, "remember">;
   readonly borrow: BorrowDeps;
   readonly earn: EarnDeps;
   readonly send: SendDeps;
+  /**
+   * Moving a linked wallet's tokens into the Mercury wallet. Optional so a test
+   * app can leave it out; built whenever there is a relayer to pay for it.
+   */
+  readonly move?: MoveDeps;
   /** Mercury's fee on every stock trade, in basis points. See `Config.tradingFeeBps`. */
   readonly tradingFeeBps: number;
   /** The in-app feedback button. Optional so a test app can leave it out. */
@@ -630,6 +727,8 @@ export function buildReadDeps(
     | "notifyFrom"
     | "feedbackTo"
     | "tradingFeeBps"
+    | "appUrl"
+    | "linkedWalletLimit"
   >,
   /** Built at boot, because loading a key is async and this is not. */
   relay?: SendDeps["relay"],
@@ -648,16 +747,84 @@ export function buildReadDeps(
     ),
   );
   const baskets = basketValueReader(deps.basketProvider, basketStore);
+  // Each move between a person's own wallets is recorded when the relayer sends it, with its cost carried over.
+  const walletMoves = moveSends({
+    history: deps.history,
+    record: (move) => recordWalletMove(db, { ...move, usdcMint: USDC_MINT }),
+  });
+  const rpc = createSolanaRpc(config.solanaRpcUrl);
+  const orders = pgOrderStore(db);
+  const fills: FillDeps = {
+    tokenRef: (mint) => tokenRefFor(db, mint),
+    settle: (input) => settleOrder(db, input),
+  };
+  const borrow: BorrowDeps = {
+    lending: deps.lending,
+    chain: deps.chain,
+    prices: deps.prices,
+    usdcMint: USDC_MINT,
+    history: deps.history,
+    record: (planned, input) => recordLoanEvents(db, planned, input),
+    ledger: (owner) => loanLedger(db, owner),
+    ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
+  };
+  /*
+   * Orders and loans are recorded by the server when their transaction goes
+   * out, so neither hangs on the page that placed it: a person who switches
+   * wallets or closes the tab after signing still gets the fill and the loan
+   * event. The app's confirm stays as the fast path, and is idempotent.
+   */
+  const orderTracker = trackedSends<TrackedOrder>("order", async (item, signature) => {
+    const order = await orders.byId(item.userId, item.orderId);
+    if (order === null) return "refused";
+    const r = await confirmOrder(
+      {
+        history: deps.history,
+        registry: deps.registry,
+        multipliers: deps.multipliers,
+        prices: deps.prices,
+        fills,
+        relayer: relay?.signer.address,
+      },
+      order,
+      { userId: item.userId, walletId: item.walletId, address: item.address, signature },
+    );
+    return r.kind === "settled" ? "recorded" : r.kind;
+  });
+  const loanTracker = trackedSends<TrackedLoan>("loan", async (item, signature) => {
+    const r = await recordLoan(borrow, {
+      userId: item.userId,
+      walletId: item.walletId,
+      wallet: item.wallet,
+      signature,
+      intentOf: () => item.intent,
+    });
+    return r.kind;
+  });
+  const basketTemplates = new BasketService({
+    store: basketStore,
+    funding: new SolanaBasketFunding(
+      config.solanaRpcUrl,
+      relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
+    ),
+    history: deps.history,
+    // What went into a basket, so shares that leave it in kind carry their share of that cost.
+    netFunding: (userId, owner, portfolioId) =>
+      basketNetFunding(db, userId, owner.slice(owner.lastIndexOf(":") + 1), portfolioId),
+    // A linked wallet's basket paid into the Mercury wallet: its token accounts opened first, by the relayer.
+    ...(relay === undefined
+      ? {}
+      : {
+          openRecipientAccounts: openTokenAccounts({
+            rpc: solanaAccountsRpc(config.solanaRpcUrl),
+            signer: relay.signer,
+            ledger: pgSponsoredAccounts(db),
+          }),
+        }),
+    ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
+  });
   return {
-    basketTemplates: new BasketService({
-      store: basketStore,
-      funding: new SolanaBasketFunding(
-        config.solanaRpcUrl,
-        relay === undefined ? undefined : { signer: relay.signer, builds: relay.builds },
-      ),
-      history: deps.history,
-      ...(deps.basketProvider === undefined ? {} : { provider: deps.basketProvider }),
-    }),
+    basketTemplates,
     instruments: {
       supportedStocks: () => readSupportedStocks(db, deps.supportedStocks),
       buyers30d: (ticker) => countBuyers30d(db, ticker),
@@ -666,20 +833,22 @@ export function buildReadDeps(
       history: deps.priceHistory,
     },
     portfolio: {
-      holdings: (userId) => readHoldings(db, userId),
+      walletHoldings: (userId, walletId) => readHoldings(db, userId, walletId),
       prices: deps.prices,
       chain: deps.chain,
       multipliers: deps.multipliers,
       usdcMint: USDC_MINT,
       pledged: (wallet) => pledgedByMint(deps.lending, wallet),
       debt: (wallet) => debtFrom(deps.lending, wallet),
-      lastKnownDebt: (userId) => readLatestDebt(db, userId),
-      lastKnownEarn: (userId) => readLatestEarn(db, userId),
-      snapshots: (userId, from) => readSnapshots(db, userId, from),
+      lastKnownDebt: (owner) => readLatestDebt(db, owner),
+      lastKnownEarn: (owner) => readLatestEarn(db, owner),
+      snapshots: (userId, walletIds, from) => readSnapshots(db, userId, walletIds, from),
       baskets,
       basketReturns: basketReturnsReader(deps.basketProvider),
-      flows: (userId, from) => readFlows(db, userId, from),
-      basketMovements: (userId) => readBasketMovements(db, userId),
+      flows: (userId, walletIds, from) => readFlows(db, userId, walletIds, from),
+      basketMovements: (owner) => readBasketMovements(db, owner),
+      summary: (userId) => readSummary(db, deps.prices, userId),
+      declareCost: (owner, ticker, unitCostUsd) => declareCost(db, owner, ticker, unitCostUsd),
       earn: onlyIfUsed(usedEarn, (wallet) => earnBalance(deps.earn, wallet), ZERO),
     },
     money: {
@@ -700,9 +869,9 @@ export function buildReadDeps(
       ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
     activity: {
-      read: (userId, limit, cursor) => readActivity(db, userId, limit, cursor),
-      receipt: (userId, wallet, id) =>
-        readReceipt(db, userId, id, wallet, {
+      read: (scope, limit, cursor) => readActivity(db, scope, limit, cursor),
+      receipt: (userId, wallets, id) =>
+        readReceipt(db, userId, id, wallets, {
           history: deps.history,
           ...(relay === undefined ? {} : { relayer: relay.signer.address }),
         }),
@@ -713,7 +882,8 @@ export function buildReadDeps(
       read: (userId, id) => markRead(db, userId, id, new Date()),
       readAll: (userId, upTo) => markAllRead(db, userId, upTo, new Date()),
     },
-    orders: pgOrderStore(db),
+    wallets: pgWalletDeps(db, { appUrl: config.appUrl, limit: config.linkedWalletLimit }),
+    orders,
     tradingFeeBps: config.tradingFeeBps,
     feedback: {
       to: config.feedbackTo,
@@ -722,27 +892,49 @@ export function buildReadDeps(
           ? loggingNotifier()
           : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom }),
     },
-    fills: {
-      tokenRef: (mint) => tokenRefFor(db, mint),
-      settle: (input) => settleOrder(db, input),
-    },
+    fills,
+    orderSends: orderTracker,
     ...(fund === undefined ? {} : { fund }),
-    borrow: {
-      lending: deps.lending,
-      chain: deps.chain,
-      prices: deps.prices,
-      usdcMint: USDC_MINT,
-      history: deps.history,
-      record: (planned, input) => recordLoanEvents(db, planned, input),
-      ledger: (userId) => loanLedger(db, userId),
-      ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
-    },
+    borrow: { ...borrow, sends: loanTracker },
     send: {
       rpcUrl: config.solanaRpcUrl,
-      fees: { chain: deps.chain, prices: deps.prices },
-      accepted: earnMoves.accepted,
+      fees: { chain: deps.chain, prices: deps.prices, history: deps.history },
+      accepted: async (messageBytes, signature) => {
+        await Promise.all([
+          earnMoves.accepted(messageBytes, signature),
+          walletMoves.accepted(messageBytes, signature),
+          orderTracker.accepted(messageBytes, signature),
+          loanTracker.accepted(messageBytes, signature),
+        ]);
+      },
       sent: (wallet) => deps.chain.forgetBalances?.(wallet),
       ...(relay === undefined ? {} : { relay }),
+    },
+    move: {
+      chain: deps.chain,
+      history: deps.history,
+      prices: deps.prices,
+      usdcMint: USDC_MINT,
+      listed: () => movableMints(db, USDC_MINT),
+      mercuryWalletId: (userId) => mercuryWalletIdOf(db, userId),
+      latestBlockhash: async () => (await rpc.getLatestBlockhash().send()).value,
+      solLamports: async (wallet) => (await rpc.getBalance(address(wallet)).send()).value,
+      sends: walletMoves,
+      // Baskets made outside Mercury, found on the chain; looked for at most every ten minutes a wallet.
+      outside: remembered(10 * 60_000, (wallet) =>
+        findOutsideBaskets(
+          {
+            db,
+            history: deps.history,
+            chain: deps.chain,
+            prices: deps.prices,
+            listed: () => movableMints(db, USDC_MINT),
+            // Mercury's baskets, to suggest the closest when the person reinvests here.
+            templates: () => basketTemplates.listTemplates(),
+          },
+          wallet,
+        ),
+      ),
     },
   };
 }

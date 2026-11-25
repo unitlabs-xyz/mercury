@@ -15,7 +15,7 @@ export interface Alert {
 /** Worst last. A move up this list is worth interrupting somebody for. */
 const SEVERITY: readonly Health[] = ["healthy", "over_limit", "margin_call", "liquidation"];
 
-const rank = (h: Health): number => SEVERITY.indexOf(h);
+export const rank = (h: Health): number => SEVERITY.indexOf(h);
 
 const money = (n: number): string =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
@@ -97,3 +97,39 @@ export const alertFor = (
  */
 export const markAfter = (told: Health | null, current: Health, delivered: boolean): Health | null =>
   current === "healthy" ? "healthy" : delivered ? current : told;
+
+/** The wallet a loan is in, as much as an alert needs to name it. */
+export interface LoanWallet {
+  readonly kind: "privy_embedded" | "external";
+  readonly label: string | null;
+  readonly address: string;
+}
+
+/** A linked wallet's name: what the person called it, or its first and last four characters. */
+export const loanWalletName = (wallet: Pick<LoanWallet, "label" | "address">): string =>
+  wallet.label ??
+  (wallet.address.length <= 10
+    ? wallet.address
+    : `${wallet.address.slice(0, 4)}…${wallet.address.slice(-4)}`);
+
+/**
+ * An alert about a loan in a linked wallet, said as one.
+ *
+ * Named, because the person may have a loan in more than one wallet and has to
+ * know which to repay. And told where it can be done: Mercury builds the repay
+ * or the collateral on the web, and the linked wallet approves it in its own
+ * pop-up, which the phone cannot ask for. A loan in the Mercury wallet reads
+ * as it always has.
+ */
+export const forWallet = (alert: Alert, wallet: LoanWallet): Alert => {
+  if (wallet.kind !== "external") return alert;
+  const name = loanWalletName(wallet);
+  return {
+    ...alert,
+    title: `${alert.title} · ${name}`,
+    subject: `${alert.subject} (${name})`,
+    body:
+      `${alert.body} This loan is in your linked wallet ${name}. ` +
+      `Repay or add collateral from Mercury on the web, where ${name} approves it, to avoid liquidation.`,
+  };
+};

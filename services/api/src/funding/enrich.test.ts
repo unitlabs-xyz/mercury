@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { USDC_MINT } from "@mercury/chain";
-import { testDb } from "../db/testing.js";
+import { mercuryWallet, testDb } from "../db/testing.js";
 import { activities, users } from "../db/schema.js";
 import { createFundingStore } from "./store.js";
 import { enrichDepositActivity, reconcileFundingDeposits } from "./enrich.js";
@@ -12,6 +12,7 @@ const REQUEST = "0xreq";
 const setup = async () => {
   const db = await testDb();
   const [user] = await db.insert(users).values({ privyUserId: "did:privy:funder" }).returning();
+  const walletId = await mercuryWallet(db, user!.id);
   const store = createFundingStore(db);
   const intent = await store.create({
     userId: user!.id,
@@ -23,12 +24,13 @@ const setup = async () => {
     recipientAddress: "PrivyWallet111",
     quotedOutRaw: "9990000",
   });
-  return { db, store, userId: user!.id, intent };
+  return { db, store, userId: user!.id, walletId, intent };
 };
 
 /** What wallet-events writes when it sees the USDC land. */
-const generic = (userId: string) => ({
+const generic = (userId: string, walletId: string) => ({
   userId,
+  walletId,
   kind: "transfer_in" as const,
   title: "Added cash",
   amountUsd: "9.99",
@@ -41,8 +43,8 @@ const feed = (db: Awaited<ReturnType<typeof testDb>>, userId: string) =>
 
 describe("enrichDepositActivity", () => {
   it("names the origin on the row wallet-events already wrote", async () => {
-    const { db, store, userId } = await setup();
-    await db.insert(activities).values(generic(userId));
+    const { db, store, userId, walletId } = await setup();
+    await db.insert(activities).values(generic(userId, walletId));
     const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
@@ -56,8 +58,8 @@ describe("enrichDepositActivity", () => {
   });
 
   it("leaves the amount and the kind alone", async () => {
-    const { db, store, userId } = await setup();
-    await db.insert(activities).values(generic(userId));
+    const { db, store, userId, walletId } = await setup();
+    await db.insert(activities).values(generic(userId, walletId));
     const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
@@ -90,8 +92,8 @@ describe("enrichDepositActivity", () => {
   });
 
   it("does nothing twice", async () => {
-    const { db, store, userId } = await setup();
-    await db.insert(activities).values(generic(userId));
+    const { db, store, userId, walletId } = await setup();
+    await db.insert(activities).values(generic(userId, walletId));
     const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
@@ -107,10 +109,13 @@ describe("enrichDepositActivity", () => {
   });
 
   it("leaves a row that is no longer generic alone", async () => {
-    const { db, store, userId } = await setup();
-    await db
-      .insert(activities)
-      .values({ ...generic(userId), kind: "buy", title: "Bought NVDA", subtitle: "something better" });
+    const { db, store, userId, walletId } = await setup();
+    await db.insert(activities).values({
+      ...generic(userId, walletId),
+      kind: "buy",
+      title: "Bought NVDA",
+      subtitle: "something better",
+    });
     const advanced = await store.settle(REQUEST, {
       status: "success",
       inTxHash: "0xin",
@@ -124,8 +129,8 @@ describe("enrichDepositActivity", () => {
   });
 
   it("does nothing for a deposit with no fill transaction", async () => {
-    const { db, store, userId } = await setup();
-    await db.insert(activities).values(generic(userId));
+    const { db, store, userId, walletId } = await setup();
+    await db.insert(activities).values(generic(userId, walletId));
     const advanced = await store.settle(REQUEST, { status: "pending", inTxHash: "0xin" });
 
     expect(await enrichDepositActivity(db, advanced!)).toBe(false);
@@ -134,11 +139,11 @@ describe("enrichDepositActivity", () => {
 
 describe("reconcileFundingDeposits", () => {
   it("enriches every landed deposit whose feed row has arrived since", async () => {
-    const { db, store, userId } = await setup();
+    const { db, store, userId, walletId } = await setup();
     await store.settle(REQUEST, { status: "success", inTxHash: "0xin", outTxHash: FILL });
     /* The order the real system runs in: the webhook lands first, wallet-events
        writes the generic row on its next pass, and this closes the gap. */
-    await db.insert(activities).values(generic(userId));
+    await db.insert(activities).values(generic(userId, walletId));
 
     expect(await reconcileFundingDeposits(db)).toBe(1);
 
@@ -153,9 +158,9 @@ describe("reconcileFundingDeposits", () => {
   });
 
   it("ignores a deposit that has not landed", async () => {
-    const { db, store, userId } = await setup();
+    const { db, store, userId, walletId } = await setup();
     await store.settle(REQUEST, { status: "pending", inTxHash: "0xin" });
-    await db.insert(activities).values(generic(userId));
+    await db.insert(activities).values(generic(userId, walletId));
 
     expect(await reconcileFundingDeposits(db)).toBe(0);
   });

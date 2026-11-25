@@ -15,6 +15,7 @@ import {
 } from "../lending/interest.js";
 import {
   LendingRefused,
+  OwnerShort,
   SponsorShort,
   type LendingIntent,
   type LendingPosition,
@@ -22,9 +23,12 @@ import {
 } from "../lending/ports.js";
 import { landedAmounts, planLoanEvents, type PlannedLoanEvent } from "../lending/events.js";
 import type { RecordInput } from "../lending/record.js";
-// Loads the ContextVariableMap declaration so `c.get("identity")` is typed.
+// Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
+import { actingOne, oneWalletOnly, writerOf } from "../wallets/acting.js";
+import type { WalletOwner } from "../wallets/active.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
+import type { TrackedSends } from "../relay/tracked.js";
 import { logger } from "../log/index.js";
 
 const log = logger("borrow");
@@ -48,8 +52,13 @@ export interface BorrowDeps {
    * cover, and remembered so the send route will co-sign it.
    */
   readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
-  /** A borrower's loan events, oldest first: what tells the interest apart from what was lent. */
-  readonly ledger: (userId: string) => Promise<readonly LedgerRow[]>;
+  /**
+   * Told about every loan transaction built, so the send path records it whether or not the app confirms.
+   * A loan has no other record: no job can infer one from the balances.
+   */
+  readonly sends?: Pick<TrackedSends<TrackedLoan>, "remember">;
+  /** One wallet's loan events, oldest first: what tells the interest apart from what was lent. */
+  readonly ledger: (owner: WalletOwner) => Promise<readonly LedgerRow[]>;
 }
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
@@ -120,6 +129,80 @@ const NET_VALUE_REMAINING_TOO_SMALL = 6092;
 /** Native SOL trades under the wrapped-SOL mint, which is how it is priced. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const pct = (d: Decimal | null) => (d === null ? null : toWire(d.toDecimalPlaces(4)));
+
+/** A loan transaction as it was built: what `recordLoan` needs but the signature. */
+export interface TrackedLoan {
+  readonly userId: string;
+  readonly walletId: string;
+  readonly wallet: string;
+  readonly intent: LendingIntent;
+}
+
+export type RecordedLoan =
+  | { readonly kind: "recorded"; readonly written: number; readonly events: readonly string[] }
+  /** The node has not returned the transaction yet. Worth asking again. */
+  | { readonly kind: "pending" }
+  | { readonly kind: "refused"; readonly message: string };
+
+/**
+ * File what a landed lending transaction did, read off the chain.
+ *
+ * Shared by the app's confirm and by the server's own tracking of every
+ * transaction it sent (`lending/sends.ts`): a loan has no other record, and a
+ * confirm that never arrived must not lose it. Recording is idempotent on the
+ * signature.
+ */
+export async function recordLoan(
+  deps: BorrowDeps,
+  input: {
+    readonly userId: string;
+    readonly walletId: string;
+    readonly wallet: string;
+    readonly signature: string;
+    readonly intentOf: (canonical: (ticker: string) => string) => LendingIntent;
+  },
+): Promise<RecordedLoan> {
+  const { wallet, signature } = input;
+  const tx = await deps.history.transaction(signature);
+  if (tx === null) return { kind: "pending" };
+  if (!tx.accountKeys.includes(wallet)) {
+    return { kind: "refused", message: "That transaction is not this wallet's." };
+  }
+
+  const [terms, position] = await Promise.all([
+    deps.lending.terms().catch(() => null),
+    deps.lending.position(wallet),
+  ]);
+  const collateralOf = (ticker: string) =>
+    terms?.collateral.find((t) => t.isStock && t.ticker === ticker.toUpperCase());
+
+  const intent = input.intentOf((ticker) => collateralOf(ticker)?.ticker ?? ticker.toUpperCase());
+  // "All" is sized by the chain as it lands, so the figure is read off the transaction.
+  const planned = landedAmounts(
+    planLoanEvents(intent, (ticker) => collateralOf(ticker)?.decimals ?? 0),
+    tx,
+    { wallet, usdcMint: deps.usdcMint, mintOf: (ticker) => collateralOf(ticker)?.mint ?? null },
+  );
+
+  const usdc = deps.usdcMint;
+  const written = await deps.record(planned, {
+    userId: input.userId,
+    walletId: input.walletId,
+    signature,
+    occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
+    borrowApy: terms?.pool.borrowApy ?? null,
+    debtAfterUsd: position?.debtUsd ?? ZERO,
+    collateralAfterUsd: (position?.deposits ?? []).reduce((s, d) => s.add(d.valueUsd), ZERO),
+    // Money moved in USDC and collateral in the stock, whatever stock the borrow names: the
+    // feed's unique index is on the mint, and a pledge-and-borrow filed twice under the stock
+    // kept only the pledge.
+    mintFor: (event) => {
+      const stock = event.kind === "pledge" || event.kind === "unpledge" ? event.ticker : null;
+      return stock === null ? usdc : (collateralOf(stock)?.mint ?? usdc);
+    },
+  });
+  return { kind: "recorded", written: written.written, events: planned.map((e) => e.kind) };
+}
 
 /**
  * Borrowing USDC against xStocks on Kamino. Reads are Kamino's live terms and
@@ -200,13 +283,13 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
    * The split is null when the ledger cannot account for the debt, rather than
    * calling all of it interest.
    */
-  const loanJson = async (input: CapacityInput, userId: string) => {
+  const loanJson = async (input: CapacityInput, owner: WalletOwner) => {
     // Micro-USDC, the smallest amount there is; Kamino's figures run to forty digits.
     // What is owed rounds up, so a figure read off the wire is never short of it.
     const owed = (input.position?.owedUsdc ?? ZERO).toDecimalPlaces(6, Decimal.ROUND_UP);
     const parts = owed.lte(0)
       ? { principal: ZERO, interest: ZERO }
-      : loanParts(owed, outstandingPrincipal(await deps.ledger(userId)));
+      : loanParts(owed, outstandingPrincipal(await deps.ledger(owner)));
     return {
       owedUsdc: toWire(owed),
       principalUsdc: parts.principal === null ? null : toWire(parts.principal),
@@ -216,25 +299,34 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
     };
   };
 
-  const summaryFor = async (wallet: string, userId: string) => {
-    const input = await inputFor(wallet);
-    const [setup, loan] = await Promise.all([setupCostUsd(input), loanJson(input, userId)]);
+  const summaryFor = async (address: string, owner: WalletOwner) => {
+    const input = await inputFor(address);
+    const [setup, loan] = await Promise.all([setupCostUsd(input), loanJson(input, owner)]);
     return { ...summaryJson(input), setupCostUsd: setup, ...loan };
   };
 
-  /** The whole position: cash, what is pledged and owed, and what can be spent. */
-  app.get("/v1/borrow", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+  /*
+   * One wallet's loan, the chosen wallet's. A Kamino loan is one wallet's
+   * position, and its LTV and liquidation prices mean nothing added to
+   * another's, so `all` is a 400 here; the summary lists every loan's health.
+   */
+  app.get("/v1/borrow", oneWalletOnly(), async (c) => {
+    const wallet = actingOne(c);
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
-    return c.json(await summaryFor(wallet, c.get("identity").userId));
+    return c.json(
+      await summaryFor(wallet.address, { userId: c.get("identity").userId, walletId: wallet.id }),
+    );
   });
 
   /** One stock: whether Kamino accepts it, and what it can be borrowed against. */
-  app.get("/v1/borrow/:ticker", async (c) => {
-    const wallet = c.get("identity").walletAddress;
+  app.get("/v1/borrow/:ticker", oneWalletOnly(), async (c) => {
+    const wallet = actingOne(c);
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const ticker = c.req.param("ticker").toUpperCase();
-    const summary = await summaryFor(wallet, c.get("identity").userId);
+    const summary = await summaryFor(wallet.address, {
+      userId: c.get("identity").userId,
+      walletId: wallet.id,
+    });
     // Only stocks are offered here; other collateral in the market still counts in `account`.
     const row = summary.collateral.find((r) => r.isStock && r.ticker === ticker) ?? null;
     return c.json({
@@ -252,8 +344,11 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
    * reason, before anything is built.
    */
   app.post("/v1/borrow/transactions", async (c) => {
-    const wallet = c.get("identity").walletAddress;
-    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    // The wallet chosen, whose own loan this acts on. See `writerOf`.
+    const writer = writerOf(c);
+    const wallet = writer?.address ?? null;
+    if (writer === null || wallet === null)
+      return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = Request.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
     const body = parsed.data;
@@ -412,8 +507,24 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
 
     let built;
     try {
-      built = await deps.lending.build(wallet, intent, deps.relay?.relayer);
+      /*
+       * Mercury sponsors the Mercury wallet alone. A linked wallet pays its own
+       * network fee and rent: its keys are its own, so SOL Mercury put into it
+       * could be taken straight back out (a USDC account opened with Mercury's
+       * SOL, closed by its owner, opened again on the next borrow).
+       */
+      built = await deps.lending.build(wallet, intent, writer.isPrimary ? deps.relay?.relayer : undefined);
     } catch (error: unknown) {
+      if (error instanceof OwnerShort) {
+        const sol = (n: bigint) => (Number(n) / 1e9).toFixed(3);
+        return c.json(
+          fail(
+            "needs_sol",
+            `A first loan opens Kamino accounts this wallet pays for: it needs about ${sol(error.neededLamports)} SOL, and holds ${sol(error.heldLamports)}. Add some SOL to it and try again.`,
+          ),
+          409,
+        );
+      }
       if (error instanceof SponsorShort) {
         log.error(
           {
@@ -439,6 +550,16 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
       throw error;
     }
     if (deps.relay !== undefined) for (const m of built.messages) deps.relay.builds.remember(m);
+    // The last message is the action's own; any setup before it moves nothing and has nothing to record.
+    const action = built.messages.at(-1);
+    if (action !== undefined) {
+      deps.sends?.remember(action, {
+        userId: c.get("identity").userId,
+        walletId: writer.id,
+        wallet,
+        intent,
+      });
+    }
     return c.json({
       transactions: built.transactions,
       firstTime: built.firstTime,
@@ -463,8 +584,9 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
    * `debt_after_usd` is Kamino's number and it is the one the books use.
    */
   app.post("/v1/borrow/confirm", async (c) => {
-    const wallet = c.get("identity").walletAddress;
-    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const writer = writerOf(c);
+    if (writer === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const wallet = writer.address;
 
     const parsed = ConfirmRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
@@ -477,47 +599,18 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
      * the only account anything has of a loan — no job can infer one from the
      * balances, so a dropped confirm loses the event for good.
      */
-    const tx = await deps.history.transaction(signature);
-    if (tx === null) {
+    const recorded = await recordLoan(deps, {
+      userId: c.get("identity").userId,
+      walletId: writer.id,
+      wallet,
+      signature,
+      intentOf: (canonical) => intentFrom(action, canonical),
+    });
+    if (recorded.kind === "pending") {
       return c.json(fail("transaction_pending", "Transaction is not settled yet. Try again shortly."), 409);
     }
-    if (!tx.accountKeys.includes(wallet)) {
-      return c.json(fail("validation_failed", "That transaction is not this wallet's."), 422);
-    }
-
-    const [terms, position] = await Promise.all([
-      deps.lending.terms().catch(() => null),
-      deps.lending.position(wallet),
-    ]);
-    const collateralOf = (ticker: string) =>
-      terms?.collateral.find((t) => t.isStock && t.ticker === ticker.toUpperCase());
-
-    const intent = intentFrom(action, (ticker) => collateralOf(ticker)?.ticker ?? ticker.toUpperCase());
-    // "All" is sized by the chain as it lands, so the figure is read off the transaction.
-    const planned = landedAmounts(
-      planLoanEvents(intent, (ticker) => collateralOf(ticker)?.decimals ?? 0),
-      tx,
-      { wallet, usdcMint: deps.usdcMint, mintOf: (ticker) => collateralOf(ticker)?.mint ?? null },
-    );
-
-    const usdc = deps.usdcMint;
-    const written = await deps.record(planned, {
-      userId: c.get("identity").userId,
-      signature,
-      occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
-      borrowApy: terms?.pool.borrowApy ?? null,
-      debtAfterUsd: position?.debtUsd ?? ZERO,
-      collateralAfterUsd: (position?.deposits ?? []).reduce((s, d) => s.add(d.valueUsd), ZERO),
-      // Money moved in USDC and collateral in the stock, whatever stock the borrow names: the
-      // feed's unique index is on the mint, and a pledge-and-borrow filed twice under the stock
-      // kept only the pledge.
-      mintFor: (event) => {
-        const stock = event.kind === "pledge" || event.kind === "unpledge" ? event.ticker : null;
-        return stock === null ? usdc : (collateralOf(stock)?.mint ?? usdc);
-      },
-    });
-
-    return c.json({ recorded: written.written, events: planned.map((e) => e.kind) });
+    if (recorded.kind === "refused") return c.json(fail("validation_failed", recorded.message), 422);
+    return c.json({ recorded: recorded.written, events: recorded.events });
   });
 
   return app;

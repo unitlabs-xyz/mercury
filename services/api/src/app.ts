@@ -1,12 +1,13 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
+import { every } from "hono/combine";
 import { httpInstrumentationMiddleware } from "@hono/otel";
 import { allocate, D, DEFAULT_POLICY, toWire } from "@mercury/core";
 import { ConfirmOrderRequest, CreateOrderRequest, InvestBasketRequest, type ErrorCode } from "@mercury/types";
 import type { Deps } from "./deps.js";
 import { priceOrder, type PriceRequest } from "./pricing.js";
 import { gateExecution } from "./orders/gate.js";
-import { planFill } from "./orders/fill.js";
+import { confirmOrder } from "./orders/confirm.js";
 import { decisionToWire } from "./serialize.js";
 import { NO_FEE, quoteFee } from "./relay/quote.js";
 import { tradeCharge, type TradeCharge } from "./relay/fee.js";
@@ -16,14 +17,17 @@ import { createSolanaRpc } from "@solana/kit";
 import { USDC_MINT } from "@mercury/chain";
 import { BASKETS } from "./baskets.js";
 import { requireAuth, type AuthDeps } from "./auth/middleware.js";
+import { actingWallet, mercuryWalletOnly, oneWalletToAct, writerOf } from "./wallets/acting.js";
 import { requestId } from "./telemetry/request-id.js";
 import { logger } from "./log/index.js";
 import type { ReadDeps } from "./deps.js";
 import { activityRoutes } from "./routes/activity.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { walletRoutes } from "./routes/wallets.js";
 import { borrowRoutes } from "./routes/borrow.js";
 import { earnRoutes } from "./routes/earn.js";
 import { sendRoutes } from "./routes/send.js";
+import { moveRoutes } from "./routes/move.js";
 import { instrumentRoutes } from "./routes/instruments.js";
 import { moneyRoutes } from "./routes/money.js";
 import { portfolioRoutes } from "./routes/portfolio.js";
@@ -122,8 +126,89 @@ const orderLog = logger("orders");
  */
 const httpLog = logger("http");
 
+/**
+ * The routes that build, sign or record something for a wallet and that act
+ * for the wallet chosen, linked ones included: every wallet at once is a 400
+ * (`oneWalletToAct`). The rest of `WALLET_ACTIONS` follows as each flow learns
+ * to act for a linked wallet. Reads under these paths pass.
+ */
+const ACTING_ACTIONS = [
+  "/v1/quote",
+  "/v1/orders",
+  "/v1/orders/*",
+  "/v1/transactions/send",
+  "/v1/borrow/*",
+  "/v1/earn/transactions",
+  "/v1/earn/confirm",
+  "/v1/money/send/*",
+  "/v1/move/*",
+] as const;
+
+/**
+ * The routes that build, sign or record something for a wallet and still act
+ * for the Mercury wallet alone, refusing a request made while another wallet,
+ * or every wallet, is chosen; see `mercuryWalletOnly`. Reads under these
+ * paths pass.
+ *
+ * Not here, on purpose: adding money (it always lands in the Mercury wallet,
+ * whichever is chosen), Earn's account settings, the inbox and the wallets
+ * themselves, none of which act for a wallet.
+ */
+const WALLET_ACTIONS = ["/v1/baskets/*"] as const;
+
+/**
+ * The wallet an order is executed and confirmed for: the one it was placed
+ * for, which must still be the one chosen. The wallet is never taken from a
+ * header alone (see `writerOf`), and an order is never built or settled for a
+ * wallet other than its own: switching wallets between placing an order and
+ * approving it is a 409, not a trade for the wallet switched to.
+ */
+const orderWallet = (
+  c: Context,
+  order: { readonly walletId: string | null },
+):
+  | { readonly kind: "ok"; readonly address: string; readonly walletId: string; readonly isPrimary: boolean }
+  | { readonly kind: "refused"; readonly response: Response } => {
+  const writer = writerOf(c);
+  if (writer === null) {
+    return { kind: "refused", response: c.json(fail("unauthorized", "No wallet on this session."), 401) };
+  }
+  /*
+   * No wallet on an order means its wallet was deleted with "Unlink and
+   * delete history" (`order.wallet_id` is `on delete set null`, kept for the
+   * fee records). Every order is placed with a wallet, so this is never one
+   * to finish for whichever wallet is chosen now: a sell-max re-priced for the
+   * Mercury wallet would sell the Mercury wallet's whole position.
+   */
+  if (order.walletId === null) {
+    return {
+      kind: "refused",
+      response: c.json(
+        fail("wallet_gone", "The wallet this order was placed from isn't on your account any more."),
+        409,
+      ),
+    };
+  }
+  if (order.walletId !== writer.id) {
+    return {
+      kind: "refused",
+      response: c.json(
+        fail("wallet_changed", "This order was placed from another wallet. Switch back to it to finish."),
+        409,
+      ),
+    };
+  }
+  return { kind: "ok", address: writer.address, walletId: writer.id, isPrimary: writer.isPrimary };
+};
+
 export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   const app = new Hono();
+  /* Which of the caller's wallets each request is for. Mounted after `requireAuth`, whose identity it reads. */
+  const acting = actingWallet({
+    db: auth.db,
+    ...(auth.onSeen === undefined ? {} : { onSeen: auth.onSeen }),
+    ...(auth.onViewed === undefined ? {} : { onViewed: auth.onViewed }),
+  });
   /* One client for the routes that talk to the chain directly. */
   const rpc = createSolanaRpc(read.send.rpcUrl);
   const lookupTables = cachedLookupTables(rpcLookupTables(rpc));
@@ -155,7 +240,8 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   // and a visitor browsing before signing in should see prices. Registered ahead
   // of the auth middleware, which only guards the routes after it.
   app.route("/", instrumentRoutes(read.instruments));
-  app.route("/", basketRoutes(read.basketTemplates, requireAuth(auth)));
+  // Baskets act for the wallet chosen, a linked one included: it owns its own under Mercury's Glider account.
+  app.route("/", basketRoutes(read.basketTemplates, every(requireAuth(auth), acting, oneWalletToAct())));
 
   /*
    * The waitlist's share links. The waitlist is gone, but people posted their
@@ -177,6 +263,9 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   }
 
   app.use("/v1/*", requireAuth(auth));
+  app.use("/v1/*", acting);
+  for (const path of ACTING_ACTIONS) app.use(path, oneWalletToAct());
+  for (const path of WALLET_ACTIONS) app.use(path, mercuryWalletOnly());
 
   app.onError((err, c) => {
     if (err.message.startsWith("buildDeps:")) return c.json(NOT_READY, 503);
@@ -207,9 +296,11 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
   app.route("/", moneyRoutes(read.money));
   app.route("/", activityRoutes(read.activity));
   app.route("/", notificationRoutes(read.notifications));
+  app.route("/", walletRoutes(read.wallets));
   app.route("/", borrowRoutes(read.borrow));
   app.route("/", earnRoutes(read.earn));
   app.route("/", sendRoutes(read.send));
+  if (read.move) app.route("/", moveRoutes(read.move));
   /* Absent when Relay or the treasury is not configured, so the routes 404 and
      the interface hides the method rather than offering one that cannot work. */
   if (read.fund) app.route("/", fundRoutes(read.fund));
@@ -246,8 +337,11 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const parsed = CreateOrderRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
-    const wallet = c.get("identity").walletAddress;
-    const sponsored = read.send.relay !== undefined && wallet !== null;
+    // The wallet chosen: a sell is priced against what that wallet holds.
+    const writer = writerOf(c);
+    const wallet = writer?.address ?? null;
+    // Sponsored for the Mercury wallet alone: a linked wallet pays the network in SOL, so owes none of it in USDC.
+    const sponsored = read.send.relay !== undefined && wallet !== null && writer?.isPrimary === true;
     const req = toPriceRequest(parsed.data, wallet);
 
     /*
@@ -264,7 +358,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
         priceOrder(market(), req),
         sponsored
           ? quoteFee(
-              { chain: market().chain, prices: market().prices },
+              { chain: market().chain, prices: market().prices, history: market().history },
               { owner: wallet, receivingMint: USDC_MINT },
             )
           : Promise.resolve(NO_FEE),
@@ -302,7 +396,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       !sponsored || probe.kind === "refuse"
         ? NO_FEE
         : await quoteFee(
-            { chain: market().chain, prices: market().prices },
+            { chain: market().chain, prices: market().prices, history: market().history },
             { owner: wallet, receivingMint: probe.best.mint },
           );
     /* On what the buyer pays: the amount they typed, before anything comes out of it. */
@@ -338,12 +432,15 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
     const identity = c.get("identity");
-    const decision = await priceOrder(market(), toPriceRequest(parsed.data, identity.walletAddress, true));
+    // Placed for the wallet chosen now, and kept on the order: executing and confirming act for it.
+    const writer = writerOf(c);
+    const decision = await priceOrder(market(), toPriceRequest(parsed.data, writer?.address ?? null, true));
     if (decision === null) return c.json(fail("not_found", "Unknown instrument."), 404);
 
     const wire = decisionToWire(decision);
     const saved = await read.orders.create({
       userId: identity.userId,
+      ...(writer === null ? {} : { walletId: writer.id }),
       ticker: parsed.data.ticker,
       side: parsed.data.side,
       usdAmount: parsed.data.amount,
@@ -385,10 +482,10 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const shown = order.decision as ReturnType<typeof decisionToWire>;
     if (shown.kind === "refuse") return c.json(fail("instrument_not_tradable", shown.detail), 409);
 
-    // The wallet comes from the identity token Privy signed, never from a
-    // header the caller controls. See services/api/src/auth/identity.ts.
-    const owner = identity.walletAddress;
-    if (owner === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    // The wallet the order was placed for. See `orderWallet`.
+    const acting = orderWallet(c, order);
+    if (acting.kind !== "ok") return acting.response;
+    const owner = acting.address;
 
     /*
      * Settled orders cannot be built again; unsettled ones can.
@@ -443,24 +540,32 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * might pay rent for is the USDC one, whichever wrapper wins, so there is
      * no winner to find first.
      */
-    const network = selling
-      ? await quoteFee(
-          { chain: market().chain, prices: market().prices },
-          { owner, receivingMint: USDC_MINT },
-        )
-      : await (async () => {
-          const probe = await priceOrder(market(), {
-            ticker: shown.ticker,
-            side: shown.side,
-            amount: shown.amount,
-            issuer,
-          });
-          if (probe === null || probe.kind === "refuse") return NO_FEE;
-          return quoteFee(
-            { chain: market().chain, prices: market().prices },
-            { owner, receivingMint: probe.best.mint },
-          );
-        })();
+    /*
+     * A linked wallet pays its own network fee and rent, in SOL, as the fee
+     * payer of its own trade: its keys are its own, so rent Mercury put up for
+     * it could be taken back out. It is charged Mercury's fee alone.
+     */
+    const selfPaying = !acting.isPrimary;
+    const network = selfPaying
+      ? NO_FEE
+      : selling
+        ? await quoteFee(
+            { chain: market().chain, prices: market().prices, history: market().history },
+            { owner, receivingMint: USDC_MINT },
+          )
+        : await (async () => {
+            const probe = await priceOrder(market(), {
+              ticker: shown.ticker,
+              side: shown.side,
+              amount: shown.amount,
+              issuer,
+            });
+            if (probe === null || probe.kind === "refuse") return NO_FEE;
+            return quoteFee(
+              { chain: market().chain, prices: market().prices, history: market().history },
+              { owner, receivingMint: probe.best.mint },
+            );
+          })();
     /*
      * A buy's charge is known now, from the dollars agreed to. A sell's waits
      * for the fresh quote below: Mercury's share is of what the shares fetch,
@@ -632,7 +737,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * because the network part turns on whether the buyer holds the token —
      * which a moment ago they might not have.
      */
-    const { wire: built } = await buildSponsored(
+    const { wire: built, messageBytes } = await buildSponsored(
       {
         quotes: market().quotes,
         lookups: lookupTables,
@@ -645,10 +750,17 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
           };
         },
       },
-      { quote, owner, feeUsdc: charge.usdc, side: shown.side },
+      { quote, owner, feeUsdc: charge.usdc, side: shown.side, selfPaying },
     );
     const transactions = [built];
     await record("executing", charge.mercury.toString());
+    // Settled by the server when the transaction goes out, whether or not this page is open to confirm it.
+    read.orderSends?.remember(messageBytes, {
+      userId: identity.userId,
+      walletId: acting.walletId,
+      address: owner,
+      orderId: order.id,
+    });
     return c.json({
       transactions,
       decision: wire,
@@ -683,60 +795,35 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     const decision = order.decision as ReturnType<typeof decisionToWire>;
     if (decision.kind === "refuse") return c.json(fail("instrument_not_tradable", decision.detail), 409);
 
-    const owner = identity.walletAddress;
-    if (owner === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const acting = orderWallet(c, order);
+    if (acting.kind !== "ok") return acting.response;
 
-    const mint = decision.best.mint;
-    const [ref, token, multiplier, board] = await Promise.all([
-      read.fills.tokenRef(mint),
-      market().registry.byMint(mint),
-      market().multipliers.multiplierFor(mint),
-      // The underlying quote, to record on the lot beside the price paid. It
-      // is read here rather than taken from the order's own `referencePrice`
-      // because that one is from the quote the user was shown, which can be a
-      // minute older than the fill.
-      market().prices.pricesFor([mint]),
-    ]);
-    if (ref === null || token === null) return c.json(fail("not_found", "Unknown token."), 404);
-
-    /*
-     * Not yet on chain is a different answer from never: a client can confirm
-     * before the node it asks has caught up, and that is worth retrying. It
-     * gets the retryable code basket funding already uses, because `not_found`
-     * also means an unknown order or token here — a caller cannot tell a
-     * transaction that will appear from one of those, and so cannot know
-     * whether asking again is worth anything.
-     */
-    const tx = await market().history.transaction(parsed.data.signature);
-    if (tx === null) {
+    const confirmed = await confirmOrder(
+      {
+        history: market().history,
+        registry: market().registry,
+        multipliers: market().multipliers,
+        prices: market().prices,
+        fills: read.fills,
+        relayer: read.send.relay?.signer.address,
+      },
+      order,
+      {
+        userId: identity.userId,
+        walletId: acting.walletId,
+        address: acting.address,
+        signature: parsed.data.signature,
+      },
+    );
+    if (confirmed.kind === "pending") {
+      // A different answer from never, and the retryable code basket funding already uses: `not_found`
+      // also means an unknown order or token here, so a caller could not tell a transaction that will
+      // appear from one of those.
       return c.json(fail("transaction_pending", "Transaction is not settled yet. Try again shortly."), 409);
     }
-
-    const fill = planFill(tx, {
-      wallet: owner,
-      side: decision.side,
-      mint,
-      decimals: token.decimals,
-      multiplier: multiplier ?? D(1),
-      // Without this the charge for sponsoring is indistinguishable from money
-      // the swap spent, and it lands in the share price.
-      ...(read.send.relay === undefined ? {} : { relayer: read.send.relay.signer.address }),
-      now: new Date(),
-    });
-    if (fill.kind === "not_a_fill") return c.json(fail("validation_failed", fill.detail), 422);
-
-    const settled = await read.fills.settle({
-      userId: identity.userId,
-      orderId: order.id,
-      signature: parsed.data.signature,
-      side: decision.side,
-      ticker: decision.ticker,
-      mint,
-      tokenId: ref.tokenId,
-      instrumentId: ref.instrumentId,
-      fill,
-      referencePricePerShare: board.get(mint)?.pricePerShare ?? null,
-    });
+    if (confirmed.kind === "refused")
+      return c.json(fail(confirmed.code, confirmed.message), confirmed.status);
+    const { fill, settled } = confirmed;
 
     return c.json({
       status: "filled",

@@ -143,3 +143,48 @@ describe("readConfig, the background jobs' RPC endpoints", () => {
     );
   });
 });
+
+describe("readConfig, linked wallets", () => {
+  it("names the beta as the app a wallet is linked from, when nothing says otherwise", () => {
+    expect(readConfig(base).appUrl).toBe("https://beta.trymercury.xyz");
+    expect(readConfig({ ...base, APP_URL: "" }).appUrl).toBe("https://beta.trymercury.xyz");
+  });
+
+  it("reads the app from APP_URL, as its origin", () => {
+    expect(readConfig({ ...base, APP_URL: "https://trymercury.xyz/app/" }).appUrl).toBe(
+      "https://trymercury.xyz",
+    );
+    expect(readConfig({ ...base, APP_URL: "http://localhost:5173" }).appUrl).toBe("http://localhost:5173");
+  });
+
+  /* The domain is what a wallet shows the person it asks to sign. */
+  it("refuses an app that is not a URL, or is plain http anywhere but this machine", () => {
+    for (const bad of ["beta.trymercury.xyz", "http://trymercury.xyz", "ftp://trymercury.xyz"]) {
+      expect(() => readConfig({ ...base, APP_URL: bad })).toThrow("APP_URL");
+    }
+  });
+
+  it("lets a person link five wallets when nothing says otherwise", () => {
+    expect(readConfig(base).linkedWalletLimit).toBe(5);
+    expect(readConfig({ ...base, LINKED_WALLET_LIMIT: "" }).linkedWalletLimit).toBe(5);
+    expect(readConfig({ ...base, LINKED_WALLET_LIMIT: "7" }).linkedWalletLimit).toBe(7);
+  });
+
+  it("refuses a limit that would offer linking and refuse every link", () => {
+    for (const bad of ["0", "-1", "2.5", "five"]) {
+      expect(() => readConfig({ ...base, LINKED_WALLET_LIMIT: bad })).toThrow("LINKED_WALLET_LIMIT");
+    }
+  });
+
+  it("gives the history reader two calls a second when nothing says otherwise", () => {
+    expect(readConfig(base).historyRps).toBe(2);
+    expect(readConfig({ ...base, HISTORY_RPC_RPS: "" }).historyRps).toBe(2);
+    expect(readConfig({ ...base, HISTORY_RPC_RPS: "0.5" }).historyRps).toBe(0.5);
+  });
+
+  it("refuses a history rate that would stop it, or that is not a number", () => {
+    for (const bad of ["0", "-1", "fast", "Infinity"]) {
+      expect(() => readConfig({ ...base, HISTORY_RPC_RPS: bad })).toThrow("HISTORY_RPC_RPS");
+    }
+  });
+});
