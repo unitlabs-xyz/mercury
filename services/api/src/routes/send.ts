@@ -243,10 +243,17 @@ export function sendRoutes(deps: SendDeps): Hono {
    * own network costs in SOL on that path, so charging USDC as well would be
    * charging twice.
    */
-  const rentOwed = async (destination: string): Promise<Decimal> =>
-    deps.relay === undefined || deps.fees === undefined
-      ? D(0)
-      : (await quoteTransferFee(deps.fees, { destination })).usdc;
+  const rentOwed = async (destination: string, sponsored: boolean): Promise<Decimal> =>
+    !sponsored || deps.fees === undefined ? D(0) : (await quoteTransferFee(deps.fees, { destination })).usdc;
+
+  /**
+   * The relayer, for the Mercury wallet alone. A linked wallet pays its own
+   * network fee and rent in SOL, so it takes the wallet-paid path and owes
+   * nothing in USDC: its keys are its own, and rent Mercury put up for it
+   * could be taken straight back out.
+   */
+  const relayFor = (writer: { readonly isPrimary: boolean } | null) =>
+    writer?.isPrimary === true ? deps.relay : undefined;
 
   /**
    * What a transfer to this recipient will cost, before an amount is typed.
@@ -258,8 +265,10 @@ export function sendRoutes(deps: SendDeps): Hono {
    */
   app.post("/v1/money/send/quote", async (c) => {
     // The wallet chosen, which the money leaves. See `writerOf`.
-    const wallet = writerOf(c)?.address ?? null;
+    const writer = writerOf(c);
+    const wallet = writer?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const sponsored = relayFor(writer) !== undefined;
     const parsed = QuoteBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", "Enter a recipient address."), 400);
 
@@ -271,8 +280,8 @@ export function sendRoutes(deps: SendDeps): Hono {
     }
 
     try {
-      const feeUsdc = await rentOwed(destination);
-      return c.json({ feeUsd: feeUsdc.toString(), sponsored: deps.relay !== undefined });
+      const feeUsdc = await rentOwed(destination, sponsored);
+      return c.json({ feeUsd: feeUsdc.toString(), sponsored });
     } catch (err) {
       /*
        * A quote we cannot get is not a reason to block a transfer. Zero and
@@ -280,13 +289,14 @@ export function sendRoutes(deps: SendDeps): Hono {
        * `prepare` prices it again for real.
        */
       log.error({ err }, "could not quote the transfer fee");
-      return c.json({ feeUsd: "0", sponsored: deps.relay !== undefined });
+      return c.json({ feeUsd: "0", sponsored });
     }
   });
 
   app.post("/v1/money/send/prepare", async (c) => {
     // The wallet chosen, which the money leaves. See `writerOf`.
-    const wallet = writerOf(c)?.address ?? null;
+    const writer = writerOf(c);
+    const wallet = writer?.address ?? null;
     if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = PrepareBody.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
@@ -306,11 +316,11 @@ export function sendRoutes(deps: SendDeps): Hono {
     if (destination === wallet)
       return c.json(fail("validation_failed", "You cannot send to your own wallet."), 400);
 
-    const relay = deps.relay;
+    const relay = relayFor(writer);
     try {
       const [{ value: lifetime }, feeUsdc] = await Promise.all([
         rpc.getLatestBlockhash({ commitment: "confirmed" }).send(),
-        rentOwed(destination),
+        rentOwed(destination, relay !== undefined),
       ]);
 
       /*

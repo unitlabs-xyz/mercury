@@ -128,6 +128,21 @@ export class LendingRefused extends Error {
  * doing and not theirs to fix, so it is said as an outage, and logged for
  * whoever tops the relayer up.
  */
+/**
+ * A wallet paying its own way (a linked wallet) holds too little SOL for its
+ * first loan: Kamino's account setup is about 0.03 SOL, which the wallet pays
+ * as its own rent. Said before anything is signed, with what it needs.
+ */
+export class OwnerShort extends Error {
+  constructor(
+    readonly heldLamports: bigint,
+    readonly neededLamports: bigint,
+  ) {
+    super(`kamino: the wallet holds ${heldLamports} lamports and its first loan needs ${neededLamports}`);
+    this.name = "OwnerShort";
+  }
+}
+
 export class SponsorShort extends Error {
   constructor(
     readonly relayer: string,

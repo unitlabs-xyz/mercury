@@ -15,6 +15,7 @@ import {
 } from "../lending/interest.js";
 import {
   LendingRefused,
+  OwnerShort,
   SponsorShort,
   type LendingIntent,
   type LendingPosition,
@@ -264,8 +265,10 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
    */
   app.post("/v1/borrow/transactions", async (c) => {
     // The wallet chosen, whose own loan this acts on. See `writerOf`.
-    const wallet = writerOf(c)?.address ?? null;
-    if (wallet === null) return c.json(fail("unauthorized", "No wallet on this session."), 401);
+    const writer = writerOf(c);
+    const wallet = writer?.address ?? null;
+    if (writer === null || wallet === null)
+      return c.json(fail("unauthorized", "No wallet on this session."), 401);
     const parsed = Request.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
     const body = parsed.data;
@@ -424,8 +427,24 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
 
     let built;
     try {
-      built = await deps.lending.build(wallet, intent, deps.relay?.relayer);
+      /*
+       * Mercury sponsors the Mercury wallet alone. A linked wallet pays its own
+       * network fee and rent: its keys are its own, so SOL Mercury put into it
+       * could be taken straight back out (a USDC account opened with Mercury's
+       * SOL, closed by its owner, opened again on the next borrow).
+       */
+      built = await deps.lending.build(wallet, intent, writer.isPrimary ? deps.relay?.relayer : undefined);
     } catch (error: unknown) {
+      if (error instanceof OwnerShort) {
+        const sol = (n: bigint) => (Number(n) / 1e9).toFixed(3);
+        return c.json(
+          fail(
+            "needs_sol",
+            `A first loan opens Kamino accounts this wallet pays for: it needs about ${sol(error.neededLamports)} SOL, and holds ${sol(error.heldLamports)}. Add some SOL to it and try again.`,
+          ),
+          409,
+        );
+      }
       if (error instanceof SponsorShort) {
         log.error(
           {

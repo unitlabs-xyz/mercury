@@ -167,7 +167,7 @@ const orderWallet = (
   c: Context,
   order: { readonly walletId: string | null },
 ):
-  | { readonly kind: "ok"; readonly address: string; readonly walletId: string }
+  | { readonly kind: "ok"; readonly address: string; readonly walletId: string; readonly isPrimary: boolean }
   | { readonly kind: "refused"; readonly response: Response } => {
   const writer = writerOf(c);
   if (writer === null) {
@@ -198,7 +198,7 @@ const orderWallet = (
       ),
     };
   }
-  return { kind: "ok", address: writer.address, walletId: writer.id };
+  return { kind: "ok", address: writer.address, walletId: writer.id, isPrimary: writer.isPrimary };
 };
 
 export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
@@ -338,8 +338,10 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     if (!parsed.success) return c.json(fail("validation_failed", parsed.error.message), 400);
 
     // The wallet chosen: a sell is priced against what that wallet holds.
-    const wallet = writerOf(c)?.address ?? null;
-    const sponsored = read.send.relay !== undefined && wallet !== null;
+    const writer = writerOf(c);
+    const wallet = writer?.address ?? null;
+    // Sponsored for the Mercury wallet alone: a linked wallet pays the network in SOL, so owes none of it in USDC.
+    const sponsored = read.send.relay !== undefined && wallet !== null && writer?.isPrimary === true;
     const req = toPriceRequest(parsed.data, wallet);
 
     /*
@@ -356,7 +358,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
         priceOrder(market(), req),
         sponsored
           ? quoteFee(
-              { chain: market().chain, prices: market().prices },
+              { chain: market().chain, prices: market().prices, history: market().history },
               { owner: wallet, receivingMint: USDC_MINT },
             )
           : Promise.resolve(NO_FEE),
@@ -394,7 +396,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
       !sponsored || probe.kind === "refuse"
         ? NO_FEE
         : await quoteFee(
-            { chain: market().chain, prices: market().prices },
+            { chain: market().chain, prices: market().prices, history: market().history },
             { owner: wallet, receivingMint: probe.best.mint },
           );
     /* On what the buyer pays: the amount they typed, before anything comes out of it. */
@@ -538,24 +540,32 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * might pay rent for is the USDC one, whichever wrapper wins, so there is
      * no winner to find first.
      */
-    const network = selling
-      ? await quoteFee(
-          { chain: market().chain, prices: market().prices },
-          { owner, receivingMint: USDC_MINT },
-        )
-      : await (async () => {
-          const probe = await priceOrder(market(), {
-            ticker: shown.ticker,
-            side: shown.side,
-            amount: shown.amount,
-            issuer,
-          });
-          if (probe === null || probe.kind === "refuse") return NO_FEE;
-          return quoteFee(
-            { chain: market().chain, prices: market().prices },
-            { owner, receivingMint: probe.best.mint },
-          );
-        })();
+    /*
+     * A linked wallet pays its own network fee and rent, in SOL, as the fee
+     * payer of its own trade: its keys are its own, so rent Mercury put up for
+     * it could be taken back out. It is charged Mercury's fee alone.
+     */
+    const selfPaying = !acting.isPrimary;
+    const network = selfPaying
+      ? NO_FEE
+      : selling
+        ? await quoteFee(
+            { chain: market().chain, prices: market().prices, history: market().history },
+            { owner, receivingMint: USDC_MINT },
+          )
+        : await (async () => {
+            const probe = await priceOrder(market(), {
+              ticker: shown.ticker,
+              side: shown.side,
+              amount: shown.amount,
+              issuer,
+            });
+            if (probe === null || probe.kind === "refuse") return NO_FEE;
+            return quoteFee(
+              { chain: market().chain, prices: market().prices, history: market().history },
+              { owner, receivingMint: probe.best.mint },
+            );
+          })();
     /*
      * A buy's charge is known now, from the dollars agreed to. A sell's waits
      * for the fresh quote below: Mercury's share is of what the shares fetch,
@@ -740,7 +750,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
           };
         },
       },
-      { quote, owner, feeUsdc: charge.usdc, side: shown.side },
+      { quote, owner, feeUsdc: charge.usdc, side: shown.side, selfPaying },
     );
     const transactions = [built];
     await record("executing", charge.mercury.toString());

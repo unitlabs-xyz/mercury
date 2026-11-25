@@ -21,7 +21,7 @@ import type { SendDeps } from "./send.js";
 import { inMemoryBuilds } from "../relay/builds.js";
 import { getBase64Encoder, getTransactionDecoder } from "@solana/kit";
 import { D } from "@mercury/core";
-import { actingAs } from "../wallets/testing.js";
+import { actingAs, actingLinked } from "../wallets/testing.js";
 import { USDC_MINT } from "@mercury/chain";
 
 const lifetime = { blockhash: "11111111111111111111111111111111" as Blockhash, lastValidBlockHeight: 1n };
@@ -280,6 +280,8 @@ const quote = (opts: {
   sponsored?: boolean;
   recipientHoldsUsdc?: boolean;
   solUsd?: string | null;
+  /** The money leaves a linked wallet rather than the Mercury one. */
+  linked?: boolean;
 }) => {
   const a = new Hono();
   a.use("*", async (c, next) => {
@@ -291,7 +293,10 @@ const quote = (opts: {
     // The Mercury wallet chosen, as the acting middleware leaves it for a session with one.
     {
       const signed = c.get("identity").walletAddress;
-      c.set("acting", { all: false, wallets: signed === null ? [] : [actingAs(signed)] });
+      c.set("acting", {
+        all: false,
+        wallets: signed === null ? [] : [opts.linked === true ? actingLinked(signed) : actingAs(signed)],
+      });
     }
     await next();
   });
@@ -329,6 +334,11 @@ describe("POST /v1/money/send/quote", () => {
    */
   it("charges nothing and claims nothing when no relayer is configured", async () => {
     const res = await quote({ sponsored: false });
+    expect(await res.json()).toEqual({ feeUsd: "0", sponsored: false });
+  });
+
+  it("sponsors nothing from a linked wallet: it pays its own fee and rent in SOL, and owes nothing in USDC", async () => {
+    const res = await quote({ linked: true });
     expect(await res.json()).toEqual({ feeUsd: "0", sponsored: false });
   });
 

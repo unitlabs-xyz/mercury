@@ -39,8 +39,9 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
  * One borrowing action, end to end: the server checks it against the safety
  * target and builds unsigned transactions, the embedded wallet signs each, and
  * the server broadcasts them in order, waiting for each to confirm. A first
- * action opens the Kamino account in its own transaction, so a first-time
- * borrower signs once too, and Mercury pays for the account.
+ * action opens the Kamino account in the same transaction, so a first-time
+ * borrower signs once too. Mercury pays for that account in the Mercury
+ * wallet; a linked wallet pays for its own, in SOL.
  */
 export const useBorrowAction = () => {
   const qc = useQueryClient();

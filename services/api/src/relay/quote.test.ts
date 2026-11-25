@@ -63,6 +63,40 @@ describe("quoteFee", () => {
     expect(fee.usdc.toString()).toBe("0.01");
   });
 
+  /*
+   * The real balance read leaves out an emptied account, so the zero row above
+   * never reaches here from the node. The account list does keep it.
+   */
+  it("finds an emptied account in the account list, where the balance read leaves it out", async () => {
+    const fee = await quoteFee(
+      {
+        ...deps([], "119.39"),
+        history: {
+          ownedTokenAccounts: async () => [
+            { address: "acct", mint: SPCX, programId: "Tokenz", rawAmount: 0n, decimals: 8 },
+          ],
+        },
+      },
+      { owner: OWNER, receivingMint: SPCX },
+    );
+    expect(fee.usdc.toString()).toBe("0.01");
+  });
+
+  it("finds a recipient's emptied USDC account the same way, and asks no rent for it", async () => {
+    const fee = await quoteTransferFee(
+      {
+        ...deps([], "119.39"),
+        history: {
+          ownedTokenAccounts: async () => [
+            { address: "acct", mint: USDC_MINT, programId: "Tokenkeg", rawAmount: 0n, decimals: 6 },
+          ],
+        },
+      },
+      { destination: OWNER },
+    );
+    expect(fee.usdc.isZero()).toBe(true);
+  });
+
   it("does not let another token's balance excuse this one's rent", async () => {
     const other = "Xs7ZdzSHLU9GLSSPoSZuMkQ8GHjNKz1F8gUQRA2ZfZ7";
     const fee = await quoteFee(deps([held(other)], "119.39"), { owner: OWNER, receivingMint: SPCX });

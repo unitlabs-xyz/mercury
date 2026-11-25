@@ -614,7 +614,7 @@ export class BasketService {
     return costs.length === 0 ? undefined : costs;
   }
 
-  async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string) {
+  async prepareFunding(slug: string, ownerAccountId: string, amountUsd: string, sponsored = true) {
     const amountRaw = usdcRaw(amountUsd);
     const { template, provider } = await this.templateForEnrollment(slug);
     if (!this.deps.funding)
@@ -640,7 +640,7 @@ export class BasketService {
 
     let prepared;
     try {
-      prepared = await this.deps.funding.prepare(ownerAccountId, destinationAccountId, amountRaw);
+      prepared = await this.deps.funding.prepare(ownerAccountId, destinationAccountId, amountRaw, sponsored);
     } catch (error) {
       if (error instanceof BasketFundingPreflightError)
         throw new BasketEnrollmentError(

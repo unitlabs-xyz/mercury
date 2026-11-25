@@ -1,10 +1,9 @@
 import { D, type Decimal } from "@mercury/core";
 import type { OwnedTokenAccount } from "@mercury/chain";
-import { transferFee } from "../relay/fee.js";
 import type { MoveToken } from "./build.js";
 
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-const USDC_UNITS = D(10).pow(6);
+const LAMPORTS_PER_SOL = D(1_000_000_000);
 
 export interface MovePlanInput {
   /** The linked wallet's token accounts, as the node has them. */
@@ -16,25 +15,26 @@ export interface MovePlanInput {
    * the wallet holds. A mint left out of it is not moved.
    */
   readonly asked?: ReadonlyMap<string, bigint> | undefined;
-  /** The mints the Mercury wallet already has an account for: no rent is owed for those. */
+  /**
+   * The mints the Mercury wallet already has an account for, empty ones
+   * included: no rent is owed for those, since the account is what rent pays
+   * for, not the tokens in it.
+   */
   readonly mercuryHolds: ReadonlySet<string>;
   /** Rent for one new account, in lamports, by the program it lives under. */
   readonly rent: { readonly classic: bigint; readonly token2022: bigint };
-  /** Undefined when SOL has no price: then nothing is charged, as for a trade. */
+  /** Undefined when SOL has no price: the rent is then said in SOL only. */
   readonly solPriceUsd: Decimal | undefined;
-  readonly usdcMint: string;
 }
 
 export type MovePlan =
   | {
       readonly ok: true;
       readonly tokens: readonly MoveToken[];
-      /** What the move repays the relayer, in USDC's smallest unit; zero when Mercury covers it. */
-      readonly feeUsdcRaw: bigint;
-      /** The rent of the accounts the Mercury wallet lacks, in dollars, whoever pays it. */
+      /** The rent of the accounts the Mercury wallet lacks, which the linked wallet pays in SOL. */
+      readonly rentLamports: bigint;
+      /** The same in dollars, at SOL's price now; zero when SOL has no price. */
       readonly rentUsd: Decimal;
-      /** True when the rent is owed but no USDC moves to take it from, so Mercury pays. */
-      readonly coveredByMercury: boolean;
     }
   | {
       readonly ok: false;
@@ -45,12 +45,14 @@ export type MovePlan =
 /**
  * What a move will do, before anything is built: which of the linked wallet's
  * accounts each token leaves from, and what opening the Mercury wallet's
- * missing accounts costs and who pays it.
+ * missing accounts costs.
  *
- * The rent is the one cost: the relayer opens each account the Mercury wallet
- * lacks and is repaid from the USDC that moves, when there is more than
- * enough of it. When no USDC moves, or too little, Mercury covers it. There is
- * no Mercury fee on a move between a person's own wallets.
+ * The linked wallet pays it all, in SOL: the network fee and the rent of each
+ * account the Mercury wallet lacks. It is the person's own wallet, signing for
+ * their own money going into their own account. Mercury sponsors only the
+ * Mercury wallet, whose accounts it alone can close; a linked wallet's keys are
+ * its own, so rent Mercury put up there could be taken back out. There is no
+ * Mercury fee on a move between a person's own wallets.
  *
  * A token in two of the wallet's accounts moves from each, the largest first,
  * until what was asked for is reached.
@@ -96,21 +98,9 @@ export const planMove = (input: MovePlanInput): MovePlan => {
     (s, program) => s + (program === TOKEN_2022 ? input.rent.token2022 : input.rent.classic),
     0n,
   );
-  const fee =
+  const rentUsd =
     input.solPriceUsd === undefined || input.solPriceUsd.lte(0)
       ? D(0)
-      : transferFee({ rentLamports: Number(rentLamports), solPriceUsd: input.solPriceUsd }).usdc;
-  const feeRaw = BigInt(fee.mul(USDC_UNITS).ceil().toFixed());
-
-  // Only from the one USDC account the build takes it from, and never all of it.
-  const firstUsdc = tokens.find((t) => t.mint === input.usdcMint);
-  const takeable = firstUsdc !== undefined && firstUsdc.amountRaw > feeRaw;
-  const charged = feeRaw > 0n && takeable ? feeRaw : 0n;
-  return {
-    ok: true,
-    tokens,
-    feeUsdcRaw: charged,
-    rentUsd: fee,
-    coveredByMercury: feeRaw > 0n && charged === 0n,
-  };
+      : D(rentLamports.toString()).div(LAMPORTS_PER_SOL).mul(input.solPriceUsd);
+  return { ok: true, tokens, rentLamports, rentUsd };
 };

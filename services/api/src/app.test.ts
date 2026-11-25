@@ -2,7 +2,12 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { getBase64Encoder, getCompiledTransactionMessageDecoder, getTransactionDecoder } from "@solana/kit";
+import {
+  generateKeyPairSigner,
+  getBase64Encoder,
+  getCompiledTransactionMessageDecoder,
+  getTransactionDecoder,
+} from "@solana/kit";
 import { D } from "@mercury/core";
 import { USDC_MINT, type TokenBalance } from "@mercury/chain";
 import { createApp } from "./app.js";
@@ -63,6 +68,12 @@ const chargedIn = (wire: string): bigint => {
   let n = 0n;
   for (let i = data.length - 1; i >= 1; i--) n = (n << 8n) | BigInt(data[i] ?? 0);
   return n;
+};
+
+/** Who pays a built transaction's network fee: the message's first account. */
+const feePayerOf = (wire: string): string => {
+  const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
+  return getCompiledTransactionMessageDecoder().decode(tx.messageBytes).staticAccounts[0]!;
 };
 
 const held = (mint: string, whole: string, decimals: number): TokenBalance => ({
@@ -489,6 +500,31 @@ describe("which wallet a write is for", () => {
     expect(res.status).toBe(200);
     const { orderId } = (await res.json()) as { orderId: string };
     expect(await (await h.get(`/v1/orders/${orderId}`)).json()).toMatchObject({ walletId: h.linkedId });
+  });
+
+  /*
+   * A linked wallet's keys are its own, so rent Mercury put up for it could be
+   * taken back out. It pays its own network fee and rent in SOL, as the fee
+   * payer of its own trade, and is charged Mercury's fee alone.
+   */
+  it("has a linked wallet pay its own network fee: it is the fee payer, and only Mercury's fee is charged", async () => {
+    const h = await harness();
+    await h.get("/v1/me");
+    const [me] = await h.db.select().from(users);
+    const address = (await generateKeyPairSigner()).address;
+    const [linked] = await h.db
+      .insert(wallets)
+      .values({ userId: me!.id, address, kind: "external", isPrimary: false, linkedAt: new Date() })
+      .returning();
+    const { orderId } = (await (
+      await h.postAs(linked!.id, "/v1/orders", { ticker: "NVDA", side: "buy", amount: "500" })
+    ).json()) as { orderId: string };
+    const res = await h.postAs(linked!.id, `/v1/orders/${orderId}/execute`, {});
+    expect(res.status).toBe(200);
+    const { transactions } = (await res.json()) as { transactions: string[] };
+    expect(feePayerOf(transactions[0]!)).toBe(address);
+    // $2.50 to Mercury, and nothing for a network it pays itself.
+    expect(chargedIn(transactions[0]!)).toBe(2_500_000n);
   });
 
   it("finishes an order only for the wallet it was placed for, never the one switched to", async () => {

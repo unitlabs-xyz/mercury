@@ -39,11 +39,12 @@ export class SolanaBasketFunding implements BasketFunding {
     this.rpc = createSolanaRpc(rpcUrl);
   }
 
-  async prepare(ownerAccountId: string, destinationAccountId: string, amountRaw: bigint) {
+  async prepare(ownerAccountId: string, destinationAccountId: string, amountRaw: bigint, sponsored = true) {
     const owner = nativeAddress(ownerAccountId);
     const destination = nativeAddress(destinationAccountId);
     if (owner === destination) throw new Error("Portfolio account cannot be the owner's wallet");
-    const relay = this.relay;
+    // A linked wallet pays its own network fee in SOL; the relayer sponsors the Mercury wallet alone.
+    const relay = sponsored ? this.relay : undefined;
 
     const { value: lifetime } = await this.rpc.getLatestBlockhash({ commitment: "confirmed" }).send();
 

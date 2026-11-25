@@ -13,7 +13,6 @@ import type { OwnedTokenAccount, TokenBalance } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import { inMemoryBuilds } from "../relay/builds.js";
 import { decodeSponsored } from "../relay/decode.js";
-import { validateSponsored } from "../relay/validate.js";
 import type { Acting } from "../wallets/acting.js";
 import { actingAs, actingLinked } from "../wallets/testing.js";
 import type { BuiltMove } from "../moves/sends.js";
@@ -30,6 +29,7 @@ type Body = {
   transactions: { transaction: string; moved: { mint: string; amountRaw: string }[] }[];
   feeUsd: string;
   rentUsd: string;
+  rentSol: string;
   coveredByMercury: boolean;
   error: { code: string; message: string };
   mint?: string;
@@ -57,15 +57,22 @@ const world = async (
   const prices = {
     pricesFor: async () => new Map([[SOL, { usdPricePerToken: D(over.solPrice ?? "200") }]]),
   } as unknown as PriceBoard;
+  // The Mercury wallet's accounts as the node lists them: empty ones too.
+  const mercuryAccounts = (over.mercuryHolds ?? []).map((mint): OwnedTokenAccount => ({
+    address: `m-${mint}`,
+    mint,
+    programId: TOKEN,
+    rawAmount: 0n,
+    decimals: 6,
+  }));
   const deps: MoveDeps = {
     chain: {
-      tokenBalances: async () =>
-        (over.mercuryHolds ?? []).map(
-          (mint) => ({ mint, rawAmount: 1n, decimals: 6 }) as unknown as TokenBalance,
-        ),
+      tokenBalances: async () => [] as TokenBalance[],
       rentExemption: async (bytes) => BigInt(128 + bytes) * 6_960n,
     },
-    history: { ownedTokenAccounts: async () => owned },
+    history: {
+      ownedTokenAccounts: async (who) => (who === phantom!.address ? owned : mercuryAccounts),
+    },
     prices,
     usdcMint: USDC,
     listed: async () =>
@@ -78,7 +85,6 @@ const world = async (
       blockhash: "EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k" as Blockhash,
       lastValidBlockHeight: 100n,
     }),
-    relay: { relayer: relayer!.address, builds },
     sends: { remember: (bytes, move) => remembered.push({ bytes, move }) },
     now: () => STARTED,
   };
@@ -166,12 +172,6 @@ describe("GET /v1/move/tokens", () => {
     });
   });
 
-  it("says moving isn't available without a relayer, rather than offering it", async () => {
-    const w = await world();
-    const { relay: _relay, ...unsponsored } = w.deps;
-    expect((await list(appWith(w, unsponsored))).body).toEqual({ available: false, tokens: [] });
-  });
-
   it("is only for a linked wallet", async () => {
     const w = await world();
     const { status } = await list(appWith(w, w.deps, { all: false, wallets: [w.MERCURY] }));
@@ -180,47 +180,40 @@ describe("GET /v1/move/tokens", () => {
 });
 
 describe("POST /v1/move/prepare", () => {
-  it("builds the move for the linked wallet to sign, which the relayer will then co-sign", async () => {
+  it("builds the move for the linked wallet to sign and send on its own: it pays the fee, not the relayer", async () => {
     const w = await world();
     const { status, body } = await prepare(appWith(w));
     expect(status).toBe(200);
     expect(body.transactions).toHaveLength(1);
     for (const t of body.transactions) {
       const tx = getTransactionDecoder().decode(getBase64Encoder().encode(t.transaction));
-      // Remembered, so the relayer recognises it; the relayer signs nothing it did not build.
-      expect(w.builds.recognises(tx.messageBytes as unknown as Uint8Array)).toBe(true);
+      // Nothing for the relayer to recognise: it pays for none of it.
+      expect(w.builds.recognises(tx.messageBytes as unknown as Uint8Array)).toBe(false);
       const signed = getBase64EncodedWireTransaction(await partiallySignTransaction([w.phantom.keyPair], tx));
       const d = decodeSponsored(signed);
       if (!d.ok) throw new Error(d.message);
-      expect(validateSponsored(d.tx, w.phantom.address, { relayer: w.relayer.address })).toEqual({
-        ok: true,
-      });
+      expect([d.tx.feePayer, d.tx.signedBy]).toEqual([w.phantom.address, [w.phantom.address]]);
     }
   });
 
-  it("says what it costs: the rent of the Mercury wallet's new accounts, taken from the USDC moving", async () => {
-    // Rent (128 + 179) and (128 + 165) bytes at 6,960 lamports, $200 a SOL: $0.4273 + $0.4079, charged as $0.84.
+  it("says what it costs: the rent of the Mercury wallet's new accounts, paid by the linked wallet in SOL", async () => {
+    // Rent (128 + 179) and (128 + 165) bytes at 6,960 lamports: 0.004176 SOL, $0.8352 at $200, shown as $0.84.
     const w = await world();
     const { body } = await prepare(appWith(w));
-    expect(body.rentUsd).toBe("0.84");
-    expect(body.feeUsd).toBe("0.84");
-    expect(body.coveredByMercury).toBe(false);
+    expect([body.rentUsd, body.rentSol, body.feeUsd, body.coveredByMercury]).toEqual([
+      "0.84",
+      "0.004176",
+      "0",
+      false,
+    ]);
+    // All the USDC asked for moves: nothing is taken out of it.
     expect(body.transactions[0]!.moved).toEqual([
       { mint: NVDAX, amountRaw: "150000000" },
-      { mint: USDC, amountRaw: "19160000" },
+      { mint: USDC, amountRaw: "20000000" },
     ]);
   });
 
-  it("has Mercury cover the rent when no USDC moves, and says so", async () => {
-    const w = await world();
-    const { body } = await prepare(appWith(w), { tokens: [{ mint: NVDAX, amountRaw: "50000000" }] });
-    expect(body.feeUsd).toBe("0");
-    expect(body.rentUsd).toBe("0.43");
-    expect(body.coveredByMercury).toBe(true);
-    expect(body.transactions[0]!.moved).toEqual([{ mint: NVDAX, amountRaw: "50000000" }]);
-  });
-
-  it("costs nothing when the Mercury wallet already has every account", async () => {
+  it("owes no rent for accounts the Mercury wallet already has, empty ones included", async () => {
     const w = await world({ mercuryHolds: [USDC, NVDAX] });
     const { body } = await prepare(appWith(w));
     expect([body.feeUsd, body.rentUsd, body.coveredByMercury]).toEqual(["0", "0", false]);
@@ -237,7 +230,7 @@ describe("POST /v1/move/prepare", () => {
         startedAt: STARTED,
         moved: [
           { mint: NVDAX, amountRaw: 150_000_000n },
-          { mint: USDC, amountRaw: 19_160_000n },
+          { mint: USDC, amountRaw: 20_000_000n },
         ],
       },
     ]);
@@ -269,13 +262,6 @@ describe("POST /v1/move/prepare", () => {
     const w = await world();
     const { status, body } = await prepare(appWith(w), { tokens: [{ mint: NVDAX, amountRaw: "1.5" }] });
     expect([status, body.error.code]).toEqual([400, "bad_request"]);
-  });
-
-  it("isn't offered without a relayer to pay for it", async () => {
-    const w = await world();
-    const { relay: _relay, ...unsponsored } = w.deps;
-    const { status, body } = await prepare(appWith(w, unsponsored));
-    expect([status, body.error.code]).toEqual([503, "move_unavailable"]);
   });
 
   it("waits for the Mercury wallet when it is still being made", async () => {

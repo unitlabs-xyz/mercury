@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { D } from "@mercury/core";
 import {
   LendingRefused,
+  OwnerShort,
   SponsorShort,
   type LendingIntent,
   type LendingSource,
@@ -339,6 +340,51 @@ describe("POST /v1/borrow/transactions", () => {
       { kind: "borrow", usd: "100" },
     );
     expect(sponsor).toBeUndefined();
+  });
+
+  it("has a linked wallet pay its own fee and rent: nothing is sponsored, nothing remembered", async () => {
+    let sponsor: string | undefined = "unset";
+    const l = lending();
+    const remembered: Uint8Array[] = [];
+    const d: BorrowDeps = {
+      ...deps({
+        ...l,
+        build: async (wallet, intent, s) => {
+          sponsor = s;
+          return l.build(wallet, intent);
+        },
+      }),
+      relay: {
+        relayer: "ReLaYeR",
+        builds: { remember: (m) => remembered.push(m), recognises: () => false, size: 0 },
+      },
+    };
+    const res = await app(d, "WaLLeT", { all: false, wallets: [actingLinked("WaLLeT")] }).request(
+      "/v1/borrow/transactions",
+      {
+        method: "POST",
+        body: JSON.stringify({ kind: "borrow", usd: "100" }),
+        headers: { "content-type": "application/json" },
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(sponsor).toBeUndefined();
+  });
+
+  it("says how much SOL a linked wallet needs for its first loan, before anything is signed", async () => {
+    const l = lending();
+    const res = await post(
+      deps({
+        ...l,
+        build: async () => {
+          throw new OwnerShort(10_000_000n, 31_000_000n);
+        },
+      }),
+      { kind: "borrow", usd: "100" },
+    );
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect([res.status, body.error.code]).toEqual([409, "needs_sol"]);
+    expect(body.error.message).toContain("it needs about 0.031 SOL, and holds 0.010");
   });
 
   it("rejects a malformed amount", async () => {

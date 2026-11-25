@@ -80,10 +80,11 @@ export const connectLinked = (address: string, name: string): Promise<void> => e
 /**
  * One transaction signed by a linked wallet, in its own pop-up.
  *
- * Signed only, never sent: Mercury's relayer pays the network fee, co-signs
- * and submits it, and it co-signs only bytes this server built. A wallet that
- * adds or rewrites instructions while signing would be refused there; this
- * says so here first, plainly, rather than as a refusal from the server.
+ * Signed only, never sent: Mercury submits it. A linked wallet is the fee
+ * payer of its own transactions and pays its own rent, in SOL (Mercury
+ * sponsors only the Mercury wallet), so its signature is the only one. A
+ * wallet that adds or rewrites instructions while signing changes what this
+ * server built; this says so here first, plainly.
  */
 export const signWithLinked = async (
   address: string,

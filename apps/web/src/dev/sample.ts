@@ -1643,12 +1643,13 @@ export const sampleResponse = (path: string, body?: string, wallet?: string): un
           ]
         : [],
     };
-  // Built, as the server would: one transaction, the rent for two new accounts taken from the USDC.
+  // Built, as the server would: one transaction, the linked wallet paying two new accounts' rent in SOL.
   if (route === "/v1/move/prepare")
     return {
       transactions: [{ transaction: "AA==", moved: [] }],
-      feeUsd: "0.84",
+      feeUsd: "0",
       rentUsd: "0.84",
+      rentSol: "0.004176",
       coveredByMercury: false,
     };
   if (route === "/v1/earn")

@@ -30,20 +30,11 @@ export interface MoveToken {
 }
 
 export interface MoveInput {
-  /** The linked wallet: signs each transfer, pays for nothing. */
+  /** The linked wallet: signs each transfer, and pays the network fee and any rent, in SOL. */
   readonly owner: string;
   /** The person's Mercury wallet, which receives every token. */
   readonly destination: string;
-  /** Pays the network fee and the rent of any account the Mercury wallet lacks, and signs last. */
-  readonly relayer: string;
   readonly tokens: readonly MoveToken[];
-  /**
-   * What the move repays the relayer, in USDC's smallest unit: the rent of the
-   * accounts it opens. Taken from the USDC being moved, so it is zero when no
-   * USDC moves (Mercury covers it then) or when there is too little to take it from.
-   */
-  readonly feeUsdcRaw: bigint;
-  readonly usdcMint: string;
   readonly blockhash: Blockhash;
   readonly lastValidBlockHeight: bigint;
 }
@@ -51,7 +42,7 @@ export interface MoveInput {
 export interface MoveBatch {
   readonly wire: string;
   readonly messageBytes: Uint8Array;
-  /** What this transaction moves, as it lands in the Mercury wallet: after the fee, for USDC. */
+  /** What this transaction moves, as it lands in the Mercury wallet. */
   readonly moved: readonly { readonly mint: string; readonly amountRaw: bigint }[];
 }
 
@@ -66,20 +57,16 @@ export const TOKENS_PER_TRANSACTION = 4;
  * The transactions that move a linked wallet's tokens into the person's
  * Mercury wallet: for each token, the Mercury wallet's account opened if it
  * lacks one, then the transfer from the linked wallet's own account. The
- * relayer pays the network fee and the rent, and is repaid the rent from the
- * USDC being moved when there is some, inside the transaction that moves it,
- * so it cannot be dropped. Nothing else is in them: no Mercury fee on a move
- * between a person's own wallets.
+ * linked wallet is the fee payer and pays the rent of what it opens, so it
+ * signs alone and nothing is Mercury's to pay or to be repaid (see
+ * `planMove`). Nothing else is in them: no Mercury fee on a move between a
+ * person's own wallets.
  *
  * `transferChecked` names the mint and its decimals, which Token-2022 requires
  * and the classic program accepts, so one instruction serves both.
  */
 export const buildMove = async (input: MoveInput): Promise<readonly MoveBatch[]> => {
   const owner = createNoopSigner(address(input.owner));
-  const relayer = createNoopSigner(address(input.relayer));
-  const usdc = input.tokens.find((t) => t.mint === input.usdcMint);
-  // The fee is only ever taken from moved USDC, and never more than moves.
-  const fee = usdc !== undefined && usdc.amountRaw > input.feeUsdcRaw ? input.feeUsdcRaw : 0n;
 
   const batches: MoveBatch[] = [];
   for (let i = 0; i < input.tokens.length; i += TOKENS_PER_TRANSACTION) {
@@ -95,49 +82,33 @@ export const buildMove = async (input: MoveInput): Promise<readonly MoveBatch[]>
         mint,
         tokenProgram: program,
       });
-      // The fee comes out of one USDC account only, even when the wallet keeps USDC in two.
-      const pays = t === usdc && fee > 0n;
-      const amount = pays ? t.amountRaw - fee : t.amountRaw;
       instructions.push(
         getCreateAssociatedTokenIdempotentInstruction({
-          payer: relayer,
+          payer: owner,
           ata: destination,
           owner: address(input.destination),
           mint,
           tokenProgram: program,
         }),
         getTransferCheckedInstruction(
-          { source: address(t.source), mint, destination, authority: owner, amount, decimals: t.decimals },
+          {
+            source: address(t.source),
+            mint,
+            destination,
+            authority: owner,
+            amount: t.amountRaw,
+            decimals: t.decimals,
+          },
           { programAddress: program },
         ),
       );
-      if (pays) {
-        const [repayTo] = await findAssociatedTokenPda({
-          owner: address(input.relayer),
-          mint,
-          tokenProgram: program,
-        });
-        instructions.push(
-          getTransferCheckedInstruction(
-            {
-              source: address(t.source),
-              mint,
-              destination: repayTo,
-              authority: owner,
-              amount: fee,
-              decimals: t.decimals,
-            },
-            { programAddress: program },
-          ),
-        );
-      }
-      moved.push({ mint: t.mint, amountRaw: amount });
+      moved.push({ mint: t.mint, amountRaw: t.amountRaw });
     }
 
     const compiled = compileTransaction(
       pipe(
         createTransactionMessage({ version: 0 }),
-        (m) => setTransactionMessageFeePayer(input.relayer as Address, m),
+        (m) => setTransactionMessageFeePayer(input.owner as Address, m),
         (m) =>
           setTransactionMessageLifetimeUsingBlockhash(
             { blockhash: input.blockhash, lastValidBlockHeight: input.lastValidBlockHeight },

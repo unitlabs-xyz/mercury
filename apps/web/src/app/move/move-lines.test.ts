@@ -107,21 +107,15 @@ describe("pledgedLines", () => {
 });
 
 describe("moveCostLine", () => {
-  it("says the cost comes out of the USDC moving", () => {
-    expect(moveCostLine({ feeUsd: "0.84", rentUsd: "0.84", coveredByMercury: false })).toBe(
-      "Network cost $0.84, taken from the USDC you move.",
+  it("says the linked wallet pays the new accounts' rent in SOL, with the fee", () => {
+    expect(moveCostLine({ rentUsd: "0.84", rentSol: "0.004176" })).toBe(
+      "This wallet pays about $0.84 (0.004176 SOL) in SOL to open accounts in your Mercury wallet, plus the network fee.",
     );
   });
 
-  it("says Mercury covers it when no USDC moves to take it from", () => {
-    expect(moveCostLine({ feeUsd: "0", rentUsd: "0.43", coveredByMercury: true })).toBe(
-      "Mercury covers the $0.43 network cost.",
-    );
-  });
-
-  it("says there is no cost when the Mercury wallet already has every account", () => {
-    expect(moveCostLine({ feeUsd: "0", rentUsd: "0", coveredByMercury: false })).toBe(
-      "No cost to move. Mercury covers the network fee.",
+  it("says only the network fee when the Mercury wallet already has every account", () => {
+    expect(moveCostLine({ rentUsd: "0", rentSol: "0" })).toBe(
+      "This wallet pays the network fee in SOL, a fraction of a cent.",
     );
   });
 });

@@ -786,8 +786,22 @@ on every action, because Mercury doesn't charge one on every action today:
 | Send                             | No                                                     | —                                                       |
 | Move between own wallets         | No                                                     | —                                                       |
 
-Every transaction Mercury builds also charges the **network cost** in USDC, as today, since the
-relayer pays the SOL.
+**Network fee and rent: the Mercury wallet is sponsored, a linked wallet pays its own.** For the
+Mercury wallet, Mercury's relayer pays the SOL (the network fee, and the rent of any account a
+transaction opens) and is repaid in USDC where the transaction says, as today. A linked wallet is
+the fee payer of every transaction Mercury builds for it (trades, sends, loans, Earn, basket
+funding, moves) and pays the network fee and any rent itself, in SOL; it is charged Mercury's own
+fee alone. Its keys are its own, so SOL or rent Mercury put up in it could be taken straight back
+out (a USDC account opened with Mercury's SOL, closed by its owner, opened again on the next
+borrow); the Mercury wallet's accounts can only be closed by what Mercury builds, which never
+closes one. A linked wallet's first loan needs about 0.03 SOL for Kamino's account setup, and is
+refused with that figure (`needs_sol`) before anything is signed when the wallet holds less. A
+move's rent, for the Mercury wallet's new accounts, is the linked wallet's too, and nothing is
+taken from the USDC moving.
+
+Rent is owed only for an account that doesn't exist: an emptied account still exists, so a stock
+sold to nothing and bought again, or a sale into a USDC account spent to nothing, owes no rent
+again. Balance reads leave emptied accounts out, so the fee is worked out from the account list.
 
 When a planned fee ships, it applies to linked wallets in the same release, because it lives in the
 transaction Mercury builds, not in the wallet that signs it. Nothing in this design needs changing

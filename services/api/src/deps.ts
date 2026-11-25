@@ -846,7 +846,7 @@ export function buildReadDeps(
     },
     send: {
       rpcUrl: config.solanaRpcUrl,
-      fees: { chain: deps.chain, prices: deps.prices },
+      fees: { chain: deps.chain, prices: deps.prices, history: deps.history },
       accepted: async (messageBytes, signature) => {
         await Promise.all([
           earnMoves.accepted(messageBytes, signature),
@@ -880,7 +880,6 @@ export function buildReadDeps(
           wallet,
         ),
       ),
-      ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
     },
   };
 }

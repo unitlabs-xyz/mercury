@@ -59,7 +59,13 @@ const listing = (address: string, over: Partial<EarnListing> = {}): EarnListing 
   ...over,
 });
 
-type Fake = { position?: EarnPosition | null; built?: EarnIntent[]; fail?: Error };
+type Fake = {
+  position?: EarnPosition | null;
+  built?: EarnIntent[];
+  fail?: Error;
+  /** Each build's sponsor, as it was asked. */
+  sponsors?: (string | undefined)[];
+};
 
 const source = (address: string, f: Fake = {}): EarnSource => ({
   address,
@@ -71,9 +77,10 @@ const source = (address: string, f: Fake = {}): EarnSource => ({
     { market: "Jlp", usdc: D(25) },
   ],
   position: async () => f.position ?? null,
-  build: async (_wallet, intent) => {
+  build: async (_wallet, intent, sponsor) => {
     if (f.fail) throw f.fail;
     f.built?.push(intent);
+    f.sponsors?.push(sponsor);
     return {
       transactions: ["dHg="],
       messages: [new Uint8Array([1])],
@@ -395,6 +402,22 @@ describe("POST /v1/earn/transactions", () => {
       usd: "all",
     });
     expect((await json(res)).error.code).toBe("nothing_to_withdraw");
+  });
+
+  it("sponsors the Mercury wallet, and has a linked wallet pay its own fee and rent", async () => {
+    const sponsors: (string | undefined)[] = [];
+    const withRelay = {
+      ...deps({ directory: directory({ [STEADY]: { sponsors } }) }),
+      relay: { relayer: "ReLaYeR", builds: { remember: () => {}, recognises: () => false, size: 0 } },
+    };
+    await send(appWith(withRelay), "POST", "/v1/earn/transactions", { kind: "deposit", usd: "1" });
+    await send(
+      appWith(withRelay, { all: false, wallets: [actingLinked(WALLET)] }),
+      "POST",
+      "/v1/earn/transactions",
+      { kind: "deposit", usd: "1" },
+    );
+    expect(sponsors).toEqual(["ReLaYeR", undefined]);
   });
 
   it("says a short relayer as an outage", async () => {

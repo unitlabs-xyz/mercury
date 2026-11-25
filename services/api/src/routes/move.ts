@@ -6,7 +6,6 @@ import type { PriceBoard } from "@mercury/market";
 import type { Blockhash } from "@solana/kit";
 // Loads the ContextVariableMap declarations so `c.get("identity")` and `c.get("acting")` are typed.
 import type {} from "../auth/middleware.js";
-import type { SponsoredBuilds } from "../relay/builds.js";
 import { STOCK_ACCOUNT_BYTES, TOKEN_ACCOUNT_BYTES, rentFor } from "../rent.js";
 import { writerOf } from "../wallets/acting.js";
 import { buildMove } from "../moves/build.js";
@@ -28,8 +27,6 @@ export interface MoveDeps {
   /** The person's Mercury wallet's id, which the moved shares are recorded into. */
   readonly mercuryWalletId: (userId: string) => Promise<string | null>;
   readonly latestBlockhash: () => Promise<{ blockhash: Blockhash; lastValidBlockHeight: bigint }>;
-  /** Absent, there is no relayer to pay for a move, and none is offered. */
-  readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
   readonly sends: Pick<MoveSends, "remember">;
   /**
    * A linked wallet's baskets made outside Mercury, found on the chain.
@@ -64,8 +61,8 @@ const REFUSED: Record<string, string> = {
  *
  * Prepare returns the transactions for the linked wallet to sign, a few tokens
  * each, and what the move costs: the rent of the accounts the Mercury wallet
- * lacks, taken from the USDC moving or covered by Mercury. They go out through
- * `/v1/transactions/send` like any other, where the relayer co-signs them, and
+ * lacks, which the linked wallet pays in SOL with the network fee. They go out
+ * through `/v1/transactions/send` on the linked wallet's own signature, and
  * the moved shares are recorded into the Mercury wallet with their cost once
  * they land.
  */
@@ -79,7 +76,7 @@ export function moveRoutes(deps: MoveDeps): Hono {
     if (writer === null || writer.isPrimary) {
       return c.json(fail("wallet_mercury", "Choose a linked wallet to move from."), 400);
     }
-    if (deps.relay === undefined || deps.history.ownedTokenAccounts === undefined) {
+    if (deps.history.ownedTokenAccounts === undefined) {
       return c.json({ available: false, tokens: [] });
     }
     const [owned, listed] = await Promise.all([
@@ -159,7 +156,7 @@ export function moveRoutes(deps: MoveDeps): Hono {
     if (writer.isPrimary) {
       return c.json(fail("wallet_mercury", "Choose a linked wallet to move from."), 400);
     }
-    if (deps.relay === undefined || deps.history.ownedTokenAccounts === undefined) {
+    if (deps.history.ownedTokenAccounts === undefined) {
       return c.json(fail("move_unavailable", "Moving isn't available right now."), 503);
     }
     const mercuryAddress = c.get("identity").walletAddress;
@@ -179,7 +176,8 @@ export function moveRoutes(deps: MoveDeps): Hono {
     const [owned, listed, mercury, prices, classic, token2022, block] = await Promise.all([
       deps.history.ownedTokenAccounts(writer.address),
       deps.listed(),
-      deps.chain.tokenBalances(mercuryAddress),
+      // Every account, empty ones too: an empty account still exists, and owes no rent again.
+      deps.history.ownedTokenAccounts(mercuryAddress),
       deps.prices.pricesFor([SOL_MINT]),
       rentFor(deps.chain, TOKEN_ACCOUNT_BYTES),
       rentFor(deps.chain, STOCK_ACCOUNT_BYTES),
@@ -192,7 +190,6 @@ export function moveRoutes(deps: MoveDeps): Hono {
       mercuryHolds: new Set(mercury.map((b) => b.mint)),
       rent: { classic, token2022 },
       solPriceUsd: prices.get(SOL_MINT)?.usdPricePerToken,
-      usdcMint: deps.usdcMint,
     });
     if (!plan.ok) {
       return c.json(
@@ -201,18 +198,15 @@ export function moveRoutes(deps: MoveDeps): Hono {
       );
     }
 
+    // The linked wallet pays its own way: the network fee and any rent, in SOL.
     const batches = await buildMove({
       owner: writer.address,
       destination: mercuryAddress,
-      relayer: deps.relay.relayer,
       tokens: plan.tokens,
-      feeUsdcRaw: plan.feeUsdcRaw,
-      usdcMint: deps.usdcMint,
       ...block,
     });
     const startedAt = now();
     for (const b of batches) {
-      deps.relay.builds.remember(b.messageBytes);
       deps.sends.remember(b.messageBytes, {
         userId,
         fromWalletId: writer.id,
@@ -226,9 +220,11 @@ export function moveRoutes(deps: MoveDeps): Hono {
         transaction: b.wire,
         moved: b.moved.map((m) => ({ mint: m.mint, amountRaw: m.amountRaw.toString() })),
       })),
-      feeUsd: toWire(D(plan.feeUsdcRaw.toString()).div(1e6).toDecimalPlaces(2, Decimal.ROUND_UP)),
-      rentUsd: toWire(plan.rentUsd),
-      coveredByMercury: plan.coveredByMercury,
+      // Nothing is taken in USDC: the wallet pays in SOL, and Mercury covers nothing for it.
+      feeUsd: "0",
+      rentUsd: toWire(plan.rentUsd.toDecimalPlaces(2, Decimal.ROUND_UP)),
+      rentSol: toWire(D(plan.rentLamports.toString()).div(1e9)),
+      coveredByMercury: false,
     });
   });
 

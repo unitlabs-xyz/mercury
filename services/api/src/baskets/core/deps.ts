@@ -78,10 +78,15 @@ export interface BasketProvider {
 }
 
 export interface BasketFunding {
+  /**
+   * `sponsored`: whether Mercury's relayer pays the network fee. The Mercury
+   * wallet only; a linked wallet pays its own way in SOL.
+   */
   prepare(
     ownerAccountId: string,
     destinationAccountId: string,
     amountRaw: bigint,
+    sponsored?: boolean,
   ): Promise<{
     transaction: string;
     expiresAt: Date;

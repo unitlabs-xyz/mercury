@@ -30,7 +30,6 @@ const input = (over: Partial<MovePlanInput> = {}): MovePlanInput => ({
   mercuryHolds: new Set(),
   rent: { classic: 2_039_280n, token2022: 2_136_720n },
   solPriceUsd: D(200),
-  usdcMint: USDC,
   ...over,
 });
 
@@ -50,43 +49,26 @@ describe("planMove", () => {
     ]);
   });
 
-  it("takes the rent for the accounts the Mercury wallet lacks from the USDC moving, rounded up to the cent", () => {
-    // (2,136,720 + 2,039,280) lamports at $200 a SOL is $0.8352, charged as $0.84.
+  it("works out the rent of the accounts the Mercury wallet lacks, which the linked wallet pays in SOL", () => {
+    // 2,136,720 + 2,039,280 lamports: 0.004176 SOL, $0.8352 at $200 a SOL.
     const plan = planMove(input());
     if (!plan.ok) throw new Error(plan.code);
-    expect(plan.feeUsdcRaw).toBe(840_000n);
-    expect(plan.rentUsd.toFixed()).toBe("0.84");
-    expect(plan.coveredByMercury).toBe(false);
+    expect(plan.rentLamports).toBe(4_176_000n);
+    expect(plan.rentUsd.toFixed()).toBe("0.8352");
   });
 
-  it("charges no rent for an account the Mercury wallet already has", () => {
+  it("owes no rent for an account the Mercury wallet already has, empty or not", () => {
     const plan = planMove(input({ mercuryHolds: new Set([NVDAX, USDC]) }));
     if (!plan.ok) throw new Error(plan.code);
-    expect(plan.feeUsdcRaw).toBe(0n);
+    expect(plan.rentLamports).toBe(0n);
     expect(plan.rentUsd.toFixed()).toBe("0");
-    expect(plan.coveredByMercury).toBe(false);
   });
 
-  it("has Mercury cover the rent when no USDC moves", () => {
-    const plan = planMove(input({ owned: [account(NVDAX, 100n)] }));
-    if (!plan.ok) throw new Error(plan.code);
-    expect(plan.feeUsdcRaw).toBe(0n);
-    expect(plan.rentUsd.toFixed()).toBe("0.43");
-    expect(plan.coveredByMercury).toBe(true);
-  });
-
-  it("has Mercury cover the rent when the USDC moving is too little to take it from", () => {
-    const plan = planMove(input({ owned: [account(USDC, 400_000n)] }));
-    if (!plan.ok) throw new Error(plan.code);
-    expect(plan.feeUsdcRaw).toBe(0n);
-    expect(plan.coveredByMercury).toBe(true);
-  });
-
-  it("charges nothing when SOL has no price, rather than guess", () => {
+  it("still says the rent in SOL when SOL has no price", () => {
     const plan = planMove(input({ solPriceUsd: undefined }));
     if (!plan.ok) throw new Error(plan.code);
-    expect(plan.feeUsdcRaw).toBe(0n);
-    expect(plan.coveredByMercury).toBe(false);
+    expect(plan.rentLamports).toBe(4_176_000n);
+    expect(plan.rentUsd.toFixed()).toBe("0");
   });
 
   it("charges rent once for a token kept in two accounts, and moves from each, the larger first", () => {
@@ -101,7 +83,7 @@ describe("planMove", () => {
       ["large", 70n],
       ["small", 20n],
     ]);
-    expect(plan.rentUsd.toFixed()).toBe("0.43");
+    expect(plan.rentLamports).toBe(2_136_720n);
   });
 
   it("moves only what was asked for, and nothing of a token left out", () => {

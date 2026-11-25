@@ -21,8 +21,11 @@ export interface PreparedMove {
     readonly transaction: string;
     readonly moved: readonly { readonly mint: string; readonly amountRaw: string }[];
   }[];
+  /** Always "0": nothing is taken from what moves. Kept for older servers. */
   readonly feeUsd: string;
+  /** The rent of the Mercury wallet's new accounts, which the linked wallet pays in SOL. */
   readonly rentUsd: string;
+  readonly rentSol?: string;
   readonly coveredByMercury: boolean;
 }
 
@@ -72,11 +75,17 @@ export const pledgedLines = (holdings: readonly Holding[]): readonly string[] =>
 
 const dollars = (s: string) => `$${Number(s).toFixed(2)}`;
 
-/** Who pays to open the Mercury wallet's new accounts, and how much, said once above the button. */
-export const moveCostLine = (p: Pick<PreparedMove, "feeUsd" | "rentUsd" | "coveredByMercury">): string => {
-  if (Number(p.feeUsd) > 0) return `Network cost ${dollars(p.feeUsd)}, taken from the USDC you move.`;
-  if (p.coveredByMercury) return `Mercury covers the ${dollars(p.rentUsd)} network cost.`;
-  return "No cost to move. Mercury covers the network fee.";
+/**
+ * What the move costs the linked wallet, said once above the button. It pays
+ * its own way in SOL: the network fee, and the rent of any account the
+ * Mercury wallet doesn't have yet. Nothing is taken from what moves.
+ */
+export const moveCostLine = (p: Pick<PreparedMove, "rentUsd" | "rentSol">): string => {
+  if (Number(p.rentUsd) > 0 || Number(p.rentSol ?? 0) > 0) {
+    const sol = p.rentSol === undefined ? "" : ` (${Number(p.rentSol)} SOL)`;
+    return `This wallet pays about ${dollars(p.rentUsd)}${sol} in SOL to open accounts in your Mercury wallet, plus the network fee.`;
+  }
+  return "This wallet pays the network fee in SOL, a fraction of a cent.";
 };
 
 /** What landed, said once every transaction has been answered. */

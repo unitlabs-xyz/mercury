@@ -1,5 +1,5 @@
 import { D } from "@mercury/core";
-import type { ChainReader } from "@mercury/chain";
+import type { ChainHistory, ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import { USDC_MINT } from "@mercury/chain";
 import { networkFee, transferFee, type Fee } from "./fee.js";
@@ -11,7 +11,22 @@ const SOL_MINT = "So11111111111111111111111111111111111111112";
 export interface FeeQuoteDeps {
   readonly chain: ChainReader;
   readonly prices: PriceBoard;
+  /**
+   * Every token account an owner holds, empty ones included. A balance read
+   * leaves out an emptied account, which still exists and owes no rent again:
+   * without this, re-buying a stock sold to nothing, or selling into a USDC
+   * account spent to nothing, was charged rent for an account already there.
+   */
+  readonly history?: Pick<ChainHistory, "ownedTokenAccounts">;
 }
+
+/** The mints `owner` has an account for, empty ones included where the reader can say. */
+const accountMints = async (deps: FeeQuoteDeps, owner: string): Promise<ReadonlySet<string>> => {
+  const list = deps.history?.ownedTokenAccounts;
+  const rows =
+    list === undefined ? await deps.chain.tokenBalances(owner) : await list.call(deps.history, owner);
+  return new Set(rows.map((r) => r.mint));
+};
 
 export interface FeeQuoteInput {
   /** The trader's wallet. */
@@ -44,8 +59,8 @@ export const NO_FEE: Fee = { usdc: D(0), lamports: 0 };
  * asking costs nothing, and waiting to know would cost a round trip.
  */
 export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promise<Fee> => {
-  const [balances, prices, rent] = await Promise.all([
-    deps.chain.tokenBalances(input.owner),
+  const [accounts, prices, rent] = await Promise.all([
+    accountMints(deps, input.owner),
     deps.prices.pricesFor([SOL_MINT]),
     rentFor(deps.chain, input.receivingMint === USDC_MINT ? TOKEN_ACCOUNT_BYTES : STOCK_ACCOUNT_BYTES),
   ]);
@@ -63,7 +78,7 @@ export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promis
    * that exists is already rent-exempt. A zero balance still counts: the
    * account is what rent pays for, not the tokens in it.
    */
-  const holds = balances.some((b) => b.mint === input.receivingMint);
+  const holds = accounts.has(input.receivingMint);
   return networkFee({ rentLamports: holds ? 0 : Number(rent), solPriceUsd: sol });
 };
 
@@ -80,8 +95,8 @@ export const quoteTransferFee = async (
   deps: FeeQuoteDeps,
   input: { readonly destination: string },
 ): Promise<Fee> => {
-  const [balances, prices, rent] = await Promise.all([
-    deps.chain.tokenBalances(input.destination),
+  const [accounts, prices, rent] = await Promise.all([
+    accountMints(deps, input.destination),
     deps.prices.pricesFor([SOL_MINT]),
     rentFor(deps.chain, TOKEN_ACCOUNT_BYTES),
   ]);
@@ -91,6 +106,6 @@ export const quoteTransferFee = async (
   // either way; it is only the repayment that cannot be priced.
   if (sol === undefined || sol.lte(0)) return NO_FEE;
 
-  const holds = balances.some((b) => b.mint === USDC_MINT);
+  const holds = accounts.has(USDC_MINT);
   return transferFee({ rentLamports: holds ? 0 : Number(rent), solPriceUsd: sol });
 };

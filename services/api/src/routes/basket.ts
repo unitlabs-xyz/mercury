@@ -259,7 +259,13 @@ export function basketRoutes(service: BasketService, requireBasketAuth: Middlewa
     const parsed = PrepareBasketFunding.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json(fail("validation_failed", "Enter a valid USDC amount."), 400);
     try {
-      const prepared = await service.prepareFunding(c.req.param("slug"), owner, parsed.data.amountUsd);
+      const prepared = await service.prepareFunding(
+        c.req.param("slug"),
+        owner,
+        parsed.data.amountUsd,
+        // Sponsored for the Mercury wallet alone: a linked wallet pays its own network fee in SOL.
+        writerOf(c)?.isPrimary === true,
+      );
       return c.json(PreparedBasketFunding.parse(prepared));
     } catch (error) {
       const result = handle(error, "funding preparation");

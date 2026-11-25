@@ -132,13 +132,16 @@ describe("MoveSheet", () => {
         { transaction: "AA==", moved: [] },
         { transaction: "AA==", moved: [] },
       ],
-      feeUsd: "0.84",
+      feeUsd: "0",
       rentUsd: "0.84",
+      rentSol: "0.004176",
       coveredByMercury: false,
     } satisfies PreparedMove;
     const html = render();
     expect(html).toContain("Review move");
-    expect(html).toContain("Network cost $0.84, taken from the USDC you move.");
+    expect(html).toContain(
+      "This wallet pays about $0.84 (0.004176 SOL) in SOL to open accounts in your Mercury wallet",
+    );
     expect(html).toContain("Phantom shows this as 2 small transactions, approved together.");
     expect(html).toContain("Continue in Phantom");
     expect(html).toContain("You&#x27;ll approve this in Phantom.");

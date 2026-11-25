@@ -74,7 +74,37 @@ it("prepares funding for the verified wallet and ignores a client-supplied desti
     "magnificent-seven",
     "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:VerifiedWallet",
     "12",
+    // The Mercury wallet: sponsored.
+    true,
   ]);
+});
+
+it("has a linked wallet fund a basket paying its own network fee", async () => {
+  let observed: unknown[] = [];
+  const service = {
+    prepareFunding: async (...args: unknown[]) => {
+      observed = args;
+      return {
+        portfolioId: "portfolio-1",
+        destinationAccountId: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:Vault",
+        amountRaw: "12000000",
+        transaction: "unsigned",
+        expiresAt: "2026-10-06T12:00:00.000Z",
+      };
+    },
+  } as BasketService;
+  const app = basketRoutes(service, async (c, next) => {
+    c.set("identity", { userId: "user-1", privyUserId: "did:privy:1", walletAddress: "VerifiedWallet" });
+    c.set("acting", { all: false, wallets: [actingLinked("PhantomWallet")] });
+    await next();
+  });
+  const response = await app.request("/v1/basket-templates/magnificent-seven/funding/prepare", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ amountUsd: "12" }),
+  });
+  expect(response.status).toBe(200);
+  expect(observed.at(-1)).toBe(false);
 });
 
 it("submits rebalance for the verified wallet without accepting a client portfolio ID", async () => {

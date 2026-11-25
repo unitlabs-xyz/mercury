@@ -322,7 +322,10 @@ export function earnRoutes(deps: EarnDeps): Hono {
 
     let built;
     try {
-      built = await deps.directory.source(vault).build(wallet, intent, deps.relay?.relayer);
+      // Sponsored for the Mercury wallet alone: a linked wallet pays its own network fee and rent.
+      built = await deps.directory
+        .source(vault)
+        .build(wallet, intent, writer.isPrimary ? deps.relay?.relayer : undefined);
     } catch (error: unknown) {
       if (error instanceof SponsorShort) {
         log.error(
