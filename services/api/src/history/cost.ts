@@ -214,7 +214,7 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
   }[] = [];
   /** Moves to the Mercury wallet found since: recorded from the wallet's lots, as the relayer's moves are. */
   const later: { event: HistoryEvent; stock: (typeof stocks)[number] }[] = [];
-  const dividends: { shares: Decimal; at: Date; stock: (typeof stocks)[number] }[] = [];
+  const dividends: { shares: Decimal; at: Date; split?: boolean; stock: (typeof stocks)[number] }[] = [];
 
   /** A later costing's writes, in the order they happened: each buy as a lot, each sale as a departure. */
   const sequence: (
@@ -299,11 +299,13 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
   const dividendRows: {
     shares: Decimal;
     at: Date;
+    split?: boolean;
     stock: (typeof stocks)[number];
     amountUsd: Decimal | null;
   }[] = [];
   for (const d of dividends) {
-    const price = await prices.share(d.stock, d.at).catch(() => null);
+    // A split earned nothing: no price asked, no amount.
+    const price = d.split === true ? null : await prices.share(d.stock, d.at).catch(() => null);
     dividendRows.push({ ...d, amountUsd: price === null ? null : d.shares.mul(price.price) });
   }
 
@@ -427,18 +429,22 @@ export async function costWallet(deps: CostDeps, walletId: string, now: Date): P
           feeUsd: "0",
           acquiredAt: d.at,
           recordedAt: now,
-          source: "dividend" as const,
+          source: d.split === true ? ("split" as const) : ("dividend" as const),
         })),
       );
       // Found in history: in the feed and the income line, dated when paid, and never announced as news.
+      // A split is in the feed as one, with no amount, and never in income.
       await tx.insert(activities).values(
         dividendRows.map((d) => ({
           userId: wallet.userId,
           walletId,
-          kind: "dividend" as const,
+          kind: d.split === true ? ("split" as const) : ("dividend" as const),
           occurredAt: d.at,
-          title: `${d.stock.ticker} dividend`,
-          subtitle: `Paid as ${d.shares.toDecimalPlaces(6).toString()} shares · found in history`,
+          title: d.split === true ? `${d.stock.ticker} stock split` : `${d.stock.ticker} dividend`,
+          subtitle:
+            d.split === true
+              ? `${d.shares.toDecimalPlaces(6).toString()} more shares, each worth less · found in history`
+              : `Paid as ${d.shares.toDecimalPlaces(6).toString()} shares · found in history`,
           amountUsd: d.amountUsd === null ? null : fixed(d.amountUsd),
           refTable: "token",
           refId: d.stock.tokenId,
@@ -841,7 +847,7 @@ async function multiplierSteps(
   const out = new Map<string, MultiplierStep[]>();
   for (const r of rows) {
     const list = out.get(r.tokenId) ?? [];
-    list.push({ at: r.observedAt, from: D(r.oldMultiplier), to: D(r.newMultiplier) });
+    list.push({ at: r.observedAt, from: D(r.oldMultiplier), to: D(r.newMultiplier), kind: r.kind });
     out.set(r.tokenId, list);
   }
   return out;

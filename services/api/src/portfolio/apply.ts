@@ -279,7 +279,7 @@ export async function applyReconciliation(db: Db, owner: WalletOwner, given: Rec
           })),
         )
         .returning({ id: activities.id });
-      // Every row a pass writes here is a dividend (`ActivityWrite.kind`), and a dividend is news.
+      // Every row a pass writes here is a dividend or a split (`ActivityWrite.kind`): both are news.
       await notifyFor(
         tx,
         userId,

@@ -1,6 +1,7 @@
 import { ZERO, type Decimal } from "../money.js";
 
-export type LotSource = "buy" | "transfer_in" | "dividend" | "basket";
+/** `split`: shares a stock split added, at no cost. Not income: each share is worth less by as much. */
+export type LotSource = "buy" | "transfer_in" | "dividend" | "split" | "basket";
 
 export interface Lot {
   readonly shares: Decimal;

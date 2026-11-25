@@ -23,4 +23,9 @@ describe("a dividend coming, in the feed", () => {
   it("is filed with income, where the dividend itself lands", () => {
     expect(GROUPS.find((g) => g.key === "income")?.kinds).toContain(toEvent(notice).kind);
   });
+
+  it("shows a split with no amount and no direction: more shares, each worth less", () => {
+    const e = toEvent({ ...notice, kind: "split", title: "TSLA stock split" } as unknown as ActivityItem);
+    expect([e.title, e.flow, e.amount]).toEqual(["TSLA stock split", null, null]);
+  });
 });

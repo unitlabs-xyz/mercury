@@ -33,6 +33,8 @@ const KIND: Record<string, EventKind> = {
   dividend: "dividend",
   // Announced, not paid: shown as a dividend, with no amount and no direction (see NO_DIRECTION).
   dividend_notice: "dividend",
+  // More shares, each worth less: nothing earned, so no amount and no direction.
+  split: "dividend",
   interest: "interest",
   buy: "buy",
   sell: "sell",
@@ -82,7 +84,7 @@ const FLOW: Partial<Record<EventKind, "in" | "out">> = {
  * The shares left and the debt went down by what they fetched; no cash reached
  * the holder or left them, so neither sign is true.
  */
-const NO_DIRECTION = new Set(["liquidation", "dividend_notice"]);
+const NO_DIRECTION = new Set(["liquidation", "dividend_notice", "split"]);
 
 export const toEvent = (i: ActivityItem): Event => {
   const kind = KIND[i.kind] ?? "receive";

@@ -430,11 +430,12 @@ export const lots = pgTable(
      *   lot from position-sync, so this is what gives a linked wallet a cost.
      * - `declared`: a cost the person entered. Always wins.
      * - `basket_exit`: shares that came out of a basket in kind.
+     * - `split`: shares a stock split added, at no cost; not income.
      *
      * Plain text with no database check, so a new value needs no migration.
      */
     source: text("source", {
-      enum: ["buy", "transfer_in", "dividend", "basket", "chain", "declared", "basket_exit"],
+      enum: ["buy", "transfer_in", "dividend", "split", "basket", "chain", "declared", "basket_exit"],
     }).notNull(),
     /** True when we inferred the cost. The UI has to say so. */
     isEstimated: boolean("is_estimated").notNull().default(false),

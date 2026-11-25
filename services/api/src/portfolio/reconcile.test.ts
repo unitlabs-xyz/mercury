@@ -108,7 +108,18 @@ describe("planReconciliation: a dividend", () => {
     // A multiplier that hands over exactly 100 whole shares must read "100
     // shares", not "1 shares" — the failure mode of a trim that strips
     // trailing zeros without checking for a decimal point first.
-    const plan = planReconciliation([withLot({ multiplier: D(101) })], NOW);
+    // 1,000 tokens and a 10% dividend: exactly 100 whole shares.
+    const plan = planReconciliation(
+      [
+        withLot({
+          chainRawAmount: 1_000n * ONE_TOKEN,
+          recordedRawAmount: 1_000n * ONE_TOKEN,
+          recordedShares: D(1_000),
+          multiplier: D("1.1"),
+        }),
+      ],
+      NOW,
+    );
     expect(plan.activity[0]!.subtitle).toBe("Paid as 100 shares");
     expect(plan.activity[0]!.title).toMatch(/^[A-Z]+ dividend$/);
   });
@@ -123,6 +134,32 @@ describe("planReconciliation: a dividend", () => {
     // The same money. More shares. Nothing was spent.
     expect(position.costBasisUsd).toEqual(D(200));
     expect(position.avgUnitCostUsd.toFixed(4)).toBe("133.3333");
+  });
+
+  /*
+   * A split raises the multiplier too, by far more. Its shares come at no cost
+   * all the same, so the cost per share falls by the split, but nothing was
+   * earned: no amount, never in income, and said as a split.
+   */
+  it("writes a split as a split: its shares at no cost, but no income and no amount", () => {
+    const plan = planReconciliation([withLot({ multiplier: D(3) })], NOW);
+    expect(plan.lots).toEqual([
+      {
+        tokenId: "token-nvdax",
+        instrumentId: "instrument-nvda",
+        tokenQty: 0n,
+        shares: D(2),
+        unitCostUsd: ZERO,
+        source: "split",
+        isEstimated: false,
+        acquiredAt: NOW,
+      },
+    ]);
+    expect(plan.activity.map((a) => [a.kind, a.title, a.subtitle, a.amountUsd])).toEqual([
+      ["split", "NVDA stock split", "Each share became 3: 2 shares more, each worth less", null],
+    ]);
+    // The same $200, three shares: $66.67 each.
+    expect(plan.positions[0]!.avgUnitCostUsd.toFixed(2)).toBe("66.67");
   });
 
   it("writes the dividend once", () => {

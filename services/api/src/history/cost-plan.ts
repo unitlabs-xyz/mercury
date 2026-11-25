@@ -197,12 +197,16 @@ export interface MultiplierStep {
   readonly at: Date;
   readonly from: Decimal;
   readonly to: Decimal;
+  /** As the stocks job named it. A split adds shares at no cost too, but earns nothing. Dividend unless said. */
+  readonly kind?: "dividend" | "split" | "unknown";
 }
 
 /** A dividend a held lot earned since it arrived, at no cost. */
 export interface PlannedDividend {
   readonly shares: Decimal;
   readonly at: Date;
+  /** Shares a split added rather than a dividend paid: no income, said as a split. */
+  readonly split?: boolean;
 }
 
 /**
@@ -226,7 +230,11 @@ export const dividendsSince = (
       const gained = scaled(lot.tokenQty, decimals).mul(rise);
       const at = step.at.getTime();
       const seen = byStep.get(at);
-      byStep.set(at, { shares: (seen?.shares ?? ZERO).add(gained), at: step.at });
+      byStep.set(at, {
+        shares: (seen?.shares ?? ZERO).add(gained),
+        at: step.at,
+        ...(step.kind === "split" ? { split: true } : {}),
+      });
     }
   }
   return [...byStep.values()]

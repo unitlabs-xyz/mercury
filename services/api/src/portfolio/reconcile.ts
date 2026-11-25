@@ -1,4 +1,5 @@
 import { D, Decimal, ZERO, type LotSource } from "@mercury/core";
+import { kindOf } from "../stocks/plan.js";
 
 /** One wrapper the user holds or has held, with everything needed to judge it. */
 export interface HeldToken {
@@ -80,7 +81,8 @@ export interface DisposalWrite {
 }
 
 export interface ActivityWrite {
-  readonly kind: "dividend";
+  /** A split is said as one, with no amount: more shares, each worth less, nothing earned. */
+  readonly kind: "dividend" | "split";
   readonly title: string;
   readonly subtitle: string;
   readonly amountUsd: Decimal | null;
@@ -279,7 +281,36 @@ export function planReconciliation(held: readonly HeldToken[], now: Date): Recon
     if (standing && recordedQty.gt(ZERO) && recordedShares.gt(ZERO)) {
       const recordedMultiplier = recordedShares.div(recordedQty);
       const gained = recordedQty.mul(token.multiplier.sub(recordedMultiplier));
-      if (gained.gte(DIVIDEND_FLOOR)) {
+      /*
+       * A split raises the multiplier too, and by far more: the stocks job's own
+       * rule, more than doubling. The shares it adds come at no cost all the
+       * same, so the cost per share falls as it should, but nothing was earned:
+       * each share is worth less by as much. Said as a split, with no amount,
+       * so it never reaches the dividend income on Home.
+       */
+      const split = gained.gte(DIVIDEND_FLOOR) && kindOf(recordedMultiplier, token.multiplier) === "split";
+      if (split) {
+        lots.push({
+          tokenId: token.tokenId,
+          instrumentId: token.instrumentId,
+          tokenQty: 0n,
+          shares: gained,
+          unitCostUsd: ZERO,
+          source: "split",
+          isEstimated: false,
+          acquiredAt: now,
+        });
+        activity.push({
+          kind: "split",
+          title: `${token.ticker} stock split`,
+          subtitle: `Each share became ${token.multiplier.div(recordedMultiplier).toDecimalPlaces(4).toString()}: ${plural(gained)} more, each worth less`,
+          amountUsd: null,
+          refTable: "token",
+          refId: token.tokenId,
+          occurredAt: now,
+        });
+        recordedShares = recordedShares.add(gained);
+      } else if (gained.gte(DIVIDEND_FLOOR)) {
         lots.push({
           tokenId: token.tokenId,
           instrumentId: token.instrumentId,

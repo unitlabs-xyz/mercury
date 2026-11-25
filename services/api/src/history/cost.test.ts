@@ -349,6 +349,40 @@ describe("costWallet, a first costing", () => {
     expect(await s.db.select().from(notifications)).toEqual([]);
   });
 
+  it("writes a split found in history as a split: its shares at no cost, no amount, never income", async () => {
+    const s = await seed();
+    await s.found({
+      kind: "in",
+      amount: tokensOf(100),
+      at: day(1),
+      counterMint: USDC,
+      counterAmount: 10_000_000_000n,
+    });
+    await s.db.insert(multiplierEvents).values({
+      tokenId: s.tokenId,
+      oldMultiplier: "1",
+      newMultiplier: "3",
+      observedAt: day(10),
+      kind: "split",
+    });
+    await s.db.update(tokens).set({ multiplier: "3" }).where(eq(tokens.id, s.tokenId));
+    const { past, asked } = pastOf({ TSLA: 40 });
+
+    await costWallet(deps(s.db, past), s.walletId, NOW);
+
+    const added = await s.db
+      .select()
+      .from(lots)
+      .where(and(eq(lots.walletId, s.walletId), eq(lots.source, "split")));
+    expect(added.map((l) => [D(l.shares).toString(), l.unitCostUsd])).toEqual([
+      ["200", "0.000000000000000000"],
+    ]);
+    const [row] = await s.db.select().from(activities).where(eq(activities.walletId, s.walletId));
+    expect([row!.kind, row!.title, row!.amountUsd]).toEqual(["split", "TSLA stock split", null]);
+    // Nothing earned, so no price was asked for it.
+    expect(asked).toEqual([]);
+  });
+
   it("prices what was held before the oldest movement read, where the walk stopped at its cap", async () => {
     const s = await seed();
     await s.found({ kind: "out", amount: tokensOf(1), at: day(6), preRaw: tokensOf(3) });

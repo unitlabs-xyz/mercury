@@ -545,7 +545,10 @@ doubling is told as a split. The dividend itself is still recorded when it takes
 
 **Dividends:** xStocks pay by raising a multiplier, so one token later stands for more stock. Each
 arrival is converted to shares with the multiplier in force at its time (`multiplier_event`), and
-each multiplier change after it is a dividend, at no cost, as `position-sync` already treats them.
+each multiplier change after it is a dividend, at no cost, as `position-sync` already treats them. A multiplier more than doubling is a **split**, not a dividend
+(the stocks job's rule): its shares come at no cost all the same, so the cost per share falls by the
+split, but nothing was earned. It is a `split` lot and a "TSLA stock split" row with no amount, and
+never in dividend income.
 
 What's left after the replay is written as lots for that wallet, in one transaction: `source: "chain"`, with
 `is_estimated` false where the wallet swapped USDC for the stock and true where the cost was
