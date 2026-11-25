@@ -338,9 +338,11 @@ wallet's address instead of the identity's:
 
 - **Buy and sell:** quote, review, build, sign, confirm, as today. The Mercury fee transfer is in
   the transaction whoever signs it.
-- **The relayer** stays fee payer. `relay/validate.ts` checks the transaction needs "this
-  account's signature". "This account" becomes the acting wallet, so a linked wallet's transaction
-  is sponsored and a transaction for someone else's wallet still isn't.
+- **Who pays the fee** depends on the wallet. The relayer stays fee payer for the Mercury wallet
+  only. A linked wallet is the fee payer of its own transactions and pays the network fee and any
+  rent in SOL (see "Network fee and rent" under Fees). `relay/validate.ts` still checks that the
+  transaction needs "this account's signature", where "this account" is the acting wallet, so a
+  transaction for someone else's wallet is refused.
 - **The web client** signs with Privy for the Mercury wallet and with the AppKit Solana provider
   for a linked wallet. The AppKit path already exists for funding (`api/fund-swap.ts` handles the
   differences between Phantom's API and the wallet-standard one); it moves into a shared signer the
@@ -750,7 +752,7 @@ trade in it is Mercury's, recorded as it settles.
    amounts editable. Each line says what its cost basis is: "TSLAx 15 · cost known for 12".
    Pledged collateral is listed separately as "In a loan, stays here".
 2. The server builds the transfers to the person's own Mercury wallet, creating any token accounts
-   the Mercury wallet lacks. The relayer is fee payer.
+   the Mercury wallet lacks. The linked wallet is fee payer and pays the rent of those accounts.
 3. **Phantom asks once.** Several tokens are split into small transactions (about four tokens each)
    and sent to the wallet together through `signAllTransactions`, so the person still approves
    once. A single transaction that empties a wallet is what drainers send, and wallet security
