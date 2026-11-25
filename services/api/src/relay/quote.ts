@@ -1,4 +1,6 @@
 import { D } from "@mercury/core";
+import { address } from "@solana/kit";
+import { findAssociatedTokenPda } from "@solana-program/token";
 import type { ChainHistory, ChainReader } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
 import { USDC_MINT } from "@mercury/chain";
@@ -20,12 +22,35 @@ export interface FeeQuoteDeps {
   readonly history?: Pick<ChainHistory, "ownedTokenAccounts">;
 }
 
-/** The mints `owner` has an account for, empty ones included where the reader can say. */
-const accountMints = async (deps: FeeQuoteDeps, owner: string): Promise<ReadonlySet<string>> => {
+/**
+ * Whether `owner`'s associated token account for `mint` exists: the one
+ * account a sponsored build opens (`getCreateAssociatedTokenIdempotent`, paid
+ * by the relayer), and so the one whose rent is owed when it is missing.
+ *
+ * Not "any account of the mint". An owner can hold a second, non-associated
+ * account for a mint, empty and costing them nothing to keep; read as "already
+ * has one", it waived the rent while the build still opened the associated
+ * account on the relayer's SOL, which the owner could then close and keep.
+ * Repeated, that was the relayer's SOL drained a rent at a time. An emptied
+ * associated account still counts: it exists, and owes no rent again.
+ *
+ * Without the list of accounts (and their addresses) there is no telling
+ * which one exists, so it is taken as missing: rent charged, in USDC, inside
+ * the transaction that opens it, rather than an account sponsored on a guess.
+ */
+const holdsAssociated = async (deps: FeeQuoteDeps, owner: string, mint: string): Promise<boolean> => {
   const list = deps.history?.ownedTokenAccounts;
-  const rows =
-    list === undefined ? await deps.chain.tokenBalances(owner) : await list.call(deps.history, owner);
-  return new Set(rows.map((r) => r.mint));
+  if (list === undefined) return false;
+  const rows = (await list.call(deps.history, owner)).filter((r) => r.mint === mint);
+  for (const r of rows) {
+    const [ata] = await findAssociatedTokenPda({
+      owner: address(owner),
+      mint: address(mint),
+      tokenProgram: address(r.programId),
+    });
+    if (r.address === ata) return true;
+  }
+  return false;
 };
 
 export interface FeeQuoteInput {
@@ -59,8 +84,8 @@ export const NO_FEE: Fee = { usdc: D(0), lamports: 0 };
  * asking costs nothing, and waiting to know would cost a round trip.
  */
 export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promise<Fee> => {
-  const [accounts, prices, rent] = await Promise.all([
-    accountMints(deps, input.owner),
+  const [holds, prices, rent] = await Promise.all([
+    holdsAssociated(deps, input.owner, input.receivingMint),
     deps.prices.pricesFor([SOL_MINT]),
     rentFor(deps.chain, input.receivingMint === USDC_MINT ? TOKEN_ACCOUNT_BYTES : STOCK_ACCOUNT_BYTES),
   ]);
@@ -73,12 +98,7 @@ export const quoteFee = async (deps: FeeQuoteDeps, input: FeeQuoteInput): Promis
    */
   if (sol === undefined || sol.lte(0)) return NO_FEE;
 
-  /*
-   * Holding any amount of the token means the account exists, and an account
-   * that exists is already rent-exempt. A zero balance still counts: the
-   * account is what rent pays for, not the tokens in it.
-   */
-  const holds = accounts.has(input.receivingMint);
+  // An associated account that exists is already rent-exempt, whatever it holds: no rent owed.
   return networkFee({ rentLamports: holds ? 0 : Number(rent), solPriceUsd: sol });
 };
 
@@ -95,8 +115,8 @@ export const quoteTransferFee = async (
   deps: FeeQuoteDeps,
   input: { readonly destination: string },
 ): Promise<Fee> => {
-  const [accounts, prices, rent] = await Promise.all([
-    accountMints(deps, input.destination),
+  const [holds, prices, rent] = await Promise.all([
+    holdsAssociated(deps, input.destination, USDC_MINT),
     deps.prices.pricesFor([SOL_MINT]),
     rentFor(deps.chain, TOKEN_ACCOUNT_BYTES),
   ]);
@@ -106,6 +126,5 @@ export const quoteTransferFee = async (
   // either way; it is only the repayment that cannot be priced.
   if (sol === undefined || sol.lte(0)) return NO_FEE;
 
-  const holds = accounts.has(USDC_MINT);
   return transferFee({ rentLamports: holds ? 0 : Number(rent), solPriceUsd: sol });
 };

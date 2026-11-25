@@ -4,6 +4,7 @@ import type { ChainReader, TokenBalance } from "@mercury/chain";
 import type { PriceBoard, TokenPrice } from "@mercury/market";
 import { USDC_MINT } from "@mercury/chain";
 import { quoteFee, quoteTransferFee } from "./quote.js";
+import { associatedAccount, heldInAssociated, programOf } from "./testing.js";
 import { STOCK_ACCOUNT_BYTES, TOKEN_ACCOUNT_BYTES } from "../rent.js";
 
 const SOL = "So11111111111111111111111111111111111111112";
@@ -25,6 +26,7 @@ const price = (usd: string): TokenPrice => ({
  * rate measured on 15 October 2026: $0.19 for a new stock account and $0.18
  * for a new USDC one, at $119.39 SOL.
  */
+/** Each balance held in the owner's associated account for its mint, which is where a wallet normally keeps it. */
 const deps = (
   balances: TokenBalance[],
   solUsd: string | null,
@@ -38,6 +40,7 @@ const deps = (
   prices: {
     pricesFor: async () => new Map(solUsd === null ? [] : [[SOL, price(solUsd)]]),
   } as PriceBoard,
+  history: { ownedTokenAccounts: heldInAssociated(balances) },
 });
 
 const held = (mint: string, raw = 1n): TokenBalance => ({ mint, rawAmount: raw, decimals: 8 });
@@ -73,7 +76,13 @@ describe("quoteFee", () => {
         ...deps([], "119.39"),
         history: {
           ownedTokenAccounts: async () => [
-            { address: "acct", mint: SPCX, programId: "Tokenz", rawAmount: 0n, decimals: 8 },
+            {
+              address: await associatedAccount(OWNER, SPCX),
+              mint: SPCX,
+              programId: programOf(SPCX),
+              rawAmount: 0n,
+              decimals: 8,
+            },
           ],
         },
       },
@@ -88,13 +97,51 @@ describe("quoteFee", () => {
         ...deps([], "119.39"),
         history: {
           ownedTokenAccounts: async () => [
-            { address: "acct", mint: USDC_MINT, programId: "Tokenkeg", rawAmount: 0n, decimals: 6 },
+            {
+              address: await associatedAccount(OWNER, USDC_MINT),
+              mint: USDC_MINT,
+              programId: programOf(USDC_MINT),
+              rawAmount: 0n,
+              decimals: 6,
+            },
           ],
         },
       },
       { destination: OWNER },
     );
     expect(fee.usdc.isZero()).toBe(true);
+  });
+
+  /*
+   * The drain this closes: an owner keeps a second, non-associated account for
+   * the mint, empty and free to keep. Read as "already has one", it waived the
+   * rent while the build still opened the associated account on the relayer's
+   * SOL, which the owner could close and keep, again and again.
+   */
+  it("charges rent when the owner holds the mint only in an account that is not its associated one", async () => {
+    const elsewhere = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+    const own = [{ address: elsewhere, mint: SPCX, programId: programOf(SPCX), rawAmount: 0n, decimals: 8 }];
+    const fee = await quoteFee(
+      { ...deps([], "119.39"), history: { ownedTokenAccounts: async () => own } },
+      { owner: OWNER, receivingMint: SPCX },
+    );
+    expect(fee.usdc.toString()).toBe("0.19");
+    const sent = await quoteTransferFee(
+      {
+        ...deps([], "119.39"),
+        history: {
+          ownedTokenAccounts: async () => [{ ...own[0]!, mint: USDC_MINT, programId: programOf(USDC_MINT) }],
+        },
+      },
+      { destination: OWNER },
+    );
+    expect(sent.usdc.toString()).toBe("0.18");
+  });
+
+  it("charges the rent when it can't tell which accounts exist, rather than sponsor one on a guess", async () => {
+    const { history: _none, ...withoutList } = deps([held(SPCX)], "119.39");
+    const fee = await quoteFee(withoutList, { owner: OWNER, receivingMint: SPCX });
+    expect(fee.usdc.toString()).toBe("0.19");
   });
 
   it("does not let another token's balance excuse this one's rent", async () => {
@@ -130,8 +177,9 @@ describe("quoteFee", () => {
       );
     await quoteFee(
       {
-        chain: { tokenBalances: () => slow("balances", [], 20), mintConfig: async () => null } as ChainReader,
+        chain: { tokenBalances: async () => [], mintConfig: async () => null } as ChainReader,
         prices: { pricesFor: () => slow("prices", new Map([[SOL, price("100")]]), 5) } as PriceBoard,
+        history: { ownedTokenAccounts: () => slow("balances", [], 20) },
       },
       { owner: OWNER, receivingMint: SPCX },
     );

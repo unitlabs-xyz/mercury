@@ -15,6 +15,7 @@ import { testDb } from "./db/testing.js";
 import { users, wallets } from "./db/schema.js";
 import { memoryOrderStore } from "./orders/memory.js";
 import { inMemoryBuilds } from "./relay/builds.js";
+import { heldInAssociated } from "./relay/testing.js";
 import type { AuthDeps } from "./auth/middleware.js";
 import type { Deps, ReadDeps } from "./deps.js";
 
@@ -143,6 +144,8 @@ const harness = async (
     chain: {
       tokenBalances: async (_owner: string) => over.balances ?? [held(XSC9, "10", 8)],
     },
+    // The same balances, each in the owner's associated account: what the fee quote checks exists.
+    history: { ownedTokenAccounts: heldInAssociated(() => over.balances ?? [held(XSC9, "10", 8)]) },
     prices: {
       pricesFor: async () =>
         new Map([

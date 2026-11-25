@@ -22,6 +22,7 @@ import { inMemoryBuilds } from "../relay/builds.js";
 import { getBase64Encoder, getTransactionDecoder } from "@solana/kit";
 import { D } from "@mercury/core";
 import { actingAs, actingLinked } from "../wallets/testing.js";
+import { heldInAssociated } from "../relay/testing.js";
 import { USDC_MINT } from "@mercury/chain";
 
 const lifetime = { blockhash: "11111111111111111111111111111111" as Blockhash, lastValidBlockHeight: 1n };
@@ -250,6 +251,11 @@ const feeDeps = (recipientHoldsUsdc: boolean, solUsd: string | null) =>
       tokenBalances: async () =>
         recipientHoldsUsdc ? [{ mint: USDC_MINT, rawAmount: 1n, decimals: 6 }] : [],
       mintConfig: async () => null,
+    },
+    history: {
+      ownedTokenAccounts: heldInAssociated(
+        recipientHoldsUsdc ? [{ mint: USDC_MINT, rawAmount: 1n, decimals: 6 }] : [],
+      ),
     },
     prices: {
       pricesFor: async () =>
