@@ -16,7 +16,6 @@ import {
   lots,
   multiplierEvents,
   notifications,
-  positions,
   priceBars,
   tokens,
   users,
@@ -221,26 +220,72 @@ describe("costWallet, a first costing", () => {
     expect(D(lot!.unitCostUsd).toString()).toBe("300");
   });
 
-  it("keeps the cost shares had in the person's own wallet when they moved from it", async () => {
+  it("keeps the cost shares had in the person's own wallet when they moved from it, exact where it was", async () => {
     const s = await seed();
-    await s.db.insert(positions).values({
+    const lot = (unitCostUsd: string, at: Date, isEstimated = false) => ({
       userId: s.userId,
       walletId: s.mainId,
+      tokenId: s.tokenId,
       instrumentId: s.instrumentId,
+      tokenQty: tokensOf(1),
       shares: "1",
-      sharesWithBasis: "1",
-      costBasisUsd: "180",
-      referenceBasisUsd: "180",
-      feeUsd: "0",
-      avgUnitCostUsd: "180",
+      unitCostUsd,
+      acquiredAt: at,
+      source: "buy" as const,
+      isEstimated,
     });
+    // Bought at $180 there before the move, and at $300 after it: the move carries $180, not today's $240.
+    await s.db.insert(lots).values([lot("180", day(2)), lot("300", day(6))]);
     await s.found({ kind: "in", amount: tokensOf(1), at: day(4), sourceOwner: MAIN });
     const { past, asked } = pastOf({ TSLA: 999 });
     await costWallet(deps(s.db, past), s.walletId, NOW);
-    const [lot] = await s.chainLots();
-    expect(lot).toMatchObject({ estimateSource: "own_wallet" });
-    expect(D(lot!.unitCostUsd).toString()).toBe("180");
+    const [moved] = await s.chainLots();
+    expect(D(moved!.unitCostUsd).toString()).toBe("180");
+    // Exact there, so exact here.
+    expect(moved).toMatchObject({ estimateSource: null, isEstimated: false });
     expect(asked).toEqual([]);
+  });
+
+  it("marks a cost carried from the person's own wallet estimated where it was estimated there", async () => {
+    const s = await seed();
+    await s.db.insert(lots).values({
+      userId: s.userId,
+      walletId: s.mainId,
+      tokenId: s.tokenId,
+      instrumentId: s.instrumentId,
+      tokenQty: tokensOf(1),
+      shares: "1",
+      unitCostUsd: "150",
+      acquiredAt: day(2),
+      source: "chain",
+      isEstimated: true,
+    });
+    await s.found({ kind: "in", amount: tokensOf(1), at: day(4), sourceOwner: MAIN });
+    await costWallet(deps(s.db, pastOf({ TSLA: 999 }).past), s.walletId, NOW);
+    const [moved] = await s.chainLots();
+    expect(moved).toMatchObject({ estimateSource: "own_wallet", isEstimated: true });
+    expect(D(moved!.unitCostUsd).toString()).toBe("150");
+  });
+
+  it("prices shares paid for with another stock Mercury lists at what that stock was worth then", async () => {
+    const s = await seed();
+    const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
+    const [nvda] = await s.db.insert(instruments).values({ ticker: "NVDA", name: "Nvidia" }).returning();
+    await s.db
+      .insert(tokens)
+      .values({ instrumentId: nvda!.id, mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 });
+    // 2 TSLA for 3 NVDA at $100: $150 a share.
+    await s.found({
+      kind: "in",
+      amount: tokensOf(2),
+      at: day(4),
+      counterMint: NVDAX,
+      counterAmount: tokensOf(3),
+    });
+    await costWallet(deps(s.db, pastOf({ TSLA: 999, NVDA: 100 }).past), s.walletId, NOW);
+    const [bought] = await s.chainLots();
+    expect(bought).toMatchObject({ estimateSource: "token_price", isEstimated: true });
+    expect(D(bought!.unitCostUsd).toString()).toBe("150");
   });
 
   it("replays departures at average cost, writing only what is still held", async () => {

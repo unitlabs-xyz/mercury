@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fails, fakeFetch, yahooChartNvda } from "@mercury/chain/testing";
-import { anchoredTo, YahooHistory } from "./yahoo.js";
+import { anchoredTo, EMPTY_FOR_MS, YahooHistory } from "./yahoo.js";
 import { D } from "@mercury/core";
 
 /** The recorded response, rebuilt with whatever series a test needs. */
@@ -242,7 +242,7 @@ describe("YahooHistory.priceAt", () => {
     expect((await yahoo.priceAt("TSLA", at("2026-06-01T14:30:00Z")))?.toString()).toBe("100");
   });
 
-  it("is null when Yahoo has nothing for the symbol then, and remembers that", async () => {
+  it("is null when Yahoo has nothing for the symbol then", async () => {
     const empty = answering(chartOf([], []));
     const yahoo = new YahooHistory({ fetch: empty.doFetch, now: () => NOW });
     expect(await yahoo.priceAt("TSLA", at("2026-06-01T14:30:00Z"))).toBeNull();
@@ -253,6 +253,36 @@ describe("YahooHistory.priceAt", () => {
         at("2026-06-01T14:30:00Z"),
       ),
     ).toBeNull();
+  });
+
+  it("asks again after a while when Yahoo answered with nothing, rather than keeping that for good", async () => {
+    let t = NOW;
+    let body: unknown = chartOf([], []);
+    let asked = 0;
+    const doFetch = (() => {
+      asked += 1;
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+    }) as typeof fetch;
+    const yahoo = new YahooHistory({ fetch: doFetch, now: () => t });
+    const moment = at("2026-06-01T14:30:00Z");
+    expect(await yahoo.priceAt("TSLA", moment)).toBeNull();
+    // Within the while, not asked again.
+    expect(await yahoo.priceAt("TSLA", moment)).toBeNull();
+    expect(asked).toBe(1);
+    // After it, asked again, and a price now is kept.
+    body = chartOf([sec("2026-06-01T14:00:00Z")], [100]);
+    t += EMPTY_FOR_MS;
+    expect((await yahoo.priceAt("TSLA", moment))?.toString()).toBe("100");
+    expect((await yahoo.priceAt("TSLA", moment))?.toString()).toBe("100");
+    expect(asked).toBe(2);
+  });
+
+  it("keeps a symbol Yahoo doesn't know as no price, without asking again", async () => {
+    const missing = answering({}, 404);
+    const yahoo = new YahooHistory({ fetch: missing.doFetch, now: () => NOW });
+    await yahoo.priceAt("NOPE", at("2026-06-01T14:30:00Z"));
+    await yahoo.priceAt("NOPE", at("2026-06-01T14:30:00Z"));
+    expect(missing.seen).toHaveLength(1);
   });
 
   it("throws when Yahoo is failing, so a missing price and an outage stay different answers", async () => {

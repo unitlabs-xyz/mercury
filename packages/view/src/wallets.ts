@@ -345,6 +345,7 @@ const ESTIMATED_FROM: Record<EstimateSource, string> = {
   earliest_price: "Estimated from the earliest price Mercury has",
   link_day_price: "Estimated from the price when you linked this wallet",
   own_wallet: "The cost it had in your other wallet",
+  token_price: "Estimated from what the stock swapped for it was worth then",
 };
 
 /**

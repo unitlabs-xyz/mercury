@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { ChainHistory, SignatureRef } from "@mercury/chain";
 import type { Db } from "../db/client.js";
 import { earnEvents, historyEvents, historyTxs, orders } from "../db/schema.js";
-import { balanceOf, emptyBefore, movementOf, rawJson, transactionFromRaw } from "./events.js";
+import { balanceOf, emptyBefore, movementsOf, rawJson, transactionFromRaw } from "./events.js";
 import { holdLease, keepCursor } from "./queue.js";
 import { stillFollowed, Unlinked } from "../wallets/active.js";
 
@@ -254,9 +254,10 @@ export async function readWallet(
         // A transaction the node kept without its details says nothing about balances: its
         // empty token lists are not "held none before", so the walk goes on past it.
         if (!tx.succeeded) continue;
-        const m = movementOf(tx, job.address, account.mint);
-        if (m?.kind === "loan_deposit") pledged = pledged > m.amountRaw ? pledged - m.amountRaw : 0n;
-        else if (m?.kind === "loan_withdraw") pledged += m.amountRaw;
+        for (const m of movementsOf(tx, job.address, account.mint)) {
+          if (m.kind === "loan_deposit") pledged = pledged > m.amountRaw ? pledged - m.amountRaw : 0n;
+          else if (m.kind === "loan_withdraw") pledged += m.amountRaw;
+        }
         oldest = { tx, pledgedBefore: pledged };
         // Held nowhere before this: in neither the wallet nor the loan.
         if (pledged === 0n && emptyBefore(tx, job.address, account.mint)) {
@@ -271,26 +272,21 @@ export async function readWallet(
       if (before === undefined) done = true;
     }
 
-    const rows = read.flatMap(({ ref, tx }) => {
-      const m = movementOf(tx, job.address, account.mint);
-      return m === null
-        ? []
-        : [
-            {
-              walletId: job.walletId,
-              account: account.address,
-              signature: ref.signature,
-              blockTime: tx.blockTime === null ? null : new Date(tx.blockTime * 1000),
-              kind: m.kind,
-              mint: account.mint,
-              amountRaw: m.amountRaw,
-              counterMint: m.counterMint,
-              counterAmountRaw: m.counterAmountRaw,
-              sourceOwner: m.sourceOwner,
-              destinationOwner: m.destinationOwner,
-            },
-          ];
-    });
+    const rows = read.flatMap(({ ref, tx }) =>
+      movementsOf(tx, job.address, account.mint).map((m) => ({
+        walletId: job.walletId,
+        account: account.address,
+        signature: ref.signature,
+        blockTime: tx.blockTime === null ? null : new Date(tx.blockTime * 1000),
+        kind: m.kind,
+        mint: account.mint,
+        amountRaw: m.amountRaw,
+        counterMint: m.counterMint,
+        counterAmountRaw: m.counterAmountRaw,
+        sourceOwner: m.sourceOwner,
+        destinationOwner: m.destinationOwner,
+      })),
+    );
 
     /*
      * This account is read: its events and its cursor kept now, together, so a

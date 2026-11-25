@@ -7,6 +7,8 @@ import {
   balanceOf,
   emptyBefore,
   movementOf,
+  movementsOf,
+  KAMINO_XSTOCKS_AUTHORITY,
   rawJson,
 } from "./events.js";
 
@@ -358,5 +360,82 @@ describe("rawJson", () => {
     };
     expect(raw.feeLamports).toBe("5000");
     expect(raw.postTokens[0]!.rawAmount).toBe("12345678901234567890");
+  });
+});
+
+describe("movementsOf, a pledge and a trade in one transaction", () => {
+  const POOL = "Pool111111111111111111111111111111111111111";
+
+  it("reads a buy and a pledge together as both: the pledge, and an arrival paid for in dollars", () => {
+    const ms = movementsOf(
+      tx({
+        accountKeys: [ME, KAMINO_LENDING_PROGRAM],
+        preTokens: [
+          entry(ME, USDC, 3_000_000_000n),
+          entry(POOL, TSLAX, 5_000_000_000n),
+          entry(KAMINO_XSTOCKS_AUTHORITY, TSLAX, 0n),
+        ],
+        postTokens: [
+          entry(ME, USDC, 0n),
+          entry(ME, TSLAX, 0n),
+          entry(POOL, TSLAX, 4_000_000_000n),
+          entry(KAMINO_XSTOCKS_AUTHORITY, TSLAX, 1_000_000_000n),
+        ],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(ms.map((m) => [m.kind, m.amountRaw, m.counterMint, m.counterAmountRaw])).toEqual([
+      ["loan_deposit", 1_000_000_000n, null, null],
+      ["in", 1_000_000_000n, USDC, 3_000_000_000n],
+    ]);
+  });
+
+  it("reads a withdrawal sold in the same transaction as the withdrawal and a sale", () => {
+    const ms = movementsOf(
+      tx({
+        accountKeys: [ME, KAMINO_LENDING_PROGRAM],
+        preTokens: [entry(ME, USDC, 0n), entry(KAMINO_XSTOCKS_AUTHORITY, TSLAX, 1_000_000_000n)],
+        postTokens: [
+          entry(ME, USDC, 2_900_000_000n),
+          entry(POOL, TSLAX, 1_000_000_000n),
+          entry(KAMINO_XSTOCKS_AUTHORITY, TSLAX, 0n),
+        ],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(ms.map((m) => [m.kind, m.amountRaw, m.counterMint])).toEqual([
+      ["loan_withdraw", 1_000_000_000n, null],
+      ["out", 1_000_000_000n, USDC],
+    ]);
+  });
+
+  it("reads a plain pledge through the market's account as the pledge alone", () => {
+    const ms = movementsOf(
+      tx({
+        accountKeys: [ME, KAMINO_LENDING_PROGRAM],
+        preTokens: [entry(ME, TSLAX, 1_000_000_000n), entry(KAMINO_XSTOCKS_AUTHORITY, TSLAX, 0n)],
+        postTokens: [entry(ME, TSLAX, 200_000_000n), entry(KAMINO_XSTOCKS_AUTHORITY, TSLAX, 800_000_000n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(ms.map((m) => [m.kind, m.amountRaw])).toEqual([["loan_deposit", 800_000_000n]]);
+  });
+});
+
+describe("movementsOf, what a swap was paid with", () => {
+  it("takes the dollars that left as the price, though another token's raw amount was larger", () => {
+    const BONK = "Bonk111111111111111111111111111111111111111";
+    const [m] = movementsOf(
+      tx({
+        preTokens: [entry(ME, USDC, 100_000_000n), entry(ME, BONK, 9_000_000_000_000n)],
+        postTokens: [entry(ME, USDC, 0n), entry(ME, BONK, 0n), entry(ME, TSLAX, 50_000_000n)],
+      }),
+      ME,
+      TSLAX,
+    );
+    expect(m).toMatchObject({ kind: "in", counterMint: USDC, counterAmountRaw: 100_000_000n });
   });
 });

@@ -4,8 +4,8 @@ import { Issuer, Mint, Ratio, Ticker, Usd } from "./primitives.js";
 /**
  * Where an estimated cost came from: SOL's price in a swap paid in SOL, the
  * share's market price when it arrived, the earliest price Mercury has, the
- * price when the wallet was linked, or the cost it had in another of the
- * person's wallets.
+ * price when the wallet was linked, the cost it had in another of the
+ * person's wallets, or what another stock swapped for it was worth then.
  */
 export const EstimateSource = z.enum([
   "sol_price",
@@ -13,6 +13,7 @@ export const EstimateSource = z.enum([
   "earliest_price",
   "link_day_price",
   "own_wallet",
+  "token_price",
 ]);
 export type EstimateSource = z.infer<typeof EstimateSource>;
 

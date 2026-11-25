@@ -1,10 +1,20 @@
 import type { TokenBalanceEntry, TransactionDetail } from "@mercury/chain";
+import { DOLLAR_MINTS } from "./cost-plan.js";
 
 /** Wrapped SOL's mint: what the reader writes when SOL left the wallet in a swap. */
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 /** Kamino's lending program: a token it moves in or out of the wallet is collateral, not a trade. */
 export const KAMINO_LENDING_PROGRAM = "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD";
+/**
+ * The xStocks market's authority at Kamino: the owner of the reserve accounts
+ * a pledge moves the stock into, and a withdrawal moves it out of. Derived
+ * from the market (`lendingMarketAuthPda`, seeds "lma" and the market) and
+ * checked on mainnet on 25 November 2026: a deposit's stock and its
+ * collateral tokens both land in accounts this owns. A change in its balance
+ * of a stock is what was pledged or taken back, whatever the wallet's balance did.
+ */
+export const KAMINO_XSTOCKS_AUTHORITY = "2Z7zhqp1eddmHNmEqexftST6DFPWmoL4QqfgiG5uJMJx";
 /** Kamino's vaults (Earn). A vault calls the lending program too, so its share tokens are told apart by this. */
 export const KAMINO_VAULT_PROGRAM = "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd";
 
@@ -154,55 +164,112 @@ const receiverOf = (tx: TransactionDetail, owner: string, mint: string): string 
 };
 
 /**
- * What a transaction did to `owner`'s `mint`, or null when it did nothing to
- * it (or failed, and so moved nothing).
+ * What a transaction did to `owner`'s `mint`, as one movement or several, and
+ * none when it did nothing to it (or failed, and so moved nothing).
+ *
+ * At Kamino, what was pledged or taken back is read from the market's own
+ * account (`KAMINO_XSTOCKS_AUTHORITY`), not from the wallet's: a buy and a
+ * pledge in one transaction leaves the wallet's balance where it was, and was
+ * read as nothing, so the shares bought had no cost. The pledge is one
+ * movement, and whatever the wallet gained or lost beyond it is an arrival or
+ * a departure like any other (bought with the dollars that left; sold, as in
+ * a repay with collateral). Where the market's account is not among the
+ * balances, the wallet's own change is the pledge, as before.
  */
-export const movementOf = (tx: TransactionDetail, owner: string, mint: string): Movement | null => {
-  if (!tx.succeeded) return null;
+export const movementsOf = (tx: TransactionDetail, owner: string, mint: string): readonly Movement[] => {
+  if (!tx.succeeded) return [];
   const all = deltas(tx, owner);
   const d = all.get(mint) ?? 0n;
-  if (d === 0n) return null;
   if (isCollateralMove(tx)) {
-    return {
-      kind: d < 0n ? "loan_deposit" : "loan_withdraw",
-      amountRaw: d < 0n ? -d : d,
-      counterMint: null,
-      counterAmountRaw: null,
-      sourceOwner: null,
-      destinationOwner: null,
-    };
+    const pledged =
+      balanceOf(tx.postTokens, KAMINO_XSTOCKS_AUTHORITY, mint) -
+      balanceOf(tx.preTokens, KAMINO_XSTOCKS_AUTHORITY, mint);
+    if (pledged === 0n) return d === 0n ? [] : [collateral(d < 0n ? "loan_deposit" : "loan_withdraw", d)];
+    const pledge = collateral(pledged > 0n ? "loan_deposit" : "loan_withdraw", pledged);
+    // What the wallet gained or lost beyond what went into or came out of the loan.
+    const rest = d + pledged;
+    if (rest > 0n) return [pledge, arrival(tx, owner, mint, all, rest)];
+    if (rest < 0n) return [pledge, departure(tx, owner, mint, all, -rest)];
+    return [pledge];
   }
-  if (d < 0n) {
-    // A plain transfer only: something arriving in the same transaction makes it a swap, sold for it.
-    let soldFor: string | null = null;
-    let soldForRaw: bigint | null = null;
-    for (const [m, delta] of all) {
-      if (m === mint || delta <= 0n) continue;
-      if (soldForRaw === null || delta > soldForRaw) {
-        soldFor = m;
-        soldForRaw = delta;
-      }
-    }
-    return {
-      kind: "out",
-      amountRaw: -d,
-      counterMint: soldFor,
-      counterAmountRaw: soldForRaw,
-      sourceOwner: null,
-      destinationOwner: soldFor === null ? receiverOf(tx, owner, mint) : null,
-    };
-  }
+  if (d === 0n) return [];
+  return [d > 0n ? arrival(tx, owner, mint, all, d) : departure(tx, owner, mint, all, -d)];
+};
 
-  // What left the wallet in the same transaction: the largest other token out, else SOL beyond the fee.
-  let counterMint: string | null = null;
-  let counterAmountRaw: bigint | null = null;
+/**
+ * The one movement a transaction made in `mint`, or its trade where it made
+ * a pledge and a trade together: for a reader that wants one (who received a
+ * departure, say). See `movementsOf`.
+ */
+export const movementOf = (tx: TransactionDetail, owner: string, mint: string): Movement | null => {
+  const all = movementsOf(tx, owner, mint);
+  return all.find((m) => m.kind === "in" || m.kind === "out") ?? all[0] ?? null;
+};
+
+const collateral = (kind: "loan_deposit" | "loan_withdraw", amount: bigint): Movement => ({
+  kind,
+  amountRaw: amount < 0n ? -amount : amount,
+  counterMint: null,
+  counterAmountRaw: null,
+  sourceOwner: null,
+  destinationOwner: null,
+});
+
+/**
+ * The other side of a trade, among the wallet's other tokens that moved the
+ * given way: dollars first (USDC or USDT, which say the price exactly),
+ * else the largest amount. Raw amounts of different tokens are not values,
+ * so dollars are never passed over for a token whose units are smaller.
+ */
+const counterOf = (
+  all: ReadonlyMap<string, bigint>,
+  mint: string,
+  way: "in" | "out",
+): { mint: string; raw: bigint } | null => {
+  let best: { mint: string; raw: bigint } | null = null;
   for (const [m, delta] of all) {
-    if (m === mint || delta >= 0n) continue;
-    if (counterAmountRaw === null || -delta > counterAmountRaw) {
-      counterMint = m;
-      counterAmountRaw = -delta;
+    if (m === mint) continue;
+    const raw = way === "out" ? -delta : delta;
+    if (raw <= 0n) continue;
+    const dollars = DOLLAR_MINTS.has(m);
+    const bestDollars = best !== null && DOLLAR_MINTS.has(best.mint);
+    if (best === null || (dollars && !bestDollars) || (dollars === bestDollars && raw > best.raw)) {
+      best = { mint: m, raw };
     }
   }
+  return best;
+};
+
+const departure = (
+  tx: TransactionDetail,
+  owner: string,
+  mint: string,
+  all: ReadonlyMap<string, bigint>,
+  amount: bigint,
+): Movement => {
+  // A plain transfer only: something arriving in the same transaction makes it a swap, sold for it.
+  const soldFor = counterOf(all, mint, "in");
+  return {
+    kind: "out",
+    amountRaw: amount,
+    counterMint: soldFor?.mint ?? null,
+    counterAmountRaw: soldFor?.raw ?? null,
+    sourceOwner: null,
+    destinationOwner: soldFor === null ? receiverOf(tx, owner, mint) : null,
+  };
+};
+
+const arrival = (
+  tx: TransactionDetail,
+  owner: string,
+  mint: string,
+  all: ReadonlyMap<string, bigint>,
+  amount: bigint,
+): Movement => {
+  // What left the wallet in the same transaction: dollars, else the largest other token out, else SOL beyond the fee.
+  const paid = counterOf(all, mint, "out");
+  let counterMint = paid?.mint ?? null;
+  let counterAmountRaw = paid?.raw ?? null;
   if (counterMint === null) {
     const sol = solSpent(tx, owner);
     if (sol > 0n) {
@@ -212,7 +279,7 @@ export const movementOf = (tx: TransactionDetail, owner: string, mint: string): 
   }
   return {
     kind: "in",
-    amountRaw: d,
+    amountRaw: amount,
     counterMint,
     counterAmountRaw,
     // A swap's tokens come from a pool, not a person: only a plain transfer names its sender.

@@ -1,5 +1,5 @@
 import { and, eq, isNotNull, isNull, lt } from "drizzle-orm";
-import { D, replayPosition, toWire, ZERO, type Decimal } from "@mercury/core";
+import { D, EMPTY_OPEN, replayPosition, toWire, type Decimal, type OpenPosition } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { activities, disposals, historyJobs, loanEvents, lots, tokens, wallets } from "../db/schema.js";
 import { movementsByToken } from "../portfolio/open.js";
@@ -96,12 +96,7 @@ export const liquidationPnl = (
  * cost. By when each happened rather than when it was recorded, because a
  * linked wallet's lots are recorded when its past is read, long after.
  */
-async function heldBefore(
-  db: Db,
-  walletId: string,
-  tokenId: string,
-  at: Date,
-): Promise<{ readonly tokenQty: bigint; readonly costUsd: Decimal }> {
+export async function heldBefore(db: Db, walletId: string, tokenId: string, at: Date): Promise<OpenPosition> {
   const [lotRows, disposalRows] = await Promise.all([
     db
       .select()
@@ -134,7 +129,5 @@ async function heldBefore(
       recordedAtUs: d.occurredAt.getTime() * 1000,
     })),
   ).get(tokenId);
-  if (moves === undefined) return { tokenQty: 0n, costUsd: ZERO };
-  const open = replayPosition(moves);
-  return { tokenQty: open.tokenQty, costUsd: open.costUsd };
+  return moves === undefined ? EMPTY_OPEN : replayPosition(moves);
 }

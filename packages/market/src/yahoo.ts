@@ -71,6 +71,8 @@ export const HOURLY_WITHIN_MS = 730 * DAY_MS - 2 * DAY_MS;
 /** How wide a window is asked for around a moment: enough to span a weekend, or a holiday on a daily series. */
 const WINDOW_MS = { "1h": 3 * DAY_MS, "1d": 10 * DAY_MS } as const;
 
+/** How long an empty answer for a past moment is believed before asking again. */
+export const EMPTY_FOR_MS = 15 * 60_000;
 /** The most past prices remembered. A past close does not change, so nothing expires but by count. */
 const PAST_CACHE_MAX = 5_000;
 
@@ -96,6 +98,8 @@ export class YahooHistory implements HistorySource, PastPriceSource {
   private readonly now: () => number;
   private readonly cache = new Map<string, Entry>();
   private readonly past = new Map<string, Decimal | null>();
+  /** Empty answers, by when to ask again. See `priceAt`. */
+  private readonly empty = new Map<string, number>();
 
   constructor(config: YahooHistoryConfig = {}) {
     this.base = config.baseUrl ?? BASE;
@@ -159,6 +163,12 @@ export class YahooHistory implements HistorySource, PastPriceSource {
     // Keyed by the hour asked about: two arrivals in one hour are one question.
     const key = `${symbol}:${interval}:${Math.floor(at.getTime() / 3_600_000)}`;
     if (this.past.has(key)) return this.past.get(key)!;
+    // An empty answer is remembered only a while: it can be Yahoo's passing gap, not the symbol's.
+    const emptyUntil = this.empty.get(key);
+    if (emptyUntil !== undefined) {
+      if (now < emptyUntil) return null;
+      this.empty.delete(key);
+    }
 
     const from = Math.floor((at.getTime() - WINDOW_MS[interval]) / 1000);
     const to = Math.floor(Math.min(now, at.getTime() + WINDOW_MS[interval]) / 1000);
@@ -171,7 +181,19 @@ export class YahooHistory implements HistorySource, PastPriceSource {
 
     const points = closesOf((await res.json()) as Chart) ?? [];
     const before = points.filter((p) => p.at.getTime() <= at.getTime()).at(-1);
-    return this.keepPast(key, (before ?? points[0])?.price ?? null);
+    const price = (before ?? points[0])?.price ?? null;
+    if (price === null) {
+      /*
+       * A 200 with no closes in it. Not kept for good: Yahoo answers that way
+       * for a while sometimes, and kept, a wallet asking then would fall to a
+       * worse estimate for every arrival in that hour until a restart. Asked
+       * again after a while; a symbol Yahoo doesn't know answers 404, kept above.
+       */
+      if (this.empty.size >= PAST_CACHE_MAX) this.empty.delete(this.empty.keys().next().value!);
+      this.empty.set(key, now + EMPTY_FOR_MS);
+      return null;
+    }
+    return this.keepPast(key, price);
   }
 
   private keepPast(key: string, price: Decimal | null): Decimal | null {

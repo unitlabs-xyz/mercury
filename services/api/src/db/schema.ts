@@ -447,7 +447,7 @@ export const lots = pgTable(
      * Plain text, so a new value needs no migration.
      */
     estimateSource: text("estimate_source", {
-      enum: ["sol_price", "market_price", "earliest_price", "link_day_price", "own_wallet"],
+      enum: ["sol_price", "market_price", "earliest_price", "link_day_price", "own_wallet", "token_price"],
     }),
     orderId: uuid("order_id"),
   },

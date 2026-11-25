@@ -21,7 +21,6 @@ import {
   instruments,
   lots,
   multiplierEvents,
-  positions,
   priceBars,
   tokens,
   wallets,
@@ -45,6 +44,7 @@ import { planChainEarn, type ChainEarnMove, type EarnVault } from "./earn.js";
 import { writeEarnRecord } from "../earn/store.js";
 import { USDC_MINT } from "@mercury/chain";
 import { recordMoveIn } from "../moves/record.js";
+import { heldBefore } from "../lending/liquidation-pnl.js";
 import { moveTitles } from "../moves/names.js";
 
 /** SOL's symbol at the historical source, for a swap paid in SOL. */
@@ -745,8 +745,9 @@ type Stock = {
 
 /**
  * One arrival's cost, by the first rule that answers: exact from a dollar
- * swap; SOL's price then for a swap paid in SOL; the cost it had in another of
- * the person's wallets; then the share's own price, by the fallbacks below.
+ * swap; SOL's price then for a swap paid in SOL; what another listed stock
+ * paid with was worth then; the cost it had in another of the person's
+ * wallets just before it left; then the share's own price, by the fallbacks below.
  */
 async function arrivalCost(
   deps: CostDeps,
@@ -776,15 +777,63 @@ async function arrivalCost(
     }
   }
 
+  /*
+   * Paid for with another stock Mercury lists: what those shares were worth
+   * then, by the same rules as any share's price. An estimate, marked as one.
+   * A token Mercury doesn't list has no price to ask, and the arrival is
+   * priced at its own share's price, below.
+   */
+  if (
+    e.counterMint !== null &&
+    e.counterMint !== stock.mint &&
+    e.counterAmountRaw !== null &&
+    shares.gt(ZERO)
+  ) {
+    const [paidWith] = await deps.db
+      .select({
+        tokenId: tokens.id,
+        instrumentId: tokens.instrumentId,
+        mint: tokens.mint,
+        decimals: tokens.decimals,
+        multiplier: tokens.multiplier,
+        ticker: instruments.ticker,
+      })
+      .from(tokens)
+      .innerJoin(instruments, eq(instruments.id, tokens.instrumentId))
+      .where(eq(tokens.mint, e.counterMint))
+      .limit(1);
+    if (paidWith !== undefined) {
+      const steps = (await multiplierSteps(deps.db, [paidWith.tokenId])).get(paidWith.tokenId) ?? [];
+      const paidShares = scaled(e.counterAmountRaw, paidWith.decimals).mul(
+        multiplierAt(at, steps, D(paidWith.multiplier)),
+      );
+      const price = await prices.share(paidWith, at);
+      if (price !== null) {
+        return {
+          unitCostUsd: paidShares.mul(price.price).div(shares),
+          referencePriceUsd: null,
+          estimateSource: "token_price",
+        };
+      }
+    }
+  }
+
+  /*
+   * Sent from another of the person's wallets: the cost the shares had there
+   * just before they left, exact where that was exact. Not that wallet's cost
+   * today, which later buys and sales there have moved since. Where that
+   * wallet held no cost for them then, the arrival is priced as one from
+   * outside, below.
+   */
   const from = e.sourceOwner === null ? undefined : own.get(e.sourceOwner);
   if (from !== undefined) {
-    const [there] = await deps.db
-      .select({ avg: positions.avgUnitCostUsd })
-      .from(positions)
-      .where(and(eq(positions.walletId, from), eq(positions.instrumentId, stock.instrumentId)))
-      .limit(1);
-    if (there !== undefined && D(there.avg).gt(ZERO)) {
-      return { unitCostUsd: D(there.avg), referencePriceUsd: null, estimateSource: "own_wallet" };
+    const there = await heldBefore(deps.db, from, stock.tokenId, at);
+    if (there.tokenQty > 0n && there.shares.gt(ZERO) && there.costUsd.gt(ZERO)) {
+      return {
+        unitCostUsd: there.costUsd.div(there.shares),
+        referencePriceUsd: there.referenceUsd.div(there.shares),
+        estimateSource: there.isEstimated ? "own_wallet" : null,
+      };
     }
   }
 
