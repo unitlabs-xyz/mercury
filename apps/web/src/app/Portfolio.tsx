@@ -15,6 +15,7 @@ import { AssetIcon } from "./baskets/AssetIcon";
 import { displayBasketName } from "./baskets/catalog";
 import { useModel } from "./portfolio/model";
 import { AllWalletLoans, WalletsOverview } from "./portfolio/Wallets";
+import { LinkPrompt } from "./settings/LinkPrompt";
 import { useActingWallet } from "../api/acting-wallet";
 import { walletName } from "../api/wallets";
 import { MoveBanner } from "./move/MoveBanner";
@@ -137,8 +138,9 @@ export const Portfolio = () => {
       )}
 
       <div className="flex flex-col gap-4 md:gap-6">
-        {/* 1 — every wallet together, once anything is linked. */}
+        {/* 1 — every wallet together, once anything is linked; until then, the way to link one. */}
         <WalletsOverview />
+        <LinkPrompt />
 
         {/* A linked wallet: the light reminder that the Mercury wallet is one tap. */}
         {acting.kind === "linked" && (

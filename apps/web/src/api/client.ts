@@ -37,6 +37,7 @@ export const apiFetch = async <T>(path: string, init: RequestInit = {}): Promise
       path,
       typeof init.body === "string" ? init.body : undefined,
       new Headers(init.headers).get(WALLET_HEADER) ?? chosenWallet() ?? undefined,
+      init.method,
     );
     if (sample !== undefined) return sample as T;
   }

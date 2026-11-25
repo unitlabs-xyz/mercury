@@ -32,6 +32,12 @@ import { toEvent, type ActivityReceipt, type Event } from "@mercury/view";
  * asserts the member form so it cannot come back.
  */
 export const SAMPLE = import.meta.env.VITE_SAMPLE === "1";
+/**
+ * `VITE_SAMPLE_WALLETS=mercury`: the person has only the Mercury wallet, no
+ * linked wallets, to see the app as most people do. Read as a member
+ * expression, like `VITE_SAMPLE`, so it folds away in a production build.
+ */
+const MERCURY_ONLY = import.meta.env.VITE_SAMPLE_WALLETS === "mercury";
 /** Local sample runs only: straight past sign-in. A deployed sample build keeps it. */
 export const SAMPLE_NO_LOGIN = SAMPLE && import.meta.env.DEV;
 
@@ -1524,14 +1530,88 @@ const inboxResponse = (route: string, body?: string): unknown | undefined => {
   return undefined;
 };
 
-export const sampleResponse = (path: string, body?: string, wallet?: string): unknown | undefined => {
+/*
+ * Which sample wallets are linked: both, or none with VITE_SAMPLE_WALLETS=mercury.
+ * Linking in Settings adds the next one, and unlinking takes it away, for this
+ * page load, so the whole flow can be walked through and seen to change Home.
+ */
+let linkedIds: string[] = MERCURY_ONLY ? [] : ["w-phantom", "w-new"];
+const visibleWallets = () => SAMPLE_WALLETS.wallets.filter((w) => w.isPrimary || linkedIds.includes(w.id));
+
+/**
+ * The next sample wallet to "connect" in Settings, as a wallet app would hand
+ * it over: Phantom first (it holds stocks and a loan), then a fresh one. Null
+ * once both are linked.
+ */
+export const sampleConnectable = (): { address: string; name: string } | null => {
+  const next = SAMPLE_WALLETS.wallets.find((w) => !w.isPrimary && !linkedIds.includes(w.id));
+  return next === undefined ? null : { address: next.address, name: next.label ?? "Solflare" };
+};
+
+/** Linking and unlinking, as the server answers them, against the sample's list. */
+const linkResponse = (route: string, body?: string, method?: string): unknown | undefined => {
+  if (route === "/v1/wallets/link/challenge") {
+    const { address } = JSON.parse(body ?? "{}") as { address?: string };
+    const issued = new Date();
+    const expires = new Date(issued.getTime() + 10 * 60_000);
+    return {
+      challengeId: `sample-${address ?? ""}`,
+      expiresAt: expires.toISOString(),
+      message: [
+        "beta.trymercury.xyz wants you to link this wallet to your Mercury account:",
+        address ?? "",
+        "",
+        "Linking lets Mercury show this wallet's positions and build transactions for you to sign.",
+        "It does not let Mercury move funds without your signature.",
+        "",
+        "URI: https://beta.trymercury.xyz",
+        "Version: 1",
+        "Chain ID: mainnet",
+        "Nonce: 7Gq2sAmpLeN0nce5tR1ng",
+        `Issued At: ${issued.toISOString()}`,
+        `Expiration Time: ${expires.toISOString()}`,
+      ].join("\n"),
+    };
+  }
+  if (route === "/v1/wallets/link") {
+    const { challengeId } = JSON.parse(body ?? "{}") as { challengeId?: string };
+    const address = (challengeId ?? "").replace(/^sample-/, "");
+    const wallet = SAMPLE_WALLETS.wallets.find((w) => w.address === address && !w.isPrimary);
+    if (wallet === undefined) return undefined;
+    if (!linkedIds.includes(wallet.id)) linkedIds = [...linkedIds, wallet.id];
+    return { wallet: { ...wallet, linkedAt: new Date().toISOString() }, relinked: false };
+  }
+  const unlink = /^\/v1\/wallets\/([^/]+)$/.exec(route);
+  if (unlink && method === "DELETE" && linkedIds.includes(decodeURIComponent(unlink[1]!))) {
+    linkedIds = linkedIds.filter((id) => id !== decodeURIComponent(unlink[1]!));
+    return null;
+  }
+  return undefined;
+};
+
+export const sampleResponse = (
+  path: string,
+  body?: string,
+  wallet?: string,
+  method?: string,
+): unknown | undefined => {
   const route = path.split("?")[0] ?? path;
   const inbox = inboxResponse(route, body);
   if (inbox !== undefined) return inbox;
-  if (route === "/v1/wallets") return SAMPLE_WALLETS;
+  const linking = linkResponse(route, body, method);
+  if (linking !== undefined) return linking;
+  if (route === "/v1/wallets") return { ...SAMPLE_WALLETS, wallets: visibleWallets() };
   // "Set cost": accepted, as the server would for an estimated holding.
   if (/^\/v1\/portfolio\/holdings\/[^/]+\/cost$/.test(route)) return { lots: 1 };
-  if (route === "/v1/portfolio/summary") return SAMPLE_SUMMARY;
+  if (route === "/v1/portfolio/summary") {
+    const shown = SAMPLE_SUMMARY.wallets.filter((w) => w.isPrimary || linkedIds.includes(w.id));
+    return {
+      ...SAMPLE_SUMMARY,
+      wallets: shown,
+      netWorthUsd: shown.reduce((sum, w) => sum + Number(w.valueUsd ?? 0), 0).toFixed(2),
+      calculating: shown.filter((w) => w.history === "calculating").length,
+    };
+  }
   /*
    * The chosen wallet's own figures. "all" is every wallet at once; the
    * account-wide routes (the card, the inbox) answer the same for any choice,
