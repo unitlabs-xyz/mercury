@@ -74,7 +74,7 @@ export const sectorOf = (name: string): string => (FUND.test(name) ? "Funds" : "
  * any issuer has ever paid, so it is called a split. A fall is something no
  * upstream explains to us, and guessing would be worse than saying so.
  */
-const kindOf = (from: Decimal, to: Decimal): MultiplierEventRow["kind"] => {
+export const kindOf = (from: Decimal, to: Decimal): MultiplierEventRow["kind"] => {
   if (to.lt(from)) return "unknown";
   return to.gt(from.mul(2)) ? "split" : "dividend";
 };

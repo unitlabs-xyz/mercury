@@ -181,6 +181,13 @@ export interface MintConfig {
    * effective timestamp has passed. One token is this many shares.
    */
   readonly multiplier: Decimal;
+  /**
+   * A change the issuer has announced and that is not in force yet: the next
+   * multiplier and when it takes over. A dividend is written to the mint ahead
+   * of its date, so this is how it is known before it lands. Absent when none
+   * is pending.
+   */
+  readonly scheduled?: { readonly multiplier: Decimal; readonly effectiveAt: Date };
   /** Token-2022 Pausable. True when the issuer has halted the token. */
   readonly isPaused: boolean;
 }

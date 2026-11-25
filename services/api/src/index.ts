@@ -15,6 +15,7 @@ import { createRelayClient } from "./funding/relay.js";
 import { createFundingStore } from "./funding/store.js";
 import { pollUnsettledDeposits } from "./funding/poll.js";
 import { syncStocks } from "./stocks/sync.js";
+import { watchMultiplierAnnouncements } from "./stocks/announcements.js";
 import { warmPrices } from "./prices/warm.js";
 import { RECORD_MAX_AGE_MS, prunePriceBars, recordPriceBars } from "./prices/record.js";
 import { pruneNotifications } from "./notify/inbox-queries.js";
@@ -384,6 +385,22 @@ every(
     return `${s.instruments} instruments, ${s.tokens} tokens`;
   },
   jobClock(60_000),
+);
+
+/**
+ * Dividends told before they land: every listed mint read for a multiplier
+ * change the issuer has written ahead of its date, and each holder told once,
+ * in the feed and the inbox. Hourly, one call per hundred mints: a dividend
+ * is written days ahead, and an hour late is still well before it.
+ */
+every(
+  "dividend-notices",
+  60 * 60 * 1000,
+  async () => {
+    const s = await watchMultiplierAnnouncements(auth.db, { chain: deps.chain }, new Date());
+    return s.announced === 0 ? null : `${s.announced} announced, ${s.told} holders told`;
+  },
+  jobClock(150_000),
 );
 
 /*

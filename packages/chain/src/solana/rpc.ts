@@ -349,9 +349,11 @@ export class SolanaRpc implements ChainReader, ChainHistory {
     const scaled = extensions.find((e) => e.extension === "scaledUiAmountConfig")?.state;
     const pausable = extensions.find((e) => e.extension === "pausableConfig")?.state;
 
+    const scheduled = this.scheduledMultiplier(scaled);
     return {
       decimals: info.decimals,
       multiplier: this.effectiveMultiplier(scaled),
+      ...(scheduled === null ? {} : { scheduled }),
       isPaused: pausable?.["paused"] === true,
     };
   }
@@ -365,6 +367,19 @@ export class SolanaRpc implements ChainReader, ChainHistory {
    * The values arrive as decimal strings, so they go into Decimal untouched. A
    * mint with no extension has a multiplier of one: one token, one share.
    */
+  /** The next multiplier while it is still ahead, and different from the one in force. */
+  private scheduledMultiplier(
+    state: Record<string, unknown> | undefined,
+  ): { multiplier: Decimal; effectiveAt: Date } | null {
+    if (state === undefined) return null;
+    const next = state["newMultiplier"];
+    const at = state["newMultiplierEffectiveTimestamp"];
+    if (typeof next !== "string" || typeof at !== "number" || this.now() >= at * 1000) return null;
+    const current = typeof state["multiplier"] === "string" ? D(state["multiplier"]) : ONE;
+    if (D(next).eq(current)) return null;
+    return { multiplier: D(next), effectiveAt: new Date(at * 1000) };
+  }
+
   private effectiveMultiplier(state: Record<string, unknown> | undefined): Decimal {
     if (state === undefined) return ONE;
     const current = typeof state["multiplier"] === "string" ? D(state["multiplier"]) : ONE;

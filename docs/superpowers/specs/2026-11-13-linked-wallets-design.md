@@ -536,6 +536,13 @@ from the loan's history, and is booked as a sale: Kamino's price for the shares,
 average cost just before, is realised P&L (`loan_event.realised_pnl_usd`), counted with the sells'.
 Until a linked wallet's past is costed, it waits rather than count the whole sale as profit.
 
+**Dividends, told before they land:** the issuer writes the next multiplier to the mint ahead of
+its date (`newMultiplier`, `newMultiplierEffectiveTimestamp`). The hourly `dividend-notices` job
+reads every listed mint for a change still ahead and tells each followed wallet holding that token,
+once (`multiplier_announcement`): "TSLA dividend coming · On Dec 3, paid as shares: about 0.0085
+more on your 10", in the feed (`dividend_notice`, no amount) and the inbox. A multiplier more than
+doubling is told as a split. The dividend itself is still recorded when it takes effect, as below.
+
 **Dividends:** xStocks pay by raising a multiplier, so one token later stands for more stock. Each
 arrival is converted to shares with the multiplier in force at its time (`multiplier_event`), and
 each multiplier change after it is a dividend, at no cost, as `position-sync` already treats them.

@@ -31,6 +31,8 @@ const KIND: Record<string, EventKind> = {
   transfer_out: "send",
   basket_funding: "send",
   dividend: "dividend",
+  // Announced, not paid: shown as a dividend, with no amount and no direction (see NO_DIRECTION).
+  dividend_notice: "dividend",
   interest: "interest",
   buy: "buy",
   sell: "sell",
@@ -75,11 +77,12 @@ const FLOW: Partial<Record<EventKind, "in" | "out">> = {
 };
 
 /**
- * Rows with an amount but no direction: collateral Kamino sold to clear a debt.
+ * Rows with no direction: collateral Kamino sold to clear a debt, and a
+ * dividend announced but not paid yet, which moved nothing.
  * The shares left and the debt went down by what they fetched; no cash reached
  * the holder or left them, so neither sign is true.
  */
-const NO_DIRECTION = new Set(["liquidation"]);
+const NO_DIRECTION = new Set(["liquidation", "dividend_notice"]);
 
 export const toEvent = (i: ActivityItem): Event => {
   const kind = KIND[i.kind] ?? "receive";

@@ -294,6 +294,28 @@ export const multiplierEvents = pgTable(
 );
 
 /**
+ * A multiplier change an issuer has written to a mint ahead of its date: a
+ * dividend (or a split) announced, not yet in force. One row per change, so
+ * its holders are told once, before it lands; `multiplier_event` records it
+ * again when it does.
+ */
+export const multiplierAnnouncements = pgTable(
+  "multiplier_announcement",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenId: uuid("token_id")
+      .notNull()
+      .references(() => tokens.id, { onDelete: "cascade" }),
+    oldMultiplier: usd("old_multiplier").notNull(),
+    newMultiplier: usd("new_multiplier").notNull(),
+    effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull(),
+    kind: text("kind", { enum: ["dividend", "split", "unknown"] }).notNull(),
+    announcedAt: timestamp("announced_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("multiplier_announcement_idx").on(t.tokenId, t.effectiveAt, t.newMultiplier)],
+);
+
+/**
  * What a token traded at across one bucket of time. See ADR 0016.
  *
  * The only record of a price in the system: the board forgets in a minute, and

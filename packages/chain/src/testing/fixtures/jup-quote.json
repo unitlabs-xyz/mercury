@@ -39,7 +39,5 @@
   "loadedLongtailToken": false,
   "instructionVersion": null,
   "transactionVersion": 0,
-  "additionalIntermediateTokens": [
-    "Ab3Jtnw4xC2ZfCh3Fwo85zFScyRtVpqC9soTKRaWHkLX"
-  ]
+  "additionalIntermediateTokens": ["Ab3Jtnw4xC2ZfCh3Fwo85zFScyRtVpqC9soTKRaWHkLX"]
 }
