@@ -98,3 +98,8 @@ wallets spec, and linking cannot open to the public without it.
 
 The design is in
 [2026-11-13 linked wallets](../superpowers/specs/2026-11-13-linked-wallets-design.md).
+
+**As built (25 November 2026).** Steps 1–11 are built. One part differs from the design as first
+drafted: moving a linked wallet's Glider basket is one approval paid straight into the Mercury
+wallet (Glider's exit takes a recipient), so the resumable `wallet_move` flow it planned for two
+approvals is not needed. Nothing in this decision changes with it.

@@ -1,6 +1,7 @@
 # Linked wallets: design
 
-**Status:** draft for review, not built · 13 November 2026 · web and iOS ·
+**Status:** built, steps 1–11, on `feat/linked-wallets` (step 10 differs from the first draft: see
+"A Glider basket, moved by Mercury") · 13 November 2026, amended 25 November 2026 · web and iOS ·
 [ADR 0017](../../adr/0017-linked-wallets.md)
 
 Someone signed in to Mercury can link Solana wallets they already hold, such as Phantom. Mercury
@@ -175,6 +176,8 @@ null`). The Mercury wallet doesn't count, and nor do unlinked ones. The count an
 - At the limit, `POST /v1/wallets/link/challenge` answers `409 link_limit` before any signature is
   asked for, so nobody signs a message only to be refused.
 - The 5 is one setting, `LINKED_WALLET_LIMIT`, defaulting to 5.
+- A person can open at most 20 challenges in a challenge's ten minutes; past that the route
+  answers `429 too_many_challenges`. Linking takes one; the ceiling only stops a flood of rows.
 
 ### Unlinking
 
@@ -213,7 +216,7 @@ goes ahead if confirmed.
 
 Under **Unlink and delete history**, these are deleted with the wallet row, in one transaction:
 positions, lots, disposals, activity, snapshots, loan events, the loan alert, Earn events,
-`wallet_move` rows, inbox notifications about the wallet, and the history reader's `history_job`
+inbox notifications about the wallet, and the history reader's `history_job`
 and `history_event` rows. Two things are kept:
 
 - `order` rows, with `wallet_id` set to null. They record the Mercury fee charged, which the books
@@ -234,8 +237,10 @@ moment it was unlinked, so the gap must be filled before anything is shown as cu
 - **A `history_job` is queued from the wallet's kept cursors,** so the reader reads only the gap,
   not the whole past again. Until it finishes, the wallet's P&L says "Calculating…", exactly as for
   a first link.
-- **`wallet-events` does not baseline it** as it would a new address. The gap's transfers are
-  recorded by the reader, marked as found in history, and never reach the inbox as news.
+- **`wallet-events` starts again from the new link**, as for a new address: its stream is reset,
+  because walking months of gap from its old cursor stalls it at its page cap. The gap's cash
+  transfers are written to the feed by the cost pass instead, from what the reader read, worded as
+  the live job words them and marked "Found in history". They never reach the inbox as news.
 - **`position-sync` runs as on any pass:** balances come from the chain at once. Shares that
   arrived during the gap have no cost until the reader has priced them, as for a new link.
 - **`loan_alert` starts empty** (it was cleared at unlink), so a loan already in trouble is warned
@@ -276,17 +281,17 @@ Today these tables are keyed by user, because a user had one wallet. Each gains
 `wallet_id uuid not null references wallet(id)`, backfilled from the user's primary wallet in the
 same migration:
 
-| Table                | Key or index that changes                                                                                                                                                                                                                                                                                                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `position`           | Primary key `(user_id, instrument_id)` → `(wallet_id, instrument_id)`                                                                                                                                                                                                                                                                       |
-| `lot`                | `lot_user_token_idx` → `(wallet_id, token_id)`. `source` gains `chain`, `declared` and `basket_exit` beside `buy`, `transfer_in`, `dividend`, `basket`. Whether a cost is exact or inferred stays in the `is_estimated` column that already exists ("True when we inferred the cost. The UI has to say so."), so the two can never disagree |
-| `disposal`           | Gains the column. Index alongside `lot`'s                                                                                                                                                                                                                                                                                                   |
-| `order`              | Gains the column, **nullable**, `on delete set null`, so fee records outlive a deleted wallet                                                                                                                                                                                                                                               |
-| `activity`           | `activity_signature_mint_idx` `(user_id, tx_signature, mint)` → `(wallet_id, tx_signature, mint)`                                                                                                                                                                                                                                           |
-| `portfolio_snapshot` | Its key gains `wallet_id`                                                                                                                                                                                                                                                                                                                   |
-| `loan_event`         | `loan_event_signature_kind_idx` → `(wallet_id, tx_signature, kind)`. Gains `origin_source` (`mercury` or `chain`) and `price_usd`, the collateral's share price at the time                                                                                                                                                                 |
-| `loan_alert`         | Primary key `user_id` → `wallet_id`: one remembered health per loan, not per person                                                                                                                                                                                                                                                         |
-| `earn_event`         | Gains the column and `origin_source` (`mercury` or `chain`)                                                                                                                                                                                                                                                                                 |
+| Table                | Key or index that changes                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `position`           | Primary key `(user_id, instrument_id)` → `(wallet_id, instrument_id)`                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `lot`                | `lot_wallet_token_idx` `(wallet_id, token_id)` beside `lot_user_token_idx`, which is kept for the reads across every wallet ("All wallets", the summary); `disposal` likewise. `source` gains `chain`, `declared` and `basket_exit` beside `buy`, `transfer_in`, `dividend`, `basket`. Whether a cost is exact or inferred stays in the `is_estimated` column that already exists ("True when we inferred the cost. The UI has to say so."), so the two can never disagree |
+| `disposal`           | Gains the column. Index alongside `lot`'s                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `order`              | Gains the column, **nullable**, `on delete set null`, so fee records outlive a deleted wallet                                                                                                                                                                                                                                                                                                                                                                              |
+| `activity`           | `activity_signature_mint_idx` `(user_id, tx_signature, mint)` → `(wallet_id, tx_signature, mint)`                                                                                                                                                                                                                                                                                                                                                                          |
+| `portfolio_snapshot` | Its key gains `wallet_id`                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `loan_event`         | `loan_event_signature_kind_idx` → `(wallet_id, tx_signature, kind)`. Gains `origin_source` (`mercury` or `chain`) and `price_usd`, the collateral's share price at the time                                                                                                                                                                                                                                                                                                |
+| `loan_alert`         | Primary key `user_id` → `wallet_id`: one remembered health per loan, not per person                                                                                                                                                                                                                                                                                                                                                                                        |
+| `earn_event`         | Gains the column and `origin_source` (`mercury` or `chain`)                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 `origin_source` says who wrote the row: `mercury` when Mercury recorded it at confirm time, `chain`
 when the history reader found it afterwards. It is not `lot.source`, which already exists and says
@@ -536,8 +541,12 @@ For each token account, the reader walks its events oldest first.
 | ---------------------------------------------------------- | --------------------------------------------------- | --------- |
 | Swap: USDC or USDT left the wallet in the same transaction | Dollars paid ÷ shares received                      | Exact     |
 | Swap: SOL or another token left the wallet                 | That token's price at that moment × amount ÷ shares | `~`       |
+| (another token Mercury doesn't list, which it can't price) | The share price at that moment, as a transfer in    | `~`       |
 | Plain transfer in (an exchange, a person, another wallet)  | The share price at that moment                      | `~`       |
-| Sent from another of the person's **own** wallets          | The cost it had there (the lots move, as in a move) | As it was |
+| Sent from another of the person's **own** wallets          | The cost it had there just before it left           | As it was |
+
+What a swap was paid with is dollars wherever dollars left in it, else the largest other token out:
+raw amounts of different tokens are not values, so dollars are never passed over.
 
 **Each departure** takes its share of the cost by Mercury's own rule, average cost
 (`packages/core/src/portfolio/cost-basis.ts`): the average cost per share of what remains doesn't
@@ -547,7 +556,11 @@ same answer the Mercury wallet's positions would.
 **Collateral is neither.** A transaction Kamino's lending program made (and no Earn vault) that
 moved the stock is a pledge (`loan_deposit`) or a withdrawal (`loan_withdraw`), not a departure or an
 arrival: the shares keep the lots and the cost they had, as position-sync keeps them
-(`withPledged`). Only a liquidation sells them. It doesn't touch the wallet's account, so it is read
+(`withPledged`). What was pledged or taken back is read from the xStocks market's own reserve
+account (its authority, `2Z7zhqp1eddmHNmEqexftST6DFPWmoL4QqfgiG5uJMJx`, derived from the market
+and checked on mainnet), not from the wallet's balance: a buy and a pledge in one transaction
+leave the wallet's balance where it was, and are a pledge and an arrival at what was paid; a
+withdrawal sold in the same transaction is a withdrawal and a sale. Only a liquidation sells them. It doesn't touch the wallet's account, so it is read
 from the loan's history, and is booked as a sale: Kamino's price for the shares, less their
 average cost just before, is realised P&L (`loan_event.realised_pnl_usd`), counted with the sells'.
 Until a linked wallet's past is costed, it waits rather than count the whole sale as profit.
@@ -589,7 +602,9 @@ Every share ends with a cost. In order, the first that answers:
 Everything after the first is marked `~`, with a line saying where the estimate came from ("from
 the price when you linked this wallet"), and every one of them offers "Set cost". A price source
 that fails is not a missing price: the reader backs off and tries again, and the wallet stays
-"Calculating…" until it answers, giving up to the next rule only after repeated failures.
+"Calculating…" until it answers, giving up to the next rule only after repeated failures. An empty
+answer for a past moment is believed for fifteen minutes and then asked again: Yahoo sometimes
+answers that way for a while, and kept for good it priced a whole hour by a worse rule.
 
 **The source is the Yahoo client Mercury already has** (`packages/market/src/yahoo.ts`), which
 reaches the same chart endpoint. It asks today by preset `range`, so reading one past moment adds
@@ -747,40 +762,53 @@ its parts that assume the wallet isn't known to Mercury no longer apply, and its
 basis rules are reused here. It is marked superseded so the two are not both left proposed for
 the same job.
 
-### A Glider basket, run by Mercury
+### A Glider basket, moved by Mercury
 
-A basket's assets sit in a Glider smart account the linked wallet owns, and Glider only ever pays
-exits to the owner ([10 Baskets](../../10-baskets.md)). So moving one is a sequence, which Mercury
-runs and the person only approves:
+A basket's assets sit in a Glider smart account the linked wallet owns. The first draft assumed
+Glider pays an exit only to the owner, so a move would be two approvals with a wait between them
+(exit to the linked wallet, then move the assets on), tracked by a resumable `wallet_move` row.
+Glider's exit takes a recipient, and the owner's signature authorizes paying it to the person's
+own Mercury wallet. So what was built is **one approval**, and nothing has to be resumed:
 
-| Step | Who signs                    | What happens                                                                                      |
-| ---- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
-| 1    | **Linked wallet** (prompt 1) | Exit the basket: in kind (the shares themselves) or to USDC, using the exit Glider already offers |
-| 2    | —                            | Glider settles. Mercury waits until the assets are in the linked wallet                           |
-| 3    | **Linked wallet** (prompt 2) | Move the assets to the Mercury wallet, as in "Tokens, in one click"                               |
-| 4    | Mercury wallet, no prompt    | Optional, if the person chose "Keep it as a basket": enroll in the same strategy and fund it      |
+| Step | Who signs                  | What happens                                                                                                           |
+| ---- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 1    | **Linked wallet** (prompt) | Exit the basket straight into the Mercury wallet: in kind, or sold for USDC (`?to=mercury`)                            |
+| 2    | —                          | Glider settles. The exit's `basket_action` row is reconciled as for any exit, into the feed of the wallet it landed in |
+| 3    | Mercury wallet, no prompt  | Only for "Keep it as a basket": invest the USDC in the same basket from the Mercury wallet                             |
+
+The recipient can only be the owner or the person's own Mercury wallet: the server refuses any
+other, before the authorization is prepared and again when the signed one comes back, and the web
+checks what Glider returned before the wallet signs (`paysOutTo`).
 
 The person chooses at the start:
 
 - **Hold as shares** (the default, and available: Ondo wrappers already count as holdings outside
-  a basket — see "Answered" below): exit in kind, move the shares. They arrive as ordinary stocks
-  in the Mercury wallet. Nothing is sold.
-- **Keep it as a basket:** exit to USDC, move the USDC, enroll and fund the same strategy from the
-  Mercury wallet. Glider only takes USDC to fund a basket, so this sells and buys again: spreads
-  are paid twice, and the money is **out of the market until Glider's next daily rebalance**. The
-  confirm screen says both.
+  a basket — see "Answered" below): exit in kind into the Mercury wallet. The shares arrive as
+  ordinary stocks there. Nothing is sold.
+- **Keep it as a basket:** exit to USDC into the Mercury wallet, then invest it in the same basket
+  from there. Glider only takes USDC to fund a basket, so this sells and buys again: spreads are
+  paid twice, and the money is **out of the market until Glider's next daily rebalance**. The
+  confirm screen says both, and the screen after it offers "Invest in … from your Mercury wallet".
 
-Prompt 2 can't be signed at the start: the exact amounts aren't known until Glider settles ("dust
-can remain"), and a Solana transaction expires within a couple of minutes. So the flow is
-resumable:
+**One exit from a basket at a time.** An exit's cost share is the basket's net funding less what
+earlier exits took, and an earlier exit counts only once it has landed and been recorded. A new
+exit is refused (`409 exit_settling`) while one from the same basket is submitted and unresolved.
 
-- A `wallet_move` row records the move and its step: `exiting`, `ready_to_move`, `moving`,
-  `enrolling`, `done` or `failed`, with Glider's operation id and each signature.
-- While the page is open it shows the steps and asks for prompt 2 as soon as the assets arrive.
-- If the person leaves, Home shows "Finish moving Magnificent Seven: one approval left", and an
-  inbox notice says the same. Nothing is lost by waiting: the assets are in their own wallet.
-- Each step is safe to retry. A step whose signature is already recorded is checked on the chain,
-  not sent again.
+What the first draft's resumable flow was for (an approval left to give, "Finish moving … one
+approval left" on Home and in the inbox) has nothing to resume with one approval: the
+`basket_action` row survives a reload, and the operation is tracked under the basket's position.
+
+**Baskets made outside Mercury.** A linked wallet's Glider baskets made on Glider directly are
+found on the chain (accounts it funded that the Swig program runs) and shown with their value. They
+cannot be exited through Mercury, so the card walks the person through it: withdraw on Glider,
+then move the shares here, or move the USDC and invest it in the closest Mercury basket. Each next
+step is read from what has arrived in the wallet, so the card needs no stored state either.
+
+**Still to verify on mainnet:** whether Glider opens the Mercury wallet's token account for an
+asset it has never held when it pays an in-kind exit there, and who pays that rent. Glider's API
+says a Solana withdrawal is "a direct paymaster-sponsored transfer"; it doesn't say more. Until a
+real move has been watched, an in-kind move of an asset new to the Mercury wallet is the case to
+test first.
 
 **Cost basis:** the basket's assets have no per-share lots today (Mercury records the basket's
 fundings, not Glider's buys). Shares exited in kind get a cost by splitting the basket's net
@@ -848,7 +876,9 @@ fee alone. Its keys are its own, so SOL or rent Mercury put up in it could be ta
 out (a USDC account opened with Mercury's SOL, closed by its owner, opened again on the next
 borrow); the Mercury wallet's accounts can only be closed by what Mercury builds, which never
 closes one. A linked wallet's first loan needs about 0.03 SOL for Kamino's account setup, and is
-refused with that figure (`needs_sol`) before anything is signed when the wallet holds less. A
+refused with that figure (`needs_sol`) before anything is signed when the wallet holds less. An
+Earn move it can't pay the network fee for, with the rent of any token account the move opens, is
+refused the same way. Its confirm screens say the fee and the setup are paid in SOL by the wallet. A
 move's rent, for the Mercury wallet's new accounts, is the linked wallet's too, and nothing is
 taken from the USDC moving.
 
@@ -901,7 +931,10 @@ poll. Tapping it opens the combined "All wallets" view.
 - **Settings → Linked wallets:** "N of 5 linked", the list, link, rename, **Unlink** and **Unlink
   and delete history**.
 - **A wallet switcher** in the header: "Mercury", each linked wallet by label, and "All wallets".
-  It sets `X-Mercury-Wallet` on every request. The choice is remembered per browser.
+  It sets `X-Mercury-Wallet` on every request. The choice is kept for the browser session and
+  cleared on sign-out: a reload keeps it, and a new visit starts on the Mercury wallet, so a linked
+  wallet is shown and asked to sign only when somebody chooses it, never because it was left
+  chosen days ago.
 - **"All wallets"** is a read-only view: summed portfolio, combined activity, every loan. Actions
   are disabled with "Choose a wallet to trade from".
 - **On a linked wallet,** each confirm screen says "You'll approve this in Phantom" (the connected
@@ -1015,8 +1048,9 @@ else.
    baskets, Earn and send from a linked wallet; the move-to-Mercury reminder.
 9. **Moving tokens.** One-click move with lots carried across; hand-made sends between own wallets
    recognised as moves.
-10. **Moving baskets.** `wallet_move`, the exit-wait-move steps, resuming, and "Keep it as a
-    basket".
+10. **Moving baskets.** One approval, paid straight into the Mercury wallet, "Hold as shares" or
+    "Keep it as a basket", one exit at a time; baskets made outside Mercury found and walked
+    through. See "A Glider basket, moved by Mercury".
 11. **Loan and Earn history.** The reader reads the loan account and the Earn share token;
     Kamino's API for the loan (the klend decoder only as a fallback), `loan_event` and `earn_event`
     with `origin_source: "chain"`, deposit-by-deposit loan detail, interest paid and earned.

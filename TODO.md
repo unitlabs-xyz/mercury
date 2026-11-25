@@ -104,7 +104,7 @@ the bigger steps in [12 Roadmap to 2028](docs/12-roadmap-2028.md).
 - [ ] Weekly check: SOL the relayer spent against the USDC it collected
 - [ ] Decide whether Send keeps absorbing its signature
 
-## Linked wallets: designed, in review
+## Linked wallets: built, steps 1–11, on `feat/linked-wallets`
 
 [ADR 0017](docs/adr/0017-linked-wallets.md) (proposed),
 [spec](docs/superpowers/specs/2026-11-13-linked-wallets-design.md). Link up to 5 Solana wallets
@@ -122,7 +122,15 @@ history reader inside the API.
       Solana Vibe Station connection, no SLA
 - [ ] Test on mainnet whether Phantom's scanner flags a multi-token move, and start domain
       verification with its security provider
-- [ ] Build steps 1–7 (link, track, read on web and iOS, cost and P&L from history): the first release
+- [x] Build steps 1–7 (link, track, read on web and iOS, cost and P&L from history): the first release
+- [x] Build steps 8–11 (acting, moving tokens, moving baskets, loan and Earn history). Step 10 is one
+      approval paid straight into the Mercury wallet, not the first draft's resumable `wallet_move`
+      flow: see the spec, "A Glider basket, moved by Mercury"
+- [ ] Watch one real in-kind basket move on mainnet of an asset the Mercury wallet has never held:
+      does Glider open its token account, and who pays the rent?
+- [ ] Wallets already costed before the reader stopped at Mercury's own buys (4866e4c) may hold an
+      estimated opening lot on top of Mercury's exact one. Find any linked wallet whose lots exceed
+      its chain balance and cost it again
 
 ## Trade router: designed, not to be built until the go-ahead
 
