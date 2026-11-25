@@ -531,12 +531,17 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     const rowsByWallet = await Promise.all(wallets.map((w) => deps.walletHoldings(userId, w.id)));
     const rows = rowsByWallet.flat().filter((r) => r.ticker === ticker);
     const held = rows.reduce((s, r) => s.add(r.shares), ZERO);
-    const row = rows[0];
-    if (row === undefined || held.lte(ZERO)) {
+    if (rows.length === 0 || held.lte(ZERO)) {
       return c.json(fail("not_found", `No position in ${ticker}.`), 404);
     }
+    /*
+     * Every wrapper any of the wallets' rows names, once each. Wallets can hold
+     * one stock through different wrappers, and the first row (which may be a
+     * closed one) names only its own.
+     */
+    const wrappers = [...new Map(rows.flatMap((r) => r.wrappers).map((w) => [w.mint, w] as const)).values()];
 
-    const mints = row.wrappers.map((w) => w.mint);
+    const mints = wrappers.map((w) => w.mint);
     // The multipliers are read here, not inside the loop below. Awaiting one
     // mint before asking about the next made this a round trip per wrapper,
     // and nothing underneath can batch calls a loop issues one at a time.
@@ -553,7 +558,7 @@ export function portfolioRoutes(deps: PortfolioDeps): Hono {
     }
 
     const tokens: WrapperHolding[] = [];
-    for (const wrapper of row.wrappers) {
+    for (const wrapper of wrappers) {
       const balance = balances.get(wrapper.mint);
       if (balance === undefined || balance.rawAmount === 0n) continue;
       const price = board.get(wrapper.mint);

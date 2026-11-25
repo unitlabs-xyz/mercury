@@ -28,6 +28,7 @@ import type {} from "../auth/middleware.js";
 import { actingOne, oneWalletOnly, writerOf } from "../wallets/acting.js";
 import type { WalletOwner } from "../wallets/active.js";
 import type { SponsoredBuilds } from "../relay/builds.js";
+import type { TrackedSends } from "../relay/tracked.js";
 import { logger } from "../log/index.js";
 
 const log = logger("borrow");
@@ -51,6 +52,11 @@ export interface BorrowDeps {
    * cover, and remembered so the send route will co-sign it.
    */
   readonly relay?: { readonly relayer: string; readonly builds: SponsoredBuilds };
+  /**
+   * Told about every loan transaction built, so the send path records it whether or not the app confirms.
+   * A loan has no other record: no job can infer one from the balances.
+   */
+  readonly sends?: Pick<TrackedSends<TrackedLoan>, "remember">;
   /** One wallet's loan events, oldest first: what tells the interest apart from what was lent. */
   readonly ledger: (owner: WalletOwner) => Promise<readonly LedgerRow[]>;
 }
@@ -123,6 +129,80 @@ const NET_VALUE_REMAINING_TOO_SMALL = 6092;
 /** Native SOL trades under the wrapped-SOL mint, which is how it is priced. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const pct = (d: Decimal | null) => (d === null ? null : toWire(d.toDecimalPlaces(4)));
+
+/** A loan transaction as it was built: what `recordLoan` needs but the signature. */
+export interface TrackedLoan {
+  readonly userId: string;
+  readonly walletId: string;
+  readonly wallet: string;
+  readonly intent: LendingIntent;
+}
+
+export type RecordedLoan =
+  | { readonly kind: "recorded"; readonly written: number; readonly events: readonly string[] }
+  /** The node has not returned the transaction yet. Worth asking again. */
+  | { readonly kind: "pending" }
+  | { readonly kind: "refused"; readonly message: string };
+
+/**
+ * File what a landed lending transaction did, read off the chain.
+ *
+ * Shared by the app's confirm and by the server's own tracking of every
+ * transaction it sent (`lending/sends.ts`): a loan has no other record, and a
+ * confirm that never arrived must not lose it. Recording is idempotent on the
+ * signature.
+ */
+export async function recordLoan(
+  deps: BorrowDeps,
+  input: {
+    readonly userId: string;
+    readonly walletId: string;
+    readonly wallet: string;
+    readonly signature: string;
+    readonly intentOf: (canonical: (ticker: string) => string) => LendingIntent;
+  },
+): Promise<RecordedLoan> {
+  const { wallet, signature } = input;
+  const tx = await deps.history.transaction(signature);
+  if (tx === null) return { kind: "pending" };
+  if (!tx.accountKeys.includes(wallet)) {
+    return { kind: "refused", message: "That transaction is not this wallet's." };
+  }
+
+  const [terms, position] = await Promise.all([
+    deps.lending.terms().catch(() => null),
+    deps.lending.position(wallet),
+  ]);
+  const collateralOf = (ticker: string) =>
+    terms?.collateral.find((t) => t.isStock && t.ticker === ticker.toUpperCase());
+
+  const intent = input.intentOf((ticker) => collateralOf(ticker)?.ticker ?? ticker.toUpperCase());
+  // "All" is sized by the chain as it lands, so the figure is read off the transaction.
+  const planned = landedAmounts(
+    planLoanEvents(intent, (ticker) => collateralOf(ticker)?.decimals ?? 0),
+    tx,
+    { wallet, usdcMint: deps.usdcMint, mintOf: (ticker) => collateralOf(ticker)?.mint ?? null },
+  );
+
+  const usdc = deps.usdcMint;
+  const written = await deps.record(planned, {
+    userId: input.userId,
+    walletId: input.walletId,
+    signature,
+    occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
+    borrowApy: terms?.pool.borrowApy ?? null,
+    debtAfterUsd: position?.debtUsd ?? ZERO,
+    collateralAfterUsd: (position?.deposits ?? []).reduce((s, d) => s.add(d.valueUsd), ZERO),
+    // Money moved in USDC and collateral in the stock, whatever stock the borrow names: the
+    // feed's unique index is on the mint, and a pledge-and-borrow filed twice under the stock
+    // kept only the pledge.
+    mintFor: (event) => {
+      const stock = event.kind === "pledge" || event.kind === "unpledge" ? event.ticker : null;
+      return stock === null ? usdc : (collateralOf(stock)?.mint ?? usdc);
+    },
+  });
+  return { kind: "recorded", written: written.written, events: planned.map((e) => e.kind) };
+}
 
 /**
  * Borrowing USDC against xStocks on Kamino. Reads are Kamino's live terms and
@@ -470,6 +550,16 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
       throw error;
     }
     if (deps.relay !== undefined) for (const m of built.messages) deps.relay.builds.remember(m);
+    // The last message is the action's own; any setup before it moves nothing and has nothing to record.
+    const action = built.messages.at(-1);
+    if (action !== undefined) {
+      deps.sends?.remember(action, {
+        userId: c.get("identity").userId,
+        walletId: writer.id,
+        wallet,
+        intent,
+      });
+    }
     return c.json({
       transactions: built.transactions,
       firstTime: built.firstTime,
@@ -509,48 +599,18 @@ export function borrowRoutes(deps: BorrowDeps): Hono {
      * the only account anything has of a loan — no job can infer one from the
      * balances, so a dropped confirm loses the event for good.
      */
-    const tx = await deps.history.transaction(signature);
-    if (tx === null) {
-      return c.json(fail("transaction_pending", "Transaction is not settled yet. Try again shortly."), 409);
-    }
-    if (!tx.accountKeys.includes(wallet)) {
-      return c.json(fail("validation_failed", "That transaction is not this wallet's."), 422);
-    }
-
-    const [terms, position] = await Promise.all([
-      deps.lending.terms().catch(() => null),
-      deps.lending.position(wallet),
-    ]);
-    const collateralOf = (ticker: string) =>
-      terms?.collateral.find((t) => t.isStock && t.ticker === ticker.toUpperCase());
-
-    const intent = intentFrom(action, (ticker) => collateralOf(ticker)?.ticker ?? ticker.toUpperCase());
-    // "All" is sized by the chain as it lands, so the figure is read off the transaction.
-    const planned = landedAmounts(
-      planLoanEvents(intent, (ticker) => collateralOf(ticker)?.decimals ?? 0),
-      tx,
-      { wallet, usdcMint: deps.usdcMint, mintOf: (ticker) => collateralOf(ticker)?.mint ?? null },
-    );
-
-    const usdc = deps.usdcMint;
-    const written = await deps.record(planned, {
+    const recorded = await recordLoan(deps, {
       userId: c.get("identity").userId,
       walletId: writer.id,
+      wallet,
       signature,
-      occurredAt: tx.blockTime === null ? new Date() : new Date(tx.blockTime * 1000),
-      borrowApy: terms?.pool.borrowApy ?? null,
-      debtAfterUsd: position?.debtUsd ?? ZERO,
-      collateralAfterUsd: (position?.deposits ?? []).reduce((s, d) => s.add(d.valueUsd), ZERO),
-      // Money moved in USDC and collateral in the stock, whatever stock the borrow names: the
-      // feed's unique index is on the mint, and a pledge-and-borrow filed twice under the stock
-      // kept only the pledge.
-      mintFor: (event) => {
-        const stock = event.kind === "pledge" || event.kind === "unpledge" ? event.ticker : null;
-        return stock === null ? usdc : (collateralOf(stock)?.mint ?? usdc);
-      },
+      intentOf: (canonical) => intentFrom(action, canonical),
     });
-
-    return c.json({ recorded: written.written, events: planned.map((e) => e.kind) });
+    if (recorded.kind === "pending") {
+      return c.json(fail("transaction_pending", "Transaction is not settled yet. Try again shortly."), 409);
+    }
+    if (recorded.kind === "refused") return c.json(fail("validation_failed", recorded.message), 422);
+    return c.json({ recorded: recorded.written, events: recorded.events });
   });
 
   return app;

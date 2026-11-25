@@ -59,7 +59,7 @@ const toBaseUnits = (usdc: Decimal): bigint =>
 export const buildSponsored = async (
   deps: SponsoredBuildDeps,
   input: SponsoredBuildInput,
-): Promise<{ wire: string }> => {
+): Promise<{ wire: string; messageBytes: Uint8Array }> => {
   const relayer = deps.relay.signer.address as Address;
   const payer = input.selfPaying === true ? (input.owner as Address) : relayer;
 
@@ -108,5 +108,5 @@ export const buildSponsored = async (
 
   /* Remembered before it leaves, or the relayer will not recognise it coming back. */
   if (input.selfPaying !== true) deps.relay.builds.remember(messageBytes);
-  return { wire };
+  return { wire, messageBytes };
 };

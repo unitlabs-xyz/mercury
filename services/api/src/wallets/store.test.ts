@@ -161,29 +161,41 @@ describe("openChallenge", () => {
     }
   });
 
-  it("refuses a wallet another account holds, linked or as its Mercury wallet", async () => {
+  it("opens a challenge for a wallet another account holds, so asking says nothing about who holds it", async () => {
     const db = await testDb();
     const alice = await person(db, "did:privy:alice");
     const bob = await person(db, "did:privy:bob");
     const alicesPhantom = await linked(db, alice.userId);
 
     for (const address of [alicesPhantom.address, "Mercury-did:privy:alice"]) {
-      expect(
-        await openChallenge(db, { userId: bob.userId, address, appUrl: APP, limit: LIMIT, now: NOW }),
-      ).toEqual({
-        kind: "refused",
-        reason: "linked_elsewhere",
+      const opened = await openChallenge(db, {
+        userId: bob.userId,
+        address,
+        appUrl: APP,
+        limit: LIMIT,
+        now: NOW,
       });
+      expect(opened.kind).toBe("ok");
     }
   });
 
-  it("still refuses one another account unlinked but kept, because its history is theirs", async () => {
+  it("opens one for a wallet another account unlinked but kept, and counts it against the ceiling", async () => {
     const db = await testDb();
     const alice = await person(db, "did:privy:alice");
     const bob = await person(db, "did:privy:bob");
     const phantom = await linked(db, alice.userId);
     await unlinkWallet(db, { userId: alice.userId, walletId: phantom.id, deleteHistory: false, now: NOW });
 
+    for (let i = 0; i < CHALLENGES_PER_WINDOW; i++) {
+      const opened = await openChallenge(db, {
+        userId: bob.userId,
+        address: phantom.address,
+        appUrl: APP,
+        limit: LIMIT,
+        now: NOW,
+      });
+      expect(opened.kind).toBe("ok");
+    }
     expect(
       await openChallenge(db, {
         userId: bob.userId,
@@ -191,6 +203,46 @@ describe("openChallenge", () => {
         appUrl: APP,
         limit: LIMIT,
         now: NOW,
+      }),
+    ).toEqual({ kind: "refused", reason: "too_many_challenges" });
+  });
+
+  it("refuses a wallet another account holds only once its signature has been checked", async () => {
+    const db = await testDb();
+    const alice = await person(db, "did:privy:alice");
+    const bob = await person(db, "did:privy:bob");
+    const phantom = await testWallet();
+    expect((await linkWith(db, alice.userId, phantom)).kind).toBe("linked");
+    const opened = await openChallenge(db, {
+      userId: bob.userId,
+      address: phantom.address,
+      appUrl: APP,
+      limit: LIMIT,
+      now: NOW,
+    });
+    if (opened.kind !== "ok") throw new Error("no challenge");
+
+    // Not the wallet's signature: nothing is said about who holds it.
+    const stranger = await testWallet();
+    expect(
+      await completeLink(db, {
+        userId: bob.userId,
+        challengeId: opened.challengeId,
+        signature: await stranger.sign(opened.message),
+        limit: LIMIT,
+        now: NOW,
+        verify: verifyWalletSignature,
+      }),
+    ).toEqual({ kind: "refused", reason: "bad_signature" });
+    // The wallet's own signature proves it is theirs; only then is it refused as held elsewhere.
+    expect(
+      await completeLink(db, {
+        userId: bob.userId,
+        challengeId: opened.challengeId,
+        signature: await phantom.sign(opened.message),
+        limit: LIMIT,
+        now: NOW,
+        verify: verifyWalletSignature,
       }),
     ).toEqual({ kind: "refused", reason: "linked_elsewhere" });
   });

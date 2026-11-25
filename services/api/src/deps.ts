@@ -45,7 +45,7 @@ import { createDb, type Db } from "./db/client.js";
 import type { ActivityDeps } from "./routes/activity.js";
 import type { NotificationDeps } from "./routes/notifications.js";
 import type { WalletDeps } from "./routes/wallets.js";
-import type { BorrowDeps } from "./routes/borrow.js";
+import { recordLoan, type BorrowDeps, type TrackedLoan } from "./routes/borrow.js";
 import type { SendDeps } from "./routes/send.js";
 import type { MoveDeps } from "./routes/move.js";
 import { recordMove as recordWalletMove } from "./moves/record.js";
@@ -53,7 +53,7 @@ import { moveSends } from "./moves/sends.js";
 import { mercuryWalletIdOf, movableMints } from "./moves/queries.js";
 import { findOutsideBaskets } from "./baskets/outside.js";
 import { remembered } from "./moves/remembered.js";
-import { createSolanaRpc } from "@solana/kit";
+import { address, createSolanaRpc } from "@solana/kit";
 import { KaminoLending } from "./lending/kamino.js";
 import { KaminoEarn } from "./earn/kamino-vault.js";
 import { D, ZERO } from "@mercury/core";
@@ -76,6 +76,8 @@ import { pgOrderStore, type OrderStore } from "./orders/store.js";
 import type { FeedbackDeps } from "./routes/feedback.js";
 import { loggingNotifier, resendNotifier } from "./notify/resend.js";
 import { settleOrder, tokenRefFor, type FillDeps } from "./orders/settle.js";
+import { confirmOrder, type TrackedOrder } from "./orders/confirm.js";
+import { trackedSends, type TrackedSends } from "./relay/tracked.js";
 import { countBuyers30d, readSupportedStocks } from "./instruments/queries.js";
 import {
   readBasketMovements,
@@ -671,6 +673,8 @@ export interface ReadDeps {
   readonly wallets: WalletDeps;
   readonly orders: OrderStore;
   readonly fills: FillDeps;
+  /** Told about every order's transaction as it is built, so the send path settles it whether or not the app confirms. */
+  readonly orderSends?: Pick<TrackedSends<TrackedOrder>, "remember">;
   readonly borrow: BorrowDeps;
   readonly earn: EarnDeps;
   readonly send: SendDeps;
@@ -749,6 +753,54 @@ export function buildReadDeps(
     record: (move) => recordWalletMove(db, { ...move, usdcMint: USDC_MINT }),
   });
   const rpc = createSolanaRpc(config.solanaRpcUrl);
+  const orders = pgOrderStore(db);
+  const fills: FillDeps = {
+    tokenRef: (mint) => tokenRefFor(db, mint),
+    settle: (input) => settleOrder(db, input),
+  };
+  const borrow: BorrowDeps = {
+    lending: deps.lending,
+    chain: deps.chain,
+    prices: deps.prices,
+    usdcMint: USDC_MINT,
+    history: deps.history,
+    record: (planned, input) => recordLoanEvents(db, planned, input),
+    ledger: (owner) => loanLedger(db, owner),
+    ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
+  };
+  /*
+   * Orders and loans are recorded by the server when their transaction goes
+   * out, so neither hangs on the page that placed it: a person who switches
+   * wallets or closes the tab after signing still gets the fill and the loan
+   * event. The app's confirm stays as the fast path, and is idempotent.
+   */
+  const orderTracker = trackedSends<TrackedOrder>("order", async (item, signature) => {
+    const order = await orders.byId(item.userId, item.orderId);
+    if (order === null) return "refused";
+    const r = await confirmOrder(
+      {
+        history: deps.history,
+        registry: deps.registry,
+        multipliers: deps.multipliers,
+        prices: deps.prices,
+        fills,
+        relayer: relay?.signer.address,
+      },
+      order,
+      { userId: item.userId, walletId: item.walletId, address: item.address, signature },
+    );
+    return r.kind === "settled" ? "recorded" : r.kind;
+  });
+  const loanTracker = trackedSends<TrackedLoan>("loan", async (item, signature) => {
+    const r = await recordLoan(borrow, {
+      userId: item.userId,
+      walletId: item.walletId,
+      wallet: item.wallet,
+      signature,
+      intentOf: () => item.intent,
+    });
+    return r.kind;
+  });
   const basketTemplates = new BasketService({
     store: basketStore,
     funding: new SolanaBasketFunding(
@@ -831,7 +883,7 @@ export function buildReadDeps(
       readAll: (userId, upTo) => markAllRead(db, userId, upTo, new Date()),
     },
     wallets: pgWalletDeps(db, { appUrl: config.appUrl, limit: config.linkedWalletLimit }),
-    orders: pgOrderStore(db),
+    orders,
     tradingFeeBps: config.tradingFeeBps,
     feedback: {
       to: config.feedbackTo,
@@ -840,21 +892,10 @@ export function buildReadDeps(
           ? loggingNotifier()
           : resendNotifier({ apiKey: config.resendApiKey, from: config.notifyFrom }),
     },
-    fills: {
-      tokenRef: (mint) => tokenRefFor(db, mint),
-      settle: (input) => settleOrder(db, input),
-    },
+    fills,
+    orderSends: orderTracker,
     ...(fund === undefined ? {} : { fund }),
-    borrow: {
-      lending: deps.lending,
-      chain: deps.chain,
-      prices: deps.prices,
-      usdcMint: USDC_MINT,
-      history: deps.history,
-      record: (planned, input) => recordLoanEvents(db, planned, input),
-      ledger: (owner) => loanLedger(db, owner),
-      ...(relay === undefined ? {} : { relay: { relayer: relay.signer.address, builds: relay.builds } }),
-    },
+    borrow: { ...borrow, sends: loanTracker },
     send: {
       rpcUrl: config.solanaRpcUrl,
       fees: { chain: deps.chain, prices: deps.prices, history: deps.history },
@@ -862,6 +903,8 @@ export function buildReadDeps(
         await Promise.all([
           earnMoves.accepted(messageBytes, signature),
           walletMoves.accepted(messageBytes, signature),
+          orderTracker.accepted(messageBytes, signature),
+          loanTracker.accepted(messageBytes, signature),
         ]);
       },
       sent: (wallet) => deps.chain.forgetBalances?.(wallet),
@@ -875,6 +918,7 @@ export function buildReadDeps(
       listed: () => movableMints(db, USDC_MINT),
       mercuryWalletId: (userId) => mercuryWalletIdOf(db, userId),
       latestBlockhash: async () => (await rpc.getLatestBlockhash().send()).value,
+      solLamports: async (wallet) => (await rpc.getBalance(address(wallet)).send()).value,
       sends: walletMoves,
       // Baskets made outside Mercury, found on the chain; looked for at most every ten minutes a wallet.
       outside: remembered(10 * 60_000, (wallet) =>

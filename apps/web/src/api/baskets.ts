@@ -23,7 +23,7 @@ import type { PreparedBasketFunding } from "@mercury/types";
 import { useSignedIn } from "./hooks";
 import { enrollBasket, fundBasket, type FundingReceipt } from "@mercury/view";
 import { apiFetch, ApiError } from "./client";
-import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { claimWallet, forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 import { refreshAfterChain } from "./settle";
 import { useTransactionSigner } from "./signer";
 
@@ -370,11 +370,12 @@ export const useBasketEnrollmentAction = (slug: string) => {
 
 const FUNDING_KIND = "funding";
 
-type SentFunding = { slug: string; signature: string };
+type SentFunding = { slug: string; signature: string; wallet?: string };
 
-const confirmSentFunding = ({ slug, signature }: SentFunding) =>
+const confirmSentFunding = ({ slug, signature, wallet }: SentFunding) =>
   apiFetch(`/v1/basket-templates/${encodeURIComponent(slug)}/funding/confirm`, {
     method: "POST",
+    headers: claimWallet({ signature, ...(wallet === undefined ? {} : { wallet }) }),
     body: JSON.stringify({ signature }),
   });
 

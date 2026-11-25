@@ -6,8 +6,10 @@ import {
   getBase64Encoder,
   getTransactionDecoder,
   partiallySignTransaction,
+  type Address,
   type Blockhash,
 } from "@solana/kit";
+import { findAssociatedTokenPda } from "@solana-program/token";
 import { D } from "@mercury/core";
 import type { OwnedTokenAccount, TokenBalance } from "@mercury/chain";
 import type { PriceBoard } from "@mercury/market";
@@ -37,7 +39,14 @@ type Body = {
 
 /** A person with a Mercury wallet and a linked Phantom, both real keys, and a relayer that is one too. */
 const world = async (
-  over: { owned?: OwnedTokenAccount[]; mercuryHolds?: string[]; solPrice?: string } = {},
+  over: {
+    owned?: OwnedTokenAccount[];
+    mercuryHolds?: string[];
+    /** Accounts of the Mercury wallet that are NOT the associated one, as the node lists them. */
+    mercuryOther?: string[];
+    solPrice?: string;
+    lamports?: bigint;
+  } = {},
 ) => {
   const [phantom, mercury, relayer, nvdaAccount, usdcAccount] = await Promise.all(
     Array.from({ length: 5 }, () => generateKeyPairSigner()),
@@ -57,14 +66,27 @@ const world = async (
   const prices = {
     pricesFor: async () => new Map([[SOL, { usdPricePerToken: D(over.solPrice ?? "200") }]]),
   } as unknown as PriceBoard;
-  // The Mercury wallet's accounts as the node lists them: empty ones too.
-  const mercuryAccounts = (over.mercuryHolds ?? []).map((mint): OwnedTokenAccount => ({
-    address: `m-${mint}`,
+  // The Mercury wallet's accounts as the node lists them: empty ones too, at their associated addresses.
+  const empty = (mint: string, account: string): OwnedTokenAccount => ({
+    address: account,
     mint,
     programId: TOKEN,
     rawAmount: 0n,
     decimals: 6,
-  }));
+  });
+  const mercuryAccounts = [
+    ...(await Promise.all(
+      (over.mercuryHolds ?? []).map(async (mint) => {
+        const [ata] = await findAssociatedTokenPda({
+          owner: mercury!.address,
+          mint: mint as Address,
+          tokenProgram: TOKEN as Address,
+        });
+        return empty(mint, ata);
+      }),
+    )),
+    ...(over.mercuryOther ?? []).map((mint) => empty(mint, `other-${mint}`)),
+  ];
   const deps: MoveDeps = {
     chain: {
       tokenBalances: async () => [] as TokenBalance[],
@@ -80,6 +102,7 @@ const world = async (
         [USDC, { symbol: "USDC", ticker: null, name: "US dollars", decimals: 6 }],
         [NVDAX, { symbol: "NVDAx", ticker: "NVDA", name: "Nvidia", decimals: 8 }],
       ]),
+    solLamports: async () => over.lamports ?? 1_000_000_000n,
     mercuryWalletId: async () => "w-mercury",
     latestBlockhash: async () => ({
       blockhash: "EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k" as Blockhash,
@@ -217,6 +240,27 @@ describe("POST /v1/move/prepare", () => {
     const w = await world({ mercuryHolds: [USDC, NVDAX] });
     const { body } = await prepare(appWith(w));
     expect([body.feeUsd, body.rentUsd, body.coveredByMercury]).toEqual(["0", "0", false]);
+  });
+
+  it("still owes the rent when the Mercury wallet's only account of a mint is not the associated one", async () => {
+    // The move opens the associated account whatever else is held, so that rent is the linked wallet's.
+    const w = await world({ mercuryOther: [USDC, NVDAX] });
+    const { body } = await prepare(appWith(w));
+    expect([body.rentUsd, body.rentSol]).toEqual(["0.84", "0.004176"]);
+  });
+
+  it("refuses with needs_sol, before anything is signed, when the wallet can't pay the fee and rent", async () => {
+    // Rent 0.004176 SOL plus 5,000 lamports for the one transaction.
+    const w = await world({ lamports: 4_180_000n });
+    const { status, body } = await prepare(appWith(w));
+    expect([status, body.error.code]).toEqual([409, "needs_sol"]);
+    expect(w.remembered).toHaveLength(0);
+  });
+
+  it("goes ahead when the wallet holds exactly the fee and the rent", async () => {
+    const w = await world({ lamports: 4_181_000n });
+    const { status } = await prepare(appWith(w));
+    expect(status).toBe(200);
   });
 
   it("remembers each transaction as a move from the linked wallet into the Mercury one, to record when it lands", async () => {

@@ -28,6 +28,7 @@ const relayer = Keypair.generate();
 
 const state = vi.hoisted(() => ({
   acting: { kind: "mercury" } as { kind: "mercury" } | { kind: "linked"; wallet: unknown },
+  resolved: true,
   privyAsked: 0,
   // AppKit, as the signer sees it.
   connected: null as string | null,
@@ -37,7 +38,9 @@ const state = vi.hoisted(() => ({
   signWith: null as null | ((tx: unknown) => unknown),
 }));
 
-vi.mock("./acting-wallet", () => ({ useActingWallet: () => ({ acting: state.acting }) }));
+vi.mock("./acting-wallet", () => ({
+  useActingWallet: () => ({ acting: state.acting, resolved: state.resolved }),
+}));
 vi.mock("../auth/embedded", () => ({ useEmbeddedWallet: () => ({ wallet: { address: "MercuryWallet" } }) }));
 vi.mock("@privy-io/react-auth/solana", () => ({
   // Privy signing a message inside Mercury: counted, and a stand-in signature.
@@ -127,6 +130,7 @@ const PHANTOM = {
 
 beforeEach(() => {
   state.acting = { kind: "mercury" };
+  state.resolved = true;
   state.privyAsked = 0;
   state.connected = null;
   state.dialogOpened = 0;
@@ -181,6 +185,15 @@ describe("useTransactionSigner: which pop-up appears", () => {
     await signing;
     expect(state.phantomAsked).toBe(1);
     expect(state.privyAsked).toBe(0);
+  });
+});
+
+describe("useTransactionSigner: before the wallet list has answered", () => {
+  it("is not ready to sign, so Privy is never asked for a request the server builds for a linked wallet", () => {
+    state.resolved = false;
+    expect(signer().walletReady).toBe(false);
+    state.resolved = true;
+    expect(signer().walletReady).toBe(true);
   });
 });
 

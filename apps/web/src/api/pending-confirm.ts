@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "./client";
+import { chosenWallet } from "./wallet-choice";
+import { WALLET_HEADER } from "@mercury/view";
 
 /*
  * Transactions that are on chain but that the server has not recorded yet.
@@ -27,11 +29,27 @@ const keyOf = (kind: string, signature: string) => `${PREFIX}:${kind}:${signatur
  * needs to confirm it rides along untouched — the server validates its own
  * request body, so this reads back only the one field it keys on.
  */
-export type PendingClaim = { readonly signature: string };
+export type PendingClaim = {
+  readonly signature: string;
+  /**
+   * The wallet that sent it: its id, or empty for the Mercury wallet. A claim
+   * is about one wallet's transaction, so it is asked again for that wallet
+   * whichever is chosen by then; the server answers for the wallet it is
+   * asked as, and would refuse a trade or loan for any other.
+   */
+  readonly wallet?: string;
+};
+
+/** The header that asks the server about the wallet a claim was made for. Nothing for a claim from before it was kept. */
+export const claimWallet = (claim: PendingClaim): Record<string, string> =>
+  typeof claim.wallet === "string" ? { [WALLET_HEADER]: claim.wallet } : {};
 
 export const rememberConfirm = <T extends PendingClaim>(kind: string, claim: T) => {
   try {
-    sessionStorage.setItem(keyOf(kind, claim.signature), JSON.stringify(claim));
+    sessionStorage.setItem(
+      keyOf(kind, claim.signature),
+      JSON.stringify({ wallet: chosenWallet() ?? "", ...claim }),
+    );
   } catch {
     /* A claim we cannot store is one we cannot retry; the attempt still happens. */
   }
@@ -109,7 +127,17 @@ export const usePendingConfirms = <T extends PendingClaim>(
           sessionStorage.removeItem(key);
           recorded = true;
         } catch (error) {
-          if (error instanceof ApiError && error.code !== "transaction_pending") {
+          /*
+           * Asked again while the node is behind, or while the wallet it was
+           * sent from is not the one chosen: neither says anything about the
+           * transaction, and the server's own tracking may well have recorded
+           * it already, which a retry for the right wallet finds out.
+           */
+          if (
+            error instanceof ApiError &&
+            error.code !== "transaction_pending" &&
+            error.code !== "wallet_changed"
+          ) {
             sessionStorage.removeItem(key);
           }
         }

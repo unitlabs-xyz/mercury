@@ -139,11 +139,13 @@ export const oneWalletOnly = (): MiddlewareHandler => async (c, next) => {
  * wallet instead, without a word. `all` is a 400, as the spec has it for every
  * write; a linked wallet is a 409, a wallet this route can't act for.
  *
- * Reads pass, so it can be mounted on a whole path: `/v1/orders/*` holds the
+ * Reads pass, and so does a `POST …/preview`, a dry run that changes nothing, so it can be mounted on a whole path: `/v1/orders/*` holds the
  * order a person is looking at as well as the ones they place.
  */
 export const mercuryWalletOnly = (): MiddlewareHandler => async (c, next) => {
-  if (c.req.method === "GET" || c.req.method === "HEAD") {
+  // A dry run is a read sent as a POST: a basket's `/preview` changes nothing, so it acts for no wallet.
+  const dryRun = c.req.method === "POST" && c.req.path.endsWith("/preview");
+  if (c.req.method === "GET" || c.req.method === "HEAD" || dryRun) {
     await next();
     return undefined;
   }

@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
 import { refreshAfterChain } from "./settle";
-import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { claimWallet, forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 import { useTransactionSigner } from "./signer";
 import { reasonOf, runSteps } from "../app/earn/moves";
 
@@ -218,15 +218,16 @@ export type EarnIntent =
  */
 export type EarnStep = EarnIntent | { kind: "deposit"; usd: { cameOutUpTo: number }; vault: string };
 
-type SentEarn = { signature: string; action: EarnIntent };
+type SentEarn = { signature: string; action: EarnIntent; wallet?: string };
 
 /** What the server filed: the USDC that actually moved, in cents. */
 type Filed = { recorded: boolean; usd: string };
 
-const confirmSent = (sent: SentEarn) =>
+const confirmSent = ({ signature, action, wallet }: SentEarn) =>
   apiFetch<Filed>("/v1/earn/confirm", {
     method: "POST",
-    body: JSON.stringify(sent),
+    headers: claimWallet({ signature, ...(wallet === undefined ? {} : { wallet }) }),
+    body: JSON.stringify({ signature, action }),
   });
 
 const toBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));

@@ -930,6 +930,59 @@ describe("GET /v1/portfolio, across wallets", () => {
     expect(body.wrappers).toEqual([expect.objectContaining({ mint: NVDAX, tokenQty: "2" })]);
   });
 
+  it("counts a wrapper only a later wallet holds, whichever row comes first (even a closed one)", async () => {
+    // The Mercury wallet's NVDA row is closed (sold out) and names NVDAx; the linked wallet holds NVDA as NVDAon.
+    const { d } = twoWallets({
+      walletHoldings: async (_userId, walletId) =>
+        walletId === MERCURY.id
+          ? [holding({ shares: ZERO, sharesWithBasis: ZERO, costBasisUsd: ZERO })]
+          : [
+              holding({
+                shares: D(1),
+                sharesWithBasis: D(1),
+                wrappers: [{ mint: NVDAON, symbol: "NVDAon", issuer: "ondo", decimals: 6 }],
+              }),
+            ],
+      chain: {
+        tokenBalances: async (address) =>
+          address === PHANTOM.address ? [{ mint: NVDAON, rawAmount: 1_000_000n, decimals: 6 }] : [],
+        mintConfig: async () => null,
+      },
+    });
+    const body = await exposureOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio/exposure/NVDA"));
+    expect(body.shares).toBe("1");
+    expect(body.valueUsd).toBe("200");
+    expect(body.wrappers).toEqual([expect.objectContaining({ mint: NVDAON, tokenQty: "1" })]);
+  });
+
+  it("lists a stock held through different wrappers in two wallets, each once", async () => {
+    const { d } = twoWallets({
+      walletHoldings: async (_userId, walletId) =>
+        walletId === MERCURY.id
+          ? [holding({ shares: D(1), sharesWithBasis: D(1) })]
+          : [
+              holding({
+                shares: D(1),
+                sharesWithBasis: D(1),
+                wrappers: [
+                  { mint: NVDAX, symbol: "NVDAx", issuer: "backed", decimals: 8 },
+                  { mint: NVDAON, symbol: "NVDAon", issuer: "ondo", decimals: 6 },
+                ],
+              }),
+            ],
+      chain: {
+        tokenBalances: async (address) =>
+          address === PHANTOM.address
+            ? [{ mint: NVDAON, rawAmount: 1_000_000n, decimals: 6 }]
+            : [{ mint: NVDAX, rawAmount: 100_000_000n, decimals: 8 }],
+        mintConfig: async () => null,
+      },
+    });
+    const body = await exposureOf(await appWith(d, "Mercury", ALL).request("/v1/portfolio/exposure/NVDA"));
+    expect(body.shares).toBe("2");
+    expect(body.wrappers.map((w) => w.mint).sort()).toEqual([NVDAON, NVDAX].sort());
+  });
+
   it("finds a stock only the linked wallet holds", async () => {
     const { d } = twoWallets({
       chain: {

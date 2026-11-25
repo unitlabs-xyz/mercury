@@ -8,8 +8,9 @@ import type { Blockhash } from "@solana/kit";
 import type {} from "../auth/middleware.js";
 import { STOCK_ACCOUNT_BYTES, TOKEN_ACCOUNT_BYTES, rentFor } from "../rent.js";
 import { writerOf } from "../wallets/acting.js";
-import { buildMove } from "../moves/build.js";
+import { buildMove, TOKENS_PER_TRANSACTION } from "../moves/build.js";
 import { planMove, type MovePlan } from "../moves/plan.js";
+import { mintsWithAssociatedAccount } from "../moves/associated.js";
 import type { MoveSends } from "../moves/sends.js";
 import type { Movable } from "../moves/queries.js";
 import type { OutsideBasket } from "../baskets/outside.js";
@@ -37,8 +38,17 @@ export interface MoveDeps {
     readonly walletId: string;
     readonly address: string;
   }) => Promise<readonly OutsideBasket[]>;
+  /**
+   * The wallet's SOL, in lamports. A linked wallet pays its own network fee and
+   * the rent of the accounts a move opens, so a move it cannot pay for is
+   * refused before anything is signed. Absent, the balance is not checked.
+   */
+  readonly solLamports?: (wallet: string) => Promise<bigint>;
   readonly now?: () => Date;
 }
+
+/** What the network charges for each signature, in lamports. Every move transaction has one. */
+const FEE_PER_SIGNATURE = 5_000n;
 
 const fail = (code: string, message: string) => ({ error: { code, message } });
 
@@ -188,7 +198,8 @@ export function moveRoutes(deps: MoveDeps): Hono {
       owned,
       listed: new Set(listed.keys()),
       asked,
-      mercuryHolds: new Set(mercury.map((b) => b.mint)),
+      // Decided by the associated account, the one a move opens: any other account of the mint pays nothing.
+      mercuryHolds: await mintsWithAssociatedAccount(mercuryAddress, mercury),
       rent: { classic, token2022 },
       solPriceUsd: prices.get(SOL_MINT)?.usdPricePerToken,
     });
@@ -197,6 +208,27 @@ export function moveRoutes(deps: MoveDeps): Hono {
         { ...fail(plan.code, REFUSED[plan.code]), ...(plan.mint ? { mint: plan.mint } : {}) },
         400,
       );
+    }
+
+    /*
+     * The linked wallet pays its own way, so it must hold the SOL for it: the
+     * network fee of every transaction and the rent of each account opened.
+     * Refused here, before anything is signed, rather than failing on chain.
+     */
+    if (deps.solLamports !== undefined) {
+      const transactions = BigInt(Math.ceil(plan.tokens.length / TOKENS_PER_TRANSACTION));
+      const needed = plan.rentLamports + transactions * FEE_PER_SIGNATURE;
+      const held = await deps.solLamports(writer.address);
+      if (held < needed) {
+        const sol = (n: bigint) => (Number(n) / 1e9).toFixed(4);
+        return c.json(
+          fail(
+            "needs_sol",
+            `This move costs about ${sol(needed)} SOL in network fees and new accounts, and this wallet holds ${sol(held)}. Add some SOL to it and try again.`,
+          ),
+          409,
+        );
+      }
     }
 
     // The linked wallet pays its own way: the network fee and any rent, in SOL.

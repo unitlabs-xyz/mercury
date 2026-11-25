@@ -4,7 +4,7 @@ import { apiFetch } from "./client";
 import { useSignedIn } from "./hooks";
 import { ALL_WALLETS, chosenWallet, subscribeChoice } from "./wallet-choice";
 import { refreshAfterChain } from "./settle";
-import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { claimWallet, forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 import { useTransactionSigner } from "./signer";
 import { borrowFromWire, type BorrowIntent, type BorrowWire } from "@mercury/view";
 
@@ -13,10 +13,14 @@ export type { Borrow, BorrowIntent, BorrowRow, Health } from "@mercury/view";
 
 const KIND = "loan";
 
-type SentLoan = { signature: string; action: BorrowIntent };
+type SentLoan = { signature: string; action: BorrowIntent; wallet?: string };
 
-const confirmSentLoan = (sent: SentLoan) =>
-  apiFetch("/v1/borrow/confirm", { method: "POST", body: JSON.stringify(sent) });
+const confirmSentLoan = ({ signature, action, wallet }: SentLoan) =>
+  apiFetch("/v1/borrow/confirm", {
+    method: "POST",
+    headers: claimWallet({ signature, ...(wallet === undefined ? {} : { wallet }) }),
+    body: JSON.stringify({ signature, action }),
+  });
 
 /** The account's Kamino position and what it can spend: cash plus what it could borrow. */
 export const useBorrow = () => {

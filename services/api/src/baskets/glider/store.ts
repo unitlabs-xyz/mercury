@@ -14,7 +14,7 @@ import type {
 } from "../core/primitives.js";
 import type { Db } from "../../db/client.js";
 import { activities, basketAccounts, basketActions, wallets } from "../../db/schema.js";
-import { primaryWalletId } from "../../wallets/primary.js";
+import { walletIdAt } from "../../wallets/primary.js";
 
 const SOLANA = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const LOCK_KEY = 4_919_208;
@@ -261,6 +261,8 @@ export class JsonBasketStore implements BasketStore {
 
   async confirmFunding(input: {
     userId: string;
+    /** The wallet that paid into the basket: its feed gets the row, not always the Mercury wallet's. */
+    ownerAddress?: string;
     slug: string;
     portfolioId: string;
     title: string;
@@ -274,7 +276,8 @@ export class JsonBasketStore implements BasketStore {
       .insert(activities)
       .values({
         userId: input.userId,
-        walletId: primaryWalletId(input.userId),
+        // The wallet that funded it, so its own transfer_out row is the one re-kinded below; the Mercury wallet when none is named.
+        walletId: walletIdAt(input.userId, input.ownerAddress ?? ""),
         kind: "basket_funding",
         occurredAt: input.occurredAt,
         title: input.title,

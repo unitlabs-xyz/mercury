@@ -158,6 +158,8 @@ export interface BasketStore {
   >;
   confirmFunding(input: {
     userId: string;
+    /** The wallet that paid into the basket. Absent, the Mercury wallet. */
+    ownerAddress?: string;
     slug: string;
     portfolioId: string;
     title: string;

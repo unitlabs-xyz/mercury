@@ -62,6 +62,8 @@ const appFor = (db: Db, userId: string, seen: Seen = { seen: [], viewed: [] }) =
   app.use("/act", mercuryWalletOnly());
   app.get("/act", (c) => c.json({ read: true }));
   app.post("/act", (c) => c.json({ acted: actingOne(c)?.address ?? null }));
+  app.use("/act/*", mercuryWalletOnly());
+  app.post("/act/:slug/preview", (c) => c.json({ previewed: true }));
   return app;
 };
 
@@ -242,6 +244,17 @@ describe("mercuryWalletOnly", () => {
     const app = appFor(db, userId);
     for (const header of [linkedId, ALL_WALLETS]) {
       const res = await app.request("/act", { headers: { [WALLET_HEADER]: header } });
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("lets a dry-run preview through for every wallet, linked or all, since it acts for none", async () => {
+    const app = appFor(db, userId);
+    for (const header of [linkedId, ALL_WALLETS]) {
+      const res = await app.request("/act/gold/preview", {
+        method: "POST",
+        headers: { [WALLET_HEADER]: header },
+      });
       expect(res.status).toBe(200);
     }
   });

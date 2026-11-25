@@ -4,7 +4,7 @@ import { useActingWallet } from "./acting-wallet";
 import { walletName } from "./wallets";
 
 export interface TransactionSigner {
-  /** Ready to sign now. The Mercury wallet waits for Privy to hydrate; a linked wallet is asked when signing. */
+  /** Ready to sign now. The Mercury wallet waits for Privy to hydrate and for the wallet list to confirm it is the one chosen; a linked wallet is asked when signing. */
   readonly walletReady: boolean;
   /** The linked wallet's name when it is the one that approves, for "Continue in Phantom"; null for the Mercury wallet. */
   readonly approver: string | null;
@@ -27,7 +27,7 @@ export interface TransactionSigner {
  * signs and confirms the same way whichever wallet acts; only this differs.
  */
 export const useTransactionSigner = (): TransactionSigner => {
-  const { acting } = useActingWallet();
+  const { acting, resolved } = useActingWallet();
   const { wallet } = useEmbeddedWallet();
   const { signTransaction } = useSignTransaction();
   const { signMessage } = useSignMessage();
@@ -58,7 +58,8 @@ export const useTransactionSigner = (): TransactionSigner => {
     return (await signTransaction({ transaction, wallet })).signedTransaction;
   };
   return {
-    walletReady: wallet !== undefined,
+    // Not before the wallet list has said which wallet is chosen: Privy must not sign for a linked wallet's request.
+    walletReady: resolved && wallet !== undefined,
     approver: null,
     sign,
     // Privy signs inside Mercury, without a pop-up to repeat: one after another.

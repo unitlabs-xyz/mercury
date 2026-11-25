@@ -22,7 +22,8 @@ export interface WalletView {
  *
  * - `link_limit`: the person already has as many linked as they may.
  * - `already_linked`: this address is already one of theirs, linked or the Mercury wallet itself.
- * - `linked_elsewhere`: another account holds this address. Never says whose.
+ * - `linked_elsewhere`: another account holds this address. Never says whose, and only said once a
+ *   signature has proven the address is the caller's (`completeLink`), so asking reveals nothing.
  * - `challenge_invalid`: no such challenge for this person, or it expired, or it was used.
  * - `bad_signature`: the signature is not this address's, over this message.
  */
@@ -110,9 +111,21 @@ const linkable = async (
   userId: string,
   address: string,
   limit: number,
+  /**
+   * Whether the caller has proven the address is theirs, by a verified
+   * signature. Until they have, another account holding it is not said: the
+   * answer would tell anyone which addresses have Mercury accounts.
+   */
+  proven: boolean,
 ): Promise<{ ok: true; existing: Wallet | null } | { ok: false; reason: LinkRefusal }> => {
   const [existing] = await db.select().from(wallets).where(eq(wallets.address, address)).limit(1);
-  if (existing !== undefined && existing.userId !== userId) return { ok: false, reason: "linked_elsewhere" };
+  if (existing !== undefined && existing.userId !== userId) {
+    if (proven) return { ok: false, reason: "linked_elsewhere" };
+    // Unproven: asked about as if nobody held it, so a challenge is opened and counted like any other.
+    return (await activeLinks(db, userId)) >= limit
+      ? { ok: false, reason: "link_limit" }
+      : { ok: true, existing: null };
+  }
   if (existing !== undefined && existing.unlinkedAt === null) return { ok: false, reason: "already_linked" };
   // Linking an unlinked wallet again counts like a new link.
   if ((await activeLinks(db, userId)) >= limit) return { ok: false, reason: "link_limit" };
@@ -142,8 +155,6 @@ export async function openChallenge(
   | { kind: "ok"; challengeId: string; message: string; expiresAt: Date }
   | { kind: "refused"; reason: LinkRefusal }
 > {
-  const check = await linkable(db, input.userId, input.address, input.limit);
-  if (!check.ok) return { kind: "refused", reason: check.reason };
   const [recent] = await db
     .select({ n: count() })
     .from(walletLinkChallenges)
@@ -154,6 +165,13 @@ export async function openChallenge(
       ),
     );
   if ((recent?.n ?? 0) >= CHALLENGES_PER_WINDOW) return { kind: "refused", reason: "too_many_challenges" };
+  /*
+   * After the ceiling, so asking about addresses is limited whatever the
+   * answer. An address another account holds is not refused here: that is said
+   * only once the signature proves the wallet is the caller's, at the last step.
+   */
+  const check = await linkable(db, input.userId, input.address, input.limit, false);
+  if (!check.ok) return { kind: "refused", reason: check.reason };
 
   const expiresAt = new Date(input.now.getTime() + CHALLENGE_TTL_MS);
   const message = linkMessage({
@@ -217,7 +235,7 @@ export async function completeLink(
       return { kind: "refused", reason: "bad_signature" } as const;
     }
 
-    const check = await linkable(tx, input.userId, challenge.address, input.limit);
+    const check = await linkable(tx, input.userId, challenge.address, input.limit, true);
     if (!check.ok) return { kind: "refused", reason: check.reason } as const;
 
     let wallet: Wallet | undefined;

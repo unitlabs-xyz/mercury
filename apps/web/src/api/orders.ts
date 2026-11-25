@@ -3,7 +3,7 @@ import { placeOrder, type OrderIntent, type OrderResult } from "@mercury/view";
 import { apiFetch } from "./client";
 import { refreshAfterChain } from "./settle";
 import { useTransactionSigner } from "./signer";
-import { forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
+import { claimWallet, forgetConfirm, rememberConfirm, usePendingConfirms } from "./pending-confirm";
 
 /**
  * The order sequence itself lives in `@mercury/view`, because the phone runs
@@ -25,11 +25,12 @@ const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
 const KIND = "order";
 
-type SentOrder = { orderId: string; signature: string };
+type SentOrder = { orderId: string; signature: string; wallet?: string };
 
 const confirmSent = (sent: SentOrder) =>
   apiFetch(`/v1/orders/${encodeURIComponent(sent.orderId)}/confirm`, {
     method: "POST",
+    headers: claimWallet(sent),
     body: JSON.stringify({ signature: sent.signature }),
   });
 

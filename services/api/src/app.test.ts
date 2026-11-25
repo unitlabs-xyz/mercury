@@ -96,6 +96,8 @@ const harness = async (
   const db = await testDb();
   const priced: string[] = [];
   /* What each quote was for, in the units the side trades: dollars on a buy. */
+  /** What the server was told it built, so it can settle the order itself when the transaction goes out. */
+  const remembered: { message: Uint8Array; item: unknown }[] = [];
   const amounts: string[] = [];
 
   const market = {
@@ -221,6 +223,9 @@ const harness = async (
     activity: {},
     notifications: {},
     fills: {},
+    orderSends: {
+      remember: (message: Uint8Array, item: unknown) => void remembered.push({ message, item }),
+    },
     borrow: {},
   } as unknown as ReadDeps;
 
@@ -247,7 +252,7 @@ const harness = async (
       body: JSON.stringify(body),
     });
 
-  return { post, get, postAs, db, priced, amounts };
+  return { post, get, postAs, db, priced, amounts, remembered };
 };
 
 describe("POST /v1/quote, selling", () => {
@@ -440,6 +445,26 @@ describe("POST /v1/orders/:id/execute", () => {
     await h.post(`/v1/orders/${orderId}/execute`, {});
     const order = (await (await h.get(`/v1/orders/${orderId}`)).json()) as { mercuryFeeUsd: string | null };
     expect(order.mercuryFeeUsd).toBe("2.5");
+  });
+
+  /*
+   * The order is settled by the server when its transaction goes out, so a
+   * person who switches wallets or closes the tab after signing still gets
+   * the fill. That needs the server to remember what it built, and for whom.
+   */
+  it("remembers the transaction it builds, for the wallet the order is for", async () => {
+    const h = await harness();
+    const { orderId } = (await (
+      await h.post("/v1/orders", { ticker: "NVDA", side: "buy", amount: "500" })
+    ).json()) as { orderId: string };
+    await h.post(`/v1/orders/${orderId}/execute`, {});
+    expect(h.remembered).toHaveLength(1);
+    expect(h.remembered[0]!.item).toMatchObject({
+      orderId,
+      userId: expect.any(String),
+      walletId: expect.any(String),
+    });
+    expect(h.remembered[0]!.message.length).toBeGreaterThan(0);
   });
 
   it("swaps what is left of a buy after both fees", async () => {

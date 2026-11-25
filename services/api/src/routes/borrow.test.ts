@@ -218,6 +218,32 @@ describe("POST /v1/borrow/transactions", () => {
     expect(((await res.json()) as { transactions: string[] }).transactions).toEqual(["AAAA"]);
   });
 
+  /*
+   * A loan has no record but the one the server files, and a tab that closes or a
+   * wallet that is switched after signing never confirms. So the server is told
+   * what it built, and files the loan itself when the transaction goes out.
+   */
+  it("tells the send path what it built, so the loan is filed without the app", async () => {
+    const remembered: { message: Uint8Array; item: unknown }[] = [];
+    const d: BorrowDeps = {
+      ...deps(lending()),
+      sends: { remember: (message, item) => void remembered.push({ message, item }) },
+    };
+    const res = await post(d, { kind: "borrow", usd: "4000" });
+    expect(res.status).toBe(200);
+    expect(remembered).toEqual([
+      {
+        message: new Uint8Array([1, 2, 3]),
+        item: {
+          userId: "user-1",
+          walletId: expect.any(String),
+          wallet: "WaLLeT",
+          intent: expect.objectContaining({ kind: "borrow" }),
+        },
+      },
+    ]);
+  });
+
   it("refuses a borrow past the 80% target, before anything is built", async () => {
     built.length = 0;
     const res = await post(deps(lending()), { kind: "borrow", usd: "4700" });

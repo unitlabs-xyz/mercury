@@ -7,7 +7,7 @@ import { ConfirmOrderRequest, CreateOrderRequest, InvestBasketRequest, type Erro
 import type { Deps } from "./deps.js";
 import { priceOrder, type PriceRequest } from "./pricing.js";
 import { gateExecution } from "./orders/gate.js";
-import { planFill } from "./orders/fill.js";
+import { confirmOrder } from "./orders/confirm.js";
 import { decisionToWire } from "./serialize.js";
 import { NO_FEE, quoteFee } from "./relay/quote.js";
 import { tradeCharge, type TradeCharge } from "./relay/fee.js";
@@ -737,7 +737,7 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
      * because the network part turns on whether the buyer holds the token —
      * which a moment ago they might not have.
      */
-    const { wire: built } = await buildSponsored(
+    const { wire: built, messageBytes } = await buildSponsored(
       {
         quotes: market().quotes,
         lookups: lookupTables,
@@ -754,6 +754,13 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
     );
     const transactions = [built];
     await record("executing", charge.mercury.toString());
+    // Settled by the server when the transaction goes out, whether or not this page is open to confirm it.
+    read.orderSends?.remember(messageBytes, {
+      userId: identity.userId,
+      walletId: acting.walletId,
+      address: owner,
+      orderId: order.id,
+    });
     return c.json({
       transactions,
       decision: wire,
@@ -790,60 +797,33 @@ export function createApp(market: () => Deps, auth: AuthDeps, read: ReadDeps) {
 
     const acting = orderWallet(c, order);
     if (acting.kind !== "ok") return acting.response;
-    const owner = acting.address;
 
-    const mint = decision.best.mint;
-    const [ref, token, multiplier, board] = await Promise.all([
-      read.fills.tokenRef(mint),
-      market().registry.byMint(mint),
-      market().multipliers.multiplierFor(mint),
-      // The underlying quote, to record on the lot beside the price paid. It
-      // is read here rather than taken from the order's own `referencePrice`
-      // because that one is from the quote the user was shown, which can be a
-      // minute older than the fill.
-      market().prices.pricesFor([mint]),
-    ]);
-    if (ref === null || token === null) return c.json(fail("not_found", "Unknown token."), 404);
-
-    /*
-     * Not yet on chain is a different answer from never: a client can confirm
-     * before the node it asks has caught up, and that is worth retrying. It
-     * gets the retryable code basket funding already uses, because `not_found`
-     * also means an unknown order or token here — a caller cannot tell a
-     * transaction that will appear from one of those, and so cannot know
-     * whether asking again is worth anything.
-     */
-    const tx = await market().history.transaction(parsed.data.signature);
-    if (tx === null) {
+    const confirmed = await confirmOrder(
+      {
+        history: market().history,
+        registry: market().registry,
+        multipliers: market().multipliers,
+        prices: market().prices,
+        fills: read.fills,
+        relayer: read.send.relay?.signer.address,
+      },
+      order,
+      {
+        userId: identity.userId,
+        walletId: acting.walletId,
+        address: acting.address,
+        signature: parsed.data.signature,
+      },
+    );
+    if (confirmed.kind === "pending") {
+      // A different answer from never, and the retryable code basket funding already uses: `not_found`
+      // also means an unknown order or token here, so a caller could not tell a transaction that will
+      // appear from one of those.
       return c.json(fail("transaction_pending", "Transaction is not settled yet. Try again shortly."), 409);
     }
-
-    const fill = planFill(tx, {
-      wallet: owner,
-      side: decision.side,
-      mint,
-      decimals: token.decimals,
-      multiplier: multiplier ?? D(1),
-      // Without this the charge for sponsoring is indistinguishable from money
-      // the swap spent, and it lands in the share price.
-      ...(read.send.relay === undefined ? {} : { relayer: read.send.relay.signer.address }),
-      now: new Date(),
-    });
-    if (fill.kind === "not_a_fill") return c.json(fail("validation_failed", fill.detail), 422);
-
-    const settled = await read.fills.settle({
-      userId: identity.userId,
-      walletId: acting.walletId,
-      orderId: order.id,
-      signature: parsed.data.signature,
-      side: decision.side,
-      ticker: decision.ticker,
-      mint,
-      tokenId: ref.tokenId,
-      instrumentId: ref.instrumentId,
-      fill,
-      referencePricePerShare: board.get(mint)?.pricePerShare ?? null,
-    });
+    if (confirmed.kind === "refused")
+      return c.json(fail(confirmed.code, confirmed.message), confirmed.status);
+    const { fill, settled } = confirmed;
 
     return c.json({
       status: "filled",

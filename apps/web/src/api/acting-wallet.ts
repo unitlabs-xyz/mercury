@@ -111,6 +111,13 @@ export const useActingWallet = () => {
   const account = useAccountWallets();
   const qc = useQueryClient();
   const { acting, stale } = resolveChoice(chosen, account.data?.wallets);
+  /*
+   * Whether `acting` is what the requests are for. `apiFetch` sends the stored
+   * choice as the header at once, but until the wallet list answers `acting` is
+   * only the Mercury wallet's fallback: a signer picked from it could sign for
+   * a different wallet than the one the server builds for.
+   */
+  const resolved = chosen === null || account.data !== undefined;
 
   // A wallet unlinked elsewhere stops being chosen here, once the list says so.
   useEffect(() => {
@@ -133,5 +140,5 @@ export const useActingWallet = () => {
   };
 
   const wallets = account.data?.wallets ?? [];
-  return { acting, choose, wallets, linked: wallets.filter((w) => !w.isPrimary) };
+  return { acting, resolved, choose, wallets, linked: wallets.filter((w) => !w.isPrimary) };
 };

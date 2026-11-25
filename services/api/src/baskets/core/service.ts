@@ -801,6 +801,8 @@ export class BasketService {
       );
     await this.deps.store.confirmFunding({
       userId,
+      // The funding wallet, so a linked wallet's funding shows in its own feed and not the Mercury wallet's.
+      ownerAddress: addressOf(ownerAccountId),
       slug,
       portfolioId: portfolio.portfolioId,
       title: `Invested in ${template.name}`,
