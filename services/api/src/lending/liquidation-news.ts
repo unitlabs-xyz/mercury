@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { ZERO, type Decimal } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { users, wallets } from "../db/schema.js";
 import { logger } from "../log/index.js";
@@ -36,13 +37,24 @@ export async function liquidationNewsSince(db: Db, walletId: string, now: Date):
  * person knows which of their loans it was.
  */
 export const liquidationNotice = (
-  found: NewLiquidation,
+  found: NewLiquidation | readonly NewLiquidation[],
   wallet: LoanWallet,
 ): Pick<Notice, "subject" | "body"> => {
-  const e = found.event;
-  const what = e.ticker === null ? "some of your collateral" : e.subtitle!.split(" · ")[0]!;
+  // One sale, however many stocks it took: each stock is a row of its own, and the mail names them all.
+  const events = (
+    Array.isArray(found) ? (found as readonly NewLiquidation[]) : [found as NewLiquidation]
+  ).map((f) => f.event);
+  const named = events.filter((e) => e.ticker !== null);
+  const what =
+    named.length === 0
+      ? "some of your collateral"
+      : named.map((e) => e.subtitle!.split(" · ")[0]!).join(" and ");
   const where = wallet.kind === "external" ? ` in your linked wallet ${loanWalletName(wallet)}` : "";
-  const repaid = e.ticker === null || e.usdAmount === null ? "" : `, which repaid $${e.usdAmount.toFixed(2)}`;
+  const total = named.reduce<Decimal | null>(
+    (sum, e) => (sum === null || e.usdAmount === null ? null : sum.add(e.usdAmount)),
+    ZERO,
+  );
+  const repaid = named.length === 0 || total === null ? "" : `, which repaid $${total.toFixed(2)}`;
   return {
     subject:
       wallet.kind === "external"
@@ -76,12 +88,17 @@ export async function mailLiquidations(
     .where(eq(wallets.id, walletId))
     .limit(1);
   if (row === undefined || row.email === null) return 0;
+  // One mail per sale: a liquidation that took two stocks is two rows and one event.
+  const bySale = new Map<string, NewLiquidation[]>();
+  for (const f of found) bySale.set(f.event.signature, [...(bySale.get(f.event.signature) ?? []), f]);
   let sent = 0;
-  for (const f of found) {
-    const ok = await notifier.send({ to: row.email, ...liquidationNotice(f, row) }).catch((err: unknown) => {
-      log.error({ userId, err }, "could not mail a liquidation");
-      return false;
-    });
+  for (const sale of bySale.values()) {
+    const ok = await notifier
+      .send({ to: row.email, ...liquidationNotice(sale, row) })
+      .catch((err: unknown) => {
+        log.error({ userId, err }, "could not mail a liquidation");
+        return false;
+      });
     if (ok) sent += 1;
   }
   return sent;

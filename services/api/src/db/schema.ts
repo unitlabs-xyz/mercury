@@ -891,8 +891,18 @@ export const loanEvents = pgTable(
      * one signature carries both a pledge and a borrow. Keyed on the signature
      * alone the second would be rejected as a duplicate of the first; keyed
      * with the kind, both land and confirming twice still writes nothing new.
+     *
+     * A liquidation is keyed by its stock too: one that took two stocks in one
+     * transaction is two sales, each with its own realised P&L. Only a
+     * liquidation, so a row Mercury recorded and the same row read from the
+     * chain are still one whatever each calls the stock.
      */
-    uniqueIndex("loan_event_signature_kind_idx").on(t.walletId, t.txSignature, t.kind),
+    uniqueIndex("loan_event_signature_kind_idx").on(
+      t.walletId,
+      t.txSignature,
+      t.kind,
+      sql`(case when ${t.kind} = 'liquidation' then coalesce(${t.ticker}, '') else '' end)`,
+    ),
   ],
 );
 export type LoanEvent = typeof loanEvents.$inferSelect;

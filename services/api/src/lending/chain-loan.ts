@@ -1,9 +1,12 @@
+import { and, eq, sql } from "drizzle-orm";
 import { D, toWire, type Decimal, ZERO } from "@mercury/core";
 import type { Db } from "../db/client.js";
 import { activities, loanEvents } from "../db/schema.js";
 import { notifyFor } from "../notify/inbox.js";
 import type { KaminoLoanDay, KaminoLoanTx } from "./kamino-loans.js";
 import { tokenText } from "./events.js";
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /** A stock Mercury lists, as a loan's history names it. */
 export interface ListedStock {
@@ -119,7 +122,9 @@ export const positionsAfter = (
  *
  * The account's creation is not a row: the first pledge is the loan opening,
  * and its receipt says so. A transaction with two rows of one kind (two
- * pledges in one go) keeps them as one, as the ledger's key does.
+ * pledges in one go) keeps them as one, as the ledger's key does, except a
+ * liquidation, which is one row per stock it took (the ledger's key has the
+ * stock for a liquidation), each with its share of what was repaid.
  */
 export const planChainLoan = (
   txs: readonly KaminoLoanTx[],
@@ -143,6 +148,37 @@ export const planChainLoan = (
       .filter((t) => t.action === "liquidate" && t.mint !== null && t.mint !== usdcMint)
       .map((t) => t.signature),
   );
+  /*
+   * A liquidation can take more than one stock in one transaction. Each is its
+   * own sale, with its own row, so each stock's realised P&L is its own. What
+   * the transaction repaid is split between them by what each stock's shares
+   * were worth then, the last taking what rounding leaves so the total is
+   * exactly what was repaid. One stock in two legs of the same transaction is
+   * one row, with both legs' shares.
+   */
+  const collateralLegs = new Map<string, Map<string, { amount: Decimal; value: Decimal }>>();
+  for (const t of txs) {
+    if (t.action !== "liquidate" || t.mint === null || t.mint === usdcMint) continue;
+    const legs = collateralLegs.get(t.signature) ?? new Map<string, { amount: Decimal; value: Decimal }>();
+    const had = legs.get(t.mint);
+    legs.set(t.mint, {
+      amount: (had?.amount ?? ZERO).add(t.amount),
+      value: (had?.value ?? ZERO).add(t.valueUsd),
+    });
+    collateralLegs.set(t.signature, legs);
+  }
+  const repaidFor = (signature: string, mint: string): Decimal | null => {
+    const repaid = repaidBy.get(signature);
+    if (repaid === undefined) return null;
+    const legs = [...(collateralLegs.get(signature)?.entries() ?? [])];
+    if (legs.length <= 1) return repaid;
+    const total = legs.reduce((sum, [, l]) => sum.add(l.value), ZERO);
+    const shareOf = (l: { value: Decimal }) =>
+      total.gt(0) ? repaid.mul(l.value).div(total) : repaid.div(legs.length);
+    const last = legs[legs.length - 1]![0];
+    if (mint !== last) return shareOf(legs.find(([m]) => m === mint)![1]);
+    return legs.slice(0, -1).reduce((left, [, l]) => left.sub(shareOf(l)), repaid);
+  };
   txs.forEach((t, i) => {
     if (t.action === "create" || t.mint === null) return;
     if (t.action === "liquidate" && t.mint === usdcMint) {
@@ -167,7 +203,8 @@ export const planChainLoan = (
       return;
     }
     const kind = KIND[t.action];
-    const key = `${t.signature}:${kind}`;
+    // A liquidation is one row per stock it took; anything else, one row per kind, as the ledger's key is.
+    const key = kind === "liquidation" ? `${t.signature}:${kind}:${t.mint}` : `${t.signature}:${kind}`;
     if (seen.has(key)) return;
     seen.add(key);
     const position = after[i]!;
@@ -195,13 +232,15 @@ export const planChainLoan = (
     }
     const stock = stocks.get(t.mint);
     const ticker = stock?.ticker ?? t.symbol;
-    const tokensRaw = stock === undefined ? null : t.amount.mul(D(10).pow(stock.decimals)).floor().toFixed();
-    const shares = tokensRaw === null ? t.amount.toString() : tokenText(tokensRaw, stock!.decimals);
+    const leg = kind === "liquidation" ? collateralLegs.get(t.signature)?.get(t.mint) : undefined;
+    const amount = leg?.amount ?? t.amount;
+    const tokensRaw = stock === undefined ? null : amount.mul(D(10).pow(stock.decimals)).floor().toFixed();
+    const shares = tokensRaw === null ? amount.toString() : tokenText(tokensRaw, stock!.decimals);
     const at = t.priceUsd.gt(0) ? ` at ${money(t.priceUsd)}` : "";
-    const repaid = kind === "liquidation" ? (repaidBy.get(t.signature) ?? null) : null;
+    const repaid = kind === "liquidation" ? repaidFor(t.signature, t.mint) : null;
     out.push({
       ...base,
-      usdAmount: kind === "liquidation" ? (repaid ?? t.valueUsd) : null,
+      usdAmount: kind === "liquidation" ? (repaid ?? leg?.value ?? t.valueUsd) : null,
       ticker,
       tokensRaw,
       priceUsd: t.priceUsd.gt(0) ? t.priceUsd : null,
@@ -269,7 +308,10 @@ export async function recordChainLoan(
         })
         .onConflictDoNothing()
         .returning({ id: loanEvents.id });
-      if (row === undefined) continue;
+      if (row === undefined) {
+        if (e.kind === "liquidation") await correctLiquidation(tx, owner.walletId, e);
+        continue;
+      }
       written += 1;
       const [feed] = await tx
         .insert(activities)
@@ -294,10 +336,45 @@ export async function recordChainLoan(
         newsSince !== null &&
         e.occurredAt.getTime() >= newsSince.getTime()
       ) {
-        await notifyFor(tx, owner.userId, [{ activityId: feed.id, kind: "loan_alert" }]);
+        // One inbox entry per sale, however many stocks it took.
+        if (!liquidations.some((l) => l.event.signature === e.signature)) {
+          await notifyFor(tx, owner.userId, [{ activityId: feed.id, kind: "loan_alert" }]);
+        }
         liquidations.push({ event: e, activityId: feed.id });
       }
     }
     return { written, liquidations };
   });
+}
+
+/**
+ * A liquidation read before it was kept one row per stock: a sale that took
+ * two stocks was one row, carrying everything the sale repaid as the first
+ * stock's proceeds. Read again, that row is brought to its own share, with its
+ * shares and feed row, and its realised P&L is worked out again from it. A row
+ * already right, or one Mercury recorded, is left as it is.
+ */
+async function correctLiquidation(tx: Tx, walletId: string, e: ChainLoanEvent): Promise<void> {
+  if (e.usdAmount === null) return;
+  const amount = toWire(e.usdAmount);
+  const fixed = await tx
+    .update(loanEvents)
+    .set({ usdAmount: amount, tokensRaw: e.tokensRaw, realisedPnlUsd: null })
+    .where(
+      and(
+        eq(loanEvents.walletId, walletId),
+        eq(loanEvents.txSignature, e.signature),
+        eq(loanEvents.kind, "liquidation"),
+        eq(loanEvents.originSource, "chain"),
+        sql`coalesce(${loanEvents.ticker}, '') = ${e.ticker ?? ""}`,
+        sql`(${loanEvents.usdAmount} is distinct from ${amount}::numeric(38, 18) or ${loanEvents.tokensRaw} is distinct from ${e.tokensRaw})`,
+      ),
+    )
+    .returning({ id: loanEvents.id });
+  for (const { id } of fixed) {
+    await tx
+      .update(activities)
+      .set({ amountUsd: amount, subtitle: e.subtitle })
+      .where(and(eq(activities.refTable, "loan_event"), eq(activities.refId, id)));
+  }
 }

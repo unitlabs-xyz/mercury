@@ -1,0 +1,2 @@
+DROP INDEX "loan_event_signature_kind_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "loan_event_signature_kind_idx" ON "loan_event" USING btree ("wallet_id","tx_signature","kind",(case when "kind" = 'liquidation' then coalesce("ticker", '') else '' end));

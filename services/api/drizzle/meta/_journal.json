@@ -295,6 +295,13 @@
       "when": 1795603126565,
       "tag": "0041_drop_opening_pledged",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1795603440634,
+      "tag": "0042_liquidation_per_stock",
+      "breakpoints": true
     }
   ]
 }

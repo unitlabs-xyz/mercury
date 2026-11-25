@@ -378,3 +378,131 @@ describe("recordChainLoan", () => {
     expect(await recordChainLoan(db, owner, [])).toEqual({ written: 0, liquidations: [] });
   });
 });
+
+describe("a liquidation that took two stocks in one transaction", () => {
+  const NVDAX = "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh";
+  const BOTH = new Map<string, ListedStock>([...STOCKS, [NVDAX, { ticker: "NVDA", decimals: 8 }]]);
+  const sale = () => {
+    const repaid = tx("liquidate", "2026-05-01T00:00:00Z", {
+      mint: USDC,
+      symbol: "USDC",
+      amount: "900",
+      price: "1",
+      value: "900",
+    });
+    const tsla = {
+      ...tx("liquidate", "2026-05-01T00:00:00Z", { amount: "4", price: "150", value: "600" }),
+      signature: repaid.signature,
+    };
+    const nvda = {
+      ...tx("liquidate", "2026-05-01T00:00:00Z", {
+        mint: NVDAX,
+        symbol: "NVDAx",
+        amount: "3",
+        price: "100",
+        value: "300",
+      }),
+      signature: repaid.signature,
+    };
+    return [repaid, tsla, nvda];
+  };
+
+  it("is one row per stock, each with its share of what was repaid, by what its shares were worth", () => {
+    const rows = planChainLoan(sale(), [], BOTH, USDC);
+    expect(rows.map((r) => [r.kind, r.ticker, r.tokensRaw, r.usdAmount?.toString(), r.mint])).toEqual([
+      ["liquidation", "TSLA", "400000000", "600", TSLAX],
+      ["liquidation", "NVDA", "300000000", "300", NVDAX],
+    ]);
+    // Together, exactly what the sale repaid.
+    expect(rows.reduce((s, r) => s.add(r.usdAmount!), D(0)).toString()).toBe("900");
+  });
+
+  it("splits what was repaid so the parts add to the whole, however the values divide", () => {
+    const [repaid, tsla, nvda] = sale();
+    const rows = planChainLoan(
+      [{ ...repaid!, amount: D("100") }, tsla!, { ...nvda!, valueUsd: D("1200") }],
+      [],
+      BOTH,
+      USDC,
+    );
+    expect(rows.reduce((s, r) => s.add(r.usdAmount!), D(0)).toString()).toBe("100");
+  });
+
+  it("keeps one stock in two legs of the same sale as one row, with both legs' shares", () => {
+    const [repaid, tsla] = sale();
+    const again = { ...tsla!, amount: D("1"), valueUsd: D("150") };
+    const rows = planChainLoan([repaid!, tsla!, again], [], STOCKS, USDC);
+    expect(rows.map((r) => [r.ticker, r.tokensRaw, r.usdAmount?.toString()])).toEqual([
+      ["TSLA", "500000000", "900"],
+    ]);
+  });
+
+  const seed = async () => {
+    const db = await testDb();
+    const [user] = await db.insert(users).values({ privyUserId: "did:privy:two-stocks" }).returning();
+    await mercuryWallet(db, user!.id);
+    const [linked] = await db
+      .insert(wallets)
+      .values({ userId: user!.id, address: "Phantom2", kind: "external", isPrimary: false })
+      .returning();
+    return { db, owner: { userId: user!.id, walletId: linked!.id } };
+  };
+
+  it("writes both sales to the ledger and the feed, and tells the person once", async () => {
+    const { db, owner } = await seed();
+    const r = await recordChainLoan(
+      db,
+      owner,
+      planChainLoan(sale(), [], BOTH, USDC),
+      at("2026-04-30T00:00:00Z"),
+    );
+    expect(r.written).toBe(2);
+    const ledger = await db.select().from(loanEvents).where(eq(loanEvents.walletId, owner.walletId));
+    expect(ledger.map((l) => [l.ticker, D(l.usdAmount!).toString()]).sort()).toEqual([
+      ["NVDA", "300"],
+      ["TSLA", "600"],
+    ]);
+    expect(r.liquidations).toHaveLength(2);
+    expect(await db.select().from(notifications)).toHaveLength(1);
+    // $900 repaid in all, off what was borrowed, as one repayment would be.
+    const feed = await db.select().from(activities).where(eq(activities.kind, "liquidation"));
+    expect(feed).toHaveLength(2);
+  });
+
+  it("brings a sale read before it was kept per stock to its own share, and works its P&L out again", async () => {
+    const { db, owner } = await seed();
+    const rows = planChainLoan(sale(), [], BOTH, USDC);
+    // As it was read before: one row, carrying the whole $900 as TSLA's proceeds, its P&L settled on that.
+    const whole = {
+      ...rows[0]!,
+      usdAmount: D(900),
+      subtitle: "4 TSLA at $150.00 · repaid $900.00 of the loan",
+    };
+    await recordChainLoan(db, owner, [whole]);
+    await db
+      .update(loanEvents)
+      .set({ realisedPnlUsd: "500" })
+      .where(and(eq(loanEvents.walletId, owner.walletId), eq(loanEvents.ticker, "TSLA")));
+
+    await recordChainLoan(db, owner, rows);
+
+    const ledger = await db.select().from(loanEvents).where(eq(loanEvents.walletId, owner.walletId));
+    expect(ledger.map((l) => [l.ticker, D(l.usdAmount!).toString(), l.realisedPnlUsd]).sort()).toEqual([
+      ["NVDA", "300", null],
+      ["TSLA", "600", null],
+    ]);
+    const tslaFeed = await db
+      .select()
+      .from(activities)
+      .where(and(eq(activities.kind, "liquidation"), eq(activities.mint, TSLAX)));
+    expect(tslaFeed.map((a) => [D(a.amountUsd!).toString(), a.subtitle])).toEqual([
+      ["600", "4 TSLA at $150.00 · repaid $600.00 of the loan"],
+    ]);
+
+    // Read a third time, nothing changes: its P&L, once settled again, stays.
+    await db.update(loanEvents).set({ realisedPnlUsd: "200" }).where(eq(loanEvents.ticker, "TSLA"));
+    await recordChainLoan(db, owner, rows);
+    const [tsla] = await db.select().from(loanEvents).where(eq(loanEvents.ticker, "TSLA"));
+    expect(tsla!.realisedPnlUsd).not.toBeNull();
+  });
+});

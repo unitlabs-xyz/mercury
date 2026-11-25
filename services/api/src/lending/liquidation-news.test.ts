@@ -83,3 +83,24 @@ describe("liquidationNotice", () => {
     expect(n.body).toContain("Kamino sold some of your collateral.");
   });
 });
+
+describe("liquidationNotice, a sale that took two stocks", () => {
+  it("names every stock sold and the whole of what the sale repaid", () => {
+    const nvda: ChainLoanEvent = {
+      ...sold,
+      usdAmount: D(330),
+      ticker: "NVDA",
+      tokensRaw: "300000000",
+      mint: "NVDAx",
+      subtitle: "3 NVDA at $110.00 · repaid $330.00 of the loan",
+    };
+    const n = liquidationNotice(
+      [
+        { event: sold, activityId: "a" },
+        { event: nvda, activityId: "b" },
+      ],
+      { kind: "privy_embedded", label: null, address: "x" },
+    );
+    expect(n.body).toContain("Kamino sold 4 TSLA at $150.00 and 3 NVDA at $110.00, which repaid $900.00");
+  });
+});
