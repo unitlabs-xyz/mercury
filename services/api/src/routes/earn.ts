@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { D, Decimal, toWire, ZERO } from "@mercury/core";
 import type { ChainHistory, ChainReader } from "@mercury/chain";
-import { SponsorShort } from "../lending/ports.js";
+import { OwnerShort, SponsorShort } from "../lending/ports.js";
 import { EarnRefused } from "../earn/kamino-vault.js";
 import type { EarnDirectory, EarnListing } from "../earn/directory.js";
 import type { KaminoApi, VaultPoint } from "../earn/kamino-api.js";
@@ -342,6 +342,17 @@ export function earnRoutes(deps: EarnDeps): Hono {
         .source(vault)
         .build(wallet, intent, writer.isPrimary ? deps.relay?.relayer : undefined);
     } catch (error: unknown) {
+      // A linked wallet pays its own network fee and rent: say how much SOL it needs, before it signs.
+      if (error instanceof OwnerShort) {
+        const sol = (n: bigint) => (Number(n) / 1e9).toFixed(3);
+        return c.json(
+          fail(
+            "needs_sol",
+            `This wallet pays its own network fee and account rent in SOL: it needs about ${sol(error.neededLamports)} SOL, and holds ${sol(error.heldLamports)}. Add some SOL to it and try again.`,
+          ),
+          409,
+        );
+      }
       if (error instanceof SponsorShort) {
         log.error(
           {

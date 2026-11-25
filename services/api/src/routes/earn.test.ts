@@ -11,7 +11,7 @@ import { EARN_VAULTS } from "../earn/catalog.js";
 import type { KaminoApi } from "../earn/kamino-api.js";
 import { EarnRefused } from "../earn/kamino-vault.js";
 import { EARN_RISK_VERSION } from "../earn/risk.js";
-import { SponsorShort } from "../lending/ports.js";
+import { OwnerShort, SponsorShort } from "../lending/ports.js";
 import type { Acting } from "../wallets/acting.js";
 import { actingAs, actingLinked } from "../wallets/testing.js";
 
@@ -419,6 +419,24 @@ describe("POST /v1/earn/transactions", () => {
       { kind: "deposit", usd: "1" },
     );
     expect(sponsors).toEqual(["ReLaYeR", undefined]);
+  });
+
+  it("says what SOL a linked wallet paying its own way needs, before it signs", async () => {
+    const res = await send(
+      appWith(deps({ directory: directory({ [STEADY]: { fail: new OwnerShort(50_000n, 2_139_280n) } }) }), {
+        all: false,
+        wallets: [actingLinked(WALLET)],
+      }),
+      "POST",
+      "/v1/earn/transactions",
+      { kind: "deposit", usd: "1" },
+    );
+    expect(res.status).toBe(409);
+    const body = await json(res);
+    expect(body.error.code).toBe("needs_sol");
+    expect((body.error as unknown as { message: string }).message).toContain(
+      "needs about 0.002 SOL, and holds 0.000",
+    );
   });
 
   it("says a short relayer as an outage", async () => {

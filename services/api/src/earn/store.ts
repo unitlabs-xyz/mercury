@@ -162,12 +162,18 @@ export async function writeEarnRecord(tx: Tx, e: EarnRecord): Promise<boolean> {
   return true;
 }
 
-/** Whether this wallet's account has ever moved money into or out of Earn. One indexed lookup. */
+/**
+ * Whether this wallet has ever moved money into or out of Earn: this wallet,
+ * not any wallet of the same person. Joined on the person, one Earn deposit
+ * from the Mercury wallet made every linked wallet read Kamino on every
+ * portfolio and money request. A linked wallet's own Earn moves from before
+ * it was linked are found by the history reader, and count from then.
+ */
 export const hasEarnHistory = async (db: Db, wallet: string): Promise<boolean> => {
   const [row] = await db
     .select({ id: earnEvents.id })
     .from(earnEvents)
-    .innerJoin(wallets, eq(wallets.userId, earnEvents.userId))
+    .innerJoin(wallets, eq(wallets.id, earnEvents.walletId))
     .where(eq(wallets.address, wallet))
     .limit(1);
   return row !== undefined;

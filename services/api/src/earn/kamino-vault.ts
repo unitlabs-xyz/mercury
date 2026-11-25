@@ -27,8 +27,8 @@ import type { ChainReader, Rotation } from "@mercury/chain";
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { createLendingRpc } from "../lending/rpc.js";
 import { topUp, transferSol } from "../lending/sponsor.js";
-import { WALLET_BYTES, rentFor } from "../rent.js";
-import { SponsorShort, type BuiltTransactions } from "../lending/ports.js";
+import { TOKEN_ACCOUNT_BYTES, WALLET_BYTES, rentFor } from "../rent.js";
+import { OwnerShort, SponsorShort, type BuiltTransactions } from "../lending/ports.js";
 import type { EarnAllocation, EarnIntent, EarnPosition, EarnSource, EarnVault } from "./ports.js";
 
 /** decimal.js from the SDK is a different copy from ours; go through the string. */
@@ -46,6 +46,8 @@ const COMPUTE_UNITS = 600_000;
 
 /** What the relayer lends a simulation to measure a top-up. */
 const PROBE_LAMPORTS = 10_000_000n;
+/** A wallet paying its own way keeps this for the network fee, as a linked wallet's loans do. */
+const OWNER_FEE_RESERVE = 100_000n;
 /** What it keeps besides: the share account's rent, about 0.002 SOL, and its own fees. */
 const RELAYER_KEEPS = 5_000_000n;
 
@@ -242,6 +244,8 @@ export class KaminoEarn implements EarnSource {
       return { wire: getBase64EncodedWireTransaction(tx), messageBytes: Uint8Array.from(tx.messageBytes) };
     };
 
+    // Paying its own way (a linked wallet), say what SOL it lacks before it signs, not after it fails.
+    if (sponsor === undefined) await this.affordsOwn(owner.address, intent, state);
     const ixs =
       sponsor === undefined ? actionIxs : await this.fund(owner.address, payer.address, actionIxs, compile);
     const compiled = compile(ixs);
@@ -255,6 +259,30 @@ export class KaminoEarn implements EarnSource {
       firstTime: false,
       expiresAt: new Date(Date.now() + 45_000),
     };
+  }
+
+  /**
+   * Throws `OwnerShort` when a wallet paying its own way can't: the network
+   * fee, and the rent of the token account the move opens where it has none
+   * yet (the vault's share account on a deposit, its USDC account on a
+   * withdrawal). Without it the wallet signs, and the network refuses.
+   */
+  private async affordsOwn(
+    owner: Address,
+    intent: EarnIntent,
+    state: { readonly sharesMint: Address; readonly tokenMint: Address; readonly tokenProgram: Address },
+  ): Promise<void> {
+    const [opens] =
+      intent.kind === "deposit"
+        ? await findAssociatedTokenPda({ owner, mint: state.sharesMint, tokenProgram: TOKEN_PROGRAM_ADDRESS })
+        : await findAssociatedTokenPda({ owner, mint: state.tokenMint, tokenProgram: state.tokenProgram });
+    const [{ value: held }, { value: account }, accountRent] = await Promise.all([
+      this.rpc.getBalance(owner).send(),
+      this.rpc.getAccountInfo(opens, { encoding: "base64" }).send(),
+      rentFor(this.rent, TOKEN_ACCOUNT_BYTES),
+    ]);
+    const needed = OWNER_FEE_RESERVE + (account === null ? accountRent : 0n);
+    if (held < needed) throw new OwnerShort(held, needed);
   }
 
   /**

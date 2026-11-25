@@ -189,6 +189,49 @@ describe("readSummary", () => {
     expect(summary.calculating).toBe(1);
   });
 
+  it("measures what Earn earned against the moves made by the reading, not those made since", async () => {
+    const s = await seed();
+    // After the 09:00 reading of $210: $100 taken out, then $500 put in. The balance waits for the next reading.
+    await s.db.insert(earnEvents).values([
+      {
+        userId: s.userId,
+        walletId: s.mercury,
+        kind: "withdraw",
+        usdcAmount: "100",
+        vault: "Vault",
+        txSignature: "earn-2",
+        occurredAt: new Date(hour(9).getTime() + 10 * 60_000),
+      },
+      {
+        userId: s.userId,
+        walletId: s.mercury,
+        kind: "deposit",
+        usdcAmount: "500",
+        vault: "Vault",
+        txSignature: "earn-3",
+        occurredAt: new Date(hour(9).getTime() + 20 * 60_000),
+        estimated: true,
+      },
+    ]);
+    const summary = PortfolioSummary.parse(await readSummary(s.db, board, s.userId));
+    // Still $10 earned on the $200 in at the reading; a move since is neither interest nor its loss.
+    expect(summary.income).toMatchObject({ earnUsd: "10", earnEstimated: false });
+
+    // The next reading has them: $610 against $600 in.
+    await s.db.insert(portfolioSnapshots).values({
+      userId: s.userId,
+      walletId: s.mercury,
+      capturedAt: hour(10),
+      readAt: hour(10),
+      totalUsd: "1000",
+      stocksUsd: "1000",
+      cashUsd: "0",
+      earnUsd: "610",
+    });
+    const later = PortfolioSummary.parse(await readSummary(s.db, board, s.userId));
+    expect(later.income).toMatchObject({ earnUsd: "10", earnEstimated: true });
+  });
+
   it("counts what a liquidation realised with the sells', once its shares' cost is known", async () => {
     const s = await seed();
     // Kamino sold some of the read wallet's shares for $40 less than they had cost.

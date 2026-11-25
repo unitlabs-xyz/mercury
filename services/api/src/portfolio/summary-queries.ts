@@ -104,17 +104,17 @@ export async function readSummaryRecords(
           ),
         )
         .groupBy(activities.walletId),
+      // Each move into or out of Earn: summed below as of the wallet's reading, not as of now.
       db
         .select({
           walletId: earnEvents.walletId,
-          total: sql<
-            string | null
-          >`sum(case when ${earnEvents.kind} = 'deposit' then ${earnEvents.usdcAmount} else -${earnEvents.usdcAmount} end)`,
-          estimated: sql<boolean>`bool_or(${earnEvents.estimated})`,
+          kind: earnEvents.kind,
+          usdcAmount: earnEvents.usdcAmount,
+          estimated: earnEvents.estimated,
+          occurredAt: earnEvents.occurredAt,
         })
         .from(earnEvents)
-        .where(and(eq(earnEvents.userId, userId), inArray(earnEvents.walletId, ids)))
-        .groupBy(earnEvents.walletId),
+        .where(and(eq(earnEvents.userId, userId), inArray(earnEvents.walletId, ids))),
       db
         .select({
           walletId: loanEvents.walletId,
@@ -139,7 +139,25 @@ export async function readSummaryRecords(
   const latestBy = new Map(latest.map((r) => [r.walletId, r]));
   const realisedBy = sums([...realised, ...liquidated, ...soldElsewhere]);
   const dividendsBy = sums(dividends);
-  const earnBy = sums(earnNet);
+  /*
+   * Put into Earn less taken out, as of each wallet's newest reading: earned is
+   * the balance read then less this, so both have to be of the same moment. A
+   * move since the reading changed the net at once while the balance waited for
+   * the next one: a deposit read as all of the interest gone, a withdrawal as
+   * the withdrawal earned, for up to an hour. With no reading, every move counts
+   * (nothing is earned without a balance anyway).
+   */
+  const earnAsOf = earnNet.filter((r) => {
+    const l = latestBy.get(r.walletId);
+    const asOf = l === undefined ? null : (l.readAt ?? l.capturedAt);
+    return asOf === null || r.occurredAt.getTime() <= asOf.getTime();
+  });
+  const earnBy = sums(
+    earnAsOf.map((r) => ({
+      walletId: r.walletId,
+      total: r.kind === "deposit" ? r.usdcAmount : D(r.usdcAmount).neg().toFixed(),
+    })),
+  );
   const healthBy = new Map(alerts.map((a) => [a.walletId, a.health]));
   const readSet = new Set(read.map((r) => r.walletId));
   const ledgerBy = new Map<string, LedgerRow[]>();
@@ -174,7 +192,7 @@ export async function readSummaryRecords(
           realisedUsd: zero(realisedBy, id),
           dividendsUsd: zero(dividendsBy, id),
           earnNetDepositedUsd: earnBy.get(id) ?? null,
-          earnEstimated: earnNet.some((r) => r.walletId === id && r.estimated === true),
+          earnEstimated: earnAsOf.some((r) => r.walletId === id && r.estimated),
           loanLedger: ledgerBy.get(id) ?? [],
           loanHealth: healthBy.get(id) ?? null,
           historyRead: readSet.has(id),

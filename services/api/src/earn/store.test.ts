@@ -77,6 +77,16 @@ describe("hasEarnHistory", () => {
     expect(await hasEarnHistory(db, "WaLLeT")).toBe(true);
     expect(await hasEarnHistory(db, "SomeoneElse")).toBe(false);
   });
+
+  it("is false for the person's other wallets, which have moved nothing through Earn themselves", async () => {
+    const { db, ledger, userId, owner } = await setup();
+    await ledger.record(move(owner));
+    await db
+      .insert(wallets)
+      .values({ userId, address: "Linked", kind: "external", isPrimary: false, linkedAt: new Date() });
+    expect(await hasEarnHistory(db, "WaLLeT")).toBe(true);
+    expect(await hasEarnHistory(db, "Linked")).toBe(false);
+  });
 });
 
 describe("pgEarnLedger.netDeposited, wallet by wallet", () => {
