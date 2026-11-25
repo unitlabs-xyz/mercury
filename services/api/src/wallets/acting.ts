@@ -130,14 +130,14 @@ export const oneWalletOnly = (): MiddlewareHandler => async (c, next) => {
 };
 
 /**
- * For every route that acts: it acts for the Mercury wallet, and only for it,
- * until linked wallets can act (step 8 of the linked-wallets build).
+ * For a route that acts for the Mercury wallet alone: today the Symmetry
+ * basket vaults (`/v1/baskets/*`), which were never built for a linked wallet.
+ * Every other route that acts takes the wallet chosen (`oneWalletToAct`).
  *
  * The web sends the header on every request, writes included. Without this a
- * trade asked for while a linked wallet was chosen would be built and signed
- * for the Mercury wallet instead, without a word. `all` is a 400, as the spec
- * has it for every write; a linked wallet is a 409, because it is a wallet
- * that will be able to act, just not yet.
+ * request made while a linked wallet was chosen would be built for the Mercury
+ * wallet instead, without a word. `all` is a 400, as the spec has it for every
+ * write; a linked wallet is a 409, a wallet this route can't act for.
  *
  * Reads pass, so it can be mounted on a whole path: `/v1/orders/*` holds the
  * order a person is looking at as well as the ones they place.

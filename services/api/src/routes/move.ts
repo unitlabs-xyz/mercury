@@ -9,7 +9,7 @@ import type {} from "../auth/middleware.js";
 import { STOCK_ACCOUNT_BYTES, TOKEN_ACCOUNT_BYTES, rentFor } from "../rent.js";
 import { writerOf } from "../wallets/acting.js";
 import { buildMove } from "../moves/build.js";
-import { planMove } from "../moves/plan.js";
+import { planMove, type MovePlan } from "../moves/plan.js";
 import type { MoveSends } from "../moves/sends.js";
 import type { Movable } from "../moves/queries.js";
 import type { OutsideBasket } from "../baskets/outside.js";
@@ -49,7 +49,8 @@ const Request = z.object({
     .optional(),
 });
 
-const REFUSED: Record<string, string> = {
+/** What each refusal of a plan says: one line for every code `planMove` can give. */
+const REFUSED: Record<Extract<MovePlan, { ok: false }>["code"], string> = {
   nothing_to_move: "This wallet holds nothing Mercury lists.",
   not_held: "This wallet doesn't hold that token.",
   too_much: "That's more than this wallet holds.",
@@ -152,7 +153,7 @@ export function moveRoutes(deps: MoveDeps): Hono {
 
   app.post("/v1/move/prepare", async (c) => {
     const writer = writerOf(c);
-    if (writer === null) return c.json(fail("wallet_pending", "Your wallet is still being set up."), 409);
+    if (writer === null) return c.json(fail("wallet_not_ready", "Your wallet is still being set up."), 409);
     if (writer.isPrimary) {
       return c.json(fail("wallet_mercury", "Choose a linked wallet to move from."), 400);
     }
@@ -163,7 +164,7 @@ export function moveRoutes(deps: MoveDeps): Hono {
     const { userId } = c.get("identity");
     const mercuryId = await deps.mercuryWalletId(userId);
     if (mercuryAddress === null || mercuryId === null) {
-      return c.json(fail("wallet_pending", "Your Mercury wallet is still being set up."), 409);
+      return c.json(fail("wallet_not_ready", "Your Mercury wallet is still being set up."), 409);
     }
 
     const parsed = Request.safeParse(await c.req.json().catch(() => ({})));
@@ -193,7 +194,7 @@ export function moveRoutes(deps: MoveDeps): Hono {
     });
     if (!plan.ok) {
       return c.json(
-        { ...fail(plan.code, REFUSED[plan.code]!), ...(plan.mint ? { mint: plan.mint } : {}) },
+        { ...fail(plan.code, REFUSED[plan.code]), ...(plan.mint ? { mint: plan.mint } : {}) },
         400,
       );
     }

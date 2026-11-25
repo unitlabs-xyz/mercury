@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  generateKeyPairSigner,
+  getBase64Decoder,
+  getTransactionEncoder,
+  partiallySignTransaction,
   getBase64Encoder,
   getCompiledTransactionMessageDecoder,
   getTransactionDecoder,
@@ -17,7 +21,9 @@ import { testDb } from "../../../db/testing.js";
 import type { RelaySigner } from "../../../relay/signer.js";
 
 const MERCURY = "2Z7zhqp1eddmHNmEqexftST6DFPWmoL4QqfgiG5uJMJx";
-const RELAYER = "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd";
+/** A real key, so the relayer's signature is on what is sent, as the live signer puts it there. */
+const relayKey = await generateKeyPairSigner();
+const RELAYER = relayKey.address;
 const TSLAX = "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB";
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const TOKEN_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
@@ -44,11 +50,21 @@ const node = (held: readonly string[], status: "confirmed" | "failed" = "confirm
       lastValidBlockHeight: 100n,
     }),
     send: async (wire) => void sent.push(wire),
-    status: async () => status,
+    status: async () =>
+      status === "confirmed"
+        ? { err: null, confirmationStatus: "confirmed" }
+        : { err: { InstructionError: [0, "Custom"] } },
   };
   return { rpc, sent };
 };
-const signer: RelaySigner = { address: RELAYER, cosign: async (wire) => wire };
+const signer: RelaySigner = {
+  address: RELAYER,
+  cosign: async (wire) => {
+    const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
+    const signed = await partiallySignTransaction([relayKey.keyPair], tx);
+    return getBase64Decoder().decode(getTransactionEncoder().encode(signed));
+  },
+};
 
 /** The ledger of accounts opened before, in memory. */
 const memoryLedger = (

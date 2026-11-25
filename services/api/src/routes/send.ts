@@ -4,10 +4,6 @@ import { z } from "zod";
 import {
   address,
   createSolanaRpc,
-  getBase58Decoder,
-  getBase64Encoder,
-  getCompiledTransactionMessageDecoder,
-  getTransactionDecoder,
   isSolanaError,
   SOLANA_ERROR__TRANSACTION_ERROR__ACCOUNT_NOT_FOUND,
   SOLANA_ERROR__TRANSACTION_ERROR__ALREADY_PROCESSED,
@@ -27,6 +23,7 @@ import type { SponsoredBuilds } from "../relay/builds.js";
 import type { RelaySigner } from "../relay/signer.js";
 import { writerOf } from "../wallets/acting.js";
 import { validateSponsored } from "../relay/validate.js";
+import { awaitLanding, feePayerSignature } from "../relay/confirm.js";
 
 export interface SendDeps {
   readonly rpcUrl: string;
@@ -82,20 +79,6 @@ export interface SendDeps {
  */
 const STATUS_FIRST_MS = 1_000;
 const STATUS_EVERY_MS = 2_000;
-
-/** The transaction id is the fee payer's signature, which is the first one. */
-const feePayerSignature = (wire: string): string | null => {
-  try {
-    const tx = getTransactionDecoder().decode(getBase64Encoder().encode(wire));
-    const message = getCompiledTransactionMessageDecoder().decode(tx.messageBytes);
-    const payer = message.staticAccounts[0];
-    if (payer === undefined) return null;
-    const sig = tx.signatures[payer as keyof typeof tx.signatures];
-    return sig ? getBase58Decoder().decode(sig) : null;
-  } catch {
-    return null;
-  }
-};
 
 /**
  * `@solana/kit` does not put the failure in the message.
@@ -447,24 +430,14 @@ export function sendRoutes(deps: SendDeps): Hono {
     }
     void deps.accepted?.(decoded.messageBytes, signature).catch(() => undefined);
 
-    const deadline = Date.now() + confirmMs;
-    let wait = STATUS_FIRST_MS;
-    for (;;) {
-      await new Promise((r) => setTimeout(r, Math.min(wait, Math.max(0, deadline - Date.now()))));
-      wait = STATUS_EVERY_MS;
-      const { value } = await rpc.getSignatureStatuses([signature as Signature]).send();
-      const status = value[0];
-      if (status?.err) {
-        deps.sent?.(wallet);
-        return c.json({ signature, status: "failed", error: JSON.stringify(status.err) }, 422);
-      }
-      if (status?.confirmationStatus === "confirmed" || status?.confirmationStatus === "finalized") {
-        deps.sent?.(wallet);
-        return c.json({ signature, status: "confirmed" });
-      }
-      if (Date.now() >= deadline) break;
-    }
+    const landed = await awaitLanding(
+      async (sig) => (await rpc.getSignatureStatuses([sig as Signature]).send()).value[0] ?? null,
+      signature,
+      { timeoutMs: confirmMs, firstMs: STATUS_FIRST_MS, everyMs: STATUS_EVERY_MS },
+    );
     deps.sent?.(wallet);
+    if (landed.kind === "failed") return c.json({ signature, status: "failed", error: landed.error }, 422);
+    if (landed.kind === "confirmed") return c.json({ signature, status: "confirmed" });
     return c.json({ signature, status: "pending" }, 202);
   });
 

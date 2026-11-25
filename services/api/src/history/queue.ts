@@ -13,7 +13,7 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
  * - `queued`: linked (or linked again), not read yet.
  * - `running`: its first read is under way.
  * - `read`: everything up to now has been read. Its P&L still waits for the
- *   cost pass (step 7), which moves it on to `done`. Until a job is `done`
+ *   cost pass (`cost.ts`), which moves it on to `done`. Until a job is `done`
  *   the wallet says "Calculating…" rather than a figure, because a figure
  *   before its costs are known would be wrong, and $0 most of all.
  * - `done`: read and costed. The summary counts it as ready.

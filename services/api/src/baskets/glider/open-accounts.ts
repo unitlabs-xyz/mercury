@@ -5,7 +5,6 @@ import {
   createNoopSigner,
   createSolanaRpc,
   createTransactionMessage,
-  getBase58Decoder,
   getBase64EncodedWireTransaction,
   pipe,
   setTransactionMessageFeePayer,
@@ -21,6 +20,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { sponsoredTokenAccounts } from "../../db/schema.js";
 import type { RelaySigner } from "../../relay/signer.js";
+import { awaitLanding, feePayerSignature, type SignatureState } from "../../relay/confirm.js";
 
 /** The chain calls this needs, so a test can stand in for the node. */
 export interface AccountsRpc {
@@ -29,7 +29,7 @@ export interface AccountsRpc {
   latestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: bigint }>;
   send(wire: string): Promise<void>;
   /** "confirmed", "failed", or null while not yet seen. */
-  status(signature: string): Promise<"confirmed" | "failed" | null>;
+  status(signature: string): Promise<SignatureState>;
 }
 
 export const solanaAccountsRpc = (rpcUrl: string): AccountsRpc => {
@@ -53,13 +53,7 @@ export const solanaAccountsRpc = (rpcUrl: string): AccountsRpc => {
         .send();
     },
     async status(signature) {
-      const { value } = await rpc.getSignatureStatuses([signature as Signature]).send();
-      const s = value[0];
-      if (s === null || s === undefined) return null;
-      if (s.err !== null) return "failed";
-      return s.confirmationStatus === "confirmed" || s.confirmationStatus === "finalized"
-        ? "confirmed"
-        : null;
+      return (await rpc.getSignatureStatuses([signature as Signature]).send()).value[0] ?? null;
     },
   };
 };
@@ -101,6 +95,7 @@ export class AccountsNotOpened extends Error {
   }
 }
 
+/** How long the opening is waited for, asked about every second: accounts open in a block or two. */
 const CONFIRM_MS = 30_000;
 const POLL_MS = 1_000;
 
@@ -125,12 +120,7 @@ const POLL_MS = 1_000;
  * for at most ten accounts, which is as many assets as an exit can name.
  */
 export const openTokenAccounts =
-  (deps: {
-    readonly rpc: AccountsRpc;
-    readonly signer: RelaySigner;
-    readonly ledger: SponsoredAccounts;
-    readonly now?: () => number;
-  }) =>
+  (deps: { readonly rpc: AccountsRpc; readonly signer: RelaySigner; readonly ledger: SponsoredAccounts }) =>
   async (owner: string, mints: readonly string[]): Promise<number> => {
     const unique = [...new Set(mints)];
     if (unique.length === 0) return 0;
@@ -183,31 +173,22 @@ export const openTokenAccounts =
     );
     const signed = await deps.signer.cosign(getBase64EncodedWireTransaction(tx));
     const signature = feePayerSignature(signed);
+    if (signature === null) throw new AccountsNotOpened("the relayer's signature is missing");
     try {
       await deps.rpc.send(signed);
     } catch (error: unknown) {
       throw new AccountsNotOpened(error instanceof Error ? error.message : String(error));
     }
-    const now = deps.now ?? Date.now;
-    const deadline = now() + CONFIRM_MS;
-    for (;;) {
-      const status = await deps.rpc.status(signature);
-      if (status === "confirmed") {
-        await deps.ledger.record(
-          owner,
-          missing.map((m) => String(m.mint)),
-        );
-        return missing.length;
-      }
-      if (status === "failed") throw new AccountsNotOpened("the transaction failed");
-      if (now() >= deadline) throw new AccountsNotOpened("not confirmed in time");
-      await new Promise((r) => setTimeout(r, POLL_MS));
-    }
+    const landed = await awaitLanding((sig) => deps.rpc.status(sig), signature, {
+      timeoutMs: CONFIRM_MS,
+      firstMs: POLL_MS,
+      everyMs: POLL_MS,
+    });
+    if (landed.kind === "failed") throw new AccountsNotOpened(`the transaction failed: ${landed.error}`);
+    if (landed.kind === "pending") throw new AccountsNotOpened("not confirmed in time");
+    await deps.ledger.record(
+      owner,
+      missing.map((m) => String(m.mint)),
+    );
+    return missing.length;
   };
-
-/** The first signature on a signed wire transaction: the fee payer's, which names it. */
-const feePayerSignature = (base64: string): string => {
-  const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
-  // A compact-u16 count of signatures (one byte below 128), then 64 bytes each.
-  return getBase58Decoder().decode(bytes.subarray(1, 65));
-};

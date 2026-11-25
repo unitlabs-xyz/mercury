@@ -711,7 +711,7 @@ every(
 
 /**
  * The history reader: each linked wallet's past, read back from its token
- * accounts, so its P&L can be worked out (step 7 costs what it reads).
+ * accounts, so its P&L can be worked out (the cost pass below costs what it reads).
  *
  * Inside the API rather than a process of its own, which is what lets it see
  * that the jobs' lane is being refused and give way: that signal is memory in

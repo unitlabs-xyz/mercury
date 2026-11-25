@@ -267,7 +267,7 @@ describe("POST /v1/move/prepare", () => {
   it("waits for the Mercury wallet when it is still being made", async () => {
     const w = await world();
     const { status, body } = await prepare(appWith(w, { ...w.deps, mercuryWalletId: async () => null }));
-    expect([status, body.error.code]).toEqual([409, "wallet_pending"]);
+    expect([status, body.error.code]).toEqual([409, "wallet_not_ready"]);
   });
 });
 
